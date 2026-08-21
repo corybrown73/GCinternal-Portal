@@ -7,6 +7,7 @@ const PUBLIC_PREFIXES = [
   "/forgot-password",
   "/auth",
   "/tam/decided",
+  "/preview",
   "/api/v1",
   "/api/tam",
 ];
