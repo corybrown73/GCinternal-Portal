@@ -390,7 +390,15 @@ export async function returnHandoff(
     snapshot: completeness,
   });
 
-  // Raise it where the team already looks, and tell the sales owner.
+  // Raise it where the team already looks.
+  //
+  // `notify` emails managers and super admins, NOT the sales owner: on
+  // `implementations`, sales_owner is a free-text name with no address behind
+  // it, and matching a name against team_members would sooner or later mail the
+  // wrong person about someone else's deal. So the owner is NAMED in the alert
+  // instead of guessed at — the person who has to act is identified, and nobody
+  // is emailed on the strength of a string match. A real owner reference is
+  // Phase 5's job, where Salesforce supplies one.
   try {
     const { createAlert } = await import("./tickets.server");
     const { data: impl } = await db()
@@ -403,11 +411,12 @@ export async function returnHandoff(
       severity: "warning",
       title: `Handoff returned: ${impl?.name ?? "implementation"}`,
       detail:
-        `The implementation owner returned this handoff with ${missingKeys.length} named gap(s)` +
-        `${note ? `: ${note}` : "."} Time in Handoff keeps running.`,
+        `The implementation owner returned this handoff to ${impl?.sales_owner ?? "the sales owner"} ` +
+        `with ${missingKeys.length} named gap(s)${note ? `: ${note}` : "."} ` +
+        `Time in Handoff keeps running.`,
       customerId: impl?.customer_id ?? null,
       implementationId,
-      payload: { missing_keys: missingKeys },
+      payload: { missing_keys: missingKeys, sales_owner: impl?.sales_owner ?? null },
       notify: true,
       actor: { type: "user", id: actorProfileId },
     });

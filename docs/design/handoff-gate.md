@@ -67,8 +67,12 @@ owner decides.
 - **A decision records what it saw.** On accept or return we snapshot the completeness result as
   evidence of the decision — not as a second copy of the content. The live records stay the truth;
   the snapshot answers "what was accepted, on what basis, by whom".
-- Returning raises a `handoff_returned` alert (`alerts.kind` is free text, so no migration) and
-  emails the deal's sales owner.
+- Returning raises a `handoff_returned` alert (`alerts.kind` is free text, so no migration), which
+  emails managers and super admins — **not** the sales owner directly. `implementations.sales_owner`
+  is a free-text name with no address behind it, and resolving it by name-matching `team_members`
+  would eventually mail the wrong person about someone else's deal. The owner is therefore named in
+  the alert (and in its payload) rather than guessed at. Phase 5 brings a real owner reference from
+  Salesforce; routing the notification to them belongs there.
 
 ## Accepting is allowed while incomplete
 
