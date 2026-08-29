@@ -84,7 +84,7 @@ export type StageHistoryRow = {
 /** Leadership layer: the Home query set plus stage dwell and graduation records. */
 export type LeadershipData = HomeData & {
   stage_history: StageHistoryRow[];
-  /** Full records, scoped to implementations in Adopt or Graduate to CS. */
+  /** Full records, scoped to implementations in Adopt or Handover to Customer Success. */
   graduation_candidates: Array<{
     implementation_id: string;
     customer_id: string;
@@ -278,14 +278,24 @@ export type Customer360 = {
     cs_owner_name: string | null;
     notes: string | null;
   } | null;
-  /** Existing CS handoff record, if one has been written. Read-only. */
+  /**
+   * The handover record. Phase 7 made `cs_handoffs` the single record of an
+   * implementation being handed to Customer Success (it had one reader and no
+   * writer since 0003) and gave it a write path behind `handover_record`;
+   * `graduations` is deprecated and folded forward, not dropped.
+   */
   cs_handoff: {
     id: string;
     handoff_date: string | null;
+    cs_owner_id: string | null;
     cs_owner_name: string | null;
     summary: string | null;
     open_items: string | null;
     account_context: string | null;
+    health_at_handover: string | null;
+    notes: string | null;
+    recorded_by_name: string | null;
+    updated_at: string | null;
   } | null;
   /** Active team members, used by inline owner selectors. */
   team: Array<{ id: string; name: string; role: string }>;

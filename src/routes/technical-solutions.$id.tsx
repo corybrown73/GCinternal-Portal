@@ -24,6 +24,7 @@ import {
   StatusEditor,
 } from "@/components/solution-write";
 import { AddFieldMapping, FieldMappingRow } from "@/components/field-mapping-write";
+import { SolutionDecisionLinks } from "@/components/trace-link-write";
 import { OpenAttachment } from "@/components/sow-write";
 import { splitLinks } from "@/lib/journal-input";
 
@@ -385,6 +386,13 @@ function SolutionDetail() {
               <NoRows label="No decisions linked to this solution." />
             )}
           </Panel>
+
+          {/* Phase 7. The list above reads `trace_links`, which nothing could
+              write until 0025 — so it has always been empty. Every other edge
+              in the spine is now derived from a foreign key; decision ↔
+              solution has none behind it, so it is the one edge a person
+              draws. Renders nothing while trace_links_editing is off. */}
+          <SolutionDecisionLinks solutionId={record.solution.id} />
 
           <Panel level="reference" title="Proof" count={record.evidence.length}>
             {record.evidence.length ? (
