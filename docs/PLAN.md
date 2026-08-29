@@ -174,7 +174,8 @@ rollbacks archive to a schema (`v2_archive`) rather than destroy. The Salesforce
 | 0023 | `sf_integration` — supersession pointer, `sf_closed_won_at`, `integration_sync_log`, `integration_field_maps`, outbox, webhook endpoints/secrets | 5 |
 | 0024 | `signals_metrics` — anything Phase 6 needs beyond Phase 1's health cache (expected: little or nothing) | 6 |
 | 0025 | `audit_consolidation` + people-merge remainder, per decisions 3/9 | 7 |
-| 0026 | `drop_sequence_compat_views` — deferred Phase 2 cleanup, one release after cutover is verified | 2 |
+| 0026 | `rpc_authorization` — SEC-01/02/03: lock portal_transition_stage, revoke trigger fns, pin search_path, drop the backfill diagnostic | QA |
+| 0027 | `drop_sequence_compat_views` — deferred Phase 2 cleanup, one release after cutover is verified | 2 |
 
 **Renumbered after Phase 3 shipped.** The gate was built as `0018`, not `0019`: dropping the
 sequence compat views is a *deferred* cleanup with no fixed date, and holding a number open for it
