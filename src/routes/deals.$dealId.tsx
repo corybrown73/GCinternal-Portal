@@ -27,7 +27,13 @@ import {
   setNoteReviewed,
   startOnboardingForDeal,
 } from "@/lib/presale.functions";
-import { STAGE_LABELS, STAGES, type AccountStage } from "@/lib/presale-stages";
+import {
+  BUILTIN_PIPELINE_STAGES,
+  isAtOrPast,
+  stageLabel,
+  wonStage,
+  type PipelineStage,
+} from "@/lib/pipeline-stages";
 import { daysSince, fmtDate, fmtDateTime, fmtMoney } from "@/lib/hub-format";
 import { cn } from "@/lib/utils";
 
@@ -72,10 +78,10 @@ const primaryButtonClass =
   "inline-flex items-center gap-1 rounded-sm bg-primary px-2 py-1 text-[11px] font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50";
 const labelClass = "text-[10px] uppercase tracking-[0.1em] text-muted-foreground";
 
-function StageChip({ stage }: { stage: string }) {
+function StageChip({ stage, stages }: { stage: string; stages: readonly PipelineStage[] }) {
   return (
     <span className="inline-flex items-center rounded-sm border border-border bg-muted px-1.5 py-0.5 font-mono text-[11px] tracking-tight text-foreground">
-      {STAGE_LABELS[stage as AccountStage] ?? stage}
+      {stageLabel(stages, stage)}
     </span>
   );
 }
@@ -134,7 +140,7 @@ function DealRecord({ deal }: { deal: DealData }) {
       <PageBody className="space-y-4">
         <div className="flex flex-wrap items-center gap-x-6 gap-y-2 rounded-md border border-border bg-card px-4 py-3">
           <div className="flex items-center gap-2">
-            <StageChip stage={account.stage} />
+            <StageChip stage={account.stage} stages={deal.stages} />
             <span className="font-mono text-[11px] text-muted-foreground">
               {days ?? 0}d in stage
             </span>
@@ -216,9 +222,10 @@ function StartOnboarding({ deal }: { deal: DealData }) {
   });
 
   const allowed = canEditSales(profile?.role) || canManage(profile?.role);
-  const stageReady =
-    (STAGES as readonly string[]).indexOf(deal.account.stage) >=
-    (STAGES as readonly string[]).indexOf("closed_won");
+  // The Closed Won gate reads the stage MARKED as won, not the literal — the
+  // same list startOnboarding checks server-side.
+  const pipeline = deal.stages ?? BUILTIN_PIPELINE_STAGES;
+  const stageReady = isAtOrPast(pipeline, deal.account.stage, wonStage(pipeline).key);
 
   const error = mutation.isError ? (
     <p className="text-[11px] text-destructive">{(mutation.error as Error).message}</p>
@@ -888,13 +895,11 @@ function HistoryPanel({ deal }: { deal: DealData }) {
                 <p className="text-[12px]">
                   {t.from_stage ? (
                     <>
-                      {STAGE_LABELS[t.from_stage as AccountStage] ?? t.from_stage}
+                      {stageLabel(deal.stages, t.from_stage)}
                       <span className="mx-1 text-muted-foreground">→</span>
                     </>
                   ) : null}
-                  <span className="font-medium">
-                    {STAGE_LABELS[t.to_stage as AccountStage] ?? t.to_stage}
-                  </span>
+                  <span className="font-medium">{stageLabel(deal.stages, t.to_stage)}</span>
                 </p>
                 <p className="mt-0.5 text-[11px] text-muted-foreground">
                   <span className="font-mono text-[10px] uppercase tracking-wider">{t.source}</span>

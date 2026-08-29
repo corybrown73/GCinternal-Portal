@@ -1,7 +1,9 @@
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { resolveAccountId, transitionStage, upsertAccount } from "./server/accounts";
 import { accountUpsertSchema } from "./server/schemas";
-import { isStage, STAGES, type AccountStage } from "./presale-stages";
+import { isStage, type AccountStage } from "./presale-stages";
+import { stageAfterWon, stageOrder, wonStage, type PipelineStage } from "./pipeline-stages";
+import { loadPipelineStages } from "./pipeline-stages.server";
 import { isFlagOn } from "./app-config.server";
 import { handoffConflictMessage, resolveHandoffCustomer } from "./presale-handoff";
 import { audit } from "./server/audit";
@@ -84,10 +86,14 @@ export interface PipelineDeal extends Account {
   se_owner_name: string | null;
 }
 
-export async function loadPipeline(): Promise<{ deals: PipelineDeal[] }> {
-  const [{ data: accounts, error }, names] = await Promise.all([
+export async function loadPipeline(): Promise<{ deals: PipelineDeal[]; stages: PipelineStage[] }> {
+  // Loaded alongside the deals rather than after them: the board needs both to
+  // render one column per configured stage, and a waterfall here is a second
+  // round trip on the busiest internal page.
+  const [{ data: accounts, error }, names, stages] = await Promise.all([
     db().from("portal_accounts").select("*").order("name"),
     profileNames(),
+    loadPipelineStages(),
   ]);
   if (error) throw new Error(error.message);
   const deals = ((accounts ?? []) as Account[]).map((a) => ({
@@ -95,7 +101,7 @@ export async function loadPipeline(): Promise<{ deals: PipelineDeal[] }> {
     am_owner_name: a.am_owner_id ? (names.get(a.am_owner_id) ?? null) : null,
     se_owner_name: a.se_owner_id ? (names.get(a.se_owner_id) ?? null) : null,
   }));
-  return { deals };
+  return { deals, stages };
 }
 
 export async function createDeal(
@@ -252,6 +258,9 @@ export interface DealDetail {
   >;
   notes: Array<OnboardingNote & { author_name: string | null; reviewed_by_name: string | null }>;
   stage_history: Array<StageTransition & { actor_name: string | null }>;
+  /** The configured pipeline, so the record renders labels and the Closed Won
+   *  control from the same list the board does. */
+  stages: PipelineStage[];
 }
 
 export async function loadDeal(dealId: string): Promise<DealDetail | null> {
@@ -262,7 +271,7 @@ export async function loadDeal(dealId: string): Promise<DealDetail | null> {
     .maybeSingle();
   if (!account) return null;
 
-  const [names, gong, briefs, tam, notes, history] = await Promise.all([
+  const [names, gong, briefs, tam, notes, history, stages] = await Promise.all([
     profileNames(),
     db()
       .from("portal_gong_reports")
@@ -289,6 +298,7 @@ export async function loadDeal(dealId: string): Promise<DealDetail | null> {
       .select("*")
       .eq("account_id", dealId)
       .order("occurred_at", { ascending: false }),
+    loadPipelineStages(),
   ]);
 
   const named = (id: string | null | undefined) => (id ? (names.get(id) ?? null) : null);
@@ -319,6 +329,7 @@ export async function loadDeal(dealId: string): Promise<DealDetail | null> {
       ...t,
       actor_name: named(t.actor_profile_id),
     })),
+    stages,
   };
 }
 
@@ -597,9 +608,14 @@ export async function startOnboarding(
     };
   }
 
-  const stageIdx = (STAGES as readonly string[]).indexOf(account.stage);
-  if (stageIdx < (STAGES as readonly string[]).indexOf("closed_won")) {
-    throw new Error("Only a closed-won deal can start onboarding");
+  // The Closed Won gate reads the CONFIGURED won stage, not the literal
+  // "closed_won". Exactly one stage carries that meaning (0028 enforces it),
+  // and on an unconfigured deployment it is still `closed_won` — so this is the
+  // same gate it has always been until somebody moves the mark.
+  const pipeline = await loadPipelineStages();
+  const won = wonStage(pipeline);
+  if (stageOrder(pipeline, account.stage) < stageOrder(pipeline, won.key)) {
+    throw new Error(`Only a deal at ${won.label} or later can start onboarding`);
   }
 
   // (a) customer + implementation records in the hub's post-sale tables.
@@ -686,11 +702,17 @@ export async function startOnboarding(
     if (linkError) throw new Error(`Could not link the deal: ${linkError.message}`);
   }
 
-  // (c) move the deal into onboarding_kickoff (only forward, never backward).
-  if (account.stage === "closed_won") {
+  // (c) move the deal one stage on (only forward, never backward). Which stage
+  // that is comes from the configuration: the first stage after the won stage
+  // that an account can actually be in. If there is none — the won stage is
+  // last, or everything after it is declared but not yet an account stage — the
+  // deal stays where it is rather than attempting a transition the enum would
+  // reject.
+  const next = stageAfterWon(pipeline);
+  if (account.stage === won.key && next) {
     await transitionStage(
       dealId,
-      "onboarding_kickoff",
+      next.key as AccountStage,
       { source: "ui", actorProfileId: userId },
       "Onboarding started from the deal record",
     );

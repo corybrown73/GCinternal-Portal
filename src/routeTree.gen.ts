@@ -32,6 +32,7 @@ import { Route as AdminIndexRouteImport } from './routes/admin.index'
 import { Route as AdminApiKeysRouteImport } from './routes/admin.api-keys'
 import { Route as AdminAuditRouteImport } from './routes/admin.audit'
 import { Route as AdminIntegrationsRouteImport } from './routes/admin.integrations'
+import { Route as AdminPipelineStagesRouteImport } from './routes/admin.pipeline-stages'
 import { Route as AdminUsersRouteImport } from './routes/admin.users'
 import { Route as ApiSplatRouteImport } from './routes/api.$'
 import { Route as AuthCallbackRouteImport } from './routes/auth.callback'
@@ -183,6 +184,11 @@ const AdminAuditRoute = AdminAuditRouteImport.update({
 const AdminIntegrationsRoute = AdminIntegrationsRouteImport.update({
   id: '/integrations',
   path: '/integrations',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminPipelineStagesRoute = AdminPipelineStagesRouteImport.update({
+  id: '/pipeline-stages',
+  path: '/pipeline-stages',
   getParentRoute: () => AdminRoute,
 } as any)
 const AdminUsersRoute = AdminUsersRouteImport.update({
@@ -395,6 +401,7 @@ export interface FileRoutesByFullPath {
   '/admin/api-keys': typeof AdminApiKeysRoute
   '/admin/audit': typeof AdminAuditRoute
   '/admin/integrations': typeof AdminIntegrationsRoute
+  '/admin/pipeline-stages': typeof AdminPipelineStagesRoute
   '/admin/users': typeof AdminUsersRoute
   '/api/$': typeof ApiSplatRoute
   '/auth/callback': typeof AuthCallbackRoute
@@ -451,6 +458,7 @@ export interface FileRoutesByTo {
   '/admin/api-keys': typeof AdminApiKeysRoute
   '/admin/audit': typeof AdminAuditRoute
   '/admin/integrations': typeof AdminIntegrationsRoute
+  '/admin/pipeline-stages': typeof AdminPipelineStagesRoute
   '/admin/users': typeof AdminUsersRoute
   '/api/$': typeof ApiSplatRoute
   '/auth/callback': typeof AuthCallbackRoute
@@ -514,6 +522,7 @@ export interface FileRoutesById {
   '/admin/api-keys': typeof AdminApiKeysRoute
   '/admin/audit': typeof AdminAuditRoute
   '/admin/integrations': typeof AdminIntegrationsRoute
+  '/admin/pipeline-stages': typeof AdminPipelineStagesRoute
   '/admin/users': typeof AdminUsersRoute
   '/api/$': typeof ApiSplatRoute
   '/auth/callback': typeof AuthCallbackRoute
@@ -578,6 +587,7 @@ export interface FileRouteTypes {
     | '/admin/api-keys'
     | '/admin/audit'
     | '/admin/integrations'
+    | '/admin/pipeline-stages'
     | '/admin/users'
     | '/api/$'
     | '/auth/callback'
@@ -634,6 +644,7 @@ export interface FileRouteTypes {
     | '/admin/api-keys'
     | '/admin/audit'
     | '/admin/integrations'
+    | '/admin/pipeline-stages'
     | '/admin/users'
     | '/api/$'
     | '/auth/callback'
@@ -696,6 +707,7 @@ export interface FileRouteTypes {
     | '/admin/api-keys'
     | '/admin/audit'
     | '/admin/integrations'
+    | '/admin/pipeline-stages'
     | '/admin/users'
     | '/api/$'
     | '/auth/callback'
@@ -940,6 +952,13 @@ declare module '@tanstack/react-router' {
       path: '/integrations'
       fullPath: '/admin/integrations'
       preLoaderRoute: typeof AdminIntegrationsRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/pipeline-stages': {
+      id: '/admin/pipeline-stages'
+      path: '/pipeline-stages'
+      fullPath: '/admin/pipeline-stages'
+      preLoaderRoute: typeof AdminPipelineStagesRouteImport
       parentRoute: typeof AdminRoute
     }
     '/admin/users': {
@@ -1208,6 +1227,7 @@ interface AdminRouteChildren {
   AdminApiKeysRoute: typeof AdminApiKeysRoute
   AdminAuditRoute: typeof AdminAuditRoute
   AdminIntegrationsRoute: typeof AdminIntegrationsRoute
+  AdminPipelineStagesRoute: typeof AdminPipelineStagesRoute
   AdminUsersRoute: typeof AdminUsersRoute
   AdminIndexRoute: typeof AdminIndexRoute
 }
@@ -1216,6 +1236,7 @@ const AdminRouteChildren: AdminRouteChildren = {
   AdminApiKeysRoute: AdminApiKeysRoute,
   AdminAuditRoute: AdminAuditRoute,
   AdminIntegrationsRoute: AdminIntegrationsRoute,
+  AdminPipelineStagesRoute: AdminPipelineStagesRoute,
   AdminUsersRoute: AdminUsersRoute,
   AdminIndexRoute: AdminIndexRoute,
 }

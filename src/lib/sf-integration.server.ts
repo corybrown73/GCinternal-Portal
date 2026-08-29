@@ -16,7 +16,9 @@ import type {
   PortalAccountRow,
   SyncLogRow,
 } from "./server/sf-ingest";
-import { STAGES, type AccountStage } from "./presale-stages";
+import { type AccountStage } from "./presale-stages";
+import { isAtOrPast, wonStage } from "./pipeline-stages";
+import { loadPipelineStages } from "./pipeline-stages.server";
 import { LIFECYCLE_STAGES } from "./lifecycle";
 
 const db = () => supabaseAdmin as any;
@@ -355,26 +357,31 @@ export async function writeSyncLog(
 
 /* ---------------------------------------------------- presale stage seam */
 
-const stageIndex = (s: string) => (STAGES as readonly string[]).indexOf(s);
-
 /**
  * The ingest's half of PLAN.md decision 10: a closed-won opportunity moves the
- * matched deal to `closed_won` — forward only, through the one legal writer
+ * matched deal to the WON stage — forward only, through the one legal writer
  * (`portal_transition_stage`), and only when `sf_presale_bridge` is on.
+ *
+ * Two things changed here and neither changes behaviour on a deployment that
+ * has not edited its pipeline. The destination is the stage MARKED as won
+ * rather than the literal `closed_won`; and "forward" is a position in the
+ * CONFIGURED order rather than an index into the enum's declaration order.
+ * Reordering the pipeline therefore changes what forward means, which is what
+ * reordering a pipeline is.
  */
 export async function bridgeDealToClosedWon(accountId: string): Promise<{ changed: boolean }> {
-  const { data: account } = await db()
-    .from("portal_accounts")
-    .select("id, stage")
-    .eq("id", accountId)
-    .maybeSingle();
+  const [{ data: account }, stages] = await Promise.all([
+    db().from("portal_accounts").select("id, stage").eq("id", accountId).maybeSingle(),
+    loadPipelineStages(),
+  ]);
   if (!account) return { changed: false };
-  if (stageIndex(account.stage) >= stageIndex("closed_won")) return { changed: false };
+  const won = wonStage(stages);
+  if (isAtOrPast(stages, account.stage, won.key)) return { changed: false };
 
   const { transitionStage } = await import("./server/accounts");
   return transitionStage(
     accountId,
-    "closed_won",
+    won.key as AccountStage,
     { source: "api" },
     "Closed-won opportunity received from Salesforce",
   );
@@ -424,7 +431,8 @@ export async function syncPresaleStageFromLifecycle(
       .eq("customer_id", impl.customer_id)
       .maybeSingle();
     if (!account) return { synced: false, reason: "no linked deal" };
-    if (stageIndex(account.stage) >= stageIndex(target)) {
+    const stages = await loadPipelineStages();
+    if (isAtOrPast(stages, account.stage, target)) {
       return { synced: false, reason: "deal is already at or past that stage" };
     }
 
