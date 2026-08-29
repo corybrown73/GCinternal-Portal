@@ -278,11 +278,7 @@ function VersionDetail({ templateId }: { templateId: string }) {
             label="Supersedes"
             value={
               supersedes ? (
-                <Link
-                  to="/templates"
-                  search={{ template: supersedes.id }}
-                  className="underline"
-                >
+                <Link to="/templates" search={{ template: supersedes.id }} className="underline">
                   v{supersedes.version}
                 </Link>
               ) : (
