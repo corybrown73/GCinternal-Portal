@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { handoffCompleteness, type HandoffInputs } from "../handoff-completeness";
+import {
+  HANDOFF_ITEM_KEYS,
+  handoffCompleteness,
+  type HandoffInputs,
+} from "../handoff-completeness";
 
 /**
  * The gate's whole value is that "incomplete" can always name what is missing.
@@ -136,5 +140,41 @@ describe("handoffCompleteness", () => {
       packet: { discovery_call_links: [{ label: "Call", url: "https://x" }] },
     });
     expect(linksOnly.missingKeys).not.toContain("discovery_calls");
+  });
+
+  it("says which of the two call sources it counted, and marks Gong as not deal-scoped", () => {
+    // Gong reports hang off the customer's presale deals, not off this
+    // implementation. Counting them is defensible; presenting them as evidence
+    // about THIS implementation without saying so is not.
+    const detail = (input: HandoffInputs) =>
+      handoffCompleteness(input).items.find((i) => i.key === "discovery_calls")!.detail;
+
+    expect(detail({ ...empty, gongReports: [{}, {}] })).toContain("2 Gong reports");
+    expect(detail({ ...empty, gongReports: [{}, {}] })).toContain("not deal-scoped");
+
+    const linked = detail({
+      ...empty,
+      packet: { discovery_call_links: [{ label: "Call", url: "https://x" }] },
+    });
+    expect(linked).toContain("1 linked on this handoff");
+    expect(linked).not.toContain("Gong");
+
+    const both = detail({
+      ...empty,
+      packet: { discovery_call_links: [{ label: "Call", url: "https://x" }] },
+      gongReports: [{}],
+    });
+    expect(both).toContain("1 linked on this handoff");
+    expect(both).toContain("1 Gong report on this customer's deals");
+  });
+
+  it("keeps HANDOFF_ITEM_KEYS in step with the items it actually produces", () => {
+    // The write side validates a return's named gaps against this list, and the
+    // UI resolves stored keys back to labels through it. A key that drifts out
+    // of step would either reject a legitimate gap or render as a bare string
+    // in the accountability record.
+    const produced = handoffCompleteness(empty).items.map((i) => i.key);
+    expect([...produced].sort()).toEqual([...HANDOFF_ITEM_KEYS].sort());
+    expect(new Set(produced).size).toBe(produced.length);
   });
 });

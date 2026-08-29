@@ -5,6 +5,7 @@ import { ChevronRight, ArrowRight } from "lucide-react";
 
 import { HealthNote } from "@/components/health-note";
 import { PlanPanel } from "@/components/plan-panel";
+import { HandoffPanel } from "@/components/handoff-panel";
 import { LifecycleRail } from "@/components/lifecycle-rail";
 import { AdvanceStage } from "@/components/stage-advance-write";
 import { launchAcceptanceGate } from "@/lib/launch-gate";
@@ -1266,6 +1267,10 @@ function JourneyTab({ record, customerId }: { record: Customer360; customerId: s
           />
         </div>
       </div>
+
+      {/* The sales → delivery handoff gate, next to the stage move it gates.
+          Renders an explanatory empty state while the flag is off. */}
+      <HandoffPanel customerId={customerId} implementationId={impl.id} />
 
       {/* The templated plan: stage instances and the work items on them.
           Renders an explanatory empty state while the flag is off. */}

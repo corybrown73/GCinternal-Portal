@@ -30,6 +30,16 @@ export type HandoffPacket = {
   discovery_call_links: Array<{ label?: string; url?: string }>;
   submitted_at: string | null;
   decided_at: string | null;
+  /**
+   * Who submitted and who decided, straight off the packet row.
+   *
+   * The event insert is a separate statement from the packet update and is not
+   * in a transaction with it, so a failed insert would otherwise leave a packet
+   * that shows a decision with no recoverable actor. Names are resolved into
+   * HandoffView.actor_names.
+   */
+  submitted_by: string | null;
+  decided_by: string | null;
   return_missing_keys: string[];
   return_note: string | null;
 };
@@ -49,6 +59,8 @@ export type HandoffView = {
   packet: HandoffPacket | null;
   completeness: HandoffCompleteness | null;
   events: HandoffEvent[];
+  /** profile id -> display name, covering both the packet's actors and the events'. */
+  actor_names: Record<string, string>;
 };
 
 function toPacket(row: any): HandoffPacket {
@@ -62,6 +74,8 @@ function toPacket(row: any): HandoffPacket {
     discovery_call_links: Array.isArray(row.discovery_call_links) ? row.discovery_call_links : [],
     submitted_at: row.submitted_at,
     decided_at: row.decided_at,
+    submitted_by: row.submitted_by ?? null,
+    decided_by: row.decided_by ?? null,
     return_missing_keys: row.return_missing_keys ?? [],
     return_note: row.return_note,
   };
@@ -113,7 +127,7 @@ async function gatherInputs(implementationId: string, packetRow: any) {
 
 export async function loadHandoff(implementationId: string): Promise<HandoffView> {
   if (!(await isFlagOn("handoff_gate"))) {
-    return { enabled: false, packet: null, completeness: null, events: [] };
+    return { enabled: false, packet: null, completeness: null, events: [], actor_names: {} };
   }
 
   const { data: row } = await db()
@@ -123,28 +137,41 @@ export async function loadHandoff(implementationId: string): Promise<HandoffView
     .maybeSingle();
 
   const inputs = await gatherInputs(implementationId, row);
-  if (!inputs) return { enabled: true, packet: null, completeness: null, events: [] };
+  if (!inputs)
+    return { enabled: true, packet: null, completeness: null, events: [], actor_names: {} };
 
   const completeness = handoffCompleteness(inputs as any);
 
   let events: HandoffEvent[] = [];
+  const actorNames: Record<string, string> = {};
   if (row) {
     const { data: rawEvents } = await db()
       .from("handoff_events")
       .select("id, kind, actor_id, missing_keys, note, created_at")
       .eq("packet_id", row.id)
       .order("created_at", { ascending: false });
-    const actorIds = [...new Set((rawEvents ?? []).map((e: any) => e.actor_id).filter(Boolean))];
+
+    // The packet's own actors are resolved alongside the events' so the header
+    // can name who submitted and who decided without depending on an event row
+    // having been written.
+    const actorIds = [
+      ...new Set(
+        [...(rawEvents ?? []).map((e: any) => e.actor_id), row.submitted_by, row.decided_by].filter(
+          Boolean,
+        ),
+      ),
+    ];
     const { data: profiles } = actorIds.length
       ? await db().from("portal_profiles").select("id, full_name, email").in("id", actorIds)
       : { data: [] };
-    const nameById = new Map<string, string>(
-      (profiles ?? []).map((p: any) => [p.id, p.full_name || p.email]),
-    );
+    for (const prof of profiles ?? []) {
+      actorNames[(prof as any).id] = (prof as any).full_name || (prof as any).email;
+    }
+
     events = (rawEvents ?? []).map((e: any) => ({
       id: e.id,
       kind: e.kind,
-      actor_name: e.actor_id ? (nameById.get(e.actor_id) ?? null) : null,
+      actor_name: e.actor_id ? (actorNames[e.actor_id] ?? null) : null,
       missing_keys: e.missing_keys ?? [],
       note: e.note,
       created_at: e.created_at,
@@ -156,6 +183,7 @@ export async function loadHandoff(implementationId: string): Promise<HandoffView
     packet: row ? toPacket(row) : null,
     completeness,
     events,
+    actor_names: actorNames,
   };
 }
 
@@ -208,6 +236,31 @@ async function currentCompleteness(implementationId: string, packetRow: any) {
   const inputs = await gatherInputs(implementationId, packetRow);
   if (!inputs) throw new Error("Implementation not found.");
   return handoffCompleteness(inputs as any);
+}
+
+/**
+ * A decision can only be made on a handoff that was actually handed over.
+ *
+ * Without this, `accept` on a draft records an acceptance of something nobody
+ * ever submitted, and `return` on an accepted packet walks the status
+ * backwards — both leave a history that reads as a gate when no gate happened.
+ * The UI hides those buttons, but these functions are directly callable, and
+ * the record is the whole product here.
+ *
+ * Reopening an accepted handoff is a real need and a different action (the
+ * event vocabulary already has `reopened` for it); it is deliberately not this
+ * one, so refuse rather than approximate it.
+ */
+function requireSubmitted(packet: { status: HandoffStatus }, verb: string): void {
+  if (packet.status === "submitted") return;
+  if (packet.status === "accepted") {
+    throw new Error(`This handoff has already been accepted, so it cannot be ${verb}.`);
+  }
+  const why =
+    packet.status === "returned"
+      ? "It was returned and has not been resubmitted yet."
+      : "It has not been submitted yet.";
+  throw new Error(`A handoff can only be ${verb} once it has been submitted. ${why}`);
 }
 
 /** Sales hands it over. Allowed while incomplete — the gaps are recorded, not hidden. */
@@ -263,6 +316,7 @@ export async function acceptHandoff(
 ): Promise<HandoffPacket> {
   await requireEnabled();
   const packet = await ensurePacket(implementationId);
+  requireSubmitted(packet, "accepted");
   const completeness = await currentCompleteness(implementationId, packet);
   const at = new Date().toISOString();
 
@@ -307,6 +361,7 @@ export async function returnHandoff(
 ): Promise<HandoffPacket> {
   await requireEnabled();
   const packet = await ensurePacket(implementationId);
+  requireSubmitted(packet, "returned");
   const completeness = await currentCompleteness(implementationId, packet);
   const at = new Date().toISOString();
 

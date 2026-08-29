@@ -13,20 +13,29 @@
  * the other way round.
  */
 
-export type HandoffItemKey =
-  | "business_outcome"
-  | "success_measures"
-  | "economic_buyer"
-  | "champion"
-  | "day_to_day_owner"
-  | "commitments"
-  | "technical_risks"
-  | "integration_dependencies"
-  | "data_migration_needs"
-  | "roadmap_promises"
-  | "sow_link"
-  | "discovery_calls"
-  | "discovery_board";
+/**
+ * The item keys, as a value so the write side can validate against them. A
+ * returned handoff names its gaps by key and those keys are rendered back as
+ * an accountability record, so an unrecognised key must be rejected at the
+ * edge rather than stored and later shown as a bare string.
+ */
+export const HANDOFF_ITEM_KEYS = [
+  "business_outcome",
+  "success_measures",
+  "economic_buyer",
+  "champion",
+  "day_to_day_owner",
+  "commitments",
+  "technical_risks",
+  "integration_dependencies",
+  "data_migration_needs",
+  "roadmap_promises",
+  "sow_link",
+  "discovery_calls",
+  "discovery_board",
+] as const;
+
+export type HandoffItemKey = (typeof HANDOFF_ITEM_KEYS)[number];
 
 export type HandoffItem = {
   key: HandoffItemKey;
@@ -205,7 +214,22 @@ export function handoffCompleteness(input: HandoffInputs): HandoffCompleteness {
       key: "discovery_calls",
       label: "Recorded discovery calls",
       present: calls > 0,
-      detail: calls > 0 ? `${calls} linked.` : "No call recordings or Gong reports linked.",
+      // The two sources are named separately on purpose. Gong reports hang off
+      // the CUSTOMER's presale deals, not off this implementation — nothing in
+      // the schema links a deal to one implementation yet — so counting them
+      // silently would present a customer-level fact as evidence about this
+      // piece of work. Say where the evidence came from and let the reader judge.
+      detail:
+        calls > 0
+          ? [
+              callLinks > 0 ? `${callLinks} linked on this handoff` : null,
+              input.gongReports.length > 0
+                ? `${input.gongReports.length} Gong report${input.gongReports.length === 1 ? "" : "s"} on this customer's deals (not deal-scoped)`
+                : null,
+            ]
+              .filter(Boolean)
+              .join("; ") + "."
+          : "No call recordings or Gong reports linked.",
       tab: "overview",
     },
     // Optional: absence is a legitimate answer, not an incomplete handoff.

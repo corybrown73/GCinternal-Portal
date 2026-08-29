@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireInternalAuth } from "@/integrations/supabase/internal-middleware";
+import { HANDOFF_ITEM_KEYS } from "./handoff-completeness";
 
 /**
  * Handoff gate server functions.
@@ -67,7 +68,13 @@ export const returnHandoffPacket = createServerFn({ method: "POST" })
         implementationId,
         // A return must name its gaps: a free-text-only return is how this
         // degrades into "it isn't good enough".
-        missingKeys: z.array(z.string()).min(1, "Name at least one gap you are returning it for."),
+        // Validated against the real key set, not `string`: these keys are
+        // stored and later rendered back as the accountability record of what
+        // the handoff was returned for, so a typo or a stale key would show up
+        // in the history as an unexplained bare string.
+        missingKeys: z
+          .array(z.enum(HANDOFF_ITEM_KEYS))
+          .min(1, "Name at least one gap you are returning it for."),
         note,
       })
       .parse(data),
@@ -78,7 +85,7 @@ export const returnHandoffPacket = createServerFn({ method: "POST" })
     return returnHandoff(
       data.implementationId,
       context.profile.id,
-      data.missingKeys as never,
+      data.missingKeys,
       data.note ?? null,
     );
   });

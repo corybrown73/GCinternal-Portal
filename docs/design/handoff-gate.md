@@ -52,7 +52,18 @@ owner decides.
   time-in-Handoff accrues through a return exactly as the brief requires. This needs no code — it
   needs us *not* to write the special case that would stop it.
 - **A return names its gaps.** Free-text-only returns are how this degrades into "it's not good
-  enough"; the return records which required items were missing, plus an optional note.
+  enough"; the return records which required items it was sent back for, plus an optional note.
+  The gaps a reviewer can name are ALL the required items, not only the absent ones — the commonest
+  real return is "the success measures are there but they aren't measurable", and a form that only
+  offers empty fields leaves that reviewer nothing to name and forces them to accept or say nothing.
+  Absent items are pre-ticked so the ordinary case is still one click. The keys are validated against
+  the real item list at the edge, because they are stored and later rendered back as the record.
+- **The transitions are enforced, not just implied by the UI.** Accept and return require the packet
+  to be `submitted`. Without that, accepting a `draft` records an acceptance of something nobody
+  handed over, and returning an `accepted` packet walks the status backwards; both leave a history
+  that reads as a gate when no gate happened, and these functions are directly callable. Reopening an
+  accepted handoff is a genuine need and a *different* action — the event vocabulary already has
+  `reopened` for it — so this refuses rather than approximating it.
 - **A decision records what it saw.** On accept or return we snapshot the completeness result as
   evidence of the decision — not as a second copy of the content. The live records stay the truth;
   the snapshot answers "what was accepted, on what basis, by whom".
@@ -65,6 +76,15 @@ Deliberate. The implementation owner is the one accountable for delivery; if the
 tolerable, blocking them protects nobody and teaches everyone to fill fields with noise. An accept
 with missing items records exactly which ones were missing at the time — which is the accountability
 the brief actually wants, and it is stronger than a block.
+
+## What "recorded discovery calls" actually counts
+
+Two sources: call links typed onto the packet, and Gong reports. The Gong reports hang off the
+**customer's** presale deals — nothing in the schema links a deal to one implementation yet — so for
+a customer with several deals, recordings from an unrelated deal would satisfy the item. Rather than
+guess a link, the item's detail names each source separately and marks the Gong count "not
+deal-scoped", so the reader can judge the evidence instead of trusting a tick. Phase 5 introduces
+`salesforce_opportunity_id` on both sides, which is where the real scoping belongs.
 
 ## Flag
 
