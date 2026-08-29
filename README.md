@@ -1,29 +1,82 @@
-# Welcome to your Lovable project
+# GoCanvas Handoff Hub
 
-This project was built with [Lovable](https://lovable.dev).
+One portal for the whole account journey: **presale pipeline → sales-to-implementation handoff → implementation lifecycle → customer-visible onboarding → graduation to CS** — with drip-email journeys, routed tickets on a 24h SLA, out-of-spec alerting, and an open API at every stage. Built multi-tenant from day one (`org_id` on every table; GoCanvas is tenant #1).
 
-## Build with Lovable
+TanStack Start (React + Vite SSR) · Supabase (Postgres/Auth/Storage) · Vercel. Architecture in `PLAN.md`.
 
-Open your project in the [Lovable editor](https://lovable.dev) and keep building.
+## Roles
 
-- **Ship faster**: describe what you want to build and Lovable handles the code.
-- **Stay in sync**: connect the project to GitHub and every change made in Lovable is committed straight to your repository.
-- **Full ownership**: this code is yours. Push to your repository and your changes sync back into Lovable, ready for your next prompt.
+| Role | Can |
+|---|---|
+| `super_admin` (×2, designated in Admin → Users; the **first signup** becomes one) | Everything + API keys, user roles, integrations |
+| `manager` | Broad edit, TAM approvals, ticket routing, leadership views, escalation target |
+| `sales` | Create deals, Gong notes, onboarding plan, start the handoff |
+| `implementation` | Lifecycle, milestones, tickets, journeys |
+| `tam_se` | Technical solutions, field mappings, technical notes, tickets |
+| `customer` | Customer portal only — magic-link sign-in, invited via **Customer access**, never self-registered |
 
-## Development
+Internal signup is restricted to `@gocanvas.com` **by a database trigger** (not just the form); customer invites bypass it deliberately.
 
-Prefer working locally? You need Node.js and npm — [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating).
+## One-time setup
 
-```sh
-git clone <this-repository-url>
-cd <repository-name>
-npm i
-npm run dev
+### 1. Database — apply pending migrations
+Migrations `0001`–`0002` are applied. Apply `0003` → `0008` **in order** in the Supabase SQL editor (Dashboard → SQL), one file per run — **`0004` must run on its own** (it only adds enum values, which Postgres won't let the same transaction use):
+
+`0003_hub_tables.sql` → `0004_roles_and_customers.sql` → `0005_roles_usage.sql` → `0006_tickets_journeys.sql` → `0007_presale_link.sql` → `0008_super_admin_fix.sql`
+
+Then optionally run `supabase/seed_demo.sql` for walkthrough data.
+
+### 2. Supabase Auth settings
+Authentication → Providers → Email: **Confirm email ON**, min password length 12, leaked-password protection ON. URL Configuration: Site URL = your deployed URL; add `https://<app>/auth/callback` to redirect URLs.
+
+### 3. Deploy (Vercel)
+Import the repo (framework: Other; build `npm run build`; the nitro `vercel` preset emits `.vercel/output`). Set env vars from `.env.example` — minimum: the four Supabase vars, `SUPABASE_SERVICE_ROLE_KEY`, `TAM_TOKEN_SECRET`, `CRON_SECRET`, `APP_URL`. Optional: `ANTHROPIC_API_KEY` (AI briefs), `RESEND_API_KEY` + `EMAIL_MODE=send` (real email; otherwise emails print to the function log). `vercel.json` schedules the SLA cron (hourly) and journey cron (every 30 min).
+
+### 4. First run
+Sign up with your `@gocanvas.com` email → verify → you are super admin #1. Designate #2 in **Admin → Users**.
+
+## The flow
+
+- **/pipeline** — deal Kanban (Prospect → Closed Won → Kickoff → In Onboarding → Complete); New deal, CSV import (Salesforce export), drag to move stages (all transitions audited through a SQL funnel).
+- **/deals/:id** — Gong agent notes (paste/upload), Claude-generated branded **.pptx account brief** with discovery questions (template fallback without a key), TAM request with one-click email approve/decline (signed, single-use links), sales/onboarding notes, stage history. **Start onboarding** creates the customer + implementation and jumps you into the hub.
+- **/customers**, **/technical-solutions**, **/portfolio**, **/** (Home triage) — the Implementation Path hub, unchanged.
+- **/tickets** — routed queue (category → role, least-loaded assignee), 24h first-response SLA: warning email at ~12h, breach flag + manager email at 24h, internal notes vs customer replies. Routing table editable at /tickets/routing.
+- **/alerts** — everything out-of-spec in one place: SLA breaches, stalled implementations (>14 days in stage), overdue milestones, external reports.
+- **/journeys** — drip automation: steps send a video/doc email with a **tracked link**; the view event advances the enrollment to the next step (or a timed delay does). Seeded "New Logo Welcome" journey: Welcome → Level 1 → Level 2.
+- **/access** — invite customer contacts to the portal (magic link, no passwords), see active portal users, revoke.
+- **/portal** — what customers see: stage tracker + progress %, next steps (their overdue items highlighted), and "ask a question" that files a routed ticket with a 24h response promise.
+- **/admin** — API keys (scoped, hashed, shown once), user roles.
+
+## Open API (`/api/v1`, `Authorization: Bearer gcp_live_…`)
+
+| Endpoint | Scope | Use |
+|---|---|---|
+| `POST /api/v1/accounts` | accounts:write | Upsert deal — the Zapier/Salesforce closed-won hook |
+| `GET /api/v1/accounts[?stage=]`, `GET /api/v1/accounts/:id` | accounts:read | Read deals (`sf_<salesforce_id>` accepted) |
+| `POST /api/v1/accounts/:id/transition` | transitions:write | Move a deal's stage |
+| `POST /api/v1/tam-requests` | tam:write | File a TAM request (triggers approval email) |
+| `POST /api/v1/tickets` | tickets:write | File a ticket from an external system |
+| `POST /api/v1/alerts` | alerts:write | **Report something out of spec** — severity ≥ warning emails managers |
+
+Errors: `{ "error": { "code", "message" } }` — 401 bad key, 403 missing scope, 422 validation. Every call audit-logged.
+
+```bash
+curl -X POST "$APP/api/v1/accounts" -H "Authorization: Bearer $KEY" -H "Content-Type: application/json" \
+  -d '{"salesforce_id":"0061","name":"Acme Mfg","stage":"closed_won","arr":48000}'
+curl -X POST "$APP/api/v1/alerts" -H "Authorization: Bearer $KEY" -H "Content-Type: application/json" \
+  -d '{"title":"Usage dropped 40% at Corewell","severity":"critical","detail":"Weekly submissions fell from 900 to 540"}'
 ```
 
-## Built with
+## Enabling Microsoft SSO later (config only)
 
-- TanStack Start
-- TypeScript
-- React
-- Tailwind CSS
+IT registers the Entra app → configure the Azure provider in Supabase Auth (restrict to tenant) → set `VITE_AUTH_MICROSOFT_ENABLED=true` and redeploy. The button, callback, and domain allowlist already ship.
+
+## Local development
+
+```bash
+npm install
+cp .env.example .env   # fill in
+npm run dev            # http://localhost:3000
+```
+
+> The Supabase project is shared with an unrelated prototype: presale tables are `portal_`-prefixed, hub tables are unprefixed (collision-checked), and the app has Supabase Auth + Storage to itself.
