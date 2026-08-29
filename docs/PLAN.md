@@ -26,8 +26,11 @@ migration `0009`, and both the account-model and Salesforce designs add the same
   trigger, the work-item instance layer and its four RPCs are in, New Logo v1 is seeded from
   `lifecycle.ts` verbatim and all 3 implementations are backfilled, and Add-On / Integration /
   Data Migration are seeded published. `journey_templates` and `work_items` flags are **off**, so
-  none of it is user-visible yet. **Remaining: the template builder UI and the work-item surfaces
-  on the 360** — everything they need exists and is verified.
+  none of it is user-visible yet. Migration 0017 then hardened the conditional-content evaluator
+  after mirroring it into TypeScript surfaced five ways a malformed condition could quietly do the
+  wrong thing. The read-only template browser (`/admin/templates`) and the Plan panel on the
+  Customer 360 both ship flag-gated. **Remaining: template *editing* — the builder's write side
+  (create/edit/publish/reorder), which the publish and reorder RPCs already support.**
 
 Two things from Phase 1 that need your call are listed under "Open from Phase 1" at the end.
 
@@ -298,7 +301,13 @@ Two decisions surfaced during implementation. Neither blocks Phase 2; both are d
    exist; the design's concern is real but only bites when a single account has several concurrent
    opportunities, which the presale schema cannot represent until the Phase 5 Salesforce work adds
    opportunity identity. **Recommendation:** keep both, revisit when opportunity ids land.
-2. **`implementations.source = 'presale'` is stamped unflagged.** It is written on every
+2. **Who reviews template content?** The template browser sits at `/admin/templates`, and the
+   `/admin` layout is gated to **super admins only** — but the content review before the flags flip
+   is the implementation team's job, and the design says reading template data needs only an
+   internal role. **Recommendation:** move the page to `/settings/templates` (internal-visible) and
+   keep the write side, when it lands, gated to manage-level roles. One-line change; I left it where
+   the brief put it rather than widening access on my own.
+3. **`implementations.source = 'presale'` is stamped unflagged.** It is written on every
    presale-created implementation regardless of the flag. Nothing renders or exports the column
    today, so this is invisible — but it is a (harmless) behavior change with the flag off.
    **Recommendation:** leave it; the provenance is worth having from the start.
