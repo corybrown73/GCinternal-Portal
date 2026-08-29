@@ -436,7 +436,26 @@ export function technicalSolutionNextAction(detail: {
 /* ---------------- WAITING ON (derived display only) ---------------- */
 
 export type WaitingOnParty = "technical_solutions" | "customer" | "tis" | "none";
-export type WaitingOn = { party: WaitingOnParty; reason: string };
+
+/**
+ * Phase 6 promotes this to the cross-surface backbone, which needs two more
+ * named facts than a party and a sentence: WHEN the wait started and WHICH
+ * record decided it.
+ *
+ * `since` is the deciding record's own timestamp — the approval's
+ * `requested_at`, the commitment's `due_date`, the escalation's `raised_at` —
+ * and deliberately never `stage_entered_at`, which would date every wait from
+ * the last stage move and overstate almost all of them. Null when the deciding
+ * record carries no usable date, which is itself worth showing.
+ */
+export type WaitingOn = {
+  party: WaitingOnParty;
+  reason: string;
+  /** ISO timestamp the wait started, from the deciding record. */
+  since: string | null;
+  /** The table the deciding record came from, e.g. "approvals". */
+  source: string | null;
+};
 
 /** Solution statuses that mean technical work is still outstanding. */
 const SOLUTION_OPEN = ["draft", "in_review", "review", "in_progress", "in_build", "build"];
@@ -485,6 +504,8 @@ export function waitingOn(input: WaitingOnInput): WaitingOn {
       reason: `Waiting on the customer to approve ${pendingApproval.title}${
         who ? ` (${who})` : ""
       }`,
+      since: pendingApproval.requested_at ?? null,
+      source: "approvals",
     };
   }
 
@@ -500,12 +521,16 @@ export function waitingOn(input: WaitingOnInput): WaitingOn {
       return {
         party: "technical_solutions",
         reason: `Waiting on Technical Solutions to finish ${incompleteRequired.length} required field mapping(s) for ${s.title}`,
+        since: s.updated_at ?? null,
+        source: "field_mappings",
       };
     }
     if (SOLUTION_OPEN.includes(status)) {
       return {
         party: "technical_solutions",
         reason: `Waiting on Technical Solutions to finish ${s.title} — still ${humanize(status)}`,
+        since: s.updated_at ?? null,
+        source: "technical_solutions",
       };
     }
   }
@@ -518,6 +543,8 @@ export function waitingOn(input: WaitingOnInput): WaitingOn {
     return {
       party: "customer",
       reason: `Waiting on the customer for a commitment past due ${fmtDate(customerCommitment.due_date)}: ${customerCommitment.description}`,
+      since: customerCommitment.due_date ?? null,
+      source: "commitments",
     };
   }
 
@@ -526,34 +553,50 @@ export function waitingOn(input: WaitingOnInput): WaitingOn {
     [...rows].sort((a, b) => severityRank(a.severity) - severityRank(b.severity))[0];
   const esc = bySeverity(escalations);
   if (esc) {
-    return { party: "tis", reason: `Waiting on TIS to resolve the open escalation: ${esc.title}` };
+    return {
+      party: "tis",
+      reason: `Waiting on TIS to resolve the open escalation: ${esc.title}`,
+      since: esc.raised_at ?? null,
+      source: "escalations",
+    };
   }
   const issue = bySeverity(issues);
   if (issue) {
     return {
       party: "tis",
       reason: `Waiting on TIS to resolve the open issue: ${issue.title}`,
+      since: issue.raised_at ?? null,
+      source: "issues",
     };
   }
   const risk = bySeverity(risks);
   if (risk) {
-    return { party: "tis", reason: `Waiting on TIS to act on the open risk: ${risk.title}` };
+    return {
+      party: "tis",
+      reason: `Waiting on TIS to act on the open risk: ${risk.title}`,
+      since: risk.identified_at ?? null,
+      source: "risks",
+    };
   }
   const tisCommitment = commitments.find((c: any) => !isCustomerSide(c.committed_to));
   if (tisCommitment) {
     return {
       party: "tis",
       reason: `Waiting on TIS to close an open commitment: ${tisCommitment.description}`,
+      since: tisCommitment.due_date ?? tisCommitment.made_at ?? null,
+      source: "commitments",
     };
   }
   if (decisions.length) {
     return {
       party: "tis",
       reason: `Waiting on TIS to resolve an open decision: ${decisions[0].title}`,
+      since: decisions[0].decision_date ?? null,
+      source: "decisions",
     };
   }
 
-  return { party: "none", reason: "No current dependency." };
+  return { party: "none", reason: "No current dependency.", since: null, source: null };
 }
 
 /** Customer 360 adapter — same logic, record-shaped input. */

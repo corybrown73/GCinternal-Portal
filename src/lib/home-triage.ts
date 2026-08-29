@@ -8,7 +8,9 @@ import {
   openItems,
   proveValueGapSummary,
   severityRank,
+  waitingOn,
   whatMattersNow,
+  type WaitingOn,
 } from "./customer360-derive";
 import { launchAcceptanceGate } from "./launch-gate";
 import { nextLifecycleStage } from "./stage-advance-input";
@@ -33,6 +35,12 @@ export type QueueRow = {
   /** What's at stake, from real fields only. */
   impact: string;
   next_action: string;
+  /**
+   * Phase 6: who owes the next move, and since when. Carried on every queue row
+   * so Home, the Customers list and Leadership all read one derivation instead
+   * of three that can disagree.
+   */
+  dependency: WaitingOn;
   /** Deep-link target tab on Customer 360. */
   tab: "overview" | "journey" | "risks" | "requirements" | "solution" | "evidence" | "history";
   /** Lower sorts first within a section. */
@@ -124,6 +132,7 @@ export function triageRow(impl: ImplementationRow, bundle: TriageBundle | undefi
       reason: `${humanize(severeEscalation.severity)} escalation: ${severeEscalation.title}`,
       impact: impactLine(impl, `escalation open ${daysSince(severeEscalation.raised_at) ?? 0}d`),
       record,
+      bundle,
     });
   }
   if (impl.status === "blocked") {
@@ -131,6 +140,7 @@ export function triageRow(impl: ImplementationRow, bundle: TriageBundle | undefi
       reason: `Blocked in ${stageLabel(impl.current_stage)} — ${whatMattersNow(record)}`,
       impact: impactLine(impl, `${stalledDays}d in stage`),
       record,
+      bundle,
     });
   }
   if (criticalRisk) {
@@ -141,6 +151,7 @@ export function triageRow(impl: ImplementationRow, bundle: TriageBundle | undefi
         criticalRisk.impact ?? `owner ${criticalRisk.owner_name ?? "unassigned"}`,
       ),
       record,
+      bundle,
     });
   }
   if (customerFacingOverdue) {
@@ -159,6 +170,7 @@ export function triageRow(impl: ImplementationRow, bundle: TriageBundle | undefi
         }`,
       ),
       record,
+      bundle,
     });
   }
   if (launchSlipped) {
@@ -168,6 +180,7 @@ export function triageRow(impl: ImplementationRow, bundle: TriageBundle | undefi
       )}d over)`,
       impact: impactLine(impl, "launch date slipped, no actual launch recorded"),
       record,
+      bundle,
     });
   }
 
@@ -183,6 +196,7 @@ export function triageRow(impl: ImplementationRow, bundle: TriageBundle | undefi
       reason: `Open risk (${midRisk.severity}/${midRisk.likelihood ?? "unknown"} likelihood): ${midRisk.title}`,
       impact: impactLine(impl, midRisk.impact ?? `owner ${midRisk.owner_name ?? "unassigned"}`),
       record,
+      bundle,
     });
   }
   if (midIssue) {
@@ -190,6 +204,7 @@ export function triageRow(impl: ImplementationRow, bundle: TriageBundle | undefi
       reason: `Open issue (${midIssue.severity}): ${midIssue.title}`,
       impact: impactLine(impl, `owner ${midIssue.owner_name ?? "unassigned"}`),
       record,
+      bundle,
     });
   }
   if (overdueCommitment) {
@@ -204,6 +219,7 @@ export function triageRow(impl: ImplementationRow, bundle: TriageBundle | undefi
         }`,
       ),
       record,
+      bundle,
     });
   }
   if (stalledCounts) {
@@ -213,6 +229,7 @@ export function triageRow(impl: ImplementationRow, bundle: TriageBundle | undefi
         : `Stalled ${stalledDays} days in ${stageLabel(impl.current_stage)}`,
       impact: impactLine(impl, `threshold ${STAGE_FLAG_DAYS}d`),
       record,
+      bundle,
     });
   }
   if (missedMilestone) {
@@ -222,6 +239,7 @@ export function triageRow(impl: ImplementationRow, bundle: TriageBundle | undefi
       }`,
       impact: impactLine(impl, `stage ${stageLabel(missedMilestone.stage ?? impl.current_stage)}`),
       record,
+      bundle,
     });
   }
   if (soonCommitment) {
@@ -229,6 +247,7 @@ export function triageRow(impl: ImplementationRow, bundle: TriageBundle | undefi
       reason: `Commitment due in ${daysUntil(soonCommitment.due_date)}d: ${soonCommitment.description}`,
       impact: impactLine(impl, `due ${fmtDate(soonCommitment.due_date)}`),
       record,
+      bundle,
     });
   }
   if (atRiskMilestone) {
@@ -241,6 +260,7 @@ export function triageRow(impl: ImplementationRow, bundle: TriageBundle | undefi
           : "no target date",
       ),
       record,
+      bundle,
     });
   }
   const valueGap = proveValueGapSummary(bundle?.success_criteria, impl.current_stage);
@@ -254,6 +274,7 @@ export function triageRow(impl: ImplementationRow, bundle: TriageBundle | undefi
         )}`,
       ),
       record,
+      bundle,
     });
   }
   // Solution acceptance is the only thing standing between this implementation
@@ -268,6 +289,7 @@ export function triageRow(impl: ImplementationRow, bundle: TriageBundle | undefi
       reason: `Solution acceptance is preventing the move to Launch — ${acceptanceGate.reason}`,
       impact: impactLine(impl, `${stalledDays}d in ${stageLabel(impl.current_stage)}`),
       record,
+      bundle,
       next: acceptanceGate.outstanding[0] ?? "Record solution acceptance before moving to Launch",
     });
   }
@@ -276,6 +298,7 @@ export function triageRow(impl: ImplementationRow, bundle: TriageBundle | undefi
       reason: `Flagged at risk — ${whatMattersNow(record)}`,
       impact: impactLine(impl, `${stalledDays}d in ${stageLabel(impl.current_stage)}`),
       record,
+      bundle,
     });
   }
 
@@ -305,8 +328,15 @@ function row(
   bucket: TriageBucket,
   rank: number,
   tab: QueueRow["tab"],
-  parts: { reason: string; impact: string; record: Customer360; next?: string },
+  parts: {
+    reason: string;
+    impact: string;
+    record: Customer360;
+    next?: string;
+    bundle?: TriageBundle | undefined;
+  },
 ): QueueRow {
+  const bundle = parts.bundle;
   return {
     impl,
     bucket,
@@ -315,6 +345,17 @@ function row(
     reason: parts.reason,
     impact: parts.impact,
     next_action: parts.next ?? nextAction(parts.record, impl),
+    // Same inputs the record was built from, so the dependency on a row can
+    // never disagree with the dependency Leadership shows for that row.
+    dependency: waitingOn({
+      technical_solutions: bundle?.technical_solutions ?? [],
+      approvals: bundle?.approvals ?? [],
+      commitments: parts.record.commitments ?? [],
+      risks: parts.record.risks ?? [],
+      issues: parts.record.issues ?? [],
+      escalations: parts.record.escalations ?? [],
+      decisions: parts.record.decisions ?? [],
+    }),
   };
 }
 

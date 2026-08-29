@@ -19,7 +19,6 @@ import {
   proveValueGaps,
   proveValueState,
   severityRank,
-  waitingOn,
   type AdoptionLevel,
   type ImplHealth,
   type WaitingOn,
@@ -200,15 +199,10 @@ export function interventions(data: LeadershipData): InterventionRow[] {
 
   return candidates.map((row) => {
     const bundle = bundleFor(data.triage, row.impl.id);
-    const dependency = waitingOn({
-      technical_solutions: bundle?.technical_solutions ?? [],
-      approvals: bundle?.approvals ?? [],
-      commitments: bundle?.commitments ?? [],
-      risks: bundle?.risks ?? [],
-      issues: bundle?.issues ?? [],
-      escalations: bundle?.escalations ?? [],
-      decisions: bundle?.decisions ?? [],
-    });
+    // Phase 6: the queue row already carries the dependency, derived from the
+    // same bundle. Reading it here rather than re-deriving keeps Home and
+    // Leadership structurally unable to disagree.
+    const dependency = row.dependency;
     const { action, action_reason } = leadershipAction(row, dependency, bundle);
     return {
       row,
