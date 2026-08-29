@@ -61,4 +61,24 @@ alter table customers
   drop column if exists csm_owner_id,
   drop column if exists salesforce_account_id;
 
-delete from portal_app_config where key = 'v2_flags';
+-- Subtract only THIS migration's key.
+--
+-- Every phase merges its own flags into this one row, so deleting the row
+-- (which this used to do) would take every other phase's flags with it —
+-- including flags a human had turned ON. getV2Flags() falls back to all-false
+-- when the row is missing, so the product would silently switch itself off
+-- with no error anywhere.
+--
+-- CI cannot catch this: it runs downs newest-first, so by the time this one
+-- executes the later phases have already subtracted their own keys and the row
+-- looks empty. The damage only appears when 0010 is rolled back in production
+-- while later phases are still installed.
+update portal_app_config
+   set value = value - 'account_model'
+ where key = 'v2_flags';
+
+-- 0010 created the row, so it removes it — but only if rolling back has left
+-- nothing else in it. Any remaining key belongs to a phase that is still
+-- installed and still reading it.
+delete from portal_app_config
+ where key = 'v2_flags' and value = '{}'::jsonb;
