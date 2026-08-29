@@ -1,6 +1,6 @@
 # V2 Plan — phased, migration-first, approval-gated
 
-Status: **approved and in progress.** Phases 0-1 complete; Phase 2 schema and core wiring complete.
+Status: **approved and in progress.** Phases 0, 1 and 2 complete; Phase 3 next.
 This plan is built on evidence: `docs/AUDIT.md` (Step 0 audit, every claim verified against the code and the
 live database) and the four adversarially-reviewed designs in `docs/design/` — `templates.md`,
 `multi-implementation.md`, `portal-access.md`, `salesforce.md`. Where this plan and a design differ, this
@@ -20,7 +20,7 @@ migration `0009`, and both the account-model and Salesforce designs add the same
   cache; presale handoff matches accounts by Salesforce id and can start a second implementation.
   The `account_model` flag is **off** in production, so all workflow/UX changes are dark; the
   schema, the scope enforcement and the bug fixes are live.
-- **Phase 2 — schema and core wiring complete** (commits `030dbce`…`20fe433`). Migrations 0012–0016
+- **Phase 2 — complete** (commits `030dbce`…`f211a8c`). Migrations 0012–0017
   applied to production: the email drip is renamed to Sequences (old URLs 301, old tracked-link
   tokens still resolve), journey templates are versioned and their published content is frozen by
   trigger, the work-item instance layer and its four RPCs are in, New Logo v1 is seeded from
@@ -28,9 +28,10 @@ migration `0009`, and both the account-model and Salesforce designs add the same
   Data Migration are seeded published. `journey_templates` and `work_items` flags are **off**, so
   none of it is user-visible yet. Migration 0017 then hardened the conditional-content evaluator
   after mirroring it into TypeScript surfaced five ways a malformed condition could quietly do the
-  wrong thing. The read-only template browser (`/admin/templates`) and the Plan panel on the
-  Customer 360 both ship flag-gated. **Remaining: template *editing* — the builder's write side
-  (create/edit/publish/reorder), which the publish and reorder RPCs already support.**
+  wrong thing. The template browser (`/templates`, internal-visible) and the Plan panel on the
+  Customer 360 both ship flag-gated, as does the builder's write side (create a family, take a new
+  version of a live one, edit a draft, reorder, publish). **Phase 2 is complete**; both flags remain
+  off, so none of it is user-visible until the implementation team has reviewed the seeded content.
 
 Two things from Phase 1 that need your call are listed under "Open from Phase 1" at the end.
 
@@ -301,13 +302,7 @@ Two decisions surfaced during implementation. Neither blocks Phase 2; both are d
    exist; the design's concern is real but only bites when a single account has several concurrent
    opportunities, which the presale schema cannot represent until the Phase 5 Salesforce work adds
    opportunity identity. **Recommendation:** keep both, revisit when opportunity ids land.
-2. **Who reviews template content?** The template browser sits at `/admin/templates`, and the
-   `/admin` layout is gated to **super admins only** — but the content review before the flags flip
-   is the implementation team's job, and the design says reading template data needs only an
-   internal role. **Recommendation:** move the page to `/settings/templates` (internal-visible) and
-   keep the write side, when it lands, gated to manage-level roles. One-line change; I left it where
-   the brief put it rather than widening access on my own.
-3. **`implementations.source = 'presale'` is stamped unflagged.** It is written on every
+2. **`implementations.source = 'presale'` is stamped unflagged.** It is written on every
    presale-created implementation regardless of the flag. Nothing renders or exports the column
    today, so this is invisible — but it is a (harmless) behavior change with the flag off.
    **Recommendation:** leave it; the provenance is worth having from the start.
