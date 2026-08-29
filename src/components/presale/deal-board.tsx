@@ -12,8 +12,8 @@ import {
   type DragStartEvent,
 } from "@dnd-kit/core";
 
-import { STAGES, STAGE_LABELS, type AccountStage } from "@/lib/server/stages";
-import type { Account } from "@/lib/server/types";
+import { STAGES, STAGE_LABELS, type AccountStage } from "@/lib/presale-stages";
+import type { Account } from "@/lib/presale-types";
 import { cn } from "@/lib/utils";
 
 export type BoardDeal = Account & { am_owner_name: string | null };

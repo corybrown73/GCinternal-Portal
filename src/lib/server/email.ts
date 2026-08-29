@@ -8,7 +8,7 @@ export async function sendEmail(opts: {
   html: string;
 }): Promise<{ delivered: boolean }> {
   const mode =
-    process.env.EMAIL_MODE ?? (process.env.RESEND_API_KEY ? "send" : "log");
+    process.env["EMAIL_MODE"] ?? (process.env["RESEND_API_KEY"] ? "send" : "log");
 
   if (mode !== "send") {
     console.log(
@@ -17,9 +17,9 @@ export async function sendEmail(opts: {
     return { delivered: false };
   }
 
-  const resend = new Resend(process.env.RESEND_API_KEY);
+  const resend = new Resend(process.env["RESEND_API_KEY"]);
   const { error } = await resend.emails.send({
-    from: process.env.EMAIL_FROM ?? "GoCanvas Handoff Portal <onboarding@resend.dev>",
+    from: process.env["EMAIL_FROM"] ?? "GoCanvas Handoff Portal <onboarding@resend.dev>",
     to: opts.to,
     subject: opts.subject,
     html: opts.html,

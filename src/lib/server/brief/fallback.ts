@@ -1,5 +1,5 @@
 import type { BriefJson } from "../schemas";
-import type { Account, GongReport } from "../types";
+import type { Account, GongReport } from "../../presale-types";
 
 // Deterministic no-LLM path: sections the report markdown into topics and
 // attaches the curated GoCanvas implementation-discovery checklist.
@@ -23,7 +23,7 @@ function sectionize(md: string): { title: string; bullets: string[] }[] {
     const heading = line.match(/^#{1,3}\s+(.*)/);
     if (heading) {
       if (current && current.bullets.length) sections.push(current);
-      current = { title: heading[1].trim(), bullets: [] };
+      current = { title: (heading[1] ?? "").trim(), bullets: [] };
     } else {
       const text = line.replace(/^[-*]\s+/, "").trim();
       if (text && current) current.bullets.push(text.slice(0, 160));

@@ -46,7 +46,7 @@ export const Route = createFileRoute("/api/v1/accounts")({
 
       GET: async ({ request }: { request: Request }) => {
         const { requireApiKey, apiError } = await import("@/lib/server/api-auth");
-        const { isStage } = await import("@/lib/server/stages");
+        const { isStage } = await import("@/lib/presale-stages");
         const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
         const { audit } = await import("@/lib/server/audit");
 

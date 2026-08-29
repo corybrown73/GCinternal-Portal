@@ -1,12 +1,13 @@
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
-const createAdminClient = () => supabaseAdmin as any;
+import type { SupabaseClient } from "@supabase/supabase-js";
+const createAdminClient = () => supabaseAdmin as unknown as SupabaseClient;
 import { signDecisionToken } from "./tokens";
 import { sendEmail } from "./email";
 import { audit } from "./audit";
-import type { Account, TamRequest } from "./types";
+import type { Account, TamRequest } from "../presale-types";
 
 function appUrl(): string {
-  return process.env.APP_URL ?? "http://localhost:3000";
+  return process.env["APP_URL"] ?? "http://localhost:3000";
 }
 
 export async function createTamRequest(input: {

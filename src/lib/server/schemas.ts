@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { STAGES } from "./stages";
+import { STAGES } from "../presale-stages";
 
 export const stageSchema = z.enum(STAGES);
 

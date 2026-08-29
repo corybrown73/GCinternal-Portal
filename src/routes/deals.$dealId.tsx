@@ -20,7 +20,7 @@ import {
   setNoteReviewed,
   startOnboardingForDeal,
 } from "@/lib/presale.functions";
-import { STAGE_LABELS, STAGES, type AccountStage } from "@/lib/server/stages";
+import { STAGE_LABELS, STAGES, type AccountStage } from "@/lib/presale-stages";
 import { daysSince, fmtDate, fmtDateTime, fmtMoney } from "@/lib/hub-format";
 import { cn } from "@/lib/utils";
 

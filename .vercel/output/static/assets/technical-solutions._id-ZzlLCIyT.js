@@ -1,0 +1,1 @@
+import{t as e}from"./link-DzEaa4_F.js";import{t}from"./jsx-runtime-NZYk81nU.js";var n=t(),r=()=>(0,n.jsxs)(`div`,{className:`p-6 text-[13px]`,children:[`That technical solution does not exist.`,` `,(0,n.jsx)(e,{to:`/technical-solutions`,search:{sort:`customer`,dir:`asc`},className:`underline`,children:`Back to the queue`})]});export{r as notFoundComponent};

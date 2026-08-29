@@ -1,4 +1,4 @@
-import type { AccountStage } from "./stages";
+import type { AccountStage } from "./presale-stages";
 
 export type UserRole = "admin" | "am" | "se" | "onboarding";
 export type TamStatus = "pending" | "approved" | "declined" | "expired";

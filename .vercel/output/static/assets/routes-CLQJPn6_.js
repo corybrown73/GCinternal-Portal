@@ -1,0 +1,1 @@
+import{t as e}from"./jsx-runtime-NZYk81nU.js";var t=e(),n=({error:e})=>(0,t.jsxs)(`div`,{role:`alert`,className:`p-6 text-[13px] text-destructive`,children:[`We couldn't load today's list: `,e.message]});export{n as errorComponent};

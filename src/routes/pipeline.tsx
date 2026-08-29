@@ -7,7 +7,7 @@ import { DealBoard } from "@/components/presale/deal-board";
 import { CsvImportDialog, NewDealDialog } from "@/components/presale/deal-dialogs";
 import { canEditSales, useProfile } from "@/lib/auth";
 import { getPipeline, moveDealStage } from "@/lib/presale.functions";
-import type { AccountStage } from "@/lib/server/stages";
+import type { AccountStage } from "@/lib/presale-stages";
 
 const pipelineQuery = queryOptions({
   queryKey: ["pipeline"],

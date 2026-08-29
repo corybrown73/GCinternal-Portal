@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from "crypto";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
-const createAdminClient = () => supabaseAdmin as any;
+import type { SupabaseClient } from "@supabase/supabase-js";
+const createAdminClient = () => supabaseAdmin as unknown as SupabaseClient;
 
 export const API_SCOPES = [
   "accounts:read",

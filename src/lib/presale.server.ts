@@ -1,7 +1,7 @@
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { resolveAccountId, transitionStage, upsertAccount } from "./server/accounts";
 import { accountUpsertSchema } from "./server/schemas";
-import { isStage, STAGES, type AccountStage } from "./server/stages";
+import { isStage, STAGES, type AccountStage } from "./presale-stages";
 import { audit } from "./server/audit";
 import { createTamRequest } from "./server/tam";
 import { API_SCOPES, generateApiKey, type ApiScope } from "./server/api-auth";
@@ -14,7 +14,7 @@ import type {
   OnboardingNote,
   StageTransition,
   TamRequest,
-} from "./server/types";
+} from "./presale-types";
 
 const db = () => supabaseAdmin as any;
 

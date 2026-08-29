@@ -3,7 +3,7 @@ import { SignJWT, jwtVerify } from "jose";
 export type DecisionAction = "approve" | "decline";
 
 function secret(): Uint8Array {
-  const s = process.env.TAM_TOKEN_SECRET;
+  const s = process.env["TAM_TOKEN_SECRET"];
   if (!s) throw new Error("TAM_TOKEN_SECRET is not set");
   return new TextEncoder().encode(s);
 }
@@ -32,11 +32,11 @@ export async function verifyDecisionToken(
     if (
       typeof payload.sub !== "string" ||
       typeof payload.jti !== "string" ||
-      (payload.act !== "approve" && payload.act !== "decline")
+      (payload["act"] !== "approve" && payload["act"] !== "decline")
     ) {
       return null;
     }
-    return { requestId: payload.sub, action: payload.act, jti: payload.jti };
+    return { requestId: payload.sub, action: payload["act"], jti: payload.jti };
   } catch {
     return null;
   }

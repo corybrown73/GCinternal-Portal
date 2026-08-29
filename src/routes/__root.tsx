@@ -162,7 +162,7 @@ function ShellWithSidebar({ showGlobalRail }: { showGlobalRail: boolean }) {
   const { profile } = useProfile();
   return (
     <div className="flex min-h-screen w-full bg-background text-foreground">
-      <AppSidebar profile={profile} />
+      <AppSidebar profile={profile ?? null} />
       <div className="flex min-w-0 flex-1 flex-col">
         {showGlobalRail ? <LifecycleRail /> : null}
         <main className="min-w-0 flex-1">

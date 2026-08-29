@@ -1,9 +1,10 @@
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
-const createAdminClient = () => supabaseAdmin as any;
+import type { SupabaseClient } from "@supabase/supabase-js";
+const createAdminClient = () => supabaseAdmin as unknown as SupabaseClient;
 import { audit } from "./audit";
 import type { AccountUpsertInput } from "./schemas";
-import type { Account, TransitionSource } from "./types";
-import type { AccountStage } from "./stages";
+import type { Account, TransitionSource } from "../presale-types";
+import type { AccountStage } from "../presale-stages";
 
 export interface ActorContext {
   source: TransitionSource;

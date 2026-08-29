@@ -1,0 +1,1 @@
+import{t as e}from"./jsx-runtime-NZYk81nU.js";var t=e(),n=()=>(0,t.jsx)(`div`,{className:`p-6 text-[13px]`,children:`Nothing to show.`});export{n as notFoundComponent};

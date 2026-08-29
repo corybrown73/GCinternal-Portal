@@ -1,0 +1,1 @@
+import{t as e}from"./jsx-runtime-NZYk81nU.js";var t=e(),n=({error:e})=>(0,t.jsxs)(`div`,{role:`alert`,className:`rounded-md border border-border bg-card p-6 text-[13px]`,children:[(0,t.jsx)(`p`,{className:`font-medium`,children:`We couldn't load your requests.`}),(0,t.jsx)(`p`,{className:`mt-1 text-muted-foreground`,children:e.message})]});export{n as errorComponent};

@@ -2,10 +2,10 @@ import Anthropic from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { briefJsonSchema, type BriefJson } from "../schemas";
 import { BRIEF_SYSTEM_PROMPT, buildBriefUserPrompt } from "./prompt";
-import type { Account, GongReport, OnboardingNote } from "../types";
+import type { Account, GongReport, OnboardingNote } from "../../presale-types";
 
 export function llmAvailable(): boolean {
-  return Boolean(process.env.ANTHROPIC_API_KEY);
+  return Boolean(process.env["ANTHROPIC_API_KEY"]);
 }
 
 // Claude Opus 5 with structured output validated against the shared zod schema.
@@ -20,16 +20,21 @@ export async function generateBriefWithLLM(
   const userPrompt = buildBriefUserPrompt(account, reports, notes);
 
   for (let attempt = 0; attempt < 2; attempt++) {
+    // The SDK's zod helper is typed against zod v4; this project pins zod v3
+    // for the hub code, so the format is cast and the output re-validated with
+    // the same schema below — runtime safety is preserved either way.
     const response = await client.messages.parse({
       model: "claude-opus-5",
       max_tokens: 16000,
       system: BRIEF_SYSTEM_PROMPT,
       messages: [{ role: "user", content: userPrompt }],
-      output_config: { format: zodOutputFormat(briefJsonSchema) },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      output_config: { format: zodOutputFormat(briefJsonSchema as any) as any },
     });
 
     if (response.stop_reason === "refusal") return null;
-    if (response.parsed_output) return response.parsed_output;
+    const checked = briefJsonSchema.safeParse(response.parsed_output);
+    if (checked.success) return checked.data;
   }
   return null;
 }

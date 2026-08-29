@@ -1,10 +1,11 @@
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
-const createAdminClient = () => supabaseAdmin as any;
+import type { SupabaseClient } from "@supabase/supabase-js";
+const createAdminClient = () => supabaseAdmin as unknown as SupabaseClient;
 import { audit } from "../audit";
 import { generateBriefWithLLM, llmAvailable } from "./llm";
 import { buildTemplateBrief } from "./fallback";
 import { buildBriefDeck } from "./pptx";
-import type { Account, Brief, GongReport, OnboardingNote } from "../types";
+import type { Account, Brief, GongReport, OnboardingNote } from "../../presale-types";
 import type { BriefJson } from "../schemas";
 
 // Synchronous within the request (Vercel route sets maxDuration=300).
@@ -52,7 +53,7 @@ export async function generateBrief(accountId: string, createdBy: string): Promi
       account_id: accountId,
       status: "generating",
       created_by: createdBy,
-      source_report_ids: reports.map((r) => r.id),
+      source_report_ids: reports.map((r: GongReport) => r.id),
     })
     .select("*")
     .single<Brief>();

@@ -1,4 +1,4 @@
-import type { Account, GongReport, OnboardingNote } from "../types";
+import type { Account, GongReport, OnboardingNote } from "../../presale-types";
 
 export const BRIEF_SYSTEM_PROMPT = `You are a presales solutions engineer at GoCanvas preparing an implementation handoff brief for the onboarding team. GoCanvas sells mobile forms, workflows, and data-collection software that replaces paper processes.
 

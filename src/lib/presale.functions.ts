@@ -2,7 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { STAGES } from "./server/stages";
+import { STAGES } from "./presale-stages";
 
 /* ---------- pipeline ---------- */
 
