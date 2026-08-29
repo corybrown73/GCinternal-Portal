@@ -2,6 +2,7 @@
   "crons": [
     { "path": "/api/cron/sla", "schedule": "0 * * * *" },
     { "path": "/api/cron/sequences", "schedule": "*/30 * * * *" },
-    { "path": "/api/cron/plan-snapshots", "schedule": "0 13 * * 1" }
+    { "path": "/api/cron/plan-snapshots", "schedule": "0 13 * * 1" },
+    { "path": "/api/cron/dispatch", "schedule": "*/5 * * * *" }
   ]
 }

@@ -7,6 +7,8 @@ import { handoffConflictMessage, resolveHandoffCustomer } from "./presale-handof
 import { audit } from "./server/audit";
 import { createTamRequest } from "./server/tam";
 import { API_SCOPES, generateApiKey, type ApiScope } from "./server/api-auth";
+import { recordImplementationCreated } from "./server/events";
+import { sfId18 } from "./server/sf-id";
 import { LIFECYCLE_STAGES } from "./lifecycle";
 import type {
   Account,
@@ -555,7 +557,9 @@ export async function startOnboarding(
     const { data: match } = await db()
       .from("customers")
       .select("id")
-      .eq("salesforce_account_id", account.salesforce_id)
+      // Normalized: a deal carrying the 15-character id must still find the
+      // customer stamped with the 18-character one (see server/sf-id.ts).
+      .eq("salesforce_account_id", sfId18(account.salesforce_id))
       .maybeSingle();
     salesforceMatchCustomerId = (match?.id as string | undefined) ?? null;
   }
@@ -618,7 +622,7 @@ export async function startOnboarding(
         industry: null,
         // Stamp the identity so the next handoff matches instead of duplicating.
         ...(flagOn && account.salesforce_id
-          ? { salesforce_account_id: account.salesforce_id }
+          ? { salesforce_account_id: sfId18(account.salesforce_id) }
           : {}),
       })
       .select("id")
@@ -662,6 +666,15 @@ export async function startOnboarding(
       `Implementation created, but its stage history row failed: ${historyError.message}`,
     );
   }
+
+  // Every creator of an implementation emits the same event, so a webhook
+  // consumer sees the whole world rather than only Salesforce-sourced activity.
+  // Never throws (see server/events.ts).
+  await recordImplementationCreated({
+    implementationId: impl.id as string,
+    customerId,
+    source: "presale",
+  });
 
   // (b) link the deal to the customer record (already linked deals keep theirs).
   const alreadyLinked = Boolean(account.customer_id);

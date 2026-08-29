@@ -1435,6 +1435,15 @@ export async function createImplementation(args: {
     );
   }
 
+  // Emitted from every creator, not only the Salesforce endpoint, so webhook
+  // consumers see the whole world. Never throws (see server/events.ts).
+  const { recordImplementationCreated } = await import("./server/events");
+  await recordImplementationCreated({
+    implementationId: impl.id as string,
+    customerId,
+    source: String(args.patch["source"] ?? "manual"),
+  });
+
   return { ok: true, customerId, implementationId: impl.id as string };
 }
 
@@ -1602,6 +1611,25 @@ export async function advanceStage(args: {
   // failure here is logged loudly and repaired by resync_stage_instances
   // rather than failing an advance that has already been recorded.
   await syncStageInstances(args.implementationId, expected, at);
+
+  // Outbound: the event a webhook consumer sees, and the Salesforce write-back.
+  // Both never throw — history above is already the authority on this move.
+  const { recordStageChange } = await import("./server/events");
+  await recordStageChange({
+    implementationId: args.implementationId,
+    fromStage: current,
+    toStage: expected,
+    actor: args.enteredBy ?? null,
+    note: args.notes ?? null,
+    enteredAt: at,
+  });
+
+  // PLAN.md decision 10: mirror the presale tail forward from delivery
+  // progress. Flag-gated on sf_presale_bridge, forward-only, and it never
+  // fails an advance that has already been recorded.
+  const sf = await import("./sf-integration.server");
+  await sf.syncPresaleStageFromLifecycle(args.implementationId, expected);
+  await sf.emitWriteBack(args.implementationId);
 
   // Stage dwell is a health input, so the cache is stale the moment we move.
   const { recomputeHealthSoon } = await import("./health.server");

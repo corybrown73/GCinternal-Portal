@@ -23,6 +23,10 @@ export type V2Flags = {
   external_plan_view_enabled: boolean;
   /** Phase 4: external viewers may complete, comment, upload and reassign. */
   external_plan_actions_enabled: boolean;
+  /** Phase 5: Salesforce auto-create — the ingest, customer adoption and the deal link. */
+  sf_auto_create: boolean;
+  /** Phase 5: the presale stage seam — the deal's stage moves, forward only. */
+  sf_presale_bridge: boolean;
 };
 
 const DEFAULT_FLAGS: V2Flags = {
@@ -33,6 +37,9 @@ const DEFAULT_FLAGS: V2Flags = {
   /** Phase 4: both off; the external surfaces refuse server-side until flipped. */
   external_plan_view_enabled: false,
   external_plan_actions_enabled: false,
+  /* Phase 5 */
+  sf_auto_create: false,
+  sf_presale_bridge: false,
 };
 const CACHE_MS = 60_000;
 
