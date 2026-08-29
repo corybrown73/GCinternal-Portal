@@ -19,6 +19,12 @@ export type V2Flags = {
   work_items: boolean;
   /** Phase 3: the handoff packet and its accept/return gate. */
   handoff_gate: boolean;
+  /**
+   * Phase 6: emission of the champion-gone-quiet and launch-date-at-risk
+   * alerts from the hourly cron. The `/signals` surface is read-only and is
+   * deliberately NOT flagged — this gates who gets notified, never who can see.
+   */
+  signals_alerts: boolean;
 };
 
 const DEFAULT_FLAGS: V2Flags = {
@@ -26,6 +32,8 @@ const DEFAULT_FLAGS: V2Flags = {
   journey_templates: false,
   work_items: false,
   handoff_gate: false,
+  /** Phase 6: see the type above. */
+  signals_alerts: false,
 };
 const CACHE_MS = 60_000;
 

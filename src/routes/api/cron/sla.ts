@@ -10,6 +10,8 @@ import { createFileRoute } from "@tanstack/react-router";
  *              open stalled_implementation alert → warning alert + manager email.
  *   4. Slip:   milestones past target_date and not complete, deduped per milestone →
  *              overdue_milestone alert.
+ *   6. Signals: champion_gone_quiet + launch_date_at_risk (Phase 6), behind the
+ *              `signals_alerts` flag; deduped per implementation, no email.
  * Every pass is guarded (sla_warned_at / sla_breached / existing unacknowledged
  * alert) so re-runs never double-email.
  *
@@ -40,6 +42,9 @@ async function runSlaSweep(): Promise<Response> {
     overdue_milestones: 0,
     health_recomputed: 0,
     health_failed: 0,
+    // Phase 6 (flag `signals_alerts`; zeros while it is off).
+    signal_alerts_created: 0,
+    signal_alerts_deduped: 0,
   };
 
   const safeSend = async (to: string, subject: string, html: string) => {
@@ -228,6 +233,20 @@ async function runSlaSweep(): Promise<Response> {
   const health = await recomputeAllHealth();
   summary.health_recomputed = health.updated;
   summary.health_failed = health.failed;
+
+  /* ---- 6. Phase 6 signal alerts: champion gone quiet, launch date at risk ----
+   * Off unless the `signals_alerts` flag is on. Both kinds require a named,
+   * dated blocker rather than an absence, and neither emails — they land on
+   * /alerts. A failure here must not fail the sweep that ran before it.
+   */
+  try {
+    const { runSignalAlerts } = await import("@/lib/signals.server");
+    const signals = await runSignalAlerts();
+    summary.signal_alerts_created = signals.created;
+    summary.signal_alerts_deduped = signals.deduped;
+  } catch (e) {
+    console.error("cron signal-alert pass failed", e);
+  }
 
   await audit({
     actor_type: "system",
