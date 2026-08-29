@@ -109,6 +109,7 @@ function SolutionDetail() {
             <Link
               to="/customers/$customerId"
               params={{ customerId: customer.id }}
+              search={implementation ? { impl: implementation.id } : {}}
               className="hover:text-foreground"
             >
               {customer.name}
@@ -121,7 +122,10 @@ function SolutionDetail() {
             <Link
               to="/customers/$customerId"
               params={{ customerId: customer.id }}
-              search={{ tab: "solution" }}
+              search={{
+                tab: "solution",
+                ...(implementation ? { impl: implementation.id } : {}),
+              }}
               className="hover:text-foreground"
             >
               {implementation?.name ?? "Implementation"}
@@ -174,7 +178,10 @@ function SolutionDetail() {
                   <Link
                     to="/customers/$customerId"
                     params={{ customerId: customer.id }}
-                    search={{ tab: "requirements" }}
+                    search={{
+                      tab: "requirements",
+                      ...(implementation ? { impl: implementation.id } : {}),
+                    }}
                     className="hover:underline"
                   >
                     {requirement.title}

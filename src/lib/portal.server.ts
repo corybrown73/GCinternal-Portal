@@ -3,8 +3,12 @@ import { LIFECYCLE_STAGES } from "./lifecycle";
 import { normalizeStage } from "./hub-format";
 import {
   addComment,
+  allowedImplIds,
   createTicket,
+  grantAllows,
   linkedCustomerIds,
+  linkedGrants,
+  type CustomerGrant,
   type TicketCategory,
   type TicketPriority,
 } from "./tickets.server";
@@ -53,6 +57,33 @@ export async function requireCustomerIds(userId: string): Promise<string[]> {
     );
   }
   return ids;
+}
+
+/**
+ * The caller's grants, which carry the implementation scope. Every portal read
+ * and write goes through the service-role client, so this — not RLS — is what
+ * keeps a scoped contact out of a sibling implementation's data. It is
+ * deliberately NOT feature-flagged: an issued scope is honoured permanently.
+ */
+export async function requireGrants(userId: string): Promise<CustomerGrant[]> {
+  const grants = await linkedGrants(userId);
+  if (grants.length === 0) {
+    throw new Error(
+      "No customer is linked to this login yet. Ask your GoCanvas contact for an invite.",
+    );
+  }
+  return grants;
+}
+
+/** Keeps only the implementations the grants allow. */
+function scopeImplementations<T extends { id: string; customer_id: string }>(
+  rows: T[],
+  grants: CustomerGrant[],
+): T[] {
+  return rows.filter((row) => {
+    const allowed = allowedImplIds(grants, row.customer_id);
+    return allowed === null || allowed.has(row.id);
+  });
 }
 
 /* ------------------------------------------------------------------------- */
@@ -120,12 +151,16 @@ function pastDue(date: string | null): boolean {
 }
 
 export async function loadPortalHome(userId: string): Promise<PortalHome> {
-  const customerIds = await requireCustomerIds(userId);
+  const grants = await requireGrants(userId);
+  const customerIds = [...new Set(grants.map((g) => g.customer_id))];
 
-  const [{ data: customers }, { data: impls }] = await Promise.all([
+  const [{ data: customers }, { data: allImpls }] = await Promise.all([
     db().from("customers").select("id, name").in("id", customerIds),
     db().from("implementations").select("*").in("customer_id", customerIds),
   ]);
+
+  // A scoped grant must never surface a sibling implementation.
+  const impls = scopeImplementations((allImpls ?? []) as any[], grants);
 
   const customerName = (customers ?? []).map((c: any) => c.name).join(" · ") || "Customer";
   const implIds = (impls ?? []).map((i: any) => i.id);
@@ -150,7 +185,9 @@ export async function loadPortalHome(userId: string): Promise<PortalHome> {
       ])
     : [{ data: [] }, { data: [] }, { data: [] }];
 
-  const customerById = new Map((customers ?? []).map((c: any) => [c.id, c.name]));
+  const customerById = new Map<string, string>(
+    (customers ?? []).map((c: any) => [c.id as string, c.name as string]),
+  );
   const totalStages = LIFECYCLE_STAGES.length;
 
   const implementations: PortalImplementation[] = (impls ?? []).map((i: any) => {
@@ -280,16 +317,25 @@ export async function loadPortalTickets(userId: string): Promise<{
   customers: Array<{ id: string; name: string }>;
   tickets: PortalTicket[];
 }> {
-  const customerIds = await requireCustomerIds(userId);
+  const grants = await requireGrants(userId);
+  const customerIds = [...new Set(grants.map((g) => g.customer_id))];
 
-  const [{ data: customers }, { data: tickets }] = await Promise.all([
+  const [{ data: customers }, { data: allTickets }] = await Promise.all([
     db().from("customers").select("id, name").in("id", customerIds),
     db()
       .from("tickets")
-      .select("id, customer_id, subject, body, category, status, priority, created_at")
+      .select(
+        "id, customer_id, implementation_id, subject, body, category, status, priority, created_at",
+      )
       .in("customer_id", customerIds)
       .order("created_at", { ascending: false }),
   ]);
+
+  // Account-level tickets (no implementation) stay visible to scoped users;
+  // tickets belonging to a sibling implementation do not.
+  const tickets = (allTickets ?? []).filter((t: any) =>
+    grantAllows(grants, t.customer_id, t.implementation_id ?? null),
+  );
 
   const ticketIds = (tickets ?? []).map((t: any) => t.id);
   // Customers must NEVER see internal comments — filtered here, server-side.
@@ -343,18 +389,27 @@ export async function submitPortalTicket(
     priority: TicketPriority;
   },
 ) {
-  const customerIds = await requireCustomerIds(userId);
-  if (!customerIds.includes(input.customerId)) {
+  const grants = await requireGrants(userId);
+  if (!grants.some((g) => g.customer_id === input.customerId)) {
     throw new Error("Forbidden: you are not linked to this customer");
   }
   const profile = await callerProfile(userId);
 
-  // Attach the customer's active implementation when there is exactly one.
-  const { data: impls } = await db()
-    .from("implementations")
-    .select("id")
-    .eq("customer_id", input.customerId);
-  const implementationId = (impls ?? []).length === 1 ? impls[0].id : null;
+  // Which implementation the ticket belongs to. A scoped grant answers this
+  // outright; an account-wide grant files against the single implementation
+  // when there is exactly one, and at account level otherwise.
+  const allowed = allowedImplIds(grants, input.customerId);
+  let implementationId: string | null = null;
+  if (allowed !== null && allowed.size === 1) {
+    implementationId = [...allowed][0] ?? null;
+  } else {
+    const { data: impls } = await db()
+      .from("implementations")
+      .select("id")
+      .eq("customer_id", input.customerId);
+    const visible = (impls ?? []).filter((i: any) => allowed === null || allowed.has(i.id));
+    implementationId = visible.length === 1 ? visible[0].id : null;
+  }
 
   return createTicket({
     customerId: input.customerId,
@@ -370,13 +425,15 @@ export async function submitPortalTicket(
 }
 
 export async function replyPortalTicket(userId: string, ticketId: string, body: string) {
-  const customerIds = await requireCustomerIds(userId);
+  const grants = await requireGrants(userId);
   const { data: ticket } = await db()
     .from("tickets")
-    .select("id, customer_id")
+    .select("id, customer_id, implementation_id")
     .eq("id", ticketId)
     .maybeSingle();
-  if (!ticket || !customerIds.includes(ticket.customer_id)) {
+  // Scope matters on reply as much as on read: without this check a scoped
+  // contact could comment on a sibling implementation's ticket by id.
+  if (!ticket || !grantAllows(grants, ticket.customer_id, ticket.implementation_id ?? null)) {
     throw new Error("Forbidden: not your ticket");
   }
   // Sibling-owned addComment: forces internal=false for customer authors and

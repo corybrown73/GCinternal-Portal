@@ -40,6 +40,8 @@ export type SignalRow = {
   actor: string | null;
   customer_id: string | null;
   customer_name: string | null;
+  /** The implementation the signal came from, so links can carry ?impl=. */
+  implementation_id: string | null;
 };
 
 /** Per-implementation open-item bundle used to triage the Home queue. */

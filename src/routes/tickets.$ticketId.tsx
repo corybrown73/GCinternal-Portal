@@ -158,6 +158,7 @@ function TicketDetailPage() {
                   <Link
                     to="/customers/$customerId"
                     params={{ customerId: ticket.customer_id }}
+                    search={ticket.implementation_id ? { impl: ticket.implementation_id } : {}}
                     className="hover:underline"
                   >
                     {ticket.customer_name ?? "Customer"}

@@ -55,10 +55,12 @@ export const Route = createFileRoute("/")({
 
 function CustomerLink({
   customerId,
+  implementationId,
   children,
   className,
 }: {
   customerId: string;
+  implementationId?: string | null;
   children: React.ReactNode;
   className?: string;
 }) {
@@ -66,7 +68,7 @@ function CustomerLink({
     <Link
       to="/customers/$customerId"
       params={{ customerId }}
-      search={{ tab: "overview" }}
+      search={{ tab: "overview", ...(implementationId ? { impl: implementationId } : {}) }}
       className={cn("hover:underline", className)}
     >
       {children}
@@ -113,7 +115,7 @@ function QueueRowItem({ row, health }: { row: QueueRow; health: HealthResult }) 
       <Link
         to="/customers/$customerId"
         params={{ customerId: impl.customer_id }}
-        search={{ tab: row.tab }}
+        search={{ tab: row.tab, impl: impl.id }}
         className="block px-3 py-2.5"
       >
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
@@ -227,7 +229,11 @@ function HomePage() {
                     {s.customer_id && s.customer_name ? (
                       <>
                         {" — "}
-                        <CustomerLink customerId={s.customer_id} className="font-medium">
+                        <CustomerLink
+                          customerId={s.customer_id}
+                          implementationId={s.implementation_id}
+                          className="font-medium"
+                        >
                           {s.customer_name}
                         </CustomerLink>
                       </>

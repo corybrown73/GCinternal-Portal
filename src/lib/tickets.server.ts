@@ -457,6 +457,8 @@ export interface TicketListRow extends TicketRow {
 export async function loadTickets(opts: {
   /** Restrict to these customer ids (customer callers). Null = no restriction. */
   customerIds?: string[] | null;
+  /** Customer callers: also honour each grant's implementation scope. */
+  grants?: CustomerGrant[] | null;
 }): Promise<TicketListRow[]> {
   let query = db().from("tickets").select("*").order("created_at", { ascending: false });
   if (opts.customerIds) {
@@ -464,7 +466,13 @@ export async function loadTickets(opts: {
     query = query.in("customer_id", opts.customerIds);
   }
   const { data: tickets } = await query;
-  const rows = (tickets ?? []) as TicketRow[];
+  let rows = (tickets ?? []) as TicketRow[];
+  if (opts.grants) {
+    const grants = opts.grants;
+    rows = rows.filter((t) =>
+      grantAllows(grants, t.customer_id as string, t.implementation_id ?? null),
+    );
+  }
   if (rows.length === 0) return [];
 
   const customerIds = [...new Set(rows.map((t) => t.customer_id).filter(Boolean))];
@@ -546,12 +554,52 @@ export async function loadTicket(
 }
 
 /** Customer ids linked to a customer-role profile via customer_users. */
-export async function linkedCustomerIds(profileId: string): Promise<string[]> {
+/**
+ * One row per grant. `implementation_id === null` is an account-wide grant
+ * (every pre-scoping row), otherwise the login sees only that implementation.
+ */
+export type CustomerGrant = { customer_id: string; implementation_id: string | null };
+
+export async function linkedGrants(profileId: string): Promise<CustomerGrant[]> {
   const { data } = await db()
     .from("customer_users")
-    .select("customer_id")
+    .select("customer_id, implementation_id")
     .eq("profile_id", profileId);
-  return (data ?? []).map((r: any) => r.customer_id as string);
+  return (data ?? []).map((r: any) => ({
+    customer_id: r.customer_id as string,
+    implementation_id: (r.implementation_id ?? null) as string | null,
+  }));
+}
+
+/**
+ * Which implementations of `customerId` the grants allow.
+ * `null` means all of them (an account-wide grant is present).
+ */
+export function allowedImplIds(grants: CustomerGrant[], customerId: string): Set<string> | null {
+  const forCustomer = grants.filter((g) => g.customer_id === customerId);
+  if (forCustomer.length === 0) return new Set();
+  if (forCustomer.some((g) => g.implementation_id === null)) return null;
+  return new Set(forCustomer.map((g) => g.implementation_id as string));
+}
+
+/** True when the grants permit this (customer, implementation) pair. */
+export function grantAllows(
+  grants: CustomerGrant[],
+  customerId: string,
+  implementationId: string | null,
+): boolean {
+  const allowed = allowedImplIds(grants, customerId);
+  if (allowed === null) return true;
+  if (allowed.size === 0) return false;
+  // Account-level records (no implementation) stay visible to scoped users:
+  // they are about the account, not a sibling implementation.
+  if (implementationId === null) return true;
+  return allowed.has(implementationId);
+}
+
+export async function linkedCustomerIds(profileId: string): Promise<string[]> {
+  const grants = await linkedGrants(profileId);
+  return [...new Set(grants.map((g) => g.customer_id))];
 }
 
 /* ------------------------------------------------------------------------- */

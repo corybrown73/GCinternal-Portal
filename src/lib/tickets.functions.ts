@@ -54,9 +54,13 @@ export const getTickets = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const profile = await callerProfile(context.userId);
-    const { loadTickets, linkedCustomerIds } = await import("./tickets.server");
+    const { loadTickets, linkedGrants } = await import("./tickets.server");
     if (profile.role === "customer") {
-      return loadTickets({ customerIds: await linkedCustomerIds(profile.id) });
+      const grants = await linkedGrants(profile.id);
+      return loadTickets({
+        customerIds: [...new Set(grants.map((g) => g.customer_id))],
+        grants,
+      });
     }
     return loadTickets({ customerIds: null });
   });
@@ -66,13 +70,16 @@ export const getTicket = createServerFn({ method: "GET" })
   .inputValidator((data: unknown) => z.object({ ticketId: z.string().uuid() }).parse(data))
   .handler(async ({ data, context }) => {
     const profile = await callerProfile(context.userId);
-    const { loadTicket, linkedCustomerIds } = await import("./tickets.server");
+    const { loadTicket, linkedGrants, grantAllows } = await import("./tickets.server");
     const internal = profile.role !== "customer";
     const detail = await loadTicket(data.ticketId, { includeInternal: internal });
     if (!detail) throw new Error("Ticket not found");
     if (!internal) {
-      const linked = await linkedCustomerIds(profile.id);
-      if (!detail.ticket.customer_id || !linked.includes(detail.ticket.customer_id)) {
+      const grants = await linkedGrants(profile.id);
+      if (
+        !detail.ticket.customer_id ||
+        !grantAllows(grants, detail.ticket.customer_id, detail.ticket.implementation_id ?? null)
+      ) {
         throw new Error("Ticket not found");
       }
     }
@@ -130,23 +137,30 @@ export const addTicket = createServerFn({ method: "POST" })
   )
   .handler(async ({ data, context }) => {
     const profile = await callerProfile(context.userId);
-    const { createTicket, linkedCustomerIds } = await import("./tickets.server");
+    const { createTicket, linkedGrants, grantAllows } = await import("./tickets.server");
 
     let customerId = data.customerId ?? null;
+    const implementationId = data.implementationId ?? null;
     if (profile.role === "customer") {
       // Customers may only file tickets against a customer they belong to.
-      const linked = await linkedCustomerIds(profile.id);
+      const grants = await linkedGrants(profile.id);
+      const linked = [...new Set(grants.map((g) => g.customer_id))];
       if (customerId) {
         if (!linked.includes(customerId)) throw new Error("Forbidden: not your customer");
       } else {
         customerId = linked[0] ?? null;
         if (!customerId) throw new Error("Forbidden: no customer linked to this account");
       }
+      // implementationId arrives from the client: a scoped contact must not be
+      // able to file against a sibling implementation by passing its id.
+      if (implementationId && !grantAllows(grants, customerId, implementationId)) {
+        throw new Error("Forbidden: not your implementation");
+      }
     }
 
     return createTicket({
       customerId,
-      implementationId: data.implementationId ?? null,
+      implementationId,
       category: data.category,
       subject: data.subject,
       body: data.body,
@@ -170,12 +184,16 @@ export const addTicketComment = createServerFn({ method: "POST" })
   )
   .handler(async ({ data, context }) => {
     const profile = await callerProfile(context.userId);
-    const { addComment, loadTicket, linkedCustomerIds } = await import("./tickets.server");
+    const { addComment, loadTicket, linkedGrants, grantAllows } = await import("./tickets.server");
 
     if (profile.role === "customer") {
       const detail = await loadTicket(data.ticketId, { includeInternal: false });
-      const linked = await linkedCustomerIds(profile.id);
-      if (!detail || !detail.ticket.customer_id || !linked.includes(detail.ticket.customer_id)) {
+      const grants = await linkedGrants(profile.id);
+      if (
+        !detail ||
+        !detail.ticket.customer_id ||
+        !grantAllows(grants, detail.ticket.customer_id, detail.ticket.implementation_id ?? null)
+      ) {
         throw new Error("Ticket not found");
       }
     }

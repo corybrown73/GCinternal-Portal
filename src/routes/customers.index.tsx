@@ -196,6 +196,7 @@ function CustomersPage() {
                     <Link
                       to="/customers/$customerId"
                       params={{ customerId: r.customer_id }}
+                      search={{ impl: r.id }}
                       className="block text-[13px] font-medium hover:underline"
                     >
                       {r.customer_name}

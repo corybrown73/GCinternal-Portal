@@ -167,7 +167,11 @@ export function NewImplementation({ customers }: { customers: CustomerOption[] }
       setOpen(false);
       setDraft(emptyDraft);
       setSowFile(null);
-      navigate({ to: "/customers/$customerId", params: { customerId: result.customerId } });
+      navigate({
+        to: "/customers/$customerId",
+        params: { customerId: result.customerId },
+        search: result.implementationId ? { impl: result.implementationId } : {},
+      });
     },
   });
 

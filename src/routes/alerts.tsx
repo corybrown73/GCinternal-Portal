@@ -139,6 +139,7 @@ function AlertList({
                       <Link
                         to="/customers/$customerId"
                         params={{ customerId: a.customer_id }}
+                        search={a.implementation_id ? { impl: a.implementation_id } : {}}
                         className="hover:underline"
                       >
                         {a.customer_name ?? "Customer"}

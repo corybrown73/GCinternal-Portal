@@ -108,6 +108,7 @@ export async function loadHome(): Promise<HomeData> {
     return {
       customer_id: impl?.customer_id ?? null,
       customer_name: impl?.customer_name ?? null,
+      implementation_id: impl?.id ?? null,
     };
   };
 

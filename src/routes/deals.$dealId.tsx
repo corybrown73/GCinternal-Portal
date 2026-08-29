@@ -179,7 +179,13 @@ function StartOnboarding({ deal }: { deal: DealData }) {
       queryClient.invalidateQueries({ queryKey: ["deal", deal.account.id] });
       queryClient.invalidateQueries({ queryKey: ["pipeline"] });
       queryClient.invalidateQueries({ queryKey: ["home"] });
-      navigate({ to: "/customers/$customerId", params: { customerId: result.customerId } });
+      navigate({
+        to: "/customers/$customerId",
+        params: { customerId: result.customerId },
+        // startOnboarding returns an empty implementationId when the deal was
+        // already linked; omit the param rather than sending a blank one.
+        search: result.implementationId ? { impl: result.implementationId } : {},
+      });
     },
   });
 

@@ -524,6 +524,8 @@ export type StuckWorkItem = {
   title: string;
   customer_name: string;
   customer_id: string;
+  /** The implementation this item belongs to, so links resolve to the right one. */
+  implementation_id: string;
   owner_name: string | null;
   severity: string | null;
   age_days: number | null;
@@ -562,6 +564,7 @@ export function stuckWork(data: LeadershipData): StuckWorkItem[] {
         title,
         customer_name: impl.customer_name,
         customer_id: impl.customer_id,
+        implementation_id: impl.id,
         owner_name: row.owner_name ?? null,
         severity: row.severity ?? null,
         age_days: age,

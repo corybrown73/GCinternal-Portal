@@ -43,7 +43,7 @@ export function AccountRowList({
             <Link
               to="/customers/$customerId"
               params={{ customerId: row.impl.customer_id }}
-              search={{ tab: row.tab }}
+              search={{ tab: row.tab, impl: row.impl.id }}
               className="text-[13px] font-semibold tracking-tight hover:underline"
             >
               {row.impl.customer_name}
@@ -76,7 +76,7 @@ export function AccountRowList({
             <Link
               to="/customers/$customerId"
               params={{ customerId: row.impl.customer_id }}
-              search={{ tab: row.tab }}
+              search={{ tab: row.tab, impl: row.impl.id }}
               className="ml-auto flex shrink-0 items-center gap-1 font-mono text-[11px] text-muted-foreground hover:text-foreground hover:underline"
             >
               {row.tab}

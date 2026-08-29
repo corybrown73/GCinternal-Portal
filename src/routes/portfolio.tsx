@@ -75,7 +75,8 @@ function CustomerLink({
   className,
   children,
 }: {
-  impl: { customer_id: string; customer_name: string };
+  /** `id` is the implementation this link was generated from, when it is known. */
+  impl: { id?: string | null; customer_id: string; customer_name: string };
   tab?:
     | "overview"
     | "journey"
@@ -92,7 +93,7 @@ function CustomerLink({
     <Link
       to="/customers/$customerId"
       params={{ customerId: impl.customer_id }}
-      search={{ tab }}
+      search={{ tab, ...(impl.id ? { impl: impl.id } : {}) }}
       className={cn("font-medium hover:underline", className)}
     >
       {children ?? impl.customer_name}
@@ -507,7 +508,7 @@ function LeadershipPage() {
                     <Link
                       to="/customers/$customerId"
                       params={{ customerId: t.impl.customer_id }}
-                      search={{ tab: "journey" }}
+                      search={{ tab: "journey", impl: t.impl.id }}
                       className="ml-auto flex shrink-0 items-center gap-1 font-mono text-[11px] text-muted-foreground hover:text-foreground hover:underline"
                     >
                       journey
@@ -636,7 +637,11 @@ function LeadershipPage() {
                 {i.severity ? <SeverityChip value={i.severity} /> : null}
                 <span className="min-w-0 flex-1 truncate text-[13px]">{i.title}</span>
                 <CustomerLink
-                  impl={{ customer_id: i.customer_id, customer_name: i.customer_name }}
+                  impl={{
+                    id: i.implementation_id,
+                    customer_id: i.customer_id,
+                    customer_name: i.customer_name,
+                  }}
                   tab="risks"
                   className="text-[12px]"
                 />
