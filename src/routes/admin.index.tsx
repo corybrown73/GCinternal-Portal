@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { ArrowRight, KeyRound, Route as RouteIcon, Upload, Users } from "lucide-react";
+import { ArrowRight, KeyRound, Plug, Route as RouteIcon, Upload, Users } from "lucide-react";
 
 import { PageBody, PageHeader } from "@/components/page";
 
@@ -21,6 +21,13 @@ const CARDS = [
     title: "Users",
     description:
       "Every portal profile and its role. Roles gate sales edits, admin areas and the customer portal.",
+  },
+  {
+    to: "/admin/integrations",
+    icon: Plug,
+    title: "Integrations",
+    description:
+      "Salesforce auto-create: the sync log and why each decision was made, field maps, outbound webhooks and the needs-template queue.",
   },
   {
     to: "/tickets/routing",

@@ -28,6 +28,7 @@ import { Route as TemplatesRouteImport } from './routes/templates'
 import { Route as TicketsRouteImport } from './routes/tickets'
 import { Route as AdminIndexRouteImport } from './routes/admin.index'
 import { Route as AdminApiKeysRouteImport } from './routes/admin.api-keys'
+import { Route as AdminIntegrationsRouteImport } from './routes/admin.integrations'
 import { Route as AdminUsersRouteImport } from './routes/admin.users'
 import { Route as AuthCallbackRouteImport } from './routes/auth.callback'
 import { Route as CustomersIndexRouteImport } from './routes/customers.index'
@@ -45,12 +46,16 @@ import { Route as TicketsIndexRouteImport } from './routes/tickets.index'
 import { Route as TicketsTicketIdRouteImport } from './routes/tickets.$ticketId'
 import { Route as TicketsRoutingRouteImport } from './routes/tickets.routing'
 import { Route as ViewTokenRouteImport } from './routes/view.$token'
+import { Route as ApiCronDispatchRouteImport } from './routes/api/cron/dispatch'
 import { Route as ApiCronJourneysRouteImport } from './routes/api.cron.journeys'
 import { Route as ApiCronSequencesRouteImport } from './routes/api.cron.sequences'
 import { Route as ApiCronSlaRouteImport } from './routes/api/cron/sla'
 import { Route as ApiTamDecisionRouteImport } from './routes/api/tam/decision'
 import { Route as ApiV1AccountsRouteImport } from './routes/api/v1/accounts'
 import { Route as ApiV1AlertsRouteImport } from './routes/api/v1/alerts'
+import { Route as ApiV1DocsRouteImport } from './routes/api/v1/docs'
+import { Route as ApiV1ImplementationsRouteImport } from './routes/api/v1/implementations'
+import { Route as ApiV1OpenapiDotjsonRouteImport } from './routes/api/v1/openapi[.]json'
 import { Route as ApiV1TamRequestsRouteImport } from './routes/api/v1/tam-requests'
 import { Route as ApiV1TicketsRouteImport } from './routes/api/v1/tickets'
 import { Route as ApiV1AccountsIdRouteImport } from './routes/api/v1/accounts.$id'
@@ -151,6 +156,11 @@ const AdminApiKeysRoute = AdminApiKeysRouteImport.update({
   path: '/api-keys',
   getParentRoute: () => AdminRoute,
 } as any)
+const AdminIntegrationsRoute = AdminIntegrationsRouteImport.update({
+  id: '/integrations',
+  path: '/integrations',
+  getParentRoute: () => AdminRoute,
+} as any)
 const AdminUsersRoute = AdminUsersRouteImport.update({
   id: '/users',
   path: '/users',
@@ -236,6 +246,11 @@ const ViewTokenRoute = ViewTokenRouteImport.update({
   path: '/view/$token',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiCronDispatchRoute = ApiCronDispatchRouteImport.update({
+  id: '/api/cron/dispatch',
+  path: '/api/cron/dispatch',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiCronJourneysRoute = ApiCronJourneysRouteImport.update({
   id: '/api/cron/journeys',
   path: '/api/cron/journeys',
@@ -264,6 +279,21 @@ const ApiV1AccountsRoute = ApiV1AccountsRouteImport.update({
 const ApiV1AlertsRoute = ApiV1AlertsRouteImport.update({
   id: '/api/v1/alerts',
   path: '/api/v1/alerts',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiV1DocsRoute = ApiV1DocsRouteImport.update({
+  id: '/api/v1/docs',
+  path: '/api/v1/docs',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiV1ImplementationsRoute = ApiV1ImplementationsRouteImport.update({
+  id: '/api/v1/implementations',
+  path: '/api/v1/implementations',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiV1OpenapiDotjsonRoute = ApiV1OpenapiDotjsonRouteImport.update({
+  id: '/api/v1/openapi.json',
+  path: '/api/v1/openapi.json',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiV1TamRequestsRoute = ApiV1TamRequestsRouteImport.update({
@@ -307,6 +337,7 @@ export interface FileRoutesByFullPath {
   '/templates': typeof TemplatesRoute
   '/tickets': typeof TicketsRouteWithChildren
   '/admin/api-keys': typeof AdminApiKeysRoute
+  '/admin/integrations': typeof AdminIntegrationsRoute
   '/admin/users': typeof AdminUsersRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/customers/$customerId': typeof CustomersCustomerIdRoute
@@ -325,12 +356,16 @@ export interface FileRoutesByFullPath {
   '/sequences/': typeof SequencesIndexRoute
   '/technical-solutions/': typeof TechnicalSolutionsIndexRoute
   '/tickets/': typeof TicketsIndexRoute
+  '/api/cron/dispatch': typeof ApiCronDispatchRoute
   '/api/cron/journeys': typeof ApiCronJourneysRoute
   '/api/cron/sequences': typeof ApiCronSequencesRoute
   '/api/cron/sla': typeof ApiCronSlaRoute
   '/api/tam/decision': typeof ApiTamDecisionRoute
   '/api/v1/accounts': typeof ApiV1AccountsRouteWithChildren
   '/api/v1/alerts': typeof ApiV1AlertsRoute
+  '/api/v1/docs': typeof ApiV1DocsRoute
+  '/api/v1/implementations': typeof ApiV1ImplementationsRoute
+  '/api/v1/openapi.json': typeof ApiV1OpenapiDotjsonRoute
   '/api/v1/tam-requests': typeof ApiV1TamRequestsRoute
   '/api/v1/tickets': typeof ApiV1TicketsRoute
   '/api/v1/accounts/$id': typeof ApiV1AccountsIdRouteWithChildren
@@ -349,6 +384,7 @@ export interface FileRoutesByTo {
   '/signup': typeof SignupRoute
   '/templates': typeof TemplatesRoute
   '/admin/api-keys': typeof AdminApiKeysRoute
+  '/admin/integrations': typeof AdminIntegrationsRoute
   '/admin/users': typeof AdminUsersRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/customers/$customerId': typeof CustomersCustomerIdRoute
@@ -367,12 +403,16 @@ export interface FileRoutesByTo {
   '/sequences': typeof SequencesIndexRoute
   '/technical-solutions': typeof TechnicalSolutionsIndexRoute
   '/tickets': typeof TicketsIndexRoute
+  '/api/cron/dispatch': typeof ApiCronDispatchRoute
   '/api/cron/journeys': typeof ApiCronJourneysRoute
   '/api/cron/sequences': typeof ApiCronSequencesRoute
   '/api/cron/sla': typeof ApiCronSlaRoute
   '/api/tam/decision': typeof ApiTamDecisionRoute
   '/api/v1/accounts': typeof ApiV1AccountsRouteWithChildren
   '/api/v1/alerts': typeof ApiV1AlertsRoute
+  '/api/v1/docs': typeof ApiV1DocsRoute
+  '/api/v1/implementations': typeof ApiV1ImplementationsRoute
+  '/api/v1/openapi.json': typeof ApiV1OpenapiDotjsonRoute
   '/api/v1/tam-requests': typeof ApiV1TamRequestsRoute
   '/api/v1/tickets': typeof ApiV1TicketsRoute
   '/api/v1/accounts/$id': typeof ApiV1AccountsIdRouteWithChildren
@@ -398,6 +438,7 @@ export interface FileRoutesById {
   '/templates': typeof TemplatesRoute
   '/tickets': typeof TicketsRouteWithChildren
   '/admin/api-keys': typeof AdminApiKeysRoute
+  '/admin/integrations': typeof AdminIntegrationsRoute
   '/admin/users': typeof AdminUsersRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/customers/$customerId': typeof CustomersCustomerIdRoute
@@ -416,12 +457,16 @@ export interface FileRoutesById {
   '/sequences/': typeof SequencesIndexRoute
   '/technical-solutions/': typeof TechnicalSolutionsIndexRoute
   '/tickets/': typeof TicketsIndexRoute
+  '/api/cron/dispatch': typeof ApiCronDispatchRoute
   '/api/cron/journeys': typeof ApiCronJourneysRoute
   '/api/cron/sequences': typeof ApiCronSequencesRoute
   '/api/cron/sla': typeof ApiCronSlaRoute
   '/api/tam/decision': typeof ApiTamDecisionRoute
   '/api/v1/accounts': typeof ApiV1AccountsRouteWithChildren
   '/api/v1/alerts': typeof ApiV1AlertsRoute
+  '/api/v1/docs': typeof ApiV1DocsRoute
+  '/api/v1/implementations': typeof ApiV1ImplementationsRoute
+  '/api/v1/openapi.json': typeof ApiV1OpenapiDotjsonRoute
   '/api/v1/tam-requests': typeof ApiV1TamRequestsRoute
   '/api/v1/tickets': typeof ApiV1TicketsRoute
   '/api/v1/accounts/$id': typeof ApiV1AccountsIdRouteWithChildren
@@ -448,6 +493,7 @@ export interface FileRouteTypes {
     | '/templates'
     | '/tickets'
     | '/admin/api-keys'
+    | '/admin/integrations'
     | '/admin/users'
     | '/auth/callback'
     | '/customers/$customerId'
@@ -466,12 +512,16 @@ export interface FileRouteTypes {
     | '/sequences/'
     | '/technical-solutions/'
     | '/tickets/'
+    | '/api/cron/dispatch'
     | '/api/cron/journeys'
     | '/api/cron/sequences'
     | '/api/cron/sla'
     | '/api/tam/decision'
     | '/api/v1/accounts'
     | '/api/v1/alerts'
+    | '/api/v1/docs'
+    | '/api/v1/implementations'
+    | '/api/v1/openapi.json'
     | '/api/v1/tam-requests'
     | '/api/v1/tickets'
     | '/api/v1/accounts/$id'
@@ -490,6 +540,7 @@ export interface FileRouteTypes {
     | '/signup'
     | '/templates'
     | '/admin/api-keys'
+    | '/admin/integrations'
     | '/admin/users'
     | '/auth/callback'
     | '/customers/$customerId'
@@ -508,12 +559,16 @@ export interface FileRouteTypes {
     | '/sequences'
     | '/technical-solutions'
     | '/tickets'
+    | '/api/cron/dispatch'
     | '/api/cron/journeys'
     | '/api/cron/sequences'
     | '/api/cron/sla'
     | '/api/tam/decision'
     | '/api/v1/accounts'
     | '/api/v1/alerts'
+    | '/api/v1/docs'
+    | '/api/v1/implementations'
+    | '/api/v1/openapi.json'
     | '/api/v1/tam-requests'
     | '/api/v1/tickets'
     | '/api/v1/accounts/$id'
@@ -538,6 +593,7 @@ export interface FileRouteTypes {
     | '/templates'
     | '/tickets'
     | '/admin/api-keys'
+    | '/admin/integrations'
     | '/admin/users'
     | '/auth/callback'
     | '/customers/$customerId'
@@ -556,12 +612,16 @@ export interface FileRouteTypes {
     | '/sequences/'
     | '/technical-solutions/'
     | '/tickets/'
+    | '/api/cron/dispatch'
     | '/api/cron/journeys'
     | '/api/cron/sequences'
     | '/api/cron/sla'
     | '/api/tam/decision'
     | '/api/v1/accounts'
     | '/api/v1/alerts'
+    | '/api/v1/docs'
+    | '/api/v1/implementations'
+    | '/api/v1/openapi.json'
     | '/api/v1/tam-requests'
     | '/api/v1/tickets'
     | '/api/v1/accounts/$id'
@@ -590,12 +650,16 @@ export interface RootRouteChildren {
   DealsDealIdRoute: typeof DealsDealIdRoute
   OwnersOwnerRoute: typeof OwnersOwnerRoute
   ViewTokenRoute: typeof ViewTokenRoute
+  ApiCronDispatchRoute: typeof ApiCronDispatchRoute
   ApiCronJourneysRoute: typeof ApiCronJourneysRoute
   ApiCronSequencesRoute: typeof ApiCronSequencesRoute
   ApiCronSlaRoute: typeof ApiCronSlaRoute
   ApiTamDecisionRoute: typeof ApiTamDecisionRoute
   ApiV1AccountsRoute: typeof ApiV1AccountsRouteWithChildren
   ApiV1AlertsRoute: typeof ApiV1AlertsRoute
+  ApiV1DocsRoute: typeof ApiV1DocsRoute
+  ApiV1ImplementationsRoute: typeof ApiV1ImplementationsRoute
+  ApiV1OpenapiDotjsonRoute: typeof ApiV1OpenapiDotjsonRoute
   ApiV1TamRequestsRoute: typeof ApiV1TamRequestsRoute
   ApiV1TicketsRoute: typeof ApiV1TicketsRoute
 }
@@ -735,6 +799,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminApiKeysRouteImport
       parentRoute: typeof AdminRoute
     }
+    '/admin/integrations': {
+      id: '/admin/integrations'
+      path: '/integrations'
+      fullPath: '/admin/integrations'
+      preLoaderRoute: typeof AdminIntegrationsRouteImport
+      parentRoute: typeof AdminRoute
+    }
     '/admin/users': {
       id: '/admin/users'
       path: '/users'
@@ -854,6 +925,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ViewTokenRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/cron/dispatch': {
+      id: '/api/cron/dispatch'
+      path: '/api/cron/dispatch'
+      fullPath: '/api/cron/dispatch'
+      preLoaderRoute: typeof ApiCronDispatchRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/cron/journeys': {
       id: '/api/cron/journeys'
       path: '/api/cron/journeys'
@@ -896,6 +974,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiV1AlertsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/v1/docs': {
+      id: '/api/v1/docs'
+      path: '/api/v1/docs'
+      fullPath: '/api/v1/docs'
+      preLoaderRoute: typeof ApiV1DocsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/implementations': {
+      id: '/api/v1/implementations'
+      path: '/api/v1/implementations'
+      fullPath: '/api/v1/implementations'
+      preLoaderRoute: typeof ApiV1ImplementationsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/openapi.json': {
+      id: '/api/v1/openapi.json'
+      path: '/api/v1/openapi.json'
+      fullPath: '/api/v1/openapi.json'
+      preLoaderRoute: typeof ApiV1OpenapiDotjsonRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/v1/tam-requests': {
       id: '/api/v1/tam-requests'
       path: '/api/v1/tam-requests'
@@ -929,12 +1028,14 @@ declare module '@tanstack/react-router' {
 
 interface AdminRouteChildren {
   AdminApiKeysRoute: typeof AdminApiKeysRoute
+  AdminIntegrationsRoute: typeof AdminIntegrationsRoute
   AdminUsersRoute: typeof AdminUsersRoute
   AdminIndexRoute: typeof AdminIndexRoute
 }
 
 const AdminRouteChildren: AdminRouteChildren = {
   AdminApiKeysRoute: AdminApiKeysRoute,
+  AdminIntegrationsRoute: AdminIntegrationsRoute,
   AdminUsersRoute: AdminUsersRoute,
   AdminIndexRoute: AdminIndexRoute,
 }
@@ -1068,12 +1169,16 @@ const rootRouteChildren: RootRouteChildren = {
   DealsDealIdRoute: DealsDealIdRoute,
   OwnersOwnerRoute: OwnersOwnerRoute,
   ViewTokenRoute: ViewTokenRoute,
+  ApiCronDispatchRoute: ApiCronDispatchRoute,
   ApiCronJourneysRoute: ApiCronJourneysRoute,
   ApiCronSequencesRoute: ApiCronSequencesRoute,
   ApiCronSlaRoute: ApiCronSlaRoute,
   ApiTamDecisionRoute: ApiTamDecisionRoute,
   ApiV1AccountsRoute: ApiV1AccountsRouteWithChildren,
   ApiV1AlertsRoute: ApiV1AlertsRoute,
+  ApiV1DocsRoute: ApiV1DocsRoute,
+  ApiV1ImplementationsRoute: ApiV1ImplementationsRoute,
+  ApiV1OpenapiDotjsonRoute: ApiV1OpenapiDotjsonRoute,
   ApiV1TamRequestsRoute: ApiV1TamRequestsRoute,
   ApiV1TicketsRoute: ApiV1TicketsRoute,
 }
