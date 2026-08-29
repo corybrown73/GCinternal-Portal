@@ -6,24 +6,24 @@ import { Plus } from "lucide-react";
 
 import { PageBody, PageHeader } from "@/components/page";
 import { NoRows } from "@/components/record";
-import { addJourney, getJourneys } from "@/lib/journeys.functions";
+import { addSequence, getSequences } from "@/lib/sequences.functions";
 import { canManage, useProfile } from "@/lib/auth";
 import { humanize } from "@/lib/hub-format";
 import { cn } from "@/lib/utils";
 
 const journeysQuery = queryOptions({
-  queryKey: ["journeys"],
-  queryFn: () => getJourneys(),
+  queryKey: ["sequences"],
+  queryFn: () => getSequences(),
 });
 
-export const Route = createFileRoute("/journeys/")({
+export const Route = createFileRoute("/sequences/")({
   head: () => ({
     meta: [
-      { title: "Journeys — Implementation Hub" },
+      { title: "Sequences — Implementation Hub" },
       {
         name: "description",
         content:
-          "Automated customer email journeys: welcome sequences, training tracks and engagement.",
+          "Automated customer email sequences: welcome sequences, training tracks and engagement.",
       },
     ],
   }),
@@ -32,10 +32,10 @@ export const Route = createFileRoute("/journeys/")({
   },
   errorComponent: ({ error }) => (
     <div role="alert" className="p-6 text-[13px] text-destructive">
-      Could not load journeys: {error.message}
+      Could not load sequences: {error.message}
     </div>
   ),
-  component: JourneysPage,
+  component: SequencesPage,
 });
 
 const inputClass =
@@ -46,7 +46,7 @@ const primaryClass =
   "inline-flex items-center gap-1 rounded-sm bg-primary px-2 py-0.5 text-[11px] font-medium text-primary-foreground disabled:opacity-50";
 const labelClass = "text-[10px] uppercase tracking-[0.1em] text-muted-foreground";
 
-function JourneysPage() {
+function SequencesPage() {
   const { data } = useSuspenseQuery(journeysQuery);
   const { profile } = useProfile();
   const canEdit =
@@ -57,16 +57,16 @@ function JourneysPage() {
   return (
     <>
       <PageHeader
-        title="Journeys"
+        title="Sequences"
         description="Automated email sequences that walk customer contacts through onboarding content."
-        actions={canEdit ? <NewJourney /> : undefined}
+        actions={canEdit ? <NewSequence /> : undefined}
       />
       <PageBody className="space-y-3">
         <div className="overflow-hidden rounded-md border border-border bg-card">
           <table className="w-full text-left">
             <thead className="border-b border-border bg-surface text-[10px] text-muted-foreground">
               <tr>
-                <th className="px-3 py-1.5 font-medium uppercase tracking-[0.1em]">Journey</th>
+                <th className="px-3 py-1.5 font-medium uppercase tracking-[0.1em]">Sequence</th>
                 <th className="px-3 py-1.5 font-medium uppercase tracking-[0.1em]">Trigger</th>
                 <th className="px-3 py-1.5 font-medium uppercase tracking-[0.1em]">Steps</th>
                 <th className="px-3 py-1.5 font-medium uppercase tracking-[0.1em]">Enrolled</th>
@@ -78,8 +78,8 @@ function JourneysPage() {
                 <tr key={j.id} className="hover:bg-muted/60">
                   <td className="px-3 py-1.5">
                     <Link
-                      to="/journeys/$journeyId"
-                      params={{ journeyId: j.id }}
+                      to="/sequences/$sequenceId"
+                      params={{ sequenceId: j.id }}
                       className="block text-[13px] font-medium hover:underline"
                     >
                       {j.name}
@@ -112,7 +112,7 @@ function JourneysPage() {
               {data.length === 0 ? (
                 <tr>
                   <td colSpan={5}>
-                    <NoRows label="No journeys yet." />
+                    <NoRows label="No sequences yet." />
                   </td>
                 </tr>
               ) : null}
@@ -124,13 +124,13 @@ function JourneysPage() {
   );
 }
 
-function NewJourney() {
+function NewSequence() {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [trigger, setTrigger] = useState<"manual" | "customer_created" | "stage_entered">("manual");
   const queryClient = useQueryClient();
-  const create = useServerFn(addJourney);
+  const create = useServerFn(addSequence);
 
   const mutation = useMutation({
     mutationFn: () =>
@@ -142,7 +142,7 @@ function NewJourney() {
         },
       }),
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["journeys"] });
+      await queryClient.invalidateQueries({ queryKey: ["sequences"] });
       setOpen(false);
       setName("");
       setDescription("");
@@ -152,7 +152,7 @@ function NewJourney() {
   if (!open) {
     return (
       <button type="button" className={buttonClass} onClick={() => setOpen(true)}>
-        <Plus className="h-3 w-3" /> New journey
+        <Plus className="h-3 w-3" /> New sequence
       </button>
     );
   }

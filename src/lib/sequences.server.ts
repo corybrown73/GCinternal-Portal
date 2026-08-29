@@ -27,7 +27,7 @@ function escapeHtml(s: string): string {
 /* Row shapes (these tables post-date the generated Database types)          */
 /* ------------------------------------------------------------------------- */
 
-export interface JourneyRow {
+export interface SequenceRow {
   id: string;
   name: string;
   description: string | null;
@@ -36,9 +36,9 @@ export interface JourneyRow {
   created_at: string;
 }
 
-export interface JourneyStepRow {
+export interface SequenceStepRow {
   id: string;
-  journey_id: string;
+  sequence_id: string;
   step_order: number;
   title: string;
   content_item_id: string | null;
@@ -58,7 +58,7 @@ export interface ContentItemRow {
 
 export interface EnrollmentRow {
   id: string;
-  journey_id: string;
+  sequence_id: string;
   customer_id: string;
   contact_id: string | null;
   contact_email: string;
@@ -69,18 +69,18 @@ export interface EnrollmentRow {
 }
 
 /* ------------------------------------------------------------------------- */
-/* Tracked links — jose HS256, distinct claim {k:'journey'}                  */
+/* Tracked links — jose HS256, distinct claim {k:'sequence'}                  */
 /* ------------------------------------------------------------------------- */
 
-export async function signJourneyToken(enrollmentId: string, stepId: string): Promise<string> {
-  return await new SignJWT({ k: "journey", e: enrollmentId, s: stepId })
+export async function signSequenceToken(enrollmentId: string, stepId: string): Promise<string> {
+  return await new SignJWT({ k: "sequence", e: enrollmentId, s: stepId })
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
     .setExpirationTime("30d")
     .sign(secret());
 }
 
-async function verifyJourneyToken(
+async function verifySequenceToken(
   token: string,
 ): Promise<{ enrollmentId: string; stepId: string } | null> {
   try {
@@ -88,7 +88,10 @@ async function verifyJourneyToken(
     const k = payload["k"];
     const e = payload["e"];
     const s = payload["s"];
-    if (k !== "journey" || typeof e !== "string" || typeof s !== "string") {
+    // Tokens live 30 days, so links already sitting in customers' inboxes carry
+    // the pre-rename claim. Both are accepted until those have all expired;
+    // only 'sequence' is minted now.
+    if ((k !== "sequence" && k !== "journey") || typeof e !== "string" || typeof s !== "string") {
       return null;
     }
     return { enrollmentId: e, stepId: s };
@@ -158,18 +161,18 @@ export async function sendStep(
 ): Promise<{ sent: boolean; completed: boolean }> {
   const nextOrder = enrollment.current_step + 1;
   const { data: step } = await db()
-    .from("journey_steps")
+    .from("sequence_steps")
     .select("*")
-    .eq("journey_id", enrollment.journey_id)
+    .eq("sequence_id", enrollment.sequence_id)
     .eq("step_order", nextOrder)
     .maybeSingle();
 
   if (!step) {
-    await db().from("journey_enrollments").update({ status: "completed" }).eq("id", enrollment.id);
+    await db().from("sequence_enrollments").update({ status: "completed" }).eq("id", enrollment.id);
     return { sent: false, completed: true };
   }
 
-  const token = await signJourneyToken(enrollment.id, step.id);
+  const token = await signSequenceToken(enrollment.id, step.id);
   const contentUrl = `${appUrl()}/view/${token}`;
   const firstName = await resolveFirstName(enrollment, opts?.firstName);
 
@@ -179,7 +182,7 @@ export async function sendStep(
   await sendEmail({ to: enrollment.contact_email, subject, html });
 
   await db()
-    .from("journey_enrollments")
+    .from("sequence_enrollments")
     .update({ current_step: step.step_order, last_sent_at: new Date().toISOString() })
     .eq("id", enrollment.id);
 
@@ -195,10 +198,10 @@ export async function sendStep(
 
   await audit({
     actor_type: "system",
-    action: "journey.step_sent",
-    entity_type: "journey_enrollment",
+    action: "sequence.step_sent",
+    entity_type: "sequence_enrollment",
     entity_id: enrollment.id,
-    payload: { journey_id: enrollment.journey_id, step_id: step.id, step_order: step.step_order },
+    payload: { sequence_id: enrollment.sequence_id, step_id: step.id, step_order: step.step_order },
   });
 
   return { sent: true, completed: false };
@@ -209,7 +212,7 @@ export async function sendStep(
 /* ------------------------------------------------------------------------- */
 
 export async function enrollContact(
-  journeyId: string,
+  sequenceId: string,
   input: {
     customerId: string;
     contactEmail: string;
@@ -221,9 +224,9 @@ export async function enrollContact(
   if (!email) throw new Error("Contact email is required");
 
   const { data: created, error } = await db()
-    .from("journey_enrollments")
+    .from("sequence_enrollments")
     .insert({
-      journey_id: journeyId,
+      sequence_id: sequenceId,
       customer_id: input.customerId,
       contact_id: input.contactId ?? null,
       contact_email: email,
@@ -234,12 +237,12 @@ export async function enrollContact(
     .single();
 
   if (error) {
-    // unique (journey_id, contact_email, customer_id): already enrolled.
+    // unique (sequence_id, contact_email, customer_id): already enrolled.
     if (error.code === "23505") {
       const { data: existing } = await db()
-        .from("journey_enrollments")
+        .from("sequence_enrollments")
         .select("*")
-        .eq("journey_id", journeyId)
+        .eq("sequence_id", sequenceId)
         .eq("customer_id", input.customerId)
         .eq("contact_email", email)
         .maybeSingle();
@@ -252,10 +255,10 @@ export async function enrollContact(
 
   await audit({
     actor_type: "system",
-    action: "journey.enrolled",
-    entity_type: "journey_enrollment",
+    action: "sequence.enrolled",
+    entity_type: "sequence_enrollment",
     entity_id: enrollment.id,
-    payload: { journey_id: journeyId, customer_id: input.customerId, contact_email: email },
+    payload: { sequence_id: sequenceId, customer_id: input.customerId, contact_email: email },
   });
 
   // Kick off immediately with step 1.
@@ -268,25 +271,25 @@ export async function enrollContact(
 /* ------------------------------------------------------------------------- */
 
 /**
- * Verify a tracked-link token, record the view (deduped), advance the journey
+ * Verify a tracked-link token, record the view (deduped), advance the sequence
  * when the step advances on 'viewed', and return the real content URL.
  * NEVER throws — falls back to APP_URL so the visitor always lands somewhere.
  */
 export async function recordView(token: string): Promise<{ url: string }> {
   const fallback = { url: appUrl() };
   try {
-    const claims = await verifyJourneyToken(token);
+    const claims = await verifySequenceToken(token);
     if (!claims) return fallback;
 
     const [{ data: enrollment }, { data: step }] = await Promise.all([
-      db().from("journey_enrollments").select("*").eq("id", claims.enrollmentId).maybeSingle(),
-      db().from("journey_steps").select("*").eq("id", claims.stepId).maybeSingle(),
+      db().from("sequence_enrollments").select("*").eq("id", claims.enrollmentId).maybeSingle(),
+      db().from("sequence_steps").select("*").eq("id", claims.stepId).maybeSingle(),
     ]);
     if (!enrollment || !step) return fallback;
 
     const contentUrl = await contentUrlOf(step);
 
-    // Dedupe: a repeat open of the same link must not advance the journey twice.
+    // Dedupe: a repeat open of the same link must not advance the sequence twice.
     const { data: prior } = await db()
       .from("engagement_events")
       .select("id")
@@ -308,8 +311,8 @@ export async function recordView(token: string): Promise<{ url: string }> {
 
       await audit({
         actor_type: "email_token",
-        action: "journey.viewed",
-        entity_type: "journey_enrollment",
+        action: "sequence.viewed",
+        entity_type: "sequence_enrollment",
         entity_id: enrollment.id,
         payload: { step_id: step.id, step_order: step.step_order },
       });
@@ -330,7 +333,7 @@ export async function recordView(token: string): Promise<{ url: string }> {
   }
 }
 
-async function contentUrlOf(step: JourneyStepRow): Promise<string | null> {
+async function contentUrlOf(step: SequenceStepRow): Promise<string | null> {
   if (!step.content_item_id) return null;
   const { data } = await db()
     .from("content_items")
@@ -345,25 +348,25 @@ async function contentUrlOf(step: JourneyStepRow): Promise<string | null> {
 /* ------------------------------------------------------------------------- */
 
 export async function advanceDelayedSteps(): Promise<{ advanced: number; completed: number }> {
-  const [{ data: enrollments }, { data: steps }, { data: journeys }] = await Promise.all([
-    db().from("journey_enrollments").select("*").eq("status", "active"),
-    db().from("journey_steps").select("*"),
-    db().from("journeys").select("id, active"),
+  const [{ data: enrollments }, { data: steps }, { data: sequences }] = await Promise.all([
+    db().from("sequence_enrollments").select("*").eq("status", "active"),
+    db().from("sequence_steps").select("*"),
+    db().from("sequences").select("id, active"),
   ]);
 
-  const activeJourneys = new Set(
-    (journeys ?? []).filter((j: any) => j.active).map((j: any) => j.id),
+  const activeSequences = new Set(
+    (sequences ?? []).filter((j: any) => j.active).map((j: any) => j.id),
   );
-  const stepByJourneyOrder = new Map<string, JourneyStepRow>();
-  for (const s of steps ?? []) stepByJourneyOrder.set(`${s.journey_id}:${s.step_order}`, s);
+  const stepBySequenceOrder = new Map<string, SequenceStepRow>();
+  for (const s of steps ?? []) stepBySequenceOrder.set(`${s.sequence_id}:${s.step_order}`, s);
 
   let advanced = 0;
   let completed = 0;
   const now = Date.now();
 
   for (const e of (enrollments ?? []) as EnrollmentRow[]) {
-    if (!activeJourneys.has(e.journey_id)) continue;
-    const next = stepByJourneyOrder.get(`${e.journey_id}:${e.current_step + 1}`);
+    if (!activeSequences.has(e.sequence_id)) continue;
+    const next = stepBySequenceOrder.get(`${e.sequence_id}:${e.current_step + 1}`);
     if (!next || next.advance_on !== "delay") continue;
     const delayMs = (next.delay_hours ?? 0) * 3600_000;
     const since = e.last_sent_at ?? e.created_at;
@@ -377,12 +380,12 @@ export async function advanceDelayedSteps(): Promise<{ advanced: number; complet
 }
 
 export async function autoEnrollNewCustomers(): Promise<{ enrolled: number }> {
-  const { data: journeys } = await db()
-    .from("journeys")
+  const { data: sequences } = await db()
+    .from("sequences")
     .select("id")
     .eq("trigger_event", "customer_created")
     .eq("active", true);
-  if (!journeys || journeys.length === 0) return { enrolled: 0 };
+  if (!sequences || sequences.length === 0) return { enrolled: 0 };
 
   const dayAgo = new Date(Date.now() - 24 * 3600_000).toISOString();
   const { data: customers } = await db()
@@ -398,13 +401,13 @@ export async function autoEnrollNewCustomers(): Promise<{ enrolled: number }> {
       .select("id, customer_id, name, email, role")
       .in("customer_id", customerIds),
     db()
-      .from("journey_enrollments")
-      .select("journey_id, customer_id, contact_email")
+      .from("sequence_enrollments")
+      .select("sequence_id, customer_id, contact_email")
       .in("customer_id", customerIds),
   ]);
 
   const already = new Set(
-    (existing ?? []).map((e: any) => `${e.journey_id}:${e.customer_id}:${e.contact_email}`),
+    (existing ?? []).map((e: any) => `${e.sequence_id}:${e.customer_id}:${e.contact_email}`),
   );
 
   let enrolled = 0;
@@ -413,11 +416,11 @@ export async function autoEnrollNewCustomers(): Promise<{ enrolled: number }> {
     if (own.length === 0) continue;
     // Prefer an explicitly "primary"-ish contact, else the first with an email.
     const primary = own.find((c: any) => /primary|champion|main/i.test(c.role ?? "")) ?? own[0];
-    for (const journey of journeys) {
-      const key = `${journey.id}:${customer.id}:${primary.email.trim().toLowerCase()}`;
+    for (const sequence of sequences) {
+      const key = `${sequence.id}:${customer.id}:${primary.email.trim().toLowerCase()}`;
       if (already.has(key)) continue;
       try {
-        await enrollContact(journey.id, {
+        await enrollContact(sequence.id, {
           customerId: customer.id,
           contactEmail: primary.email,
           contactId: primary.id,
@@ -437,21 +440,21 @@ export async function autoEnrollNewCustomers(): Promise<{ enrolled: number }> {
 /* Admin loaders + editors (called by internal-only server functions)        */
 /* ------------------------------------------------------------------------- */
 
-export interface JourneyListRow extends JourneyRow {
+export interface SequenceListRow extends SequenceRow {
   step_count: number;
   enrolled_count: number;
 }
 
-export async function loadJourneys(): Promise<JourneyListRow[]> {
-  const [{ data: journeys }, { data: steps }, { data: enrollments }] = await Promise.all([
-    db().from("journeys").select("*").order("created_at", { ascending: true }),
-    db().from("journey_steps").select("id, journey_id"),
-    db().from("journey_enrollments").select("id, journey_id"),
+export async function loadSequences(): Promise<SequenceListRow[]> {
+  const [{ data: sequences }, { data: steps }, { data: enrollments }] = await Promise.all([
+    db().from("sequences").select("*").order("created_at", { ascending: true }),
+    db().from("sequence_steps").select("id, sequence_id"),
+    db().from("sequence_enrollments").select("id, sequence_id"),
   ]);
-  return (journeys ?? []).map((j: any) => ({
+  return (sequences ?? []).map((j: any) => ({
     ...j,
-    step_count: (steps ?? []).filter((s: any) => s.journey_id === j.id).length,
-    enrolled_count: (enrollments ?? []).filter((e: any) => e.journey_id === j.id).length,
+    step_count: (steps ?? []).filter((s: any) => s.sequence_id === j.id).length,
+    enrolled_count: (enrollments ?? []).filter((e: any) => e.sequence_id === j.id).length,
   }));
 }
 
@@ -466,9 +469,9 @@ export interface EnrollmentDetail extends EnrollmentRow {
   }>;
 }
 
-export interface JourneyDetail {
-  journey: JourneyRow;
-  steps: Array<JourneyStepRow & { content_item: ContentItemRow | null }>;
+export interface SequenceDetail {
+  sequence: SequenceRow;
+  steps: Array<SequenceStepRow & { content_item: ContentItemRow | null }>;
   enrollments: EnrollmentDetail[];
   content_items: ContentItemRow[];
   customers: Array<{
@@ -478,13 +481,13 @@ export interface JourneyDetail {
   }>;
 }
 
-export async function loadJourneyDetail(journeyId: string): Promise<JourneyDetail> {
-  const { data: journey } = await db()
-    .from("journeys")
+export async function loadSequenceDetail(sequenceId: string): Promise<SequenceDetail> {
+  const { data: sequence } = await db()
+    .from("sequences")
     .select("*")
-    .eq("id", journeyId)
+    .eq("id", sequenceId)
     .maybeSingle();
-  if (!journey) throw new Error("Journey not found");
+  if (!sequence) throw new Error("Sequence not found");
 
   const [
     { data: steps },
@@ -493,11 +496,11 @@ export async function loadJourneyDetail(journeyId: string): Promise<JourneyDetai
     { data: customers },
     { data: contacts },
   ] = await Promise.all([
-    db().from("journey_steps").select("*").eq("journey_id", journeyId).order("step_order"),
+    db().from("sequence_steps").select("*").eq("sequence_id", sequenceId).order("step_order"),
     db()
-      .from("journey_enrollments")
+      .from("sequence_enrollments")
       .select("*")
-      .eq("journey_id", journeyId)
+      .eq("sequence_id", sequenceId)
       .order("created_at", { ascending: false }),
     db().from("content_items").select("id, title, kind, url, description").order("title"),
     db().from("customers").select("id, name").order("name"),
@@ -518,7 +521,7 @@ export async function loadJourneyDetail(journeyId: string): Promise<JourneyDetai
   const contactById = new Map((contacts ?? []).map((c: any) => [c.id, c.name]));
 
   return {
-    journey: journey as JourneyRow,
+    sequence: sequence as SequenceRow,
     steps: (steps ?? []).map((s: any) => ({
       ...s,
       content_item: s.content_item_id ? (contentById.get(s.content_item_id) ?? null) : null,
@@ -547,14 +550,14 @@ export async function loadJourneyDetail(journeyId: string): Promise<JourneyDetai
   };
 }
 
-export async function createJourney(input: {
+export async function createSequence(input: {
   name: string;
   description?: string | null;
   trigger_event: "manual" | "customer_created" | "stage_entered";
   createdBy: string;
-}): Promise<JourneyRow> {
+}): Promise<SequenceRow> {
   const { data, error } = await db()
-    .from("journeys")
+    .from("sequences")
     .insert({
       name: input.name,
       description: input.description ?? null,
@@ -563,27 +566,27 @@ export async function createJourney(input: {
     })
     .select("*")
     .single();
-  if (error) throw new Error(`Could not create journey: ${error.message}`);
+  if (error) throw new Error(`Could not create sequence: ${error.message}`);
   await audit({
     actor_type: "user",
     actor_id: input.createdBy,
-    action: "journey.created",
-    entity_type: "journey",
+    action: "sequence.created",
+    entity_type: "sequence",
     entity_id: data.id,
     payload: { name: input.name },
   });
-  return data as JourneyRow;
+  return data as SequenceRow;
 }
 
-export async function setJourneyActive(journeyId: string, active: boolean, actorId: string) {
-  const { error } = await db().from("journeys").update({ active }).eq("id", journeyId);
+export async function setSequenceActive(sequenceId: string, active: boolean, actorId: string) {
+  const { error } = await db().from("sequences").update({ active }).eq("id", sequenceId);
   if (error) throw new Error(error.message);
   await audit({
     actor_type: "user",
     actor_id: actorId,
-    action: active ? "journey.activated" : "journey.paused",
-    entity_type: "journey",
-    entity_id: journeyId,
+    action: active ? "sequence.activated" : "sequence.paused",
+    entity_type: "sequence",
+    entity_id: sequenceId,
   });
 }
 
@@ -596,85 +599,85 @@ export interface StepPatch {
   delay_hours: number | null;
 }
 
-export async function saveJourneyStep(
-  journeyId: string,
+export async function saveSequenceStep(
+  sequenceId: string,
   stepId: string | null,
   patch: StepPatch,
   actorId: string,
-): Promise<JourneyStepRow> {
+): Promise<SequenceStepRow> {
   if (patch.advance_on === "delay" && (!patch.delay_hours || patch.delay_hours <= 0)) {
     throw new Error("A delay step needs delay_hours greater than zero");
   }
   if (stepId) {
     const { data, error } = await db()
-      .from("journey_steps")
+      .from("sequence_steps")
       .update({ ...patch })
       .eq("id", stepId)
-      .eq("journey_id", journeyId)
+      .eq("sequence_id", sequenceId)
       .select("*")
       .single();
     if (error) throw new Error(`Could not update step: ${error.message}`);
     await audit({
       actor_type: "user",
       actor_id: actorId,
-      action: "journey.step_updated",
-      entity_type: "journey_step",
+      action: "sequence.step_updated",
+      entity_type: "sequence_step",
       entity_id: stepId,
     });
-    return data as JourneyStepRow;
+    return data as SequenceStepRow;
   }
   const { data: last } = await db()
-    .from("journey_steps")
+    .from("sequence_steps")
     .select("step_order")
-    .eq("journey_id", journeyId)
+    .eq("sequence_id", sequenceId)
     .order("step_order", { ascending: false })
     .limit(1);
   const nextOrder = ((last ?? [])[0]?.step_order ?? 0) + 1;
   const { data, error } = await db()
-    .from("journey_steps")
-    .insert({ journey_id: journeyId, step_order: nextOrder, ...patch })
+    .from("sequence_steps")
+    .insert({ sequence_id: sequenceId, step_order: nextOrder, ...patch })
     .select("*")
     .single();
   if (error) throw new Error(`Could not add step: ${error.message}`);
   await audit({
     actor_type: "user",
     actor_id: actorId,
-    action: "journey.step_added",
-    entity_type: "journey_step",
+    action: "sequence.step_added",
+    entity_type: "sequence_step",
     entity_id: data.id,
-    payload: { journey_id: journeyId, step_order: nextOrder },
+    payload: { sequence_id: sequenceId, step_order: nextOrder },
   });
-  return data as JourneyStepRow;
+  return data as SequenceStepRow;
 }
 
-export async function deleteJourneyStep(journeyId: string, stepId: string, actorId: string) {
+export async function deleteSequenceStep(sequenceId: string, stepId: string, actorId: string) {
   const { error } = await db()
-    .from("journey_steps")
+    .from("sequence_steps")
     .delete()
     .eq("id", stepId)
-    .eq("journey_id", journeyId);
+    .eq("sequence_id", sequenceId);
   if (error) throw new Error(error.message);
 
   // Close the ordering gap so step_order stays 1..n.
   const { data: rest } = await db()
-    .from("journey_steps")
+    .from("sequence_steps")
     .select("id, step_order")
-    .eq("journey_id", journeyId)
+    .eq("sequence_id", sequenceId)
     .order("step_order");
   let order = 1;
   for (const s of rest ?? []) {
     if (s.step_order !== order) {
-      await db().from("journey_steps").update({ step_order: order }).eq("id", s.id);
+      await db().from("sequence_steps").update({ step_order: order }).eq("id", s.id);
     }
     order += 1;
   }
   await audit({
     actor_type: "user",
     actor_id: actorId,
-    action: "journey.step_deleted",
-    entity_type: "journey_step",
+    action: "sequence.step_deleted",
+    entity_type: "sequence_step",
     entity_id: stepId,
-    payload: { journey_id: journeyId },
+    payload: { sequence_id: sequenceId },
   });
 }
 
@@ -704,9 +707,9 @@ export async function createContentItem(input: {
 /* Seed: "New Logo Welcome"                                                  */
 /* ------------------------------------------------------------------------- */
 
-/** Idempotent: only seeds when ZERO journeys exist. */
-export async function ensureDefaultJourney(): Promise<void> {
-  const { count } = await db().from("journeys").select("id", { count: "exact", head: true });
+/** Idempotent: only seeds when ZERO sequences exist. */
+export async function ensureDefaultSequence(): Promise<void> {
+  const { count } = await db().from("sequences").select("id", { count: "exact", head: true });
   if ((count ?? 0) > 0) return;
 
   const { data: content, error: contentError } = await db()
@@ -721,8 +724,8 @@ export async function ensureDefaultJourney(): Promise<void> {
     .single();
   if (contentError) throw new Error(`Seed failed: ${contentError.message}`);
 
-  const { data: journey, error: journeyError } = await db()
-    .from("journeys")
+  const { data: sequence, error: journeyError } = await db()
+    .from("sequences")
     .insert({
       name: "New Logo Welcome",
       description: "Automated welcome + training sequence for newly signed customers.",
@@ -734,10 +737,10 @@ export async function ensureDefaultJourney(): Promise<void> {
   if (journeyError) throw new Error(`Seed failed: ${journeyError.message}`);
 
   const { error: stepsError } = await db()
-    .from("journey_steps")
+    .from("sequence_steps")
     .insert([
       {
-        journey_id: journey.id,
+        sequence_id: sequence.id,
         step_order: 1,
         title: "Welcome to GoCanvas",
         content_item_id: content.id,
@@ -748,7 +751,7 @@ export async function ensureDefaultJourney(): Promise<void> {
         delay_hours: null,
       },
       {
-        journey_id: journey.id,
+        sequence_id: sequence.id,
         step_order: 2,
         title: "Level 1 training",
         content_item_id: content.id,
@@ -759,7 +762,7 @@ export async function ensureDefaultJourney(): Promise<void> {
         delay_hours: null,
       },
       {
-        journey_id: journey.id,
+        sequence_id: sequence.id,
         step_order: 3,
         title: "Level 2 training",
         content_item_id: content.id,

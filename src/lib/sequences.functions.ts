@@ -3,9 +3,9 @@ import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
 /* ------------------------------------------------------------------------- */
-/* Journey engine server functions.                                          */
+/* Sequence engine server functions.                                          */
 /* Viewing requires an internal profile; editing/enrolling additionally      */
-/* requires canManage or the implementation role. recordJourneyView is the   */
+/* requires canManage or the implementation role. recordSequenceView is the   */
 /* single PUBLIC function (token-authenticated, used by /view/$token).       */
 /* ------------------------------------------------------------------------- */
 
@@ -15,34 +15,34 @@ async function internalOnly(userId: string) {
 }
 
 async function editorOnly(userId: string) {
-  const { requireInternal, canEditJourneys } = await import("./portal.server");
+  const { requireInternal, canEditSequences } = await import("./portal.server");
   const profile = await requireInternal(userId);
-  if (!canEditJourneys(profile.role)) {
+  if (!canEditSequences(profile.role)) {
     throw new Error("Forbidden: managers or implementation only");
   }
   return profile;
 }
 
-export const getJourneys = createServerFn({ method: "GET" })
+export const getSequences = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     await internalOnly(context.userId);
-    const { ensureDefaultJourney, loadJourneys } = await import("./journeys.server");
+    const { ensureDefaultSequence, loadSequences } = await import("./sequences.server");
     // Lazy idempotent seed — internal path only.
-    await ensureDefaultJourney();
-    return loadJourneys();
+    await ensureDefaultSequence();
+    return loadSequences();
   });
 
-export const getJourneyDetail = createServerFn({ method: "GET" })
-  .inputValidator((data: unknown) => z.object({ journeyId: z.string().uuid() }).parse(data))
+export const getSequenceDetail = createServerFn({ method: "GET" })
+  .inputValidator((data: unknown) => z.object({ sequenceId: z.string().uuid() }).parse(data))
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     await internalOnly(context.userId);
-    const { loadJourneyDetail } = await import("./journeys.server");
-    return loadJourneyDetail(data.journeyId);
+    const { loadSequenceDetail } = await import("./sequences.server");
+    return loadSequenceDetail(data.sequenceId);
   });
 
-export const addJourney = createServerFn({ method: "POST" })
+export const addSequence = createServerFn({ method: "POST" })
   .inputValidator((data: unknown) =>
     z
       .object({
@@ -55,8 +55,8 @@ export const addJourney = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const profile = await editorOnly(context.userId);
-    const { createJourney } = await import("./journeys.server");
-    return createJourney({
+    const { createSequence } = await import("./sequences.server");
+    return createSequence({
       name: data.name,
       description: data.description ?? null,
       trigger_event: data.trigger_event,
@@ -64,20 +64,20 @@ export const addJourney = createServerFn({ method: "POST" })
     });
   });
 
-export const toggleJourneyActive = createServerFn({ method: "POST" })
+export const toggleSequenceActive = createServerFn({ method: "POST" })
   .inputValidator((data: unknown) =>
-    z.object({ journeyId: z.string().uuid(), active: z.boolean() }).parse(data),
+    z.object({ sequenceId: z.string().uuid(), active: z.boolean() }).parse(data),
   )
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const profile = await editorOnly(context.userId);
-    const { setJourneyActive } = await import("./journeys.server");
-    await setJourneyActive(data.journeyId, data.active, profile.id);
+    const { setSequenceActive } = await import("./sequences.server");
+    await setSequenceActive(data.sequenceId, data.active, profile.id);
     return { ok: true };
   });
 
 const stepInput = z.object({
-  journeyId: z.string().uuid(),
+  sequenceId: z.string().uuid(),
   stepId: z.string().uuid().nullable().optional(),
   title: z.string().trim().min(2).max(200),
   content_item_id: z.string().uuid().nullable().optional(),
@@ -92,9 +92,9 @@ export const saveStep = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const profile = await editorOnly(context.userId);
-    const { saveJourneyStep } = await import("./journeys.server");
-    return saveJourneyStep(
-      data.journeyId,
+    const { saveSequenceStep } = await import("./sequences.server");
+    return saveSequenceStep(
+      data.sequenceId,
       data.stepId ?? null,
       {
         title: data.title,
@@ -110,13 +110,13 @@ export const saveStep = createServerFn({ method: "POST" })
 
 export const removeStep = createServerFn({ method: "POST" })
   .inputValidator((data: unknown) =>
-    z.object({ journeyId: z.string().uuid(), stepId: z.string().uuid() }).parse(data),
+    z.object({ sequenceId: z.string().uuid(), stepId: z.string().uuid() }).parse(data),
   )
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const profile = await editorOnly(context.userId);
-    const { deleteJourneyStep } = await import("./journeys.server");
-    await deleteJourneyStep(data.journeyId, data.stepId, profile.id);
+    const { deleteSequenceStep } = await import("./sequences.server");
+    await deleteSequenceStep(data.sequenceId, data.stepId, profile.id);
     return { ok: true };
   });
 
@@ -134,7 +134,7 @@ export const addContentItem = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const profile = await editorOnly(context.userId);
-    const { createContentItem } = await import("./journeys.server");
+    const { createContentItem } = await import("./sequences.server");
     return createContentItem({
       title: data.title,
       kind: data.kind,
@@ -144,11 +144,11 @@ export const addContentItem = createServerFn({ method: "POST" })
     });
   });
 
-export const enrollJourneyContact = createServerFn({ method: "POST" })
+export const enrollSequenceContact = createServerFn({ method: "POST" })
   .inputValidator((data: unknown) =>
     z
       .object({
-        journeyId: z.string().uuid(),
+        sequenceId: z.string().uuid(),
         customerId: z.string().uuid(),
         contactId: z.string().uuid().nullable().optional(),
         contactEmail: z.string().trim().email(),
@@ -159,8 +159,8 @@ export const enrollJourneyContact = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     await editorOnly(context.userId);
-    const { enrollContact } = await import("./journeys.server");
-    const enrollment = await enrollContact(data.journeyId, {
+    const { enrollContact } = await import("./sequences.server");
+    const enrollment = await enrollContact(data.sequenceId, {
       customerId: data.customerId,
       contactEmail: data.contactEmail,
       contactId: data.contactId ?? null,
@@ -170,9 +170,9 @@ export const enrollJourneyContact = createServerFn({ method: "POST" })
   });
 
 /* PUBLIC — the tracked-link landing. Auth is the signed token itself. */
-export const recordJourneyView = createServerFn({ method: "POST" })
+export const recordSequenceView = createServerFn({ method: "POST" })
   .inputValidator((data: unknown) => z.object({ token: z.string().min(10) }).parse(data))
   .handler(async ({ data }) => {
-    const { recordView } = await import("./journeys.server");
+    const { recordView } = await import("./sequences.server");
     return recordView(data.token);
   });

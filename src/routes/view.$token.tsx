@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 
-import { recordJourneyView } from "@/lib/journeys.functions";
+import { recordSequenceView } from "@/lib/sequences.functions";
 
 export const Route = createFileRoute("/view/$token")({
   head: () => ({
@@ -16,13 +16,13 @@ export const Route = createFileRoute("/view/$token")({
 
 /**
  * PUBLIC tracked-link landing (AuthGate exempts /view). Records the view —
- * which may advance the journey — then forwards the visitor to the real
- * content URL. recordJourneyView never throws: on any failure it returns the
+ * which may advance the sequence — then forwards the visitor to the real
+ * content URL. recordSequenceView never throws: on any failure it returns the
  * app root so the visitor always lands somewhere.
  */
 function ViewTokenPage() {
   const { token } = Route.useParams();
-  const record = useServerFn(recordJourneyView);
+  const record = useServerFn(recordSequenceView);
   const [failed, setFailed] = useState(false);
 
   useEffect(() => {

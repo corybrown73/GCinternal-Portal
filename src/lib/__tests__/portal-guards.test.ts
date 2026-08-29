@@ -27,7 +27,7 @@ vi.mock("@/integrations/supabase/client.server", () => ({
   },
 }));
 
-import { canEditJourneys, requireInternal } from "../portal.server";
+import { canEditSequences, requireInternal } from "../portal.server";
 
 beforeEach(() => {
   profiles.clear();
@@ -60,13 +60,13 @@ describe("requireInternal", () => {
   });
 });
 
-describe("canEditJourneys", () => {
+describe("canEditSequences", () => {
   it("allows managers/admins/implementation, denies sales/tam_se/customer", () => {
     for (const role of ["admin", "super_admin", "manager", "implementation"]) {
-      expect(canEditJourneys(role)).toBe(true);
+      expect(canEditSequences(role)).toBe(true);
     }
     for (const role of ["sales", "tam_se", "customer", ""]) {
-      expect(canEditJourneys(role)).toBe(false);
+      expect(canEditSequences(role)).toBe(false);
     }
   });
 });

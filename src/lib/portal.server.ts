@@ -46,7 +46,7 @@ export async function requireInternal(userId: string): Promise<CallerProfile> {
 }
 
 /** Roles allowed to edit journeys: managers/admins plus implementation. */
-export function canEditJourneys(role: string): boolean {
+export function canEditSequences(role: string): boolean {
   return ["admin", "super_admin", "manager", "implementation", "onboarding"].includes(role);
 }
 
