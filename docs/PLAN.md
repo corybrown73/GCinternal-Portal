@@ -1,6 +1,6 @@
 # V2 Plan — phased, migration-first, approval-gated
 
-Status: **awaiting approval.** Per the brief, no application code is written until this plan is approved.
+Status: **approved and in progress.** Phases 0-1 complete; Phase 2 schema and core wiring complete.
 This plan is built on evidence: `docs/AUDIT.md` (Step 0 audit, every claim verified against the code and the
 live database) and the four adversarially-reviewed designs in `docs/design/` — `templates.md`,
 `multi-implementation.md`, `portal-access.md`, `salesforce.md`. Where this plan and a design differ, this
@@ -20,7 +20,14 @@ migration `0009`, and both the account-model and Salesforce designs add the same
   cache; presale handoff matches accounts by Salesforce id and can start a second implementation.
   The `account_model` flag is **off** in production, so all workflow/UX changes are dark; the
   schema, the scope enforcement and the bug fixes are live.
-- **Phase 2 — not started.**
+- **Phase 2 — schema and core wiring complete** (commits `030dbce`…`20fe433`). Migrations 0012–0016
+  applied to production: the email drip is renamed to Sequences (old URLs 301, old tracked-link
+  tokens still resolve), journey templates are versioned and their published content is frozen by
+  trigger, the work-item instance layer and its four RPCs are in, New Logo v1 is seeded from
+  `lifecycle.ts` verbatim and all 3 implementations are backfilled, and Add-On / Integration /
+  Data Migration are seeded published. `journey_templates` and `work_items` flags are **off**, so
+  none of it is user-visible yet. **Remaining: the template builder UI and the work-item surfaces
+  on the 360** — everything they need exists and is verified.
 
 Two things from Phase 1 that need your call are listed under "Open from Phase 1" at the end.
 
