@@ -7,6 +7,23 @@ live database) and the four adversarially-reviewed designs in `docs/design/` —
 plan wins (it exists to resolve their collisions: both the templates and account-model designs claimed
 migration `0009`, and both the account-model and Salesforce designs add the same Salesforce key columns).
 
+## Progress
+
+- **Phase 0 — complete** (commits `7136995`…`2a68260`). Migration 0009 applied to production;
+  server-side RBAC on all 69 hub/presale server functions; the `'active'` status save bug, the TAM
+  approver-role query and its 404 deep link fixed; full-schema typegen; ~4,300 lines of dead weight
+  removed; hardcoded Supabase fallbacks dropped; **first test harness and CI** (lint → typecheck →
+  test → build, plus a migrations job that executes every down script up→down→up).
+- **Phase 1 — complete** (commits `852ccb6`…`f22f0f7`). Migrations 0010 and 0011 applied to
+  production; implementation scope enforced in the app layer and honoured in RLS; `?impl=` carried
+  on every implementation-derived link; recorded-vs-computed health with a reproducible evidence
+  cache; presale handoff matches accounts by Salesforce id and can start a second implementation.
+  The `account_model` flag is **off** in production, so all workflow/UX changes are dark; the
+  schema, the scope enforcement and the bug fixes are live.
+- **Phase 2 — not started.**
+
+Two things from Phase 1 that need your call are listed under "Open from Phase 1" at the end.
+
 ## How to read this
 
 1. Skim **Top findings you did not list** — these reshape several workstreams.
@@ -257,3 +274,23 @@ without templates. Phases 3, 4, 6 are mutually independent once 2 lands and can 
 priorities — say the word and I'll reshuffle.
 
 Each phase is a deployable, flag-gated unit; stopping after any phase leaves production coherent.
+
+---
+
+## Open from Phase 1
+
+Two decisions surfaced during implementation. Neither blocks Phase 2; both are dark behind the
+`account_model` flag today.
+
+1. **Second implementation from the presale side.** The build lets a linked deal start another
+   implementation ("Start another implementation" on the deal page). The account-model design
+   argued the opposite — that an already-linked deal should route to the Customer 360 instead, and
+   that Phase 1 should have *no* presale-side second-onboarding flow, because `portal_accounts` is
+   one row per account and an add-on opportunity has nowhere to live in presale. Both routes now
+   exist; the design's concern is real but only bites when a single account has several concurrent
+   opportunities, which the presale schema cannot represent until the Phase 5 Salesforce work adds
+   opportunity identity. **Recommendation:** keep both, revisit when opportunity ids land.
+2. **`implementations.source = 'presale'` is stamped unflagged.** It is written on every
+   presale-created implementation regardless of the flag. Nothing renders or exports the column
+   today, so this is invisible — but it is a (harmless) behavior change with the flag off.
+   **Recommendation:** leave it; the provenance is worth having from the start.
