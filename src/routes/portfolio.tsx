@@ -10,6 +10,10 @@ import { NoRows, Panel, SeverityChip, StageBadge } from "@/components/record";
 import { getLeadership } from "@/lib/hub.functions";
 import { fmtDate, fmtMoney, humanize, stageLabel } from "@/lib/hub-format";
 import { READINESS_STATE_LABEL } from "@/lib/graduation-readiness";
+// Phase 7 vocabulary: the final stage had one id and two rendered names. The id
+// (`graduate-to-cs`) and its aliases are untouched — only the label a reader
+// sees is unified, on the canonical one lifecycle.ts already declares.
+import { FINAL_STAGE_LABEL } from "@/lib/vocabulary";
 import {
   HEALTH_LABEL,
   PORTFOLIO_FILTER_LABEL,
@@ -661,7 +665,7 @@ function LeadershipPage() {
         <Panel
           title="Ready to hand over — gate review"
           count={gates.length}
-          meta="Scoped to Adopt and Graduate to CS · same readiness assessment as Customer 360"
+          meta={`Scoped to Adopt and ${FINAL_STAGE_LABEL} · same readiness assessment as Customer 360`}
         >
           <ul className="divide-y divide-border">
             {gates.map((g) => (
@@ -693,7 +697,7 @@ function LeadershipPage() {
               </li>
             ))}
             {gates.length === 0 ? (
-              <NoRows label="No implementation is in Adopt or Graduate to CS." />
+              <NoRows label={`No implementation is in Adopt or ${FINAL_STAGE_LABEL}.`} />
             ) : null}
           </ul>
         </Panel>

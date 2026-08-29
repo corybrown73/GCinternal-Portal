@@ -63,7 +63,8 @@ export const LIFECYCLE_STAGES: LifecycleStage[] = [
   {
     id: "handoff",
     label: "Handoff",
-    intent: "Sales-to-implementation transfer of context, promises and risks accepted by TIS.",
+    intent:
+      "Sales-to-implementation transfer of context, promises and risks accepted by the Technical Implementation Specialist (TIS).",
     phase: "intake",
 
     leads: ["Implementation"],
