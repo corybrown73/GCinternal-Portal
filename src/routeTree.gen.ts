@@ -11,9 +11,13 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as CustomersRouteImport } from './routes/customers'
+import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
+import { Route as LoginRouteImport } from './routes/login'
 import { Route as PortfolioRouteImport } from './routes/portfolio'
 import { Route as SettingsRouteImport } from './routes/settings'
+import { Route as SignupRouteImport } from './routes/signup'
 import { Route as TechnicalSolutionsRouteImport } from './routes/technical-solutions'
+import { Route as AuthCallbackRouteImport } from './routes/auth.callback'
 import { Route as CustomersIndexRouteImport } from './routes/customers.index'
 import { Route as CustomersCustomerIdRouteImport } from './routes/customers.$customerId'
 import { Route as OwnersOwnerRouteImport } from './routes/owners.$owner'
@@ -30,6 +34,16 @@ const CustomersRoute = CustomersRouteImport.update({
   path: '/customers',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ForgotPasswordRoute = ForgotPasswordRouteImport.update({
+  id: '/forgot-password',
+  path: '/forgot-password',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const PortfolioRoute = PortfolioRouteImport.update({
   id: '/portfolio',
   path: '/portfolio',
@@ -40,9 +54,19 @@ const SettingsRoute = SettingsRouteImport.update({
   path: '/settings',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SignupRoute = SignupRouteImport.update({
+  id: '/signup',
+  path: '/signup',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const TechnicalSolutionsRoute = TechnicalSolutionsRouteImport.update({
   id: '/technical-solutions',
   path: '/technical-solutions',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthCallbackRoute = AuthCallbackRouteImport.update({
+  id: '/auth/callback',
+  path: '/auth/callback',
   getParentRoute: () => rootRouteImport,
 } as any)
 const CustomersIndexRoute = CustomersIndexRouteImport.update({
@@ -74,9 +98,13 @@ const TechnicalSolutionsIdRoute = TechnicalSolutionsIdRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/customers': typeof CustomersRouteWithChildren
+  '/forgot-password': typeof ForgotPasswordRoute
+  '/login': typeof LoginRoute
   '/portfolio': typeof PortfolioRoute
   '/settings': typeof SettingsRoute
+  '/signup': typeof SignupRoute
   '/technical-solutions': typeof TechnicalSolutionsRouteWithChildren
+  '/auth/callback': typeof AuthCallbackRoute
   '/customers/$customerId': typeof CustomersCustomerIdRoute
   '/owners/$owner': typeof OwnersOwnerRoute
   '/technical-solutions/$id': typeof TechnicalSolutionsIdRoute
@@ -85,8 +113,12 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/forgot-password': typeof ForgotPasswordRoute
+  '/login': typeof LoginRoute
   '/portfolio': typeof PortfolioRoute
   '/settings': typeof SettingsRoute
+  '/signup': typeof SignupRoute
+  '/auth/callback': typeof AuthCallbackRoute
   '/customers/$customerId': typeof CustomersCustomerIdRoute
   '/owners/$owner': typeof OwnersOwnerRoute
   '/technical-solutions/$id': typeof TechnicalSolutionsIdRoute
@@ -97,9 +129,13 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/customers': typeof CustomersRouteWithChildren
+  '/forgot-password': typeof ForgotPasswordRoute
+  '/login': typeof LoginRoute
   '/portfolio': typeof PortfolioRoute
   '/settings': typeof SettingsRoute
+  '/signup': typeof SignupRoute
   '/technical-solutions': typeof TechnicalSolutionsRouteWithChildren
+  '/auth/callback': typeof AuthCallbackRoute
   '/customers/$customerId': typeof CustomersCustomerIdRoute
   '/owners/$owner': typeof OwnersOwnerRoute
   '/technical-solutions/$id': typeof TechnicalSolutionsIdRoute
@@ -111,9 +147,13 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/customers'
+    | '/forgot-password'
+    | '/login'
     | '/portfolio'
     | '/settings'
+    | '/signup'
     | '/technical-solutions'
+    | '/auth/callback'
     | '/customers/$customerId'
     | '/owners/$owner'
     | '/technical-solutions/$id'
@@ -122,8 +162,12 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/forgot-password'
+    | '/login'
     | '/portfolio'
     | '/settings'
+    | '/signup'
+    | '/auth/callback'
     | '/customers/$customerId'
     | '/owners/$owner'
     | '/technical-solutions/$id'
@@ -133,9 +177,13 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/customers'
+    | '/forgot-password'
+    | '/login'
     | '/portfolio'
     | '/settings'
+    | '/signup'
     | '/technical-solutions'
+    | '/auth/callback'
     | '/customers/$customerId'
     | '/owners/$owner'
     | '/technical-solutions/$id'
@@ -146,9 +194,13 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   CustomersRoute: typeof CustomersRouteWithChildren
+  ForgotPasswordRoute: typeof ForgotPasswordRoute
+  LoginRoute: typeof LoginRoute
   PortfolioRoute: typeof PortfolioRoute
   SettingsRoute: typeof SettingsRoute
+  SignupRoute: typeof SignupRoute
   TechnicalSolutionsRoute: typeof TechnicalSolutionsRouteWithChildren
+  AuthCallbackRoute: typeof AuthCallbackRoute
   OwnersOwnerRoute: typeof OwnersOwnerRoute
 }
 
@@ -168,6 +220,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof CustomersRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/forgot-password': {
+      id: '/forgot-password'
+      path: '/forgot-password'
+      fullPath: '/forgot-password'
+      preLoaderRoute: typeof ForgotPasswordRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/portfolio': {
       id: '/portfolio'
       path: '/portfolio'
@@ -182,11 +248,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SettingsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/signup': {
+      id: '/signup'
+      path: '/signup'
+      fullPath: '/signup'
+      preLoaderRoute: typeof SignupRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/technical-solutions': {
       id: '/technical-solutions'
       path: '/technical-solutions'
       fullPath: '/technical-solutions'
       preLoaderRoute: typeof TechnicalSolutionsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/auth/callback': {
+      id: '/auth/callback'
+      path: '/auth/callback'
+      fullPath: '/auth/callback'
+      preLoaderRoute: typeof AuthCallbackRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/customers/': {
@@ -257,9 +337,13 @@ const TechnicalSolutionsRouteWithChildren =
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   CustomersRoute: CustomersRouteWithChildren,
+  ForgotPasswordRoute: ForgotPasswordRoute,
+  LoginRoute: LoginRoute,
   PortfolioRoute: PortfolioRoute,
   SettingsRoute: SettingsRoute,
+  SignupRoute: SignupRoute,
   TechnicalSolutionsRoute: TechnicalSolutionsRouteWithChildren,
+  AuthCallbackRoute: AuthCallbackRoute,
   OwnersOwnerRoute: OwnersOwnerRoute,
 }
 export const routeTree = rootRouteImport

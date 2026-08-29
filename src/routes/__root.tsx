@@ -14,6 +14,8 @@ import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { AppSidebar } from "@/components/app-sidebar";
 import { LifecycleRail } from "@/components/lifecycle-rail";
+import { AuthGate } from "@/components/auth-gate";
+import { useProfile } from "@/lib/auth";
 
 function NotFoundComponent() {
   return (
@@ -80,13 +82,13 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Implementation Hub" },
+      { title: "GoCanvas Handoff Hub" },
       {
         name: "description",
         content:
           "Internal Implementation Operating System for the Customer Onboarding & Implementation team.",
       },
-      { property: "og:title", content: "Implementation Hub" },
+      { property: "og:title", content: "GoCanvas Handoff Hub" },
       {
         property: "og:description",
         content: "Internal operating system for customer implementations.",
@@ -139,17 +141,36 @@ function RootComponent() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <div className="flex min-h-screen w-full bg-background text-foreground">
-        <AppSidebar />
-        <div className="flex min-w-0 flex-1 flex-col">
-          {showGlobalRail ? <LifecycleRail /> : null}
-          <main className="min-w-0 flex-1">
-            {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
-            <Outlet />
-          </main>
-        </div>
-      </div>
+      <AuthGate
+        renderShell={({ chrome }) =>
+          chrome ? (
+            <ShellWithSidebar showGlobalRail={showGlobalRail} />
+          ) : (
+            <main className="min-h-screen bg-background text-foreground">
+              <Outlet />
+            </main>
+          )
+        }
+      >
+        <Outlet />
+      </AuthGate>
     </QueryClientProvider>
+  );
+}
+
+function ShellWithSidebar({ showGlobalRail }: { showGlobalRail: boolean }) {
+  const { profile } = useProfile();
+  return (
+    <div className="flex min-h-screen w-full bg-background text-foreground">
+      <AppSidebar profile={profile} />
+      <div className="flex min-w-0 flex-1 flex-col">
+        {showGlobalRail ? <LifecycleRail /> : null}
+        <main className="min-w-0 flex-1">
+          {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
+          <Outlet />
+        </main>
+      </div>
+    </div>
   );
 }
 
