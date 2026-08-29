@@ -78,9 +78,14 @@ create index handoff_events_packet_idx on handoff_events (packet_id, created_at 
 -- The brief calls out skeptics explicitly, and a stakeholder map that cannot
 -- express dissent is decoration. Both of these are facts about a person, so
 -- they belong on the contact rather than in the packet.
+--
+-- `if not exists` is load-bearing, not defensive noise: 0018's down deliberately
+-- KEEPS these two columns (a recorded fact about a person did not come from the
+-- gate and must not be erased by rolling it back), so a re-apply after a
+-- rollback finds them already there. Without this, up -> down -> up fails.
 alter table customer_contacts
-  add column is_skeptic boolean not null default false,
-  add column comms_preference text;
+  add column if not exists is_skeptic boolean not null default false,
+  add column if not exists comms_preference text;
 
 -- ---------------------------------------------------------------------------
 -- RLS (defense-in-depth; the server functions are the real boundary)
