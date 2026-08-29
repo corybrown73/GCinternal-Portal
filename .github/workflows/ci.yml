@@ -38,6 +38,21 @@ jobs:
       - name: Apply all migrations (up)
         run: supabase db reset
       - name: Exercise rollbacks (down, newest first)
+        # Several downs refuse to destroy recorded human input unless an export
+        # has been confirmed (work items, health statements, portal scope).
+        # That guard is for PRODUCTION and stays exactly as strict there. This
+        # database is created by `supabase db start` and thrown away minutes
+        # later, so there is nothing to export and the confirmation is granted
+        # explicitly here rather than by weakening the guard.
+        #
+        # Without this, the job passes only while the seeded stack happens to
+        # contain no work items — and the first fixture that creates one would
+        # look like a broken rollback instead of a guard doing its job.
+        env:
+          PGOPTIONS: >-
+            -c down.work_items_export_confirmed=1
+            -c down.health_export_confirmed=1
+            -c down.scope_export_confirmed=1
         run: |
           set -euo pipefail
           shopt -s nullglob
