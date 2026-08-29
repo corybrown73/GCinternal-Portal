@@ -26,6 +26,11 @@ const csrfMiddleware = createCsrfMiddleware({
 });
 
 export const startInstance = createStart(() => ({
+  // The app sits behind auth: the SSR document request carries no Supabase
+  // bearer token, so route loaders that call auth-required server functions
+  // would throw during server rendering. Render routes client-side (the root
+  // shell still SSRs); loaders then run with the attached session.
+  defaultSsr: false,
   functionMiddleware: [attachSupabaseAuth],
   requestMiddleware: [errorMiddleware, csrfMiddleware],
 }));
