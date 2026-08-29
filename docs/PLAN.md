@@ -1,6 +1,6 @@
 # V2 Plan — phased, migration-first, approval-gated
 
-Status: **approved and in progress.** Phases 0, 1 and 2 complete; Phase 3 next.
+Status: **approved and in progress.** Phases 0, 1, 2 and 3 complete; Phase 4 next.
 This plan is built on evidence: `docs/AUDIT.md` (Step 0 audit, every claim verified against the code and the
 live database) and the four adversarially-reviewed designs in `docs/design/` — `templates.md`,
 `multi-implementation.md`, `portal-access.md`, `salesforce.md`. Where this plan and a design differ, this
@@ -32,6 +32,19 @@ migration `0009`, and both the account-model and Salesforce designs add the same
   Customer 360 both ship flag-gated, as does the builder's write side (create a family, take a new
   version of a live one, edit a draft, reorder, publish). **Phase 2 is complete**; both flags remain
   off, so none of it is user-visible until the implementation team has reviewed the seeded content.
+
+- **Phase 3 — complete** (commits `b0ae2ea`…`db0820b`). Migration 0018 applied to production: a
+  **thin** `handoff_packets` row plus an append-only `handoff_events` log, and two stakeholder facts
+  (`is_skeptic`, `comms_preference`) on the contact where they belong. The packet deliberately does
+  not copy success criteria, contacts, commitments or risks — those already have homes, and a second
+  copy would diverge; completeness is computed from the live records every time it is read. It is
+  reported as a **count of facts** ("9 of 9 required items present") with every missing item named,
+  explained and deep-linked — never a percentage or a score, because a number that hides its
+  reasoning is exactly the black box the brief rejects. Accepting while incomplete stays allowed and
+  records what was missing against the person who accepted; returning must name at least one required
+  item, and can name one that is present but inadequate. Accept and return are refused on anything
+  but a submitted packet, so the history can never read as a gate that did not happen. The clock is
+  not touched by a return, and the panel says so. `handoff_gate` is **off**.
 
 Two things from Phase 1 that need your call are listed under "Open from Phase 1" at the end.
 
@@ -230,6 +243,14 @@ Migration 0018 only; the score is computed, not stored as truth.
 
 **Rollback:** 0018 down archives packets. **Exit:** a deal can be handed off, returned with reasons, and
 re-accepted, with the full trail on the 360.
+
+**As built** (see `docs/design/handoff-gate.md`): the "completeness score" is delivered as a count of
+facts, not a score — the sketch's word was the brief's, and a single number is the thing the brief
+elsewhere refuses. Two deviations worth naming: the packet's gaps do **not** become work items (work
+items belong to a template's plan; a missing champion is not a plan task, and manufacturing one would
+put two owners on the same gap), and scoping answers are not pulled into the packet because 0014
+already stores them against the implementation. Gong-based evidence is counted at the **customer**
+level and says so, because nothing links a presale deal to one implementation until Phase 5.
 
 ### Phase 4 — External portal *(flags: `external_plan_view_enabled`, then `external_plan_actions_enabled`)*
 
