@@ -1,7 +1,9 @@
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 const createAdminClient = () => supabaseAdmin as any;
 
-export type ActorType = "user" | "api_key" | "email_token" | "system";
+// 'external_contact' added by migration 0020 (Phase 4): a customer acting
+// through a signed plan link is a real actor with no auth.users row.
+export type ActorType = "user" | "api_key" | "email_token" | "system" | "external_contact";
 
 export async function audit(entry: {
   actor_type: ActorType;
