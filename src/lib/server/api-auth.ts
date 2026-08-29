@@ -10,6 +10,9 @@ export const API_SCOPES = [
   "tam:write",
   "tickets:write",
   "alerts:write",
+  // Phase 5 — the Salesforce opportunity hook and its read-back.
+  "implementations:read",
+  "implementations:write",
 ] as const;
 export type ApiScope = (typeof API_SCOPES)[number];
 

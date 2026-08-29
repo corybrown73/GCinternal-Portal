@@ -2,6 +2,8 @@ import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 const createAdminClient = () => supabaseAdmin as unknown as SupabaseClient;
 import { audit } from "./audit";
+import { sfId18 } from "./sf-id";
+import { resolveSalesforceIdWrite } from "./sf-account-match";
 import type { AccountUpsertInput } from "./schemas";
 import type { Account, TransitionSource } from "../presale-types";
 import type { AccountStage } from "../presale-stages";
@@ -16,10 +18,11 @@ export interface ActorContext {
 export async function resolveAccountId(idOrSf: string): Promise<string | null> {
   const admin = createAdminClient();
   if (idOrSf.startsWith("sf_")) {
+    // Normalized so a caller passing the 15-character form still resolves.
     const { data } = await admin
       .from("portal_accounts")
       .select("id")
-      .eq("salesforce_id", idOrSf.slice(3))
+      .eq("salesforce_id", sfId18(idOrSf.slice(3)) ?? idOrSf.slice(3))
       .maybeSingle();
     return data?.id ?? null;
   }
@@ -76,14 +79,22 @@ export async function upsertAccount(
 ): Promise<{ account: Account; created: boolean; stage_changed: boolean }> {
   const admin = createAdminClient();
 
+  // Salesforce hands out the same record as a 15- or an 18-character id. Both
+  // the match and the stored value are normalized to 18 so the key is a key —
+  // otherwise a row written from a CSV export never matches the same account
+  // arriving from the API. (0023's data fix normalized what was already there.)
+  const normalizedSfId = sfId18(input.salesforce_id ?? null);
+
   let existing: Account | null = null;
-  if (input.salesforce_id) {
+  let matchedBy: "salesforce_id" | "name" | null = null;
+  if (normalizedSfId) {
     const { data } = await admin
       .from("portal_accounts")
       .select("*")
-      .eq("salesforce_id", input.salesforce_id)
+      .eq("salesforce_id", normalizedSfId)
       .maybeSingle<Account>();
     existing = data;
+    if (existing) matchedBy = "salesforce_id";
   }
   if (!existing) {
     // ilike with no wildcards = case-insensitive equality; matches the
@@ -94,15 +105,23 @@ export async function upsertAccount(
       .ilike("name", input.name)
       .maybeSingle<Account>();
     existing = data;
+    if (existing) matchedBy = "name";
   }
 
   const amOwnerId = await profileIdByEmail(input.am_owner_email);
   const seOwnerId = await profileIdByEmail(input.se_owner_email);
 
+  // PLAN.md decision 4 — see resolveSalesforceIdWrite for the reasoning.
+  const sfIdDecision = resolveSalesforceIdWrite({
+    matchedBy,
+    incoming: input.salesforce_id,
+    existing: existing?.salesforce_id ?? null,
+  });
+
   const fields: Record<string, unknown> = {
     name: input.name,
     ...(input.domain !== undefined && { domain: input.domain }),
-    ...(input.salesforce_id !== undefined && { salesforce_id: input.salesforce_id }),
+    ...(sfIdDecision.write !== null && { salesforce_id: sfIdDecision.write }),
     ...(input.arr !== undefined && { arr: input.arr }),
     ...(input.products !== undefined && { products: input.products }),
     ...(input.summary !== undefined && { summary: input.summary }),
@@ -157,7 +176,19 @@ export async function upsertAccount(
     action: "account.upsert",
     entity_type: "account",
     entity_id: account.id,
-    payload: { created, stage_changed: stageChanged, source: ctx.source },
+    payload: {
+      created,
+      stage_changed: stageChanged,
+      source: ctx.source,
+      matched_by: matchedBy,
+      ...(sfIdDecision.conflict && {
+        salesforce_id_conflict: {
+          ...sfIdDecision.conflict,
+          reason:
+            "matched on name only; the account already carries a different Salesforce id, which is the stronger evidence",
+        },
+      }),
+    },
   });
 
   return { account, created, stage_changed: stageChanged };

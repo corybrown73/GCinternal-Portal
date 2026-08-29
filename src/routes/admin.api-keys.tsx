@@ -19,6 +19,8 @@ const SCOPES = [
   ["tam:write", "Create TAM requests"],
   ["tickets:write", "Create and update tickets"],
   ["alerts:write", "Push monitoring alerts"],
+  ["implementations:read", "Read implementations by Salesforce opportunity"],
+  ["implementations:write", "Create implementations from closed-won opportunities"],
 ] as const;
 
 const keysQuery = queryOptions({

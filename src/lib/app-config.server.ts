@@ -19,6 +19,10 @@ export type V2Flags = {
   work_items: boolean;
   /** Phase 3: the handoff packet and its accept/return gate. */
   handoff_gate: boolean;
+  /** Phase 5: Salesforce auto-create — the ingest, customer adoption and the deal link. */
+  sf_auto_create: boolean;
+  /** Phase 5: the presale stage seam — the deal's stage moves, forward only. */
+  sf_presale_bridge: boolean;
 };
 
 const DEFAULT_FLAGS: V2Flags = {
@@ -26,6 +30,9 @@ const DEFAULT_FLAGS: V2Flags = {
   journey_templates: false,
   work_items: false,
   handoff_gate: false,
+  /* Phase 5 */
+  sf_auto_create: false,
+  sf_presale_bridge: false,
 };
 const CACHE_MS = 60_000;
 
