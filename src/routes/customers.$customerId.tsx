@@ -165,9 +165,36 @@ export const Route = createFileRoute("/customers/$customerId")({
     );
     if (!data) throw notFound();
   },
+  // Shown while the loader runs. Without it the shell painted and the content
+  // pane stayed empty, so a slow load and a broken one were indistinguishable —
+  // which is what made this page look dead rather than slow. pendingMs 0 so it
+  // appears immediately rather than after the router's default grace period.
+  pendingMs: 0,
+  pendingComponent: () => (
+    <div className="p-6" role="status" aria-live="polite">
+      <span className="text-[13px] text-muted-foreground">Loading this implementation…</span>
+      <div className="mt-4 space-y-2" aria-hidden>
+        {[0, 1, 2, 3, 4].map((i) => (
+          <div
+            key={i}
+            className="h-4 animate-pulse rounded-sm bg-muted"
+            style={{ width: `${90 - i * 12}%` }}
+          />
+        ))}
+      </div>
+    </div>
+  ),
   errorComponent: ({ error }) => (
-    <div role="alert" className="p-6 text-[13px] text-destructive">
-      Could not load this implementation: {error.message}
+    <div role="alert" className="space-y-2 p-6 text-[13px]">
+      <p className="font-medium text-destructive">Could not load this implementation.</p>
+      <p className="text-muted-foreground">{error.message}</p>
+      <Link
+        to="/customers"
+        search={{ sort: "days", dir: "desc" }}
+        className="inline-block underline"
+      >
+        Back to customers
+      </Link>
     </div>
   ),
   notFoundComponent: () => (

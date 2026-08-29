@@ -320,34 +320,41 @@ export async function loadCustomer360(
   customerId: string,
   implementationId?: string | null,
 ): Promise<Customer360 | null> {
-  const team = await loadTeam();
-  const { data: activeTeam } = await db()
-    .from("team_members")
-    .select("id,name,role")
-    .eq("active", true)
-    .order("name");
-  const teamOptions = (activeTeam ?? []).map((t: any) => ({
+  // WAVE A. Five reads that depend on nothing but customerId, so they go
+  // together. They used to be five sequential awaits — five round trips to
+  // Supabase before the page could even discover which implementation it was
+  // rendering. On a page that was timing out at the 20s function limit, the
+  // waterfall cost more than any individual query did.
+  const [team, activeTeamRes, customerRes, demo, contactRes, implRes] = await Promise.all([
+    loadTeam(),
+    db().from("team_members").select("id,name,role").eq("active", true).order("name"),
+    db().from("customers").select("*").eq("id", customerId).maybeSingle(),
+    demoMasker(),
+    db()
+      .from("customer_contacts")
+      .select("id,name,role,email,notes")
+      .eq("customer_id", customerId)
+      .order("name"),
+    db()
+      .from("implementations")
+      .select("*")
+      .eq("customer_id", customerId)
+      .order("created_at", { ascending: false }),
+  ]);
+
+  const customer = customerRes.data;
+  if (!customer) return null;
+
+  const teamOptions = (activeTeamRes.data ?? []).map((t: any) => ({
     id: t.id,
     name: t.name,
     role: t.role,
   }));
-  const { data: customer } = await db()
-    .from("customers")
-    .select("*")
-    .eq("id", customerId)
-    .maybeSingle();
-  if (!customer) return null;
 
   // Phase 7 demo mode: the 360 is the surface a demo spends longest on, so the
   // customer and its named contacts are pseudonymised here too. Internal staff
   // names are not masked — they are the demo.
-  const demo = await demoMasker();
-
-  const { data: contactRows } = await db()
-    .from("customer_contacts")
-    .select("id,name,role,email,notes")
-    .eq("customer_id", customerId)
-    .order("name");
+  const contactRows = contactRes.data;
   const contacts = (contactRows ?? []).map((c: any) => ({
     id: c.id,
     name: demo.person(c.name, c.id),
@@ -357,12 +364,7 @@ export async function loadCustomer360(
   }));
   const contactById = new Map<string, any>(contacts.map((c: any) => [c.id, c]));
 
-  const { data: impls } = await db()
-    .from("implementations")
-    .select("*")
-    .eq("customer_id", customerId)
-    .order("created_at", { ascending: false });
-  const implList = (impls ?? []) as any[];
+  const implList = (implRes.data ?? []) as any[];
   // A customer can run several implementations at once. The caller picks one;
   // without a pick we show the newest, and an unknown id falls back the same way.
   const impl =
@@ -430,7 +432,10 @@ export async function loadCustomer360(
     evidence,
     approvals,
     stageHistory,
-    traceLinks,
+    adoptionAreaRes,
+    graduationRes,
+    handoffRes,
+    journalRes,
   ] = await Promise.all([
     child("requirements", "created_at"),
     child("success_criteria", "created_at"),
@@ -445,10 +450,104 @@ export async function loadCustomer360(
     child("evidence", "created_at", false),
     child("approvals", "requested_at", false),
     child("implementation_stage_history", "entered_at"),
-    db().from("trace_links").select("*"),
+    // These four used to run in three further sequential waves AFTER this one,
+    // even though not one of them needs anything this batch returns. They only
+    // need impl.id, which is already known here.
+    child("adoption_areas", "created_at"),
+    db()
+      .from("graduations")
+      .select("*")
+      .eq("implementation_id", impl.id)
+      .order("created_at", { ascending: false })
+      .limit(1),
+    db()
+      .from("cs_handoffs")
+      .select("*")
+      .eq("implementation_id", impl.id)
+      .order("created_at", { ascending: false })
+      .limit(1),
+    child("journal_entries", "created_at", false),
   ]);
 
   const named = (id: string | null | undefined) => (id ? (team.get(id)?.name ?? null) : null);
+
+  // WAVE C. The only reads that genuinely need wave B's ids. Four round trips
+  // collapsed into one.
+  //
+  // trace_links was `select * from trace_links` with NO filter — the whole
+  // table, every time anyone opened any customer, to render the edges of ONE
+  // implementation. It was tolerable only while the table was nearly empty, and
+  // 0025 has just started backfilling a derived edge for every solution,
+  // evidence row and approval in the system, so it was about to stop being
+  // tolerable. Scoped to the entities actually on this page, matched at either
+  // end of the edge.
+  const entityIds = [
+    ...(requirements.data ?? []),
+    ...(decisions.data ?? []),
+    ...(solutions.data ?? []),
+    ...(evidence.data ?? []),
+    ...(approvals.data ?? []),
+    ...(milestones.data ?? []),
+    ...(successCriteria.data ?? []),
+    ...(risks.data ?? []),
+    ...(issues.data ?? []),
+    ...(escalations.data ?? []),
+    ...(commitments.data ?? []),
+  ].map((r: any) => r.id);
+
+  const criterionIds = (successCriteria.data ?? []).map((c: any) => c.id);
+  const areaIds = (adoptionAreaRes.data ?? []).map((a: any) => a.id);
+  const auditIds = [impl.id, ...entityIds];
+
+  // An edge matters if EITHER end is on this page, so it is two plain `.in()`
+  // reads merged, not one `.or()` string. The `.or()` filter language is
+  // stringly-typed: a syntax slip returns an empty set rather than an error,
+  // and a silently empty traceability spine looks exactly like a customer who
+  // has no links yet. These two run in the same parallel wave, so being two
+  // queries costs nothing.
+  const traceLinkCols =
+    "from_entity_type,from_entity_id,relationship,to_entity_type,to_entity_id,source";
+  const noRows = { data: [] as any[] };
+
+  const [linksOut, linksIn, observationRes, adoptionObservationRes, auditRes] = await Promise.all([
+    entityIds.length
+      ? db().from("trace_links").select(traceLinkCols).in("from_entity_id", entityIds)
+      : Promise.resolve(noRows),
+    entityIds.length
+      ? db().from("trace_links").select(traceLinkCols).in("to_entity_id", entityIds)
+      : Promise.resolve(noRows),
+    criterionIds.length
+      ? db()
+          .from("success_criteria_observations")
+          .select("*")
+          .in("success_criteria_id", criterionIds)
+          .order("observed_at", { ascending: false })
+      : Promise.resolve({ data: [] as any[] }),
+    areaIds.length
+      ? db()
+          .from("adoption_observations")
+          .select("*")
+          .in("adoption_area_id", areaIds)
+          .order("observed_at", { ascending: false })
+      : Promise.resolve({ data: [] as any[] }),
+    db()
+      .from("audit_log")
+      .select("*")
+      .in("entity_id", auditIds)
+      .order("changed_at", { ascending: false }),
+  ]);
+
+  // One edge can match both reads; the unique index in 0025 is on exactly this
+  // tuple, so it is the right identity to de-duplicate on.
+  const seenEdge = new Set<string>();
+  const traceLinks = {
+    data: [...(linksOut.data ?? []), ...(linksIn.data ?? [])].filter((l: any) => {
+      const k = `${l.from_entity_type}:${l.from_entity_id}:${l.relationship}:${l.to_entity_type}:${l.to_entity_id}`;
+      if (seenEdge.has(k)) return false;
+      seenEdge.add(k);
+      return true;
+    }),
+  };
 
   // Traceability spine: walk trace_links outward from each requirement.
   const lookup = new Map<string, any>();
@@ -482,6 +581,14 @@ export async function loadCustomer360(
     linksFrom.set(key, [...(linksFrom.get(key) ?? []), l]);
   }
 
+  // Reach, after scoping the fetch. This is a multi-hop walk, and trace_links is
+  // no longer read whole, so it is worth being exact about what changed: every
+  // edge with either end on this page is present, so the walk still crosses the
+  // page's own entities freely and still takes one hop past the boundary. What
+  // it can no longer do is continue walking a chain that has already left this
+  // implementation entirely. Those steps were never renderable anyway — `label`
+  // resolves through `lookup`, which only ever holds this page's rows, so an
+  // off-page entity came back unlabelled before and simply stops appearing now.
   const traceFor = (requirementId: string): TraceStep[] => {
     const steps: TraceStep[] = [];
     const seen = new Set<string>();
@@ -552,66 +659,23 @@ export async function loadCustomer360(
   const riskById = new Map((risks.data ?? []).map((r: any) => [r.id, r]));
   const issueById = new Map((issues.data ?? []).map((r: any) => [r.id, r]));
 
-  // Prove Value: observations for this implementation's criteria (empty-safe).
-  const criterionIds = (successCriteria.data ?? []).map((c: any) => c.id);
-  let observations: any[] = [];
-  if (criterionIds.length) {
-    const { data } = await db()
-      .from("success_criteria_observations")
-      .select("*")
-      .in("success_criteria_id", criterionIds)
-      .order("observed_at", { ascending: false });
-    observations = data ?? [];
-  }
+  // All fetched in waves B and C above; nothing here waits on the network.
+  const observations: any[] = observationRes.data ?? [];
   const evidenceById = new Map<string, any>(
     (evidence.data ?? []).map((e: any) => [
       e.id,
       { id: e.id, type: e.type, title: e.title, url: e.url },
     ]),
   );
-
-  // Adoption: intended user groups / workflows and their behavioural observations.
-  const { data: adoptionAreas } = await db()
-    .from("adoption_areas")
-    .select("*")
-    .eq("implementation_id", impl.id)
-    .order("created_at", { ascending: true });
-  const areaIds = (adoptionAreas ?? []).map((a: any) => a.id);
-  let adoptionObservations: any[] = [];
-  if (areaIds.length) {
-    const { data } = await db()
-      .from("adoption_observations")
-      .select("*")
-      .in("adoption_area_id", areaIds)
-      .order("observed_at", { ascending: false });
-    adoptionObservations = data ?? [];
-  }
-
-  // Graduation / CS handoff: read-only context for the readiness view.
-  const [graduationRes, handoffRes] = await Promise.all([
-    db()
-      .from("graduations")
-      .select("*")
-      .eq("implementation_id", impl.id)
-      .order("created_at", { ascending: false })
-      .limit(1),
-    db()
-      .from("cs_handoffs")
-      .select("*")
-      .eq("implementation_id", impl.id)
-      .order("created_at", { ascending: false })
-      .limit(1),
-  ]);
+  const adoptionAreas = adoptionAreaRes.data;
+  const adoptionObservations: any[] = adoptionObservationRes.data ?? [];
   const graduationRow: any = (graduationRes.data ?? [])[0] ?? null;
   const handoffRow: any = (handoffRes.data ?? [])[0] ?? null;
 
   // Working notes, newest first. Each row already carries the stage it was
-  // written in, so the timeline never has to guess after the fact.
-  const { data: journalRows } = await db()
-    .from("journal_entries")
-    .select("*")
-    .eq("implementation_id", impl.id)
-    .order("created_at", { ascending: false });
+  // written in, so the timeline never has to guess after the fact. Fetched in
+  // wave B.
+  const journalRows = journalRes.data;
 
   return {
     ...base,
@@ -817,28 +881,11 @@ export async function loadCustomer360(
       notes: h.notes,
       entered_by_name: named(h.entered_by),
     })),
-    audit_log: await (async () => {
-      const ids = [
-        impl.id,
-        ...(requirements.data ?? []).map((r: any) => r.id),
-        ...(solutions.data ?? []).map((r: any) => r.id),
-        ...(milestones.data ?? []).map((r: any) => r.id),
-        ...(commitments.data ?? []).map((r: any) => r.id),
-        ...(decisions.data ?? []).map((r: any) => r.id),
-        ...(risks.data ?? []).map((r: any) => r.id),
-        ...(issues.data ?? []).map((r: any) => r.id),
-        ...(escalations.data ?? []).map((r: any) => r.id),
-        ...(evidence.data ?? []).map((r: any) => r.id),
-        ...(approvals.data ?? []).map((r: any) => r.id),
-        ...(successCriteria.data ?? []).map((r: any) => r.id),
-      ];
-
-      const { data } = await db()
-        .from("audit_log")
-        .select("*")
-        .in("entity_id", ids)
-        .order("changed_at", { ascending: false });
-      return (data ?? []).map((a: any) => ({
+    // Fetched in wave C. It used to be awaited HERE, inside the returned object
+    // literal, which made it a whole extra round trip after every other query
+    // had already finished.
+    audit_log: ((): Customer360["audit_log"] => {
+      return (auditRes.data ?? []).map((a: any) => ({
         id: a.id,
         entity_type: a.entity_type,
         field_name: a.field_name,

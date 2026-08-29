@@ -103,7 +103,37 @@ export const getCustomer360 = createServerFn({ method: "GET" })
   )
   .handler(async ({ data }) => {
     const { loadCustomer360 } = await import("./hub.server");
-    return loadCustomer360(data.customerId, data.implementationId ?? null);
+    // Fail at 8s rather than hanging to the platform's 20s function limit.
+    //
+    // When this page timed out at 20s the client got an unhandled 500 with the
+    // message "HTTPError" and the page simply never rendered — no error, no
+    // spinner, indistinguishable from a hang. Eight seconds is well beyond what
+    // this load should ever take and still leaves room to say something useful.
+    //
+    // This bounds the RESPONSE, not the queries: Supabase's REST calls are not
+    // cancelled by it, so the work may finish after we have stopped waiting.
+    // That is acceptable for a read — the point is that the person gets an
+    // answer instead of a blank pane.
+    const TIMEOUT_MS = 8000;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      return await Promise.race([
+        loadCustomer360(data.customerId, data.implementationId ?? null),
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(
+            () =>
+              reject(
+                new Error(
+                  "Loading this implementation took longer than 8 seconds. Nothing was changed — reload to try again.",
+                ),
+              ),
+            TIMEOUT_MS,
+          );
+        }),
+      ]);
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
   });
 
 export const getTechnicalSolutions = createServerFn({ method: "GET" })
