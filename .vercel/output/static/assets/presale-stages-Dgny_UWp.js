@@ -1,1 +1,0 @@
-var e=[`prospect`,`closed_won`,`onboarding_kickoff`,`in_onboarding`,`onboarding_complete`],t={prospect:`Prospect`,closed_won:`Closed Won`,onboarding_kickoff:`Onboarding Kickoff`,in_onboarding:`In Onboarding`,onboarding_complete:`Onboarding Complete`};export{t as n,e as t};

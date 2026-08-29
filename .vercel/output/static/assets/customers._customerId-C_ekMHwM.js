@@ -1,1 +1,0 @@
-import{t as e}from"./link-DzEaa4_F.js";import{t}from"./jsx-runtime-NZYk81nU.js";var n=t(),r=()=>(0,n.jsxs)(`div`,{className:`p-6 text-[13px]`,children:[`Customer not found.`,` `,(0,n.jsx)(e,{to:`/customers`,search:{sort:`days`,dir:`desc`},className:`underline`,children:`Back to customers`})]});export{r as notFoundComponent};
