@@ -37,7 +37,7 @@ function defaultVersionId(list: TemplateBrowserList): string | null {
   return first.live?.id ?? first.versions[0]?.id ?? null;
 }
 
-export const Route = createFileRoute("/admin/templates")({
+export const Route = createFileRoute("/templates")({
   head: () => ({
     meta: [
       { title: "Journey templates — Admin | GoCanvas Handoff Hub" },
@@ -154,7 +154,7 @@ function TemplatesPage() {
                   return (
                     <li key={family.key}>
                       <Link
-                        to="/admin/templates"
+                        to="/templates"
                         search={shown ? { template: shown.id } : {}}
                         className={cn("block px-3 py-2 hover:bg-muted/60", active && "bg-muted/70")}
                         aria-current={active ? "true" : undefined}
@@ -243,7 +243,7 @@ function VersionDetail({ templateId }: { templateId: string }) {
           <div className="border-b border-border bg-status-risk px-3 py-2 text-[12px] text-status-risk-foreground">
             This version was superseded by{" "}
             <Link
-              to="/admin/templates"
+              to="/templates"
               search={{ template: superseded_by.id }}
               className="font-medium underline"
             >
@@ -279,7 +279,7 @@ function VersionDetail({ templateId }: { templateId: string }) {
             value={
               supersedes ? (
                 <Link
-                  to="/admin/templates"
+                  to="/templates"
                   search={{ template: supersedes.id }}
                   className="underline"
                 >
@@ -309,7 +309,7 @@ function VersionDetail({ templateId }: { templateId: string }) {
             {siblings.map((s) => (
               <Link
                 key={s.id}
-                to="/admin/templates"
+                to="/templates"
                 search={{ template: s.id }}
                 className={cn(
                   "rounded-sm border border-border px-1.5 py-0.5 font-mono text-[11px] hover:bg-muted/60",

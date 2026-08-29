@@ -24,10 +24,10 @@ import { Route as SequencesRouteImport } from './routes/sequences'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as SignupRouteImport } from './routes/signup'
 import { Route as TechnicalSolutionsRouteImport } from './routes/technical-solutions'
+import { Route as TemplatesRouteImport } from './routes/templates'
 import { Route as TicketsRouteImport } from './routes/tickets'
 import { Route as AdminIndexRouteImport } from './routes/admin.index'
 import { Route as AdminApiKeysRouteImport } from './routes/admin.api-keys'
-import { Route as AdminTemplatesRouteImport } from './routes/admin.templates'
 import { Route as AdminUsersRouteImport } from './routes/admin.users'
 import { Route as AuthCallbackRouteImport } from './routes/auth.callback'
 import { Route as CustomersIndexRouteImport } from './routes/customers.index'
@@ -131,6 +131,11 @@ const TechnicalSolutionsRoute = TechnicalSolutionsRouteImport.update({
   path: '/technical-solutions',
   getParentRoute: () => rootRouteImport,
 } as any)
+const TemplatesRoute = TemplatesRouteImport.update({
+  id: '/templates',
+  path: '/templates',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const TicketsRoute = TicketsRouteImport.update({
   id: '/tickets',
   path: '/tickets',
@@ -144,11 +149,6 @@ const AdminIndexRoute = AdminIndexRouteImport.update({
 const AdminApiKeysRoute = AdminApiKeysRouteImport.update({
   id: '/api-keys',
   path: '/api-keys',
-  getParentRoute: () => AdminRoute,
-} as any)
-const AdminTemplatesRoute = AdminTemplatesRouteImport.update({
-  id: '/templates',
-  path: '/templates',
   getParentRoute: () => AdminRoute,
 } as any)
 const AdminUsersRoute = AdminUsersRouteImport.update({
@@ -304,9 +304,9 @@ export interface FileRoutesByFullPath {
   '/settings': typeof SettingsRoute
   '/signup': typeof SignupRoute
   '/technical-solutions': typeof TechnicalSolutionsRouteWithChildren
+  '/templates': typeof TemplatesRoute
   '/tickets': typeof TicketsRouteWithChildren
   '/admin/api-keys': typeof AdminApiKeysRoute
-  '/admin/templates': typeof AdminTemplatesRoute
   '/admin/users': typeof AdminUsersRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/customers/$customerId': typeof CustomersCustomerIdRoute
@@ -347,8 +347,8 @@ export interface FileRoutesByTo {
   '/portfolio': typeof PortfolioRoute
   '/settings': typeof SettingsRoute
   '/signup': typeof SignupRoute
+  '/templates': typeof TemplatesRoute
   '/admin/api-keys': typeof AdminApiKeysRoute
-  '/admin/templates': typeof AdminTemplatesRoute
   '/admin/users': typeof AdminUsersRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/customers/$customerId': typeof CustomersCustomerIdRoute
@@ -395,9 +395,9 @@ export interface FileRoutesById {
   '/settings': typeof SettingsRoute
   '/signup': typeof SignupRoute
   '/technical-solutions': typeof TechnicalSolutionsRouteWithChildren
+  '/templates': typeof TemplatesRoute
   '/tickets': typeof TicketsRouteWithChildren
   '/admin/api-keys': typeof AdminApiKeysRoute
-  '/admin/templates': typeof AdminTemplatesRoute
   '/admin/users': typeof AdminUsersRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/customers/$customerId': typeof CustomersCustomerIdRoute
@@ -445,9 +445,9 @@ export interface FileRouteTypes {
     | '/settings'
     | '/signup'
     | '/technical-solutions'
+    | '/templates'
     | '/tickets'
     | '/admin/api-keys'
-    | '/admin/templates'
     | '/admin/users'
     | '/auth/callback'
     | '/customers/$customerId'
@@ -488,8 +488,8 @@ export interface FileRouteTypes {
     | '/portfolio'
     | '/settings'
     | '/signup'
+    | '/templates'
     | '/admin/api-keys'
-    | '/admin/templates'
     | '/admin/users'
     | '/auth/callback'
     | '/customers/$customerId'
@@ -535,9 +535,9 @@ export interface FileRouteTypes {
     | '/settings'
     | '/signup'
     | '/technical-solutions'
+    | '/templates'
     | '/tickets'
     | '/admin/api-keys'
-    | '/admin/templates'
     | '/admin/users'
     | '/auth/callback'
     | '/customers/$customerId'
@@ -584,6 +584,7 @@ export interface RootRouteChildren {
   SettingsRoute: typeof SettingsRoute
   SignupRoute: typeof SignupRoute
   TechnicalSolutionsRoute: typeof TechnicalSolutionsRouteWithChildren
+  TemplatesRoute: typeof TemplatesRoute
   TicketsRoute: typeof TicketsRouteWithChildren
   AuthCallbackRoute: typeof AuthCallbackRoute
   DealsDealIdRoute: typeof DealsDealIdRoute
@@ -706,6 +707,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof TechnicalSolutionsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/templates': {
+      id: '/templates'
+      path: '/templates'
+      fullPath: '/templates'
+      preLoaderRoute: typeof TemplatesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/tickets': {
       id: '/tickets'
       path: '/tickets'
@@ -725,13 +733,6 @@ declare module '@tanstack/react-router' {
       path: '/api-keys'
       fullPath: '/admin/api-keys'
       preLoaderRoute: typeof AdminApiKeysRouteImport
-      parentRoute: typeof AdminRoute
-    }
-    '/admin/templates': {
-      id: '/admin/templates'
-      path: '/templates'
-      fullPath: '/admin/templates'
-      preLoaderRoute: typeof AdminTemplatesRouteImport
       parentRoute: typeof AdminRoute
     }
     '/admin/users': {
@@ -928,14 +929,12 @@ declare module '@tanstack/react-router' {
 
 interface AdminRouteChildren {
   AdminApiKeysRoute: typeof AdminApiKeysRoute
-  AdminTemplatesRoute: typeof AdminTemplatesRoute
   AdminUsersRoute: typeof AdminUsersRoute
   AdminIndexRoute: typeof AdminIndexRoute
 }
 
 const AdminRouteChildren: AdminRouteChildren = {
   AdminApiKeysRoute: AdminApiKeysRoute,
-  AdminTemplatesRoute: AdminTemplatesRoute,
   AdminUsersRoute: AdminUsersRoute,
   AdminIndexRoute: AdminIndexRoute,
 }
@@ -1063,6 +1062,7 @@ const rootRouteChildren: RootRouteChildren = {
   SettingsRoute: SettingsRoute,
   SignupRoute: SignupRoute,
   TechnicalSolutionsRoute: TechnicalSolutionsRouteWithChildren,
+  TemplatesRoute: TemplatesRoute,
   TicketsRoute: TicketsRouteWithChildren,
   AuthCallbackRoute: AuthCallbackRoute,
   DealsDealIdRoute: DealsDealIdRoute,
