@@ -21,9 +21,13 @@ function SignupPage() {
     e.preventDefault();
     setError(null);
 
-    const allowed = (import.meta.env["VITE_ALLOWED_EMAIL_DOMAINS"] ?? "gocanvas.com")
+    // An empty or blank env value must never disable signups — fall back to
+    // the default domain. The database trigger is the authoritative check.
+    const configured = (import.meta.env["VITE_ALLOWED_EMAIL_DOMAINS"] ?? "")
       .split(",")
-      .map((d: string) => d.trim().toLowerCase());
+      .map((d: string) => d.trim().toLowerCase())
+      .filter(Boolean);
+    const allowed = configured.length > 0 ? configured : ["gocanvas.com"];
     const domain = email.split("@")[1]?.toLowerCase();
     if (!domain || !allowed.includes(domain)) {
       setError(`Signups are limited to ${allowed.map((d: string) => "@" + d).join(", ")} addresses. Customers are invited by their GoCanvas team instead.`);
