@@ -456,7 +456,11 @@ function OverviewTab({ record, customerId }: { record: Customer360; customerId: 
               detail={
                 waiting.party === "none"
                   ? undefined
-                  : waiting.reason.replace(/^Waiting on [^—]+ — /, "")
+                  : // Phase 6: the wait is dated from the record that decided it
+                    // (the approval, the commitment), never from stage entry.
+                    `${waiting.reason.replace(/^Waiting on [^—]+ — /, "")}${
+                      waiting.since ? ` · since ${fmtDate(waiting.since)}` : ""
+                    }`
               }
             />
             {valueGaps.length ? (

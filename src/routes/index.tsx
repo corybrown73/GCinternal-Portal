@@ -5,7 +5,7 @@ import { ArrowRight, Clock, Info } from "lucide-react";
 import { PageBody, PageHeader } from "@/components/page";
 import { Panel, StageBadge, StatusChip, StatusDot, NoRows } from "@/components/record";
 import { getHome } from "@/lib/hub.functions";
-import { fmtDateTime, humanize } from "@/lib/hub-format";
+import { fmtDate, fmtDateTime, humanize } from "@/lib/hub-format";
 import { deriveHealth, launchStateConflict } from "@/lib/customer360-derive";
 
 type HealthResult = ReturnType<typeof deriveHealth>;
@@ -154,6 +154,13 @@ function QueueRowItem({ row, health }: { row: QueueRow; health: HealthResult }) 
           <span>
             <span className="uppercase tracking-[0.08em]">Owner</span> ·{" "}
             {impl.owner_name ?? "Unassigned"}
+          </span>
+          {/* Phase 6: the dependency is the spine — who owes the next move, and
+              since when. Dated from the deciding record, never from stage entry. */}
+          <span className="md:col-span-3">
+            <span className="uppercase tracking-[0.08em]">Waiting on</span> ·{" "}
+            {row.dependency.reason}
+            {row.dependency.since ? ` (since ${fmtDate(row.dependency.since)})` : ""}
           </span>
         </div>
       </Link>

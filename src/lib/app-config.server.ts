@@ -27,6 +27,12 @@ export type V2Flags = {
   sf_auto_create: boolean;
   /** Phase 5: the presale stage seam — the deal's stage moves, forward only. */
   sf_presale_bridge: boolean;
+  /**
+   * Phase 6: emission of the champion-gone-quiet and launch-date-at-risk
+   * alerts from the hourly cron. The `/signals` surface is read-only and is
+   * deliberately NOT flagged — this gates who gets notified, never who can see.
+   */
+  signals_alerts: boolean;
 };
 
 const DEFAULT_FLAGS: V2Flags = {
@@ -40,6 +46,8 @@ const DEFAULT_FLAGS: V2Flags = {
   /* Phase 5 */
   sf_auto_create: false,
   sf_presale_bridge: false,
+  /** Phase 6: see the type above. */
+  signals_alerts: false,
 };
 const CACHE_MS = 60_000;
 
