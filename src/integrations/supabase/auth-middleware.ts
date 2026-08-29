@@ -34,12 +34,17 @@ export const requireSupabaseAuth = createMiddleware({ type: 'function' }).server
   async ({ next }) => {
     
     // Also accept the names the Supabase<->Vercel integration auto-injects.
+    // `||` (not ??) so empty-string env values fall through; the final
+    // literals are public by design (publishable key + URL, RLS-protected).
     const SUPABASE_URL =
-      process.env['SUPABASE_URL'] ?? process.env['NEXT_PUBLIC_SUPABASE_URL'];
+      process.env['SUPABASE_URL'] ||
+      process.env['NEXT_PUBLIC_SUPABASE_URL'] ||
+      'https://wynvngnbjasiuxkcfofu.supabase.co';
     const SUPABASE_PUBLISHABLE_KEY =
-      process.env['SUPABASE_PUBLISHABLE_KEY'] ??
-      process.env['NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY'] ??
-      process.env['NEXT_PUBLIC_SUPABASE_ANON_KEY'];
+      process.env['SUPABASE_PUBLISHABLE_KEY'] ||
+      process.env['NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY'] ||
+      process.env['NEXT_PUBLIC_SUPABASE_ANON_KEY'] ||
+      'sb_publishable_WINyOQ8YFqFiidIZ-feWcg_S1EbrFeW';
 
     if (!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY) {
       const missing = [
