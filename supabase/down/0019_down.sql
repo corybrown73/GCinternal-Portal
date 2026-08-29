@@ -49,17 +49,32 @@ drop function if exists eag_enforce();
 drop function if exists revoke_grants_for_contact();
 drop function if exists revoke_grants_for_implementation();
 
--- The branding bucket is dropped only when nothing was ever uploaded to it.
--- 'attachments' is never touched — see the header.
+-- The buckets are KEPT, and not by preference — Supabase refuses to have it any
+-- other way. `storage.protect_delete()` raises on a direct DELETE from
+-- storage.buckets ("Use the Storage API instead"), so a migration cannot remove
+-- one from SQL at all. This down script used to try, passed against a local
+-- stand-in that had no such trigger, and failed on the real stack in CI.
+--
+-- Keeping them is also the right answer on its own terms: a bucket is an empty
+-- container, harmless when unused, and removing one that still holds objects
+-- would destroy uploaded files during what is supposed to be a reversible
+-- rollback. 'attachments' is doubly untouchable — hub.server.ts has written to
+-- it since long before this migration.
+--
+-- To remove a bucket, use the Storage API or the Supabase dashboard, after
+-- confirming it is empty.
 do $$
 declare
   n_objects int;
 begin
   select count(*) into n_objects from storage.objects where bucket_id = 'customer-branding';
-  if n_objects = 0 then
-    delete from storage.buckets where id = 'customer-branding';
+  if n_objects > 0 then
+    raise notice
+      'customer-branding kept with % object(s). Buckets cannot be dropped from SQL; use the Storage API.',
+      n_objects;
   else
-    raise notice 'customer-branding bucket kept: % object(s) still stored', n_objects;
+    raise notice
+      'customer-branding kept and empty. Buckets cannot be dropped from SQL; remove it via the Storage API if you want it gone.';
   end if;
 end $$;
 
