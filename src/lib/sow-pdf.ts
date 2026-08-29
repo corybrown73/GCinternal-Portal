@@ -12,7 +12,7 @@ import {
 } from "@/lib/sow-analysis";
 import { LIFECYCLE_STAGES, STAGE_ALIASES } from "@/lib/lifecycle";
 
-/** Same grouping the screen uses, so the shared file matches what the TIS reviewed. */
+/** Same grouping the screen uses, so the shared file matches what the Technical Implementation Specialist reviewed. */
 type Entry = { stage: SowProposedStage; timing: ProposedTiming | null };
 
 function groupByStage(entries: Entry[]) {
@@ -62,7 +62,7 @@ export function downloadSowAnalysisPdf({
   analysedAt: Date;
   /** Anchors proposed weeks to calendar dates when the implementation has a start date. */
   startDate?: string | null | undefined;
-  /** TIS adjustments to the proposed weeks, keyed by journey index. */
+  /** Technical Implementation Specialist adjustments to the proposed weeks, keyed by journey index. */
   overrides?: Record<number, TimingOverride>;
 }) {
   const doc = new jsPDF({ unit: "pt", format: "a4" });
@@ -121,7 +121,7 @@ export function downloadSowAnalysisPdf({
     { size: 9, color: 110, gap: 6 },
   );
   text(
-    "Draft for discussion. The extracted section reflects what the SOW says; the journey is a proposal that a TIS must confirm before it becomes the plan.",
+    "Draft for discussion. The extracted section reflects what the SOW says; the journey is a proposal that a Technical Implementation Specialist (TIS) must confirm before it becomes the plan.",
     { size: 9, style: "italic", color: 110, gap: 4 },
   );
 

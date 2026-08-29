@@ -268,7 +268,7 @@ export type ProposedTiming = {
   beyondSowWindow: boolean;
 };
 
-/** A TIS adjustment to one stage's proposed weeks, keyed by journey index. */
+/** A Technical Implementation Specialist adjustment to one stage's proposed weeks, keyed by journey index. */
 export type TimingOverride = { startWeek: number; endWeek: number };
 
 function weekLabel(start: number, end: number) {
@@ -369,11 +369,12 @@ export function proposedTimings(
 export const TIMING_SOURCE_LABEL: Record<ProposedTiming["source"], string> = {
   sow: "per SOW",
   estimated: "AI estimate",
-  adjusted: "adjusted by TIS",
+  adjusted: "adjusted by the TIS",
 };
 
 /**
- * Applying a reviewed proposal. Every part is opt-in: the TIS ticks what should
+ * Applying a reviewed proposal. Every part is opt-in: the Technical
+ * Implementation Specialist (TIS) ticks what should
  * be written, and anything not ticked is left exactly as it is.
  */
 export const applySowProposalInput = z.object({
@@ -406,7 +407,7 @@ export function proposalAsNote(
   overrides: Record<number, TimingOverride> = {},
 ): string {
   const lines: string[] = [
-    `Proposed implementation journey — AI-proposed from the SOW${sowName ? ` (${sowName})` : ""}, reviewed and saved by the TIS.`,
+    `Proposed implementation journey — AI-proposed from the SOW${sowName ? ` (${sowName})` : ""}, reviewed and saved by the Technical Implementation Specialist (TIS).`,
     "",
   ];
   const window = deliveryWindowLabel(analysis);

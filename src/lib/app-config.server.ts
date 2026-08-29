@@ -33,6 +33,22 @@ export type V2Flags = {
    * deliberately NOT flagged — this gates who gets notified, never who can see.
    */
   signals_alerts: boolean;
+  /** Phase 7: hub mutations write the account activity feed (`audit_log`). */
+  audit_activity_feed: boolean;
+  /** Phase 7: a failed audit write on a critical action aborts the mutation. */
+  audit_strict: boolean;
+  /** Phase 7: the Record-handover form on the Customer 360. */
+  handover_record: boolean;
+  /** Phase 7: the manual decision ↔ solution trace linker. */
+  trace_links_editing: boolean;
+  /** Phase 7: `/search` across customers, deals, tickets, solutions and people. */
+  global_search: boolean;
+  /** Phase 7: named, shareable saved search parameters per surface. */
+  saved_views: boolean;
+  /** Phase 7: pseudonymised customer identities at the server projection. */
+  demo_mode: boolean;
+  /** Phase 7: API-key expiry and per-minute rate limits are enforced. */
+  api_key_limits: boolean;
 };
 
 const DEFAULT_FLAGS: V2Flags = {
@@ -48,6 +64,15 @@ const DEFAULT_FLAGS: V2Flags = {
   sf_presale_bridge: false,
   /** Phase 6: see the type above. */
   signals_alerts: false,
+  /* Phase 7 — platform hygiene completion. All off. */
+  audit_activity_feed: false,
+  audit_strict: false,
+  handover_record: false,
+  trace_links_editing: false,
+  global_search: false,
+  saved_views: false,
+  demo_mode: false,
+  api_key_limits: false,
 };
 const CACHE_MS = 60_000;
 

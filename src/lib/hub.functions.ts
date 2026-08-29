@@ -293,12 +293,17 @@ export const setImplementation = createServerFn({ method: "POST" })
     const { updateImplementation } = await import("./hub.server");
     // health_recorded is the human's statement, so it is stamped with the
     // person who saved it — resolved through the profile's team_member bridge.
-    return updateImplementation(data.id, {
-      ...toImplementationUpdatePatch(data),
-      ...toRecordedHealthPatch(data, {
-        teamMemberId: context.profile.team_member_id ?? null,
-      }),
-    });
+    return updateImplementation(
+      data.id,
+      {
+        ...toImplementationUpdatePatch(data),
+        ...toRecordedHealthPatch(data, {
+          teamMemberId: context.profile.team_member_id ?? null,
+        }),
+      },
+      // Phase 7: the account activity feed attributes through the same bridge.
+      { actorProfileId: context.profile.id },
+    );
   });
 
 export const advanceImplementationStage = createServerFn({ method: "POST" })

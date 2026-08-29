@@ -46,6 +46,8 @@ import {
   type DiscoveryBoardImplementation,
 } from "@/components/discovery-board-write";
 import { JournalPanel } from "@/components/journal-write";
+import { HandoverRecordPanel } from "@/components/handover-write";
+import { TIS_FULL, TIS_SHORT } from "@/lib/vocabulary";
 
 import { ADOPTION_KIND_LABEL, type AdoptionKind } from "@/lib/adoption-input";
 import { contactRoleLabel } from "@/lib/customer-contact-input";
@@ -543,8 +545,8 @@ function OverviewTab({ record, customerId }: { record: Customer360; customerId: 
         >
           <p className="border-b border-border px-3 py-2 text-[11px] leading-relaxed text-muted-foreground">
             Each measure records what success looks like, how it will be measured, the starting
-            point and target where they apply, and who owns it. Working context belongs in the TIS
-            journal, not here.
+            point and target where they apply, and who owns it. Working context belongs in the{" "}
+            {TIS_SHORT} journal, not here.
           </p>
 
           {/* Kickoff intake: the named customer people outcomes and adoption are
@@ -748,6 +750,12 @@ function OverviewTab({ record, customerId }: { record: Customer360; customerId: 
             </p>
           )}
         </Panel>
+
+        {/* Phase 7. The writer for the record the panel above reads. Two tables
+            modelled this one event in 0003 and neither had a write path;
+            cs_handoffs is now the record, graduations is deprecated and folded
+            forward. Renders nothing while handover_record is off. */}
+        <HandoverRecordPanel implementationId={impl.id} team={record.team} />
 
         <Panel
           title="Open items"
@@ -1286,7 +1294,8 @@ function JourneyTab({ record, customerId }: { record: Customer360; customerId: s
       <ExternalSharePanel implementationId={impl.id} />
 
       {/* Reads the SOW attached to this implementation, proposes a journey and
-          lets the TIS choose what — if anything — to apply. */}
+          lets the Technical Implementation Specialist choose what — if
+          anything — to apply. */}
       <Panel
         title="Proposed journey from the SOW"
         meta="Draft suggestion — only applied when you choose to"
@@ -1310,10 +1319,14 @@ function JourneyTab({ record, customerId }: { record: Customer360; customerId: s
       {/* The one place working notes are written and read. The stage timeline
           below stays the record of how the implementation moved. */}
       <Panel
-        title="TIS journal"
+        // Phase 7 vocabulary: the acronym is expanded at its first user-visible
+        // use on this page. It is never expanded in the dense triage lists —
+        // "Waiting on Technical Implementation Specialist to…" is worse copy,
+        // not better.
+        title={`${TIS_SHORT} journal`}
         count={record.journal.length}
         level="reference"
-        meta={`Working notes, filed under the stage they were written in — currently ${stageLabel(impl.current_stage)}`}
+        meta={`${TIS_FULL} working notes, filed under the stage they were written in — currently ${stageLabel(impl.current_stage)}`}
       >
         <div className="py-1.5">
           <JournalPanel

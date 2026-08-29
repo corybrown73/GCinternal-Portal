@@ -105,4 +105,7 @@ export interface ApiKey {
   created_at: string;
   last_used_at: string | null;
   revoked_at: string | null;
+  /** Phase 7. Null = never expires, which is every key created before 0025. */
+  expires_at?: string | null;
+  rate_limit_per_minute?: number | null;
 }

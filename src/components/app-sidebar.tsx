@@ -8,6 +8,10 @@ export function AppSidebar({ profile }: { profile?: PortalProfile | null }) {
 
   const nav: NavItem[] = [
     { to: "/", label: "Home", hint: "What needs attention", exact: true },
+    // Phase 7. The page itself explains and does nothing while global_search is
+    // off; the link is unconditional so the nav does not depend on a server
+    // round-trip to decide whether to render.
+    { to: "/search", label: "Search", hint: "Across every surface" },
     { to: "/pipeline", label: "Pipeline", hint: "Deals & handoff" },
     { to: "/customers", label: "Customers", hint: "All implementations" },
     { to: "/technical-solutions", label: "Solutions", hint: "Technical work" },

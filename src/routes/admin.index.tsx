@@ -1,5 +1,13 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { ArrowRight, KeyRound, Plug, Route as RouteIcon, Upload, Users } from "lucide-react";
+import {
+  ArrowRight,
+  KeyRound,
+  Plug,
+  Route as RouteIcon,
+  ShieldCheck,
+  Upload,
+  Users,
+} from "lucide-react";
 
 import { PageBody, PageHeader } from "@/components/page";
 
@@ -28,6 +36,13 @@ const CARDS = [
     title: "Integrations",
     description:
       "Salesforce auto-create: the sync log and why each decision was made, field maps, outbound webhooks and the needs-template queue.",
+  },
+  {
+    to: "/admin/audit",
+    icon: ShieldCheck,
+    title: "Audit health",
+    description:
+      "Whether the audit log is actually recording what happened: failed writes, and changes the database observed but the app never attributed.",
   },
   {
     to: "/tickets/routing",

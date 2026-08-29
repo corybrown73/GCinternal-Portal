@@ -131,7 +131,8 @@ function Checkbox({
 
 /**
  * Reads the SOW attached to the implementation, proposes a journey grouped by
- * the existing lifecycle stages, and lets the TIS review before anything is
+ * the existing lifecycle stages, and lets the Technical Implementation
+ * Specialist (TIS) review before anything is
  * written. Applying is additive: existing information is never replaced.
  */
 export function SowAnalysisPanel({

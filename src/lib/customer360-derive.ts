@@ -733,7 +733,7 @@ export const PROVE_VALUE_LABEL: Record<ProveValueState, string> = {
 /**
  * When a criterion carries no due_stage, the operating model's implicit
  * expectations apply: baseline by Align Externally, first measurement by
- * Launch, customer confirmation by Graduate to CS.
+ * Launch, customer confirmation by Handover to Customer Success.
  */
 export const DEFAULT_PROVE_VALUE_DUE_STAGE: Record<ProveValueState, string | null> = {
   not_baselined: "align-external",
