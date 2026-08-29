@@ -1,0 +1,71 @@
+import { createFileRoute, Link } from "@tanstack/react-router";
+import { ArrowRight, KeyRound, Route as RouteIcon, Upload, Users } from "lucide-react";
+
+import { PageBody, PageHeader } from "@/components/page";
+
+export const Route = createFileRoute("/admin/")({
+  component: AdminIndex,
+});
+
+const CARDS = [
+  {
+    to: "/admin/api-keys",
+    icon: KeyRound,
+    title: "API keys",
+    description:
+      "Create and revoke scoped keys for Salesforce, Zapier and monitoring integrations calling /api/v1/*.",
+  },
+  {
+    to: "/admin/users",
+    icon: Users,
+    title: "Users",
+    description: "Every portal profile and its role. Roles gate sales edits, admin areas and the customer portal.",
+  },
+  {
+    to: "/tickets/routing",
+    icon: RouteIcon,
+    title: "Ticket routing",
+    description: "Assignment rules for inbound tickets: which team picks up what, and the fallback owner.",
+  },
+  {
+    to: "/pipeline",
+    icon: Upload,
+    title: "CSV import",
+    description:
+      "Bulk-load or refresh presale deals from a Salesforce export. The import dialog lives on the Pipeline board.",
+  },
+] as const;
+
+function AdminIndex() {
+  return (
+    <>
+      <PageHeader
+        title="Admin"
+        description="Integration keys, people and routing. Everything here is super-admin only and audited."
+      />
+      <PageBody>
+        <div className="grid gap-3 sm:grid-cols-2">
+          {CARDS.map((card) => (
+            <Link
+              key={card.to}
+              to={card.to}
+              className="group rounded-md border border-border bg-card px-4 py-3 transition-colors hover:bg-muted/60"
+            >
+              <div className="flex items-center justify-between">
+                <span className="flex items-center gap-2">
+                  <card.icon className="h-3.5 w-3.5 text-muted-foreground" strokeWidth={1.75} />
+                  <span className="text-[13px] font-medium group-hover:underline">{card.title}</span>
+                </span>
+                <ArrowRight
+                  className="h-3.5 w-3.5 text-muted-foreground transition-transform group-hover:translate-x-0.5"
+                  strokeWidth={1.75}
+                />
+              </div>
+              <p className="mt-1.5 text-[12px] text-muted-foreground">{card.description}</p>
+            </Link>
+          ))}
+        </div>
+      </PageBody>
+    </>
+  );
+}

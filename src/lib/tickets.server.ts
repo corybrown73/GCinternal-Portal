@@ -78,7 +78,7 @@ export const SLA_HOURS = 24;
 /* ------------------------------------------------------------------------- */
 
 function appUrl(): string {
-  return process.env.APP_URL ?? "http://localhost:3000";
+  return process.env["APP_URL"] ?? "http://localhost:3000";
 }
 
 export function escapeHtml(s: string): string {
@@ -170,17 +170,17 @@ async function responsibleRecipients(ticket: TicketRow): Promise<ProfileLite[]> 
 /* ------------------------------------------------------------------------- */
 
 export interface CreateTicketInput {
-  customerId?: string | null;
-  implementationId?: string | null;
+  customerId?: string | null | undefined;
+  implementationId?: string | null | undefined;
   category: TicketCategory;
   subject: string;
   body: string;
-  priority?: TicketPriority;
+  priority?: TicketPriority | undefined;
   /** portal_profiles.id of the submitter, when the caller is a signed-in user. */
-  submittedBy?: string | null;
+  submittedBy?: string | null | undefined;
   submitterEmail: string;
   /** Who performed the write, for the audit log. Defaults to the submitter. */
-  actor?: { type: "user" | "api_key" | "system"; id?: string | null };
+  actor?: { type: "user" | "api_key" | "system"; id?: string | null | undefined } | undefined;
 }
 
 export async function createTicket(input: CreateTicketInput): Promise<TicketRow> {
@@ -303,7 +303,7 @@ export async function createTicket(input: CreateTicketInput): Promise<TicketRow>
 
 export async function addComment(
   ticketId: string,
-  input: { authorProfileId: string; body: string; internal?: boolean },
+  input: { authorProfileId: string; body: string; internal?: boolean | undefined },
 ): Promise<TicketCommentRow> {
   const { data: ticketRow } = await db()
     .from("tickets")
@@ -388,12 +388,11 @@ export async function updateTicketStatus(
   status: TicketStatus,
   actorProfileId: string,
 ): Promise<TicketRow> {
-  const patch: Record<string, unknown> = { status };
-  if (status === "resolved" || status === "closed") {
-    patch.resolved_at = new Date().toISOString();
-  } else {
-    patch.resolved_at = null;
-  }
+  const patch: { status: TicketStatus; resolved_at: string | null } = {
+    status,
+    resolved_at:
+      status === "resolved" || status === "closed" ? new Date().toISOString() : null,
+  };
   const { data, error } = await db()
     .from("tickets")
     .update(patch)
@@ -418,7 +417,9 @@ export async function assignTicket(
   assigneeProfileId: string | null,
   actorProfileId: string,
 ): Promise<TicketRow> {
-  const patch: Record<string, unknown> = { assigned_to: assigneeProfileId };
+  const patch: { assigned_to: string | null; assigned_role?: string } = {
+    assigned_to: assigneeProfileId,
+  };
   if (assigneeProfileId) {
     const assignee = await profileById(assigneeProfileId);
     if (!assignee || assignee.role === "customer") {
@@ -477,8 +478,10 @@ export async function loadTickets(opts: {
       ? db().from("portal_profiles").select("id, full_name, email").in("id", profileIds)
       : Promise.resolve({ data: [] }),
   ]);
-  const customerName = new Map((customers ?? []).map((c: any) => [c.id, c.name]));
-  const profileName = new Map(
+  const customerName = new Map<string, string>(
+    (customers ?? []).map((c: any) => [c.id, c.name]),
+  );
+  const profileName = new Map<string, string>(
     (profiles ?? []).map((p: any) => [p.id, p.full_name ?? p.email]),
   );
 
@@ -528,7 +531,7 @@ export async function loadTicket(
       ? db().from("customers").select("id, name").eq("id", ticket.customer_id).maybeSingle()
       : Promise.resolve({ data: null }),
   ]);
-  const profileName = new Map(
+  const profileName = new Map<string, string>(
     (profiles ?? []).map((p: any) => [p.id, p.full_name ?? p.email]),
   );
 
@@ -582,16 +585,16 @@ export interface AlertRow {
 
 export async function createAlert(input: {
   kind: string;
-  severity?: AlertSeverity;
+  severity?: AlertSeverity | undefined;
   title: string;
-  detail?: string | null;
-  customerId?: string | null;
-  implementationId?: string | null;
-  source?: string;
-  payload?: Record<string, unknown> | null;
-  /** Email these managers/super admins (severity != info). Empty = no email. */
-  notify?: boolean;
-  actor?: { type: "user" | "api_key" | "system"; id?: string | null };
+  detail?: string | null | undefined;
+  customerId?: string | null | undefined;
+  implementationId?: string | null | undefined;
+  source?: string | undefined;
+  payload?: Record<string, unknown> | null | undefined;
+  /** Email every manager + super admin when severity is not 'info'. */
+  notify?: boolean | undefined;
+  actor?: { type: "user" | "api_key" | "system"; id?: string | null | undefined } | undefined;
 }): Promise<AlertRow> {
   const severity = input.severity ?? "warning";
   const { data: alert, error } = await db()

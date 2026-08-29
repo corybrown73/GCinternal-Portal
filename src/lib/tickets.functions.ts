@@ -262,25 +262,45 @@ export const setTicketRouting = createServerFn({ method: "POST" })
 
 /* ---------- Alerts ---------- */
 
+export interface AlertListItem {
+  id: string;
+  kind: string;
+  severity: "info" | "warning" | "critical";
+  title: string;
+  detail: string | null;
+  customer_id: string | null;
+  implementation_id: string | null;
+  source: string;
+  acknowledged_at: string | null;
+  acknowledged_by: string | null;
+  notified_at: string | null;
+  created_at: string;
+  customer_name: string | null;
+}
+
 export const getAlerts = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
-  .handler(async ({ context }) => {
+  .handler(async ({ context }): Promise<AlertListItem[]> => {
     const profile = await callerProfile(context.userId);
     assertInternal(profile);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const admin = supabaseAdmin as any;
     const { data: alerts } = await admin
       .from("alerts")
-      .select("*")
+      .select(
+        "id, kind, severity, title, detail, customer_id, implementation_id, source, acknowledged_at, acknowledged_by, notified_at, created_at",
+      )
       .order("created_at", { ascending: false })
       .limit(200);
-    const rows = (alerts ?? []) as Array<Record<string, any>>;
+    const rows = (alerts ?? []) as Array<Omit<AlertListItem, "customer_name">>;
 
     const customerIds = [...new Set(rows.map((a) => a.customer_id).filter(Boolean))];
     const { data: customers } = customerIds.length
       ? await admin.from("customers").select("id, name").in("id", customerIds)
       : { data: [] };
-    const names = new Map((customers ?? []).map((c: any) => [c.id, c.name as string]));
+    const names = new Map<string, string>(
+      (customers ?? []).map((c: any) => [c.id, c.name as string]),
+    );
     return rows.map((a) => ({
       ...a,
       customer_name: a.customer_id ? (names.get(a.customer_id) ?? null) : null,
@@ -294,5 +314,7 @@ export const ackAlert = createServerFn({ method: "POST" })
     const profile = await callerProfile(context.userId);
     assertInternal(profile);
     const { acknowledgeAlert } = await import("./tickets.server");
-    return acknowledgeAlert(data.alertId, profile.id);
+    const alert = await acknowledgeAlert(data.alertId, profile.id);
+    // Trimmed to a serializable shape (payload is free-form jsonb).
+    return { id: alert.id, acknowledged_at: alert.acknowledged_at };
   });
