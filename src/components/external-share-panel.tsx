@@ -60,6 +60,16 @@ export function ExternalSharePanel({ implementationId }: { implementationId: str
     }
   };
 
+  // The server refuses before it reads any of 0019-0022's schema, so this is
+  // also what renders on a deploy whose migrations have not been applied yet.
+  if (panel.data && !panel.data.enabled) {
+    return (
+      <Panel title="Customer plan links">
+        <NoRows label="Sharing the plan with customers is not switched on yet." />
+      </Panel>
+    );
+  }
+
   return (
     <Panel
       title="Customer plan links"

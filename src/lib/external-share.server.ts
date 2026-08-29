@@ -1,4 +1,5 @@
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import { isFlagOn } from "./app-config.server";
 import { audit } from "./server/audit";
 import { sendEmail } from "./server/email";
 import { CONFIG_DEFAULTS, getConfigNumber } from "./server/app-config";
@@ -78,6 +79,18 @@ export type ShareEventRow = {
 };
 
 export type SharePanel = {
+  /**
+   * False when `external_plan_view_enabled` is off. The panel then renders an
+   * explanatory line instead of its controls, matching every other Phase 4
+   * surface and the plan/handoff panels before it.
+   *
+   * This guard is not cosmetic. Everything below reads schema that only exists
+   * once 0019-0022 are applied — `implementations.portal_key`,
+   * `external_access_grants`, `external_plan_events`. Without it, a deploy that
+   * lands before its migrations takes out the whole Customer 360, because this
+   * panel renders on every implementation unconditionally.
+   */
+  enabled: boolean;
   implementation_id: string;
   portal_key: string;
   grants: ShareGrantRow[];
@@ -87,7 +100,21 @@ export type SharePanel = {
   default_ttl_days: number;
 };
 
+const DISABLED_PANEL: SharePanel = {
+  enabled: false,
+  implementation_id: "",
+  portal_key: "",
+  grants: [],
+  events: [],
+  contacts: [],
+  default_ttl_days: 0,
+};
+
 export async function loadSharePanel(implementationId: string): Promise<SharePanel> {
+  // Checked BEFORE any query, so nothing here touches 0019-0022's schema while
+  // the flag is off.
+  if (!(await isFlagOn("external_plan_view_enabled"))) return DISABLED_PANEL;
+
   const { data: impl } = await db()
     .from("implementations")
     .select("id, customer_id, portal_key")
@@ -132,6 +159,7 @@ export async function loadSharePanel(implementationId: string): Promise<SharePan
 
   const now = Date.now();
   return {
+    enabled: true,
     implementation_id: implementationId,
     portal_key: impl.portal_key,
     default_ttl_days: ttl,
