@@ -6,7 +6,10 @@ import reactRefresh from "eslint-plugin-react-refresh";
 import tseslint from "typescript-eslint";
 
 export default tseslint.config(
-  { ignores: ["dist", ".output", ".vinxi", ".vercel", ".nitro"] },
+  // `.claude/worktrees` holds ephemeral per-agent git worktrees — each a full
+  // nested checkout of this repo. Without it, `npm run lint` reports errors from
+  // other branches' in-progress code as if they were yours.
+  { ignores: ["dist", ".output", ".vinxi", ".vercel", ".nitro", ".claude"] },
   {
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
     files: ["**/*.{ts,tsx}"],

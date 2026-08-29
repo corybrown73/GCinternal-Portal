@@ -103,7 +103,10 @@ describe("deriveHealth evidence", () => {
   it("uses rule 'clear' when signals exist but none is open against it", () => {
     const record = {
       ...emptyRecord,
-      risks: [{ id: "r1", status: "resolved", severity: "critical", title: "Was bad" }],
+      // "mitigated", not "resolved": resolved is the ISSUE vocabulary, and a
+      // risk can never hold it. The fixture used to say resolved and passed
+      // only because one blended status list was applied to four tables.
+      risks: [{ id: "r1", status: "mitigated", severity: "critical", title: "Was bad" }],
     };
     const { level, evidence } = deriveHealth(record, {});
     expect(level).toBe("on_track");

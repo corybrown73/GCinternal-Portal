@@ -19,17 +19,40 @@ export function severityRank(value: string | null | undefined) {
   return SEVERITY_RANK[(value ?? "").toLowerCase()] ?? 4;
 }
 
-const isOpen = (status: string | null | undefined) =>
-  !["resolved", "closed", "fulfilled", "cancelled", "mitigated", "accepted", "done"].includes(
-    (status ?? "").toLowerCase(),
-  );
+/**
+ * Terminal statuses, PER VOCABULARY.
+ *
+ * These four tables do not share a status vocabulary — `delivery-input.ts`
+ * defines a separate enum for each, and the write paths enforce them. One
+ * blended list was the bug: it excluded "fulfilled" and "done", which no
+ * commitment can ever be, while missing "met", which is the only way a
+ * commitment is ever finished. Every met commitment therefore counted as open,
+ * on Home, on the 360, in health and in Leadership.
+ *
+ * `customer360-derive.test.ts` cross-checks these against the write-path enums,
+ * so adding a status without deciding whether it is terminal fails CI rather
+ * than quietly inflating an open count.
+ *
+ * Judgement calls, stated: a MISSED commitment stays open (the obligation did
+ * not go away by being broken), and a RENEGOTIATED one stays open (the new
+ * terms are still owed). An in_progress issue or escalation is open.
+ */
+export const TERMINAL_STATUSES = {
+  commitments: ["met"],
+  risks: ["mitigated", "accepted", "closed"],
+  issues: ["resolved", "closed"],
+  escalations: ["resolved"],
+} as const;
+
+const isOpenFor = (kind: keyof typeof TERMINAL_STATUSES, status: string | null | undefined) =>
+  !(TERMINAL_STATUSES[kind] as readonly string[]).includes((status ?? "").toLowerCase());
 
 export function openItems(record: Customer360) {
   return {
-    commitments: record.commitments.filter((c: any) => isOpen(c.status)),
-    risks: record.risks.filter((r: any) => isOpen(r.status)),
-    issues: record.issues.filter((r: any) => isOpen(r.status)),
-    escalations: record.escalations.filter((r: any) => isOpen(r.status)),
+    commitments: record.commitments.filter((c: any) => isOpenFor("commitments", c.status)),
+    risks: record.risks.filter((r: any) => isOpenFor("risks", r.status)),
+    issues: record.issues.filter((r: any) => isOpenFor("issues", r.status)),
+    escalations: record.escalations.filter((r: any) => isOpenFor("escalations", r.status)),
   };
 }
 
@@ -466,10 +489,14 @@ export type WaitingOnInput = {
 export function waitingOn(input: WaitingOnInput): WaitingOn {
   const solutions = input.technical_solutions ?? [];
   const approvals = input.approvals ?? [];
-  const commitments = (input.commitments ?? []).filter((c: any) => isOpen(c.status));
-  const risks = (input.risks ?? []).filter((r: any) => isOpen(r.status));
-  const issues = (input.issues ?? []).filter((r: any) => isOpen(r.status));
-  const escalations = (input.escalations ?? []).filter((r: any) => isOpen(r.status));
+  const commitments = (input.commitments ?? []).filter((c: any) =>
+    isOpenFor("commitments", c.status),
+  );
+  const risks = (input.risks ?? []).filter((r: any) => isOpenFor("risks", r.status));
+  const issues = (input.issues ?? []).filter((r: any) => isOpenFor("issues", r.status));
+  const escalations = (input.escalations ?? []).filter((r: any) =>
+    isOpenFor("escalations", r.status),
+  );
   const decisions = (input.decisions ?? []).filter((d: any) =>
     DECISION_OPEN.includes(String(d.status ?? "").toLowerCase()),
   );
