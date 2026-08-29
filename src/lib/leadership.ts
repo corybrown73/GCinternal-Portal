@@ -517,15 +517,6 @@ export function adoptionCoverage(data: LeadershipData): AdoptionCoverageRow[] {
     );
 }
 
-/** Per-area detail for one implementation, used by the expanded adoption row. */
-export function adoptionAreaLevels(areas: any[]) {
-  return (areas ?? []).map((a) => ({
-    id: a.id as string,
-    name: a.name as string,
-    level: adoptionAreaLevel(a),
-  }));
-}
-
 /* ---------------- 8. Stuck work across the team ---------------- */
 
 export type StuckWorkItem = {

@@ -19,7 +19,6 @@ const SCOPES = [
   ["tam:write", "Create TAM requests"],
   ["tickets:write", "Create and update tickets"],
   ["alerts:write", "Push monitoring alerts"],
-  ["reports:write", "Push usage reports"],
 ] as const;
 
 const keysQuery = queryOptions({

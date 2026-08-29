@@ -10,7 +10,6 @@ export const API_SCOPES = [
   "tam:write",
   "tickets:write",
   "alerts:write",
-  "reports:write",
 ] as const;
 export type ApiScope = (typeof API_SCOPES)[number];
 

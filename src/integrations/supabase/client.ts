@@ -28,22 +28,22 @@ function createSupabaseFetch(supabaseKey: string): typeof fetch {
 
 
 function createSupabaseClient() {
-  // Use import.meta.env for client-side (Vite build-time replacement)
-  // Fall back to process.env for SSR (server-side rendering)
-  // Last-resort literals: the URL and publishable key are public by design
-  // (they ship in every browser bundle; RLS enforces access control), and
-  // some build environments fail to inject VITE_ vars at build time.
+  // Use import.meta.env for client-side (Vite build-time replacement, values
+  // come from the platform env or the committed .env.production) and fall back
+  // to process.env for SSR — `||` (not ??) so blank values fall through, and
+  // the Supabase<->Vercel integration's NEXT_PUBLIC_* names are accepted.
+  // No literal fallbacks: a misconfigured deploy fails loudly below instead.
   const SUPABASE_URL =
     import.meta.env['VITE_SUPABASE_URL'] ||
     (typeof process !== 'undefined' && (process.env['SUPABASE_URL'] || process.env['NEXT_PUBLIC_SUPABASE_URL'])) ||
-    'https://wynvngnbjasiuxkcfofu.supabase.co';
+    '';
   const SUPABASE_PUBLISHABLE_KEY =
     import.meta.env['VITE_SUPABASE_PUBLISHABLE_KEY'] ||
     (typeof process !== 'undefined' &&
       (process.env['SUPABASE_PUBLISHABLE_KEY'] ||
         process.env['NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY'] ||
         process.env['NEXT_PUBLIC_SUPABASE_ANON_KEY'])) ||
-    'sb_publishable_WINyOQ8YFqFiidIZ-feWcg_S1EbrFeW';
+    '';
 
   if (!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY) {
     const missing = [

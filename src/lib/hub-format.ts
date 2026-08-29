@@ -76,16 +76,3 @@ export function humanize(value: string | null | undefined): string {
   return value.replace(/_/g, " ").replace(/^\w/, (c) => c.toUpperCase());
 }
 
-/** Urgency rank: lower sorts first. */
-export function urgencyRank(impl: {
-  status: string;
-  overdue_commitments: number;
-  stage_entered_at: string;
-}): number {
-  if (impl.status === "blocked") return 0;
-  if (impl.status === "at_risk") return 1;
-  if (impl.overdue_commitments > 0) return 2;
-  if ((daysSince(impl.stage_entered_at) ?? 0) > STAGE_FLAG_DAYS) return 3;
-  if (impl.status === "idle") return 4;
-  return 5;
-}

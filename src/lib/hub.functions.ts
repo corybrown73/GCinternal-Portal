@@ -87,11 +87,6 @@ export const getLeadership = createServerFn({ method: "GET" }).middleware([requi
   return loadLeadership();
 });
 
-export const getImplementations = createServerFn({ method: "GET" }).middleware([requireInternalAuth]).handler(async () => {
-  const { loadImplementations } = await import("./hub.server");
-  return loadImplementations();
-});
-
 export const getCustomer360 = createServerFn({ method: "GET" }).middleware([requireInternalAuth])
   .inputValidator((data: unknown) =>
     z

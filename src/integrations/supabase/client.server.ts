@@ -31,10 +31,10 @@ function createSupabaseFetch(supabaseKey: string): typeof fetch {
 
 function createSupabaseAdminClient() {
   // Also accept the names the Supabase<->Vercel integration auto-injects.
+  // `||` (not ??) so empty-string env values fall through. No literal
+  // fallbacks: a misconfigured deploy fails loudly below instead.
   const SUPABASE_URL =
-    process.env['SUPABASE_URL'] ||
-    process.env['NEXT_PUBLIC_SUPABASE_URL'] ||
-    'https://wynvngnbjasiuxkcfofu.supabase.co';
+    process.env['SUPABASE_URL'] || process.env['NEXT_PUBLIC_SUPABASE_URL'];
   const SUPABASE_SERVICE_ROLE_KEY =
     process.env['SUPABASE_SERVICE_ROLE_KEY'] || process.env['SUPABASE_SECRET_KEY'];
 
