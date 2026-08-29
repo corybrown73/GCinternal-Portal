@@ -36,8 +36,7 @@ begin
     (tpl_id, 3, 'validate', 'Validate', 'delivery',
      'Customer confirms the module does what was sold.'),
     (tpl_id, 4, 'live', 'Live', 'value',
-     'In use by the intended team, with the existing CS owner informed.')
-  returning id into s_scope;
+     'In use by the intended team, with the existing CS owner informed.');
 
   select id into s_scope from journey_template_stages
    where template_id = tpl_id and stage_key = 'scope';
