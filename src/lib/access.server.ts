@@ -119,17 +119,26 @@ export async function inviteCustomerContact(
 
   // 1. Record the invite FIRST — the signup DB trigger keys off this row to
   //    assign the 'customer' role and the customer_users link.
-  const { error: inviteError } = await db()
+  //    Select-then-insert-or-update rather than an upsert: uniqueness on this
+  //    table moves to partial indexes (scoped vs account-wide invites), and a
+  //    column-list ON CONFLICT cannot use a partial index as its arbiter.
+  const { data: existingInvite, error: lookupError } = await db()
     .from("customer_invites")
-    .upsert(
-      {
-        email,
-        customer_id: input.customerId,
-        contact_id: input.contactId ?? null,
-        invited_by: inviter.id,
-      },
-      { onConflict: "email,customer_id" },
-    );
+    .select("id")
+    .eq("email", email)
+    .eq("customer_id", input.customerId)
+    .maybeSingle();
+  if (lookupError) throw new Error(`Could not record invite: ${lookupError.message}`);
+
+  const invitePatch = {
+    contact_id: input.contactId ?? null,
+    invited_by: inviter.id,
+  };
+  const { error: inviteError } = existingInvite
+    ? await db().from("customer_invites").update(invitePatch).eq("id", existingInvite.id)
+    : await db()
+        .from("customer_invites")
+        .insert({ email, customer_id: input.customerId, ...invitePatch });
   if (inviteError) throw new Error(`Could not record invite: ${inviteError.message}`);
 
   // 2. Generate the sign-in link. 'magiclink' works when the auth user exists;
