@@ -815,7 +815,10 @@ export async function loadCustomer360(
         new_value: a.new_value,
         change_reason: a.change_reason,
         changed_at: a.changed_at,
-        changed_by_name: named(a.changed_by),
+        // 0020 added actor_label for actors with no team_members row — a
+        // customer acting through a signed plan link. Falling back to it is
+        // what keeps "who did this" answerable in the activity feed.
+        changed_by_name: named(a.changed_by) ?? a.actor_label ?? null,
       }));
     })(),
   };

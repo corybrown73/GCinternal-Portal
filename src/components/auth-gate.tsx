@@ -2,7 +2,18 @@ import { useEffect, type ReactNode } from "react";
 import { useRouterState } from "@tanstack/react-router";
 import { useProfile } from "@/lib/auth";
 
-const PUBLIC_PREFIXES = ["/login", "/signup", "/forgot-password", "/auth", "/view", "/tam"];
+// "/plan" (Phase 4) is the signed-link door: the visitor has no account by
+// design. Matching is exact-or-slash below, so it cannot shadow /pipeline,
+// /portfolio or anything else that merely starts with the same letters.
+const PUBLIC_PREFIXES = [
+  "/login",
+  "/signup",
+  "/forgot-password",
+  "/auth",
+  "/view",
+  "/tam",
+  "/plan",
+];
 
 function isPublic(pathname: string): boolean {
   return PUBLIC_PREFIXES.some((p) => pathname === p || pathname.startsWith(p + "/"));
