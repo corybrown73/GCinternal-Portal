@@ -10,9 +10,19 @@ export default defineConfig({
   // Deploy target: Vercel (Build Output API). Local `npm run build` produces
   // .vercel/output; the Lovable sandbox overrides this preset inside Lovable.
   nitro: { preset: "vercel" },
-  tanstackStart: {
-    // Redirect TanStack Start's bundled server entry to src/server.ts (our SSR error wrapper).
-    // nitro/vite builds from this
-    server: { entry: "server" },
+  vite: {
+    environments: {
+      ssr: {
+        build: {
+          rollupOptions: {
+            // Work around a rolldown chunking bug: the __exportAll runtime
+            // helper lands in a chunk that circularly imports the server
+            // chunk, throwing "TypeError: __exportAll is not a function" at
+            // SSR startup. A server bundle needs no code splitting anyway.
+            output: { inlineDynamicImports: true },
+          },
+        },
+      },
+    },
   },
 });
