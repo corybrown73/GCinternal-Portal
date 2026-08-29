@@ -13,24 +13,12 @@ import { createFileRoute } from "@tanstack/react-router";
  * Every pass is guarded (sla_warned_at / sla_breached / existing unacknowledged
  * alert) so re-runs never double-email.
  *
- * Auth: `Authorization: Bearer ${CRON_SECRET}` (or the Lovable cron secret).
+ * Auth: `Authorization: Bearer ${CRON_SECRET}`.
  */
 
 async function authorizeCron(request: Request): Promise<Response | null> {
-  const match = /^Bearer ([^\s,]+)$/.exec(request.headers.get("authorization") ?? "");
-  const token = match?.[1] ?? null;
-
-  const secret = process.env["CRON_SECRET"];
-  if (secret && token) {
-    const { createHash, timingSafeEqual } = await import("node:crypto");
-    const digest = (v: string) => createHash("sha256").update(v, "utf8").digest();
-    if (timingSafeEqual(digest(token), digest(secret))) return null;
-  }
-  if (process.env["LOVABLE_CRON_SECRET"]) {
-    const { authenticateCronRequest } = await import("@/integrations/supabase/cron-auth");
-    return authenticateCronRequest(request);
-  }
-  return new Response("Unauthorized", { status: 401 });
+  const { authenticateCronRequest } = await import("@/integrations/supabase/cron-auth");
+  return authenticateCronRequest(request);
 }
 
 async function runSlaSweep(): Promise<Response> {

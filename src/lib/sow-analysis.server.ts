@@ -1,10 +1,10 @@
+import Anthropic from "@anthropic-ai/sdk";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { LIFECYCLE_STAGES } from "./lifecycle";
 import { sowAnalysisSchema, type SowAnalysis } from "./sow-analysis";
 
 const ATTACHMENT_BUCKET = "attachments";
-const MODEL = "google/gemini-3.7-flash";
-const GATEWAY = "https://ai.gateway.lovable.dev/v1/chat/completions";
+const MODEL = "claude-opus-5";
 
 /** How much of a text SOW we hand to the model — POC scale. */
 const MAX_TEXT_CHARS = 120_000;
@@ -58,9 +58,9 @@ Return JSON exactly in this shape:
 async function sowContent(
   bytes: Uint8Array,
   fileName: string,
-): Promise<Array<Record<string, unknown>>> {
+): Promise<Anthropic.ContentBlockParam[]> {
   const ext = extensionOf(fileName);
-  const instruction = {
+  const instruction: Anthropic.TextBlockParam = {
     type: "text",
     text: "Read this Statement of Work and return the JSON described in the system message. Ground everything in the document.",
   };
@@ -68,11 +68,11 @@ async function sowContent(
   if (ext === "pdf") {
     const base64 = Buffer.from(bytes).toString("base64");
     return [
-      instruction,
       {
-        type: "file",
-        file: { filename: fileName, file_data: `data:application/pdf;base64,${base64}` },
+        type: "document",
+        source: { type: "base64", media_type: "application/pdf", data: base64 },
       },
+      instruction,
     ];
   }
 
@@ -81,7 +81,7 @@ async function sowContent(
     if (text.length < 40) {
       throw new Error("The attached SOW looks empty — there is no readable text to analyse.");
     }
-    return [instruction, { type: "text", text }];
+    return [{ type: "text", text }, instruction];
   }
 
   throw new Error(
@@ -139,9 +139,8 @@ export async function analyzeSow(implementationId: string): Promise<SowAnalysisR
     throw new Error("The attached SOW is too large for this preview to analyse.");
   }
 
-  const apiKey = process.env["LOVABLE_API_KEY"];
-  if (!apiKey) {
-    throw new Error("AI analysis is not configured for this project.");
+  if (!process.env["ANTHROPIC_API_KEY"]) {
+    throw new Error("AI analysis is not configured — set ANTHROPIC_API_KEY on the deployment.");
   }
 
   const content = await sowContent(
@@ -149,50 +148,42 @@ export async function analyzeSow(implementationId: string): Promise<SowAnalysisR
     (impl.sow_document_name as string | null) ?? (impl.sow_document_url as string),
   );
 
-  const requestAnalysis = () =>
-    fetch(GATEWAY, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Lovable-API-Key": apiKey,
-        "X-Lovable-AIG-SDK": "fetch",
-      },
-      body: JSON.stringify({
+  const client = new Anthropic();
+  const requestAnalysis = async (): Promise<string> => {
+    try {
+      const response = await client.messages.create({
         model: MODEL,
-        response_format: { type: "json_object" },
-        messages: [
-          { role: "system", content: SYSTEM_PROMPT },
-          { role: "user", content },
-        ],
-      }),
-    });
-
-  let res = await requestAnalysis();
-
-  if (!res.ok) {
-    const body = await res.text().catch(() => "");
-    if (res.status === 429) throw new Error("The AI service is busy — try again in a moment.");
-    if (res.status === 402) {
-      throw new Error("AI credits for this workspace are used up, so analysis cannot run.");
+        max_tokens: 16000,
+        system: SYSTEM_PROMPT,
+        messages: [{ role: "user", content }],
+      });
+      if (response.stop_reason === "refusal") {
+        throw new Error("The model declined to analyse this document.");
+      }
+      return response.content
+        .filter((b): b is Anthropic.TextBlock => b.type === "text")
+        .map((b) => b.text)
+        .join("");
+    } catch (e) {
+      if (e instanceof Anthropic.RateLimitError) {
+        throw new Error("The AI service is busy — try again in a moment.");
+      }
+      if (e instanceof Anthropic.AuthenticationError) {
+        throw new Error("AI analysis is misconfigured: the ANTHROPIC_API_KEY was rejected.");
+      }
+      if (e instanceof Anthropic.APIError) {
+        console.error("[sow-analysis] api error", e.status, e.message);
+        throw new Error("The SOW analysis failed. Nothing has been changed.");
+      }
+      throw e;
     }
-    if (res.status === 403) {
-      throw new Error("AI analysis is blocked for this workspace by an administrator setting.");
-    }
-    console.error("[sow-analysis] gateway error", res.status, body.slice(0, 500));
-    throw new Error("The SOW analysis failed. Nothing has been changed.");
-  }
-
-  const readText = async (r: Response) => {
-    const payload = (await r.json()) as { choices?: { message?: { content?: string } }[] };
-    return payload.choices?.[0]?.message?.content ?? "";
   };
 
-  let analysis = tryParseAnalysis(await readText(res));
+  let analysis = tryParseAnalysis(await requestAnalysis());
   if (!analysis) {
     // Models occasionally return a near-miss shape; one clean retry rather than
     // handing the user a failure they can only fix by clicking again themselves.
-    res = await requestAnalysis();
-    if (res.ok) analysis = tryParseAnalysis(await readText(res));
+    analysis = tryParseAnalysis(await requestAnalysis());
   }
   if (!analysis) {
     throw new Error("The analysis came back incomplete. Run it again.");
