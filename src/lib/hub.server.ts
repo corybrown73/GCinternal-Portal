@@ -17,6 +17,19 @@ import type {
 
 const db = () => supabaseAdmin as any;
 
+/**
+ * Phase 7 demo mode. The flag lookup lives here rather than in demo-mode.ts so
+ * that module stays pure and unit-testable; the masker is a passthrough object
+ * when the flag is off, so the call sites below read the same either way.
+ */
+async function demoMasker() {
+  const [{ createMasker }, { isFlagOn }] = await Promise.all([
+    import("./demo-mode"),
+    import("./app-config.server"),
+  ]);
+  return createMasker(await isFlagOn("demo_mode"));
+}
+
 function isOverdue(due: string | null | undefined) {
   if (!due) return false;
   return new Date(due).getTime() < Date.now();
@@ -40,6 +53,10 @@ export async function loadImplementations(): Promise<ImplementationRow[]> {
     ]);
 
   const customerMap = new Map((customers ?? []).map((c: any) => [c.id, c]));
+  // Phase 7 demo mode: mask at the server projection, never in the browser.
+  // This is the single choke point every customer name reaches Home, the
+  // customers list and the leadership portfolio through.
+  const demo = await demoMasker();
 
   return (impls ?? []).map((i: any) => {
     const c: any = customerMap.get(i.customer_id) ?? {};
@@ -47,10 +64,10 @@ export async function loadImplementations(): Promise<ImplementationRow[]> {
       id: i.id,
       name: i.name,
       customer_id: i.customer_id,
-      customer_name: c.name ?? "Unknown customer",
+      customer_name: c.name ? demo.org(c.name, c.id) : "Unknown customer",
       segment: c.segment ?? null,
       industry: c.industry ?? null,
-      arr: c.arr ?? null,
+      arr: demo.arr(c.arr ?? null),
       current_stage: i.current_stage,
       stage_entered_at: i.stage_entered_at,
       status: i.status,
@@ -321,6 +338,11 @@ export async function loadCustomer360(
     .maybeSingle();
   if (!customer) return null;
 
+  // Phase 7 demo mode: the 360 is the surface a demo spends longest on, so the
+  // customer and its named contacts are pseudonymised here too. Internal staff
+  // names are not masked — they are the demo.
+  const demo = await demoMasker();
+
   const { data: contactRows } = await db()
     .from("customer_contacts")
     .select("id,name,role,email,notes")
@@ -328,9 +350,9 @@ export async function loadCustomer360(
     .order("name");
   const contacts = (contactRows ?? []).map((c: any) => ({
     id: c.id,
-    name: c.name,
+    name: demo.person(c.name, c.id),
     role: c.role,
-    email: c.email ?? null,
+    email: demo.email(c.email ?? null, c.id),
     notes: c.notes ?? null,
   }));
   const contactById = new Map<string, any>(contacts.map((c: any) => [c.id, c]));
@@ -361,10 +383,10 @@ export async function loadCustomer360(
   const base: Customer360 = {
     customer: {
       id: customer.id,
-      name: customer.name,
+      name: demo.org(customer.name, customer.id),
       industry: customer.industry,
       segment: customer.segment,
-      arr: customer.arr,
+      arr: demo.arr(customer.arr),
       region: customer.region,
     },
     implementation: null,
@@ -667,10 +689,19 @@ export async function loadCustomer360(
       ? {
           id: handoffRow.id,
           handoff_date: handoffRow.handoff_date ?? null,
+          // Phase 7: cs_handoffs is now THE handover record and is writable.
+          // The id is exposed so the form can edit what it is looking at, and
+          // the two fields folded forward from `graduations` in 0025 render
+          // beside the ones this table always had.
+          cs_owner_id: handoffRow.cs_owner_id ?? null,
           cs_owner_name: named(handoffRow.cs_owner_id),
           summary: handoffRow.summary ?? null,
           open_items: handoffRow.open_items ?? null,
           account_context: handoffRow.account_context ?? null,
+          health_at_handover: handoffRow.health_at_handover ?? null,
+          notes: handoffRow.notes ?? null,
+          recorded_by_name: named(handoffRow.recorded_by),
+          updated_at: handoffRow.updated_at ?? null,
         }
       : null,
     adoption: (adoptionAreas ?? []).map((a: any) => ({
@@ -1440,12 +1471,26 @@ export async function createImplementation(args: {
  * context, what the customer wants). Stage is not editable here — it moves only
  * through stage advancement, which keeps the stage history authoritative.
  */
-export async function updateImplementation(id: string, patch: Record<string, unknown>) {
+export async function updateImplementation(
+  id: string,
+  patch: Record<string, unknown>,
+  opts: { actorProfileId?: string | null } = {},
+) {
+  // Phase 7: snapshot before the write so the account activity feed can record
+  // old → new. Returns null (and costs nothing) while audit_activity_feed is
+  // off. See docs/design/hygiene.md §1.
+  const { captureImplementation, recordImplementationChange } = await import("./activity.server");
+  const before = await captureImplementation(id);
+
   const { error } = await db()
     .from("implementations")
     .update({ ...patch, updated_at: new Date().toISOString() })
     .eq("id", id);
   if (error) throw deliveryWriteError("implementations", error.message);
+
+  // After the write, never before: a feed row for a save that then failed is a
+  // lie about history.
+  await recordImplementationChange(id, before, patch, opts.actorProfileId ?? null);
   return { ok: true };
 }
 

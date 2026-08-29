@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { ArrowRight, KeyRound, Route as RouteIcon, Upload, Users } from "lucide-react";
+import { ArrowRight, KeyRound, Route as RouteIcon, ShieldCheck, Upload, Users } from "lucide-react";
 
 import { PageBody, PageHeader } from "@/components/page";
 
@@ -21,6 +21,13 @@ const CARDS = [
     title: "Users",
     description:
       "Every portal profile and its role. Roles gate sales edits, admin areas and the customer portal.",
+  },
+  {
+    to: "/admin/audit",
+    icon: ShieldCheck,
+    title: "Audit health",
+    description:
+      "Whether the audit log is actually recording what happened: failed writes, and changes the database observed but the app never attributed.",
   },
   {
     to: "/tickets/routing",
