@@ -19,6 +19,10 @@ export type V2Flags = {
   work_items: boolean;
   /** Phase 3: the handoff packet and its accept/return gate. */
   handoff_gate: boolean;
+  /** Phase 4: the external plan is readable through a signed link or /portal. */
+  external_plan_view_enabled: boolean;
+  /** Phase 4: external viewers may complete, comment, upload and reassign. */
+  external_plan_actions_enabled: boolean;
 };
 
 const DEFAULT_FLAGS: V2Flags = {
@@ -26,6 +30,9 @@ const DEFAULT_FLAGS: V2Flags = {
   journey_templates: false,
   work_items: false,
   handoff_gate: false,
+  /** Phase 4: both off; the external surfaces refuse server-side until flipped. */
+  external_plan_view_enabled: false,
+  external_plan_actions_enabled: false,
 };
 const CACHE_MS = 60_000;
 

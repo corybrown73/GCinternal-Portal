@@ -35,6 +35,7 @@ import { Route as CustomersCustomerIdRouteImport } from './routes/customers.$cus
 import { Route as DealsDealIdRouteImport } from './routes/deals.$dealId'
 import { Route as JourneysJourneyIdRouteImport } from './routes/journeys.$journeyId'
 import { Route as OwnersOwnerRouteImport } from './routes/owners.$owner'
+import { Route as PlanTokenRouteImport } from './routes/plan.$token'
 import { Route as PortalIndexRouteImport } from './routes/portal.index'
 import { Route as PortalTicketsRouteImport } from './routes/portal.tickets'
 import { Route as SequencesIndexRouteImport } from './routes/sequences.index'
@@ -46,13 +47,17 @@ import { Route as TicketsTicketIdRouteImport } from './routes/tickets.$ticketId'
 import { Route as TicketsRoutingRouteImport } from './routes/tickets.routing'
 import { Route as ViewTokenRouteImport } from './routes/view.$token'
 import { Route as ApiCronJourneysRouteImport } from './routes/api.cron.journeys'
+import { Route as ApiCronPlanSnapshotsRouteImport } from './routes/api/cron/plan-snapshots'
 import { Route as ApiCronSequencesRouteImport } from './routes/api.cron.sequences'
 import { Route as ApiCronSlaRouteImport } from './routes/api/cron/sla'
+import { Route as ApiPlanSnapshotTokenRouteImport } from './routes/api/plan-snapshot.$token'
 import { Route as ApiTamDecisionRouteImport } from './routes/api/tam/decision'
 import { Route as ApiV1AccountsRouteImport } from './routes/api/v1/accounts'
 import { Route as ApiV1AlertsRouteImport } from './routes/api/v1/alerts'
 import { Route as ApiV1TamRequestsRouteImport } from './routes/api/v1/tam-requests'
 import { Route as ApiV1TicketsRouteImport } from './routes/api/v1/tickets'
+import { Route as PlanSSnapshotTokenRouteImport } from './routes/plan.s.$snapshotToken'
+import { Route as PortalPlanPortalKeyRouteImport } from './routes/portal.plan.$portalKey'
 import { Route as ApiV1AccountsIdRouteImport } from './routes/api/v1/accounts.$id'
 import { Route as ApiV1AccountsIdTransitionRouteImport } from './routes/api/v1/accounts.$id.transition'
 
@@ -186,6 +191,11 @@ const OwnersOwnerRoute = OwnersOwnerRouteImport.update({
   path: '/owners/$owner',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PlanTokenRoute = PlanTokenRouteImport.update({
+  id: '/plan/$token',
+  path: '/plan/$token',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const PortalIndexRoute = PortalIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -241,6 +251,11 @@ const ApiCronJourneysRoute = ApiCronJourneysRouteImport.update({
   path: '/api/cron/journeys',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiCronPlanSnapshotsRoute = ApiCronPlanSnapshotsRouteImport.update({
+  id: '/api/cron/plan-snapshots',
+  path: '/api/cron/plan-snapshots',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiCronSequencesRoute = ApiCronSequencesRouteImport.update({
   id: '/api/cron/sequences',
   path: '/api/cron/sequences',
@@ -249,6 +264,11 @@ const ApiCronSequencesRoute = ApiCronSequencesRouteImport.update({
 const ApiCronSlaRoute = ApiCronSlaRouteImport.update({
   id: '/api/cron/sla',
   path: '/api/cron/sla',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiPlanSnapshotTokenRoute = ApiPlanSnapshotTokenRouteImport.update({
+  id: '/api/plan-snapshot/$token',
+  path: '/api/plan-snapshot/$token',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiTamDecisionRoute = ApiTamDecisionRouteImport.update({
@@ -275,6 +295,16 @@ const ApiV1TicketsRoute = ApiV1TicketsRouteImport.update({
   id: '/api/v1/tickets',
   path: '/api/v1/tickets',
   getParentRoute: () => rootRouteImport,
+} as any)
+const PlanSSnapshotTokenRoute = PlanSSnapshotTokenRouteImport.update({
+  id: '/plan/s/$snapshotToken',
+  path: '/plan/s/$snapshotToken',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PortalPlanPortalKeyRoute = PortalPlanPortalKeyRouteImport.update({
+  id: '/plan/$portalKey',
+  path: '/plan/$portalKey',
+  getParentRoute: () => PortalRoute,
 } as any)
 const ApiV1AccountsIdRoute = ApiV1AccountsIdRouteImport.update({
   id: '/$id',
@@ -313,6 +343,7 @@ export interface FileRoutesByFullPath {
   '/deals/$dealId': typeof DealsDealIdRoute
   '/journeys/$journeyId': typeof JourneysJourneyIdRoute
   '/owners/$owner': typeof OwnersOwnerRoute
+  '/plan/$token': typeof PlanTokenRoute
   '/portal/tickets': typeof PortalTicketsRoute
   '/sequences/$sequenceId': typeof SequencesSequenceIdRoute
   '/technical-solutions/$id': typeof TechnicalSolutionsIdRoute
@@ -326,13 +357,17 @@ export interface FileRoutesByFullPath {
   '/technical-solutions/': typeof TechnicalSolutionsIndexRoute
   '/tickets/': typeof TicketsIndexRoute
   '/api/cron/journeys': typeof ApiCronJourneysRoute
+  '/api/cron/plan-snapshots': typeof ApiCronPlanSnapshotsRoute
   '/api/cron/sequences': typeof ApiCronSequencesRoute
   '/api/cron/sla': typeof ApiCronSlaRoute
+  '/api/plan-snapshot/$token': typeof ApiPlanSnapshotTokenRoute
   '/api/tam/decision': typeof ApiTamDecisionRoute
   '/api/v1/accounts': typeof ApiV1AccountsRouteWithChildren
   '/api/v1/alerts': typeof ApiV1AlertsRoute
   '/api/v1/tam-requests': typeof ApiV1TamRequestsRoute
   '/api/v1/tickets': typeof ApiV1TicketsRoute
+  '/plan/s/$snapshotToken': typeof PlanSSnapshotTokenRoute
+  '/portal/plan/$portalKey': typeof PortalPlanPortalKeyRoute
   '/api/v1/accounts/$id': typeof ApiV1AccountsIdRouteWithChildren
   '/api/v1/accounts/$id/transition': typeof ApiV1AccountsIdTransitionRoute
 }
@@ -355,6 +390,7 @@ export interface FileRoutesByTo {
   '/deals/$dealId': typeof DealsDealIdRoute
   '/journeys/$journeyId': typeof JourneysJourneyIdRoute
   '/owners/$owner': typeof OwnersOwnerRoute
+  '/plan/$token': typeof PlanTokenRoute
   '/portal/tickets': typeof PortalTicketsRoute
   '/sequences/$sequenceId': typeof SequencesSequenceIdRoute
   '/technical-solutions/$id': typeof TechnicalSolutionsIdRoute
@@ -368,13 +404,17 @@ export interface FileRoutesByTo {
   '/technical-solutions': typeof TechnicalSolutionsIndexRoute
   '/tickets': typeof TicketsIndexRoute
   '/api/cron/journeys': typeof ApiCronJourneysRoute
+  '/api/cron/plan-snapshots': typeof ApiCronPlanSnapshotsRoute
   '/api/cron/sequences': typeof ApiCronSequencesRoute
   '/api/cron/sla': typeof ApiCronSlaRoute
+  '/api/plan-snapshot/$token': typeof ApiPlanSnapshotTokenRoute
   '/api/tam/decision': typeof ApiTamDecisionRoute
   '/api/v1/accounts': typeof ApiV1AccountsRouteWithChildren
   '/api/v1/alerts': typeof ApiV1AlertsRoute
   '/api/v1/tam-requests': typeof ApiV1TamRequestsRoute
   '/api/v1/tickets': typeof ApiV1TicketsRoute
+  '/plan/s/$snapshotToken': typeof PlanSSnapshotTokenRoute
+  '/portal/plan/$portalKey': typeof PortalPlanPortalKeyRoute
   '/api/v1/accounts/$id': typeof ApiV1AccountsIdRouteWithChildren
   '/api/v1/accounts/$id/transition': typeof ApiV1AccountsIdTransitionRoute
 }
@@ -404,6 +444,7 @@ export interface FileRoutesById {
   '/deals/$dealId': typeof DealsDealIdRoute
   '/journeys/$journeyId': typeof JourneysJourneyIdRoute
   '/owners/$owner': typeof OwnersOwnerRoute
+  '/plan/$token': typeof PlanTokenRoute
   '/portal/tickets': typeof PortalTicketsRoute
   '/sequences/$sequenceId': typeof SequencesSequenceIdRoute
   '/technical-solutions/$id': typeof TechnicalSolutionsIdRoute
@@ -417,13 +458,17 @@ export interface FileRoutesById {
   '/technical-solutions/': typeof TechnicalSolutionsIndexRoute
   '/tickets/': typeof TicketsIndexRoute
   '/api/cron/journeys': typeof ApiCronJourneysRoute
+  '/api/cron/plan-snapshots': typeof ApiCronPlanSnapshotsRoute
   '/api/cron/sequences': typeof ApiCronSequencesRoute
   '/api/cron/sla': typeof ApiCronSlaRoute
+  '/api/plan-snapshot/$token': typeof ApiPlanSnapshotTokenRoute
   '/api/tam/decision': typeof ApiTamDecisionRoute
   '/api/v1/accounts': typeof ApiV1AccountsRouteWithChildren
   '/api/v1/alerts': typeof ApiV1AlertsRoute
   '/api/v1/tam-requests': typeof ApiV1TamRequestsRoute
   '/api/v1/tickets': typeof ApiV1TicketsRoute
+  '/plan/s/$snapshotToken': typeof PlanSSnapshotTokenRoute
+  '/portal/plan/$portalKey': typeof PortalPlanPortalKeyRoute
   '/api/v1/accounts/$id': typeof ApiV1AccountsIdRouteWithChildren
   '/api/v1/accounts/$id/transition': typeof ApiV1AccountsIdTransitionRoute
 }
@@ -454,6 +499,7 @@ export interface FileRouteTypes {
     | '/deals/$dealId'
     | '/journeys/$journeyId'
     | '/owners/$owner'
+    | '/plan/$token'
     | '/portal/tickets'
     | '/sequences/$sequenceId'
     | '/technical-solutions/$id'
@@ -467,13 +513,17 @@ export interface FileRouteTypes {
     | '/technical-solutions/'
     | '/tickets/'
     | '/api/cron/journeys'
+    | '/api/cron/plan-snapshots'
     | '/api/cron/sequences'
     | '/api/cron/sla'
+    | '/api/plan-snapshot/$token'
     | '/api/tam/decision'
     | '/api/v1/accounts'
     | '/api/v1/alerts'
     | '/api/v1/tam-requests'
     | '/api/v1/tickets'
+    | '/plan/s/$snapshotToken'
+    | '/portal/plan/$portalKey'
     | '/api/v1/accounts/$id'
     | '/api/v1/accounts/$id/transition'
   fileRoutesByTo: FileRoutesByTo
@@ -496,6 +546,7 @@ export interface FileRouteTypes {
     | '/deals/$dealId'
     | '/journeys/$journeyId'
     | '/owners/$owner'
+    | '/plan/$token'
     | '/portal/tickets'
     | '/sequences/$sequenceId'
     | '/technical-solutions/$id'
@@ -509,13 +560,17 @@ export interface FileRouteTypes {
     | '/technical-solutions'
     | '/tickets'
     | '/api/cron/journeys'
+    | '/api/cron/plan-snapshots'
     | '/api/cron/sequences'
     | '/api/cron/sla'
+    | '/api/plan-snapshot/$token'
     | '/api/tam/decision'
     | '/api/v1/accounts'
     | '/api/v1/alerts'
     | '/api/v1/tam-requests'
     | '/api/v1/tickets'
+    | '/plan/s/$snapshotToken'
+    | '/portal/plan/$portalKey'
     | '/api/v1/accounts/$id'
     | '/api/v1/accounts/$id/transition'
   id:
@@ -544,6 +599,7 @@ export interface FileRouteTypes {
     | '/deals/$dealId'
     | '/journeys/$journeyId'
     | '/owners/$owner'
+    | '/plan/$token'
     | '/portal/tickets'
     | '/sequences/$sequenceId'
     | '/technical-solutions/$id'
@@ -557,13 +613,17 @@ export interface FileRouteTypes {
     | '/technical-solutions/'
     | '/tickets/'
     | '/api/cron/journeys'
+    | '/api/cron/plan-snapshots'
     | '/api/cron/sequences'
     | '/api/cron/sla'
+    | '/api/plan-snapshot/$token'
     | '/api/tam/decision'
     | '/api/v1/accounts'
     | '/api/v1/alerts'
     | '/api/v1/tam-requests'
     | '/api/v1/tickets'
+    | '/plan/s/$snapshotToken'
+    | '/portal/plan/$portalKey'
     | '/api/v1/accounts/$id'
     | '/api/v1/accounts/$id/transition'
   fileRoutesById: FileRoutesById
@@ -589,15 +649,19 @@ export interface RootRouteChildren {
   AuthCallbackRoute: typeof AuthCallbackRoute
   DealsDealIdRoute: typeof DealsDealIdRoute
   OwnersOwnerRoute: typeof OwnersOwnerRoute
+  PlanTokenRoute: typeof PlanTokenRoute
   ViewTokenRoute: typeof ViewTokenRoute
   ApiCronJourneysRoute: typeof ApiCronJourneysRoute
+  ApiCronPlanSnapshotsRoute: typeof ApiCronPlanSnapshotsRoute
   ApiCronSequencesRoute: typeof ApiCronSequencesRoute
   ApiCronSlaRoute: typeof ApiCronSlaRoute
+  ApiPlanSnapshotTokenRoute: typeof ApiPlanSnapshotTokenRoute
   ApiTamDecisionRoute: typeof ApiTamDecisionRoute
   ApiV1AccountsRoute: typeof ApiV1AccountsRouteWithChildren
   ApiV1AlertsRoute: typeof ApiV1AlertsRoute
   ApiV1TamRequestsRoute: typeof ApiV1TamRequestsRoute
   ApiV1TicketsRoute: typeof ApiV1TicketsRoute
+  PlanSSnapshotTokenRoute: typeof PlanSSnapshotTokenRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -784,6 +848,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OwnersOwnerRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/plan/$token': {
+      id: '/plan/$token'
+      path: '/plan/$token'
+      fullPath: '/plan/$token'
+      preLoaderRoute: typeof PlanTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/portal/': {
       id: '/portal/'
       path: '/'
@@ -861,6 +932,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiCronJourneysRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/cron/plan-snapshots': {
+      id: '/api/cron/plan-snapshots'
+      path: '/api/cron/plan-snapshots'
+      fullPath: '/api/cron/plan-snapshots'
+      preLoaderRoute: typeof ApiCronPlanSnapshotsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/cron/sequences': {
       id: '/api/cron/sequences'
       path: '/api/cron/sequences'
@@ -873,6 +951,13 @@ declare module '@tanstack/react-router' {
       path: '/api/cron/sla'
       fullPath: '/api/cron/sla'
       preLoaderRoute: typeof ApiCronSlaRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/plan-snapshot/$token': {
+      id: '/api/plan-snapshot/$token'
+      path: '/api/plan-snapshot/$token'
+      fullPath: '/api/plan-snapshot/$token'
+      preLoaderRoute: typeof ApiPlanSnapshotTokenRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/tam/decision': {
@@ -909,6 +994,20 @@ declare module '@tanstack/react-router' {
       fullPath: '/api/v1/tickets'
       preLoaderRoute: typeof ApiV1TicketsRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/plan/s/$snapshotToken': {
+      id: '/plan/s/$snapshotToken'
+      path: '/plan/s/$snapshotToken'
+      fullPath: '/plan/s/$snapshotToken'
+      preLoaderRoute: typeof PlanSSnapshotTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/portal/plan/$portalKey': {
+      id: '/portal/plan/$portalKey'
+      path: '/plan/$portalKey'
+      fullPath: '/portal/plan/$portalKey'
+      preLoaderRoute: typeof PortalPlanPortalKeyRouteImport
+      parentRoute: typeof PortalRoute
     }
     '/api/v1/accounts/$id': {
       id: '/api/v1/accounts/$id'
@@ -970,11 +1069,13 @@ const JourneysRouteWithChildren = JourneysRoute._addFileChildren(
 interface PortalRouteChildren {
   PortalTicketsRoute: typeof PortalTicketsRoute
   PortalIndexRoute: typeof PortalIndexRoute
+  PortalPlanPortalKeyRoute: typeof PortalPlanPortalKeyRoute
 }
 
 const PortalRouteChildren: PortalRouteChildren = {
   PortalTicketsRoute: PortalTicketsRoute,
   PortalIndexRoute: PortalIndexRoute,
+  PortalPlanPortalKeyRoute: PortalPlanPortalKeyRoute,
 }
 
 const PortalRouteWithChildren =
@@ -1067,15 +1168,19 @@ const rootRouteChildren: RootRouteChildren = {
   AuthCallbackRoute: AuthCallbackRoute,
   DealsDealIdRoute: DealsDealIdRoute,
   OwnersOwnerRoute: OwnersOwnerRoute,
+  PlanTokenRoute: PlanTokenRoute,
   ViewTokenRoute: ViewTokenRoute,
   ApiCronJourneysRoute: ApiCronJourneysRoute,
+  ApiCronPlanSnapshotsRoute: ApiCronPlanSnapshotsRoute,
   ApiCronSequencesRoute: ApiCronSequencesRoute,
   ApiCronSlaRoute: ApiCronSlaRoute,
+  ApiPlanSnapshotTokenRoute: ApiPlanSnapshotTokenRoute,
   ApiTamDecisionRoute: ApiTamDecisionRoute,
   ApiV1AccountsRoute: ApiV1AccountsRouteWithChildren,
   ApiV1AlertsRoute: ApiV1AlertsRoute,
   ApiV1TamRequestsRoute: ApiV1TamRequestsRoute,
   ApiV1TicketsRoute: ApiV1TicketsRoute,
+  PlanSSnapshotTokenRoute: PlanSSnapshotTokenRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

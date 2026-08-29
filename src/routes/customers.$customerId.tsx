@@ -6,6 +6,7 @@ import { ChevronRight, ArrowRight } from "lucide-react";
 import { HealthNote } from "@/components/health-note";
 import { PlanPanel } from "@/components/plan-panel";
 import { HandoffPanel } from "@/components/handoff-panel";
+import { ExternalSharePanel } from "@/components/external-share-panel";
 import { LifecycleRail } from "@/components/lifecycle-rail";
 import { AdvanceStage } from "@/components/stage-advance-write";
 import { launchAcceptanceGate } from "@/lib/launch-gate";
@@ -1275,6 +1276,10 @@ function JourneyTab({ record, customerId }: { record: Customer360; customerId: s
       {/* The templated plan: stage instances and the work items on them.
           Renders an explanatory empty state while the flag is off. */}
       <PlanPanel implementationId={impl.id} />
+
+      {/* Phase 4: the customer-facing links onto that plan — issue, revoke,
+          rotate, and preview exactly what the customer sees. */}
+      <ExternalSharePanel implementationId={impl.id} />
 
       {/* Reads the SOW attached to this implementation, proposes a journey and
           lets the TIS choose what — if anything — to apply. */}
