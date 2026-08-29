@@ -3,7 +3,9 @@ import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { queryOptions, useSuspenseQuery } from "@tanstack/react-query";
 import { ChevronRight, ArrowRight } from "lucide-react";
 
+import { CustomerLogo } from "@/components/customer-logo";
 import { HealthNote } from "@/components/health-note";
+import { datePace, dwellPace } from "@/lib/pace";
 import { PlanPanel } from "@/components/plan-panel";
 import { HandoffPanel } from "@/components/handoff-panel";
 import { ExternalSharePanel } from "@/components/external-share-panel";
@@ -61,6 +63,7 @@ import {
   SeverityChip,
   StageBadge,
   StatusChip,
+  PaceChip,
 } from "@/components/record";
 
 import { getCustomer360 } from "@/lib/hub.functions";
@@ -316,6 +319,7 @@ function Customer360Page() {
   }
 
   const prog = progress(impl.current_stage);
+  const stagePace = dwellPace(impl.stage_entered_at, impl.stage_target_days);
 
   return (
     <div className="pb-16">
@@ -334,7 +338,21 @@ function Customer360Page() {
               <ChevronRight className="h-3 w-3" />
               <span>{customer.name}</span>
             </div>
-            <h1 className="mt-1 text-[17px] font-semibold tracking-tight">{customer.name}</h1>
+            <div className="mt-1 flex items-center gap-2.5">
+              {/* The customer's own mark, top-left beside their name. Sized to
+                  the heading and never stretched — a logo that has been squashed
+                  reads as carelessness about the customer, which is the exact
+                  opposite of the point. `contain` letterboxes rather than crops,
+                  so a wide wordmark and a square badge both survive.
+                  Decorative: the name is right next to it, so alt is empty
+                  rather than a screen reader saying the name twice. */}
+              <CustomerLogo
+                customerId={customer.id}
+                customerName={customer.name}
+                logoUrl={customer.logo_url}
+              />
+              <h1 className="text-[17px] font-semibold tracking-tight">{customer.name}</h1>
+            </div>
             <ImplementationSwitcher
               customerId={customerId}
               tab={tab}
@@ -357,18 +375,27 @@ function Customer360Page() {
               computed={health.level}
             />
             <StageBadge stage={impl.current_stage} />
-            <span className="font-mono text-[11px] text-muted-foreground">
-              {daysSince(impl.stage_entered_at)}d in stage
-            </span>
+            {/* Days in stage, measured against this stage's own target where the
+                template set one. The number was already here; what was missing
+                was any way to tell whether it was fine. */}
+            <PaceChip
+              pace={stagePace}
+              label={`${daysSince(impl.stage_entered_at)}d in stage`}
+              className="font-mono"
+            />
             <span className="font-mono text-[11px] text-muted-foreground">
               stage {prog.index}/{prog.total}
             </span>
             <div className="h-1 w-24 overflow-hidden rounded-sm bg-muted">
               <div className="h-full bg-primary" style={{ width: `${prog.pct}%` }} />
             </div>
-            <span className="text-[11px] text-muted-foreground">
-              Target launch{" "}
-              <span className="text-foreground">{fmtDate(impl.target_launch_date)}</span>
+            <span className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground">
+              Target launch
+              <PaceChip
+                pace={datePace(impl.target_launch_date, impl.actual_launch_date)}
+                label={fmtDate(impl.target_launch_date)}
+                className="font-mono"
+              />
             </span>
           </div>
         </div>

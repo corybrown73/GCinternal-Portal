@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { humanize, stageLabel } from "@/lib/hub-format";
+import { PACE_CHIP, PACE_LABEL, PACE_TEXT, type Pace } from "@/lib/pace";
 
 const STATUS_CLASS: Record<string, string> = {
   on_track: "bg-status-ontrack text-status-ontrack-foreground",
@@ -38,6 +39,68 @@ export function StatusChip({ status }: { status: string }) {
       )}
     >
       {humanize(status)}
+    </span>
+  );
+}
+
+/**
+ * Pace, shown as a fact rather than a mood.
+ *
+ * The `reason` is on the element as both `title` and `aria-label`, so the state
+ * survives a screen reader, a greyscale print and anyone who cannot separate
+ * the hues. The colour is reinforcement; the words are the message.
+ *
+ * `quiet` renders the on-pace and unknown levels as plain text with no chrome,
+ * which is what stops a table of forty rows turning into a traffic jam. Pass it
+ * anywhere the pace sits inline next to other text.
+ */
+export function PaceChip({
+  pace,
+  label,
+  quiet = false,
+  className,
+}: {
+  pace: Pace;
+  /** Overrides the level word — e.g. a date, or "Day 9 of 14". */
+  label?: ReactNode;
+  quiet?: boolean;
+  className?: string;
+}) {
+  const plain = pace.level === "on_pace" || pace.level === "unknown";
+  const body = label ?? PACE_LABEL[pace.level];
+
+  if (quiet && plain) {
+    return (
+      <span className={cn("text-[12px]", PACE_TEXT[pace.level], className)} title={pace.reason}>
+        {body}
+      </span>
+    );
+  }
+
+  return (
+    <span
+      title={pace.reason}
+      aria-label={`${PACE_LABEL[pace.level]}. ${pace.reason}`}
+      className={cn(
+        "inline-flex items-center gap-1 whitespace-nowrap rounded-sm px-1.5 py-0.5 text-[11px] font-medium",
+        PACE_CHIP[pace.level],
+        plain && "px-0",
+        className,
+      )}
+    >
+      {/* A filled dot for the two levels that want attention; a ring for the
+          rest. Shape carries the same distinction as the colour does. */}
+      <span
+        aria-hidden
+        className={cn(
+          "h-1.5 w-1.5 shrink-0 rounded-full",
+          pace.level === "late" && "bg-status-blocked-foreground",
+          pace.level === "watch" && "bg-status-risk-foreground",
+          pace.level === "done" && "bg-status-ontrack-foreground",
+          plain && "border border-muted-foreground/50 bg-transparent",
+        )}
+      />
+      {body}
     </span>
   );
 }

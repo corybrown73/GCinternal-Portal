@@ -382,6 +382,27 @@ export async function loadCustomer360(
     target_launch_date: i.target_launch_date ?? null,
   }));
 
+  // The customer's logo, as a signed URL.
+  //
+  // customer-branding is a PRIVATE bucket, so the stored path is not a link and
+  // handing it to the browser would be handing over a dead string. A signed URL
+  // is minted per load and expires; nothing durable ever holds it.
+  //
+  // Guarded on logo_path, so a customer without a logo — every customer today —
+  // costs no round trip at all. A signing failure is not allowed to take the
+  // page down over a picture.
+  let logoUrl: string | null = null;
+  if (customer.logo_path) {
+    try {
+      const { data: signed } = await (db() as any).storage
+        .from("customer-branding")
+        .createSignedUrl(customer.logo_path, 60 * 60);
+      logoUrl = signed?.signedUrl ?? null;
+    } catch (e) {
+      console.error("[360] could not sign the customer logo url", e);
+    }
+  }
+
   const base: Customer360 = {
     customer: {
       id: customer.id,
@@ -390,6 +411,7 @@ export async function loadCustomer360(
       segment: customer.segment,
       arr: demo.arr(customer.arr),
       region: customer.region,
+      logo_url: logoUrl,
     },
     implementation: null,
     requirements: [],
@@ -436,6 +458,7 @@ export async function loadCustomer360(
     graduationRes,
     handoffRes,
     journalRes,
+    stageTargetRes,
   ] = await Promise.all([
     child("requirements", "created_at"),
     child("success_criteria", "created_at"),
@@ -467,6 +490,13 @@ export async function loadCustomer360(
       .order("created_at", { ascending: false })
       .limit(1),
     child("journal_entries", "created_at", false),
+    // The current stage's own target duration. It has been on stage_instances
+    // since 0014 and nothing has ever read it, so "8 days in Build" was shown
+    // with no way to tell whether that was early or double.
+    db()
+      .from("stage_instances")
+      .select("stage_key,target_duration_days")
+      .eq("implementation_id", impl.id),
   ]);
 
   const named = (id: string | null | undefined) => (id ? (team.get(id)?.name ?? null) : null);
@@ -712,6 +742,12 @@ export async function loadCustomer360(
       contract_start_date: impl.contract_start_date,
       target_launch_date: impl.target_launch_date,
       actual_launch_date: impl.actual_launch_date,
+      // null when the template set no target for this stage — which the UI
+      // reports as "no target", never as "on pace".
+      stage_target_days:
+        (stageTargetRes.data ?? []).find(
+          (r: any) => normalizeStage(r.stage_key) === normalizeStage(impl.current_stage),
+        )?.target_duration_days ?? null,
       customer_goals: impl.customer_goals,
       discovery_board_url: impl.discovery_board_url ?? null,
       discovery_board_image_url: impl.discovery_board_image_url ?? null,
@@ -1905,6 +1941,55 @@ export async function storeAttachment(args: {
     .upload(path, binary, { contentType: args.contentType, upsert: false });
   if (error) throw new Error(`Could not upload the file: ${error.message}`);
   return { path, name: args.fileName };
+}
+
+/**
+ * Store a customer's logo and point the customer row at it.
+ *
+ * The bucket is private, so nothing here produces a public URL — the 360 mints
+ * a short-lived signed one per load.
+ *
+ * The previous object is deleted AFTER the row is repointed, never before: if
+ * the delete fails we are left with one orphaned file, which is harmless. Doing
+ * it the other way round risks a customer row pointing at an object that is
+ * already gone, and a broken image where their brand used to be.
+ */
+export async function storeCustomerLogo(args: {
+  customerId: string;
+  fileName: string;
+  contentType: string;
+  dataBase64: string;
+}) {
+  const binary = Buffer.from(args.dataBase64, "base64");
+  const ext = (args.contentType.split("/")[1] ?? "png").replace(/[^a-z0-9]/g, "");
+  const path = `${args.customerId}/${crypto.randomUUID()}.${ext}`;
+
+  const { data: before } = await db()
+    .from("customers")
+    .select("logo_path")
+    .eq("id", args.customerId)
+    .maybeSingle();
+
+  const { error: upErr } = await db()
+    .storage.from("customer-branding")
+    .upload(path, binary, { contentType: args.contentType, upsert: false });
+  if (upErr) throw new Error(`Could not upload the logo: ${upErr.message}`);
+
+  const { error } = await db()
+    .from("customers")
+    .update({ logo_path: path })
+    .eq("id", args.customerId);
+  if (error) throw new Error(`Could not save the logo: ${error.message}`);
+
+  const previous = (before as any)?.logo_path as string | null | undefined;
+  if (previous && previous !== path) {
+    try {
+      await db().storage.from("customer-branding").remove([previous]);
+    } catch (e) {
+      console.error("[logo] replaced the logo but could not remove the old object", e);
+    }
+  }
+  return { path };
 }
 
 /** Short-lived link so the file can be opened from the record. */

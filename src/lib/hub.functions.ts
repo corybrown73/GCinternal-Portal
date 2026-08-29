@@ -66,6 +66,7 @@ import {
   attachmentPathInput,
   createJournalEntryInput,
   uploadAttachmentInput,
+  uploadCustomerLogoInput,
 } from "./journal-input";
 import {
   createImplementationInput,
@@ -513,6 +514,14 @@ export const uploadAttachment = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const { storeAttachment } = await import("./hub.server");
     return storeAttachment(data);
+  });
+
+export const uploadCustomerLogo = createServerFn({ method: "POST" })
+  .middleware([requireInternalAuth])
+  .inputValidator((data: unknown) => uploadCustomerLogoInput.parse(data))
+  .handler(async ({ data }) => {
+    const { storeCustomerLogo } = await import("./hub.server");
+    return storeCustomerLogo(data);
   });
 
 export const getAttachmentLink = createServerFn({ method: "POST" })

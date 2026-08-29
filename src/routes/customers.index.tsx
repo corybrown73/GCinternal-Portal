@@ -7,11 +7,12 @@ import { PageBody, PageHeader } from "@/components/page";
 import { SavedViews } from "@/components/saved-views";
 import { searchToView } from "@/lib/saved-view-input";
 import { HealthNote } from "@/components/health-note";
-import { StageBadge, StatusDot, NoRows } from "@/components/record";
+import { PaceChip, StageBadge, StatusDot, NoRows } from "@/components/record";
 import { getHome } from "@/lib/hub.functions";
 import { healthByImplementation } from "@/lib/home-triage";
 import { LIFECYCLE_STAGES } from "@/lib/lifecycle";
 import { daysSince, fmtDate, humanize, normalizeStage, stageIndex } from "@/lib/hub-format";
+import { datePace, dwellPace } from "@/lib/pace";
 import { cn } from "@/lib/utils";
 
 const implementationsQuery = queryOptions({
@@ -251,18 +252,26 @@ function CustomersPage() {
                   </td>
                   <td className="px-3 py-1.5 text-[12px]">{r.owner_name ?? "Unassigned"}</td>
                   <td className="px-3 py-1.5 text-[12px]">{r.tier ?? "—"}</td>
+                  {/* The launch date carries its own pace: a date alone does
+                      not say whether it has already passed. */}
                   <td className="px-3 py-1.5 font-mono text-[12px]">
-                    {fmtDate(r.target_launch_date)}
+                    <PaceChip
+                      quiet
+                      pace={datePace(r.target_launch_date, r.actual_launch_date)}
+                      label={fmtDate(r.target_launch_date)}
+                    />
                   </td>
-                  <td
-                    className={cn(
-                      "px-3 py-1.5 font-mono text-[12px]",
-                      (daysSince(r.stage_entered_at) ?? 0) > 14
-                        ? "text-status-risk-foreground"
-                        : "text-muted-foreground",
-                    )}
-                  >
-                    {daysSince(r.stage_entered_at)}d
+                  {/* Was a bare `> 14` with no explanation. Same threshold, but
+                      the chip now says it is a general one rather than this
+                      stage's own target — this list does not load
+                      stage_instances, and inventing a target would be worse
+                      than naming the fallback. The 360 uses the real one. */}
+                  <td className="px-3 py-1.5 font-mono text-[12px]">
+                    <PaceChip
+                      quiet
+                      pace={dwellPace(r.stage_entered_at, null)}
+                      label={`${daysSince(r.stage_entered_at) ?? 0}d`}
+                    />
                   </td>
                 </tr>
               ))}

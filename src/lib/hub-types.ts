@@ -217,6 +217,14 @@ export type Customer360 = {
     segment: string | null;
     arr: number | null;
     region: string | null;
+    /**
+     * A short-lived signed URL for the customer's logo, or null.
+     *
+     * NOT the storage path: the customer-branding bucket is private, so a path
+     * grants nothing on its own and handing one to the browser would just be a
+     * dead string. Minted per load and expires; never cached anywhere durable.
+     */
+    logo_url: string | null;
   };
   implementation: {
     id: string;
@@ -240,6 +248,8 @@ export type Customer360 = {
     contract_start_date: string | null;
     target_launch_date: string | null;
     actual_launch_date: string | null;
+    /** This stage's target duration from the template, or null if none was set. */
+    stage_target_days: number | null;
     customer_goals: string | null;
     discovery_board_url: string | null;
     discovery_board_image_url: string | null;
