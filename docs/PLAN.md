@@ -46,6 +46,15 @@ migration `0009`, and both the account-model and Salesforce designs add the same
   but a submitted packet, so the history can never read as a gate that did not happen. The clock is
   not touched by a return, and the panel says so. `handoff_gate` is **off**.
 
+- **QA pass and customisation work** (commits `fefc27e`…`b6f84e3`). Migrations 0026 (RPC
+  authorization), 0027 (finish 0012's column rename) applied to production; 0028 (configurable
+  pre-sale stages) written and cycle-tested but **not** applied. Closed the SEC-01 privilege
+  escalation, the BUG-01 query waterfall and unfiltered `trace_links` read, BUG-06's blank
+  /sequences page, BUG-10's 500-instead-of-404, BUG-11's missing history actor and BUG-12's
+  silent template briefs. Added a pace-colour system (`src/lib/pace.ts`), per-customer logos,
+  deployment branding with a nav colour scheme, and rebuilt the lifecycle header to read each
+  project's own stages with one lane per project. All 18 flags remain **off**.
+
 Two things from Phase 1 that need your call are listed under "Open from Phase 1" at the end.
 
 ## How to read this
