@@ -148,15 +148,16 @@ rollbacks archive to a schema (`v2_archive`) rather than destroy. The Salesforce
 | 0014 | `work_items` — instance layer (`stage_instances`, `work_items`, scoping, plan events, role assignments), instantiate/recalc/advance RPCs | 2 |
 | 0015 | `seed_new_logo_v1` — published v1 from `lifecycle.ts` verbatim; provenance-stamped backfill; never aborts on non-normalizing rows | 2 |
 | 0016 | `seed_templates_addon_integration_datamigration` — three more published v1 templates | 2 |
-| 0017 | `drop_sequence_compat_views` — one release after cutover verified | 2 |
-| 0018 | `handoff_gate` — handoff packet object, accept/return states, `handoff_returned` alert kind | 3 |
-| 0019 | `external_access` — grants, plan events, `portal_key`, contact dedupe + unique index, buckets, flags | 4 |
-| 0020 | `audit_stores` — `audit_log` actor columns; `portal_audit_log` CHECK widened | 4 |
-| 0021 | `work_item_external` — external columns + `work_item_comments`/`work_item_files` | 4 |
-| 0022 | `plan_snapshots` — weekly snapshot + share tokens | 4 |
-| 0023 | `sf_integration` — supersession pointer, `sf_closed_won_at`, `integration_sync_log`, `integration_field_maps`, outbox, webhook endpoints/secrets | 5 |
-| 0024 | `signals_metrics` — anything Phase 6 needs beyond Phase 1's health cache (expected: little or nothing) | 6 |
-| 0025 | `audit_consolidation` + people-merge remainder, per decisions 3/9 | 7 |
+| 0017 | `include_when_hardening` — malformed conditions fail closed (see commit `f0d3078`) | 2 |
+| 0018 | `drop_sequence_compat_views` — one release after cutover verified | 2 |
+| 0019 | `handoff_gate` — handoff packet object, accept/return states, `handoff_returned` alert kind | 3 |
+| 0020 | `external_access` — grants, plan events, `portal_key`, contact dedupe + unique index, buckets, flags | 4 |
+| 0021 | `audit_stores` — `audit_log` actor columns; `portal_audit_log` CHECK widened | 4 |
+| 0022 | `work_item_external` — external columns + `work_item_comments`/`work_item_files` | 4 |
+| 0023 | `plan_snapshots` — weekly snapshot + share tokens | 4 |
+| 0024 | `sf_integration` — supersession pointer, `sf_closed_won_at`, `integration_sync_log`, `integration_field_maps`, outbox, webhook endpoints/secrets | 5 |
+| 0025 | `signals_metrics` — anything Phase 6 needs beyond Phase 1's health cache (expected: little or nothing) | 6 |
+| 0026 | `audit_consolidation` + people-merge remainder, per decisions 3/9 | 7 |
 
 URL guarantee: every existing URL keeps working; the only redirects introduced are permanent 301s
 `/journeys* → /sequences*`.
