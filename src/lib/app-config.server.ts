@@ -13,9 +13,17 @@ import { supabaseAdmin } from "@/integrations/supabase/client.server";
 export type V2Flags = {
   /** Phase 1: account-model workflow + UX changes. Schema is live regardless. */
   account_model: boolean;
+  /** Phase 2: the journey template builder and template-driven plans. */
+  journey_templates: boolean;
+  /** Phase 2: work items as the plan's unit of work. */
+  work_items: boolean;
 };
 
-const DEFAULT_FLAGS: V2Flags = { account_model: false };
+const DEFAULT_FLAGS: V2Flags = {
+  account_model: false,
+  journey_templates: false,
+  work_items: false,
+};
 const CACHE_MS = 60_000;
 
 let cache: { at: number; flags: V2Flags } | null = null;
