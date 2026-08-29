@@ -1452,6 +1452,65 @@ export async function updateImplementation(id: string, patch: Record<string, unk
 /* ---------- Mutations (Stage advancement) ---------- */
 
 /**
+ * Move the stage_instances mirror to `toStage`.
+ *
+ * implementation_stage_history is the authority on stage transitions; these
+ * rows are a read cache for the templated plan. A no-op when the
+ * implementation has no instances (every pre-template record).
+ */
+async function syncStageInstances(
+  implementationId: string,
+  toStage: string,
+  at: string,
+): Promise<void> {
+  try {
+    const { data: instances } = await db()
+      .from("stage_instances")
+      .select("id, stage_key, position, status")
+      .eq("implementation_id", implementationId)
+      .order("position");
+    if (!instances || instances.length === 0) return;
+
+    const target = instances.find((s: any) => s.stage_key === toStage);
+    if (!target) {
+      // The plan does not contain the stage we just moved to. Recording the
+      // disagreement beats writing a guess into the mirror.
+      console.error(
+        `[stage-sync] ${implementationId} advanced to ${toStage}, which has no stage_instance`,
+      );
+      return;
+    }
+
+    await db()
+      .from("stage_instances")
+      .update({ status: "done", exited_at: at })
+      .eq("implementation_id", implementationId)
+      .lt("position", target.position)
+      .neq("status", "done");
+    await db()
+      .from("stage_instances")
+      .update({ status: "active", entered_at: at })
+      .eq("id", target.id);
+
+    // Stage-entry dates land now the stage has actually been entered. A
+    // hand-set date is a recorded fact and is never overwritten.
+    const { data: pending } = await db()
+      .from("work_items")
+      .select("id, due_offset_days")
+      .eq("stage_instance_id", target.id)
+      .eq("due_basis", "stage_entry")
+      .is("due_at", null)
+      .eq("due_at_edited", false);
+    for (const item of pending ?? []) {
+      const due = new Date(new Date(at).getTime() + (item.due_offset_days ?? 0) * 86_400_000);
+      await db().from("work_items").update({ due_at: due.toISOString() }).eq("id", item.id);
+    }
+  } catch (e) {
+    console.error(`[stage-sync] mirror update failed for ${implementationId}`, e);
+  }
+}
+
+/**
  * Advance an implementation one stage along the existing lifecycle ordering.
  * Keeps the stored lifecycle state internally consistent: the open history row
  * is closed at the same instant the destination row is opened, and
@@ -1529,6 +1588,14 @@ export async function advanceStage(args: {
     .update({ current_stage: expected, stage_entered_at: at, updated_at: at })
     .eq("id", args.implementationId);
   if (updateError) throw new Error(`Could not update the current stage: ${updateError.message}`);
+
+  // Keep the stage_instances mirror in step. UNCONDITIONAL, not flag-gated:
+  // a mirror that only updates when a feature flag is on desyncs silently the
+  // first time someone advances a stage with it off, and the desync is
+  // invisible until the flag flips. History above is the authority, so a
+  // failure here is logged loudly and repaired by resync_stage_instances
+  // rather than failing an advance that has already been recorded.
+  await syncStageInstances(args.implementationId, expected, at);
 
   // Stage dwell is a health input, so the cache is stale the moment we move.
   const { recomputeHealthSoon } = await import("./health.server");
