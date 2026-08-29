@@ -9,7 +9,7 @@ import { createFileRoute } from "@tanstack/react-router";
  */
 
 async function handleCron(request: Request): Promise<Response> {
-  const secret = process.env.CRON_SECRET;
+  const secret = process.env["CRON_SECRET"];
   if (!secret) return new Response("Server configuration error", { status: 500 });
 
   const match = /^Bearer ([^\s,]+)$/.exec(request.headers.get("authorization") ?? "");

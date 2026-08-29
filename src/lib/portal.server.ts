@@ -306,7 +306,7 @@ export async function loadPortalTickets(userId: string): Promise<{
   const { data: authors } = authorIds.length
     ? await db().from("portal_profiles").select("id, full_name, email, role").in("id", authorIds)
     : { data: [] };
-  const authorById = new Map((authors ?? []).map((a: any) => [a.id, a]));
+  const authorById = new Map<string, any>((authors ?? []).map((a: any) => [a.id, a]));
 
   return {
     customers: (customers ?? []).map((c: any) => ({ id: c.id, name: c.name })),
@@ -338,7 +338,7 @@ export async function submitPortalTicket(
     category: TicketCategory;
     subject: string;
     body: string;
-    priority?: TicketPriority;
+    priority: TicketPriority;
   },
 ) {
   const customerIds = await requireCustomerIds(userId);

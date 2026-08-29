@@ -77,7 +77,7 @@ function JourneyDetailPage() {
     <>
       <PageHeader
         title={data.journey.name}
-        description={data.journey.description ?? undefined}
+        {...(data.journey.description ? { description: data.journey.description } : {})}
         actions={
           <div className="flex items-center gap-2">
             <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">

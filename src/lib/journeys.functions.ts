@@ -15,7 +15,7 @@ async function internalOnly(userId: string) {
 }
 
 async function editorOnly(userId: string) {
-  const [{ requireInternal, canEditJourneys }] = await Promise.all([import("./portal.server")]);
+  const { requireInternal, canEditJourneys } = await import("./portal.server");
   const profile = await requireInternal(userId);
   if (!canEditJourneys(profile.role)) {
     throw new Error("Forbidden: managers or implementation only");
@@ -56,7 +56,12 @@ export const addJourney = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const profile = await editorOnly(context.userId);
     const { createJourney } = await import("./journeys.server");
-    return createJourney({ ...data, createdBy: profile.id });
+    return createJourney({
+      name: data.name,
+      description: data.description ?? null,
+      trigger_event: data.trigger_event,
+      createdBy: profile.id,
+    });
   });
 
 export const toggleJourneyActive = createServerFn({ method: "POST" })
@@ -130,7 +135,13 @@ export const addContentItem = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const profile = await editorOnly(context.userId);
     const { createContentItem } = await import("./journeys.server");
-    return createContentItem({ ...data, createdBy: profile.id });
+    return createContentItem({
+      title: data.title,
+      kind: data.kind,
+      url: data.url,
+      description: data.description ?? null,
+      createdBy: profile.id,
+    });
   });
 
 export const enrollJourneyContact = createServerFn({ method: "POST" })

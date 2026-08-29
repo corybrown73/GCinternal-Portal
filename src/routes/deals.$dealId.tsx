@@ -41,7 +41,8 @@ export const Route = createFileRoute("/deals/$dealId")({
     ],
   }),
   loader: ({ context, params }) => {
-    void context.queryClient.ensureQueryData(dealQuery(params.dealId)).catch(() => {});
+    const { dealId } = params as unknown as { dealId: string };
+    void context.queryClient.ensureQueryData(dealQuery(dealId)).catch(() => {});
   },
   errorComponent: ({ error }) => (
     <div role="alert" className="p-6 text-[13px] text-destructive">
@@ -102,7 +103,7 @@ const markdownClass =
   "text-[13px] leading-relaxed [&_h1]:text-[14px] [&_h1]:font-semibold [&_h2]:text-[13px] [&_h2]:font-semibold [&_h3]:text-[13px] [&_h3]:font-medium [&_p]:my-1.5 [&_ul]:my-1.5 [&_ul]:list-disc [&_ul]:pl-4 [&_ol]:my-1.5 [&_ol]:list-decimal [&_ol]:pl-4 [&_li]:my-0.5 [&_code]:font-mono [&_code]:text-[12px] [&_a]:underline [&_blockquote]:border-l-2 [&_blockquote]:border-border [&_blockquote]:pl-2 [&_blockquote]:text-muted-foreground";
 
 function DealPage() {
-  const { dealId } = Route.useParams();
+  const { dealId } = Route.useParams() as unknown as { dealId: string };
   const { data } = useSuspenseQuery(dealQuery(dealId));
 
   if (!data) {
@@ -119,7 +120,7 @@ function DealRecord({ deal }: { deal: DealData }) {
     <>
       <PageHeader
         title={account.name}
-        description={account.summary ?? undefined}
+        {...(account.summary ? { description: account.summary } : {})}
         actions={<StartOnboarding deal={deal} />}
       />
       <PageBody className="space-y-4">

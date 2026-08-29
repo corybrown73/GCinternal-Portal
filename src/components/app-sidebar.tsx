@@ -13,6 +13,7 @@ export function AppSidebar({ profile }: { profile?: PortalProfile | null }) {
     { to: "/technical-solutions", label: "Solutions", hint: "Technical work" },
     { to: "/tickets", label: "Tickets", hint: "Requests & SLA" },
     { to: "/journeys", label: "Journeys", hint: "Automated onboarding" },
+    { to: "/access", label: "Customer access", hint: "Portal invites" },
     ...(canManage(role) ? [{ to: "/portfolio", label: "Leadership", hint: "Team overview" }] : []),
     ...(canManage(role) ? [{ to: "/settings", label: "Settings", hint: "Stages & defaults" }] : []),
     ...(isSuperAdmin(role) ? [{ to: "/admin", label: "Admin", hint: "Keys, users, routing" }] : []),

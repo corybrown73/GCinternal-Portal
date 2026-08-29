@@ -25,7 +25,7 @@ function resultPage(status: string): Response {
       body: "The decision link could not be verified. Ask for a fresh request email or decide in the portal.",
     },
   };
-  const c = copy[status] ?? copy.invalid;
+  const c = copy[status] ?? copy["invalid"]!;
   const html = `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><title>${c.title}</title></head>
 <body style="font-family:sans-serif;display:flex;min-height:100vh;align-items:center;justify-content:center;background:#fafaf9">

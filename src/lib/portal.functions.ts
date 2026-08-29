@@ -35,7 +35,13 @@ export const submitTicket = createServerFn({ method: "POST" })
   .inputValidator((data: unknown) => submitTicketInput.parse(data))
   .handler(async ({ data, context }) => {
     const { submitPortalTicket } = await import("./portal.server");
-    const ticket = await submitPortalTicket(context.userId, data);
+    const ticket = await submitPortalTicket(context.userId, {
+      customerId: data.customerId,
+      category: data.category,
+      subject: data.subject,
+      body: data.body,
+      priority: data.priority ?? "normal",
+    });
     return { id: ticket.id };
   });
 

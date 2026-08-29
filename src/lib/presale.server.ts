@@ -347,19 +347,23 @@ export async function deleteGongReport(userId: string, reportId: string): Promis
 
 /* ---------- briefs ---------- */
 
-export async function generateDealBrief(userId: string, dealId: string): Promise<Brief> {
+export async function generateDealBrief(
+  userId: string,
+  dealId: string,
+): Promise<{ id: string; status: string; error: string | null }> {
   await requireInternal(userId);
   const { generateBrief } = await import("./server/brief/generate");
-  return generateBrief(dealId, userId);
+  const brief = await generateBrief(dealId, userId);
+  return { id: brief.id, status: brief.status, error: brief.error };
 }
 
 export async function briefDownloadUrl(userId: string, briefId: string): Promise<{ url: string }> {
   await requireInternal(userId);
-  const { data: brief } = await db()
+  const { data: brief } = (await db()
     .from("portal_briefs")
     .select("pptx_storage_path")
     .eq("id", briefId)
-    .maybeSingle<{ pptx_storage_path: string | null }>();
+    .maybeSingle()) as { data: { pptx_storage_path: string | null } | null };
   if (!brief?.pptx_storage_path) throw new Error("No file exists for this brief");
 
   const { data: signed, error } = await db()
@@ -471,7 +475,7 @@ export async function startOnboarding(
     throw new Error(customerError?.message ?? "Could not create the customer record");
   }
 
-  const firstStage = LIFECYCLE_STAGES[0].id;
+  const firstStage = LIFECYCLE_STAGES[0]!.id;
   const now = new Date().toISOString();
   const { data: impl, error: implError } = await db()
     .from("implementations")

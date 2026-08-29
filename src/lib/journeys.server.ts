@@ -6,11 +6,11 @@ import { audit } from "./server/audit";
 const db = () => supabaseAdmin as any;
 
 function appUrl(): string {
-  return process.env.APP_URL ?? "http://localhost:3000";
+  return process.env["APP_URL"] ?? "http://localhost:3000";
 }
 
 function secret(): Uint8Array {
-  const s = process.env.TAM_TOKEN_SECRET;
+  const s = process.env["TAM_TOKEN_SECRET"];
   if (!s) throw new Error("TAM_TOKEN_SECRET is not set");
   return new TextEncoder().encode(s);
 }
@@ -85,10 +85,13 @@ async function verifyJourneyToken(
 ): Promise<{ enrollmentId: string; stepId: string } | null> {
   try {
     const { payload } = await jwtVerify(token, secret());
-    if (payload.k !== "journey" || typeof payload.e !== "string" || typeof payload.s !== "string") {
+    const k = payload["k"];
+    const e = payload["e"];
+    const s = payload["s"];
+    if (k !== "journey" || typeof e !== "string" || typeof s !== "string") {
       return null;
     }
-    return { enrollmentId: payload.e, stepId: payload.s };
+    return { enrollmentId: e, stepId: s };
   } catch {
     return null;
   }
@@ -103,7 +106,8 @@ async function resolveFirstName(
   enrollment: EnrollmentRow,
   explicit?: string | null,
 ): Promise<string> {
-  if (explicit?.trim()) return explicit.trim().split(/\s+/)[0];
+  const explicitFirst = explicit?.trim().split(/\s+/)[0];
+  if (explicitFirst) return explicitFirst;
   if (enrollment.contact_id) {
     const { data } = await db()
       .from("customer_contacts")
@@ -251,7 +255,7 @@ export async function enrollContact(
   });
 
   // Kick off immediately with step 1.
-  await sendStep(enrollment, { firstName: input.firstName });
+  await sendStep(enrollment, { firstName: input.firstName ?? null });
   return enrollment;
 }
 

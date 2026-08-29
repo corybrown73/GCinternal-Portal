@@ -6,7 +6,7 @@ import type { CallerProfile } from "./portal.server";
 const db = () => supabaseAdmin as any;
 
 function appUrl(): string {
-  return process.env.APP_URL ?? "http://localhost:3000";
+  return process.env["APP_URL"] ?? "http://localhost:3000";
 }
 
 function escapeHtml(s: string): string {
@@ -60,8 +60,8 @@ export async function loadAccessOverview(): Promise<AccessCustomer[]> {
     db().from("portal_profiles").select("id, email, full_name"),
   ]);
 
-  const profileById = new Map((profiles ?? []).map((p: any) => [p.id, p]));
-  const contactById = new Map((contacts ?? []).map((c: any) => [c.id, c]));
+  const profileById = new Map<string, any>((profiles ?? []).map((p: any) => [p.id, p]));
+  const contactById = new Map<string, any>((contacts ?? []).map((c: any) => [c.id, c]));
 
   return (customers ?? []).map((c: any) => ({
     id: c.id,
