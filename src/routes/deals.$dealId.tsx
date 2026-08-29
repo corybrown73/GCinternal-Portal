@@ -562,9 +562,29 @@ function BriefsPanel({ deal }: { deal: DealData }) {
             <li key={b.id} className="flex items-center justify-between gap-2 px-3 py-2">
               <div className="flex min-w-0 items-center gap-2">
                 <StatusChip value={b.status} map={BRIEF_STATUS_CLASS} />
-                {b.generator ? (
+                {/* BUG-12. This used to render the raw enum — "TEMPLATE" in
+                    grey, indistinguishable from decoration — so a brief with no
+                    AI synthesis in it looked exactly like one that had been
+                    synthesised. The only brief in production is a template one
+                    whose own risks section reads "generated without AI
+                    synthesis"; nothing on screen said so.
+
+                    It matters beyond tidiness: the Closed Won gate is meant to
+                    require a real brief, and a template fallback would satisfy
+                    a naive check while containing no synthesis at all. */}
+                {b.generator === "llm" ? (
                   <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-                    {b.generator}
+                    AI synthesis
+                  </span>
+                ) : b.generator ? (
+                  <span
+                    className="rounded-sm bg-status-risk px-1.5 py-0.5 text-[10px] font-medium text-status-risk-foreground"
+                    title={
+                      b.error ??
+                      "The AI step did not run — most often because ANTHROPIC_API_KEY is not set. The content is the template fallback, not a synthesis of the calls."
+                    }
+                  >
+                    Template only — no AI synthesis
                   </span>
                 ) : null}
                 {b.error ? (

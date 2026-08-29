@@ -33,6 +33,7 @@ import { Route as AdminApiKeysRouteImport } from './routes/admin.api-keys'
 import { Route as AdminAuditRouteImport } from './routes/admin.audit'
 import { Route as AdminIntegrationsRouteImport } from './routes/admin.integrations'
 import { Route as AdminUsersRouteImport } from './routes/admin.users'
+import { Route as ApiSplatRouteImport } from './routes/api.$'
 import { Route as AuthCallbackRouteImport } from './routes/auth.callback'
 import { Route as CustomersIndexRouteImport } from './routes/customers.index'
 import { Route as CustomersCustomerIdRouteImport } from './routes/customers.$customerId'
@@ -188,6 +189,11 @@ const AdminUsersRoute = AdminUsersRouteImport.update({
   id: '/users',
   path: '/users',
   getParentRoute: () => AdminRoute,
+} as any)
+const ApiSplatRoute = ApiSplatRouteImport.update({
+  id: '/api/$',
+  path: '/api/$',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const AuthCallbackRoute = AuthCallbackRouteImport.update({
   id: '/auth/callback',
@@ -390,6 +396,7 @@ export interface FileRoutesByFullPath {
   '/admin/audit': typeof AdminAuditRoute
   '/admin/integrations': typeof AdminIntegrationsRoute
   '/admin/users': typeof AdminUsersRoute
+  '/api/$': typeof ApiSplatRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/customers/$customerId': typeof CustomersCustomerIdRoute
   '/deals/$dealId': typeof DealsDealIdRoute
@@ -445,6 +452,7 @@ export interface FileRoutesByTo {
   '/admin/audit': typeof AdminAuditRoute
   '/admin/integrations': typeof AdminIntegrationsRoute
   '/admin/users': typeof AdminUsersRoute
+  '/api/$': typeof ApiSplatRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/customers/$customerId': typeof CustomersCustomerIdRoute
   '/deals/$dealId': typeof DealsDealIdRoute
@@ -507,6 +515,7 @@ export interface FileRoutesById {
   '/admin/audit': typeof AdminAuditRoute
   '/admin/integrations': typeof AdminIntegrationsRoute
   '/admin/users': typeof AdminUsersRoute
+  '/api/$': typeof ApiSplatRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/customers/$customerId': typeof CustomersCustomerIdRoute
   '/deals/$dealId': typeof DealsDealIdRoute
@@ -570,6 +579,7 @@ export interface FileRouteTypes {
     | '/admin/audit'
     | '/admin/integrations'
     | '/admin/users'
+    | '/api/$'
     | '/auth/callback'
     | '/customers/$customerId'
     | '/deals/$dealId'
@@ -625,6 +635,7 @@ export interface FileRouteTypes {
     | '/admin/audit'
     | '/admin/integrations'
     | '/admin/users'
+    | '/api/$'
     | '/auth/callback'
     | '/customers/$customerId'
     | '/deals/$dealId'
@@ -686,6 +697,7 @@ export interface FileRouteTypes {
     | '/admin/audit'
     | '/admin/integrations'
     | '/admin/users'
+    | '/api/$'
     | '/auth/callback'
     | '/customers/$customerId'
     | '/deals/$dealId'
@@ -744,6 +756,7 @@ export interface RootRouteChildren {
   TechnicalSolutionsRoute: typeof TechnicalSolutionsRouteWithChildren
   TemplatesRoute: typeof TemplatesRoute
   TicketsRoute: typeof TicketsRouteWithChildren
+  ApiSplatRoute: typeof ApiSplatRoute
   AuthCallbackRoute: typeof AuthCallbackRoute
   DealsDealIdRoute: typeof DealsDealIdRoute
   OwnersOwnerRoute: typeof OwnersOwnerRoute
@@ -935,6 +948,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/admin/users'
       preLoaderRoute: typeof AdminUsersRouteImport
       parentRoute: typeof AdminRoute
+    }
+    '/api/$': {
+      id: '/api/$'
+      path: '/api/$'
+      fullPath: '/api/$'
+      preLoaderRoute: typeof ApiSplatRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/auth/callback': {
       id: '/auth/callback'
@@ -1329,6 +1349,7 @@ const rootRouteChildren: RootRouteChildren = {
   TechnicalSolutionsRoute: TechnicalSolutionsRouteWithChildren,
   TemplatesRoute: TemplatesRoute,
   TicketsRoute: TicketsRouteWithChildren,
+  ApiSplatRoute: ApiSplatRoute,
   AuthCallbackRoute: AuthCallbackRoute,
   DealsDealIdRoute: DealsDealIdRoute,
   OwnersOwnerRoute: OwnersOwnerRoute,
