@@ -340,12 +340,25 @@ export const setImplementation = createServerFn({ method: "POST" })
 export const advanceImplementationStage = createServerFn({ method: "POST" })
   .middleware([requireInternalAuth])
   .inputValidator((data: unknown) => advanceStageInput.parse(data))
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
     const { advanceStage } = await import("./hub.server");
     return advanceStage({
       implementationId: data.implementationId,
       toStage: data.toStage,
-      enteredBy: data.enteredBy,
+      // BUG-11: implementation_stage_history.entered_by was null on every row,
+      // so the post-sale History tab showed a stage change with no actor while
+      // the pre-sale one showed full attribution.
+      //
+      // The cause was not a missing write — it was asking the client a question
+      // the server could already answer. "Recorded by" is an optional dropdown
+      // that defaults to "Not stated", and nobody fills in a field about
+      // themselves. So it now defaults to the authenticated caller, resolved
+      // through the portal_profiles -> team_members bridge because entered_by
+      // references team_members.
+      //
+      // An explicit choice still wins: recording a move on a colleague's behalf
+      // is a real thing, and the person doing it is the one who should say so.
+      enteredBy: data.enteredBy ?? context.profile.team_member_id ?? null,
       notes: data.notes,
     });
   });

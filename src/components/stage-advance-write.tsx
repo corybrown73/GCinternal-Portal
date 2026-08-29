@@ -145,7 +145,7 @@ export function AdvanceStage({
 
       <div className="grid gap-2 md:grid-cols-2">
         <label className="block space-y-0.5">
-          <span className={labelClass}>Recorded by (optional)</span>
+          <span className={labelClass}>Recorded by</span>
           <select
             className={inputClass}
             aria-label="Recorded by"
@@ -153,7 +153,10 @@ export function AdvanceStage({
             disabled={mutation.isPending}
             onChange={(e) => setEnteredBy(e.target.value)}
           >
-            <option value="">Not stated</option>
+            {/* Was "Not stated", which is what everyone left it on — so every
+                    history row had a null actor. The server now falls back to
+                    the signed-in user, so the honest label is "you". */}
+            <option value="">You</option>
             {team.map((t) => (
               <option key={t.id} value={t.id}>
                 {t.name}
