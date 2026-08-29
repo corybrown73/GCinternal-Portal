@@ -6,17 +6,20 @@
  * SQL is the enforcement point: it decides which template tasks become real
  * work items at instantiation. This module exists ONLY so the template builder
  * can preview "with these answers, these tasks would be created". If the two
- * disagree the preview lies, so every rule below is written to match the SQL
- * literally — including the shapes the SQL handles oddly. Where the SQL raises
- * instead of returning a boolean (a non-numeric operand to a comparison) there
- * is no truth value to mirror, and this module fails the clause rather than
- * throwing, so a malformed template never quietly ADDS work to the preview.
+ * disagree the preview lies, so every rule below matches the SQL exactly.
+ *
+ * The governing invariant, shared with the SQL: a clause that cannot be
+ * evaluated EXCLUDES its task. Unanswered questions and malformed clauses both
+ * fail closed, so neither can put work on a plan nobody asked for. In
+ * particular an unrecognised operator (a plausible typo like `equals`) fails
+ * rather than constraining nothing — a mistake can only ever narrow scope.
  *
  * Pure by contract: no imports, no I/O, safe in a client bundle.
  */
 
 /** A JSON value exactly as it arrives from a jsonb column. */
-export type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
+export type JsonValue =
+  string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
 
 /** The object form of a clause. Every field is optional; all present ones AND. */
 export type IncludeWhenOperatorClause = {
@@ -48,18 +51,22 @@ export type IncludeWhenResult = {
   missingKeys: string[];
 };
 
-const COMPARISONS: ReadonlyArray<[keyof IncludeWhenOperatorClause, (a: number, b: number) => boolean]> =
-  [
-    [">", (a, b) => a > b],
-    [">=", (a, b) => a >= b],
-    ["<", (a, b) => a < b],
-    ["<=", (a, b) => a <= b],
-  ];
+const COMPARISONS: ReadonlyArray<
+  [keyof IncludeWhenOperatorClause, (a: number, b: number) => boolean]
+> = [
+  [">", (a, b) => a > b],
+  [">=", (a, b) => a >= b],
+  ["<", (a, b) => a < b],
+  ["<=", (a, b) => a <= b],
+];
 
 /** What `::numeric` accepts from text — decimal only, so no NaN/Infinity/hex. */
 const NUMERIC_TEXT = /^[+-]?(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?$/;
 
 const hasOwn = (obj: object, key: string) => Object.prototype.hasOwnProperty.call(obj, key);
+
+/** The complete operator vocabulary. Anything else fails its clause. */
+const KNOWN_OPERATORS = new Set([">", ">=", "<", "<=", "in", "contains", "exists"]);
 
 /** jsonb 'object' — arrays and null are separate types there, as they are here. */
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -75,7 +82,8 @@ function deepEqual(a: unknown, b: unknown): boolean {
   if (isPlainObject(a) && isPlainObject(b)) {
     const keys = Object.keys(a);
     return (
-      keys.length === Object.keys(b).length && keys.every((k) => hasOwn(b, k) && deepEqual(a[k], b[k]))
+      keys.length === Object.keys(b).length &&
+      keys.every((k) => hasOwn(b, k) && deepEqual(a[k], b[k]))
     );
   }
   return false;
@@ -124,23 +132,28 @@ function clauseMatches(clause: unknown, answer: unknown): boolean {
   // A clause that is not an object is an equality test against the answer.
   if (!isPlainObject(clause)) return deepEqual(answer, clause);
 
+  // Every key must be one we understand, so a typo narrows rather than widens.
+  for (const op of Object.keys(clause)) {
+    if (!KNOWN_OPERATORS.has(op)) return false;
+  }
+
   for (const [op, compare] of COMPARISONS) {
     if (!hasOwn(clause, op)) continue;
-    const bound = clause[op];
-    // A null bound makes the SQL comparison NULL, which its `if not (...)`
-    // treats as "did not fail". Mirrored deliberately — see the SQL note below.
-    if (bound === null) continue;
+    // Both sides must really be numbers; an unusable bound (null included)
+    // fails the clause rather than passing vacuously.
     const left = numericAnswer(answer);
-    const right = numericBound(bound);
+    const right = numericBound(clause[op]);
     if (left === null || right === null) return false;
     if (!compare(left, right)) return false;
   }
 
-  if (hasOwn(clause, "in") && !jsonContains(clause.in, [answer])) return false;
-  if (hasOwn(clause, "contains") && !jsonContains(answer, clause.contains)) return false;
+  if (hasOwn(clause, "in")) {
+    const options = clause["in"];
+    if (!Array.isArray(options)) return false;
+    if (!jsonContains(options, [answer])) return false;
+  }
+  if (hasOwn(clause, "contains") && !jsonContains(answer, clause["contains"])) return false;
 
-  // An object clause with no recognised operator constrains nothing, exactly as
-  // the SQL's sequence of `clause ? '<op>'` guards does.
   return true;
 }
 
@@ -169,18 +182,27 @@ export function evaluateIncludeWhen(
     const present = hasOwn(given, key) && given[key] !== undefined;
     const answer = given[key];
 
-    // Only a strict JSON `true` means "must be answered" in the SQL, and the
-    // whole clause is consumed by the check — sibling operators are ignored.
+    // `exists` asks about presence. It must be a real boolean — `{"exists":
+    // "yes"}` would otherwise quietly mean "must be UNANSWERED", the opposite
+    // of what its author meant. Unlike before, it does NOT consume the clause:
+    // any sibling operators still apply.
     if (isPlainObject(clause) && hasOwn(clause, "exists")) {
-      if (clause.exists === true) {
+      const wanted = clause["exists"];
+      if (typeof wanted !== "boolean") {
+        failedKeys.push(key);
+        continue;
+      }
+      if (wanted) {
         if (!present) {
           failedKeys.push(key);
           missingKeys.push(key);
+          continue;
         }
-      } else if (present) {
-        failedKeys.push(key);
+      } else {
+        // Absence was required. If it holds, nothing else can be tested.
+        if (present) failedKeys.push(key);
+        continue;
       }
-      continue;
     }
 
     if (!present) {
