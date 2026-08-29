@@ -1,5 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { PageBody, PageHeader, EmptyState } from "@/components/page";
+import { AppearanceSettings } from "@/components/appearance-settings";
+import { canManage, useProfile } from "@/lib/auth";
 import { LIFECYCLE_BOUNDARY_LABEL, LIFECYCLE_STAGES, PRE_HANDOFF_CONTEXT } from "@/lib/lifecycle";
 
 export const Route = createFileRoute("/settings")({
@@ -22,13 +24,16 @@ export const Route = createFileRoute("/settings")({
 });
 
 function SettingsPage() {
+  const { profile } = useProfile();
   return (
     <>
       <PageHeader
         title="Settings"
-        description="This app owns the implementation journey only: it begins once the opportunity is Closed/Won and the work is handed over. Roles shown are descriptive context only — they drive no assignment or permissions."
+        description="One record per customer, from the first pre-sale conversation through to handover to Customer Success — including every project they run along the way. Roles shown are descriptive context only; they drive no assignment or permissions."
       />
       <PageBody className="space-y-5">
+        <AppearanceSettings canManage={canManage(profile?.role)} />
+
         <section className="overflow-hidden rounded-md border border-border bg-card">
           <header className="border-b border-border px-4 py-2.5">
             <h2 className="text-[13px] font-semibold">Implementation lifecycle</h2>
