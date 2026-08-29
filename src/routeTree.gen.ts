@@ -22,6 +22,7 @@ import { Route as PortalRouteImport } from './routes/portal'
 import { Route as PortfolioRouteImport } from './routes/portfolio'
 import { Route as SequencesRouteImport } from './routes/sequences'
 import { Route as SettingsRouteImport } from './routes/settings'
+import { Route as SignalsRouteImport } from './routes/signals'
 import { Route as SignupRouteImport } from './routes/signup'
 import { Route as TechnicalSolutionsRouteImport } from './routes/technical-solutions'
 import { Route as TemplatesRouteImport } from './routes/templates'
@@ -119,6 +120,11 @@ const SequencesRoute = SequencesRouteImport.update({
 const SettingsRoute = SettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SignalsRoute = SignalsRouteImport.update({
+  id: '/signals',
+  path: '/signals',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SignupRoute = SignupRouteImport.update({
@@ -302,6 +308,7 @@ export interface FileRoutesByFullPath {
   '/portfolio': typeof PortfolioRoute
   '/sequences': typeof SequencesRouteWithChildren
   '/settings': typeof SettingsRoute
+  '/signals': typeof SignalsRoute
   '/signup': typeof SignupRoute
   '/technical-solutions': typeof TechnicalSolutionsRouteWithChildren
   '/templates': typeof TemplatesRoute
@@ -346,6 +353,7 @@ export interface FileRoutesByTo {
   '/pipeline': typeof PipelineRoute
   '/portfolio': typeof PortfolioRoute
   '/settings': typeof SettingsRoute
+  '/signals': typeof SignalsRoute
   '/signup': typeof SignupRoute
   '/templates': typeof TemplatesRoute
   '/admin/api-keys': typeof AdminApiKeysRoute
@@ -393,6 +401,7 @@ export interface FileRoutesById {
   '/portfolio': typeof PortfolioRoute
   '/sequences': typeof SequencesRouteWithChildren
   '/settings': typeof SettingsRoute
+  '/signals': typeof SignalsRoute
   '/signup': typeof SignupRoute
   '/technical-solutions': typeof TechnicalSolutionsRouteWithChildren
   '/templates': typeof TemplatesRoute
@@ -443,6 +452,7 @@ export interface FileRouteTypes {
     | '/portfolio'
     | '/sequences'
     | '/settings'
+    | '/signals'
     | '/signup'
     | '/technical-solutions'
     | '/templates'
@@ -487,6 +497,7 @@ export interface FileRouteTypes {
     | '/pipeline'
     | '/portfolio'
     | '/settings'
+    | '/signals'
     | '/signup'
     | '/templates'
     | '/admin/api-keys'
@@ -533,6 +544,7 @@ export interface FileRouteTypes {
     | '/portfolio'
     | '/sequences'
     | '/settings'
+    | '/signals'
     | '/signup'
     | '/technical-solutions'
     | '/templates'
@@ -582,6 +594,7 @@ export interface RootRouteChildren {
   PortfolioRoute: typeof PortfolioRoute
   SequencesRoute: typeof SequencesRouteWithChildren
   SettingsRoute: typeof SettingsRoute
+  SignalsRoute: typeof SignalsRoute
   SignupRoute: typeof SignupRoute
   TechnicalSolutionsRoute: typeof TechnicalSolutionsRouteWithChildren
   TemplatesRoute: typeof TemplatesRoute
@@ -691,6 +704,13 @@ declare module '@tanstack/react-router' {
       path: '/settings'
       fullPath: '/settings'
       preLoaderRoute: typeof SettingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/signals': {
+      id: '/signals'
+      path: '/signals'
+      fullPath: '/signals'
+      preLoaderRoute: typeof SignalsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/signup': {
@@ -1060,6 +1080,7 @@ const rootRouteChildren: RootRouteChildren = {
   PortfolioRoute: PortfolioRoute,
   SequencesRoute: SequencesRouteWithChildren,
   SettingsRoute: SettingsRoute,
+  SignalsRoute: SignalsRoute,
   SignupRoute: SignupRoute,
   TechnicalSolutionsRoute: TechnicalSolutionsRouteWithChildren,
   TemplatesRoute: TemplatesRoute,

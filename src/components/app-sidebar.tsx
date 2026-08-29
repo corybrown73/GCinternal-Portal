@@ -16,6 +16,8 @@ export function AppSidebar({ profile }: { profile?: PortalProfile | null }) {
     { to: "/templates", label: "Journey templates", hint: "How onboarding runs" },
     { to: "/access", label: "Customer access", hint: "Portal invites" },
     ...(canManage(role) ? [{ to: "/portfolio", label: "Leadership", hint: "Team overview" }] : []),
+    // Phase 6: read-only, internal-only. Not flag-gated — see docs/design/signals.md §8.
+    { to: "/signals", label: "Signals", hint: "Velocity, dwell & waiting on" },
     ...(canManage(role) ? [{ to: "/settings", label: "Settings", hint: "Stages & defaults" }] : []),
     ...(isSuperAdmin(role) ? [{ to: "/admin", label: "Admin", hint: "Keys, users, routing" }] : []),
   ];
