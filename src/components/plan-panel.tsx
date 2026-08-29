@@ -214,6 +214,29 @@ export function PlanPanel({ implementationId }: { implementationId: string }) {
           );
         })}
       </ul>
+
+      {/* work_items.stage_instance_id is ON DELETE SET NULL, so an item can
+          outlive its stage. Without this it would still be counted in the
+          summary above while being invisible, and the numbers would stop
+          adding up to the rows with no explanation. */}
+      {(itemsByStage.get("__unassigned") ?? []).length > 0 ? (
+        <div>
+          <div className="flex items-center gap-2 bg-surface px-3 py-1.5">
+            <span className="text-[12px] font-medium">Not on a stage</span>
+            <span
+              className={labelClass}
+              title="These items are not attached to any stage of the plan."
+            >
+              unassigned
+            </span>
+          </div>
+          <ul className="divide-y divide-border">
+            {(itemsByStage.get("__unassigned") ?? []).map((item) => (
+              <ItemRow key={item.id} item={item} byId={byId} />
+            ))}
+          </ul>
+        </div>
+      ) : null}
     </Panel>
   );
 }

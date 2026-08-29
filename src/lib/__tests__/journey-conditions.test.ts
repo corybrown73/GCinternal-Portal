@@ -72,9 +72,16 @@ describe("evaluateIncludeWhen — numeric comparisons", () => {
     expect(included({ seats: { ">=": 10, "<=": 20 } }, { seats: 21 })).toBe(false);
   });
 
-  it("accepts a numeric string as the bound, the way the SQL's ->> cast does", () => {
-    expect(included({ seats: { ">": "100" } }, { seats: 101 })).toBe(true);
+  it("excludes when the bound is a numeric STRING rather than a number", () => {
+    // 0017 requires both sides to be real JSON numbers. Accepting "100" here
+    // would show a task as includable that instantiation silently drops —
+    // the precise way a preview can lie.
+    expect(included({ seats: { ">": "100" } }, { seats: 101 })).toBe(false);
     expect(included({ seats: { ">": "100" } }, { seats: 99 })).toBe(false);
+  });
+
+  it("checks the operator vocabulary even when exists:false would short-circuit", () => {
+    expect(included({ q: { exists: false, equals: 1 } }, {})).toBe(false);
   });
 
   it("excludes the task when the answer is not a number, since it cannot be compared", () => {

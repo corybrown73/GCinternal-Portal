@@ -60,9 +60,6 @@ const COMPARISONS: ReadonlyArray<
   ["<=", (a, b) => a <= b],
 ];
 
-/** What `::numeric` accepts from text — decimal only, so no NaN/Infinity/hex. */
-const NUMERIC_TEXT = /^[+-]?(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?$/;
-
 const hasOwn = (obj: object, key: string) => Object.prototype.hasOwnProperty.call(obj, key);
 
 /** The complete operator vocabulary. Anything else fails its clause. */
@@ -120,12 +117,14 @@ function jsonContains(container: unknown, contained: unknown): boolean {
 const numericAnswer = (value: unknown): number | null =>
   typeof value === "number" && Number.isFinite(value) ? value : null;
 
-/** The bound side uses `->>`, so a numeric string works there too. */
-function numericBound(value: unknown): number | null {
-  if (typeof value === "number") return Number.isFinite(value) ? value : null;
-  if (typeof value === "string" && NUMERIC_TEXT.test(value.trim())) return Number(value.trim());
-  return null;
-}
+/**
+ * 0017 requires BOTH sides to be real JSON numbers (`jsonb_typeof(bound) <>
+ * 'number'` fails the clause). An earlier version of this mirror accepted a
+ * numeric string here, because 0014's `->>` cast did — that made the preview
+ * show a task as includable which instantiation would silently drop.
+ */
+const numericBound = (value: unknown): number | null =>
+  typeof value === "number" && Number.isFinite(value) ? value : null;
 
 /** Everything except presence: the answer is known to exist by this point. */
 function clauseMatches(clause: unknown, answer: unknown): boolean {
@@ -187,6 +186,13 @@ export function evaluateIncludeWhen(
     // of what its author meant. Unlike before, it does NOT consume the clause:
     // any sibling operators still apply.
     if (isPlainObject(clause) && hasOwn(clause, "exists")) {
+      // The SQL validates the whole operator vocabulary first, so an unknown
+      // operator fails the clause even when `exists: false` would have
+      // short-circuited. Check it here too, or the two disagree.
+      if (Object.keys(clause).some((op) => !KNOWN_OPERATORS.has(op))) {
+        failedKeys.push(key);
+        continue;
+      }
       const wanted = clause["exists"];
       if (typeof wanted !== "boolean") {
         failedKeys.push(key);

@@ -1489,7 +1489,10 @@ async function syncStageInstances(
       .neq("status", "done");
     await db()
       .from("stage_instances")
-      .update({ status: "active", entered_at: at })
+      // provenance moves to 'live': the stage has now genuinely been entered
+      // with a history row to prove it, so it must stop claiming its state was
+      // inferred from stage order.
+      .update({ status: "active", entered_at: at, provenance: "live" })
       .eq("id", target.id);
 
     // Stage-entry dates land now the stage has actually been entered. A

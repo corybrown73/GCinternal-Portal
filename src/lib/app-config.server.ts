@@ -17,12 +17,15 @@ export type V2Flags = {
   journey_templates: boolean;
   /** Phase 2: work items as the plan's unit of work. */
   work_items: boolean;
+  /** Phase 3: the handoff packet and its accept/return gate. */
+  handoff_gate: boolean;
 };
 
 const DEFAULT_FLAGS: V2Flags = {
   account_model: false,
   journey_templates: false,
   work_items: false,
+  handoff_gate: false,
 };
 const CACHE_MS = 60_000;
 

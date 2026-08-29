@@ -245,4 +245,7 @@ export type OffsetBasis = (typeof OFFSET_BASES)[number];
 export type QuestionKind = (typeof QUESTION_KINDS)[number];
 
 /** Keys are identity across versions, so they are slug-shaped and stable. */
-export const TEMPLATE_KEY_PATTERN = /^[a-z0-9][a-z0-9_-]*$/;
+// Dots are allowed: every task seeded by 0016 is namespaced (`int.erp_sandbox`,
+// `dm.export`). Rejecting them made the three seeded templates permanently
+// uneditable — the deep copy bypasses zod, so it only surfaced on save.
+export const TEMPLATE_KEY_PATTERN = /^[a-z0-9][a-z0-9_.-]*$/;

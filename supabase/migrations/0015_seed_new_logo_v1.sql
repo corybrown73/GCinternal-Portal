@@ -115,7 +115,10 @@ begin
 
     for st in select * from journey_template_stages
                where template_id = tpl_id order by position loop
-      select min(entered_at), max(coalesce(exited_at, entered_at)), count(*)
+      -- exited_at stays NULL when no exit was recorded. Falling back to
+      -- entered_at would manufacture a zero-day dwell and stamp it
+      -- 'observed' — the provenance that tells metrics to trust it.
+      select min(entered_at), max(exited_at), count(*)
         into hist_min, hist_max, hist_count
         from implementation_stage_history
        where implementation_id = impl.id
@@ -128,7 +131,11 @@ begin
              when 'adopt' then 'prove-value'
              when 'graduate-to-cs' then 'graduate'
              else st.stage_key
-           end
+           end,
+           -- graduate-to-cs has TWO legacy spellings in STAGE_ALIASES.
+           -- Missing one discards real recorded history and mislabels the
+           -- stage 'inferred'.
+           case st.stage_key when 'graduate-to-cs' then 'cs' else st.stage_key end
          );
 
       insert into stage_instances (
