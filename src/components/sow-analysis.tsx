@@ -348,7 +348,7 @@ export function SowAnalysisPanel({
               type="button"
               className={buttonClass}
               onClick={() =>
-                downloadSowAnalysisPdf({
+                void downloadSowAnalysisPdf({
                   analysis,
                   customerName,
                   sowName: active.sowName,
@@ -802,7 +802,7 @@ export function SowAnalysisPanel({
                     type="button"
                     className={buttonClass}
                     onClick={() =>
-                      downloadSowAnalysisPdf({
+                      void downloadSowAnalysisPdf({
                         analysis: r.analysis,
                         customerName,
                         sowName: r.sowName,

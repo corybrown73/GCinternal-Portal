@@ -1,10 +1,16 @@
+// ./llm and ./pptx are loaded at their call sites, not here.
+//
+// This module is already behind a dynamic import in presale.server.ts, but a
+// STATIC import of these two lets the bundler hoist the Anthropic SDK (578 kB)
+// and pptxgenjs (398 kB) into the SSR boot entry. Nearly a megabyte was being
+// parsed on every cold start so that a page which never generates a brief could
+// be served. Deferring them here keeps them in their own chunks, loaded only
+// when a brief is actually generated.
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 const createAdminClient = () => supabaseAdmin as unknown as SupabaseClient;
 import { audit } from "../audit";
-import { generateBriefWithLLM, llmAvailable } from "./llm";
 import { buildTemplateBrief } from "./fallback";
-import { buildBriefDeck } from "./pptx";
 import type { Account, Brief, GongReport, OnboardingNote } from "../../presale-types";
 import type { BriefJson } from "../schemas";
 
@@ -64,6 +70,7 @@ export async function generateBrief(accountId: string, createdBy: string): Promi
     let generator: "llm" | "template" = "template";
     let llmError: string | null = null;
 
+    const { generateBriefWithLLM, llmAvailable } = await import("./llm");
     if (llmAvailable()) {
       try {
         json = await generateBriefWithLLM(account, reports, notes ?? []);
@@ -77,6 +84,7 @@ export async function generateBrief(accountId: string, createdBy: string): Promi
       json = buildTemplateBrief(account, reports);
     }
 
+    const { buildBriefDeck } = await import("./pptx");
     const deck = await buildBriefDeck(json);
     const path = `${accountId}/${briefRow.id}.pptx`;
     const { error: uploadError } = await admin.storage.from("portal-briefs").upload(path, deck, {

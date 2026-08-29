@@ -1,4 +1,10 @@
-import Anthropic from "@anthropic-ai/sdk";
+// TYPE-only: erased at compile time, so importing it costs nothing at runtime.
+// The SDK itself is ~578 kB and is pulled in dynamically at the one call site
+// below. This module is reached from hub.functions.ts, which defines 48 server
+// functions and is therefore loaded on essentially every request — a static
+// import here made every cold start parse the whole SDK to serve a page that
+// never analyses a SOW.
+import type Anthropic from "@anthropic-ai/sdk";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { LIFECYCLE_STAGES } from "./lifecycle";
 import { sowAnalysisSchema, type SowAnalysis } from "./sow-analysis";
@@ -149,7 +155,10 @@ export async function analyzeSow(implementationId: string): Promise<SowAnalysisR
     (impl.sow_document_name as string | null) ?? (impl.sow_document_url as string),
   );
 
-  const client = new Anthropic();
+  // Loaded here, not at module scope: by this point the request really is a
+  // SOW analysis, so paying for the SDK is warranted.
+  const { default: AnthropicSDK } = await import("@anthropic-ai/sdk");
+  const client = new AnthropicSDK();
   const requestAnalysis = async (): Promise<string> => {
     try {
       const response = await client.messages.create({
@@ -166,13 +175,13 @@ export async function analyzeSow(implementationId: string): Promise<SowAnalysisR
         .map((b) => b.text)
         .join("");
     } catch (e) {
-      if (e instanceof Anthropic.RateLimitError) {
+      if (e instanceof AnthropicSDK.RateLimitError) {
         throw new Error("The AI service is busy — try again in a moment.");
       }
-      if (e instanceof Anthropic.AuthenticationError) {
+      if (e instanceof AnthropicSDK.AuthenticationError) {
         throw new Error("AI analysis is misconfigured: the ANTHROPIC_API_KEY was rejected.");
       }
-      if (e instanceof Anthropic.APIError) {
+      if (e instanceof AnthropicSDK.APIError) {
         console.error("[sow-analysis] api error", e.status, e.message);
         throw new Error("The SOW analysis failed. Nothing has been changed.");
       }

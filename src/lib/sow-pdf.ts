@@ -1,4 +1,7 @@
-import { jsPDF } from "jspdf";
+// jspdf is ~501 kB and this module is reachable from the Customer 360 route,
+// so a static import made every render of that page parse it — server side too
+// — for a button most visits never press. Loaded at the call site instead, the
+// way src/lib/server/snapshot-pdf.ts already does it.
 
 import {
   deliveryWindowLabel,
@@ -48,7 +51,7 @@ function safeFileName(s: string) {
  * read without the app. Nothing is sent to a server — the file is built in the
  * browser and downloaded.
  */
-export function downloadSowAnalysisPdf({
+export async function downloadSowAnalysisPdf({
   analysis,
   customerName,
   sowName,
@@ -65,6 +68,7 @@ export function downloadSowAnalysisPdf({
   /** Technical Implementation Specialist adjustments to the proposed weeks, keyed by journey index. */
   overrides?: Record<number, TimingOverride>;
 }) {
+  const { jsPDF } = await import("jspdf");
   const doc = new jsPDF({ unit: "pt", format: "a4" });
   const marginX = 48;
   const marginTop = 56;
