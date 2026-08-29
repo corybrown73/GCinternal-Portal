@@ -21,7 +21,7 @@ export const Route = createFileRoute("/pipeline")({
       {
         name: "description",
         content:
-          "Presale deals across the five stages from Prospect to Onboarding Complete. Drag a deal to record a stage transition.",
+          "Presale deals across this deployment's configured pipeline stages. Drag a deal to record a stage transition.",
       },
     ],
   }),
@@ -74,6 +74,7 @@ function PipelinePage() {
       <PageBody>
         <DealBoard
           deals={data.deals}
+          stages={data.stages}
           canDrag={editable}
           onMove={(dealId, toStage) => moveMutation.mutateAsync({ dealId, toStage })}
         />

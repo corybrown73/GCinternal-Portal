@@ -49,6 +49,17 @@ export type V2Flags = {
   demo_mode: boolean;
   /** Phase 7: API-key expiry and per-minute rate limits are enforced. */
   api_key_limits: boolean;
+  /**
+   * The pre-sale pipeline's stages come from `portal_pipeline_stages` (0028)
+   * rather than from the compiled-in enum mirror.
+   *
+   * This is a DEPLOY gate, not a behaviour switch. 0028 seeds the table with
+   * the enum, in enum order, with the labels the UI already renders, so both
+   * paths produce identical output until somebody edits the configuration.
+   * What the flag buys is that this code is safe to ship ahead of its
+   * migration: with it off nothing here touches the new table at all.
+   */
+  presale_stage_config: boolean;
 };
 
 const DEFAULT_FLAGS: V2Flags = {
@@ -73,6 +84,8 @@ const DEFAULT_FLAGS: V2Flags = {
   saved_views: false,
   demo_mode: false,
   api_key_limits: false,
+  /* Configurable pre-sale pipeline — see docs/design/presale-stages.md. */
+  presale_stage_config: false,
 };
 const CACHE_MS = 60_000;
 

@@ -4,6 +4,7 @@ import {
   KeyRound,
   Plug,
   Route as RouteIcon,
+  Rows3,
   ShieldCheck,
   Upload,
   Users,
@@ -36,6 +37,13 @@ const CARDS = [
     title: "Integrations",
     description:
       "Salesforce auto-create: the sync log and why each decision was made, field maps, outbound webhooks and the needs-template queue.",
+  },
+  {
+    to: "/admin/pipeline-stages",
+    icon: Rows3,
+    title: "Pipeline stages",
+    description:
+      "The pre-sale pipeline: label, colour and order of each stage, and which one means Closed Won. Renaming or reordering never rewrites the stage history.",
   },
   {
     to: "/admin/audit",

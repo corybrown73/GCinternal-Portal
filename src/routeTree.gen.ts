@@ -32,6 +32,7 @@ import { Route as AdminIndexRouteImport } from './routes/admin.index'
 import { Route as AdminApiKeysRouteImport } from './routes/admin.api-keys'
 import { Route as AdminAuditRouteImport } from './routes/admin.audit'
 import { Route as AdminIntegrationsRouteImport } from './routes/admin.integrations'
+import { Route as AdminPipelineStagesRouteImport } from './routes/admin.pipeline-stages'
 import { Route as AdminUsersRouteImport } from './routes/admin.users'
 import { Route as AuthCallbackRouteImport } from './routes/auth.callback'
 import { Route as CustomersIndexRouteImport } from './routes/customers.index'
@@ -182,6 +183,11 @@ const AdminAuditRoute = AdminAuditRouteImport.update({
 const AdminIntegrationsRoute = AdminIntegrationsRouteImport.update({
   id: '/integrations',
   path: '/integrations',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminPipelineStagesRoute = AdminPipelineStagesRouteImport.update({
+  id: '/pipeline-stages',
+  path: '/pipeline-stages',
   getParentRoute: () => AdminRoute,
 } as any)
 const AdminUsersRoute = AdminUsersRouteImport.update({
@@ -389,6 +395,7 @@ export interface FileRoutesByFullPath {
   '/admin/api-keys': typeof AdminApiKeysRoute
   '/admin/audit': typeof AdminAuditRoute
   '/admin/integrations': typeof AdminIntegrationsRoute
+  '/admin/pipeline-stages': typeof AdminPipelineStagesRoute
   '/admin/users': typeof AdminUsersRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/customers/$customerId': typeof CustomersCustomerIdRoute
@@ -444,6 +451,7 @@ export interface FileRoutesByTo {
   '/admin/api-keys': typeof AdminApiKeysRoute
   '/admin/audit': typeof AdminAuditRoute
   '/admin/integrations': typeof AdminIntegrationsRoute
+  '/admin/pipeline-stages': typeof AdminPipelineStagesRoute
   '/admin/users': typeof AdminUsersRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/customers/$customerId': typeof CustomersCustomerIdRoute
@@ -506,6 +514,7 @@ export interface FileRoutesById {
   '/admin/api-keys': typeof AdminApiKeysRoute
   '/admin/audit': typeof AdminAuditRoute
   '/admin/integrations': typeof AdminIntegrationsRoute
+  '/admin/pipeline-stages': typeof AdminPipelineStagesRoute
   '/admin/users': typeof AdminUsersRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/customers/$customerId': typeof CustomersCustomerIdRoute
@@ -569,6 +578,7 @@ export interface FileRouteTypes {
     | '/admin/api-keys'
     | '/admin/audit'
     | '/admin/integrations'
+    | '/admin/pipeline-stages'
     | '/admin/users'
     | '/auth/callback'
     | '/customers/$customerId'
@@ -624,6 +634,7 @@ export interface FileRouteTypes {
     | '/admin/api-keys'
     | '/admin/audit'
     | '/admin/integrations'
+    | '/admin/pipeline-stages'
     | '/admin/users'
     | '/auth/callback'
     | '/customers/$customerId'
@@ -685,6 +696,7 @@ export interface FileRouteTypes {
     | '/admin/api-keys'
     | '/admin/audit'
     | '/admin/integrations'
+    | '/admin/pipeline-stages'
     | '/admin/users'
     | '/auth/callback'
     | '/customers/$customerId'
@@ -927,6 +939,13 @@ declare module '@tanstack/react-router' {
       path: '/integrations'
       fullPath: '/admin/integrations'
       preLoaderRoute: typeof AdminIntegrationsRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/pipeline-stages': {
+      id: '/admin/pipeline-stages'
+      path: '/pipeline-stages'
+      fullPath: '/admin/pipeline-stages'
+      preLoaderRoute: typeof AdminPipelineStagesRouteImport
       parentRoute: typeof AdminRoute
     }
     '/admin/users': {
@@ -1188,6 +1207,7 @@ interface AdminRouteChildren {
   AdminApiKeysRoute: typeof AdminApiKeysRoute
   AdminAuditRoute: typeof AdminAuditRoute
   AdminIntegrationsRoute: typeof AdminIntegrationsRoute
+  AdminPipelineStagesRoute: typeof AdminPipelineStagesRoute
   AdminUsersRoute: typeof AdminUsersRoute
   AdminIndexRoute: typeof AdminIndexRoute
 }
@@ -1196,6 +1216,7 @@ const AdminRouteChildren: AdminRouteChildren = {
   AdminApiKeysRoute: AdminApiKeysRoute,
   AdminAuditRoute: AdminAuditRoute,
   AdminIntegrationsRoute: AdminIntegrationsRoute,
+  AdminPipelineStagesRoute: AdminPipelineStagesRoute,
   AdminUsersRoute: AdminUsersRoute,
   AdminIndexRoute: AdminIndexRoute,
 }

@@ -12,7 +12,13 @@ import {
   type DragStartEvent,
 } from "@dnd-kit/core";
 
-import { STAGES, STAGE_LABELS, type AccountStage } from "@/lib/presale-stages";
+import type { AccountStage } from "@/lib/presale-stages";
+import {
+  BUILTIN_PIPELINE_STAGES,
+  STAGE_COLOR_DOT_CLASS,
+  terminalStage,
+  type PipelineStage,
+} from "@/lib/pipeline-stages";
 import type { Account } from "@/lib/presale-types";
 import { cn } from "@/lib/utils";
 
@@ -27,7 +33,17 @@ function fmtArr(arr: number | null): string {
   return `$${Number(arr).toLocaleString()}`;
 }
 
-function DealCard({ deal, overlay = false }: { deal: BoardDeal; overlay?: boolean }) {
+function DealCard({
+  deal,
+  terminalKey,
+  overlay = false,
+}: {
+  deal: BoardDeal;
+  /** Days-in-stage stops being a warning once the deal is at the end. Which
+   *  stage that is comes from the configuration, not from a literal. */
+  terminalKey: string;
+  overlay?: boolean;
+}) {
   const days = daysIn(deal.stage_entered_at);
   return (
     <div
@@ -41,9 +57,7 @@ function DealCard({ deal, overlay = false }: { deal: BoardDeal; overlay?: boolea
         <span>{fmtArr(deal.arr)}</span>
         <span
           title="Days in stage"
-          className={cn(
-            days > 14 && deal.stage !== "onboarding_complete" && "text-status-risk-foreground",
-          )}
+          className={cn(days > 14 && deal.stage !== terminalKey && "text-status-risk-foreground")}
         >
           {days}d
         </span>
@@ -55,7 +69,15 @@ function DealCard({ deal, overlay = false }: { deal: BoardDeal; overlay?: boolea
   );
 }
 
-function DraggableCard({ deal, canDrag }: { deal: BoardDeal; canDrag: boolean }) {
+function DraggableCard({
+  deal,
+  canDrag,
+  terminalKey,
+}: {
+  deal: BoardDeal;
+  canDrag: boolean;
+  terminalKey: string;
+}) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: deal.id,
     disabled: !canDrag,
@@ -71,8 +93,40 @@ function DraggableCard({ deal, canDrag }: { deal: BoardDeal; canDrag: boolean })
         className="block"
         draggable={false}
       >
-        <DealCard deal={deal} />
+        <DealCard deal={deal} terminalKey={terminalKey} />
       </Link>
+    </div>
+  );
+}
+
+function ColumnHeading({
+  label,
+  count,
+  arrTotal,
+  dotClass,
+  note,
+}: {
+  label: string;
+  count: number;
+  arrTotal: number;
+  dotClass: string | null;
+  note?: string | undefined;
+}) {
+  return (
+    <div className="mb-1.5 px-1">
+      <div className="flex items-baseline justify-between">
+        <span className="flex items-center gap-1.5 font-mono text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+          {dotClass ? (
+            <span aria-hidden className={cn("h-1.5 w-1.5 rounded-full", dotClass)} />
+          ) : null}
+          {label}
+          <span className="text-muted-foreground/60">{count}</span>
+        </span>
+        <span className="font-mono text-[10px] text-muted-foreground/60">
+          {arrTotal > 0 ? `$${arrTotal.toLocaleString()}` : ""}
+        </span>
+      </div>
+      {note ? <p className="mt-0.5 text-[10px] text-muted-foreground/60">{note}</p> : null}
     </div>
   );
 }
@@ -81,33 +135,37 @@ function Column({
   stage,
   deals,
   canDrag,
+  terminalKey,
 }: {
-  stage: AccountStage;
+  stage: PipelineStage;
   deals: BoardDeal[];
   canDrag: boolean;
+  terminalKey: string;
 }) {
-  const { setNodeRef, isOver } = useDroppable({ id: stage });
+  const { setNodeRef, isOver } = useDroppable({ id: stage.key, disabled: !stage.enterable });
   const arrTotal = deals.reduce((sum, d) => sum + (d.arr ?? 0), 0);
   return (
     <div className="flex w-60 flex-none flex-col">
-      <div className="mb-1.5 flex items-baseline justify-between px-1">
-        <span className="font-mono text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-          {STAGE_LABELS[stage]}
-          <span className="ml-1.5 text-muted-foreground/60">{deals.length}</span>
-        </span>
-        <span className="font-mono text-[10px] text-muted-foreground/60">
-          {arrTotal > 0 ? `$${arrTotal.toLocaleString()}` : ""}
-        </span>
-      </div>
+      <ColumnHeading
+        label={stage.label}
+        count={deals.length}
+        arrTotal={arrTotal}
+        dotClass={STAGE_COLOR_DOT_CLASS[stage.color]}
+        // Honest rather than hidden: until the stage key is an account stage in
+        // the database, nothing can be dragged in here. See
+        // docs/design/presale-stages.md.
+        note={stage.enterable ? undefined : "Configured, not yet in use"}
+      />
       <div
         ref={setNodeRef}
         className={cn(
           "flex min-h-44 flex-1 flex-col gap-1.5 rounded-md border p-1.5 transition-colors",
           isOver ? "border-primary/50 bg-muted" : "border-transparent bg-surface",
+          !stage.enterable && "border-dashed border-border/70 bg-transparent",
         )}
       >
         {deals.map((d) => (
-          <DraggableCard key={d.id} deal={d} canDrag={canDrag} />
+          <DraggableCard key={d.id} deal={d} canDrag={canDrag} terminalKey={terminalKey} />
         ))}
         {deals.length === 0 ? (
           <p className="py-6 text-center text-[11px] text-muted-foreground/60">No deals</p>
@@ -118,15 +176,46 @@ function Column({
 }
 
 /**
+ * Deals whose stage is not in the configured pipeline. It should be empty —
+ * 0028 refuses to delete a stage accounts sit in — but a board that silently
+ * dropped a deal would hide exactly the case somebody needs to see.
+ */
+function OrphanColumn({ stageKey, deals }: { stageKey: string; deals: BoardDeal[] }) {
+  return (
+    <div className="flex w-60 flex-none flex-col">
+      <ColumnHeading
+        label={stageKey}
+        count={deals.length}
+        arrTotal={deals.reduce((sum, d) => sum + (d.arr ?? 0), 0)}
+        dotClass={null}
+        note="Not in the configured pipeline"
+      />
+      <div className="flex min-h-44 flex-1 flex-col gap-1.5 rounded-md border border-dashed border-status-risk-foreground/40 p-1.5">
+        {deals.map((d) => (
+          <DraggableCard key={d.id} deal={d} canDrag={false} terminalKey="" />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/**
  * Presale Kanban. Drag is an optimistic stage move; `onMove` performs the real
  * transition (portal_transition_stage via serverFn) and rejects to revert.
+ *
+ * The columns come from the CONFIGURED pipeline
+ * (docs/design/presale-stages.md), not from the enum's declaration order. The
+ * default is the enum, so an unconfigured deployment renders the board it
+ * always did.
  */
 export function DealBoard({
   deals: incoming,
+  stages = BUILTIN_PIPELINE_STAGES,
   canDrag,
   onMove,
 }: {
   deals: BoardDeal[];
+  stages?: readonly PipelineStage[];
   canDrag: boolean;
   onMove: (dealId: string, toStage: AccountStage) => Promise<unknown>;
 }) {
@@ -162,20 +251,30 @@ export function DealBoard({
   }
 
   const active = activeId ? deals.find((d) => d.id === activeId) : null;
+  const terminalKey = terminalStage(stages).key;
+
+  const known = new Set(stages.map((s) => s.key));
+  const orphanKeys = [...new Set(deals.map((d) => d.stage).filter((k) => !known.has(k)))];
 
   return (
     <DndContext sensors={sensors} onDragStart={onDragStart} onDragEnd={onDragEnd}>
       <div className="flex gap-3 overflow-x-auto pb-4">
-        {STAGES.map((stage) => (
+        {stages.map((stage) => (
           <Column
-            key={stage}
+            key={stage.key}
             stage={stage}
             canDrag={canDrag}
-            deals={deals.filter((d) => d.stage === stage)}
+            terminalKey={terminalKey}
+            deals={deals.filter((d) => d.stage === stage.key)}
           />
         ))}
+        {orphanKeys.map((key) => (
+          <OrphanColumn key={key} stageKey={key} deals={deals.filter((d) => d.stage === key)} />
+        ))}
       </div>
-      <DragOverlay>{active ? <DealCard deal={active} overlay /> : null}</DragOverlay>
+      <DragOverlay>
+        {active ? <DealCard deal={active} terminalKey={terminalKey} overlay /> : null}
+      </DragOverlay>
     </DndContext>
   );
 }
