@@ -1,20 +1,20 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
-import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { requireInternalAuth } from "@/integrations/supabase/internal-middleware";
 import { STAGES } from "./presale-stages";
 
 /* ---------- pipeline ---------- */
 
 export const getPipeline = createServerFn({ method: "GET" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireInternalAuth])
   .handler(async () => {
     const { loadPipeline } = await import("./presale.server");
     return loadPipeline();
   });
 
 export const addDeal = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireInternalAuth])
   .inputValidator((data: unknown) =>
     z
       .object({
@@ -38,7 +38,7 @@ export const addDeal = createServerFn({ method: "POST" })
   });
 
 export const moveDealStage = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireInternalAuth])
   .inputValidator((data: unknown) =>
     z
       .object({
@@ -54,7 +54,7 @@ export const moveDealStage = createServerFn({ method: "POST" })
   });
 
 export const importDeals = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireInternalAuth])
   .inputValidator((data: unknown) =>
     z.object({ csv: z.string().min(1, "The CSV file is empty").max(2 * 1024 * 1024) }).parse(data),
   )
@@ -66,7 +66,7 @@ export const importDeals = createServerFn({ method: "POST" })
 /* ---------- deal record ---------- */
 
 export const getDeal = createServerFn({ method: "GET" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireInternalAuth])
   .inputValidator((data: unknown) => z.object({ dealId: z.string().uuid() }).parse(data))
   .handler(async ({ data }) => {
     const { loadDeal } = await import("./presale.server");
@@ -74,7 +74,7 @@ export const getDeal = createServerFn({ method: "GET" })
   });
 
 export const addReport = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireInternalAuth])
   .inputValidator((data: unknown) =>
     z
       .object({
@@ -91,7 +91,7 @@ export const addReport = createServerFn({ method: "POST" })
   });
 
 export const removeReport = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireInternalAuth])
   .inputValidator((data: unknown) => z.object({ reportId: z.string().uuid() }).parse(data))
   .handler(async ({ data, context }) => {
     const { deleteGongReport } = await import("./presale.server");
@@ -99,7 +99,7 @@ export const removeReport = createServerFn({ method: "POST" })
   });
 
 export const generateBriefForDeal = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireInternalAuth])
   .inputValidator((data: unknown) => z.object({ dealId: z.string().uuid() }).parse(data))
   .handler(async ({ data, context }) => {
     const { generateDealBrief } = await import("./presale.server");
@@ -107,7 +107,7 @@ export const generateBriefForDeal = createServerFn({ method: "POST" })
   });
 
 export const getBriefDownloadUrl = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireInternalAuth])
   .inputValidator((data: unknown) => z.object({ briefId: z.string().uuid() }).parse(data))
   .handler(async ({ data, context }) => {
     const { briefDownloadUrl } = await import("./presale.server");
@@ -115,7 +115,7 @@ export const getBriefDownloadUrl = createServerFn({ method: "POST" })
   });
 
 export const createTamRequestForDeal = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireInternalAuth])
   .inputValidator((data: unknown) =>
     z
       .object({
@@ -131,7 +131,7 @@ export const createTamRequestForDeal = createServerFn({ method: "POST" })
   });
 
 export const addNote = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireInternalAuth])
   .inputValidator((data: unknown) =>
     z
       .object({ dealId: z.string().uuid(), bodyMd: z.string().trim().min(1, "Write something first") })
@@ -143,7 +143,7 @@ export const addNote = createServerFn({ method: "POST" })
   });
 
 export const setNoteReviewed = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireInternalAuth])
   .inputValidator((data: unknown) =>
     z.object({ noteId: z.string().uuid(), reviewed: z.boolean() }).parse(data),
   )
@@ -153,7 +153,7 @@ export const setNoteReviewed = createServerFn({ method: "POST" })
   });
 
 export const removeNote = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireInternalAuth])
   .inputValidator((data: unknown) => z.object({ noteId: z.string().uuid() }).parse(data))
   .handler(async ({ data, context }) => {
     const { deleteDealNote } = await import("./presale.server");
@@ -161,7 +161,7 @@ export const removeNote = createServerFn({ method: "POST" })
   });
 
 export const startOnboardingForDeal = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireInternalAuth])
   .inputValidator((data: unknown) => z.object({ dealId: z.string().uuid() }).parse(data))
   .handler(async ({ data, context }) => {
     const { startOnboarding } = await import("./presale.server");
@@ -171,14 +171,14 @@ export const startOnboardingForDeal = createServerFn({ method: "POST" })
 /* ---------- admin ---------- */
 
 export const getApiKeys = createServerFn({ method: "GET" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireInternalAuth])
   .handler(async ({ context }) => {
     const { listApiKeys } = await import("./presale.server");
     return listApiKeys(context.userId);
   });
 
 export const createApiKey = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireInternalAuth])
   .inputValidator((data: unknown) =>
     z
       .object({
@@ -193,7 +193,7 @@ export const createApiKey = createServerFn({ method: "POST" })
   });
 
 export const revokeApiKey = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireInternalAuth])
   .inputValidator((data: unknown) => z.object({ keyId: z.string().uuid() }).parse(data))
   .handler(async ({ data, context }) => {
     const { revokeApiKeyRecord } = await import("./presale.server");
@@ -201,14 +201,14 @@ export const revokeApiKey = createServerFn({ method: "POST" })
   });
 
 export const getUsers = createServerFn({ method: "GET" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireInternalAuth])
   .handler(async ({ context }) => {
     const { listProfiles } = await import("./presale.server");
     return listProfiles(context.userId);
   });
 
 export const setUserRole = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireInternalAuth])
   .inputValidator((data: unknown) =>
     z
       .object({

@@ -98,8 +98,8 @@ function SettingsPage() {
 
         <EmptyState
           title="Team & roles"
-          description="Owners, workload limits and permissions will be set up here."
-          hint="Not available yet"
+          description="Sign-in roles and permissions are managed under Admin → Users. Roles listed above are descriptive lifecycle context only."
+          hint="See Admin → Users"
         />
       </PageBody>
     </>

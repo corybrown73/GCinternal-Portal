@@ -14,7 +14,7 @@ export const ADOPTION_KIND_LABEL: Record<AdoptionKind, string> = {
   workflow: "Workflow",
 };
 
-/** The only state values the schema's CHECK constraint accepts. */
+/** The state vocabulary the app writes (the DB column has no check constraint). */
 export const ADOPTION_STATES = [
   "not_started",
   "progressing",

@@ -690,7 +690,7 @@ function LeadershipPage() {
         </Panel>
 
         <p className="text-[11px] text-muted-foreground">
-          No auth yet — this is the whole portfolio, not a filtered team. Nothing here is a score,
+          This is the whole portfolio, not a filtered team. Nothing here is a score,
           forecast or trend: {humanize("stage")} dwell and counts come straight from stored records,
           and stages shown are the eight owned stages from {stageLabel("handoff")} onward.
         </p>

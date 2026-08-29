@@ -60,7 +60,7 @@ async function sendApprovalEmails(request: TamRequest, account: Account) {
   const { data: admins } = await admin
     .from("portal_profiles")
     .select("email")
-    .eq("role", "admin")
+    .in("role", ["admin", "super_admin", "manager"])
     .returns<{ email: string }[]>();
   if (!admins || admins.length === 0) {
     console.warn("TAM request created but no admin profiles exist to notify");
@@ -71,7 +71,9 @@ async function sendApprovalEmails(request: TamRequest, account: Account) {
   const declineToken = await signDecisionToken(request.id, "decline", request.token_jti);
   const approveUrl = `${appUrl()}/api/tam/decision?token=${approveToken}`;
   const declineUrl = `${appUrl()}/api/tam/decision?token=${declineToken}`;
-  const portalUrl = `${appUrl()}/accounts/${account.id}?tab=tam`;
+  // The deal page hosts the TAM panel in this app ("/accounts/…" was the old
+  // Next.js portal's route and 404s here).
+  const portalUrl = `${appUrl()}/deals/${account.id}`;
 
   const html = `
     <div style="font-family:sans-serif;max-width:540px">

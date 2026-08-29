@@ -1,4 +1,4 @@
-import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { requireInternalAuth } from "@/integrations/supabase/internal-middleware";
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { advanceStageInput } from "./stage-advance-input";
@@ -77,22 +77,22 @@ import {
 
 
 
-export const getHome = createServerFn({ method: "GET" }).middleware([requireSupabaseAuth]).handler(async () => {
+export const getHome = createServerFn({ method: "GET" }).middleware([requireInternalAuth]).handler(async () => {
   const { loadHome } = await import("./hub.server");
   return loadHome();
 });
 
-export const getLeadership = createServerFn({ method: "GET" }).middleware([requireSupabaseAuth]).handler(async () => {
+export const getLeadership = createServerFn({ method: "GET" }).middleware([requireInternalAuth]).handler(async () => {
   const { loadLeadership } = await import("./hub.server");
   return loadLeadership();
 });
 
-export const getImplementations = createServerFn({ method: "GET" }).middleware([requireSupabaseAuth]).handler(async () => {
+export const getImplementations = createServerFn({ method: "GET" }).middleware([requireInternalAuth]).handler(async () => {
   const { loadImplementations } = await import("./hub.server");
   return loadImplementations();
 });
 
-export const getCustomer360 = createServerFn({ method: "GET" }).middleware([requireSupabaseAuth])
+export const getCustomer360 = createServerFn({ method: "GET" }).middleware([requireInternalAuth])
   .inputValidator((data: unknown) =>
     z
       .object({
@@ -106,19 +106,19 @@ export const getCustomer360 = createServerFn({ method: "GET" }).middleware([requ
     return loadCustomer360(data.customerId, data.implementationId ?? null);
   });
 
-export const getTechnicalSolutions = createServerFn({ method: "GET" }).middleware([requireSupabaseAuth]).handler(async () => {
+export const getTechnicalSolutions = createServerFn({ method: "GET" }).middleware([requireInternalAuth]).handler(async () => {
   const { loadTechnicalSolutions } = await import("./hub.server");
   return loadTechnicalSolutions();
 });
 
-export const getTechnicalSolution = createServerFn({ method: "GET" }).middleware([requireSupabaseAuth])
+export const getTechnicalSolution = createServerFn({ method: "GET" }).middleware([requireInternalAuth])
   .inputValidator((data: unknown) => z.object({ id: z.string().uuid() }).parse(data))
   .handler(async ({ data }) => {
     const { loadTechnicalSolution } = await import("./hub.server");
     return loadTechnicalSolution(data.id);
   });
 
-export const setTechnicalSolutionOwner = createServerFn({ method: "POST" }).middleware([requireSupabaseAuth])
+export const setTechnicalSolutionOwner = createServerFn({ method: "POST" }).middleware([requireInternalAuth])
   .inputValidator((data: unknown) =>
     z
       .object({ id: z.string().uuid(), ownerId: z.string().uuid().nullable() })
@@ -129,7 +129,7 @@ export const setTechnicalSolutionOwner = createServerFn({ method: "POST" }).midd
     return updateTechnicalSolutionOwner(data.id, data.ownerId);
   });
 
-export const setTechnicalSolutionStatus = createServerFn({ method: "POST" }).middleware([requireSupabaseAuth])
+export const setTechnicalSolutionStatus = createServerFn({ method: "POST" }).middleware([requireInternalAuth])
   .inputValidator((data: unknown) =>
     z.object({ id: z.string().uuid(), status: z.enum(SOLUTION_STATUSES) }).parse(data),
   )
@@ -138,14 +138,14 @@ export const setTechnicalSolutionStatus = createServerFn({ method: "POST" }).mid
     return updateTechnicalSolutionStatus(data.id, data.status);
   });
 
-export const createTechnicalSolutionNote = createServerFn({ method: "POST" }).middleware([requireSupabaseAuth])
+export const createTechnicalSolutionNote = createServerFn({ method: "POST" }).middleware([requireInternalAuth])
   .inputValidator((data: unknown) => createSolutionNoteInput.parse(data))
   .handler(async ({ data }) => {
     const { addTechnicalSolutionNote } = await import("./hub.server");
     return addTechnicalSolutionNote(data);
   });
 
-export const addFieldMapping = createServerFn({ method: "POST" }).middleware([requireSupabaseAuth])
+export const addFieldMapping = createServerFn({ method: "POST" }).middleware([requireInternalAuth])
   .inputValidator((data: unknown) => createFieldMappingInput.parse(data))
   .handler(async ({ data }) => {
     const { createFieldMapping } = await import("./hub.server");
@@ -153,7 +153,7 @@ export const addFieldMapping = createServerFn({ method: "POST" }).middleware([re
     return createFieldMapping(technicalSolutionId, toFieldMappingPatch(rest));
   });
 
-export const setFieldMapping = createServerFn({ method: "POST" }).middleware([requireSupabaseAuth])
+export const setFieldMapping = createServerFn({ method: "POST" }).middleware([requireInternalAuth])
   .inputValidator((data: unknown) => updateFieldMappingInput.parse(data))
   .handler(async ({ data }) => {
     const { updateFieldMapping } = await import("./hub.server");
@@ -161,7 +161,7 @@ export const setFieldMapping = createServerFn({ method: "POST" }).middleware([re
     return updateFieldMapping(id, toFieldMappingPatch(rest));
   });
 
-export const setSolutionDesign = createServerFn({ method: "POST" }).middleware([requireSupabaseAuth])
+export const setSolutionDesign = createServerFn({ method: "POST" }).middleware([requireInternalAuth])
   .inputValidator((data: unknown) => updateSolutionDesignInput.parse(data))
   .handler(async ({ data }) => {
     const { updateTechnicalSolutionDesign } = await import("./hub.server");
@@ -171,7 +171,7 @@ export const setSolutionDesign = createServerFn({ method: "POST" }).middleware([
     });
   });
 
-export const addSuccessCriterion = createServerFn({ method: "POST" }).middleware([requireSupabaseAuth])
+export const addSuccessCriterion = createServerFn({ method: "POST" }).middleware([requireInternalAuth])
   .inputValidator((data: unknown) => createSuccessCriterionInput.parse(data))
   .handler(async ({ data }) => {
     const { createSuccessCriterion } = await import("./hub.server");
@@ -179,7 +179,7 @@ export const addSuccessCriterion = createServerFn({ method: "POST" }).middleware
     return createSuccessCriterion(implementationId, toSuccessCriterionPatch(rest));
   });
 
-export const setSuccessCriterion = createServerFn({ method: "POST" }).middleware([requireSupabaseAuth])
+export const setSuccessCriterion = createServerFn({ method: "POST" }).middleware([requireInternalAuth])
   .inputValidator((data: unknown) => updateSuccessCriterionInput.parse(data))
   .handler(async ({ data }) => {
     const { updateSuccessCriterion } = await import("./hub.server");
@@ -187,21 +187,21 @@ export const setSuccessCriterion = createServerFn({ method: "POST" }).middleware
     return updateSuccessCriterion(id, toSuccessCriterionPatch(rest));
   });
 
-export const addSuccessCriterionObservation = createServerFn({ method: "POST" }).middleware([requireSupabaseAuth])
+export const addSuccessCriterionObservation = createServerFn({ method: "POST" }).middleware([requireInternalAuth])
   .inputValidator((data: unknown) => createObservationInput.parse(data))
   .handler(async ({ data }) => {
     const { createSuccessCriterionObservation } = await import("./hub.server");
     return createSuccessCriterionObservation(toObservationRow(data));
   });
 
-export const addSuccessCriterionConfirmation = createServerFn({ method: "POST" }).middleware([requireSupabaseAuth])
+export const addSuccessCriterionConfirmation = createServerFn({ method: "POST" }).middleware([requireInternalAuth])
   .inputValidator((data: unknown) => createConfirmationInput.parse(data))
   .handler(async ({ data }) => {
     const { createSuccessCriterionConfirmation } = await import("./hub.server");
     return createSuccessCriterionConfirmation(data);
   });
 
-export const setSuccessCriterionConfirmation = createServerFn({ method: "POST" }).middleware([requireSupabaseAuth])
+export const setSuccessCriterionConfirmation = createServerFn({ method: "POST" }).middleware([requireInternalAuth])
   .inputValidator((data: unknown) => updateConfirmationInput.parse(data))
   .handler(async ({ data }) => {
     const { updateSuccessCriterionConfirmation } = await import("./hub.server");
@@ -211,7 +211,7 @@ export const setSuccessCriterionConfirmation = createServerFn({ method: "POST" }
     });
   });
 
-export const addAdoptionArea = createServerFn({ method: "POST" }).middleware([requireSupabaseAuth])
+export const addAdoptionArea = createServerFn({ method: "POST" }).middleware([requireInternalAuth])
   .inputValidator((data: unknown) => createAdoptionAreaInput.parse(data))
   .handler(async ({ data }) => {
     const { createAdoptionArea } = await import("./hub.server");
@@ -219,7 +219,7 @@ export const addAdoptionArea = createServerFn({ method: "POST" }).middleware([re
     return createAdoptionArea(implementationId, toAdoptionAreaPatch(rest));
   });
 
-export const setAdoptionArea = createServerFn({ method: "POST" }).middleware([requireSupabaseAuth])
+export const setAdoptionArea = createServerFn({ method: "POST" }).middleware([requireInternalAuth])
   .inputValidator((data: unknown) => updateAdoptionAreaInput.parse(data))
   .handler(async ({ data }) => {
     const { updateAdoptionArea } = await import("./hub.server");
@@ -227,14 +227,14 @@ export const setAdoptionArea = createServerFn({ method: "POST" }).middleware([re
     return updateAdoptionArea(id, toAdoptionAreaPatch(rest));
   });
 
-export const addAdoptionObservation = createServerFn({ method: "POST" }).middleware([requireSupabaseAuth])
+export const addAdoptionObservation = createServerFn({ method: "POST" }).middleware([requireInternalAuth])
   .inputValidator((data: unknown) => createAdoptionObservationInput.parse(data))
   .handler(async ({ data }) => {
     const { createAdoptionObservation } = await import("./hub.server");
     return createAdoptionObservation(toAdoptionObservationRow(data));
   });
 
-export const addCustomerContact = createServerFn({ method: "POST" }).middleware([requireSupabaseAuth])
+export const addCustomerContact = createServerFn({ method: "POST" }).middleware([requireInternalAuth])
   .inputValidator((data: unknown) => createCustomerContactInput.parse(data))
   .handler(async ({ data }) => {
     const { createCustomerContact } = await import("./hub.server");
@@ -242,7 +242,7 @@ export const addCustomerContact = createServerFn({ method: "POST" }).middleware(
     return createCustomerContact(customerId, toCustomerContactPatch(rest));
   });
 
-export const setCustomerContact = createServerFn({ method: "POST" }).middleware([requireSupabaseAuth])
+export const setCustomerContact = createServerFn({ method: "POST" }).middleware([requireInternalAuth])
   .inputValidator((data: unknown) => updateCustomerContactInput.parse(data))
   .handler(async ({ data }) => {
     const { updateCustomerContact } = await import("./hub.server");
@@ -250,12 +250,12 @@ export const setCustomerContact = createServerFn({ method: "POST" }).middleware(
     return updateCustomerContact(id, toCustomerContactPatch(rest));
   });
 
-export const getTeamOptions = createServerFn({ method: "GET" }).middleware([requireSupabaseAuth]).handler(async () => {
+export const getTeamOptions = createServerFn({ method: "GET" }).middleware([requireInternalAuth]).handler(async () => {
   const { loadTeamOptions } = await import("./hub.server");
   return loadTeamOptions();
 });
 
-export const addImplementation = createServerFn({ method: "POST" }).middleware([requireSupabaseAuth])
+export const addImplementation = createServerFn({ method: "POST" }).middleware([requireInternalAuth])
   .inputValidator((data: unknown) => createImplementationInput.parse(data))
   .handler(async ({ data }) => {
     const { createImplementation } = await import("./hub.server");
@@ -266,7 +266,7 @@ export const addImplementation = createServerFn({ method: "POST" }).middleware([
     });
   });
 
-export const setImplementation = createServerFn({ method: "POST" }).middleware([requireSupabaseAuth])
+export const setImplementation = createServerFn({ method: "POST" }).middleware([requireInternalAuth])
   .inputValidator((data: unknown) => updateImplementationInput.parse(data))
   .handler(async ({ data }) => {
     const { updateImplementation } = await import("./hub.server");
@@ -275,7 +275,7 @@ export const setImplementation = createServerFn({ method: "POST" }).middleware([
 
 
 
-export const advanceImplementationStage = createServerFn({ method: "POST" }).middleware([requireSupabaseAuth])
+export const advanceImplementationStage = createServerFn({ method: "POST" }).middleware([requireInternalAuth])
   .inputValidator((data: unknown) => advanceStageInput.parse(data))
   .handler(async ({ data }) => {
     const { advanceStage } = await import("./hub.server");
@@ -289,7 +289,7 @@ export const advanceImplementationStage = createServerFn({ method: "POST" }).mid
 
 /* ---------- P0 Slice 3: delivery record write paths ---------- */
 
-export const addRequirement = createServerFn({ method: "POST" }).middleware([requireSupabaseAuth])
+export const addRequirement = createServerFn({ method: "POST" }).middleware([requireInternalAuth])
   .inputValidator((data: unknown) => createRequirementInput.parse(data))
   .handler(async ({ data }) => {
     const { createRequirement } = await import("./hub.server");
@@ -297,7 +297,7 @@ export const addRequirement = createServerFn({ method: "POST" }).middleware([req
     return createRequirement(implementationId, toRequirementPatch(rest));
   });
 
-export const setRequirement = createServerFn({ method: "POST" }).middleware([requireSupabaseAuth])
+export const setRequirement = createServerFn({ method: "POST" }).middleware([requireInternalAuth])
   .inputValidator((data: unknown) => updateRequirementInput.parse(data))
   .handler(async ({ data }) => {
     const { updateRequirement } = await import("./hub.server");
@@ -305,7 +305,7 @@ export const setRequirement = createServerFn({ method: "POST" }).middleware([req
     return updateRequirement(id, toRequirementPatch(rest));
   });
 
-export const addRisk = createServerFn({ method: "POST" }).middleware([requireSupabaseAuth])
+export const addRisk = createServerFn({ method: "POST" }).middleware([requireInternalAuth])
   .inputValidator((data: unknown) => createRiskInput.parse(data))
   .handler(async ({ data }) => {
     const { createRisk } = await import("./hub.server");
@@ -313,7 +313,7 @@ export const addRisk = createServerFn({ method: "POST" }).middleware([requireSup
     return createRisk(implementationId, toRiskPatch(rest));
   });
 
-export const setRisk = createServerFn({ method: "POST" }).middleware([requireSupabaseAuth])
+export const setRisk = createServerFn({ method: "POST" }).middleware([requireInternalAuth])
   .inputValidator((data: unknown) => updateRiskInput.parse(data))
   .handler(async ({ data }) => {
     const { updateRisk } = await import("./hub.server");
@@ -321,7 +321,7 @@ export const setRisk = createServerFn({ method: "POST" }).middleware([requireSup
     return updateRisk(id, toRiskPatch(rest));
   });
 
-export const addIssue = createServerFn({ method: "POST" }).middleware([requireSupabaseAuth])
+export const addIssue = createServerFn({ method: "POST" }).middleware([requireInternalAuth])
   .inputValidator((data: unknown) => createIssueInput.parse(data))
   .handler(async ({ data }) => {
     const { createIssue } = await import("./hub.server");
@@ -329,7 +329,7 @@ export const addIssue = createServerFn({ method: "POST" }).middleware([requireSu
     return createIssue(implementationId, toIssuePatch(rest));
   });
 
-export const setIssue = createServerFn({ method: "POST" }).middleware([requireSupabaseAuth])
+export const setIssue = createServerFn({ method: "POST" }).middleware([requireInternalAuth])
   .inputValidator((data: unknown) => updateIssueInput.parse(data))
   .handler(async ({ data }) => {
     const { updateIssue } = await import("./hub.server");
@@ -337,7 +337,7 @@ export const setIssue = createServerFn({ method: "POST" }).middleware([requireSu
     return updateIssue(id, toIssuePatch(rest));
   });
 
-export const addEscalation = createServerFn({ method: "POST" }).middleware([requireSupabaseAuth])
+export const addEscalation = createServerFn({ method: "POST" }).middleware([requireInternalAuth])
   .inputValidator((data: unknown) => createEscalationInput.parse(data))
   .handler(async ({ data }) => {
     const { createEscalation } = await import("./hub.server");
@@ -345,7 +345,7 @@ export const addEscalation = createServerFn({ method: "POST" }).middleware([requ
     return createEscalation(implementationId, toEscalationPatch(rest));
   });
 
-export const setEscalation = createServerFn({ method: "POST" }).middleware([requireSupabaseAuth])
+export const setEscalation = createServerFn({ method: "POST" }).middleware([requireInternalAuth])
   .inputValidator((data: unknown) => updateEscalationInput.parse(data))
   .handler(async ({ data }) => {
     const { updateEscalation } = await import("./hub.server");
@@ -353,7 +353,7 @@ export const setEscalation = createServerFn({ method: "POST" }).middleware([requ
     return updateEscalation(id, toEscalationPatch(rest));
   });
 
-export const addDecision = createServerFn({ method: "POST" }).middleware([requireSupabaseAuth])
+export const addDecision = createServerFn({ method: "POST" }).middleware([requireInternalAuth])
   .inputValidator((data: unknown) => createDecisionInput.parse(data))
   .handler(async ({ data }) => {
     const { createDecision } = await import("./hub.server");
@@ -361,7 +361,7 @@ export const addDecision = createServerFn({ method: "POST" }).middleware([requir
     return createDecision(implementationId, toDecisionPatch(rest));
   });
 
-export const setDecision = createServerFn({ method: "POST" }).middleware([requireSupabaseAuth])
+export const setDecision = createServerFn({ method: "POST" }).middleware([requireInternalAuth])
   .inputValidator((data: unknown) => updateDecisionInput.parse(data))
   .handler(async ({ data }) => {
     const { updateDecision } = await import("./hub.server");
@@ -369,7 +369,7 @@ export const setDecision = createServerFn({ method: "POST" }).middleware([requir
     return updateDecision(id, toDecisionPatch(rest));
   });
 
-export const addCommitment = createServerFn({ method: "POST" }).middleware([requireSupabaseAuth])
+export const addCommitment = createServerFn({ method: "POST" }).middleware([requireInternalAuth])
   .inputValidator((data: unknown) => createCommitmentInput.parse(data))
   .handler(async ({ data }) => {
     const { createCommitment } = await import("./hub.server");
@@ -377,7 +377,7 @@ export const addCommitment = createServerFn({ method: "POST" }).middleware([requ
     return createCommitment(implementationId, toCommitmentPatch(rest));
   });
 
-export const setCommitment = createServerFn({ method: "POST" }).middleware([requireSupabaseAuth])
+export const setCommitment = createServerFn({ method: "POST" }).middleware([requireInternalAuth])
   .inputValidator((data: unknown) => updateCommitmentInput.parse(data))
   .handler(async ({ data }) => {
     const { updateCommitment } = await import("./hub.server");
@@ -387,7 +387,7 @@ export const setCommitment = createServerFn({ method: "POST" }).middleware([requ
 
 /* ---------- Slice 4: evidence + approval request write paths ---------- */
 
-export const addEvidence = createServerFn({ method: "POST" }).middleware([requireSupabaseAuth])
+export const addEvidence = createServerFn({ method: "POST" }).middleware([requireInternalAuth])
   .inputValidator((data: unknown) => createEvidenceInput.parse(data))
   .handler(async ({ data }) => {
     const { createEvidence } = await import("./hub.server");
@@ -395,7 +395,7 @@ export const addEvidence = createServerFn({ method: "POST" }).middleware([requir
     return createEvidence(implementationId, toEvidencePatch(rest));
   });
 
-export const setEvidence = createServerFn({ method: "POST" }).middleware([requireSupabaseAuth])
+export const setEvidence = createServerFn({ method: "POST" }).middleware([requireInternalAuth])
   .inputValidator((data: unknown) => updateEvidenceInput.parse(data))
   .handler(async ({ data }) => {
     const { updateEvidence } = await import("./hub.server");
@@ -403,7 +403,7 @@ export const setEvidence = createServerFn({ method: "POST" }).middleware([requir
     return updateEvidence(id, toEvidencePatch(rest));
   });
 
-export const addApproval = createServerFn({ method: "POST" }).middleware([requireSupabaseAuth])
+export const addApproval = createServerFn({ method: "POST" }).middleware([requireInternalAuth])
   .inputValidator((data: unknown) => createApprovalInput.parse(data))
   .handler(async ({ data }) => {
     const { createApproval } = await import("./hub.server");
@@ -411,7 +411,7 @@ export const addApproval = createServerFn({ method: "POST" }).middleware([requir
     return createApproval(implementationId, toApprovalPatch(rest));
   });
 
-export const setApproval = createServerFn({ method: "POST" }).middleware([requireSupabaseAuth])
+export const setApproval = createServerFn({ method: "POST" }).middleware([requireInternalAuth])
   .inputValidator((data: unknown) => updateApprovalInput.parse(data))
   .handler(async ({ data }) => {
     const { updateApproval } = await import("./hub.server");
@@ -421,21 +421,21 @@ export const setApproval = createServerFn({ method: "POST" }).middleware([requir
 
 /* ---------- Working notes + attachments ---------- */
 
-export const addJournalEntry = createServerFn({ method: "POST" }).middleware([requireSupabaseAuth])
+export const addJournalEntry = createServerFn({ method: "POST" }).middleware([requireInternalAuth])
   .inputValidator((data: unknown) => createJournalEntryInput.parse(data))
   .handler(async ({ data }) => {
     const { createJournalEntry } = await import("./hub.server");
     return createJournalEntry(data);
   });
 
-export const uploadAttachment = createServerFn({ method: "POST" }).middleware([requireSupabaseAuth])
+export const uploadAttachment = createServerFn({ method: "POST" }).middleware([requireInternalAuth])
   .inputValidator((data: unknown) => uploadAttachmentInput.parse(data))
   .handler(async ({ data }) => {
     const { storeAttachment } = await import("./hub.server");
     return storeAttachment(data);
   });
 
-export const getAttachmentLink = createServerFn({ method: "POST" }).middleware([requireSupabaseAuth])
+export const getAttachmentLink = createServerFn({ method: "POST" }).middleware([requireInternalAuth])
   .inputValidator((data: unknown) => attachmentPathInput.parse(data))
   .handler(async ({ data }) => {
     const { attachmentLink } = await import("./hub.server");
@@ -444,21 +444,21 @@ export const getAttachmentLink = createServerFn({ method: "POST" }).middleware([
 
 /* ---------- SOW analysis (read-only proposal) ---------- */
 
-export const analyzeSowDocument = createServerFn({ method: "POST" }).middleware([requireSupabaseAuth])
+export const analyzeSowDocument = createServerFn({ method: "POST" }).middleware([requireInternalAuth])
   .inputValidator((data: unknown) => analyzeSowInput.parse(data))
   .handler(async ({ data }) => {
     const { analyzeSow } = await import("./sow-analysis.server");
     return analyzeSow(data.implementationId);
   });
 
-export const applySowProposalToImplementation = createServerFn({ method: "POST" }).middleware([requireSupabaseAuth])
+export const applySowProposalToImplementation = createServerFn({ method: "POST" }).middleware([requireInternalAuth])
   .inputValidator((data: unknown) => applySowProposalInput.parse(data))
   .handler(async ({ data }) => {
     const { applySowProposal } = await import("./sow-analysis.server");
     return applySowProposal(data);
   });
 
-export const setSowDocumentForImplementation = createServerFn({ method: "POST" }).middleware([requireSupabaseAuth])
+export const setSowDocumentForImplementation = createServerFn({ method: "POST" }).middleware([requireInternalAuth])
   .inputValidator((data: unknown) => setSowDocumentInput.parse(data))
   .handler(async ({ data }) => {
     const { setSowDocument } = await import("./sow-analysis.server");

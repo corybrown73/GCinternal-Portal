@@ -77,8 +77,17 @@ export function toCustomerPatch(data: NewCustomerInput) {
   };
 }
 
-/** The only status values the schema's CHECK constraint accepts. */
+/**
+ * The status vocabulary the app writes. The DB column has NO check constraint
+ * and defaults to 'active' (0003), so rows created by the hub's "new
+ * implementation" flow carry a value outside this list; the update schema
+ * tolerates it so an unrelated edit (SOW upload, discovery board) never fails
+ * on a status the user didn't touch.
+ */
 export const IMPLEMENTATION_STATUSES = ["on_track", "at_risk", "blocked", "idle"] as const;
+
+/** Accepts the app vocabulary plus the legacy DB default 'active' (pass-through). */
+export const implementationStatusInput = z.enum([...IMPLEMENTATION_STATUSES, "active"]);
 
 /**
  * Editing an existing implementation. `current_stage` and `stage_entered_at` are
@@ -91,7 +100,7 @@ export const updateImplementationInput = z.object({
   ownerId: z.string().uuid().nullable(),
   salesOwner: optionalText,
   tier: optionalText,
-  status: z.enum(IMPLEMENTATION_STATUSES),
+  status: implementationStatusInput,
   sowReference: optionalText,
   /** Stored path of the uploaded SOW document, plus the name to show for it. */
   sowDocumentUrl: optionalText,

@@ -75,7 +75,7 @@ export function useProfile() {
     enabled: Boolean(session?.user),
     queryFn: async (): Promise<PortalProfile | null> => {
       const { data } = await supabase
-        .from("portal_profiles" as never)
+        .from("portal_profiles")
         .select("id, email, full_name, role")
         .eq("id", session!.user.id)
         .maybeSingle<PortalProfile>();

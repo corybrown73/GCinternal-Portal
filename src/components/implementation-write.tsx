@@ -636,6 +636,12 @@ export function EditImplementation({
             disabled={disabled}
             onChange={(e) => set({ status: e.target.value })}
           >
+            {/* Legacy rows carry the DB default 'active'; render it as an
+                explicit "not set" choice so the select isn't silently blank
+                and the human picks a real status. */}
+            {!STATUS_CHOICE.some((s) => s.value === draft.status) && (
+              <option value={draft.status}>Not set — choose one</option>
+            )}
             {STATUS_CHOICE.map((s) => (
               <option key={s.value} value={s.value}>
                 {s.label}
