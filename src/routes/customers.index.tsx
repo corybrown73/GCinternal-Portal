@@ -4,6 +4,8 @@ import { ArrowDown, ArrowUp } from "lucide-react";
 
 import { NewImplementation } from "@/components/implementation-write";
 import { PageBody, PageHeader } from "@/components/page";
+import { SavedViews } from "@/components/saved-views";
+import { searchToView } from "@/lib/saved-view-input";
 import { HealthNote } from "@/components/health-note";
 import { StageBadge, StatusDot, NoRows } from "@/components/record";
 import { getHome } from "@/lib/hub.functions";
@@ -176,6 +178,34 @@ function CustomersPage() {
             onChange={(v) => setSearch({ status: v })}
           />
         </div>
+
+        {/* Phase 7. A saved view stores this surface's search PARAMETERS, not
+            its rows, and applying one writes them back into the URL — so the
+            result stays an ordinary, shareable link and nothing about the
+            existing ?stage/?status/?sort/?dir contract changes. Renders nothing
+            while the saved_views flag is off. */}
+        <SavedViews
+          surface="customers"
+          current={searchToView({ stage, status, sort, dir })}
+          onApply={(view) => {
+            // A stored view is re-validated on the way back in, exactly as the
+            // URL is: it was written months ago against a sort key that may
+            // since have gone.
+            const savedSort = String(view["sort"] ?? "");
+            const savedStage = view["stage"];
+            const savedStatus = view["status"];
+            void navigate({
+              search: () => ({
+                sort: ((SORTS as readonly string[]).includes(savedSort)
+                  ? savedSort
+                  : "days") as SortKey,
+                dir: view["dir"] === "asc" ? ("asc" as const) : ("desc" as const),
+                ...(typeof savedStage === "string" ? { stage: savedStage } : {}),
+                ...(typeof savedStatus === "string" ? { status: savedStatus } : {}),
+              }),
+            });
+          }}
+        />
 
         <div className="overflow-hidden rounded-md border border-border bg-card">
           <table className="w-full text-left">

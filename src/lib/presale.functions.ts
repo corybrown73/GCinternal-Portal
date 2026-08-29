@@ -214,6 +214,15 @@ export const createApiKey = createServerFn({ method: "POST" })
       .object({
         name: z.string().trim().min(1, "Name is required"),
         scopes: z.array(z.string()).min(1, "Pick at least one scope"),
+        // Phase 7. Optional and null-by-default so an existing caller is
+        // unaffected: a key with no expiry behaves exactly as every key does
+        // today.
+        expiresAt: z
+          .string()
+          .regex(/^\d{4}-\d{2}-\d{2}$/, "Use YYYY-MM-DD")
+          .nullable()
+          .optional(),
+        rateLimitPerMinute: z.number().int().min(1).max(100000).nullable().optional(),
       })
       .parse(data),
   )

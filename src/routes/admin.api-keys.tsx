@@ -55,19 +55,33 @@ function ApiKeysPage() {
 
   const [name, setName] = useState("");
   const [scopes, setScopes] = useState<string[]>([]);
+  // Phase 7. Both optional: a key with no expiry and the default limit behaves
+  // exactly as every key created before 0025 does.
+  const [expiresAt, setExpiresAt] = useState("");
+  const [rateLimit, setRateLimit] = useState("");
   const [freshKey, setFreshKey] = useState<{ name: string; key: string } | null>(null);
   const [copied, setCopied] = useState(false);
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ["admin", "api-keys"] });
 
   const createMutation = useMutation({
-    mutationFn: () => create({ data: { name: name.trim(), scopes } }),
+    mutationFn: () =>
+      create({
+        data: {
+          name: name.trim(),
+          scopes,
+          expiresAt: expiresAt || null,
+          rateLimitPerMinute: rateLimit ? Number(rateLimit) : null,
+        },
+      }),
     onSuccess: (result) => {
       invalidate();
       setFreshKey({ name: name.trim(), key: result.key });
       setCopied(false);
       setName("");
       setScopes([]);
+      setExpiresAt("");
+      setRateLimit("");
     },
   });
 
@@ -158,6 +172,34 @@ function ApiKeysPage() {
                 ))}
               </div>
             </div>
+            <div className="grid max-w-sm gap-2 sm:grid-cols-2">
+              <div>
+                <label className={labelClass}>Expires (optional)</label>
+                <input
+                  type="date"
+                  className={inputClass}
+                  value={expiresAt}
+                  onChange={(e) => setExpiresAt(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className={labelClass}>Requests / minute</label>
+                <input
+                  type="number"
+                  min={1}
+                  max={100000}
+                  className={inputClass}
+                  placeholder="120"
+                  value={rateLimit}
+                  onChange={(e) => setRateLimit(e.target.value)}
+                />
+              </div>
+            </div>
+            <p className="text-[11px] text-muted-foreground">
+              Both are recorded whether or not enforcement is on, so you can see what would happen
+              before it does. Enforcement is gated by the <code>api_key_limits</code> flag; blank
+              expiry means the key never expires.
+            </p>
             {createMutation.isError ? (
               <p className="text-[11px] text-destructive">
                 {(createMutation.error as Error).message}
@@ -186,6 +228,8 @@ function ApiKeysPage() {
                     <th className="px-3 py-1.5 font-medium">Name</th>
                     <th className="px-3 py-1.5 font-medium">Key</th>
                     <th className="px-3 py-1.5 font-medium">Scopes</th>
+                    <th className="px-3 py-1.5 font-medium">Expires</th>
+                    <th className="px-3 py-1.5 font-medium">Limit / min</th>
                     <th className="px-3 py-1.5 font-medium">Last used</th>
                     <th className="px-3 py-1.5 font-medium">Status</th>
                     <th className="px-3 py-1.5" />
@@ -209,6 +253,12 @@ function ApiKeysPage() {
                             </code>
                           ))}
                         </div>
+                      </td>
+                      <td className="px-3 py-1.5 font-mono text-[11px] text-muted-foreground">
+                        {k.expires_at ? fmtDateTime(k.expires_at) : "never"}
+                      </td>
+                      <td className="px-3 py-1.5 font-mono text-[11px] text-muted-foreground">
+                        {k.rate_limit_per_minute ?? 120}
                       </td>
                       <td className="px-3 py-1.5 font-mono text-[11px] text-muted-foreground">
                         {k.last_used_at ? fmtDateTime(k.last_used_at) : "never"}

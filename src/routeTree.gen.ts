@@ -20,6 +20,7 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as PipelineRouteImport } from './routes/pipeline'
 import { Route as PortalRouteImport } from './routes/portal'
 import { Route as PortfolioRouteImport } from './routes/portfolio'
+import { Route as SearchRouteImport } from './routes/search'
 import { Route as SequencesRouteImport } from './routes/sequences'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as SignupRouteImport } from './routes/signup'
@@ -28,6 +29,7 @@ import { Route as TemplatesRouteImport } from './routes/templates'
 import { Route as TicketsRouteImport } from './routes/tickets'
 import { Route as AdminIndexRouteImport } from './routes/admin.index'
 import { Route as AdminApiKeysRouteImport } from './routes/admin.api-keys'
+import { Route as AdminAuditRouteImport } from './routes/admin.audit'
 import { Route as AdminUsersRouteImport } from './routes/admin.users'
 import { Route as AuthCallbackRouteImport } from './routes/auth.callback'
 import { Route as CustomersIndexRouteImport } from './routes/customers.index'
@@ -111,6 +113,11 @@ const PortfolioRoute = PortfolioRouteImport.update({
   path: '/portfolio',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SearchRoute = SearchRouteImport.update({
+  id: '/search',
+  path: '/search',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SequencesRoute = SequencesRouteImport.update({
   id: '/sequences',
   path: '/sequences',
@@ -149,6 +156,11 @@ const AdminIndexRoute = AdminIndexRouteImport.update({
 const AdminApiKeysRoute = AdminApiKeysRouteImport.update({
   id: '/api-keys',
   path: '/api-keys',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminAuditRoute = AdminAuditRouteImport.update({
+  id: '/audit',
+  path: '/audit',
   getParentRoute: () => AdminRoute,
 } as any)
 const AdminUsersRoute = AdminUsersRouteImport.update({
@@ -300,6 +312,7 @@ export interface FileRoutesByFullPath {
   '/pipeline': typeof PipelineRoute
   '/portal': typeof PortalRouteWithChildren
   '/portfolio': typeof PortfolioRoute
+  '/search': typeof SearchRoute
   '/sequences': typeof SequencesRouteWithChildren
   '/settings': typeof SettingsRoute
   '/signup': typeof SignupRoute
@@ -307,6 +320,7 @@ export interface FileRoutesByFullPath {
   '/templates': typeof TemplatesRoute
   '/tickets': typeof TicketsRouteWithChildren
   '/admin/api-keys': typeof AdminApiKeysRoute
+  '/admin/audit': typeof AdminAuditRoute
   '/admin/users': typeof AdminUsersRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/customers/$customerId': typeof CustomersCustomerIdRoute
@@ -345,10 +359,12 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/pipeline': typeof PipelineRoute
   '/portfolio': typeof PortfolioRoute
+  '/search': typeof SearchRoute
   '/settings': typeof SettingsRoute
   '/signup': typeof SignupRoute
   '/templates': typeof TemplatesRoute
   '/admin/api-keys': typeof AdminApiKeysRoute
+  '/admin/audit': typeof AdminAuditRoute
   '/admin/users': typeof AdminUsersRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/customers/$customerId': typeof CustomersCustomerIdRoute
@@ -391,6 +407,7 @@ export interface FileRoutesById {
   '/pipeline': typeof PipelineRoute
   '/portal': typeof PortalRouteWithChildren
   '/portfolio': typeof PortfolioRoute
+  '/search': typeof SearchRoute
   '/sequences': typeof SequencesRouteWithChildren
   '/settings': typeof SettingsRoute
   '/signup': typeof SignupRoute
@@ -398,6 +415,7 @@ export interface FileRoutesById {
   '/templates': typeof TemplatesRoute
   '/tickets': typeof TicketsRouteWithChildren
   '/admin/api-keys': typeof AdminApiKeysRoute
+  '/admin/audit': typeof AdminAuditRoute
   '/admin/users': typeof AdminUsersRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/customers/$customerId': typeof CustomersCustomerIdRoute
@@ -441,6 +459,7 @@ export interface FileRouteTypes {
     | '/pipeline'
     | '/portal'
     | '/portfolio'
+    | '/search'
     | '/sequences'
     | '/settings'
     | '/signup'
@@ -448,6 +467,7 @@ export interface FileRouteTypes {
     | '/templates'
     | '/tickets'
     | '/admin/api-keys'
+    | '/admin/audit'
     | '/admin/users'
     | '/auth/callback'
     | '/customers/$customerId'
@@ -486,10 +506,12 @@ export interface FileRouteTypes {
     | '/login'
     | '/pipeline'
     | '/portfolio'
+    | '/search'
     | '/settings'
     | '/signup'
     | '/templates'
     | '/admin/api-keys'
+    | '/admin/audit'
     | '/admin/users'
     | '/auth/callback'
     | '/customers/$customerId'
@@ -531,6 +553,7 @@ export interface FileRouteTypes {
     | '/pipeline'
     | '/portal'
     | '/portfolio'
+    | '/search'
     | '/sequences'
     | '/settings'
     | '/signup'
@@ -538,6 +561,7 @@ export interface FileRouteTypes {
     | '/templates'
     | '/tickets'
     | '/admin/api-keys'
+    | '/admin/audit'
     | '/admin/users'
     | '/auth/callback'
     | '/customers/$customerId'
@@ -580,6 +604,7 @@ export interface RootRouteChildren {
   PipelineRoute: typeof PipelineRoute
   PortalRoute: typeof PortalRouteWithChildren
   PortfolioRoute: typeof PortfolioRoute
+  SearchRoute: typeof SearchRoute
   SequencesRoute: typeof SequencesRouteWithChildren
   SettingsRoute: typeof SettingsRoute
   SignupRoute: typeof SignupRoute
@@ -679,6 +704,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PortfolioRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/search': {
+      id: '/search'
+      path: '/search'
+      fullPath: '/search'
+      preLoaderRoute: typeof SearchRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/sequences': {
       id: '/sequences'
       path: '/sequences'
@@ -733,6 +765,13 @@ declare module '@tanstack/react-router' {
       path: '/api-keys'
       fullPath: '/admin/api-keys'
       preLoaderRoute: typeof AdminApiKeysRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/audit': {
+      id: '/admin/audit'
+      path: '/audit'
+      fullPath: '/admin/audit'
+      preLoaderRoute: typeof AdminAuditRouteImport
       parentRoute: typeof AdminRoute
     }
     '/admin/users': {
@@ -929,12 +968,14 @@ declare module '@tanstack/react-router' {
 
 interface AdminRouteChildren {
   AdminApiKeysRoute: typeof AdminApiKeysRoute
+  AdminAuditRoute: typeof AdminAuditRoute
   AdminUsersRoute: typeof AdminUsersRoute
   AdminIndexRoute: typeof AdminIndexRoute
 }
 
 const AdminRouteChildren: AdminRouteChildren = {
   AdminApiKeysRoute: AdminApiKeysRoute,
+  AdminAuditRoute: AdminAuditRoute,
   AdminUsersRoute: AdminUsersRoute,
   AdminIndexRoute: AdminIndexRoute,
 }
@@ -1058,6 +1099,7 @@ const rootRouteChildren: RootRouteChildren = {
   PipelineRoute: PipelineRoute,
   PortalRoute: PortalRouteWithChildren,
   PortfolioRoute: PortfolioRoute,
+  SearchRoute: SearchRoute,
   SequencesRoute: SequencesRouteWithChildren,
   SettingsRoute: SettingsRoute,
   SignupRoute: SignupRoute,

@@ -723,7 +723,14 @@ export async function listApiKeys(userId: string): Promise<ApiKey[]> {
 
 export async function createApiKeyRecord(
   userId: string,
-  input: { name: string; scopes: string[] },
+  input: {
+    name: string;
+    scopes: string[];
+    /** Phase 7. Null (the default) means the key never expires, which is what
+     * every key created before this existed does. */
+    expiresAt?: string | null | undefined;
+    rateLimitPerMinute?: number | null | undefined;
+  },
 ): Promise<{ key: string; record: ApiKey }> {
   await requireSuperAdmin(userId);
   const scopes = input.scopes.filter((s): s is ApiScope =>
@@ -734,7 +741,15 @@ export async function createApiKeyRecord(
   const { key, hash, prefix } = generateApiKey();
   const { data, error } = await db()
     .from("portal_api_keys")
-    .insert({ name: input.name, key_prefix: prefix, key_hash: hash, scopes, created_by: userId })
+    .insert({
+      name: input.name,
+      key_prefix: prefix,
+      key_hash: hash,
+      scopes,
+      created_by: userId,
+      expires_at: input.expiresAt ?? null,
+      ...(input.rateLimitPerMinute ? { rate_limit_per_minute: input.rateLimitPerMinute } : {}),
+    })
     .select("*")
     .single();
   if (error || !data) throw new Error(error?.message ?? "Could not create the key");
@@ -745,7 +760,12 @@ export async function createApiKeyRecord(
     action: "api_key.create",
     entity_type: "api_key",
     entity_id: data.id,
-    payload: { name: input.name, scopes },
+    payload: {
+      name: input.name,
+      scopes,
+      expires_at: input.expiresAt ?? null,
+      rate_limit_per_minute: input.rateLimitPerMinute ?? null,
+    },
   });
   return { key, record: data as ApiKey };
 }
