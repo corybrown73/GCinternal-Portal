@@ -54,6 +54,8 @@ export async function loadImplementations(): Promise<ImplementationRow[]> {
       current_stage: i.current_stage,
       stage_entered_at: i.stage_entered_at,
       status: i.status,
+      health_recorded: i.health_recorded ?? null,
+      health_recorded_reason: i.health_recorded_reason ?? null,
       owner_name: i.owner_id ? (team.get(i.owner_id)?.name ?? null) : null,
       tier: i.tier,
       target_launch_date: i.target_launch_date,
@@ -349,6 +351,9 @@ export async function loadCustomer360(
     current_stage: i.current_stage,
     stage_entered_at: i.stage_entered_at,
     status: i.status,
+    health_recorded: i.health_recorded ?? null,
+    health_recorded_reason: i.health_recorded_reason ?? null,
+    health_recorded_at: i.health_recorded_at ?? null,
     owner_name: i.owner_id ? (team.get(i.owner_id)?.name ?? null) : null,
     target_launch_date: i.target_launch_date ?? null,
   }));
@@ -606,6 +611,9 @@ export async function loadCustomer360(
       current_stage: impl.current_stage,
       stage_entered_at: impl.stage_entered_at,
       status: impl.status,
+      health_recorded: impl.health_recorded ?? null,
+      health_recorded_reason: impl.health_recorded_reason ?? null,
+      health_recorded_at: impl.health_recorded_at ?? null,
       owner_id: impl.owner_id ?? null,
       owner_name: named(impl.owner_id),
       sales_owner: impl.sales_owner,
@@ -1522,6 +1530,10 @@ export async function advanceStage(args: {
     .eq("id", args.implementationId);
   if (updateError) throw new Error(`Could not update the current stage: ${updateError.message}`);
 
+  // Stage dwell is a health input, so the cache is stale the moment we move.
+  const { recomputeHealthSoon } = await import("./health.server");
+  recomputeHealthSoon(args.implementationId);
+
   return { ok: true, stage: expected, enteredAt: at };
 }
 
@@ -1566,6 +1578,9 @@ function deliveryWriteError(table: string, message: string): Error {
   return new Error(`Could not save this ${label}. Check the details and try again.`);
 }
 
+/** Tables deriveHealth reads, so a write to one invalidates the health cache. */
+const HEALTH_INPUT_TABLES = new Set(["risks", "issues", "escalations", "commitments"]);
+
 async function insertDeliveryRow(
   table: string,
   implementationId: string,
@@ -1577,12 +1592,26 @@ async function insertDeliveryRow(
     .select("id")
     .maybeSingle();
   if (error) throw deliveryWriteError(table, error.message);
+  if (HEALTH_INPUT_TABLES.has(table)) {
+    const { recomputeHealthSoon } = await import("./health.server");
+    recomputeHealthSoon(implementationId);
+  }
   return { ok: true, id: data?.id ?? null };
 }
 
 async function updateDeliveryRow(table: string, id: string, patch: Record<string, unknown>) {
   const { error } = await db().from(table).update(patch).eq("id", id);
   if (error) throw deliveryWriteError(table, error.message);
+  if (HEALTH_INPUT_TABLES.has(table)) {
+    // The update carries only the row id; the cache is keyed by implementation.
+    const { data: row } = await db()
+      .from(table)
+      .select("implementation_id")
+      .eq("id", id)
+      .maybeSingle();
+    const { recomputeHealthSoon } = await import("./health.server");
+    recomputeHealthSoon(row?.implementation_id ?? null);
+  }
   return { ok: true, id };
 }
 

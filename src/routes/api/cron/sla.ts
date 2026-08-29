@@ -33,7 +33,14 @@ async function runSlaSweep(): Promise<Response> {
   const now = Date.now();
   const nowIso = new Date(now).toISOString();
   const appUrl = process.env["APP_URL"] ?? "http://localhost:3000";
-  const summary = { warned: 0, breached: 0, stalled: 0, overdue_milestones: 0 };
+  const summary = {
+    warned: 0,
+    breached: 0,
+    stalled: 0,
+    overdue_milestones: 0,
+    health_recomputed: 0,
+    health_failed: 0,
+  };
 
   const safeSend = async (to: string, subject: string, html: string) => {
     try {
@@ -211,6 +218,16 @@ async function runSlaSweep(): Promise<Response> {
     });
     summary.overdue_milestones += 1;
   }
+
+  /* ---- 5. Computed-health backstop ----
+   * Write paths recompute on mutation; this sweep repairs anything they
+   * missed (a failed background recompute, a direct SQL edit, or time simply
+   * passing — dwell and launch dates go stale on their own).
+   */
+  const { recomputeAllHealth } = await import("@/lib/health.server");
+  const health = await recomputeAllHealth();
+  summary.health_recomputed = health.updated;
+  summary.health_failed = health.failed;
 
   await audit({
     actor_type: "system",

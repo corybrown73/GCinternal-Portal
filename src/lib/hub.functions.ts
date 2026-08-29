@@ -73,6 +73,8 @@ import {
   toImplementationPatch,
   toImplementationUpdatePatch,
   updateImplementationInput,
+  updateImplementationInputChecked,
+  toRecordedHealthPatch,
 } from "./implementation-input";
 
 export const getHome = createServerFn({ method: "GET" })
@@ -286,10 +288,17 @@ export const addImplementation = createServerFn({ method: "POST" })
 
 export const setImplementation = createServerFn({ method: "POST" })
   .middleware([requireInternalAuth])
-  .inputValidator((data: unknown) => updateImplementationInput.parse(data))
-  .handler(async ({ data }) => {
+  .inputValidator((data: unknown) => updateImplementationInputChecked.parse(data))
+  .handler(async ({ data, context }) => {
     const { updateImplementation } = await import("./hub.server");
-    return updateImplementation(data.id, toImplementationUpdatePatch(data));
+    // health_recorded is the human's statement, so it is stamped with the
+    // person who saved it — resolved through the profile's team_member bridge.
+    return updateImplementation(data.id, {
+      ...toImplementationUpdatePatch(data),
+      ...toRecordedHealthPatch(data, {
+        teamMemberId: context.profile.team_member_id ?? null,
+      }),
+    });
   });
 
 export const advanceImplementationStage = createServerFn({ method: "POST" })

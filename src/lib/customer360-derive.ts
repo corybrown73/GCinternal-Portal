@@ -137,69 +137,162 @@ function milestoneMissed(m: any) {
   );
 }
 
-export function deriveHealth(
-  record: Customer360,
-  impl: HealthImpl,
-): { level: ImplHealth; reason: string | null } {
+/** The branch of deriveHealth that decided the level. */
+export type HealthRule =
+  | "escalation_blocked"
+  | "risk_blocked"
+  | "risk_at_risk"
+  | "issue_at_risk"
+  | "overdue_commitments"
+  | "launch_overdue"
+  | "stalled_stage"
+  | "milestone_off_track"
+  | "no_signal"
+  | "clear";
+
+/**
+ * Everything the decision turned on, not a summary of it. deriveHealth branches
+ * on the identity and severity of specific rows, so counts alone could not
+ * explain a verdict — these fields are enough to re-derive the level from the
+ * snapshot alone.
+ */
+export type HealthEvidence = {
+  rule: HealthRule;
+  top_escalation: { id: string; severity: string; title: string } | null;
+  top_risk: { id: string; severity: string; likelihood: string | null; title: string } | null;
+  top_issue: { id: string; severity: string; title: string } | null;
+  overdue_commitments: Array<{ id: string; title: string; due_date: string | null }>;
+  milestone: { id: string; name: string; status: string | null; target_date: string | null } | null;
+  stage: string | null;
+  stage_entered_at: string | null;
+  days_in_stage: number | null;
+  target_launch_date: string | null;
+  actual_launch_date: string | null;
+  counts: {
+    open_escalations: number;
+    open_risks: number;
+    open_issues: number;
+    open_commitments: number;
+    milestones: number;
+  };
+};
+
+export type HealthResult = { level: ImplHealth; reason: string | null; evidence: HealthEvidence };
+
+/** At most this many overdue commitments are recorded in the evidence object. */
+const MAX_EVIDENCE_COMMITMENTS = 10;
+
+export function deriveHealth(record: Customer360, impl: HealthImpl): HealthResult {
   const open = openItems(record);
   const milestones: any[] = (record as any).milestones ?? [];
   const bySeverity = (rows: any[]) =>
     [...rows].sort((a, b) => severityRank(a.severity) - severityRank(b.severity))[0];
 
-  // ---- blocked ----
   const esc = bySeverity(open.escalations);
-  if (esc && severityRank(esc.severity) <= 1) {
-    return { level: "blocked", reason: `Escalation (${esc.severity}): ${esc.title}` };
-  }
   const topRisk = bySeverity(open.risks);
+  const topIssue = bySeverity(open.issues);
+  const overdue = open.commitments.filter((c: any) => isOverdue(c.due_date));
+  const stalledDays = daysSince(impl.stage_entered_at) ?? 0;
+  const badMilestone =
+    milestones.find(milestoneMissed) ??
+    milestones.find((m: any) => (m.status ?? "").toLowerCase() === "at_risk");
+
+  const base: Omit<HealthEvidence, "rule"> = {
+    top_escalation: esc ? { id: esc.id, severity: esc.severity, title: esc.title } : null,
+    top_risk: topRisk
+      ? {
+          id: topRisk.id,
+          severity: topRisk.severity,
+          likelihood: topRisk.likelihood ?? null,
+          title: topRisk.title,
+        }
+      : null,
+    top_issue: topIssue
+      ? { id: topIssue.id, severity: topIssue.severity, title: topIssue.title }
+      : null,
+    overdue_commitments: overdue.slice(0, MAX_EVIDENCE_COMMITMENTS).map((c: any) => ({
+      id: c.id,
+      title: c.description ?? c.title ?? "",
+      due_date: c.due_date ?? null,
+    })),
+    milestone: badMilestone
+      ? {
+          id: badMilestone.id,
+          name: badMilestone.name,
+          status: badMilestone.status ?? null,
+          target_date: badMilestone.target_date ?? null,
+        }
+      : null,
+    stage: impl.current_stage ?? null,
+    stage_entered_at: impl.stage_entered_at ?? null,
+    days_in_stage: daysSince(impl.stage_entered_at),
+    target_launch_date: impl.target_launch_date ?? null,
+    actual_launch_date: impl.actual_launch_date ?? null,
+    counts: {
+      open_escalations: open.escalations.length,
+      open_risks: open.risks.length,
+      open_issues: open.issues.length,
+      open_commitments: open.commitments.length,
+      milestones: milestones.length,
+    },
+  };
+  const decide = (level: ImplHealth, reason: string | null, rule: HealthRule): HealthResult => ({
+    level,
+    reason,
+    evidence: { ...base, rule },
+  });
+
+  // ---- blocked ----
+  if (esc && severityRank(esc.severity) <= 1) {
+    return decide("blocked", `Escalation (${esc.severity}): ${esc.title}`, "escalation_blocked");
+  }
   if (topRisk && severityRank(topRisk.severity) === 0) {
-    return {
-      level: "blocked",
-      reason: `Risk (critical/${topRisk.likelihood ?? "unknown"} likelihood): ${topRisk.title}`,
-    };
+    return decide(
+      "blocked",
+      `Risk (critical/${topRisk.likelihood ?? "unknown"} likelihood): ${topRisk.title}`,
+      "risk_blocked",
+    );
   }
 
   // ---- at risk ----
   if (topRisk && severityRank(topRisk.severity) <= 2) {
-    return {
-      level: "at_risk",
-      reason: `Risk (${topRisk.severity}/${topRisk.likelihood ?? "unknown"} likelihood): ${topRisk.title}`,
-    };
+    return decide(
+      "at_risk",
+      `Risk (${topRisk.severity}/${topRisk.likelihood ?? "unknown"} likelihood): ${topRisk.title}`,
+      "risk_at_risk",
+    );
   }
-  const topIssue = bySeverity(open.issues);
   if (topIssue && severityRank(topIssue.severity) <= 2) {
-    return { level: "at_risk", reason: `Issue (${topIssue.severity}): ${topIssue.title}` };
+    return decide("at_risk", `Issue (${topIssue.severity}): ${topIssue.title}`, "issue_at_risk");
   }
-  const overdue = open.commitments.filter((c: any) => isOverdue(c.due_date));
   if (overdue.length) {
-    return {
-      level: "at_risk",
-      reason: `${overdue.length} overdue commitment(s), most recent due ${fmtDate(
+    return decide(
+      "at_risk",
+      `${overdue.length} overdue commitment(s), most recent due ${fmtDate(
         [...overdue].sort((a: any, b: any) =>
           String(a.due_date).localeCompare(String(b.due_date)),
         )[0].due_date,
       )}`,
-    };
+      "overdue_commitments",
+    );
   }
   if (launchOverdue(impl)) {
-    return {
-      level: "at_risk",
-      reason: `Target launch ${fmtDate(impl.target_launch_date)} passed with no actual launch recorded`,
-    };
+    return decide(
+      "at_risk",
+      `Target launch ${fmtDate(impl.target_launch_date)} passed with no actual launch recorded`,
+      "launch_overdue",
+    );
   }
-  const stalledDays = daysSince(impl.stage_entered_at) ?? 0;
   const stalled = stalledDays > STAGE_FLAG_DAYS;
   if (stalled && (!isCsStage(impl.current_stage) || hasOtherOpenSignal(record))) {
-    return { level: "at_risk", reason: `Stalled ${stalledDays} days in current stage` };
+    return decide("at_risk", `Stalled ${stalledDays} days in current stage`, "stalled_stage");
   }
-  const badMilestone =
-    milestones.find(milestoneMissed) ??
-    milestones.find((m: any) => (m.status ?? "").toLowerCase() === "at_risk");
   if (badMilestone) {
-    return {
-      level: "at_risk",
-      reason: `Milestone ${humanize(badMilestone.status ?? "off track")}: ${badMilestone.name}`,
-    };
+    return decide(
+      "at_risk",
+      `Milestone ${humanize(badMilestone.status ?? "off track")}: ${badMilestone.name}`,
+      "milestone_off_track",
+    );
   }
 
   // ---- no signal (checked before on_track) ----
@@ -211,13 +304,14 @@ export function deriveHealth(
       milestones.length >
     0;
   if (!anyData) {
-    return {
-      level: "no_signal",
-      reason: "No risks, issues, escalations, commitments or milestones recorded yet",
-    };
+    return decide(
+      "no_signal",
+      "No risks, issues, escalations, commitments or milestones recorded yet",
+      "no_signal",
+    );
   }
 
-  return { level: "on_track", reason: "Nothing open against it" };
+  return decide("on_track", "Nothing open against it", "clear");
 }
 
 /**

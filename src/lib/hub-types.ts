@@ -11,6 +11,9 @@ export type ImplementationRow = {
   current_stage: string;
   stage_entered_at: string;
   status: ImplStatus;
+  /** The owner's own statement of health (0010). Null = never recorded. */
+  health_recorded: string | null;
+  health_recorded_reason: string | null;
   owner_name: string | null;
   tier: string | null;
   target_launch_date: string | null;
@@ -221,6 +224,10 @@ export type Customer360 = {
     current_stage: string;
     stage_entered_at: string;
     status: string;
+    /** Recorded by a person through the editor; null = never recorded (0010). */
+    health_recorded: string | null;
+    health_recorded_reason: string | null;
+    health_recorded_at: string | null;
     owner_id: string | null;
     owner_name: string | null;
     sales_owner: string | null;

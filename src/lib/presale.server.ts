@@ -2,6 +2,8 @@ import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { resolveAccountId, transitionStage, upsertAccount } from "./server/accounts";
 import { accountUpsertSchema } from "./server/schemas";
 import { isStage, STAGES, type AccountStage } from "./presale-stages";
+import { isFlagOn } from "./app-config.server";
+import { handoffConflictMessage, resolveHandoffCustomer } from "./presale-handoff";
 import { audit } from "./server/audit";
 import { createTamRequest } from "./server/tam";
 import { API_SCOPES, generateApiKey, type ApiScope } from "./server/api-auth";
@@ -456,10 +458,85 @@ export async function deleteDealNote(userId: string, noteId: string): Promise<{ 
 
 /* ---------- start onboarding handoff ---------- */
 
+/** What the deal page needs to render the account choice (see §7 rule 1). */
+export interface HandoffOptions {
+  /** `account_model`. When false the page renders exactly the pre-Phase-1 action. */
+  flagOn: boolean;
+  linkedCustomerId: string | null;
+  salesforceId: string | null;
+  /** The account whose `salesforce_account_id` equals the deal's `salesforce_id`. */
+  salesforceMatch: { id: string; name: string } | null;
+  /** Existing accounts to pick from. Empty while the flag is off. */
+  accounts: { id: string; name: string }[];
+}
+
+export async function loadHandoffOptions(userId: string, dealId: string): Promise<HandoffOptions> {
+  await requireInternal(userId);
+
+  const { data: account } = await db()
+    .from("portal_accounts")
+    .select("id, name, salesforce_id, customer_id")
+    .eq("id", dealId)
+    .maybeSingle();
+  if (!account) throw new Error("Deal not found");
+
+  const flagOn = await isFlagOn("account_model");
+  const linkedCustomerId = (account.customer_id as string | null) ?? null;
+  const salesforceId = (account.salesforce_id as string | null) ?? null;
+  if (!flagOn) {
+    return { flagOn, linkedCustomerId, salesforceId, salesforceMatch: null, accounts: [] };
+  }
+
+  const [{ data: match }, { data: accounts }] = await Promise.all([
+    salesforceId && !linkedCustomerId
+      ? db()
+          .from("customers")
+          .select("id, name")
+          .eq("salesforce_account_id", salesforceId)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
+    db().from("customers").select("id, name").order("name"),
+  ]);
+
+  return {
+    flagOn,
+    linkedCustomerId,
+    salesforceId,
+    salesforceMatch: (match as { id: string; name: string } | null) ?? null,
+    accounts: (accounts ?? []) as { id: string; name: string }[],
+  };
+}
+
+export interface StartOnboardingOptions {
+  /** Link the deal to this existing account instead of creating one. */
+  customerId?: string | null;
+  /** Explicitly create a brand-new account for this deal. */
+  createNewCustomer?: boolean;
+}
+
+export interface StartOnboardingResult {
+  /**
+   * `started` — an implementation now exists (`implementationId` is real).
+   * `already_linked` — the legacy flag-off dead-end; `implementationId` is "".
+   * `needs_account_choice` — nothing was written; the caller must pick an
+   * account or ask for a new one.
+   */
+  outcome: "started" | "already_linked" | "needs_account_choice";
+  /** "" only on `needs_account_choice`. */
+  customerId: string;
+  /** "" on `already_linked` and `needs_account_choice`. */
+  implementationId: string;
+  /** The deal was already linked to its account before this call. */
+  alreadyLinked: boolean;
+  customerCreated: boolean;
+  matchedBy: "deal_link" | "salesforce" | "chosen" | "created" | null;
+}
+
 export async function startOnboarding(
   userId: string,
   dealId: string,
-): Promise<{ customerId: string; implementationId: string; alreadyLinked: boolean }> {
+  options: StartOnboardingOptions = {},
+): Promise<StartOnboardingResult> {
   await requireSalesEditor(userId);
 
   const { data: account } = await db()
@@ -468,8 +545,52 @@ export async function startOnboarding(
     .eq("id", dealId)
     .maybeSingle();
   if (!account) throw new Error("Deal not found");
-  if (account.customer_id) {
-    return { customerId: account.customer_id, implementationId: "", alreadyLinked: true };
+
+  const flagOn = await isFlagOn("account_model");
+
+  // Identity match, never by name. Only looked up while the flag is on, so the
+  // flag-off path issues exactly the queries it always has.
+  let salesforceMatchCustomerId: string | null = null;
+  if (flagOn && !account.customer_id && account.salesforce_id) {
+    const { data: match } = await db()
+      .from("customers")
+      .select("id")
+      .eq("salesforce_account_id", account.salesforce_id)
+      .maybeSingle();
+    salesforceMatchCustomerId = (match?.id as string | undefined) ?? null;
+  }
+
+  const decision = resolveHandoffCustomer({
+    flagOn,
+    linkedCustomerId: (account.customer_id as string | null) ?? null,
+    salesforceMatchCustomerId,
+    choice: {
+      customerId: options.customerId ?? null,
+      createNew: options.createNewCustomer === true,
+    },
+  });
+
+  if (decision.action === "already_linked") {
+    return {
+      outcome: "already_linked",
+      customerId: decision.customerId,
+      implementationId: "",
+      alreadyLinked: true,
+      customerCreated: false,
+      matchedBy: "deal_link",
+    };
+  }
+  if (decision.action === "conflict") throw new Error(handoffConflictMessage(decision));
+  if (decision.action === "needs_choice") {
+    // Nothing is written: creating a duplicate account is a human's call.
+    return {
+      outcome: "needs_account_choice",
+      customerId: "",
+      implementationId: "",
+      alreadyLinked: false,
+      customerCreated: false,
+      matchedBy: null,
+    };
   }
 
   const stageIdx = (STAGES as readonly string[]).indexOf(account.stage);
@@ -478,13 +599,35 @@ export async function startOnboarding(
   }
 
   // (a) customer + implementation records in the hub's post-sale tables.
-  const { data: customer, error: customerError } = await db()
-    .from("customers")
-    .insert({ name: account.name, arr: account.arr ?? null, industry: null })
-    .select("id")
-    .single();
-  if (customerError || !customer) {
-    throw new Error(customerError?.message ?? "Could not create the customer record");
+  let customerId: string;
+  let customerCreated = false;
+  if (decision.action === "use_existing") {
+    const { data: existing } = await db()
+      .from("customers")
+      .select("id")
+      .eq("id", decision.customerId)
+      .maybeSingle();
+    if (!existing) throw new Error("That account no longer exists — pick another one");
+    customerId = decision.customerId;
+  } else {
+    const { data: customer, error: customerError } = await db()
+      .from("customers")
+      .insert({
+        name: account.name,
+        arr: account.arr ?? null,
+        industry: null,
+        // Stamp the identity so the next handoff matches instead of duplicating.
+        ...(flagOn && account.salesforce_id
+          ? { salesforce_account_id: account.salesforce_id }
+          : {}),
+      })
+      .select("id")
+      .single();
+    if (customerError || !customer) {
+      throw new Error(customerError?.message ?? "Could not create the customer record");
+    }
+    customerId = customer.id as string;
+    customerCreated = true;
   }
 
   const firstStage = LIFECYCLE_STAGES[0]!.id;
@@ -492,11 +635,12 @@ export async function startOnboarding(
   const { data: impl, error: implError } = await db()
     .from("implementations")
     .insert({
-      customer_id: customer.id,
+      customer_id: customerId,
       name: account.name,
       current_stage: firstStage,
       stage_entered_at: now,
       status: "on_track",
+      source: "presale",
     })
     .select("id")
     .single();
@@ -519,12 +663,15 @@ export async function startOnboarding(
     );
   }
 
-  // (b) link the deal to the customer record.
-  const { error: linkError } = await db()
-    .from("portal_accounts")
-    .update({ customer_id: customer.id })
-    .eq("id", dealId);
-  if (linkError) throw new Error(`Could not link the deal: ${linkError.message}`);
+  // (b) link the deal to the customer record (already linked deals keep theirs).
+  const alreadyLinked = Boolean(account.customer_id);
+  if (!alreadyLinked) {
+    const { error: linkError } = await db()
+      .from("portal_accounts")
+      .update({ customer_id: customerId })
+      .eq("id", dealId);
+    if (linkError) throw new Error(`Could not link the deal: ${linkError.message}`);
+  }
 
   // (c) move the deal into onboarding_kickoff (only forward, never backward).
   if (account.stage === "closed_won") {
@@ -536,6 +683,8 @@ export async function startOnboarding(
     );
   }
 
+  const matchedBy = decision.action === "use_existing" ? decision.matchedBy : "created";
+
   // (d) audit.
   await audit({
     actor_type: "user",
@@ -543,13 +692,20 @@ export async function startOnboarding(
     action: "account.start_onboarding",
     entity_type: "account",
     entity_id: dealId,
-    payload: { customer_id: customer.id, implementation_id: impl.id },
+    payload: {
+      customer_id: customerId,
+      implementation_id: impl.id,
+      ...(flagOn ? { matched_by: matchedBy, customer_created: customerCreated } : {}),
+    },
   });
 
   return {
-    customerId: customer.id as string,
+    outcome: "started",
+    customerId,
     implementationId: impl.id as string,
-    alreadyLinked: false,
+    alreadyLinked,
+    customerCreated,
+    matchedBy,
   };
 }
 

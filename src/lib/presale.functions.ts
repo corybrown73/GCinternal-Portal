@@ -170,12 +170,32 @@ export const removeNote = createServerFn({ method: "POST" })
     return deleteDealNote(context.userId, data.noteId);
   });
 
-export const startOnboardingForDeal = createServerFn({ method: "POST" })
+export const getHandoffOptions = createServerFn({ method: "GET" })
   .middleware([requireInternalAuth])
   .inputValidator((data: unknown) => z.object({ dealId: z.string().uuid() }).parse(data))
   .handler(async ({ data, context }) => {
+    const { loadHandoffOptions } = await import("./presale.server");
+    return loadHandoffOptions(context.userId, data.dealId);
+  });
+
+export const startOnboardingForDeal = createServerFn({ method: "POST" })
+  .middleware([requireInternalAuth])
+  .inputValidator((data: unknown) =>
+    z
+      .object({
+        dealId: z.string().uuid(),
+        // Both are ignored while `account_model` is off.
+        customerId: z.string().uuid().nullable().optional(),
+        createNewCustomer: z.boolean().optional(),
+      })
+      .parse(data),
+  )
+  .handler(async ({ data, context }) => {
     const { startOnboarding } = await import("./presale.server");
-    return startOnboarding(context.userId, data.dealId);
+    return startOnboarding(context.userId, data.dealId, {
+      customerId: data.customerId ?? null,
+      createNewCustomer: data.createNewCustomer === true,
+    });
   });
 
 /* ---------- admin ---------- */

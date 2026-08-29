@@ -3,6 +3,7 @@ import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { queryOptions, useSuspenseQuery } from "@tanstack/react-query";
 import { ChevronRight, ArrowRight } from "lucide-react";
 
+import { HealthNote } from "@/components/health-note";
 import { LifecycleRail } from "@/components/lifecycle-rail";
 import { AdvanceStage } from "@/components/stage-advance-write";
 import { launchAcceptanceGate } from "@/lib/launch-gate";
@@ -316,11 +317,13 @@ function Customer360Page() {
           </div>
           <div className="flex flex-wrap items-center gap-3">
             <StatusChip status={health.level} />
-            {impl.status !== "on_track" ? (
-              <span className="text-[11px] text-muted-foreground">
-                Manual flag: {humanize(impl.status)}
-              </span>
-            ) : null}
+            <HealthNote
+              recorded={impl.health_recorded}
+              recordedReason={impl.health_recorded_reason}
+              recordedAt={impl.health_recorded_at}
+              legacyStatus={impl.status}
+              computed={health.level}
+            />
             <StageBadge stage={impl.current_stage} />
             <span className="font-mono text-[11px] text-muted-foreground">
               {daysSince(impl.stage_entered_at)}d in stage

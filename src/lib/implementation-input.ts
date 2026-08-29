@@ -90,6 +90,15 @@ export const IMPLEMENTATION_STATUSES = ["on_track", "at_risk", "blocked", "idle"
 export const implementationStatusInput = z.enum([...IMPLEMENTATION_STATUSES, "active"]);
 
 /**
+ * Health the owner states themselves. Distinct from `status`, which is also
+ * written programmatically (startOnboarding, the DB default) and so cannot
+ * evidence a human judgement. 'idle' is not a health, so it has no recorded
+ * equivalent.
+ */
+export const RECORDED_HEALTH = ["on_track", "at_risk", "blocked"] as const;
+export type RecordedHealth = (typeof RECORDED_HEALTH)[number];
+
+/**
  * Editing an existing implementation. `current_stage` and `stage_entered_at` are
  * deliberately absent: stage movement only ever happens through stage
  * advancement, so this editor can never disagree with the stage history.
@@ -101,6 +110,9 @@ export const updateImplementationInput = z.object({
   salesOwner: optionalText,
   tier: optionalText,
   status: implementationStatusInput,
+  /** The owner's own statement of health. Null clears it back to unrecorded. */
+  healthRecorded: z.enum(RECORDED_HEALTH).nullable().optional(),
+  healthRecordedReason: optionalText.optional(),
   sowReference: optionalText,
   /** Stored path of the uploaded SOW document, plus the name to show for it. */
   sowDocumentUrl: optionalText,
@@ -118,6 +130,23 @@ export const updateImplementationInput = z.object({
   discoveryBoardImageName: optionalText.optional(),
   discoveryBoardNotes: optionalText.optional(),
 });
+
+export const updateImplementationInputChecked = updateImplementationInput.superRefine(
+  (data, ctx) => {
+    // "At risk"/"Blocked" without a reason is an assertion with no evidence
+    // behind it, and it is what everyone downstream has to act on.
+    if (
+      (data.healthRecorded === "at_risk" || data.healthRecorded === "blocked") &&
+      !data.healthRecordedReason
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["healthRecordedReason"],
+        message: "Say why it is at risk or blocked — this is what the team acts on.",
+      });
+    }
+  },
+);
 
 export type UpdateImplementationInput = z.infer<typeof updateImplementationInput>;
 
@@ -146,4 +175,31 @@ export function toImplementationUpdatePatch(data: UpdateImplementationInput) {
   if (data.discoveryBoardNotes !== undefined)
     patch["discovery_board_notes"] = data.discoveryBoardNotes;
   return patch;
+}
+
+/**
+ * The recorded-health half of the patch, kept separate because it is the only
+ * part that must carry who said it and when. Returns an empty object when the
+ * editor did not touch health, so an unrelated save never restamps it.
+ */
+export function toRecordedHealthPatch(
+  data: UpdateImplementationInput,
+  actor: { teamMemberId: string | null; at?: string },
+): Record<string, unknown> {
+  if (data.healthRecorded === undefined) return {};
+  const at = actor.at ?? new Date().toISOString();
+  if (data.healthRecorded === null) {
+    return {
+      health_recorded: null,
+      health_recorded_reason: null,
+      health_recorded_by: null,
+      health_recorded_at: null,
+    };
+  }
+  return {
+    health_recorded: data.healthRecorded,
+    health_recorded_reason: data.healthRecordedReason ?? null,
+    health_recorded_by: actor.teamMemberId,
+    health_recorded_at: at,
+  };
 }

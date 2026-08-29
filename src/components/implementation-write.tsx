@@ -500,6 +500,8 @@ type EditDraft = {
   salesOwner: string;
   tier: string;
   status: string;
+  healthRecorded: string;
+  healthRecordedReason: string;
   sowReference: string;
   sowValue: string;
   sowSignedDate: string;
@@ -508,6 +510,12 @@ type EditDraft = {
   actualLaunchDate: string;
   customerGoals: string;
 };
+
+const RECORDED_HEALTH_CHOICE: { value: string; label: string }[] = [
+  { value: "on_track", label: "On track" },
+  { value: "at_risk", label: "At risk" },
+  { value: "blocked", label: "Blocked" },
+];
 
 const STATUS_CHOICE: { value: string; label: string }[] = [
   { value: "on_track", label: "On track" },
@@ -525,6 +533,8 @@ export type EditableImplementation = {
   sales_owner: string | null;
   tier: string | null;
   status: string;
+  health_recorded?: string | null;
+  health_recorded_reason?: string | null;
   sow_reference: string | null;
   sow_value: number | null;
   sow_signed_date: string | null;
@@ -558,6 +568,8 @@ export function EditImplementation({
     salesOwner: implementation.sales_owner ?? "",
     tier: implementation.tier ?? "",
     status: implementation.status ?? "on_track",
+    healthRecorded: implementation.health_recorded ?? "",
+    healthRecordedReason: implementation.health_recorded_reason ?? "",
     sowReference: implementation.sow_reference ?? "",
     sowValue: implementation.sow_value == null ? "" : String(implementation.sow_value),
     sowSignedDate: dateOnly(implementation.sow_signed_date),
@@ -580,6 +592,9 @@ export function EditImplementation({
           salesOwner: nullable(draft.salesOwner),
           tier: nullable(draft.tier),
           status: draft.status as "on_track" | "at_risk" | "blocked" | "idle",
+          healthRecorded: (draft.healthRecorded || null) as
+            "on_track" | "at_risk" | "blocked" | null,
+          healthRecordedReason: nullable(draft.healthRecordedReason),
           sowReference: nullable(draft.sowReference),
           sowValue: nullableNumber(draft.sowValue),
           sowSignedDate: nullable(draft.sowSignedDate),
@@ -656,6 +671,37 @@ export function EditImplementation({
             ))}
           </select>
         </label>
+        <label className="block space-y-0.5">
+          <span className={labelClass}>Your call on health</span>
+          <select
+            className={selectClass}
+            aria-label="Your call on health"
+            value={draft.healthRecorded}
+            disabled={disabled}
+            onChange={(e) => set({ healthRecorded: e.target.value })}
+          >
+            <option value="">Not recorded</option>
+            {RECORDED_HEALTH_CHOICE.map((h) => (
+              <option key={h.value} value={h.value}>
+                {h.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        {draft.healthRecorded === "at_risk" || draft.healthRecorded === "blocked" ? (
+          <label className="block space-y-0.5 md:col-span-2">
+            <span className={labelClass}>
+              Why {draft.healthRecorded === "blocked" ? "blocked" : "at risk"} *
+            </span>
+            <input
+              className={inputClass}
+              value={draft.healthRecordedReason}
+              disabled={disabled}
+              placeholder="What is wrong, in one line — this is what the team acts on"
+              onChange={(e) => set({ healthRecordedReason: e.target.value })}
+            />
+          </label>
+        ) : null}
         <label className="block space-y-0.5">
           <span className={labelClass}>Target launch date</span>
           <input

@@ -55,3 +55,58 @@ describe("normalizeStage", () => {
     expect(normalizeStage(null)).toBeNull();
   });
 });
+
+describe("deriveHealth evidence", () => {
+  it("names the rule that decided, and carries the deciding row", () => {
+    const record = {
+      ...emptyRecord,
+      escalations: [{ id: "e1", status: "open", severity: "critical", title: "Exec escalation" }],
+    };
+    const { level, evidence } = deriveHealth(record, {});
+    expect(level).toBe("blocked");
+    expect(evidence.rule).toBe("escalation_blocked");
+    expect(evidence.top_escalation).toEqual({
+      id: "e1",
+      severity: "critical",
+      title: "Exec escalation",
+    });
+  });
+
+  it("records counts alongside the deciding row, so the snapshot explains itself", () => {
+    const record = {
+      ...emptyRecord,
+      risks: [
+        { id: "r1", status: "open", severity: "high", likelihood: "likely", title: "Data risk" },
+        { id: "r2", status: "open", severity: "low", title: "Minor" },
+      ],
+    };
+    const { evidence } = deriveHealth(record, {});
+    expect(evidence.rule).toBe("risk_at_risk");
+    expect(evidence.top_risk?.id).toBe("r1");
+    expect(evidence.counts.open_risks).toBe(2);
+  });
+
+  it("caps overdue commitments so one bad account cannot bloat the cache", () => {
+    const commitments = Array.from({ length: 15 }, (_, i) => ({
+      id: `c${i}`,
+      status: "open",
+      description: `Promise ${i}`,
+      due_date: "2020-01-01",
+    }));
+    const { level, evidence } = deriveHealth({ ...emptyRecord, commitments } as any, {});
+    expect(level).toBe("at_risk");
+    expect(evidence.rule).toBe("overdue_commitments");
+    expect(evidence.overdue_commitments).toHaveLength(10);
+    expect(evidence.counts.open_commitments).toBe(15);
+  });
+
+  it("uses rule 'clear' when signals exist but none is open against it", () => {
+    const record = {
+      ...emptyRecord,
+      risks: [{ id: "r1", status: "resolved", severity: "critical", title: "Was bad" }],
+    };
+    const { level, evidence } = deriveHealth(record, {});
+    expect(level).toBe("on_track");
+    expect(evidence.rule).toBe("clear");
+  });
+});

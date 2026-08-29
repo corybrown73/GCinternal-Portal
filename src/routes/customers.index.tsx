@@ -4,6 +4,7 @@ import { ArrowDown, ArrowUp } from "lucide-react";
 
 import { NewImplementation } from "@/components/implementation-write";
 import { PageBody, PageHeader } from "@/components/page";
+import { HealthNote } from "@/components/health-note";
 import { StageBadge, StatusDot, NoRows } from "@/components/record";
 import { getHome } from "@/lib/hub.functions";
 import { healthByImplementation } from "@/lib/home-triage";
@@ -210,14 +211,13 @@ function CustomersPage() {
                   </td>
                   <td className="px-3 py-1.5">
                     <StatusDot status={levelOf(r.id)} />
-                    {r.status !== levelOf(r.id) ? (
-                      <span
-                        className="mt-0.5 block text-[10px] text-muted-foreground"
-                        title="The status someone set by hand differs from what the record actually shows"
-                      >
-                        Manual flag: {humanize(r.status)}
-                      </span>
-                    ) : null}
+                    <HealthNote
+                      recorded={r.health_recorded}
+                      recordedReason={r.health_recorded_reason}
+                      legacyStatus={r.status}
+                      computed={levelOf(r.id)}
+                      className="mt-0.5 block text-[10px] text-muted-foreground"
+                    />
                   </td>
                   <td className="px-3 py-1.5 text-[12px]">{r.owner_name ?? "Unassigned"}</td>
                   <td className="px-3 py-1.5 text-[12px]">{r.tier ?? "—"}</td>

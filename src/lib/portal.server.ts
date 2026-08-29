@@ -24,12 +24,14 @@ export interface CallerProfile {
   email: string;
   full_name: string | null;
   role: string;
+  /** Bridge to the hub's ownership anchor (0010); null when no email match. */
+  team_member_id: string | null;
 }
 
 export async function callerProfile(userId: string): Promise<CallerProfile> {
   const { data } = await db()
     .from("portal_profiles")
-    .select("id, email, full_name, role")
+    .select("id, email, full_name, role, team_member_id")
     .eq("id", userId)
     .maybeSingle();
   if (!data) throw new Error("Unauthorized: no profile for this user");

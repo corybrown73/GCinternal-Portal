@@ -1,6 +1,12 @@
 import { useRef, useState } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { queryOptions, useMutation, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
+import {
+  queryOptions,
+  useMutation,
+  useQuery,
+  useQueryClient,
+  useSuspenseQuery,
+} from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { ArrowRight, Download, FileText, Trash2 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
@@ -15,6 +21,7 @@ import {
   generateBriefForDeal,
   getBriefDownloadUrl,
   getDeal,
+  getHandoffOptions,
   removeNote,
   removeReport,
   setNoteReviewed,
@@ -167,18 +174,37 @@ function DealRecord({ deal }: { deal: DealData }) {
 
 /* ---------- Start onboarding / View implementation ---------- */
 
+type HandoffChoiceVars = { customerId: string | null; createNewCustomer: boolean };
+
 function StartOnboarding({ deal }: { deal: DealData }) {
   const { profile } = useProfile();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const start = useServerFn(startOnboardingForDeal);
+  // Which account this deal hands off to. Only used while `account_model` is
+  // on; with the flag off the response says so and the action below is
+  // exactly the pre-Phase-1 one.
+  const options = useQuery({
+    queryKey: ["handoff-options", deal.account.id],
+    queryFn: () => getHandoffOptions({ data: { dealId: deal.account.id } }),
+  });
+  // "" means "create a new account"; otherwise an existing account id.
+  const [pick, setPick] = useState("");
+
+  const opts = options.data;
+  const flagOn = opts?.flagOn === true;
 
   const mutation = useMutation({
-    mutationFn: () => start({ data: { dealId: deal.account.id } }),
+    mutationFn: (vars: HandoffChoiceVars) => start({ data: { dealId: deal.account.id, ...vars } }),
     onSuccess: (result) => {
+      // The server refuses to invent an account: leave the picker open.
+      if (result.outcome === "needs_account_choice") return;
       queryClient.invalidateQueries({ queryKey: ["deal", deal.account.id] });
       queryClient.invalidateQueries({ queryKey: ["pipeline"] });
       queryClient.invalidateQueries({ queryKey: ["home"] });
+      if (flagOn) {
+        queryClient.invalidateQueries({ queryKey: ["handoff-options", deal.account.id] });
+      }
       navigate({
         to: "/customers/$customerId",
         params: { customerId: result.customerId },
@@ -189,8 +215,17 @@ function StartOnboarding({ deal }: { deal: DealData }) {
     },
   });
 
+  const allowed = canEditSales(profile?.role) || canManage(profile?.role);
+  const stageReady =
+    (STAGES as readonly string[]).indexOf(deal.account.stage) >=
+    (STAGES as readonly string[]).indexOf("closed_won");
+
+  const error = mutation.isError ? (
+    <p className="text-[11px] text-destructive">{(mutation.error as Error).message}</p>
+  ) : null;
+
   if (deal.account.customer_id) {
-    return (
+    const viewLink = (
       <Link
         to="/customers/$customerId"
         params={{ customerId: deal.account.customer_id }}
@@ -199,27 +234,84 @@ function StartOnboarding({ deal }: { deal: DealData }) {
         View implementation <ArrowRight className="h-3 w-3" />
       </Link>
     );
+    // An account can run several implementations: a linked deal is no longer
+    // a dead end.
+    if (!flagOn || !allowed) return viewLink;
+    return (
+      <div className="flex flex-col items-end gap-1">
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            className={buttonClass}
+            disabled={mutation.isPending}
+            onClick={() => mutation.mutate({ customerId: null, createNewCustomer: false })}
+          >
+            {mutation.isPending ? "Starting…" : "Start another implementation"}
+          </button>
+          {viewLink}
+        </div>
+        {error}
+      </div>
+    );
   }
 
-  const allowed = canEditSales(profile?.role) || canManage(profile?.role);
-  const stageReady =
-    (STAGES as readonly string[]).indexOf(deal.account.stage) >=
-    (STAGES as readonly string[]).indexOf("closed_won");
   if (!allowed || !stageReady) return null;
 
+  if (!flagOn) {
+    return (
+      <div className="flex flex-col items-end gap-1">
+        <button
+          type="button"
+          className={primaryButtonClass}
+          disabled={mutation.isPending}
+          onClick={() => mutation.mutate({ customerId: null, createNewCustomer: false })}
+        >
+          {mutation.isPending ? "Starting…" : "Start onboarding"} <ArrowRight className="h-3 w-3" />
+        </button>
+        {error}
+      </div>
+    );
+  }
+
+  const match = opts?.salesforceMatch ?? null;
   return (
     <div className="flex flex-col items-end gap-1">
-      <button
-        type="button"
-        className={primaryButtonClass}
-        disabled={mutation.isPending}
-        onClick={() => mutation.mutate()}
-      >
-        {mutation.isPending ? "Starting…" : "Start onboarding"} <ArrowRight className="h-3 w-3" />
-      </button>
-      {mutation.isError ? (
-        <p className="text-[11px] text-destructive">{(mutation.error as Error).message}</p>
-      ) : null}
+      <div className="flex items-center gap-2">
+        {match ? (
+          <span className="text-[11px] text-muted-foreground">
+            Salesforce match: <span className="text-foreground">{match.name}</span>
+          </span>
+        ) : (
+          <select
+            className={cn(inputClass, "w-56")}
+            value={pick}
+            onChange={(e) => setPick(e.target.value)}
+            aria-label="Account to onboard under"
+          >
+            <option value="">Create a new account — {deal.account.name}</option>
+            {(opts?.accounts ?? []).map((a) => (
+              <option key={a.id} value={a.id}>
+                Existing account — {a.name}
+              </option>
+            ))}
+          </select>
+        )}
+        <button
+          type="button"
+          className={primaryButtonClass}
+          disabled={mutation.isPending}
+          onClick={() =>
+            mutation.mutate(
+              match || pick === ""
+                ? { customerId: null, createNewCustomer: !match }
+                : { customerId: pick, createNewCustomer: false },
+            )
+          }
+        >
+          {mutation.isPending ? "Starting…" : "Start onboarding"} <ArrowRight className="h-3 w-3" />
+        </button>
+      </div>
+      {error}
     </div>
   );
 }
