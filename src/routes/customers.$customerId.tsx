@@ -4,6 +4,7 @@ import { queryOptions, useSuspenseQuery } from "@tanstack/react-query";
 import { ChevronRight, ArrowRight } from "lucide-react";
 
 import { HealthNote } from "@/components/health-note";
+import { PlanPanel } from "@/components/plan-panel";
 import { LifecycleRail } from "@/components/lifecycle-rail";
 import { AdvanceStage } from "@/components/stage-advance-write";
 import { launchAcceptanceGate } from "@/lib/launch-gate";
@@ -1265,6 +1266,10 @@ function JourneyTab({ record, customerId }: { record: Customer360; customerId: s
           />
         </div>
       </div>
+
+      {/* The templated plan: stage instances and the work items on them.
+          Renders an explanatory empty state while the flag is off. */}
+      <PlanPanel implementationId={impl.id} />
 
       {/* Reads the SOW attached to this implementation, proposes a journey and
           lets the TIS choose what — if anything — to apply. */}
