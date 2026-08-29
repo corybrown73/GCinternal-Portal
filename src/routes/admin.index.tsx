@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { ArrowRight, KeyRound, Route as RouteIcon, Upload, Users } from "lucide-react";
+import { ArrowRight, KeyRound, Layers, Route as RouteIcon, Upload, Users } from "lucide-react";
 
 import { PageBody, PageHeader } from "@/components/page";
 
@@ -14,6 +14,13 @@ const CARDS = [
     title: "API keys",
     description:
       "Create and revoke scoped keys for Salesforce, Zapier and monitoring integrations calling /api/v1/*.",
+  },
+  {
+    to: "/admin/templates",
+    icon: Layers,
+    title: "Journey templates",
+    description:
+      "Read-only review of every template family and version: stages, tasks, conditional work and scoping questions.",
   },
   {
     to: "/admin/users",

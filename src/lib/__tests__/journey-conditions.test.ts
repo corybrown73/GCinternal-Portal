@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { evaluateIncludeWhen } from "../journey-conditions";
+import {
+  describeIncludeWhen,
+  evaluateIncludeWhen,
+  formatIncludeWhen,
+  includeWhenKeys,
+} from "../journey-conditions";
 
 /**
  * These rules are enforced in SQL by journey_include_when_matches
@@ -240,5 +245,103 @@ describe("evaluateIncludeWhen — malformed clauses fail closed", () => {
 
   it("excludes when in is given something other than a list", () => {
     expect(included({ region: { in: "emea" } }, { region: "emea" })).toBe(false);
+  });
+});
+
+/**
+ * The template browser renders the same conditions the evaluator enforces. The
+ * sentence must not claim a task is narrower or broader than the evaluator
+ * makes it — in particular every fail-closed case has to READ as never
+ * included, or a reviewer signs off on work that instantiation will skip.
+ */
+describe("formatIncludeWhen", () => {
+  it("returns null when there is no condition, so the task is unconditional", () => {
+    expect(formatIncludeWhen(null)).toBeNull();
+    expect(formatIncludeWhen(undefined)).toBeNull();
+    expect(formatIncludeWhen("always")).toBeNull();
+    expect(formatIncludeWhen(["not", "a", "condition"])).toBeNull();
+    expect(formatIncludeWhen({})).toBeNull();
+  });
+
+  it("renders a bare value as equality", () => {
+    expect(formatIncludeWhen({ integration_type: "erp" })).toBe(
+      "only when integration_type is erp",
+    );
+    expect(formatIncludeWhen({ has_sandbox: true })).toBe("only when has_sandbox is yes");
+    expect(formatIncludeWhen({ has_sandbox: false })).toBe("only when has_sandbox is no");
+    expect(formatIncludeWhen({ seats: 50 })).toBe("only when seats is 50");
+    expect(formatIncludeWhen({ notes: null })).toBe("only when notes is null");
+  });
+
+  it("renders the comparison operators", () => {
+    expect(formatIncludeWhen({ plants: { ">": 1 } })).toBe("only when plants is more than 1");
+    expect(formatIncludeWhen({ plants: { ">=": 2 } })).toBe("only when plants is at least 2");
+    expect(formatIncludeWhen({ plants: { "<": 10 } })).toBe("only when plants is less than 10");
+    expect(formatIncludeWhen({ plants: { "<=": 10 } })).toBe("only when plants is at most 10");
+  });
+
+  it("renders in and contains", () => {
+    expect(formatIncludeWhen({ region: { in: ["emea"] } })).toBe("only when region is one of emea");
+    expect(formatIncludeWhen({ region: { in: ["emea", "amer", "apac"] } })).toBe(
+      "only when region is one of emea, amer or apac",
+    );
+    expect(formatIncludeWhen({ systems: { contains: "erp" } })).toBe(
+      "only when systems includes erp",
+    );
+  });
+
+  it("ANDs the clauses of one key and the keys of one condition", () => {
+    expect(formatIncludeWhen({ plants: { ">": 1, "<=": 10 } })).toBe(
+      "only when plants is more than 1 and is at most 10",
+    );
+    expect(formatIncludeWhen({ integration_type: "erp", plants: { ">": 1 } })).toBe(
+      "only when integration_type is erp and plants is more than 1",
+    );
+  });
+
+  it("renders exists as presence, not value", () => {
+    expect(formatIncludeWhen({ budget: { exists: true } })).toBe("only when budget is answered");
+    expect(formatIncludeWhen({ budget: { exists: false } })).toBe(
+      "only when budget is not answered",
+    );
+    expect(formatIncludeWhen({ budget: {} })).toBe("only when budget is answered");
+  });
+
+  it("does not describe siblings of exists:false, which the evaluator never tests", () => {
+    const cond = { budget: { exists: false, ">": 10 } };
+    expect(evaluateIncludeWhen(cond, { budget: 50 }).included).toBe(false);
+    expect(evaluateIncludeWhen(cond, {}).included).toBe(true);
+    expect(formatIncludeWhen(cond)).toBe("only when budget is not answered");
+  });
+
+  it("says never included wherever the evaluator fails closed", () => {
+    const cases: unknown[] = [
+      { integration_type: { equals: "erp" } },
+      { budget: { exists: "yes" } },
+      { region: { in: "emea" } },
+    ];
+    for (const cond of cases) {
+      expect(
+        evaluateIncludeWhen(cond, { integration_type: "erp", budget: "10k", region: "emea" })
+          .included,
+      ).toBe(false);
+      expect(formatIncludeWhen(cond)).toContain("never included");
+    }
+    expect(formatIncludeWhen({ integration_type: { equals: "erp" } })).toBe(
+      "only when integration_type has an unrecognised condition (equals), so this task is never included",
+    );
+  });
+
+  it("uses supplied labels in place of raw question keys", () => {
+    expect(
+      formatIncludeWhen({ integration_type: "erp" }, { integration_type: "Integration type" }),
+    ).toBe("only when Integration type is erp");
+  });
+
+  it("exposes the clauses individually and the keys a condition references", () => {
+    const cond = { integration_type: "erp", plants: { ">": 1 } };
+    expect(describeIncludeWhen(cond)).toEqual(["integration_type is erp", "plants is more than 1"]);
+    expect(includeWhenKeys(cond)).toEqual(["integration_type", "plants"]);
+    expect(includeWhenKeys(null)).toEqual([]);
   });
 });

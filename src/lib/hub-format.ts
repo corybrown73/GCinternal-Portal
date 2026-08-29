@@ -78,3 +78,22 @@ export function humanize(value: string | null | undefined): string {
   if (!value) return "—";
   return value.replace(/_/g, " ").replace(/^\w/, (c) => c.toUpperCase());
 }
+
+const OFFSET_BASIS_LABELS: Record<string, string> = {
+  project_start: "project start",
+  stage_entry: "stage entry",
+  target_launch: "target launch",
+};
+
+/**
+ * A template task's due date as a phrase: "stage entry +3d", "target launch
+ * -14d", "on stage entry". The basis is echoed verbatim when it is one this
+ * build does not know, so an added enum value degrades to readable rather than
+ * to a wrong label.
+ */
+export function formatTaskOffset(basis: string | null | undefined, days: number | null): string {
+  const label = basis ? (OFFSET_BASIS_LABELS[basis] ?? basis.replace(/_/g, " ")) : "stage entry";
+  const offset = days ?? 0;
+  if (offset === 0) return `on ${label}`;
+  return `${label} ${offset > 0 ? "+" : "-"}${Math.abs(offset)}d`;
+}

@@ -216,3 +216,99 @@ export function evaluateIncludeWhen(
 
   return { included: failedKeys.length === 0, failedKeys, missingKeys };
 }
+
+/* ------------------------------------------------------------------------- */
+/* Plain-English rendering                                                    */
+/* ------------------------------------------------------------------------- */
+
+/**
+ * The read-only template browser has to let a reviewer see, at a glance, why a
+ * task is conditional — so the same DSL the evaluator above enforces is also
+ * rendered as a sentence. The two must agree: anything the evaluator fails
+ * CLOSED on (an unknown operator, a non-boolean `exists`, an `in` that is not
+ * a list) is described as "never included" rather than quietly dropped, and
+ * `exists: false` short-circuits here exactly as it does there.
+ */
+
+/** Optional per-key display names, e.g. { integration_type: "Integration type" }. */
+export type ConditionLabels = Readonly<Record<string, string>>;
+
+const OPERATOR_PHRASES: ReadonlyArray<[keyof IncludeWhenOperatorClause, string]> = [
+  [">", "is more than"],
+  [">=", "is at least"],
+  ["<", "is less than"],
+  ["<=", "is at most"],
+];
+
+/** Scalars read as themselves; anything structural falls back to its JSON. */
+function formatValue(value: unknown): string {
+  if (typeof value === "string") return value;
+  if (typeof value === "number") return String(value);
+  if (typeof value === "boolean") return value ? "yes" : "no";
+  if (value === null) return "null";
+  if (value === undefined) return "nothing";
+  return JSON.stringify(value) ?? String(value);
+}
+
+function formatList(values: readonly unknown[]): string {
+  const parts = values.map(formatValue);
+  if (parts.length === 0) return "nothing";
+  if (parts.length === 1) return parts[0] ?? "";
+  return `${parts.slice(0, -1).join(", ")} or ${parts[parts.length - 1]}`;
+}
+
+const never = (label: string, why: string) => `${label} ${why}, so this task is never included`;
+
+function describeClause(label: string, clause: unknown): string {
+  // A bare value is an equality test.
+  if (!isPlainObject(clause)) return `${label} is ${formatValue(clause)}`;
+
+  for (const op of Object.keys(clause)) {
+    if (!KNOWN_OPERATORS.has(op)) {
+      return never(label, `has an unrecognised condition (${op})`);
+    }
+  }
+
+  if (hasOwn(clause, "exists")) {
+    const wanted = clause["exists"];
+    if (typeof wanted !== "boolean") {
+      return never(label, `has an unusable "exists" condition (${formatValue(wanted)})`);
+    }
+    // Absence required — the evaluator tests no sibling operator past this.
+    if (!wanted) return `${label} is not answered`;
+  }
+  if (hasOwn(clause, "in") && !Array.isArray(clause["in"])) {
+    return never(label, 'has an unusable "is one of" list');
+  }
+
+  const parts: string[] = [];
+  if (hasOwn(clause, "exists")) parts.push("is answered");
+  for (const [op, phrase] of OPERATOR_PHRASES) {
+    if (hasOwn(clause, op)) parts.push(`${phrase} ${formatValue(clause[op])}`);
+  }
+  const options = clause["in"];
+  if (Array.isArray(options)) parts.push(`is one of ${formatList(options)}`);
+  if (hasOwn(clause, "contains")) parts.push(`includes ${formatValue(clause["contains"])}`);
+  // An empty clause object only requires the question to be answered.
+  if (parts.length === 0) parts.push("is answered");
+
+  return `${label} ${parts.join(" and ")}`;
+}
+
+/** One sentence fragment per clause, in condition order. Empty = unconditional. */
+export function describeIncludeWhen(cond: unknown, labels: ConditionLabels = {}): string[] {
+  if (!isPlainObject(cond)) return [];
+  return Object.entries(cond).map(([key, clause]) => describeClause(labels[key] ?? key, clause));
+}
+
+/** The whole condition as one sentence, or null when the task is unconditional. */
+export function formatIncludeWhen(cond: unknown, labels: ConditionLabels = {}): string | null {
+  const parts = describeIncludeWhen(cond, labels);
+  if (parts.length === 0) return null;
+  return `only when ${parts.join(" and ")}`;
+}
+
+/** The question keys a condition references, in order — [] when unconditional. */
+export function includeWhenKeys(cond: unknown): string[] {
+  return isPlainObject(cond) ? Object.keys(cond) : [];
+}
