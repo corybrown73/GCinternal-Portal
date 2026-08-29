@@ -411,6 +411,39 @@ export type ImplementationSummary = {
   status: string;
   owner_name: string | null;
   target_launch_date: string | null;
+  /* ---- One customer, several project timelines. ------------------------
+     A customer runs more than one project at a time and they start on
+     different days (0010's parent/child add-ons are exactly this case), so
+     the header draws a lane per project. Each lane needs that project's own
+     dates and its own stages — none of which is derivable from the selected
+     implementation. */
+  /** Recorded contract start, when there is one. */
+  contract_start_date: string | null;
+  /** Fallback start: when the project record was created. */
+  created_at: string | null;
+  /** Launched, so the lane can read "delivered" rather than "in Launch". */
+  actual_launch_date: string | null;
+  /** Set when this project hangs off another as an add-on (0010). */
+  parent_implementation_id: string | null;
+  /**
+   * This project's OWN stages from `stage_instances` (0014) — the integration
+   * journey's five, the new-logo eight, whatever was applied. Empty when no
+   * journey has been applied, which the header renders as a visibly-labelled
+   * default rather than passing the house stages off as this project's plan.
+   */
+  stages: ImplementationStageInstance[];
+};
+
+/** A `stage_instances` row as the 360 projects it. Mirrors 0014's columns. */
+export type ImplementationStageInstance = {
+  stage_key: string;
+  name: string;
+  position: number;
+  status: string;
+  entered_at: string | null;
+  exited_at: string | null;
+  target_duration_days: number | null;
+  provenance: string | null;
 };
 
 /** A working note written by the team while the implementation was in a stage. */

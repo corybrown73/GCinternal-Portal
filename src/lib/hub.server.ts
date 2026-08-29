@@ -369,6 +369,9 @@ export async function loadCustomer360(
   // without a pick we show the newest, and an unknown id falls back the same way.
   const impl =
     (implementationId ? implList.find((i) => i.id === implementationId) : null) ?? implList[0];
+  // Every project this customer runs, with the dates each one needs to draw
+  // its own lane in the header. `stages` is filled in below, once wave B has
+  // read them for all of these implementations in a single query.
   const implementationSummaries = implList.map((i) => ({
     id: i.id,
     name: i.name,
@@ -380,6 +383,11 @@ export async function loadCustomer360(
     health_recorded_at: i.health_recorded_at ?? null,
     owner_name: i.owner_id ? (team.get(i.owner_id)?.name ?? null) : null,
     target_launch_date: i.target_launch_date ?? null,
+    contract_start_date: i.contract_start_date ?? null,
+    created_at: i.created_at ?? null,
+    actual_launch_date: i.actual_launch_date ?? null,
+    parent_implementation_id: i.parent_implementation_id ?? null,
+    stages: [] as any[],
   }));
 
   // The customer's logo, as a signed URL.
@@ -458,7 +466,7 @@ export async function loadCustomer360(
     graduationRes,
     handoffRes,
     journalRes,
-    stageTargetRes,
+    stageInstanceRes,
   ] = await Promise.all([
     child("requirements", "created_at"),
     child("success_criteria", "created_at"),
@@ -490,14 +498,47 @@ export async function loadCustomer360(
       .order("created_at", { ascending: false })
       .limit(1),
     child("journal_entries", "created_at", false),
-    // The current stage's own target duration. It has been on stage_instances
-    // since 0014 and nothing has ever read it, so "8 days in Build" was shown
-    // with no way to tell whether that was early or double.
+    // Every stage of every project this customer runs, in ONE read.
+    //
+    // It started as the selected implementation's current-stage target — on
+    // stage_instances since 0014 and never read, so "8 days in Build" was
+    // shown with no way to tell whether that was early or double. The header
+    // now draws a rail per project from these same rows, and a customer with
+    // twelve projects must not cost twelve queries, so this is `.in()` over
+    // the ids wave A already returned rather than a per-project loop.
     db()
       .from("stage_instances")
-      .select("stage_key,target_duration_days")
-      .eq("implementation_id", impl.id),
+      .select(
+        "implementation_id,stage_key,name,position,status,entered_at,exited_at,target_duration_days,provenance",
+      )
+      .in(
+        "implementation_id",
+        implList.map((i) => i.id),
+      )
+      .order("position"),
   ]);
+
+  // Group the one stage_instances read by project, and hand each summary its
+  // own stages. A project with no journey applied keeps an empty array — the
+  // header treats that as "no plan", never as "no stages".
+  const stagesByImplementation = new Map<string, any[]>();
+  for (const row of (stageInstanceRes.data ?? []) as any[]) {
+    const bucket = stagesByImplementation.get(row.implementation_id);
+    if (bucket) bucket.push(row);
+    else stagesByImplementation.set(row.implementation_id, [row]);
+  }
+  for (const summary of implementationSummaries) {
+    summary.stages = (stagesByImplementation.get(summary.id) ?? []).map((r: any) => ({
+      stage_key: r.stage_key,
+      name: r.name,
+      position: r.position,
+      status: r.status,
+      entered_at: r.entered_at ?? null,
+      exited_at: r.exited_at ?? null,
+      target_duration_days: r.target_duration_days ?? null,
+      provenance: r.provenance ?? null,
+    }));
+  }
 
   const named = (id: string | null | undefined) => (id ? (team.get(id)?.name ?? null) : null);
 
@@ -745,7 +786,7 @@ export async function loadCustomer360(
       // null when the template set no target for this stage — which the UI
       // reports as "no target", never as "on pace".
       stage_target_days:
-        (stageTargetRes.data ?? []).find(
+        (stagesByImplementation.get(impl.id) ?? []).find(
           (r: any) => normalizeStage(r.stage_key) === normalizeStage(impl.current_stage),
         )?.target_duration_days ?? null,
       customer_goals: impl.customer_goals,

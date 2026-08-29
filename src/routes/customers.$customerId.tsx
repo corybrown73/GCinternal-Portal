@@ -5,11 +5,11 @@ import { ChevronRight, ArrowRight } from "lucide-react";
 
 import { CustomerLogo } from "@/components/customer-logo";
 import { HealthNote } from "@/components/health-note";
-import { datePace, dwellPace } from "@/lib/pace";
 import { PlanPanel } from "@/components/plan-panel";
 import { HandoffPanel } from "@/components/handoff-panel";
 import { ExternalSharePanel } from "@/components/external-share-panel";
-import { LifecycleRail } from "@/components/lifecycle-rail";
+import { ProjectRail, ProjectTimelines } from "@/components/project-timeline-rail";
+import { buildProjectTimeline, type TimelineInput } from "@/lib/project-timeline";
 import { AdvanceStage } from "@/components/stage-advance-write";
 import { launchAcceptanceGate } from "@/lib/launch-gate";
 import { nextLifecycleStage } from "@/lib/stage-advance-input";
@@ -70,7 +70,6 @@ import { getCustomer360 } from "@/lib/hub.functions";
 import type { Customer360, TraceStep } from "@/lib/hub-types";
 import { LIFECYCLE_STAGES } from "@/lib/lifecycle";
 import {
-  daysSince,
   fmtDate,
   fmtDateTime,
   fmtMoney,
@@ -90,7 +89,6 @@ import {
   meaningfulEvents,
   nextAction,
   openItems,
-  progress,
   proveValueState,
   proveValueGaps,
   PROVE_VALUE_LABEL,
@@ -116,7 +114,7 @@ const TABS = [
   "evidence",
   "history",
 ] as const;
-type TabId = (typeof TABS)[number];
+export type TabId = (typeof TABS)[number];
 
 const TAB_LABEL: Record<TabId, string> = {
   overview: "Overview",
@@ -253,50 +251,6 @@ function TraceChain({ trace }: { trace: TraceStep[] }) {
   );
 }
 
-/**
- * Every implementation this customer has. Selecting one reloads this page for
- * that record — each keeps its own stage, owner, dates and notes.
- */
-function ImplementationSwitcher({
-  customerId,
-  tab,
-  activeId,
-  implementations,
-}: {
-  customerId: string;
-  tab: TabId;
-  activeId: string;
-  implementations: Customer360["implementations"];
-}) {
-  if (implementations.length < 2) return null;
-  return (
-    <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-      <span className="text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
-        Implementations
-      </span>
-      {implementations.map((row) => (
-        <Link
-          key={row.id}
-          to="/customers/$customerId"
-          params={{ customerId }}
-          search={{ tab, impl: row.id }}
-          className={cn(
-            "rounded-sm border px-1.5 py-0.5 text-[11px]",
-            row.id === activeId
-              ? "border-primary bg-muted text-foreground"
-              : "border-border text-muted-foreground hover:text-foreground",
-          )}
-        >
-          {row.name}
-          <span className="ml-1.5 text-muted-foreground">
-            {stageLabel(row.current_stage)} · {row.owner_name ?? "Unassigned"}
-          </span>
-        </Link>
-      ))}
-    </div>
-  );
-}
-
 /* ------------------------------------------------------------------ */
 
 function Customer360Page() {
@@ -317,9 +271,6 @@ function Customer360Page() {
       </div>
     );
   }
-
-  const prog = progress(impl.current_stage);
-  const stagePace = dwellPace(impl.stage_entered_at, impl.stage_target_days);
 
   return (
     <div className="pb-16">
@@ -353,12 +304,6 @@ function Customer360Page() {
               />
               <h1 className="text-[17px] font-semibold tracking-tight">{customer.name}</h1>
             </div>
-            <ImplementationSwitcher
-              customerId={customerId}
-              tab={tab}
-              activeId={impl.id}
-              implementations={record.implementations}
-            />
             <p className="mt-0.5 text-[12px] text-muted-foreground">
               {[customer.industry, impl.tier, customer.segment].filter(Boolean).join(" · ") || "—"}
               {" · Owner "}
@@ -375,29 +320,30 @@ function Customer360Page() {
               computed={health.level}
             />
             <StageBadge stage={impl.current_stage} />
-            {/* Days in stage, measured against this stage's own target where the
-                template set one. The number was already here; what was missing
-                was any way to tell whether it was fine. */}
-            <PaceChip
-              pace={stagePace}
-              label={`${daysSince(impl.stage_entered_at)}d in stage`}
-              className="font-mono"
-            />
-            <span className="font-mono text-[11px] text-muted-foreground">
-              stage {prog.index}/{prog.total}
-            </span>
-            <div className="h-1 w-24 overflow-hidden rounded-sm bg-muted">
-              <div className="h-full bg-primary" style={{ width: `${prog.pct}%` }} />
-            </div>
-            <span className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground">
-              Target launch
-              <PaceChip
-                pace={datePace(impl.target_launch_date, impl.actual_launch_date)}
-                label={fmtDate(impl.target_launch_date)}
-                className="font-mono"
-              />
-            </span>
+            {/* "stage 3/8", a 3/8-wide progress bar, days-in-stage and the
+                target launch date all used to sit here. Every one of them was
+                computed against the hardcoded eight-stage lifecycle, so a
+                five-stage integration project read "stage 3/8" with a bar
+                two-fifths too short — and none of them said which of the
+                customer's projects they described. They now live on each
+                project's own lane below, measured against that project's own
+                stages. */}
           </div>
+        </div>
+
+        {/* ONE customer profile, N project timelines.
+            A new logo signed in June and the integration they added in August
+            are two projects on this same profile, each with its own start
+            date, its own stages and its own pace. Each lane is that project's
+            board at a glance and deep-links to it through `?impl=`. With a
+            single project this collapses to just that project's rail. */}
+        <div className="min-w-0 px-6 pt-3">
+          <ProjectTimelines
+            customerId={customerId}
+            tab={tab}
+            activeId={impl.id}
+            implementations={record.implementations}
+          />
         </div>
 
         <div className="px-6 pb-4 pt-3">
@@ -444,12 +390,41 @@ function Customer360Page() {
   );
 }
 
+/**
+ * The selected project, in the shape a timeline is built from.
+ *
+ * Its stages come from the summary row — `stage_instances` for THIS project,
+ * fetched for every one of the customer's projects in a single query — and its
+ * dates come from the full record, which is the authority on them.
+ */
+function projectInput(
+  record: Customer360,
+  impl: NonNullable<Customer360["implementation"]>,
+): TimelineInput {
+  const summary = record.implementations.find((row) => row.id === impl.id);
+  return {
+    id: impl.id,
+    name: impl.name,
+    current_stage: impl.current_stage,
+    stage_entered_at: impl.stage_entered_at,
+    contract_start_date: impl.contract_start_date,
+    target_launch_date: impl.target_launch_date,
+    actual_launch_date: impl.actual_launch_date,
+    created_at: summary?.created_at ?? null,
+    parent_implementation_id: summary?.parent_implementation_id ?? null,
+    stages: summary?.stages ?? [],
+  };
+}
+
 /* ---------------- 1. OVERVIEW ---------------- */
 
 function OverviewTab({ record, customerId }: { record: Customer360; customerId: string }) {
   const impl = record.implementation!;
   const open = openItems(record);
-  const prog = progress(impl.current_stage);
+  // Read from this project's own stages. `progress()` counts against the
+  // hardcoded eight, so it reported "3 / 8 stages" for a five-stage
+  // integration; the same rail the header draws is the honest denominator.
+  const timeline = buildProjectTimeline(projectInput(record, impl));
   const boardImpl: DiscoveryBoardImplementation = {
     id: impl.id,
     name: impl.name,
@@ -494,13 +469,38 @@ function OverviewTab({ record, customerId }: { record: Customer360; customerId: 
       <div className="space-y-4 xl:col-span-2">
         <Panel title="Current state" level="primary">
           <dl className="grid grid-cols-2 gap-x-6 gap-y-3 px-3 py-2.5 md:grid-cols-4">
-            <Field label="Stage" value={stageLabel(impl.current_stage)} />
+            <Field label="Stage" value={timeline.currentStageName} />
             <Field
               label="Health"
               value={<StatusChip status={deriveHealth(record, impl).level} />}
             />
-            <Field label="Target launch" value={fmtDate(impl.target_launch_date)} />
-            <Field label="Progress" value={`${prog.index} / ${prog.total} stages`} />
+            <Field
+              label="Target launch"
+              value={
+                <PaceChip
+                  pace={timeline.launch}
+                  label={fmtDate(impl.target_launch_date)}
+                  className="font-mono"
+                />
+              }
+            />
+            <Field
+              label="Progress"
+              value={
+                <span
+                  title={
+                    timeline.source === "lifecycle_default"
+                      ? "No journey has been applied to this project, so this counts against the default implementation stages."
+                      : `Counted against this project's own ${timeline.total}-stage plan.`
+                  }
+                >
+                  {timeline.position} / {timeline.total} stages
+                  {timeline.source === "lifecycle_default" ? (
+                    <span className="ml-1 text-muted-foreground">(default)</span>
+                  ) : null}
+                </span>
+              }
+            />
           </dl>
           <div className="space-y-2 border-t border-border px-3 py-3">
             <PrimarySignal
@@ -1311,13 +1311,17 @@ function JourneyTab({ record, customerId }: { record: Customer360; customerId: s
     return Math.max(0, Math.round((end - new Date(h.entered_at).getTime()) / 86_400_000));
   };
 
+  const journeyProject = projectInput(record, impl);
+
   return (
     <div className="space-y-4">
-      <div className="overflow-hidden rounded-md bg-surface">
-        <LifecycleRail
-          activeStage={activeStage ?? undefined}
-          className="border-b-0 bg-transparent"
-        />
+      {/* THIS project's stages, from its own `stage_instances` — so an
+          integration journey shows Discovery / Design / Build / Validate /
+          Launch rather than the new-logo eight. Falls back to the house
+          lifecycle only when no journey has been applied, and says so on the
+          rail when it does. */}
+      <div className="min-w-0 overflow-hidden rounded-md bg-surface px-4 py-3">
+        <ProjectRail project={journeyProject} />
       </div>
 
       <div className="rounded-md bg-surface px-4 py-3.5">
