@@ -690,6 +690,24 @@ export async function createAlert(input: {
     payload: { kind: created.kind, severity, title: created.title },
   });
 
+  // Outbox: every alert, whatever raised it. Never throws (server/events.ts).
+  const { emitEvent } = await import("./server/events");
+  await emitEvent({
+    event_type: "alert.raised",
+    entity_type: "alert",
+    entity_id: created.id,
+    implementation_id: created.implementation_id,
+    payload: {
+      alert_id: created.id,
+      kind: created.kind,
+      severity: created.severity,
+      title: created.title,
+      customer_id: created.customer_id,
+      implementation_id: created.implementation_id,
+    },
+    dedupe_key: `alert.raised:${created.id}`,
+  });
+
   return created;
 }
 
