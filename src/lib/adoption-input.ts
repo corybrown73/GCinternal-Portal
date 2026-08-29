@@ -15,12 +15,7 @@ export const ADOPTION_KIND_LABEL: Record<AdoptionKind, string> = {
 };
 
 /** The state vocabulary the app writes (the DB column has no check constraint). */
-export const ADOPTION_STATES = [
-  "not_started",
-  "progressing",
-  "established",
-  "at_risk",
-] as const;
+export const ADOPTION_STATES = ["not_started", "progressing", "established", "at_risk"] as const;
 export type AdoptionStateValue = (typeof ADOPTION_STATES)[number];
 
 const optionalText = z.string().trim().min(1).nullable();

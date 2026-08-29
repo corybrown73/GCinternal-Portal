@@ -15,7 +15,6 @@ import type {
   TraceStep,
 } from "./hub-types";
 
-
 const db = () => supabaseAdmin as any;
 
 function isOverdue(due: string | null | undefined) {
@@ -55,7 +54,7 @@ export async function loadImplementations(): Promise<ImplementationRow[]> {
       current_stage: i.current_stage,
       stage_entered_at: i.stage_entered_at,
       status: i.status,
-      owner_name: i.owner_id ? team.get(i.owner_id)?.name ?? null : null,
+      owner_name: i.owner_id ? (team.get(i.owner_id)?.name ?? null) : null,
       tier: i.tier,
       target_launch_date: i.target_launch_date,
       actual_launch_date: i.actual_launch_date,
@@ -89,7 +88,7 @@ export async function loadHome(): Promise<HomeData> {
         due_date: c.due_date,
         status: c.status,
         committed_to: c.committed_to,
-        owner_name: c.owner_id ? team.get(c.owner_id)?.name ?? null : null,
+        owner_name: c.owner_id ? (team.get(c.owner_id)?.name ?? null) : null,
         implementation_id: c.implementation_id,
         customer_id: impl?.customer_id ?? "",
         customer_name: impl?.customer_name ?? "Unknown customer",
@@ -137,7 +136,7 @@ export async function loadHome(): Promise<HomeData> {
           ? `${a.old_value ?? "—"} → ${a.new_value ?? "—"}${a.change_reason ? ` · ${a.change_reason}` : ""}`
           : a.change_reason,
       at: a.changed_at,
-      actor: a.changed_by ? team.get(a.changed_by)?.name ?? null : null,
+      actor: a.changed_by ? (team.get(a.changed_by)?.name ?? null) : null,
       ...implContext(a.entity_type === "implementation" ? a.entity_id : null),
     })),
     ...(risks ?? []).map((r: any) => ({
@@ -164,7 +163,7 @@ export async function loadHome(): Promise<HomeData> {
       title: `Escalation · ${r.title}`,
       detail: `${r.severity} · ${r.status}`,
       at: r.raised_at,
-      actor: r.raised_by ? team.get(r.raised_by)?.name ?? null : null,
+      actor: r.raised_by ? (team.get(r.raised_by)?.name ?? null) : null,
       ...implContext(r.implementation_id),
     })),
   ]
@@ -202,22 +201,26 @@ export async function loadHome(): Promise<HomeData> {
   }));
 
   // Dependency inputs for the shared waitingOn signal (no schema change).
-  const [{ data: allSolutions }, { data: allMappings }, { data: allAreas }, { data: allAdoptionObs }] =
-    await Promise.all([
-      db().from("technical_solutions").select("*"),
-      db().from("field_mappings").select("*"),
-      db().from("adoption_areas").select("*"),
-      db().from("adoption_observations").select("*"),
-    ]);
+  const [
+    { data: allSolutions },
+    { data: allMappings },
+    { data: allAreas },
+    { data: allAdoptionObs },
+  ] = await Promise.all([
+    db().from("technical_solutions").select("*"),
+    db().from("field_mappings").select("*"),
+    db().from("adoption_areas").select("*"),
+    db().from("adoption_observations").select("*"),
+  ]);
 
   const solutionRows = (allSolutions ?? []).map((s: any) => ({
     ...s,
-    owner_name: s.owner_id ? team.get(s.owner_id)?.name ?? null : null,
+    owner_name: s.owner_id ? (team.get(s.owner_id)?.name ?? null) : null,
     field_mappings: (allMappings ?? []).filter((m: any) => m.technical_solution_id === s.id),
   }));
   const adoptionRows = (allAreas ?? []).map((a: any) => ({
     ...a,
-    owner_name: a.owner_id ? team.get(a.owner_id)?.name ?? null : null,
+    owner_name: a.owner_id ? (team.get(a.owner_id)?.name ?? null) : null,
     observations: (allAdoptionObs ?? [])
       .filter((o: any) => o.adoption_area_id === a.id)
       .sort((x: any, y: any) => String(y.observed_at).localeCompare(String(x.observed_at))),
@@ -226,7 +229,7 @@ export async function loadHome(): Promise<HomeData> {
   const withOwner = (rows: any[] | null) =>
     (rows ?? []).map((r: any) => ({
       ...r,
-      owner_name: r.owner_id ? team.get(r.owner_id)?.name ?? null : null,
+      owner_name: r.owner_id ? (team.get(r.owner_id)?.name ?? null) : null,
     }));
 
   const forImpl = (rows: any[], id: string) => rows.filter((r) => r.implementation_id === id);
@@ -252,7 +255,6 @@ export async function loadHome(): Promise<HomeData> {
   }));
 
   return { implementations, commitments, signal, triage };
-
 }
 
 /**
@@ -288,7 +290,6 @@ export async function loadLeadership(): Promise<LeadershipData> {
     ),
   };
 }
-
 
 function label(entityType: string, row: any): string {
   if (!row) return "(missing)";
@@ -331,7 +332,6 @@ export async function loadCustomer360(
   }));
   const contactById = new Map<string, any>(contacts.map((c: any) => [c.id, c]));
 
-
   const { data: impls } = await db()
     .from("implementations")
     .select("*")
@@ -348,7 +348,7 @@ export async function loadCustomer360(
     current_stage: i.current_stage,
     stage_entered_at: i.stage_entered_at,
     status: i.status,
-    owner_name: i.owner_id ? team.get(i.owner_id)?.name ?? null : null,
+    owner_name: i.owner_id ? (team.get(i.owner_id)?.name ?? null) : null,
     target_launch_date: i.target_launch_date ?? null,
   }));
 
@@ -420,7 +420,7 @@ export async function loadCustomer360(
     db().from("trace_links").select("*"),
   ]);
 
-  const named = (id: string | null | undefined) => (id ? team.get(id)?.name ?? null : null);
+  const named = (id: string | null | undefined) => (id ? (team.get(id)?.name ?? null) : null);
 
   // Traceability spine: walk trace_links outward from each requirement.
   const lookup = new Map<string, any>();
@@ -447,7 +447,6 @@ export async function loadCustomer360(
   register("commitment", commitments.data);
   register("commitments", commitments.data);
   register("approvals", approvals.data);
-
 
   const linksFrom = new Map<string, any[]>();
   for (const l of traceLinks.data ?? []) {
@@ -623,7 +622,6 @@ export async function loadCustomer360(
       discovery_board_image_url: impl.discovery_board_image_url ?? null,
       discovery_board_image_name: impl.discovery_board_image_name ?? null,
       discovery_board_notes: impl.discovery_board_notes ?? null,
-
     },
     requirements: (requirements.data ?? []).map((r: any) => {
       const trace = traceFor(r.id);
@@ -670,38 +668,39 @@ export async function loadCustomer360(
       ...a,
       owner_name: named(a.owner_id),
       customer_owner_name: a.customer_owner_contact_id
-        ? contactById.get(a.customer_owner_contact_id)?.name ?? null
+        ? (contactById.get(a.customer_owner_contact_id)?.name ?? null)
         : null,
       customer_owner_role: a.customer_owner_contact_id
-        ? contactById.get(a.customer_owner_contact_id)?.role ?? null
+        ? (contactById.get(a.customer_owner_contact_id)?.role ?? null)
         : null,
       observations: adoptionObservations
         .filter((o: any) => o.adoption_area_id === a.id)
         .map((o: any) => ({
           ...o,
           observed_by_name: named(o.observed_by),
-          evidence: o.evidence_id ? evidenceById.get(o.evidence_id) ?? null : null,
+          evidence: o.evidence_id ? (evidenceById.get(o.evidence_id) ?? null) : null,
         })),
     })),
     success_criteria: (successCriteria.data ?? []).map((c: any) => ({
       ...c,
       owner_name: named(c.owner_id),
       customer_owner_name: c.customer_owner_contact_id
-        ? contactById.get(c.customer_owner_contact_id)?.name ?? null
+        ? (contactById.get(c.customer_owner_contact_id)?.name ?? null)
         : null,
       customer_owner_role: c.customer_owner_contact_id
-        ? contactById.get(c.customer_owner_contact_id)?.role ?? null
+        ? (contactById.get(c.customer_owner_contact_id)?.role ?? null)
         : null,
       observations: (observations ?? [])
         .filter((o: any) => o.success_criteria_id === c.id)
         .map((o: any) => ({
           ...o,
           observed_by_name: named(o.observed_by),
-          evidence: o.evidence_id ? evidenceById.get(o.evidence_id) ?? null : null,
+          evidence: o.evidence_id ? (evidenceById.get(o.evidence_id) ?? null) : null,
         })),
       confirmations: (approvals.data ?? [])
         .filter(
-          (a: any) => a.approved_entity_type === "success_criterion" && a.approved_entity_id === c.id,
+          (a: any) =>
+            a.approved_entity_type === "success_criterion" && a.approved_entity_id === c.id,
         )
         .map((a: any) => ({
           id: a.id,
@@ -714,12 +713,12 @@ export async function loadCustomer360(
           evidence_id: a.evidence_id,
           customer_contact_id: a.customer_contact_id ?? null,
           contact_name: a.customer_contact_id
-            ? contactById.get(a.customer_contact_id)?.name ?? null
+            ? (contactById.get(a.customer_contact_id)?.name ?? null)
             : null,
           contact_role: a.customer_contact_id
-            ? contactById.get(a.customer_contact_id)?.role ?? null
+            ? (contactById.get(a.customer_contact_id)?.role ?? null)
             : null,
-          evidence: a.evidence_id ? evidenceById.get(a.evidence_id) ?? null : null,
+          evidence: a.evidence_id ? (evidenceById.get(a.evidence_id) ?? null) : null,
         })),
     })),
     milestones: (milestones.data ?? []).map((m: any) => ({
@@ -748,18 +747,16 @@ export async function loadCustomer360(
       ...r,
       raised_by_name: named(r.raised_by),
       related_issue_title: r.related_issue_id
-        ? (issueById.get(r.related_issue_id) as any)?.title ?? null
+        ? ((issueById.get(r.related_issue_id) as any)?.title ?? null)
         : null,
       related_risk_title: r.related_risk_id
-        ? (riskById.get(r.related_risk_id) as any)?.title ?? null
+        ? ((riskById.get(r.related_risk_id) as any)?.title ?? null)
         : null,
     })),
     technical_solutions: (solutions.data ?? []).map((s: any) => ({
       ...s,
       owner_name: named(s.owner_id),
-      requirement_title: s.requirement_id
-        ? entityLabelFor("requirement", s.requirement_id)
-        : null,
+      requirement_title: s.requirement_id ? entityLabelFor("requirement", s.requirement_id) : null,
       field_mappings: (mappings.data ?? []).filter((m: any) => m.technical_solution_id === s.id),
     })),
     evidence: (evidence.data ?? []).map((e: any) => ({
@@ -870,8 +867,10 @@ export async function loadTechnicalSolutions(): Promise<TechnicalSolutionRow[]> 
       id: s.id,
       title: s.title,
       status: s.status,
-      owner_name: s.owner_id ? team.get(s.owner_id)?.name ?? null : null,
-      requirement_title: s.requirement_id ? (reqMap.get(s.requirement_id) as any)?.title ?? null : null,
+      owner_name: s.owner_id ? (team.get(s.owner_id)?.name ?? null) : null,
+      requirement_title: s.requirement_id
+        ? ((reqMap.get(s.requirement_id) as any)?.title ?? null)
+        : null,
       implementation_id: s.implementation_id,
       implementation_name: impl?.name ?? "Unknown implementation",
       customer_id: impl?.customer_id ?? "",
@@ -896,7 +895,7 @@ export async function loadTechnicalSolution(id: string): Promise<TechnicalSoluti
     .maybeSingle();
   if (!solution) return null;
 
-  const named = (uid: string | null | undefined) => (uid ? team.get(uid)?.name ?? null : null);
+  const named = (uid: string | null | undefined) => (uid ? (team.get(uid)?.name ?? null) : null);
 
   const [
     { data: impl },
@@ -992,9 +991,7 @@ export async function loadTechnicalSolution(id: string): Promise<TechnicalSoluti
 
   // Second hop: requirements that point INTO one of the linked decisions.
   // Reached through an intermediate node, so kept separate from `trace`.
-  const decisionKeys = new Set(
-    decisionIds.flatMap((d) => [`decision:${d}`, `decisions:${d}`]),
-  );
+  const decisionKeys = new Set(decisionIds.flatMap((d) => [`decision:${d}`, `decisions:${d}`]));
   const indirectLinks = links.filter(
     (l: any) =>
       decisionKeys.has(`${l.to_entity_type}:${l.to_entity_id}`) &&
@@ -1016,7 +1013,6 @@ export async function loadTechnicalSolution(id: string): Promise<TechnicalSoluti
     seenIndirect.add(k);
     linked_trace.push(stepOf(l.from_entity_type, l.from_entity_id, l.relationship));
   }
-
 
   return {
     solution: {
@@ -1072,7 +1068,6 @@ export async function loadTechnicalSolution(id: string): Promise<TechnicalSoluti
     })),
     trace,
     linked_trace,
-
   };
 }
 
@@ -1125,10 +1120,7 @@ export type FieldMappingPatch = {
 };
 
 /** A new mapping row is always created against the solution being worked on. */
-export async function createFieldMapping(
-  technicalSolutionId: string,
-  patch: FieldMappingPatch,
-) {
+export async function createFieldMapping(technicalSolutionId: string, patch: FieldMappingPatch) {
   const { data: solution, error: readError } = await db()
     .from("technical_solutions")
     .select("id,implementation_id")
@@ -1242,19 +1234,21 @@ export async function createSuccessCriterionConfirmation(input: {
   if (criterionError) throw new Error(criterionError.message);
   if (!criterion) throw new Error("Success criterion not found");
 
-  const { error } = await db().from("approvals").insert({
-    implementation_id: input.implementationId,
-    title: `Customer confirmation · ${criterion.description}`,
-    approved_entity_type: "success_criterion",
-    approved_entity_id: input.successCriteriaId,
-    customer_contact_id: contact.id,
-    // Denormalised from the structured contact record — never free text.
-    approver_name: contact.name,
-    approver_role: contact.role,
-    status: input.status,
-    evidence_id: input.evidenceId,
-    decided_at: input.status === "pending" ? null : new Date().toISOString(),
-  });
+  const { error } = await db()
+    .from("approvals")
+    .insert({
+      implementation_id: input.implementationId,
+      title: `Customer confirmation · ${criterion.description}`,
+      approved_entity_type: "success_criterion",
+      approved_entity_id: input.successCriteriaId,
+      customer_contact_id: contact.id,
+      // Denormalised from the structured contact record — never free text.
+      approver_name: contact.name,
+      approver_role: contact.role,
+      status: input.status,
+      evidence_id: input.evidenceId,
+      decided_at: input.status === "pending" ? null : new Date().toISOString(),
+    });
   if (error) throw new Error(error.message);
   return { ok: true };
 }
@@ -1414,13 +1408,15 @@ export async function createImplementation(args: {
     );
   }
 
-  const { error: historyError } = await db().from("implementation_stage_history").insert({
-    implementation_id: impl.id,
-    stage: "handoff",
-    entered_at: impl.stage_entered_at ?? impl.created_at,
-    entered_by: impl.owner_id ?? null,
-    exited_at: null,
-  });
+  const { error: historyError } = await db()
+    .from("implementation_stage_history")
+    .insert({
+      implementation_id: impl.id,
+      stage: "handoff",
+      entered_at: impl.stage_entered_at ?? impl.created_at,
+      entered_by: impl.owner_id ?? null,
+      exited_at: null,
+    });
   if (historyError) {
     throw new Error(
       `Implementation created, but its first stage history row failed: ${historyError.message}`,
@@ -1445,7 +1441,6 @@ export async function updateImplementation(id: string, patch: Record<string, unk
 }
 
 /* ---------- Mutations (Stage advancement) ---------- */
-
 
 /**
  * Advance an implementation one stage along the existing lifecycle ordering.
@@ -1503,7 +1498,6 @@ export async function advanceStage(args: {
 
   const at = new Date().toISOString();
 
-
   const { error: closeError } = await db()
     .from("implementation_stage_history")
     .update({ exited_at: at })
@@ -1549,7 +1543,6 @@ const DELIVERY_LABEL: Record<string, string> = {
   approvals: "approval request",
   implementations: "implementation",
 };
-
 
 function deliveryWriteError(table: string, message: string): Error {
   const label = DELIVERY_LABEL[table] ?? "record";
@@ -1693,9 +1686,7 @@ export async function storeAttachment(args: {
 
 /** Short-lived link so the file can be opened from the record. */
 export async function attachmentLink(path: string) {
-  const { data, error } = await db()
-    .storage.from(ATTACHMENT_BUCKET)
-    .createSignedUrl(path, 3600);
+  const { data, error } = await db().storage.from(ATTACHMENT_BUCKET).createSignedUrl(path, 3600);
   if (error || !data?.signedUrl) {
     throw new Error(`Could not open the file: ${error?.message ?? "no link returned"}`);
   }

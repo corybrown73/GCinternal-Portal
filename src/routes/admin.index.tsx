@@ -19,13 +19,15 @@ const CARDS = [
     to: "/admin/users",
     icon: Users,
     title: "Users",
-    description: "Every portal profile and its role. Roles gate sales edits, admin areas and the customer portal.",
+    description:
+      "Every portal profile and its role. Roles gate sales edits, admin areas and the customer portal.",
   },
   {
     to: "/tickets/routing",
     icon: RouteIcon,
     title: "Ticket routing",
-    description: "Assignment rules for inbound tickets: which team picks up what, and the fallback owner.",
+    description:
+      "Assignment rules for inbound tickets: which team picks up what, and the fallback owner.",
   },
   {
     to: "/pipeline",
@@ -54,7 +56,9 @@ function AdminIndex() {
               <div className="flex items-center justify-between">
                 <span className="flex items-center gap-2">
                   <card.icon className="h-3.5 w-3.5 text-muted-foreground" strokeWidth={1.75} />
-                  <span className="text-[13px] font-medium group-hover:underline">{card.title}</span>
+                  <span className="text-[13px] font-medium group-hover:underline">
+                    {card.title}
+                  </span>
                 </span>
                 <ArrowRight
                   className="h-3.5 w-3.5 text-muted-foreground transition-transform group-hover:translate-x-0.5"

@@ -36,7 +36,8 @@ export const Route = createFileRoute("/deals/$dealId")({
       { title: "Deal — GoCanvas Handoff Hub" },
       {
         name: "description",
-        content: "Presale deal record: notes, Gong reports, account briefs, TAM requests and stage history.",
+        content:
+          "Presale deal record: notes, Gong reports, account briefs, TAM requests and stage history.",
       },
     ],
   }),
@@ -127,12 +128,20 @@ function DealRecord({ deal }: { deal: DealData }) {
         <div className="flex flex-wrap items-center gap-x-6 gap-y-2 rounded-md border border-border bg-card px-4 py-3">
           <div className="flex items-center gap-2">
             <StageChip stage={account.stage} />
-            <span className="font-mono text-[11px] text-muted-foreground">{days ?? 0}d in stage</span>
+            <span className="font-mono text-[11px] text-muted-foreground">
+              {days ?? 0}d in stage
+            </span>
           </div>
           <Field label="ARR" value={account.arr != null ? fmtMoney(account.arr) : "—"} />
           <Field
             label="Salesforce"
-            value={account.salesforce_id ? <span className="font-mono">{account.salesforce_id}</span> : "—"}
+            value={
+              account.salesforce_id ? (
+                <span className="font-mono">{account.salesforce_id}</span>
+              ) : (
+                "—"
+              )
+            }
           />
           <Field label="Domain" value={account.domain ?? "—"} />
           <Field label="AM owner" value={deal.am_owner_name ?? "Unassigned"} />
@@ -229,7 +238,12 @@ function ReportsPanel({ deal }: { deal: DealData }) {
   const addMutation = useMutation({
     mutationFn: () =>
       create({
-        data: { dealId: deal.account.id, title: title.trim(), reportType, contentMd: contentMd.trim() },
+        data: {
+          dealId: deal.account.id,
+          title: title.trim(),
+          reportType,
+          contentMd: contentMd.trim(),
+        },
       }),
     onSuccess: () => {
       invalidate();
@@ -268,7 +282,12 @@ function ReportsPanel({ deal }: { deal: DealData }) {
           <div className="grid grid-cols-[1fr_10rem] gap-2">
             <div>
               <label className={labelClass}>Title *</label>
-              <input className={inputClass} value={title} onChange={(e) => setTitle(e.target.value)} required />
+              <input
+                className={inputClass}
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                required
+              />
             </div>
             <div>
               <label className={labelClass}>Type</label>
@@ -285,7 +304,11 @@ function ReportsPanel({ deal }: { deal: DealData }) {
           <div>
             <div className="flex items-center justify-between">
               <label className={labelClass}>Markdown *</label>
-              <button type="button" className={buttonClass} onClick={() => fileRef.current?.click()}>
+              <button
+                type="button"
+                className={buttonClass}
+                onClick={() => fileRef.current?.click()}
+              >
                 Upload .md / .txt
               </button>
               <input
@@ -338,8 +361,13 @@ function ReportsPanel({ deal }: { deal: DealData }) {
                   className="flex min-w-0 items-center gap-2 text-left"
                   onClick={() => setExpanded(expanded === r.id ? null : r.id)}
                 >
-                  <FileText className="h-3.5 w-3.5 shrink-0 text-muted-foreground" strokeWidth={1.75} />
-                  <span className="truncate text-[13px] font-medium hover:underline">{r.title}</span>
+                  <FileText
+                    className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
+                    strokeWidth={1.75}
+                  />
+                  <span className="truncate text-[13px] font-medium hover:underline">
+                    {r.title}
+                  </span>
                   <span className="shrink-0 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
                     {r.report_type === "account_map" ? "Account map" : "Call notes"}
                   </span>
@@ -395,10 +423,11 @@ function BriefsPanel({ deal }: { deal: DealData }) {
 
   const latestComplete = deal.briefs.find((b) => b.status === "complete");
   const questions: DiscoveryQuestion[] = Array.isArray(
-    (latestComplete?.structured_json as { discovery_questions?: unknown } | null)?.discovery_questions,
+    (latestComplete?.structured_json as { discovery_questions?: unknown } | null)
+      ?.discovery_questions,
   )
-    ? ((latestComplete!.structured_json as { discovery_questions: DiscoveryQuestion[] })
-        .discovery_questions)
+    ? (latestComplete!.structured_json as { discovery_questions: DiscoveryQuestion[] })
+        .discovery_questions
     : [];
 
   return (
@@ -475,7 +504,9 @@ function BriefsPanel({ deal }: { deal: DealData }) {
               <li key={i} className="px-3 py-2">
                 <p className="text-[13px]">{q.question}</p>
                 <p className="mt-0.5 text-[11px] text-muted-foreground">
-                  <span className="font-mono text-[10px] uppercase tracking-wider">{q.category}</span>
+                  <span className="font-mono text-[10px] uppercase tracking-wider">
+                    {q.category}
+                  </span>
                   {" · "}
                   {q.why_it_matters}
                 </p>
@@ -657,7 +688,11 @@ function NotesPanel({ deal }: { deal: DealData }) {
           ) : (
             <span />
           )}
-          <button type="submit" className={primaryButtonClass} disabled={addMutation.isPending || body.trim() === ""}>
+          <button
+            type="submit"
+            className={primaryButtonClass}
+            disabled={addMutation.isPending || body.trim() === ""}
+          >
             {addMutation.isPending ? "Saving…" : "Add note"}
           </button>
         </div>
@@ -689,7 +724,10 @@ function NotesPanel({ deal }: { deal: DealData }) {
                         : "Mark reviewed so brief generation can use it"
                     }
                     onClick={() =>
-                      reviewMutation.mutate({ noteId: n.id, reviewed: n.review_status !== "reviewed" })
+                      reviewMutation.mutate({
+                        noteId: n.id,
+                        reviewed: n.review_status !== "reviewed",
+                      })
                     }
                   >
                     {n.review_status === "reviewed" ? "Reviewed" : "Needs review"}

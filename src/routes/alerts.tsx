@@ -46,9 +46,7 @@ function AlertsPage() {
         title="Alerts"
         description="What the system flagged: SLA breaches, stalled implementations, overdue milestones and anything reported from outside."
         actions={
-          <span className="font-mono text-[11px] text-muted-foreground">
-            {open.length} open
-          </span>
+          <span className="font-mono text-[11px] text-muted-foreground">{open.length} open</span>
         }
       />
       <PageBody className="space-y-4">

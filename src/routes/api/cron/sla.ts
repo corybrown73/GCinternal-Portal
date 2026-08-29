@@ -155,16 +155,13 @@ async function runSlaSweep(): Promise<Response> {
     .select("id, name, customer_id, current_stage, stage_entered_at, status")
     .lt("stage_entered_at", cutoff);
   const stalled = (impls ?? []).filter(
-    (i: any) =>
-      normalizeStage(i.current_stage) !== "graduate-to-cs" && !stalledFlagged.has(i.id),
+    (i: any) => normalizeStage(i.current_stage) !== "graduate-to-cs" && !stalledFlagged.has(i.id),
   );
   const customerIds = [...new Set(stalled.map((i: any) => i.customer_id).filter(Boolean))];
   const { data: customers } = customerIds.length
     ? await db.from("customers").select("id, name").in("id", customerIds)
     : { data: [] };
-  const customerName = new Map<string, string>(
-    (customers ?? []).map((c: any) => [c.id, c.name]),
-  );
+  const customerName = new Map<string, string>((customers ?? []).map((c: any) => [c.id, c.name]));
   for (const impl of stalled) {
     const days = Math.floor((now - new Date(impl.stage_entered_at).getTime()) / 86_400_000);
     await createAlert({

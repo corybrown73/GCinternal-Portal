@@ -7,13 +7,10 @@ export async function sendEmail(opts: {
   subject: string;
   html: string;
 }): Promise<{ delivered: boolean }> {
-  const mode =
-    process.env["EMAIL_MODE"] ?? (process.env["RESEND_API_KEY"] ? "send" : "log");
+  const mode = process.env["EMAIL_MODE"] ?? (process.env["RESEND_API_KEY"] ? "send" : "log");
 
   if (mode !== "send") {
-    console.log(
-      `[email:log] to=${opts.to} subject=${JSON.stringify(opts.subject)}\n${opts.html}`
-    );
+    console.log(`[email:log] to=${opts.to} subject=${JSON.stringify(opts.subject)}\n${opts.html}`);
     return { delivered: false };
   }
 

@@ -15,7 +15,7 @@ Rules:
 export function buildBriefUserPrompt(
   account: Account,
   reports: GongReport[],
-  notes: OnboardingNote[]
+  notes: OnboardingNote[],
 ): string {
   const parts: string[] = [];
   parts.push(`# Account: ${account.name}`);
@@ -29,7 +29,7 @@ export function buildBriefUserPrompt(
 
   for (const r of reports) {
     parts.push(
-      `## ${r.report_type === "account_map" ? "Account map" : "Gong call notes"}: ${r.title} (${r.created_at.slice(0, 10)})\n\n${r.content_md}`
+      `## ${r.report_type === "account_map" ? "Account map" : "Gong call notes"}: ${r.title} (${r.created_at.slice(0, 10)})\n\n${r.content_md}`,
     );
   }
   for (const n of notes) {

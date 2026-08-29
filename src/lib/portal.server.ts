@@ -48,7 +48,9 @@ export function canEditJourneys(role: string): boolean {
 export async function requireCustomerIds(userId: string): Promise<string[]> {
   const ids = await linkedCustomerIds(userId);
   if (ids.length === 0) {
-    throw new Error("No customer is linked to this login yet. Ask your GoCanvas contact for an invite.");
+    throw new Error(
+      "No customer is linked to this login yet. Ask your GoCanvas contact for an invite.",
+    );
   }
   return ids;
 }
@@ -322,7 +324,7 @@ export async function loadPortalTickets(userId: string): Promise<{
             body: c.body,
             author_name: isTeam
               ? "GoCanvas team"
-              : (author?.full_name || author?.email || c.author_email || "You"),
+              : author?.full_name || author?.email || c.author_email || "You",
             author_is_team: isTeam,
             created_at: c.created_at,
           };

@@ -56,7 +56,14 @@ export const moveDealStage = createServerFn({ method: "POST" })
 export const importDeals = createServerFn({ method: "POST" })
   .middleware([requireInternalAuth])
   .inputValidator((data: unknown) =>
-    z.object({ csv: z.string().min(1, "The CSV file is empty").max(2 * 1024 * 1024) }).parse(data),
+    z
+      .object({
+        csv: z
+          .string()
+          .min(1, "The CSV file is empty")
+          .max(2 * 1024 * 1024),
+      })
+      .parse(data),
   )
   .handler(async ({ data, context }) => {
     const { importDealsCsv } = await import("./presale.server");
@@ -134,7 +141,10 @@ export const addNote = createServerFn({ method: "POST" })
   .middleware([requireInternalAuth])
   .inputValidator((data: unknown) =>
     z
-      .object({ dealId: z.string().uuid(), bodyMd: z.string().trim().min(1, "Write something first") })
+      .object({
+        dealId: z.string().uuid(),
+        bodyMd: z.string().trim().min(1, "Write something first"),
+      })
       .parse(data),
   )
   .handler(async ({ data, context }) => {

@@ -76,7 +76,15 @@ function CustomerLink({
   children,
 }: {
   impl: { customer_id: string; customer_name: string };
-  tab?: "overview" | "journey" | "risks" | "requirements" | "solution" | "decisions" | "evidence" | "history";
+  tab?:
+    | "overview"
+    | "journey"
+    | "risks"
+    | "requirements"
+    | "solution"
+    | "decisions"
+    | "evidence"
+    | "history";
   className?: string;
   children?: React.ReactNode;
 }) {
@@ -126,7 +134,6 @@ function Owner({ name, emphasis }: { name: string | null; emphasis?: boolean }) 
     </Link>
   );
 }
-
 
 function Metric({
   label,
@@ -193,8 +200,7 @@ function LeadershipPage() {
   const [filter, setFilter] = useState<PortfolioFilterId | null>(null);
   const [stageFilter, setStageFilter] = useState<string | null>(null);
   const [dwellStage, setDwellStage] = useState<string | null>(null);
-  const toggleFilter = (id: PortfolioFilterId) =>
-    setFilter((cur) => (cur === id ? null : id));
+  const toggleFilter = (id: PortfolioFilterId) => setFilter((cur) => (cur === id ? null : id));
 
   const rollup = portfolioRollup(data);
   const rows = interventions(data);
@@ -281,7 +287,9 @@ function LeadershipPage() {
 
         {/* 2. The one account list. A selected card above swaps what it shows. */}
         <Panel
-          title={filter ? `${PORTFOLIO_FILTER_LABEL[filter]} accounts` : "Accounts needing attention"}
+          title={
+            filter ? `${PORTFOLIO_FILTER_LABEL[filter]} accounts` : "Accounts needing attention"
+          }
           count={accounts.length}
           meta={
             <span className="flex items-center gap-2">
@@ -374,16 +382,12 @@ function LeadershipPage() {
                 <li key={s.id}>
                   <button
                     type="button"
-                    onClick={() =>
-                      setStageFilter((cur) => (cur === s.id ? null : s.id))
-                    }
+                    onClick={() => setStageFilter((cur) => (cur === s.id ? null : s.id))}
                     aria-pressed={stageFilter === s.id}
                     disabled={s.implementations.length === 0}
                     className={cn(
                       "flex w-full flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2 text-left",
-                      s.implementations.length
-                        ? "hover:bg-muted/60"
-                        : "cursor-default opacity-70",
+                      s.implementations.length ? "hover:bg-muted/60" : "cursor-default opacity-70",
                       stageFilter === s.id && "bg-secondary",
                     )}
                   >
@@ -690,9 +694,9 @@ function LeadershipPage() {
         </Panel>
 
         <p className="text-[11px] text-muted-foreground">
-          This is the whole portfolio, not a filtered team. Nothing here is a score,
-          forecast or trend: {humanize("stage")} dwell and counts come straight from stored records,
-          and stages shown are the eight owned stages from {stageLabel("handoff")} onward.
+          This is the whole portfolio, not a filtered team. Nothing here is a score, forecast or
+          trend: {humanize("stage")} dwell and counts come straight from stored records, and stages
+          shown are the eight owned stages from {stageLabel("handoff")} onward.
         </p>
       </PageBody>
     </>

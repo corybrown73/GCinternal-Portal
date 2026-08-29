@@ -28,7 +28,7 @@ function LoginPage() {
       setError(
         error.message === "Email not confirmed"
           ? "Your email isn't verified yet — check your inbox for the verification link."
-          : "That email and password combination didn't work."
+          : "That email and password combination didn't work.",
       );
       return;
     }
@@ -155,8 +155,8 @@ function LoginPage() {
             <div className="py-3 text-center">
               <p className="text-[13px] font-medium">Check your inbox</p>
               <p className="mt-1 text-[12px] text-muted-foreground">
-                If you have portal access, a sign-in link for <b>{email}</b> is on its way. It
-                signs you straight in — no password needed.
+                If you have portal access, a sign-in link for <b>{email}</b> is on its way. It signs
+                you straight in — no password needed.
               </p>
             </div>
           ) : (

@@ -1111,13 +1111,7 @@ export function AddDecision({
   );
 }
 
-export function EditDecision({
-  customerId,
-  decision,
-}: {
-  customerId: string;
-  decision: any;
-}) {
+export function EditDecision({ customerId, decision }: { customerId: string; decision: any }) {
   const save = useServerFn(setDecision);
   return (
     <WriteShell<DecisionDraft>

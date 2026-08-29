@@ -82,7 +82,11 @@ export function useProfile() {
       return data ?? null;
     },
   });
-  return { session, profile: query.data, loading: session === undefined || (Boolean(session) && query.isPending) };
+  return {
+    session,
+    profile: query.data,
+    loading: session === undefined || (Boolean(session) && query.isPending),
+  };
 }
 
 export async function signOut() {

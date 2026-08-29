@@ -105,7 +105,6 @@ const SECTIONS: Array<{
   },
 ];
 
-
 function QueueRowItem({ row, health }: { row: QueueRow; health: HealthResult }) {
   const { impl } = row;
   const conflict = launchStateConflict(impl);
@@ -168,7 +167,6 @@ function HomePage() {
     data.triage,
   );
 
-
   return (
     <>
       <PageHeader
@@ -199,7 +197,11 @@ function HomePage() {
             >
               <ul className="divide-y divide-border">
                 {rows.map((row) => (
-                  <QueueRowItem key={row.impl.id} row={row} health={healthByImpl.get(row.impl.id)!} />
+                  <QueueRowItem
+                    key={row.impl.id}
+                    row={row}
+                    health={healthByImpl.get(row.impl.id)!}
+                  />
                 ))}
                 {rows.length === 0 ? <NoRows label={section.empty} /> : null}
               </ul>
@@ -246,8 +248,8 @@ function HomePage() {
         </Panel>
 
         <p className="text-[11px] text-muted-foreground">
-          <StatusDot status="idle" className="mr-1 align-middle" /> Sign-in isn't set up yet, so this shows
-          every implementation regardless of who owns it.
+          <StatusDot status="idle" className="mr-1 align-middle" /> Sign-in isn't set up yet, so
+          this shows every implementation regardless of who owns it.
         </p>
       </PageBody>
     </>

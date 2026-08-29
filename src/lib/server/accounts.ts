@@ -23,11 +23,7 @@ export async function resolveAccountId(idOrSf: string): Promise<string | null> {
       .maybeSingle();
     return data?.id ?? null;
   }
-  const { data } = await admin
-    .from("portal_accounts")
-    .select("id")
-    .eq("id", idOrSf)
-    .maybeSingle();
+  const { data } = await admin.from("portal_accounts").select("id").eq("id", idOrSf).maybeSingle();
   return data?.id ?? null;
 }
 
@@ -47,7 +43,7 @@ export async function transitionStage(
   toStage: AccountStage,
   ctx: ActorContext,
   note?: string,
-  occurredAt?: string
+  occurredAt?: string,
 ): Promise<{ changed: boolean }> {
   const admin = createAdminClient();
   const { data, error } = await admin.rpc("portal_transition_stage", {
@@ -76,7 +72,7 @@ export async function transitionStage(
 
 export async function upsertAccount(
   input: AccountUpsertInput,
-  ctx: ActorContext
+  ctx: ActorContext,
 ): Promise<{ account: Account; created: boolean; stage_changed: boolean }> {
   const admin = createAdminClient();
 

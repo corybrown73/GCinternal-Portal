@@ -27,7 +27,8 @@ type Mapping = {
   status: string | null;
 };
 
-const dash = (v: string | null | undefined) => (v === null || v === undefined || v === "" ? "—" : v);
+const dash = (v: string | null | undefined) =>
+  v === null || v === undefined || v === "" ? "—" : v;
 
 const requiredToken = (v: boolean | null | undefined) =>
   v === null || v === undefined ? "" : v ? "yes" : "no";
@@ -58,8 +59,7 @@ const draftPayload = (d: Draft) => ({
   targetField: nullable(d.targetField),
   transformationNotes: nullable(d.transformationNotes),
   required: d.required === "" ? null : d.required === "yes",
-  status:
-    d.status === "" ? null : (d.status as (typeof FIELD_MAPPING_STATUSES)[number]),
+  status: d.status === "" ? null : (d.status as (typeof FIELD_MAPPING_STATUSES)[number]),
 });
 
 function RequiredSelect({
@@ -267,8 +267,7 @@ export function AddFieldMapping({ solutionId }: { solutionId: string }) {
   const queryClient = useQueryClient();
   const create = useServerFn(addFieldMapping);
   const mutation = useMutation({
-    mutationFn: () =>
-      create({ data: { technicalSolutionId: solutionId, ...draftPayload(draft) } }),
+    mutationFn: () => create({ data: { technicalSolutionId: solutionId, ...draftPayload(draft) } }),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["technical-solution", solutionId] });
       setDraft(draftFrom());

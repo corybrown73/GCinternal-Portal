@@ -41,7 +41,9 @@ function DealCard({ deal, overlay = false }: { deal: BoardDeal; overlay?: boolea
         <span>{fmtArr(deal.arr)}</span>
         <span
           title="Days in stage"
-          className={cn(days > 14 && deal.stage !== "onboarding_complete" && "text-status-risk-foreground")}
+          className={cn(
+            days > 14 && deal.stage !== "onboarding_complete" && "text-status-risk-foreground",
+          )}
         >
           {days}d
         </span>
@@ -155,7 +157,7 @@ export function DealBoard({
       ),
     );
     onMove(dealId, target).catch(() => {
-      setDeals((prev) => (prev.map((d) => (d.id === dealId ? { ...d, stage: previousStage } : d))));
+      setDeals((prev) => prev.map((d) => (d.id === dealId ? { ...d, stage: previousStage } : d)));
     });
   }
 

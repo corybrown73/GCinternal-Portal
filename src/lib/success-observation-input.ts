@@ -1,12 +1,7 @@
 import { z } from "zod";
 
 /** The only assessment values the schema's CHECK constraint accepts. */
-export const OBSERVATION_ASSESSMENTS = [
-  "improving",
-  "met",
-  "not_met",
-  "inconclusive",
-] as const;
+export const OBSERVATION_ASSESSMENTS = ["improving", "met", "not_met", "inconclusive"] as const;
 
 /** Approval statuses used for customer confirmation of a success criterion. */
 export const CONFIRMATION_STATUSES = ["pending", "approved", "rejected"] as const;

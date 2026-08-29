@@ -79,13 +79,10 @@ export async function generateBrief(accountId: string, createdBy: string): Promi
 
     const deck = await buildBriefDeck(json);
     const path = `${accountId}/${briefRow.id}.pptx`;
-    const { error: uploadError } = await admin.storage
-      .from("portal-briefs")
-      .upload(path, deck, {
-        contentType:
-          "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-        upsert: true,
-      });
+    const { error: uploadError } = await admin.storage.from("portal-briefs").upload(path, deck, {
+      contentType: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+      upsert: true,
+    });
     if (uploadError) throw new Error(`Storage upload failed: ${uploadError.message}`);
 
     const { data: done, error: updateError } = await admin

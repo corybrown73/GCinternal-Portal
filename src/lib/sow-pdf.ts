@@ -19,8 +19,7 @@ function groupByStage(entries: Entry[]) {
   const buckets = new Map<string, Entry[]>();
   const unmapped: Entry[] = [];
   for (const entry of entries) {
-    const id =
-      STAGE_ALIASES[entry.stage.lifecycleStage ?? ""] ?? entry.stage.lifecycleStage ?? "";
+    const id = STAGE_ALIASES[entry.stage.lifecycleStage ?? ""] ?? entry.stage.lifecycleStage ?? "";
     if (LIFECYCLE_STAGES.some((s) => s.id === id)) {
       buckets.set(id, [...(buckets.get(id) ?? []), entry]);
     } else {
@@ -36,7 +35,12 @@ function groupByStage(entries: Entry[]) {
 }
 
 function safeFileName(s: string) {
-  return s.replace(/[^a-z0-9]+/gi, "-").replace(/^-+|-+$/g, "").toLowerCase() || "sow-analysis";
+  return (
+    s
+      .replace(/[^a-z0-9]+/gi, "-")
+      .replace(/^-+|-+$/g, "")
+      .toLowerCase() || "sow-analysis"
+  );
 }
 
 /**
@@ -77,7 +81,13 @@ export function downloadSowAnalysisPdf({
 
   const text = (
     value: string,
-    opts: { size?: number; style?: "normal" | "bold" | "italic"; indent?: number; gap?: number; color?: number } = {},
+    opts: {
+      size?: number;
+      style?: "normal" | "bold" | "italic";
+      indent?: number;
+      gap?: number;
+      color?: number;
+    } = {},
   ) => {
     const size = opts.size ?? 10;
     const indent = opts.indent ?? 0;
@@ -146,7 +156,12 @@ export function downloadSowAnalysisPdf({
   for (const d of analysis.deliveryWindow.delayConditions)
     text(`Delay condition: ${d}`, { indent: 10 });
   if (analysis.deliveryWindow.quote)
-    text(`“${analysis.deliveryWindow.quote}”`, { size: 8.5, style: "italic", color: 120, indent: 10 });
+    text(`“${analysis.deliveryWindow.quote}”`, {
+      size: 8.5,
+      style: "italic",
+      color: 120,
+      indent: 10,
+    });
 
   heading("AI-proposed planning timeline by stage");
   const timings = proposedTimings(analysis, startDate ?? null, overrides);

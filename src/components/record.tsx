@@ -18,7 +18,6 @@ const DOT_CLASS: Record<string, string> = {
   no_signal: "bg-muted-foreground/40",
 };
 
-
 export function StatusDot({ status, className }: { status: string; className?: string }) {
   return (
     <span className={cn("inline-flex items-center gap-1.5 whitespace-nowrap", className)}>
@@ -196,10 +195,7 @@ export function Panel({
       {children}
     </section>
   );
-
 }
-
-
 
 export function Field({ label, value }: { label: string; value: ReactNode }) {
   return (

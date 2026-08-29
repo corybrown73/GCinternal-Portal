@@ -76,7 +76,10 @@ function UsersPage() {
       />
       <PageBody className="max-w-3xl space-y-3">
         {error ? (
-          <p role="alert" className="rounded-md border border-border bg-status-blocked px-3 py-2 text-[12px] text-status-blocked-foreground">
+          <p
+            role="alert"
+            className="rounded-md border border-border bg-status-blocked px-3 py-2 text-[12px] text-status-blocked-foreground"
+          >
             {error}
           </p>
         ) : null}

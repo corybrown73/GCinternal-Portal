@@ -10,12 +10,12 @@ export type LifecycleStageId =
 
 export type LifecyclePhase = "intake" | "delivery" | "value" | "steady-state";
 
-
 /**
  * Descriptive role vocabulary for the lifecycle only. These are NOT ownership
  * fields and drive no assignment, permission or triage logic.
  */
-export type LifecycleRole = "BDR" | "AE" | "SE" | "Implementation" | "Professional Services" | "Customer Success";
+export type LifecycleRole =
+  "BDR" | "AE" | "SE" | "Implementation" | "Professional Services" | "Customer Success";
 
 /** Marks the two organisational boundaries the journey must keep distinct. */
 export type LifecycleBoundary = "sales-to-implementation" | "implementation-to-cs";
@@ -45,7 +45,10 @@ export const PRE_HANDOFF_CONTEXT: { label: string; note: string }[] = [
   { label: "Qualify", note: "Sales-led. Operating model not yet agreed." },
   { label: "Define the Process", note: "Sales-led. Operating model not yet agreed." },
   { label: "Technically Validate", note: "SE-led. Output becomes the agreed scope handed over." },
-  { label: "Closed / Won", note: "Trigger, not a stage — an implementation record implies the deal is won." },
+  {
+    label: "Closed / Won",
+    note: "Trigger, not a stage — an implementation record implies the deal is won.",
+  },
 ];
 
 /** Legacy stage ids recorded upstream, kept readable on historical rows only. */
@@ -117,7 +120,8 @@ export const LIFECYCLE_STAGES: LifecycleStage[] = [
   {
     id: "graduate-to-cs",
     label: "Handover to Customer Success",
-    intent: "Ready to hand over confirmed and accepted by Customer Success; account self-sufficient.",
+    intent:
+      "Ready to hand over confirmed and accepted by Customer Success; account self-sufficient.",
     phase: "steady-state",
     leads: ["Implementation"],
     supports: ["Customer Success"],
@@ -140,7 +144,6 @@ export const LIFECYCLE_STAGE_MAP = Object.fromEntries(
  * carry the old vocabulary and aliasing is how we read them honestly.
  */
 export const STAGE_ALIASES: Record<string, LifecycleStageId> = {
-
   plan: "plan-internal",
   align: "align-external",
   validate: "validate-iterate",

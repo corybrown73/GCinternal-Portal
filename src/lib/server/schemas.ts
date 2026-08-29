@@ -42,12 +42,10 @@ export const briefJsonSchema = z.object({
   current_process: z.array(z.object({ title: z.string(), bullets: z.array(z.string()) })),
   goals: z.array(z.string()),
   what_we_know: z.array(z.object({ topic: z.string(), detail: z.string() })),
-  stakeholders: z.array(
-    z.object({ name: z.string(), role: z.string(), notes: z.string() })
-  ),
+  stakeholders: z.array(z.object({ name: z.string(), role: z.string(), notes: z.string() })),
   risks_open_items: z.array(z.string()),
   discovery_questions: z.array(
-    z.object({ question: z.string(), why_it_matters: z.string(), category: z.string() })
+    z.object({ question: z.string(), why_it_matters: z.string(), category: z.string() }),
   ),
   process_gaps: z.array(z.string()),
 });

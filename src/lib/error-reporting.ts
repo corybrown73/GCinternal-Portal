@@ -2,5 +2,5 @@
 // function logs). Swap in Sentry or similar here later — this is the single
 // funnel every boundary calls.
 export function reportClientError(error: unknown, context?: Record<string, unknown>) {
-  console.error('[app-error]', error, context ?? {});
+  console.error("[app-error]", error, context ?? {});
 }

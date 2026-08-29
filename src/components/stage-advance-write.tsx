@@ -86,9 +86,7 @@ export function AdvanceStage({
   if (blocked) {
     return (
       <div className="space-y-1 rounded-sm border border-status-risk bg-status-risk/10 px-2 py-1.5">
-        <p className="text-[12px] font-semibold text-status-risk-foreground">
-          {LAUNCH_GATE_TITLE}
-        </p>
+        <p className="text-[12px] font-semibold text-status-risk-foreground">{LAUNCH_GATE_TITLE}</p>
         <p className="text-[11px] text-muted-foreground">
           The technical solution must be accepted before this implementation can move to{" "}
           {nextStage.label}. {gate?.reason}
@@ -200,11 +198,7 @@ export function AdvanceStage({
             {mutation.isPending ? "Moving…" : `Confirm move to ${nextStage.label}`}
           </button>
         ) : (
-          <button
-            type="button"
-            className={primaryClass}
-            onClick={() => setConfirming(true)}
-          >
+          <button type="button" className={primaryClass} onClick={() => setConfirming(true)}>
             Move to next stage
           </button>
         )}

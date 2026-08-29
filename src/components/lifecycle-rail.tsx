@@ -1,11 +1,6 @@
 import { LIFECYCLE_STAGES, type LifecycleStageId } from "@/lib/lifecycle";
 import { cn } from "@/lib/utils";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 type LifecycleRailProps = {
   /** Stage currently in focus, if any context is selected. */
@@ -14,9 +9,7 @@ type LifecycleRailProps = {
 };
 
 export function LifecycleRail({ activeStage, className }: LifecycleRailProps) {
-  const activeIndex = activeStage
-    ? LIFECYCLE_STAGES.findIndex((s) => s.id === activeStage)
-    : -1;
+  const activeIndex = activeStage ? LIFECYCLE_STAGES.findIndex((s) => s.id === activeStage) : -1;
 
   return (
     <TooltipProvider delayDuration={120}>

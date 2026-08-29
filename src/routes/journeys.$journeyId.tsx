@@ -64,7 +64,9 @@ function JourneyDetailPage() {
   const { data } = useSuspenseQuery(detailQuery(journeyId));
   const { profile } = useProfile();
   const canEdit =
-    canManage(profile?.role) || profile?.role === "implementation" || profile?.role === "onboarding";
+    canManage(profile?.role) ||
+    profile?.role === "implementation" ||
+    profile?.role === "onboarding";
   const invalidate = useInvalidate(journeyId);
 
   const toggle = useServerFn(toggleJourneyActive);
@@ -467,7 +469,12 @@ function StepForm({
         >
           {mutation.isPending ? "Saving…" : stepId ? "Save step" : "Add step"}
         </button>
-        <button type="button" className={buttonClass} disabled={mutation.isPending} onClick={onDone}>
+        <button
+          type="button"
+          className={buttonClass}
+          disabled={mutation.isPending}
+          onClick={onDone}
+        >
           Cancel
         </button>
       </div>
@@ -713,7 +720,12 @@ function EnrollForm({
         >
           {mutation.isPending ? "Enrolling…" : "Enroll & send step 1"}
         </button>
-        <button type="button" className={buttonClass} disabled={mutation.isPending} onClick={onDone}>
+        <button
+          type="button"
+          className={buttonClass}
+          disabled={mutation.isPending}
+          onClick={onDone}
+        >
           Cancel
         </button>
       </div>

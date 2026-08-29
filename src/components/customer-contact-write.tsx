@@ -4,11 +4,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { Pencil, Plus } from "lucide-react";
 
 import { addCustomerContact, setCustomerContact } from "@/lib/hub.functions";
-import {
-  CONTACT_ROLES,
-  CONTACT_ROLE_LABELS,
-  type ContactRole,
-} from "@/lib/customer-contact-input";
+import { CONTACT_ROLES, CONTACT_ROLE_LABELS, type ContactRole } from "@/lib/customer-contact-input";
 import type { CustomerContactOption } from "@/lib/hub-types";
 
 const inputClass =
@@ -68,9 +64,7 @@ function ContactForm({
           aria-label="Contact role"
           value={draft.role}
           disabled={disabled}
-          onChange={(e) =>
-            set({ role: isContactRole(e.target.value) ? e.target.value : "" })
-          }
+          onChange={(e) => set({ role: isContactRole(e.target.value) ? e.target.value : "" })}
         >
           <option value="">Select contact type…</option>
           {CONTACT_ROLES.map((r) => (
@@ -103,8 +97,8 @@ function ContactForm({
         />
       </label>
       <p className="col-span-2 text-[10px] leading-relaxed text-muted-foreground md:col-span-4">
-        Role records the person&rsquo;s contact type. Responsibility for a success
-        measure or usage area is set on that record&rsquo;s customer owner field.
+        Role records the person&rsquo;s contact type. Responsibility for a success measure or usage
+        area is set on that record&rsquo;s customer owner field.
       </p>
     </div>
   );
@@ -183,9 +177,7 @@ export function AddCustomerContact({ customerId }: { customerId: string }) {
         <button
           type="button"
           className={primaryClass}
-          disabled={
-            mutation.isPending || draft.name.trim() === "" || draft.role === ""
-          }
+          disabled={mutation.isPending || draft.name.trim() === "" || draft.role === ""}
           onClick={() => mutation.mutate()}
         >
           {mutation.isPending ? "Saving…" : "Save"}
@@ -266,9 +258,7 @@ export function EditCustomerContact({
         <button
           type="button"
           className={primaryClass}
-          disabled={
-            mutation.isPending || draft.name.trim() === "" || draft.role === ""
-          }
+          disabled={mutation.isPending || draft.name.trim() === "" || draft.role === ""}
           onClick={() => mutation.mutate()}
         >
           {mutation.isPending ? "Saving…" : "Save"}

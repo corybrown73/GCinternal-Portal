@@ -104,7 +104,6 @@ function groupByStage(entries: StageEntry[]) {
   return groups;
 }
 
-
 function Checkbox({
   checked,
   disabled,
@@ -146,7 +145,6 @@ export function SowAnalysisPanel({
   requirementCount,
   successMeasureCount,
   startDate,
-
 }: {
   customerId: string;
   customerName: string;
@@ -160,7 +158,6 @@ export function SowAnalysisPanel({
   /** Anchors proposed relative weeks to calendar dates when known. */
   startDate?: string | null;
 }) {
-
   const queryClient = useQueryClient();
   const analyze = useServerFn(analyzeSowDocument);
   const applyProposal = useServerFn(applySowProposalToImplementation);
@@ -183,15 +180,14 @@ export function SowAnalysisPanel({
   /** Elapsed seconds while a run is in flight, so a slow read looks busy, not stuck. */
   const [elapsed, setElapsed] = useState(0);
 
-
   const [applyGoals, setApplyGoals] = useState(true);
   const [applyNote, setApplyNote] = useState(true);
   const [pickedRequirements, setPickedRequirements] = useState<Record<number, boolean>>({});
   const [pickedMeasures, setPickedMeasures] = useState<Record<number, boolean>>({});
   /** TIS adjustments to proposed weeks, per run id then journey index. */
-  const [adjustments, setAdjustments] = useState<
-    Record<number, Record<number, TimingOverride>>
-  >({});
+  const [adjustments, setAdjustments] = useState<Record<number, Record<number, TimingOverride>>>(
+    {},
+  );
 
   const resetSelections = (a: SowAnalysis) => {
     setApplyGoals(true);
@@ -253,8 +249,6 @@ export function SowAnalysisPanel({
     return () => clearInterval(t);
   }, [run.isPending]);
 
-
-
   const active = runs.find((r) => r.id === activeId) ?? null;
   const analysis = active?.analysis;
   const applied = active?.applied ?? null;
@@ -287,13 +281,8 @@ export function SowAnalysisPanel({
     });
   };
 
-
-
   const proposedGoals = useMemo(
-    () =>
-      analysis
-        ? analysis.extraction.objectives.map((o) => `• ${o.text}`).join("\n")
-        : "",
+    () => (analysis ? analysis.extraction.objectives.map((o) => `• ${o.text}`).join("\n") : ""),
     [analysis],
   );
 
@@ -322,7 +311,6 @@ export function SowAnalysisPanel({
       setRuns((prev) => prev.map((x) => (x.id === activeId ? { ...x, applied: r } : x)));
     },
   });
-
 
   if (!sowDocumentUrl) {
     return (
@@ -387,15 +375,14 @@ export function SowAnalysisPanel({
               ? `${newFile.name} will replace the attached SOW when you re-analyze.`
               : "Leave empty to re-run against the SOW already attached."}
           </span>
-      </div>
+        </div>
 
-      {run.isPending ? (
-        <p className="rounded-sm border border-border bg-accent px-2 py-1.5 text-[12px] text-foreground">
-          Reading the document and drafting a journey — a long SOW can take a minute or two. The
-          button stays greyed out until it finishes.
-        </p>
-      ) : null}
-
+        {run.isPending ? (
+          <p className="rounded-sm border border-border bg-accent px-2 py-1.5 text-[12px] text-foreground">
+            Reading the document and drafting a journey — a long SOW can take a minute or two. The
+            button stays greyed out until it finishes.
+          </p>
+        ) : null}
       </div>
 
       {run.isError ? (
@@ -474,7 +461,10 @@ export function SowAnalysisPanel({
             </div>
             <div className="mt-2 space-y-2.5">
               {groups.map((g) => (
-                <div key={g.id} className="border-t border-border/70 pt-2 first:border-t-0 first:pt-0">
+                <div
+                  key={g.id}
+                  className="border-t border-border/70 pt-2 first:border-t-0 first:pt-0"
+                >
                   <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
                     {g.label}
                   </p>
@@ -596,7 +586,6 @@ export function SowAnalysisPanel({
                       ) : null}
                     </div>
                   ))}
-
                 </div>
               ))}
             </div>
@@ -653,7 +642,8 @@ export function SowAnalysisPanel({
               <div className="mt-2 space-y-2.5">
                 <div>
                   <p className={labelClass}>
-                    Customer goals · {currentGoals?.trim() ? "already recorded" : "nothing recorded yet"}
+                    Customer goals ·{" "}
+                    {currentGoals?.trim() ? "already recorded" : "nothing recorded yet"}
                   </p>
                   {currentGoals?.trim() ? (
                     <p className="mt-0.5 whitespace-pre-wrap border-l border-border pl-2 text-[11px] text-muted-foreground">
@@ -823,7 +813,6 @@ export function SowAnalysisPanel({
                   >
                     Download PDF
                   </button>
-
                 </li>
               ))}
           </ul>

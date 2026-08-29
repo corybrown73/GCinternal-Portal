@@ -9,16 +9,22 @@ export const analyzeSowInput = z.object({
   implementationId: z.string().uuid(),
 });
 
-const confidence = z.preprocess((v) => {
-  const s = typeof v === "string" ? v.toLowerCase().trim() : "";
-  if (s === "stated" || s === "implied" || s === "uncertain") return s;
-  if (s === "explicit" || s === "high") return "stated";
-  if (s === "medium" || s === "inferred") return "implied";
-  return "uncertain";
-}, z.enum(["stated", "implied", "uncertain"]));
+const confidence = z.preprocess(
+  (v) => {
+    const s = typeof v === "string" ? v.toLowerCase().trim() : "";
+    if (s === "stated" || s === "implied" || s === "uncertain") return s;
+    if (s === "explicit" || s === "high") return "stated";
+    if (s === "medium" || s === "inferred") return "implied";
+    return "uncertain";
+  },
+  z.enum(["stated", "implied", "uncertain"]),
+);
 
 /** The model sometimes returns an object or a bare string where we expect text. */
-function textOf(v: unknown, keys: string[] = ["text", "description", "value", "name", "item"]): string {
+function textOf(
+  v: unknown,
+  keys: string[] = ["text", "description", "value", "name", "item"],
+): string {
   if (typeof v === "string") return v;
   if (v && typeof v === "object") {
     const o = v as Record<string, unknown>;
@@ -62,9 +68,15 @@ const num = z.preprocess((v) => {
 const stageTiming = z.preprocess(
   (v) => {
     const o = (v && typeof v === "object" ? v : {}) as Record<string, unknown>;
-    const stated = textOf(o["statedText"] ?? o["stated"] ?? o["text"] ?? null, ["statedText", "text"]);
+    const stated = textOf(o["statedText"] ?? o["stated"] ?? o["text"] ?? null, [
+      "statedText",
+      "text",
+    ]);
     const rationale = textOf(o["rationale"] ?? o["reason"] ?? null, ["rationale", "text"]);
-    const driver = textOf(o["dependencyDriver"] ?? o["driver"] ?? null, ["dependencyDriver", "text"]);
+    const driver = textOf(o["dependencyDriver"] ?? o["driver"] ?? null, [
+      "dependencyDriver",
+      "text",
+    ]);
     return {
       startWeek: o["startWeek"] ?? null,
       endWeek: o["endWeek"] ?? null,
@@ -96,11 +108,11 @@ const stageTiming = z.preprocess(
   }),
 );
 
-
 const proposedStage = z.preprocess(
   (v) => {
     const o = (v && typeof v === "object" ? v : {}) as Record<string, unknown>;
-    const list = (x: unknown) => (Array.isArray(x) ? x.map((i) => textOf(i)).filter((s) => s !== "") : []);
+    const list = (x: unknown) =>
+      Array.isArray(x) ? x.map((i) => textOf(i)).filter((s) => s !== "") : [];
     return {
       name: textOf(o["name"] ?? o["stage"] ?? o["title"] ?? v),
       lifecycleStage:
@@ -145,7 +157,9 @@ const deliveryWindow = z.preprocess(
       minWeeks: o["minWeeks"] ?? o["weeksMin"] ?? null,
       maxWeeks: o["maxWeeks"] ?? o["weeksMax"] ?? null,
       startDateStated: textOf(o["startDateStated"] ?? null) || null,
-      startCondition: textOf(o["startCondition"] ?? o["startTrigger"] ?? null, ["startCondition", "text"]) || null,
+      startCondition:
+        textOf(o["startCondition"] ?? o["startTrigger"] ?? null, ["startCondition", "text"]) ||
+        null,
       delayConditions: Array.isArray(o["delayConditions"])
         ? (o["delayConditions"] as unknown[]).map((x) => textOf(x)).filter((s) => s !== "")
         : [],
@@ -168,16 +182,16 @@ const deliveryWindow = z.preprocess(
   }),
 );
 
-
-
-
 const findings = z.preprocess((v) => (Array.isArray(v) ? v : []), z.array(finding));
 const strings = z.preprocess((v) => (Array.isArray(v) ? v : []), z.array(looseString));
 
 export const sowAnalysisSchema = z.object({
   readable: z.preprocess((v) => (typeof v === "boolean" ? v : true), z.boolean()),
   /** Present when the document could not be read or carried no SOW content. */
-  problem: z.preprocess((v) => (typeof v === "string" && v !== "" ? v : null), z.string().nullable()),
+  problem: z.preprocess(
+    (v) => (typeof v === "string" && v !== "" ? v : null),
+    z.string().nullable(),
+  ),
   summary: looseString,
   extraction: z.preprocess(
     (v) => (v && typeof v === "object" ? v : {}),
@@ -205,9 +219,7 @@ export const sowAnalysisSchema = z.object({
   assumptions: strings,
 
   gaps: strings,
-
 });
-
 
 export type SowAnalysis = z.infer<typeof sowAnalysisSchema>;
 export type SowFinding = z.infer<typeof finding>;
@@ -275,7 +287,12 @@ function dateRange(startDate: string, startWeek: number, endWeek: number) {
   const to = addDays(startDate, endWeek * 7 - 1);
   if (!from || !to) return null;
   const f = (d: Date) =>
-    d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric", timeZone: "UTC" });
+    d.toLocaleDateString("en-GB", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+      timeZone: "UTC",
+    });
   return `${f(from)} – ${f(to)}`;
 }
 
@@ -289,7 +306,8 @@ export function sowTotalWeeks(analysis: SowAnalysis): number | null {
 export function deliveryWindowLabel(analysis: SowAnalysis): string | null {
   const w = analysis.deliveryWindow;
   if (w.statedText) return w.statedText;
-  if (w.minWeeks && w.maxWeeks && w.minWeeks !== w.maxWeeks) return `${w.minWeeks}–${w.maxWeeks} weeks`;
+  if (w.minWeeks && w.maxWeeks && w.minWeeks !== w.maxWeeks)
+    return `${w.minWeeks}–${w.maxWeeks} weeks`;
   const total = sowTotalWeeks(analysis);
   return total ? `${total} weeks` : null;
 }
@@ -354,8 +372,6 @@ export const TIMING_SOURCE_LABEL: Record<ProposedTiming["source"], string> = {
   adjusted: "adjusted by TIS",
 };
 
-
-
 /**
  * Applying a reviewed proposal. Every part is opt-in: the TIS ticks what should
  * be written, and anything not ticked is left exactly as it is.
@@ -372,7 +388,6 @@ export const applySowProposalInput = z.object({
 });
 
 export type ApplySowProposalInput = z.infer<typeof applySowProposalInput>;
-
 
 export const CONFIDENCE_LABEL: Record<SowFinding["confidence"], string> = {
   stated: "Stated in the SOW",
@@ -418,14 +433,14 @@ export function proposalAsNote(
     if (t?.statedText) lines.push(`  SOW timing: ${t.statedText}`);
     if (t?.rationale) lines.push(`  why: ${t.rationale}`);
     if (t?.dependencyDriver) lines.push(`  timing depends on: ${t.dependencyDriver}`);
-    if (t && t.overlapsWith.length > 0) lines.push(`  runs alongside: ${t.overlapsWith.join("; ")}`);
+    if (t && t.overlapsWith.length > 0)
+      lines.push(`  runs alongside: ${t.overlapsWith.join("; ")}`);
     if (t?.beyondSowWindow) lines.push("  note: extends past the SOW's stated delivery window");
     for (const w of stage.workstreams) lines.push(`  • ${w}`);
     for (const d of stage.dependencies) lines.push(`  depends on: ${d}`);
     for (const c of stage.customerResponsibilities) lines.push(`  customer: ${c}`);
     for (const a of stage.acceptanceCriteria) lines.push(`  accepted when: ${a}`);
   });
-
 
   if (analysis.extraction.outOfScope.length > 0) {
     lines.push("", "Out of scope per the SOW:");

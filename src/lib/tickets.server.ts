@@ -390,8 +390,7 @@ export async function updateTicketStatus(
 ): Promise<TicketRow> {
   const patch: { status: TicketStatus; resolved_at: string | null } = {
     status,
-    resolved_at:
-      status === "resolved" || status === "closed" ? new Date().toISOString() : null,
+    resolved_at: status === "resolved" || status === "closed" ? new Date().toISOString() : null,
   };
   const { data, error } = await db()
     .from("tickets")
@@ -478,9 +477,7 @@ export async function loadTickets(opts: {
       ? db().from("portal_profiles").select("id, full_name, email").in("id", profileIds)
       : Promise.resolve({ data: [] }),
   ]);
-  const customerName = new Map<string, string>(
-    (customers ?? []).map((c: any) => [c.id, c.name]),
-  );
+  const customerName = new Map<string, string>((customers ?? []).map((c: any) => [c.id, c.name]));
   const profileName = new Map<string, string>(
     (profiles ?? []).map((p: any) => [p.id, p.full_name ?? p.email]),
   );
@@ -539,15 +536,11 @@ export async function loadTicket(
     ticket: {
       ...ticket,
       customer_name: (customerRes as any)?.data?.name ?? null,
-      assignee_name: ticket.assigned_to
-        ? (profileName.get(ticket.assigned_to) ?? null)
-        : null,
+      assignee_name: ticket.assigned_to ? (profileName.get(ticket.assigned_to) ?? null) : null,
     },
     comments: commentRows.map((c) => ({
       ...c,
-      author_name: c.author_id
-        ? (profileName.get(c.author_id) ?? c.author_email)
-        : c.author_email,
+      author_name: c.author_id ? (profileName.get(c.author_id) ?? c.author_email) : c.author_email,
     })),
   };
 }

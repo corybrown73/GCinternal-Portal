@@ -176,4 +176,3 @@ function ShellWithSidebar({ showGlobalRail }: { showGlobalRail: boolean }) {
     </div>
   );
 }
-

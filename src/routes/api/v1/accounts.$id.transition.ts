@@ -42,7 +42,11 @@ export const Route = createFileRoute("/api/v1/accounts/$id/transition")({
           );
           return Response.json({ changed, account_id: accountId, stage: parsed.data.to_stage });
         } catch (e) {
-          return apiError(500, "transition_failed", e instanceof Error ? e.message : "Unknown error");
+          return apiError(
+            500,
+            "transition_failed",
+            e instanceof Error ? e.message : "Unknown error",
+          );
         }
       },
     },

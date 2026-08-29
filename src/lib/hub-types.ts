@@ -87,8 +87,6 @@ export type LeadershipData = HomeData & {
   }>;
 };
 
-
-
 /** Prove Value: intended outcome ("what we meant to achieve"). */
 export type SuccessCriterion = {
   id: string;
@@ -238,7 +236,6 @@ export type Customer360 = {
     discovery_board_image_url: string | null;
     discovery_board_image_name: string | null;
     discovery_board_notes: string | null;
-
   } | null;
   requirements: Array<{
     id: string;
@@ -374,7 +371,6 @@ export type TechnicalSolutionDetail = {
   trace: TraceStep[];
   /** Steps reached through an intermediate node (requirement → decision → this solution). */
   linked_trace: TraceStep[];
-
 };
 
 /** One implementation belonging to a customer, as shown in the selector. */

@@ -77,7 +77,9 @@ function ApiKeysPage() {
   });
 
   const toggleScope = (scope: string) =>
-    setScopes((prev) => (prev.includes(scope) ? prev.filter((s) => s !== scope) : [...prev, scope]));
+    setScopes((prev) =>
+      prev.includes(scope) ? prev.filter((s) => s !== scope) : [...prev, scope],
+    );
 
   return (
     <>
@@ -230,7 +232,11 @@ function ApiKeysPage() {
                             className="text-[11px] text-destructive hover:underline"
                             disabled={revokeMutation.isPending}
                             onClick={() => {
-                              if (confirm(`Revoke “${k.name}”? Integrations using it stop working immediately.`)) {
+                              if (
+                                confirm(
+                                  `Revoke “${k.name}”? Integrations using it stop working immediately.`,
+                                )
+                              ) {
                                 revokeMutation.mutate(k.id);
                               }
                             }}

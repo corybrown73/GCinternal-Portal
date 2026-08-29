@@ -23,13 +23,7 @@ export function PageHeader({
   );
 }
 
-export function PageBody({
-  children,
-  className,
-}: {
-  children: ReactNode;
-  className?: string;
-}) {
+export function PageBody({ children, className }: { children: ReactNode; className?: string }) {
   return <div className={cn("px-6 py-5", className)}>{children}</div>;
 }
 

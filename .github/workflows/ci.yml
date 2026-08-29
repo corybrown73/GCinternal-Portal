@@ -1,0 +1,62 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  app:
+    name: Lint, typecheck, test, build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      # Public build-time values come from the committed .env.production;
+      # server secrets are never needed to build.
+      - run: npm run build
+
+  migrations:
+    name: Migrations up → down → up
+    runs-on: ubuntu-latest
+    env:
+      DB_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+    steps:
+      - uses: actions/checkout@v4
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      - name: Start local database
+        run: supabase db start
+      - name: Apply all migrations (up)
+        run: supabase db reset
+      - name: Exercise rollbacks (down, newest first)
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          downs=(supabase/down/*_down.sql)
+          if [ ${#downs[@]} -eq 0 ]; then echo "no down scripts yet"; exit 0; fi
+          for d in $(printf '%s\n' "${downs[@]}" | sort -r); do
+            echo "== down: $d"
+            psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$d"
+          done
+      - name: Re-apply rolled-back migrations (up again)
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          downs=(supabase/down/*_down.sql)
+          if [ ${#downs[@]} -eq 0 ]; then exit 0; fi
+          for d in $(printf '%s\n' "${downs[@]}" | sort); do
+            n=$(basename "$d" | cut -d_ -f1)
+            for up in supabase/migrations/"$n"_*.sql; do
+              echo "== up: $up"
+              psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$up"
+            done
+          done

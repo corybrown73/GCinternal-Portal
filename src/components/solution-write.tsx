@@ -115,20 +115,12 @@ export function OwnerEditor({
       >
         Cancel
       </button>
-      {mutation.isError ? (
-        <span className="text-[11px] text-destructive">Save failed</span>
-      ) : null}
+      {mutation.isError ? <span className="text-[11px] text-destructive">Save failed</span> : null}
     </span>
   );
 }
 
-export function StatusEditor({
-  solutionId,
-  status,
-}: {
-  solutionId: string;
-  status: string;
-}) {
+export function StatusEditor({ solutionId, status }: { solutionId: string; status: string }) {
   const [editing, setEditing] = useState(false);
   const [pending, setPending] = useState<string>(status);
   const invalidate = useInvalidate(solutionId);
@@ -193,13 +185,10 @@ export function StatusEditor({
       >
         Cancel
       </button>
-      {mutation.isError ? (
-        <span className="text-[11px] text-destructive">Save failed</span>
-      ) : null}
+      {mutation.isError ? <span className="text-[11px] text-destructive">Save failed</span> : null}
     </span>
   );
 }
-
 
 /**
  * Working notes for the Technical Solutions team, written from inside the

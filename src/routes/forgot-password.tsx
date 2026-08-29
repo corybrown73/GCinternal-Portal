@@ -70,7 +70,8 @@ function ForgotPasswordPage() {
             <form onSubmit={setPassword} className="flex flex-col gap-3">
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="new-password">
-                  New password <span className="font-normal text-muted-foreground">(12+ characters)</span>
+                  New password{" "}
+                  <span className="font-normal text-muted-foreground">(12+ characters)</span>
                 </Label>
                 <Input
                   id="new-password"
@@ -110,7 +111,10 @@ function ForgotPasswordPage() {
                 {busy ? "Sending…" : "Send reset link"}
               </Button>
               <p className="text-center text-[12px]">
-                <Link to="/login" className="text-muted-foreground underline-offset-2 hover:underline">
+                <Link
+                  to="/login"
+                  className="text-muted-foreground underline-offset-2 hover:underline"
+                >
                   Back to sign in
                 </Link>
               </p>

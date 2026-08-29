@@ -30,10 +30,7 @@ export function OwnerPicker({
     () => Array.from(new Set(team.map((t) => t.role))).sort((a, b) => a.localeCompare(b)),
     [team],
   );
-  const people = useMemo(
-    () => (group ? team.filter((t) => t.role === group) : []),
-    [team, group],
-  );
+  const people = useMemo(() => (group ? team.filter((t) => t.role === group) : []), [team, group]);
 
   return (
     <>

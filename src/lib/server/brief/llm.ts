@@ -14,7 +14,7 @@ export function llmAvailable(): boolean {
 export async function generateBriefWithLLM(
   account: Account,
   reports: GongReport[],
-  notes: OnboardingNote[]
+  notes: OnboardingNote[],
 ): Promise<BriefJson | null> {
   const client = new Anthropic();
   const userPrompt = buildBriefUserPrompt(account, reports, notes);
@@ -28,7 +28,7 @@ export async function generateBriefWithLLM(
       max_tokens: 16000,
       system: BRIEF_SYSTEM_PROMPT,
       messages: [{ role: "user", content: userPrompt }],
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
       output_config: { format: zodOutputFormat(briefJsonSchema as any) as any },
     });
 

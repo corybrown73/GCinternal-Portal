@@ -116,9 +116,13 @@ function CustomersPage() {
         case "tier":
           return factor * (a.tier ?? "").localeCompare(b.tier ?? "");
         case "launch":
-          return factor * (a.target_launch_date ?? "9999").localeCompare(b.target_launch_date ?? "9999");
+          return (
+            factor * (a.target_launch_date ?? "9999").localeCompare(b.target_launch_date ?? "9999")
+          );
         default:
-          return factor * ((daysSince(a.stage_entered_at) ?? 0) - (daysSince(b.stage_entered_at) ?? 0));
+          return (
+            factor * ((daysSince(a.stage_entered_at) ?? 0) - (daysSince(b.stage_entered_at) ?? 0))
+          );
       }
     });
 
@@ -267,7 +271,9 @@ function FilterGroup({
         onClick={() => onChange(undefined)}
         className={cn(
           "rounded-sm border border-border px-1.5 py-0.5 text-[11px]",
-          value === undefined ? "bg-primary text-primary-foreground border-primary" : "bg-card text-muted-foreground hover:text-foreground",
+          value === undefined
+            ? "bg-primary text-primary-foreground border-primary"
+            : "bg-card text-muted-foreground hover:text-foreground",
         )}
       >
         All

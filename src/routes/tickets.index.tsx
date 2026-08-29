@@ -134,10 +134,22 @@ function TicketQueuePage() {
         </p>
       ) : (
         <div className="space-y-4">
-          <QueueSection title="Needs first response" rows={needsResponse} emptyLabel="Nothing waiting on a first response." />
+          <QueueSection
+            title="Needs first response"
+            rows={needsResponse}
+            emptyLabel="Nothing waiting on a first response."
+          />
           <QueueSection title="In progress" rows={inProgress} emptyLabel="Nothing in progress." />
-          <QueueSection title="Waiting on customer" rows={waiting} emptyLabel="Nothing waiting on a customer." />
-          <QueueSection title="Resolved (last 14 days)" rows={resolved} emptyLabel="Nothing resolved in the last 14 days." />
+          <QueueSection
+            title="Waiting on customer"
+            rows={waiting}
+            emptyLabel="Nothing waiting on a customer."
+          />
+          <QueueSection
+            title="Resolved (last 14 days)"
+            rows={resolved}
+            emptyLabel="Nothing resolved in the last 14 days."
+          />
         </div>
       )}
     </PageBody>

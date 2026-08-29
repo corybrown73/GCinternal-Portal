@@ -9,12 +9,13 @@ import { cn } from "@/lib/utils";
  */
 export function StageTracker({ currentStage }: { currentStage: string }) {
   const normalized = normalizeStage(currentStage);
-  const currentIndex = normalized
-    ? LIFECYCLE_STAGES.findIndex((s) => s.id === normalized)
-    : -1;
+  const currentIndex = normalized ? LIFECYCLE_STAGES.findIndex((s) => s.id === normalized) : -1;
 
   return (
-    <ol className="flex w-full items-start gap-0 overflow-x-auto pb-1" aria-label="Onboarding stages">
+    <ol
+      className="flex w-full items-start gap-0 overflow-x-auto pb-1"
+      aria-label="Onboarding stages"
+    >
       {LIFECYCLE_STAGES.map((stage, i) => {
         const state = i < currentIndex ? "done" : i === currentIndex ? "current" : "upcoming";
         return (
@@ -23,7 +24,11 @@ export function StageTracker({ currentStage }: { currentStage: string }) {
               <div
                 className={cn(
                   "h-0.5 flex-1",
-                  i === 0 ? "bg-transparent" : i <= currentIndex ? "bg-status-ontrack-foreground/60" : "bg-border",
+                  i === 0
+                    ? "bg-transparent"
+                    : i <= currentIndex
+                      ? "bg-status-ontrack-foreground/60"
+                      : "bg-border",
                 )}
               />
               <div

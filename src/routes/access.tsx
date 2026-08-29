@@ -247,7 +247,12 @@ function InviteForm({ customer, onDone }: { customer: AccessCustomer; onDone: ()
         >
           {mutation.isPending ? "Sending…" : "Send invite"}
         </button>
-        <button type="button" className={buttonClass} disabled={mutation.isPending} onClick={onDone}>
+        <button
+          type="button"
+          className={buttonClass}
+          disabled={mutation.isPending}
+          onClick={onDone}
+        >
           Cancel
         </button>
       </div>

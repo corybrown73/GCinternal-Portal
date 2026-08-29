@@ -11,7 +11,9 @@ function TicketsLayout() {
 
   const tabs = [
     { to: "/tickets", label: "Queue", exact: true },
-    ...(canManage(profile?.role) ? [{ to: "/tickets/routing", label: "Routing", exact: false }] : []),
+    ...(canManage(profile?.role)
+      ? [{ to: "/tickets/routing", label: "Routing", exact: false }]
+      : []),
     { to: "/alerts", label: "Alerts", exact: false },
   ];
 

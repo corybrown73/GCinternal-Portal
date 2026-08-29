@@ -13,25 +13,41 @@ function chunk<T>(items: T[], size: number): T[][] {
 function addBulletSlide(pptx: PptxGenJS, title: string, bullets: string[]) {
   const slide = pptx.addSlide({ masterName: MASTER });
   slide.addText(title, {
-    x: 0.5, y: 0.35, w: 9, h: 0.6,
-    fontSize: 24, bold: true, color: BRAND.green, fontFace: BRAND.fontHead,
+    x: 0.5,
+    y: 0.35,
+    w: 9,
+    h: 0.6,
+    fontSize: 24,
+    bold: true,
+    color: BRAND.green,
+    fontFace: BRAND.fontHead,
   });
   slide.addText(
     bullets.map((b) => ({ text: b, options: { bullet: true, breakLine: true } })),
-    { x: 0.6, y: 1.2, w: 8.8, h: 3.9, fontSize: 14, color: BRAND.ink, fontFace: BRAND.fontBody, valign: "top" }
+    {
+      x: 0.6,
+      y: 1.2,
+      w: 8.8,
+      h: 3.9,
+      fontSize: 14,
+      color: BRAND.ink,
+      fontFace: BRAND.fontBody,
+      valign: "top",
+    },
   );
 }
 
-function addTableSlide(
-  pptx: PptxGenJS,
-  title: string,
-  header: string[],
-  rows: string[][]
-) {
+function addTableSlide(pptx: PptxGenJS, title: string, header: string[], rows: string[][]) {
   const slide = pptx.addSlide({ masterName: MASTER });
   slide.addText(title, {
-    x: 0.5, y: 0.35, w: 9, h: 0.6,
-    fontSize: 24, bold: true, color: BRAND.green, fontFace: BRAND.fontHead,
+    x: 0.5,
+    y: 0.35,
+    w: 9,
+    h: 0.6,
+    fontSize: 24,
+    bold: true,
+    color: BRAND.green,
+    fontFace: BRAND.fontHead,
   });
   slide.addTable(
     [
@@ -42,11 +58,16 @@ function addTableSlide(
       ...rows.map((r) => r.map((c) => ({ text: c }))),
     ],
     {
-      x: 0.5, y: 1.2, w: 9,
-      fontSize: 12, color: BRAND.ink, fontFace: BRAND.fontBody,
+      x: 0.5,
+      y: 1.2,
+      w: 9,
+      fontSize: 12,
+      color: BRAND.ink,
+      fontFace: BRAND.fontBody,
       border: { type: "solid", color: BRAND.line, pt: 0.5 },
-      autoPage: true, autoPageRepeatHeader: true,
-    }
+      autoPage: true,
+      autoPageRepeatHeader: true,
+    },
   );
 }
 
@@ -61,7 +82,15 @@ export async function buildBriefDeck(brief: BriefJson): Promise<Buffer> {
       {
         text: {
           text: "GoCanvas Internal — Account Brief",
-          options: { x: 0.5, y: 5.32, w: 6, h: 0.3, fontSize: 9, color: "FFFFFF", fontFace: BRAND.fontBody },
+          options: {
+            x: 0.5,
+            y: 5.32,
+            w: 6,
+            h: 0.3,
+            fontSize: 9,
+            color: "FFFFFF",
+            fontFace: BRAND.fontBody,
+          },
         },
       },
     ],
@@ -70,16 +99,41 @@ export async function buildBriefDeck(brief: BriefJson): Promise<Buffer> {
   // 1 — Title
   const title = pptx.addSlide({ masterName: MASTER });
   title.addText("Account Brief", {
-    x: 0.5, y: 1.2, w: 9, h: 0.6, fontSize: 20, color: BRAND.slate, fontFace: BRAND.fontHead,
+    x: 0.5,
+    y: 1.2,
+    w: 9,
+    h: 0.6,
+    fontSize: 20,
+    color: BRAND.slate,
+    fontFace: BRAND.fontHead,
   });
   title.addText(brief.account_name, {
-    x: 0.5, y: 1.7, w: 9, h: 1.0, fontSize: 40, bold: true, color: BRAND.green, fontFace: BRAND.fontHead,
+    x: 0.5,
+    y: 1.7,
+    w: 9,
+    h: 1.0,
+    fontSize: 40,
+    bold: true,
+    color: BRAND.green,
+    fontFace: BRAND.fontHead,
   });
   title.addText(brief.one_liner, {
-    x: 0.5, y: 2.9, w: 9, h: 1.2, fontSize: 16, color: BRAND.ink, fontFace: BRAND.fontBody,
+    x: 0.5,
+    y: 2.9,
+    w: 9,
+    h: 1.2,
+    fontSize: 16,
+    color: BRAND.ink,
+    fontFace: BRAND.fontBody,
   });
   title.addText(`Prepared ${new Date().toLocaleDateString("en-US", { dateStyle: "long" })}`, {
-    x: 0.5, y: 4.4, w: 9, h: 0.4, fontSize: 12, color: BRAND.slate, fontFace: BRAND.fontBody,
+    x: 0.5,
+    y: 4.4,
+    w: 9,
+    h: 0.4,
+    fontSize: 12,
+    color: BRAND.slate,
+    fontFace: BRAND.fontBody,
   });
 
   // 2 — Goals (if any)
@@ -93,7 +147,12 @@ export async function buildBriefDeck(brief: BriefJson): Promise<Buffer> {
   // What we know
   if (brief.what_we_know.length) {
     for (const group of chunk(brief.what_we_know, 6)) {
-      addTableSlide(pptx, "What We Know Today", ["Topic", "Detail"], group.map((w) => [w.topic, w.detail]));
+      addTableSlide(
+        pptx,
+        "What We Know Today",
+        ["Topic", "Detail"],
+        group.map((w) => [w.topic, w.detail]),
+      );
     }
   }
 
@@ -103,7 +162,7 @@ export async function buildBriefDeck(brief: BriefJson): Promise<Buffer> {
       pptx,
       "Stakeholders",
       ["Name", "Role", "Notes"],
-      brief.stakeholders.map((s) => [s.name, s.role, s.notes])
+      brief.stakeholders.map((s) => [s.name, s.role, s.notes]),
     );
   }
 
@@ -118,7 +177,7 @@ export async function buildBriefDeck(brief: BriefJson): Promise<Buffer> {
       pptx,
       "Discovery Questions for Onboarding",
       ["Question", "Why it matters", "Category"],
-      group.map((q) => [q.question, q.why_it_matters, q.category])
+      group.map((q) => [q.question, q.why_it_matters, q.category]),
     );
   }
 

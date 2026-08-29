@@ -1,11 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { PageBody, PageHeader, EmptyState } from "@/components/page";
-import {
-  LIFECYCLE_BOUNDARY_LABEL,
-  LIFECYCLE_STAGES,
-  PRE_HANDOFF_CONTEXT,
-} from "@/lib/lifecycle";
-
+import { LIFECYCLE_BOUNDARY_LABEL, LIFECYCLE_STAGES, PRE_HANDOFF_CONTEXT } from "@/lib/lifecycle";
 
 export const Route = createFileRoute("/settings")({
   head: () => ({
@@ -42,7 +37,6 @@ function SettingsPage() {
             </p>
           </header>
           <ul className="divide-y divide-border">
-
             {LIFECYCLE_STAGES.map((stage, i) => (
               <li key={stage.id} className="flex gap-3 px-4 py-2.5">
                 <span className="w-6 shrink-0 pt-px font-mono text-[11px] text-muted-foreground">
@@ -78,8 +72,8 @@ function SettingsPage() {
           <header className="border-b border-border px-4 py-2.5">
             <h2 className="text-[13px] font-semibold">Upstream — not owned by this app</h2>
             <p className="mt-0.5 text-[11.5px] text-muted-foreground">
-              Context from the broader company journey. No stages, ownership or workflow are modelled
-              here; the pre-handoff operating model is not yet agreed.
+              Context from the broader company journey. No stages, ownership or workflow are
+              modelled here; the pre-handoff operating model is not yet agreed.
             </p>
           </header>
           <ul className="divide-y divide-border">
@@ -93,8 +87,6 @@ function SettingsPage() {
             ))}
           </ul>
         </section>
-
-
 
         <EmptyState
           title="Team & roles"

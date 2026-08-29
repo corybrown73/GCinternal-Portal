@@ -13,7 +13,15 @@ import {
 import { launchAcceptanceGate } from "./launch-gate";
 import { nextLifecycleStage } from "./stage-advance-input";
 import { normalizeStage } from "./hub-format";
-import { STAGE_FLAG_DAYS, daysSince, fmtDate, fmtMoney, humanize, isOverdue, stageLabel } from "./hub-format";
+import {
+  STAGE_FLAG_DAYS,
+  daysSince,
+  fmtDate,
+  fmtMoney,
+  humanize,
+  isOverdue,
+  stageLabel,
+} from "./hub-format";
 
 export type TriageBucket = "act_now" | "needs_attention" | "moving";
 
@@ -102,7 +110,9 @@ export function triageRow(impl: ImplementationRow, bundle: TriageBundle | undefi
     Boolean(severeEscalation) || (topRisk != null && severityRank(topRisk.severity) <= 1);
   const customerFacingOverdue =
     overdueCommitment &&
-    (String(overdueCommitment.committed_to ?? "").toLowerCase().includes("customer") ||
+    (String(overdueCommitment.committed_to ?? "")
+      .toLowerCase()
+      .includes("customer") ||
       highSignalPresent)
       ? overdueCommitment
       : null;
@@ -126,14 +136,19 @@ export function triageRow(impl: ImplementationRow, bundle: TriageBundle | undefi
   if (criticalRisk) {
     return row(impl, "act_now", 0.8, "risks", {
       reason: `Critical risk: ${criticalRisk.title} (${criticalRisk.likelihood ?? "unknown"} likelihood)`,
-      impact: impactLine(impl, criticalRisk.impact ?? `owner ${criticalRisk.owner_name ?? "unassigned"}`),
+      impact: impactLine(
+        impl,
+        criticalRisk.impact ?? `owner ${criticalRisk.owner_name ?? "unassigned"}`,
+      ),
       record,
     });
   }
   if (customerFacingOverdue) {
     return row(impl, "act_now", 1.5, "overview", {
       reason: `Commitment overdue${
-        String(customerFacingOverdue.committed_to ?? "").toLowerCase().includes("customer")
+        String(customerFacingOverdue.committed_to ?? "")
+          .toLowerCase()
+          .includes("customer")
           ? " to customer"
           : " alongside a high-severity signal"
       }: ${customerFacingOverdue.description} (due ${fmtDate(customerFacingOverdue.due_date)})`,
@@ -221,7 +236,9 @@ export function triageRow(impl: ImplementationRow, bundle: TriageBundle | undefi
       reason: `Milestone at risk: ${atRiskMilestone.name}`,
       impact: impactLine(
         impl,
-        atRiskMilestone.target_date ? `target ${fmtDate(atRiskMilestone.target_date)}` : "no target date",
+        atRiskMilestone.target_date
+          ? `target ${fmtDate(atRiskMilestone.target_date)}`
+          : "no target date",
       ),
       record,
     });

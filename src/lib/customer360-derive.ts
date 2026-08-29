@@ -11,7 +11,6 @@ import {
   stageLabel,
 } from "./hub-format";
 
-
 export const NEXT_ACTION_UNKNOWN = "Next action not recorded";
 
 const SEVERITY_RANK: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3 };
@@ -87,7 +86,9 @@ export function launchOverdue(impl: {
   target_launch_date?: string | null;
   actual_launch_date?: string | null;
 }) {
-  return Boolean(!impl.actual_launch_date && impl.target_launch_date && isOverdue(impl.target_launch_date));
+  return Boolean(
+    !impl.actual_launch_date && impl.target_launch_date && isOverdue(impl.target_launch_date),
+  );
 }
 
 /**
@@ -98,7 +99,6 @@ export function isCsStage(stage: string | null | undefined) {
   const id = normalizeStage(stage);
   return id ? LIFECYCLE_STAGE_MAP[id].phase === "steady-state" : false;
 }
-
 
 /** Any open signal that justifies surfacing a long-tenured CS implementation. */
 export function hasOtherOpenSignal(record: Customer360) {
@@ -116,7 +116,6 @@ export function progress(stage: string | null | undefined) {
   const total = LIFECYCLE_STAGES.length;
   return { index: idx + 1, total, pct: idx < 0 ? 0 : ((idx + 1) / total) * 100 };
 }
-
 
 /** Signal-derived implementation health. Never reads implementations.status. */
 export type ImplHealth = "blocked" | "at_risk" | "on_track" | "no_signal";
@@ -176,8 +175,9 @@ export function deriveHealth(
     return {
       level: "at_risk",
       reason: `${overdue.length} overdue commitment(s), most recent due ${fmtDate(
-        [...overdue].sort((a: any, b: any) => String(a.due_date).localeCompare(String(b.due_date)))[0]
-          .due_date,
+        [...overdue].sort((a: any, b: any) =>
+          String(a.due_date).localeCompare(String(b.due_date)),
+        )[0].due_date,
       )}`,
     };
   }
@@ -233,7 +233,6 @@ export function launchStateConflict(impl: {
   if (current < 0 || launch < 0) return false;
   return current > launch && !impl.actual_launch_date;
 }
-
 
 export type MeaningfulEvent = {
   key: string;
@@ -321,7 +320,10 @@ export function technicalSolutionNextAction(detail: {
     }`;
   }
 
-  if (["in_review", "review", "build", "in_build", "in_progress"].includes(status) && !detail.approvals.length) {
+  if (
+    ["in_review", "review", "build", "in_build", "in_progress"].includes(status) &&
+    !detail.approvals.length
+  ) {
     return `Status is ${humanize(status)} with no approval linked — request sign-off`;
   }
 
@@ -504,11 +506,7 @@ export const WAITING_ON_LABEL: Record<WaitingOnParty, string> = {
  * ------------------------------------------------------------------ */
 
 export type ProveValueState =
-  | "not_baselined"
-  | "not_measured"
-  | "measured_unconfirmed"
-  | "customer_confirmed"
-  | "not_met";
+  "not_baselined" | "not_measured" | "measured_unconfirmed" | "customer_confirmed" | "not_met";
 
 type ProveValueCriterion = { id: string; baseline_value?: string | null };
 type ProveValueObservation = {
@@ -640,9 +638,7 @@ export function proveValueGaps(
     if (!late) continue;
 
     const description = (c.description ?? "").trim() || "Untitled success criterion";
-    const dueText = due
-      ? ` — due by ${stageLabel(due)}${explicit ? "" : " (implied)"}`
-      : "";
+    const dueText = due ? ` — due by ${stageLabel(due)}${explicit ? "" : " (implied)"}` : "";
     gaps.push({
       id: c.id,
       description,
@@ -742,7 +738,9 @@ export type AdoptionSummary = {
 };
 
 /** One-line adoption picture for the Customer 360 header. */
-export function adoptionSummary(areas: AdoptionAreaLike[] | null | undefined): AdoptionSummary | null {
+export function adoptionSummary(
+  areas: AdoptionAreaLike[] | null | undefined,
+): AdoptionSummary | null {
   const rows = areas ?? [];
   if (!rows.length) return null;
 

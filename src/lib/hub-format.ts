@@ -27,7 +27,6 @@ export function stageLabel(raw: string | null | undefined): string {
   return PRE_HANDOFF_STAGE_LABELS[raw.trim().toLowerCase().replace(/_/g, "-")] ?? raw;
 }
 
-
 export function stageIndex(raw: string | null | undefined): number {
   const id = normalizeStage(raw);
   if (!id) return -1;
@@ -47,12 +46,16 @@ export function isOverdue(due: string | null | undefined): boolean {
   return new Date(due).getTime() < Date.now();
 }
 
-
 export function fmtDate(value: string | null | undefined): string {
   if (!value) return "—";
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return "—";
-  return d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric", timeZone: "UTC" });
+  return d.toLocaleDateString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    timeZone: "UTC",
+  });
 }
 
 export function fmtDateTime(value: string | null | undefined): string {
@@ -75,4 +78,3 @@ export function humanize(value: string | null | undefined): string {
   if (!value) return "—";
   return value.replace(/_/g, " ").replace(/^\w/, (c) => c.toUpperCase());
 }
-

@@ -8,10 +8,7 @@ import {
   addSuccessCriterionObservation,
   setSuccessCriterionConfirmation,
 } from "@/lib/hub.functions";
-import {
-  CONFIRMATION_STATUSES,
-  OBSERVATION_ASSESSMENTS,
-} from "@/lib/success-observation-input";
+import { CONFIRMATION_STATUSES, OBSERVATION_ASSESSMENTS } from "@/lib/success-observation-input";
 import { humanize } from "@/lib/hub-format";
 
 const inputClass =
@@ -92,7 +89,8 @@ export function AddObservation({
   });
 
   const set = (patch: Partial<ObservationDraft>) => setDraft({ ...draft, ...patch });
-  const valid = draft.observedValue.trim() !== "" && draft.observedAt !== "" && draft.assessment !== "";
+  const valid =
+    draft.observedValue.trim() !== "" && draft.observedAt !== "" && draft.assessment !== "";
 
   if (!open) {
     return (
@@ -250,7 +248,12 @@ export function CustomerConfirmationEditor({
   customerId: string;
   implementationId: string;
   criterionId: string;
-  existing: { id: string; status: string; evidence_id: string | null; customer_contact_id: string | null } | null;
+  existing: {
+    id: string;
+    status: string;
+    evidence_id: string | null;
+    customer_contact_id: string | null;
+  } | null;
   contacts: ContactOption[];
   evidence: EvidenceOption[];
 }) {

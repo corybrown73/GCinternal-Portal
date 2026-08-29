@@ -101,8 +101,7 @@ export function AccountRowList({
             <MetaLine label="Impact">{row.impact}</MetaLine>
             {intervention ? (
               <MetaLine label="Waiting on">
-                {WAITING_ON_LABEL[intervention.dependency.party]} —{" "}
-                {intervention.dependency.reason}
+                {WAITING_ON_LABEL[intervention.dependency.party]} — {intervention.dependency.reason}
               </MetaLine>
             ) : null}
           </div>

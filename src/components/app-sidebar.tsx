@@ -45,7 +45,9 @@ export function AppSidebar({ profile }: { profile?: PortalProfile | null }) {
         {profile ? (
           <div className="flex items-center justify-between gap-2">
             <div className="min-w-0">
-              <p className="truncate text-[12px] font-medium">{profile.full_name || profile.email}</p>
+              <p className="truncate text-[12px] font-medium">
+                {profile.full_name || profile.email}
+              </p>
               <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
                 {ROLE_LABELS[profile.role] ?? profile.role}
               </p>

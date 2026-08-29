@@ -13,7 +13,7 @@ function secret(): Uint8Array {
 export async function signDecisionToken(
   requestId: string,
   action: DecisionAction,
-  jti: string
+  jti: string,
 ): Promise<string> {
   return await new SignJWT({ act: action })
     .setProtectedHeader({ alg: "HS256" })
@@ -25,7 +25,7 @@ export async function signDecisionToken(
 }
 
 export async function verifyDecisionToken(
-  token: string
+  token: string,
 ): Promise<{ requestId: string; action: DecisionAction; jti: string } | null> {
   try {
     const { payload } = await jwtVerify(token, secret());

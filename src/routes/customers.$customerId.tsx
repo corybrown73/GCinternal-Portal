@@ -7,14 +7,8 @@ import { LifecycleRail } from "@/components/lifecycle-rail";
 import { AdvanceStage } from "@/components/stage-advance-write";
 import { launchAcceptanceGate } from "@/lib/launch-gate";
 import { nextLifecycleStage } from "@/lib/stage-advance-input";
-import {
-  AddSuccessCriterion,
-  EditSuccessCriterion,
-} from "@/components/success-criterion-write";
-import {
-  AddObservation,
-  CustomerConfirmationEditor,
-} from "@/components/success-observation-write";
+import { AddSuccessCriterion, EditSuccessCriterion } from "@/components/success-criterion-write";
+import { AddObservation, CustomerConfirmationEditor } from "@/components/success-observation-write";
 import {
   AddAdoptionArea,
   AddAdoptionObservation,
@@ -49,7 +43,6 @@ import {
 } from "@/components/discovery-board-write";
 import { JournalPanel } from "@/components/journal-write";
 
-
 import { ADOPTION_KIND_LABEL, type AdoptionKind } from "@/lib/adoption-input";
 import { contactRoleLabel } from "@/lib/customer-contact-input";
 import { AddCustomerContact, EditCustomerContact } from "@/components/customer-contact-write";
@@ -76,7 +69,6 @@ import {
   isOverdue,
   isPreHandoffStage,
   normalizeStage,
-
   stageLabel,
 } from "@/lib/hub-format";
 import {
@@ -133,13 +125,14 @@ const TAB_LABEL: Record<TabId, string> = {
 const customerQuery = (customerId: string, implementationId?: string | null) =>
   queryOptions({
     queryKey: ["customer360", customerId, implementationId ?? null],
-    queryFn: () => getCustomer360({ data: { customerId, implementationId: implementationId ?? null } }),
+    queryFn: () =>
+      getCustomer360({ data: { customerId, implementationId: implementationId ?? null } }),
   });
 
 export const Route = createFileRoute("/customers/$customerId")({
   validateSearch: (search: Record<string, unknown>): { tab?: TabId; impl?: string } => {
-    const raw = String(search['tab'] ?? "overview") as TabId;
-    const impl = typeof search['impl'] === "string" ? (search['impl'] as string) : undefined;
+    const raw = String(search["tab"] ?? "overview") as TabId;
+    const impl = typeof search["impl"] === "string" ? (search["impl"] as string) : undefined;
     return { tab: TABS.includes(raw) ? raw : "overview", ...(impl ? { impl } : {}) };
   },
   head: () => ({
@@ -316,9 +309,7 @@ function Customer360Page() {
               implementations={record.implementations}
             />
             <p className="mt-0.5 text-[12px] text-muted-foreground">
-              {[customer.industry, impl.tier, customer.segment]
-                .filter(Boolean)
-                .join(" · ") || "—"}
+              {[customer.industry, impl.tier, customer.segment].filter(Boolean).join(" · ") || "—"}
               {" · Owner "}
               {impl.owner_name ?? "Unassigned"}
             </p>
@@ -353,8 +344,6 @@ function Customer360Page() {
             <PrimarySignal label="Next action" value={nextAction(record, impl)} />
           </AttentionBand>
         </div>
-
-
 
         <nav className="flex flex-wrap gap-px border-t border-border px-4">
           {TABS.map((t) => (
@@ -434,9 +423,7 @@ function OverviewTab({ record, customerId }: { record: Customer360; customerId: 
   );
   const approvers = Array.from(
     new Map(
-      record.approvals
-        .filter((a: any) => a.approver_name)
-        .map((a: any) => [a.approver_name, a]),
+      record.approvals.filter((a: any) => a.approver_name).map((a: any) => [a.approver_name, a]),
     ).values(),
   );
 
@@ -458,9 +445,7 @@ function OverviewTab({ record, customerId }: { record: Customer360; customerId: 
               label="Waiting on"
               emphasis="medium"
               value={
-                waiting.party === "none"
-                  ? "No current dependency"
-                  : WAITING_ON_LABEL[waiting.party]
+                waiting.party === "none" ? "No current dependency" : WAITING_ON_LABEL[waiting.party]
               }
               detail={
                 waiting.party === "none"
@@ -541,14 +526,16 @@ function OverviewTab({ record, customerId }: { record: Customer360; customerId: 
           </div>
         </Panel>
 
-        <Panel title="What success looks like" count={record.success_criteria.length} level="primary">
+        <Panel
+          title="What success looks like"
+          count={record.success_criteria.length}
+          level="primary"
+        >
           <p className="border-b border-border px-3 py-2 text-[11px] leading-relaxed text-muted-foreground">
             Each measure records what success looks like, how it will be measured, the starting
             point and target where they apply, and who owns it. Working context belongs in the TIS
             journal, not here.
           </p>
-
-
 
           {/* Kickoff intake: the named customer people outcomes and adoption are
               owned by, and who confirms value. Reuses the customer contact record. */}
@@ -604,7 +591,8 @@ function OverviewTab({ record, customerId }: { record: Customer360; customerId: 
           ) : (
             <div className="flex flex-wrap items-center gap-3 px-3 py-3">
               <span className="text-[12px] text-muted-foreground">
-                No success measures recorded yet. Add one so we can measure whether this implementation delivers value.
+                No success measures recorded yet. Add one so we can measure whether this
+                implementation delivers value.
               </span>
             </div>
           )}
@@ -626,7 +614,6 @@ function OverviewTab({ record, customerId }: { record: Customer360; customerId: 
           meta={adoption ? ADOPTION_LEVEL_LABEL[adoption.level] : undefined}
           level="supporting"
         >
-
           <p className="border-b border-border px-3 py-2 text-[11px] text-muted-foreground">
             Each row records how the customer is expected to use the solution — the intended users,
             how often, and what counts as being in use. Usage observations underneath record what is
@@ -746,17 +733,22 @@ function OverviewTab({ record, customerId }: { record: Customer360; customerId: 
               ) : null}
             </>
           ) : (
-
             <p className="border-t border-border px-3 py-2 text-[12px] text-muted-foreground">
               No handover record exists yet — nothing is assumed on its behalf.
             </p>
           )}
         </Panel>
 
-
-        <Panel title="Open items" level="primary" meta={`${
-          open.commitments.length + open.risks.length + open.issues.length + open.escalations.length
-        } open`}>
+        <Panel
+          title="Open items"
+          level="primary"
+          meta={`${
+            open.commitments.length +
+            open.risks.length +
+            open.issues.length +
+            open.escalations.length
+          } open`}
+        >
           <div className="grid grid-cols-2 divide-x divide-border border-b border-border md:grid-cols-4">
             {(
               [
@@ -1039,7 +1031,9 @@ function SuccessCriterionRow({
             ))}
           </ul>
         ) : (
-          <p className="mt-1 text-[11px] text-muted-foreground">No success measurements recorded yet.</p>
+          <p className="mt-1 text-[11px] text-muted-foreground">
+            No success measurements recorded yet.
+          </p>
         )}
         <div className="mt-2">
           <AddObservation
@@ -1059,7 +1053,7 @@ function SuccessCriterionRow({
             <span className="text-foreground">
               {dash(confirmation.contact_name ?? confirmation.approver_name)}
             </span>
-            {confirmation.contact_role ?? confirmation.approver_role
+            {(confirmation.contact_role ?? confirmation.approver_role)
               ? ` (${confirmation.contact_role ?? confirmation.approver_role})`
               : ""}
             {confirmation.decided_at ? ` · ${fmtDate(confirmation.decided_at)}` : ""}
@@ -1124,12 +1118,7 @@ function AdoptionAreaRow({
           </span>
         ) : null}
         <span className="ml-auto">
-          <EditAdoptionArea
-            customerId={customerId}
-            area={area}
-            team={team}
-            contacts={contacts}
-          />
+          <EditAdoptionArea customerId={customerId} area={area} team={team} contacts={contacts} />
         </span>
       </div>
 
@@ -1167,9 +1156,7 @@ function AdoptionAreaRow({
           ["Last observed", latest ? fmtDate(latest.observed_at) : "—"],
         ]}
       />
-      {area.notes ? (
-        <p className="mt-0.5 text-[11px] text-muted-foreground">{area.notes}</p>
-      ) : null}
+      {area.notes ? <p className="mt-0.5 text-[11px] text-muted-foreground">{area.notes}</p> : null}
 
       <div className="mt-2">
         <p className="text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
@@ -1228,7 +1215,6 @@ function AdoptionAreaRow({
 
 /* ---------------- 2. JOURNEY ---------------- */
 
-
 function JourneyTab({ record, customerId }: { record: Customer360; customerId: string }) {
   const impl = record.implementation!;
   const activeStage = normalizeStage(impl.current_stage);
@@ -1247,7 +1233,6 @@ function JourneyTab({ record, customerId }: { record: Customer360; customerId: s
     else if (isPreHandoffStage(h.stage)) preHandoffHistory.push(h);
   }
 
-
   const duration = (h: { entered_at: string; exited_at: string | null } | undefined) => {
     if (!h) return null;
     const end = h.exited_at ? new Date(h.exited_at).getTime() : Date.now();
@@ -1257,7 +1242,10 @@ function JourneyTab({ record, customerId }: { record: Customer360; customerId: s
   return (
     <div className="space-y-4">
       <div className="overflow-hidden rounded-md bg-surface">
-        <LifecycleRail activeStage={activeStage ?? undefined} className="border-b-0 bg-transparent" />
+        <LifecycleRail
+          activeStage={activeStage ?? undefined}
+          className="border-b-0 bg-transparent"
+        />
       </div>
 
       <div className="rounded-md bg-surface px-4 py-3.5">
@@ -1274,7 +1262,6 @@ function JourneyTab({ record, customerId }: { record: Customer360; customerId: s
           />
         </div>
       </div>
-
 
       {/* Reads the SOW attached to this implementation, proposes a journey and
           lets the TIS choose what — if anything — to apply. */}
@@ -1298,7 +1285,6 @@ function JourneyTab({ record, customerId }: { record: Customer360; customerId: s
         </div>
       </Panel>
 
-
       {/* The one place working notes are written and read. The stage timeline
           below stays the record of how the implementation moved. */}
       <Panel
@@ -1318,7 +1304,6 @@ function JourneyTab({ record, customerId }: { record: Customer360; customerId: s
         </div>
       </Panel>
 
-
       {/* Commitments: promises made during the journey. Read surface + write path
           live together; Home/Leadership consume these rows as they already did. */}
       <Panel
@@ -1326,11 +1311,7 @@ function JourneyTab({ record, customerId }: { record: Customer360; customerId: s
         count={(record.commitments as any[]).length}
         meta="Promises made to the customer or internally"
         action={
-          <AddCommitment
-            customerId={customerId}
-            implementationId={impl.id}
-            team={record.team}
-          />
+          <AddCommitment customerId={customerId} implementationId={impl.id} team={record.team} />
         }
       >
         {(record.commitments as any[]).length ? (
@@ -1364,8 +1345,6 @@ function JourneyTab({ record, customerId }: { record: Customer360; customerId: s
           <NoRows label="No commitments recorded" />
         )}
       </Panel>
-
-
 
       {launchStateConflict(impl) ? (
         <div className="rounded-md border border-dashed border-border bg-muted/30 px-3 py-2.5">
@@ -1403,14 +1382,15 @@ function JourneyTab({ record, customerId }: { record: Customer360; customerId: s
       ) : null}
 
       <Panel title="Stage timeline" count={LIFECYCLE_STAGES.length} meta="From stage history">
-
         <ul className="divide-y divide-border">
           {LIFECYCLE_STAGES.map((stage, i) => {
             const h = historyByStage.get(stage.id);
             const state =
-              i === activeIndex ? "current" : h || (activeIndex > -1 && i < activeIndex)
-                ? "completed"
-                : "upcoming";
+              i === activeIndex
+                ? "current"
+                : h || (activeIndex > -1 && i < activeIndex)
+                  ? "completed"
+                  : "upcoming";
             const days = duration(h);
             return (
               <li key={stage.id} className="flex gap-3 px-3 py-2.5">
@@ -1461,7 +1441,10 @@ function JourneyTab({ record, customerId }: { record: Customer360; customerId: s
                       {open.risks.length + open.issues.length + open.escalations.length ? (
                         <ul className="mt-1 space-y-0.5">
                           {[...open.escalations, ...open.risks, ...open.issues].map((x: any) => (
-                            <li key={x.id} className="flex flex-wrap items-baseline gap-2 text-[12px]">
+                            <li
+                              key={x.id}
+                              className="flex flex-wrap items-baseline gap-2 text-[12px]"
+                            >
                               <SeverityChip value={x.severity} />
                               <span>{x.title}</span>
                               <span className="text-[11px] text-muted-foreground">
@@ -1627,11 +1610,7 @@ function RequirementsTab({ record, customerId }: { record: Customer360; customer
       count={record.requirements.length}
       meta="Traceability and validation from linked records"
       action={
-        <AddRequirement
-          customerId={customerId}
-          implementationId={impl.id}
-          team={record.team}
-        />
+        <AddRequirement customerId={customerId} implementationId={impl.id} team={record.team} />
       }
     >
       {record.requirements.length ? (
@@ -1643,11 +1622,7 @@ function RequirementsTab({ record, customerId }: { record: Customer360; customer
                 <SeverityChip value={r.priority} />
                 <StatusChip status={r.status} />
                 <span className="ml-auto">
-                  <EditRequirement
-                    customerId={customerId}
-                    requirement={r}
-                    team={record.team}
-                  />
+                  <EditRequirement customerId={customerId} requirement={r} team={record.team} />
                 </span>
               </div>
               {r.description ? (
@@ -1758,9 +1733,7 @@ function RisksTab({ record, customerId }: { record: Customer360; customerId: str
       <Panel
         title="Risks"
         count={risks.length}
-        action={
-          <AddRisk customerId={customerId} implementationId={impl.id} team={record.team} />
-        }
+        action={<AddRisk customerId={customerId} implementationId={impl.id} team={record.team} />}
       >
         {risks.length ? (
           <ul className="divide-y divide-border">
@@ -1801,9 +1774,7 @@ function RisksTab({ record, customerId }: { record: Customer360; customerId: str
       <Panel
         title="Issues"
         count={issues.length}
-        action={
-          <AddIssue customerId={customerId} implementationId={impl.id} team={record.team} />
-        }
+        action={<AddIssue customerId={customerId} implementationId={impl.id} team={record.team} />}
       >
         {issues.length ? (
           <ul className="divide-y divide-border">
@@ -1902,7 +1873,6 @@ function RisksTab({ record, customerId }: { record: Customer360; customerId: str
   );
 }
 
-
 /* ---------------- 7. EVIDENCE ---------------- */
 
 const EVIDENCE_TAB: Record<string, TabId> = {
@@ -1976,7 +1946,7 @@ function EvidenceTab({ record, customerId }: { record: Customer360; customerId: 
           <ul className="divide-y divide-border">
             {evidence.map((e) => {
               const target = e.related_entity_type
-                ? EVIDENCE_TAB[e.related_entity_type] ?? null
+                ? (EVIDENCE_TAB[e.related_entity_type] ?? null)
                 : null;
               const supportLabel = e.related_entity_type
                 ? `${humanize(e.related_entity_type)}: ${e.related_label ?? "record"}`
@@ -2072,10 +2042,10 @@ function EvidenceTab({ record, customerId }: { record: Customer360; customerId: 
           <ul className="divide-y divide-border">
             {approvals.map((a) => {
               const proof = a.evidence_id
-                ? evidence.find((e) => e.id === a.evidence_id) ?? null
+                ? (evidence.find((e) => e.id === a.evidence_id) ?? null)
                 : null;
               const contact = a.customer_contact_id
-                ? (record.contacts as any[]).find((c) => c.id === a.customer_contact_id) ?? null
+                ? ((record.contacts as any[]).find((c) => c.id === a.customer_contact_id) ?? null)
                 : null;
               const approver = a.approver_name ?? contact?.name ?? null;
               const approverRole = a.approver_role ?? contact?.role ?? null;
@@ -2149,7 +2119,6 @@ function EvidenceTab({ record, customerId }: { record: Customer360; customerId: 
           <NoRows label="No approvals recorded" />
         )}
       </Panel>
-
     </div>
   );
 }
@@ -2190,7 +2159,12 @@ function HistoryTab({ record }: { record: Customer360 }) {
   ].sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime());
 
   return (
-    <Panel title="Change history" count={entries.length} level="reference" meta="Stage history + audit log">
+    <Panel
+      title="Change history"
+      count={entries.length}
+      level="reference"
+      meta="Stage history + audit log"
+    >
       {entries.length ? (
         <div className="overflow-x-auto">
           <table className="w-full text-[12px]">

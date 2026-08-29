@@ -125,7 +125,12 @@ function renderTemplate(raw: string, firstName: string, contentUrl: string): str
   return raw.replaceAll("{{first_name}}", firstName).replaceAll("{{content_url}}", contentUrl);
 }
 
-function renderBodyHtml(rawBody: string, firstName: string, contentUrl: string, cta: string): string {
+function renderBodyHtml(
+  rawBody: string,
+  firstName: string,
+  contentUrl: string,
+  cta: string,
+): string {
   // Escape first, then swap the (escape-stable) placeholders in as markup.
   const withName = rawBody.replaceAll("{{first_name}}", firstName);
   let html = escapeHtml(withName).replaceAll(
@@ -160,10 +165,7 @@ export async function sendStep(
     .maybeSingle();
 
   if (!step) {
-    await db()
-      .from("journey_enrollments")
-      .update({ status: "completed" })
-      .eq("id", enrollment.id);
+    await db().from("journey_enrollments").update({ status: "completed" }).eq("id", enrollment.id);
     return { sent: false, completed: true };
   }
 
@@ -181,13 +183,15 @@ export async function sendStep(
     .update({ current_step: step.step_order, last_sent_at: new Date().toISOString() })
     .eq("id", enrollment.id);
 
-  await db().from("engagement_events").insert({
-    enrollment_id: enrollment.id,
-    step_id: step.id,
-    contact_email: enrollment.contact_email,
-    event: "sent",
-    payload: { step_order: step.step_order, subject },
-  });
+  await db()
+    .from("engagement_events")
+    .insert({
+      enrollment_id: enrollment.id,
+      step_id: step.id,
+      contact_email: enrollment.contact_email,
+      event: "sent",
+      payload: { step_order: step.step_order, subject },
+    });
 
   await audit({
     actor_type: "system",
@@ -292,13 +296,15 @@ export async function recordView(token: string): Promise<{ url: string }> {
       .limit(1);
 
     if ((prior ?? []).length === 0) {
-      await db().from("engagement_events").insert({
-        enrollment_id: enrollment.id,
-        step_id: step.id,
-        contact_email: enrollment.contact_email,
-        event: "viewed",
-        payload: { step_order: step.step_order },
-      });
+      await db()
+        .from("engagement_events")
+        .insert({
+          enrollment_id: enrollment.id,
+          step_id: step.id,
+          contact_email: enrollment.contact_email,
+          event: "viewed",
+          payload: { step_order: step.step_order },
+        });
 
       await audit({
         actor_type: "email_token",
@@ -406,8 +412,7 @@ export async function autoEnrollNewCustomers(): Promise<{ enrolled: number }> {
     const own = (contacts ?? []).filter((c: any) => c.customer_id === customer.id && c.email);
     if (own.length === 0) continue;
     // Prefer an explicitly "primary"-ish contact, else the first with an email.
-    const primary =
-      own.find((c: any) => /primary|champion|main/i.test(c.role ?? "")) ?? own[0];
+    const primary = own.find((c: any) => /primary|champion|main/i.test(c.role ?? "")) ?? own[0];
     for (const journey of journeys) {
       const key = `${journey.id}:${customer.id}:${primary.email.trim().toLowerCase()}`;
       if (already.has(key)) continue;
@@ -701,9 +706,7 @@ export async function createContentItem(input: {
 
 /** Idempotent: only seeds when ZERO journeys exist. */
 export async function ensureDefaultJourney(): Promise<void> {
-  const { count } = await db()
-    .from("journeys")
-    .select("id", { count: "exact", head: true });
+  const { count } = await db().from("journeys").select("id", { count: "exact", head: true });
   if ((count ?? 0) > 0) return;
 
   const { data: content, error: contentError } = await db()
@@ -730,40 +733,42 @@ export async function ensureDefaultJourney(): Promise<void> {
     .single();
   if (journeyError) throw new Error(`Seed failed: ${journeyError.message}`);
 
-  const { error: stepsError } = await db().from("journey_steps").insert([
-    {
-      journey_id: journey.id,
-      step_order: 1,
-      title: "Welcome to GoCanvas",
-      content_item_id: content.id,
-      email_subject: "Welcome to GoCanvas, {{first_name}}!",
-      email_body:
-        "Hi {{first_name}},\n\nWelcome aboard! We put together a short welcome video that shows what your first weeks with GoCanvas will look like.\n\nWatch it here: {{content_url}}\n\nYour onboarding team",
-      advance_on: "viewed",
-      delay_hours: null,
-    },
-    {
-      journey_id: journey.id,
-      step_order: 2,
-      title: "Level 1 training",
-      content_item_id: content.id,
-      email_subject: "Thanks for watching — here's Level 1 training",
-      email_body:
-        "Hi {{first_name}},\n\nGreat — you watched the welcome video. The next step is Level 1 training: the basics of building and dispatching your first form.\n\nStart here: {{content_url}}\n\nYour onboarding team",
-      advance_on: "viewed",
-      delay_hours: null,
-    },
-    {
-      journey_id: journey.id,
-      step_order: 3,
-      title: "Level 2 training",
-      content_item_id: content.id,
-      email_subject: "Ready for Level 2, {{first_name}}?",
-      email_body:
-        "Hi {{first_name}},\n\nYou're making great progress. Level 2 training covers workflows, integrations and reporting.\n\nContinue here: {{content_url}}\n\nYour onboarding team",
-      advance_on: "delay",
-      delay_hours: 48,
-    },
-  ]);
+  const { error: stepsError } = await db()
+    .from("journey_steps")
+    .insert([
+      {
+        journey_id: journey.id,
+        step_order: 1,
+        title: "Welcome to GoCanvas",
+        content_item_id: content.id,
+        email_subject: "Welcome to GoCanvas, {{first_name}}!",
+        email_body:
+          "Hi {{first_name}},\n\nWelcome aboard! We put together a short welcome video that shows what your first weeks with GoCanvas will look like.\n\nWatch it here: {{content_url}}\n\nYour onboarding team",
+        advance_on: "viewed",
+        delay_hours: null,
+      },
+      {
+        journey_id: journey.id,
+        step_order: 2,
+        title: "Level 1 training",
+        content_item_id: content.id,
+        email_subject: "Thanks for watching — here's Level 1 training",
+        email_body:
+          "Hi {{first_name}},\n\nGreat — you watched the welcome video. The next step is Level 1 training: the basics of building and dispatching your first form.\n\nStart here: {{content_url}}\n\nYour onboarding team",
+        advance_on: "viewed",
+        delay_hours: null,
+      },
+      {
+        journey_id: journey.id,
+        step_order: 3,
+        title: "Level 2 training",
+        content_item_id: content.id,
+        email_subject: "Ready for Level 2, {{first_name}}?",
+        email_body:
+          "Hi {{first_name}},\n\nYou're making great progress. Level 2 training covers workflows, integrations and reporting.\n\nContinue here: {{content_url}}\n\nYour onboarding team",
+        advance_on: "delay",
+        delay_hours: 48,
+      },
+    ]);
   if (stepsError) throw new Error(`Seed failed: ${stepsError.message}`);
 }

@@ -63,7 +63,11 @@ export const Route = createFileRoute("/technical-solutions/$id")({
   notFoundComponent: () => (
     <div className="p-6 text-[13px]">
       That technical solution does not exist.{" "}
-      <Link to="/technical-solutions" search={{ sort: "customer", dir: "asc" }} className="underline">
+      <Link
+        to="/technical-solutions"
+        search={{ sort: "customer", dir: "asc" }}
+        className="underline"
+      >
         Back to the queue
       </Link>
     </div>
@@ -93,7 +97,11 @@ function SolutionDetail() {
     <>
       <header className="border-b border-border bg-surface px-5 py-3">
         <nav className="flex items-center gap-1 text-[11px] text-muted-foreground">
-          <Link to="/technical-solutions" search={{ sort: "customer", dir: "asc" }} className="hover:text-foreground">
+          <Link
+            to="/technical-solutions"
+            search={{ sort: "customer", dir: "asc" }}
+            className="hover:text-foreground"
+          >
             Technical Solutions
           </Link>
           <ChevronRight className="h-3 w-3" />
@@ -182,7 +190,6 @@ function SolutionDetail() {
           <Field label="Created" value={fmtDate(solution.created_at)} />
           <Field label="Last updated" value={fmtDate(solution.updated_at)} />
         </dl>
-
       </header>
 
       <PageBody className="space-y-5">
@@ -319,7 +326,11 @@ function SolutionDetail() {
             )}
           </Panel>
 
-          <Panel level="reference" title="Ownership changes" count={record.ownership_history.length}>
+          <Panel
+            level="reference"
+            title="Ownership changes"
+            count={record.ownership_history.length}
+          >
             {record.ownership_history.length ? (
               <ul className="divide-y divide-border">
                 {record.ownership_history.map((h) => (
@@ -464,13 +475,13 @@ function SolutionDetail() {
                     .linked_trace.length &&
                   record.linked_trace.some((s) => s.entity_type.startsWith("requirement")) ? (
                   <p className="pt-1 text-[11px] text-muted-foreground">
-                    No direct link from the requirement to this solution — it is
-                    connected via a linked decision instead.
+                    No direct link from the requirement to this solution — it is connected via a
+                    linked decision instead.
                   </p>
                 ) : (
                   <p className="pt-1 text-[11px] text-muted-foreground">
-                    No requirement link found in the trace history — the requirement shown in the header
-                    comes from this solution's requirement field.
+                    No requirement link found in the trace history — the requirement shown in the
+                    header comes from this solution's requirement field.
                   </p>
                 )}
               </div>
@@ -478,7 +489,6 @@ function SolutionDetail() {
               <NoRows label="No trace links exist for this solution." />
             )}
           </Panel>
-
         </section>
       </PageBody>
     </>

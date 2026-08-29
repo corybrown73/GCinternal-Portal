@@ -29,7 +29,7 @@ export function apiError(status: number, code: string, message: string): Respons
 
 export async function requireApiKey(
   req: Request,
-  scope: ApiScope
+  scope: ApiScope,
 ): Promise<{ apiKeyId: string } | Response> {
   const authHeader = req.headers.get("authorization");
   const raw = authHeader?.toLowerCase().startsWith("bearer ")

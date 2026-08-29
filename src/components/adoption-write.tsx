@@ -90,155 +90,155 @@ function AreaForm({
 }) {
   return (
     <div className="space-y-2">
-    <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
-      <label className="block space-y-0.5">
-        <span className={labelClass}>Kind</span>
-        <select
-          className={inputClass}
-          aria-label="Adoption area kind"
-          value={draft.kind}
-          disabled={disabled}
-          onChange={(e) => set({ kind: e.target.value })}
-        >
-          {ADOPTION_KINDS.map((k) => (
-            <option key={k} value={k}>
-              {ADOPTION_KIND_LABEL[k as AdoptionKind]}
-            </option>
-          ))}
-        </select>
-      </label>
-      <label className="block space-y-0.5">
-        <span className={labelClass}>Name</span>
-        <input
-          className={inputClass}
-          aria-label="Adoption area name"
-          value={draft.name}
-          disabled={disabled}
-          onChange={(e) => set({ name: e.target.value })}
-        />
-      </label>
-      <label className="block space-y-0.5 md:col-span-2">
-        <span className={labelClass}>Intended use (from SOW)</span>
-        {sowUsage ? (
-          <p
-            aria-label="Intended use from SOW (read only)"
-            className="rounded-sm border border-border bg-muted px-1.5 py-1 text-[12px] text-muted-foreground"
-          >
-            {sowUsage}
-          </p>
-        ) : (
-          <input
-            className={inputClass}
-            aria-label="Intended use"
-            value={draft.intendedUsage}
-            disabled={disabled}
-            onChange={(e) => set({ intendedUsage: e.target.value })}
-          />
-        )}
-      </label>
-      <label className="block space-y-0.5">
-        <span className={labelClass}>Owner</span>
-        <select
-          className={inputClass}
-          aria-label="Adoption area owner"
-          value={draft.ownerId}
-          disabled={disabled}
-          onChange={(e) => set({ ownerId: e.target.value })}
-        >
-          <option value="">Unassigned</option>
-          {team.map((m) => (
-            <option key={m.id} value={m.id}>
-              {m.name} · {m.role}
-            </option>
-          ))}
-        </select>
-      </label>
-      <label className="block space-y-0.5 md:col-span-3">
-        <span className={labelClass}>Notes</span>
-        <input
-          className={inputClass}
-          aria-label="Adoption area notes"
-          value={draft.notes}
-          disabled={disabled}
-          onChange={(e) => set({ notes: e.target.value })}
-        />
-      </label>
-    </div>
-
-    {/* Kickoff intake: intended usage confirmed with the customer. Establishes
-        intent only — usage evidence stays in observations. */}
-    <div className="rounded-sm border border-border/70 bg-muted/30 p-2">
-      <p className="text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
-        Confirmed at kickoff
-      </p>
-      <p className="mt-0.5 mb-1.5 text-[11px] text-muted-foreground">
-        Leave blank where the customer has not provided it. This records intended usage, not
-        observed usage.
-      </p>
-      <div className="grid grid-cols-2 gap-2 md:grid-cols-2">
+      <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
         <label className="block space-y-0.5">
-          <span className={labelClass}>Intended users (who)</span>
-          <input
-            className={inputClass}
-            aria-label="Intended users"
-            value={draft.intendedUsers}
-            disabled={disabled}
-            placeholder="Not provided"
-            onChange={(e) => set({ intendedUsers: e.target.value })}
-          />
-        </label>
-        <label className="block space-y-0.5">
-          <span className={labelClass}>Intended use (what they do)</span>
-          <input
-            className={inputClass}
-            aria-label="Intended use"
-            value={draft.intendedUsage}
-            disabled={disabled || Boolean(sowUsage)}
-            placeholder={sowUsage ? "Held as SOW source text above" : "Not provided"}
-            onChange={(e) => set({ intendedUsage: e.target.value })}
-          />
-        </label>
-        <label className="block space-y-0.5">
-          <span className={labelClass}>Expected frequency / volume</span>
-          <input
-            className={inputClass}
-            aria-label="Expected frequency"
-            value={draft.expectedFrequency}
-            disabled={disabled}
-            placeholder="Not provided"
-            onChange={(e) => set({ expectedFrequency: e.target.value })}
-          />
-        </label>
-        <label className="block space-y-0.5">
-          <span className={labelClass}>Definition of &quot;in use&quot;</span>
-          <input
-            className={inputClass}
-            aria-label="Definition of in use"
-            value={draft.inUseDefinition}
-            disabled={disabled}
-            placeholder="Not provided"
-            onChange={(e) => set({ inUseDefinition: e.target.value })}
-          />
-        </label>
-        <label className="block space-y-0.5">
-          <span className={labelClass}>Customer-side owner</span>
+          <span className={labelClass}>Kind</span>
           <select
             className={inputClass}
-            aria-label="Customer-side owner"
-            value={draft.customerOwnerContactId}
+            aria-label="Adoption area kind"
+            value={draft.kind}
             disabled={disabled}
-            onChange={(e) => set({ customerOwnerContactId: e.target.value })}
+            onChange={(e) => set({ kind: e.target.value })}
           >
-            <option value="">Not named</option>
-            {contacts.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name} · {c.role}
+            {ADOPTION_KINDS.map((k) => (
+              <option key={k} value={k}>
+                {ADOPTION_KIND_LABEL[k as AdoptionKind]}
               </option>
             ))}
           </select>
         </label>
+        <label className="block space-y-0.5">
+          <span className={labelClass}>Name</span>
+          <input
+            className={inputClass}
+            aria-label="Adoption area name"
+            value={draft.name}
+            disabled={disabled}
+            onChange={(e) => set({ name: e.target.value })}
+          />
+        </label>
+        <label className="block space-y-0.5 md:col-span-2">
+          <span className={labelClass}>Intended use (from SOW)</span>
+          {sowUsage ? (
+            <p
+              aria-label="Intended use from SOW (read only)"
+              className="rounded-sm border border-border bg-muted px-1.5 py-1 text-[12px] text-muted-foreground"
+            >
+              {sowUsage}
+            </p>
+          ) : (
+            <input
+              className={inputClass}
+              aria-label="Intended use"
+              value={draft.intendedUsage}
+              disabled={disabled}
+              onChange={(e) => set({ intendedUsage: e.target.value })}
+            />
+          )}
+        </label>
+        <label className="block space-y-0.5">
+          <span className={labelClass}>Owner</span>
+          <select
+            className={inputClass}
+            aria-label="Adoption area owner"
+            value={draft.ownerId}
+            disabled={disabled}
+            onChange={(e) => set({ ownerId: e.target.value })}
+          >
+            <option value="">Unassigned</option>
+            {team.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.name} · {m.role}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="block space-y-0.5 md:col-span-3">
+          <span className={labelClass}>Notes</span>
+          <input
+            className={inputClass}
+            aria-label="Adoption area notes"
+            value={draft.notes}
+            disabled={disabled}
+            onChange={(e) => set({ notes: e.target.value })}
+          />
+        </label>
       </div>
-    </div>
+
+      {/* Kickoff intake: intended usage confirmed with the customer. Establishes
+        intent only — usage evidence stays in observations. */}
+      <div className="rounded-sm border border-border/70 bg-muted/30 p-2">
+        <p className="text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
+          Confirmed at kickoff
+        </p>
+        <p className="mt-0.5 mb-1.5 text-[11px] text-muted-foreground">
+          Leave blank where the customer has not provided it. This records intended usage, not
+          observed usage.
+        </p>
+        <div className="grid grid-cols-2 gap-2 md:grid-cols-2">
+          <label className="block space-y-0.5">
+            <span className={labelClass}>Intended users (who)</span>
+            <input
+              className={inputClass}
+              aria-label="Intended users"
+              value={draft.intendedUsers}
+              disabled={disabled}
+              placeholder="Not provided"
+              onChange={(e) => set({ intendedUsers: e.target.value })}
+            />
+          </label>
+          <label className="block space-y-0.5">
+            <span className={labelClass}>Intended use (what they do)</span>
+            <input
+              className={inputClass}
+              aria-label="Intended use"
+              value={draft.intendedUsage}
+              disabled={disabled || Boolean(sowUsage)}
+              placeholder={sowUsage ? "Held as SOW source text above" : "Not provided"}
+              onChange={(e) => set({ intendedUsage: e.target.value })}
+            />
+          </label>
+          <label className="block space-y-0.5">
+            <span className={labelClass}>Expected frequency / volume</span>
+            <input
+              className={inputClass}
+              aria-label="Expected frequency"
+              value={draft.expectedFrequency}
+              disabled={disabled}
+              placeholder="Not provided"
+              onChange={(e) => set({ expectedFrequency: e.target.value })}
+            />
+          </label>
+          <label className="block space-y-0.5">
+            <span className={labelClass}>Definition of &quot;in use&quot;</span>
+            <input
+              className={inputClass}
+              aria-label="Definition of in use"
+              value={draft.inUseDefinition}
+              disabled={disabled}
+              placeholder="Not provided"
+              onChange={(e) => set({ inUseDefinition: e.target.value })}
+            />
+          </label>
+          <label className="block space-y-0.5">
+            <span className={labelClass}>Customer-side owner</span>
+            <select
+              className={inputClass}
+              aria-label="Customer-side owner"
+              value={draft.customerOwnerContactId}
+              disabled={disabled}
+              onChange={(e) => set({ customerOwnerContactId: e.target.value })}
+            >
+              <option value="">Not named</option>
+              {contacts.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name} · {c.role}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+      </div>
     </div>
   );
 }

@@ -36,7 +36,11 @@ export const Route = createFileRoute("/api/v1/accounts")({
             actorApiKeyId: auth.apiKeyId,
           });
           return Response.json(
-            { account: result.account, created: result.created, stage_changed: result.stage_changed },
+            {
+              account: result.account,
+              created: result.created,
+              stage_changed: result.stage_changed,
+            },
             { status: result.created ? 201 : 200 },
           );
         } catch (e) {

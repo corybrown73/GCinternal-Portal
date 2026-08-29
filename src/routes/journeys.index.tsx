@@ -22,7 +22,8 @@ export const Route = createFileRoute("/journeys/")({
       { title: "Journeys — Implementation Hub" },
       {
         name: "description",
-        content: "Automated customer email journeys: welcome sequences, training tracks and engagement.",
+        content:
+          "Automated customer email journeys: welcome sequences, training tracks and engagement.",
       },
     ],
   }),
@@ -49,7 +50,9 @@ function JourneysPage() {
   const { data } = useSuspenseQuery(journeysQuery);
   const { profile } = useProfile();
   const canEdit =
-    canManage(profile?.role) || profile?.role === "implementation" || profile?.role === "onboarding";
+    canManage(profile?.role) ||
+    profile?.role === "implementation" ||
+    profile?.role === "onboarding";
 
   return (
     <>

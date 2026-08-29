@@ -4,11 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 
 import { PageBody } from "@/components/page";
-import {
-  getInternalProfiles,
-  getTicketRouting,
-  setTicketRouting,
-} from "@/lib/tickets.functions";
+import { getInternalProfiles, getTicketRouting, setTicketRouting } from "@/lib/tickets.functions";
 import { canManage, useProfile } from "@/lib/auth";
 import { humanize } from "@/lib/hub-format";
 import { cn } from "@/lib/utils";
@@ -48,8 +44,8 @@ function RoutingPage() {
   return (
     <PageBody className="space-y-3">
       <p className="max-w-2xl text-[13px] text-muted-foreground">
-        Each category routes to a role. New tickets go to the person in that role with the
-        fewest open tickets; the fallback person catches categories whose role has no members.
+        Each category routes to a role. New tickets go to the person in that role with the fewest
+        open tickets; the fallback person catches categories whose role has no members.
       </p>
       {routingQuery.isPending || teamQuery.isPending ? (
         <p className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground">

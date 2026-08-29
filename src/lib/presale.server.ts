@@ -88,8 +88,8 @@ export async function loadPipeline(): Promise<{ deals: PipelineDeal[] }> {
   if (error) throw new Error(error.message);
   const deals = ((accounts ?? []) as Account[]).map((a) => ({
     ...a,
-    am_owner_name: a.am_owner_id ? names.get(a.am_owner_id) ?? null : null,
-    se_owner_name: a.se_owner_id ? names.get(a.se_owner_id) ?? null : null,
+    am_owner_name: a.am_owner_id ? (names.get(a.am_owner_id) ?? null) : null,
+    se_owner_name: a.se_owner_id ? (names.get(a.se_owner_id) ?? null) : null,
   }));
   return { deals };
 }
@@ -150,7 +150,10 @@ function normalizeHeader(h: string): string | null {
 }
 
 function normalizeStageValue(raw: string): string {
-  return raw.toLowerCase().trim().replace(/[\s-]+/g, "_");
+  return raw
+    .toLowerCase()
+    .trim()
+    .replace(/[\s-]+/g, "_");
 }
 
 export interface CsvImportSummary {
@@ -204,7 +207,9 @@ export async function importDealsCsv(userId: string, csvText: string): Promise<C
     if (!check.success) {
       errors.push({
         row: i + 2,
-        message: check.error.issues.map((iss) => `${iss.path.join(".")}: ${iss.message}`).join("; "),
+        message: check.error.issues
+          .map((iss) => `${iss.path.join(".")}: ${iss.message}`)
+          .join("; "),
       });
       continue;
     }
@@ -238,7 +243,9 @@ export interface DealDetail {
   se_owner_name: string | null;
   gong_reports: Array<GongReport & { uploaded_by_name: string | null }>;
   briefs: Array<BriefRow & { created_by_name: string | null }>;
-  tam_requests: Array<TamRequest & { requested_by_name: string | null; decided_by_name: string | null }>;
+  tam_requests: Array<
+    TamRequest & { requested_by_name: string | null; decided_by_name: string | null }
+  >;
   notes: Array<OnboardingNote & { author_name: string | null; reviewed_by_name: string | null }>;
   stage_history: Array<StageTransition & { actor_name: string | null }>;
 }
@@ -280,7 +287,7 @@ export async function loadDeal(dealId: string): Promise<DealDetail | null> {
       .order("occurred_at", { ascending: false }),
   ]);
 
-  const named = (id: string | null | undefined) => (id ? names.get(id) ?? null : null);
+  const named = (id: string | null | undefined) => (id ? (names.get(id) ?? null) : null);
 
   return {
     account: account as DealDetail["account"],
@@ -315,7 +322,12 @@ export async function loadDeal(dealId: string): Promise<DealDetail | null> {
 
 export async function addGongReport(
   userId: string,
-  input: { dealId: string; title: string; reportType: "call_notes" | "account_map"; contentMd: string },
+  input: {
+    dealId: string;
+    title: string;
+    reportType: "call_notes" | "account_map";
+    contentMd: string;
+  },
 ): Promise<{ ok: true }> {
   await requireInternal(userId);
   const { error } = await db().from("portal_gong_reports").insert({
@@ -502,7 +514,9 @@ export async function startOnboarding(
     exited_at: null,
   });
   if (historyError) {
-    throw new Error(`Implementation created, but its stage history row failed: ${historyError.message}`);
+    throw new Error(
+      `Implementation created, but its stage history row failed: ${historyError.message}`,
+    );
   }
 
   // (b) link the deal to the customer record.
@@ -532,7 +546,11 @@ export async function startOnboarding(
     payload: { customer_id: customer.id, implementation_id: impl.id },
   });
 
-  return { customerId: customer.id as string, implementationId: impl.id as string, alreadyLinked: false };
+  return {
+    customerId: customer.id as string,
+    implementationId: impl.id as string,
+    alreadyLinked: false,
+  };
 }
 
 /* ---------- admin: API keys ---------- */

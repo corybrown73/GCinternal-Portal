@@ -30,7 +30,9 @@ function SignupPage() {
     const allowed = configured.length > 0 ? configured : ["gocanvas.com"];
     const domain = email.split("@")[1]?.toLowerCase();
     if (!domain || !allowed.includes(domain)) {
-      setError(`Signups are limited to ${allowed.map((d: string) => "@" + d).join(", ")} addresses. Customers are invited by their GoCanvas team instead.`);
+      setError(
+        `Signups are limited to ${allowed.map((d: string) => "@" + d).join(", ")} addresses. Customers are invited by their GoCanvas team instead.`,
+      );
       return;
     }
     if (password.length < 12) {
@@ -52,7 +54,7 @@ function SignupPage() {
       setError(
         error.message.includes("restricted")
           ? "Signups are restricted to approved email domains."
-          : error.message
+          : error.message,
       );
       return;
     }
@@ -86,7 +88,12 @@ function SignupPage() {
             <form onSubmit={onSubmit} className="flex flex-col gap-3">
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="name">Full name</Label>
-                <Input id="name" required value={fullName} onChange={(e) => setFullName(e.target.value)} />
+                <Input
+                  id="name"
+                  required
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                />
               </div>
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="email">Work email</Label>
@@ -101,7 +108,8 @@ function SignupPage() {
               </div>
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="password">
-                  Password <span className="font-normal text-muted-foreground">(12+ characters)</span>
+                  Password{" "}
+                  <span className="font-normal text-muted-foreground">(12+ characters)</span>
                 </Label>
                 <Input
                   id="password"

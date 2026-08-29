@@ -11,7 +11,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { addImplementation, getTeamOptions, setImplementation, uploadAttachment } from "@/lib/hub.functions";
+import {
+  addImplementation,
+  getTeamOptions,
+  setImplementation,
+  uploadAttachment,
+} from "@/lib/hub.functions";
 import { fileToBase64, MAX_ATTACHMENT_BYTES } from "@/lib/attachment-client";
 import { OwnerPicker, groupOf } from "@/components/owner-picker";
 
@@ -202,9 +207,7 @@ export function NewImplementation({ customers }: { customers: CustomerOption[] }
                   type="button"
                   className={buttonClass}
                   disabled={mutation.isPending}
-                  onClick={() =>
-                    set({ mode: draft.mode === "existing" ? "new" : "existing" })
-                  }
+                  onClick={() => set({ mode: draft.mode === "existing" ? "new" : "existing" })}
                 >
                   {draft.mode === "existing" ? "New customer" : "Select existing"}
                 </button>

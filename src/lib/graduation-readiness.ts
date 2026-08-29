@@ -48,10 +48,7 @@ const idx = (stage: string) => stageIndex(stage);
 
 const BLOCKING_SEVERITY = 1; // critical or high
 
-export function graduationReadiness(
-  record: Customer360,
-  impl: ReadinessImpl,
-): ReadinessArea[] {
+export function graduationReadiness(record: Customer360, impl: ReadinessImpl): ReadinessArea[] {
   const current = idx(impl.current_stage);
   const launchIdx = idx("launch");
   const alignIdx = idx("align-external");
@@ -404,7 +401,10 @@ export function graduationEvidence(
   const approvalCount = (record.approvals ?? []).length;
 
   const verified: VerifiedFact[] = [
-    { label: "Graduated", value: graduation?.graduated_at ? fmtDate(graduation.graduated_at) : "—" },
+    {
+      label: "Graduated",
+      value: graduation?.graduated_at ? fmtDate(graduation.graduated_at) : "—",
+    },
     { label: "Handover date", value: handoff?.handoff_date ? fmtDate(handoff.handoff_date) : "—" },
     {
       label: "CS owner",
@@ -456,7 +456,6 @@ export function graduationEvidence(
     corroboration,
   };
 }
-
 
 /** Honest one-line summary. Counts only — never a score. */
 export function graduationReadinessSummary(areas: ReadinessArea[]) {

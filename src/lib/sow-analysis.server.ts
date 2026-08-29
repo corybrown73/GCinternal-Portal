@@ -51,9 +51,6 @@ Existing lifecycle stage ids: ${LIFECYCLE_STAGES.map((s) => s.id).join(", ")}.
 Return JSON exactly in this shape:
 {"readable":true,"problem":null,"summary":"","extraction":{"objectives":[{"text":"","confidence":"stated","quote":null}],"scope":[],"deliverables":[],"integrations":[],"customerResponsibilities":[],"providerResponsibilities":[],"trainingAndAdoption":[],"acceptanceCriteria":[],"timeline":[],"dependencies":[],"outOfScope":[],"requirements":[],"technicalSolutions":[],"successMeasures":[],"risksAndQuestions":[]},"deliveryWindow":{"statedText":null,"minWeeks":null,"maxWeeks":null,"startDateStated":null,"startCondition":null,"delayConditions":[],"stageTimingProvided":false,"quote":null},"proposedJourney":[{"name":"","lifecycleStage":"handoff","purpose":"","workstreams":[],"dependencies":[],"customerResponsibilities":[],"acceptanceCriteria":[],"timing":{"startWeek":null,"endWeek":null,"statedText":null,"fromSow":false,"rationale":null,"dependencyDriver":null,"parallelWith":[],"insufficientInfo":false},"confidence":"stated"}],"assumptions":[],"gaps":[]}`;
 
-
-
-
 /** Build the user message content from the stored file, by type. */
 async function sowContent(
   bytes: Uint8Array,
@@ -90,7 +87,11 @@ async function sowContent(
 }
 
 function tryParseAnalysis(raw: string): SowAnalysis | null {
-  const cleaned = raw.trim().replace(/^```(?:json)?/i, "").replace(/```$/, "").trim();
+  const cleaned = raw
+    .trim()
+    .replace(/^```(?:json)?/i, "")
+    .replace(/```$/, "")
+    .trim();
   let json: unknown;
   try {
     json = JSON.parse(cleaned);

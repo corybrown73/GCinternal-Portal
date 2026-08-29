@@ -43,7 +43,10 @@ function PortalHomePage() {
                 </p>
                 <h1 className="mt-0.5 text-[17px] font-semibold tracking-tight">{impl.name}</h1>
                 <p className="mt-0.5 text-[12px] text-muted-foreground">
-                  Currently in <span className="font-medium text-foreground">{stageLabel(impl.current_stage)}</span>
+                  Currently in{" "}
+                  <span className="font-medium text-foreground">
+                    {stageLabel(impl.current_stage)}
+                  </span>
                 </p>
               </div>
               <div className="text-right">
@@ -93,7 +96,12 @@ function PortalHomePage() {
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <p className={cn("text-[13px]", step.overdue && "text-status-risk-foreground font-medium")}>
+                      <p
+                        className={cn(
+                          "text-[13px]",
+                          step.overdue && "text-status-risk-foreground font-medium",
+                        )}
+                      >
                         {step.title}
                       </p>
                       <p className="mt-0.5 text-[11px] text-muted-foreground">

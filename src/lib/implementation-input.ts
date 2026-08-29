@@ -138,14 +138,12 @@ export function toImplementationUpdatePatch(data: UpdateImplementationInput) {
     actual_launch_date: data.actualLaunchDate,
     customer_goals: data.customerGoals,
   };
-  if (data.discoveryBoardUrl !== undefined) patch['discovery_board_url'] = data.discoveryBoardUrl;
+  if (data.discoveryBoardUrl !== undefined) patch["discovery_board_url"] = data.discoveryBoardUrl;
   if (data.discoveryBoardImageUrl !== undefined)
-    patch['discovery_board_image_url'] = data.discoveryBoardImageUrl;
+    patch["discovery_board_image_url"] = data.discoveryBoardImageUrl;
   if (data.discoveryBoardImageName !== undefined)
-    patch['discovery_board_image_name'] = data.discoveryBoardImageName;
+    patch["discovery_board_image_name"] = data.discoveryBoardImageName;
   if (data.discoveryBoardNotes !== undefined)
-    patch['discovery_board_notes'] = data.discoveryBoardNotes;
+    patch["discovery_board_notes"] = data.discoveryBoardNotes;
   return patch;
 }
-
-

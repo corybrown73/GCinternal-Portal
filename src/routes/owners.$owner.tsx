@@ -118,7 +118,10 @@ function OwnerPortfolioPage() {
   if (!portfolio) {
     return (
       <>
-        <PageHeader title={owner} description="No implementations are recorded against this person." />
+        <PageHeader
+          title={owner}
+          description="No implementations are recorded against this person."
+        />
         <PageBody>
           <Panel title="What this person is carrying">
             <NoRows label="Nothing is currently assigned to this person." />

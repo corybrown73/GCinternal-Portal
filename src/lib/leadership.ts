@@ -118,7 +118,8 @@ export function leadershipAction(
   if (!impl.owner_name) {
     return {
       action: "assign_owner",
-      action_reason: "No implementation owner is recorded, so no one is accountable for the signal.",
+      action_reason:
+        "No implementation owner is recorded, so no one is accountable for the signal.",
     };
   }
 
@@ -297,9 +298,7 @@ export type StageDistributionRow = {
 
 export function stageDistribution(data: LeadershipData): StageDistributionRow[] {
   return LIFECYCLE_STAGES.map((stage) => {
-    const impls = data.implementations.filter(
-      (i) => normalizeStage(i.current_stage) === stage.id,
-    );
+    const impls = data.implementations.filter((i) => normalizeStage(i.current_stage) === stage.id);
     const dwell = impls
       .map((i) => ({ days: daysSince(i.stage_entered_at) ?? 0, customer: i.customer_name }))
       .sort((a, b) => b.days - a.days)[0];
@@ -581,7 +580,9 @@ export function stuckWork(data: LeadershipData): StuckWorkItem[] {
     for (const c of open.commitments)
       push("commitment", c, c.description, c.made_at, isOverdue(c.due_date));
     for (const d of bundle.decisions.filter((x: any) =>
-      ["proposed", "pending", "open", "under_review"].includes(String(x.status ?? "").toLowerCase()),
+      ["proposed", "pending", "open", "under_review"].includes(
+        String(x.status ?? "").toLowerCase(),
+      ),
     ))
       push("decision", d, d.title, d.created_at);
   }
@@ -612,7 +613,9 @@ export function graduationGate(data: LeadershipData): GraduationGateRow[] {
     rows.push({ impl, areas, summary: graduationReadinessSummary(areas) });
   }
   return rows.sort(
-    (a, b) => b.summary.attention - a.summary.attention || a.impl.customer_name.localeCompare(b.impl.customer_name),
+    (a, b) =>
+      b.summary.attention - a.summary.attention ||
+      a.impl.customer_name.localeCompare(b.impl.customer_name),
   );
 }
 
@@ -673,10 +676,7 @@ export function ownerPortfolio(data: LeadershipData, owner: string): OwnerPortfo
  * Presentation helper: wraps a set of implementations in their already-derived
  * triage row, health level and intervention row, intervention accounts first.
  */
-export function accountRows(
-  data: LeadershipData,
-  impls: ImplementationRow[],
-): OwnerAccountRow[] {
+export function accountRows(data: LeadershipData, impls: ImplementationRow[]): OwnerAccountRow[] {
   const health = healthByImplementation(data.implementations, data.triage);
   const interventionByImpl = new Map(interventions(data).map((r) => [r.row.impl.id, r]));
 
@@ -697,12 +697,7 @@ export function accountRows(
 /* ---------------- 10. Portfolio card filters (presentation only) ---------------- */
 
 export type PortfolioFilterId =
-  | "act_now"
-  | "needs_attention"
-  | "blocked"
-  | "at_risk"
-  | "on_track"
-  | "unassigned";
+  "act_now" | "needs_attention" | "blocked" | "at_risk" | "on_track" | "unassigned";
 
 export const PORTFOLIO_FILTER_LABEL: Record<PortfolioFilterId, string> = {
   act_now: "Act now",

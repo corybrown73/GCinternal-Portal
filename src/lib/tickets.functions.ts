@@ -22,13 +22,7 @@ const TICKET_CATEGORIES = [
   "other",
 ] as const;
 const TICKET_PRIORITIES = ["low", "normal", "high", "urgent"] as const;
-const TICKET_STATUSES = [
-  "open",
-  "in_progress",
-  "waiting_customer",
-  "resolved",
-  "closed",
-] as const;
+const TICKET_STATUSES = ["open", "in_progress", "waiting_customer", "resolved", "closed"] as const;
 
 type CallerProfile = { id: string; email: string; full_name: string | null; role: string };
 
@@ -181,11 +175,7 @@ export const addTicketComment = createServerFn({ method: "POST" })
     if (profile.role === "customer") {
       const detail = await loadTicket(data.ticketId, { includeInternal: false });
       const linked = await linkedCustomerIds(profile.id);
-      if (
-        !detail ||
-        !detail.ticket.customer_id ||
-        !linked.includes(detail.ticket.customer_id)
-      ) {
+      if (!detail || !detail.ticket.customer_id || !linked.includes(detail.ticket.customer_id)) {
         throw new Error("Ticket not found");
       }
     }
@@ -201,9 +191,7 @@ export const addTicketComment = createServerFn({ method: "POST" })
 export const setTicketStatus = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data: unknown) =>
-    z
-      .object({ ticketId: z.string().uuid(), status: z.enum(TICKET_STATUSES) })
-      .parse(data),
+    z.object({ ticketId: z.string().uuid(), status: z.enum(TICKET_STATUSES) }).parse(data),
   )
   .handler(async ({ data, context }) => {
     const profile = await callerProfile(context.userId);
@@ -215,9 +203,7 @@ export const setTicketStatus = createServerFn({ method: "POST" })
 export const setTicketAssignee = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data: unknown) =>
-    z
-      .object({ ticketId: z.string().uuid(), assigneeId: z.string().uuid().nullable() })
-      .parse(data),
+    z.object({ ticketId: z.string().uuid(), assigneeId: z.string().uuid().nullable() }).parse(data),
   )
   .handler(async ({ data, context }) => {
     const profile = await callerProfile(context.userId);
