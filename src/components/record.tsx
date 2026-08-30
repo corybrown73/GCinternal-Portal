@@ -215,11 +215,15 @@ export function Panel({
     <section
       id={id}
       className={cn(
+        // A shadow as well as a border. On a page that is now a real grey, a
+        // white card with one hairline still reads as a region of the page; a
+        // card with a shadow reads as an object sitting on it. That is the
+        // difference between "the sections blur together" and not.
         level === "supporting"
-          ? "overflow-hidden rounded-md bg-surface"
+          ? "overflow-hidden rounded-md border border-border/70 bg-surface"
           : bordered
-            ? "overflow-hidden rounded-md border border-border bg-card"
-            : "border-t border-border/70 pt-2",
+            ? "overflow-hidden rounded-md border border-border bg-card shadow-sm"
+            : "border-t-2 border-border pt-2",
         className,
       )}
     >
@@ -227,8 +231,13 @@ export function Panel({
         className={cn(
           "flex items-center justify-between gap-3",
           bordered ? "px-3 py-2" : "px-0 py-1",
-          level === "supporting" ? null : bordered ? "border-b border-border" : null,
-          level === "primary" ? "bg-surface py-2.5" : null,
+          // EVERY bordered panel now gets a filled header band, not just the
+          // `primary` ones. A heading that shares its background with the rows
+          // beneath it is a label; a heading on its own band is a lid, and a
+          // lid is what makes a stack of panels scannable.
+          bordered ? "border-b border-border bg-surface" : null,
+          level === "supporting" ? "border-b border-border/70" : null,
+          level === "primary" ? "py-2.5" : null,
         )}
       >
         <h2
@@ -237,10 +246,10 @@ export function Panel({
             level === "primary"
               ? "text-[14px] font-semibold tracking-tight text-foreground"
               : level === "supporting"
-                ? "text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground"
+                ? "text-[11px] font-semibold uppercase tracking-[0.08em] text-foreground/80"
                 : level === "reference"
-                  ? "text-[11px] font-medium uppercase tracking-[0.1em] text-muted-foreground/80"
-                  : "text-[12px] font-semibold uppercase tracking-[0.08em]",
+                  ? "text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground"
+                  : "text-[12px] font-bold uppercase tracking-[0.08em] text-foreground",
           )}
         >
           {title}

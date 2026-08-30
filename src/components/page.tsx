@@ -11,7 +11,10 @@ export function PageHeader({
   actions?: ReactNode;
 }) {
   return (
-    <div className="flex items-start justify-between gap-6 border-b border-border px-6 py-4">
+    // The page header sits on `card` rather than the page background, so the
+    // top of every screen is a distinct band rather than the same grey as the
+    // body with a line under it.
+    <div className="flex items-start justify-between gap-6 border-b border-border bg-card px-6 py-4">
       <div>
         <h1 className="text-[15px] font-semibold tracking-tight">{title}</h1>
         {description ? (

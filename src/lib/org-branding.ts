@@ -36,11 +36,14 @@ export const NAV_SCHEMES: NavScheme[] = [
     note: "The default. Quiet grey, lets the content carry the colour.",
     dark: false,
     vars: {
-      "--nav-bg": "oklch(0.972 0.003 250)",
-      "--nav-fg": "oklch(0.22 0.012 250)",
-      "--nav-muted": "oklch(0.5 0.012 250)",
-      "--nav-active": "oklch(0.92 0.008 250)",
-      "--nav-border": "oklch(0.9 0.005 250)",
+      // Follows the surface ramp in styles.css. When the page background moved
+      // down to 0.945 the old 0.972 nav stopped reading as a separate surface
+      // and started reading as a slightly wrong-coloured page.
+      "--nav-bg": "oklch(0.925 0.005 250)",
+      "--nav-fg": "oklch(0.2 0.014 250)",
+      "--nav-muted": "oklch(0.46 0.014 250)",
+      "--nav-active": "oklch(0.87 0.009 250)",
+      "--nav-border": "oklch(0.8 0.008 250)",
     },
   },
   {
@@ -101,11 +104,11 @@ export const NAV_SCHEMES: NavScheme[] = [
     note: "A light warm alternative to Paper, for people who dislike grey.",
     dark: false,
     vars: {
-      "--nav-bg": "oklch(0.96 0.012 85)",
-      "--nav-fg": "oklch(0.26 0.02 85)",
-      "--nav-muted": "oklch(0.52 0.02 85)",
-      "--nav-active": "oklch(0.91 0.025 85)",
-      "--nav-border": "oklch(0.89 0.02 85)",
+      "--nav-bg": "oklch(0.925 0.018 85)",
+      "--nav-fg": "oklch(0.24 0.022 85)",
+      "--nav-muted": "oklch(0.47 0.024 85)",
+      "--nav-active": "oklch(0.87 0.032 85)",
+      "--nav-border": "oklch(0.79 0.026 85)",
     },
   },
 ];

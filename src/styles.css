@@ -75,26 +75,57 @@
 
 :root {
   --radius: 0.375rem;
-  --background: oklch(0.985 0.002 250);
-  --foreground: oklch(0.22 0.012 250);
-  --surface: oklch(0.972 0.003 250);
+
+  /*
+   * WHY THESE NUMBERS MOVED. The page used to be oklch(0.985) with pure-white
+   * cards on it: a separation of 1.04:1, which is to say none. Borders sat at
+   * 0.9 for 1.35:1 against a card. Everything was technically there and
+   * perceptually absent — panels floated with no edges and the page read as one
+   * undifferentiated sheet.
+   *
+   * Contrast RATIO is a poor guide at the top of the lightness range: two
+   * near-white surfaces cannot produce a large ratio no matter what you do, so
+   * chasing 3:1 between a card and its page would mean a grey page and a
+   * wireframe look. What actually reads is the SIZE OF THE STEP between
+   * adjacent surfaces, and there are now four distinct ones:
+   *
+   *   card 1.0  >  background 0.945  >  surface 0.885  >  muted 0.87
+   *
+   * `surface` sits BELOW the page rather than between it and the card, because
+   * it does two jobs: it fills the header band on a white panel, and it fills a
+   * `supporting` panel sitting directly on the page. A value tucked between the
+   * two would be faint against both. Below both, it is visible against both.
+   *
+   * Text was never the problem — muted-foreground already passed AA at 5.27:1
+   * — but this app sets a lot of 11px type, where AA is a floor rather than a
+   * target, so it goes to 0.47 (6.7:1) for comfort rather than compliance.
+   *
+   * The border is the one place a real ratio is worth paying for, because it is
+   * what makes a section look like a section: 0.80 gives 2.0:1 against a card,
+   * about a 50% larger step than before. `--input` goes further still (2.5:1)
+   * because a control that does not look like a control is a different and
+   * worse failure than a divider that is merely quiet.
+   */
+  --background: oklch(0.945 0.004 250);
+  --foreground: oklch(0.2 0.014 250);
+  --surface: oklch(0.885 0.007 250);
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.22 0.012 250);
+  --card-foreground: oklch(0.2 0.014 250);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.22 0.012 250);
+  --popover-foreground: oklch(0.2 0.014 250);
   --primary: oklch(0.3 0.02 250);
-  --primary-foreground: oklch(0.985 0.002 250);
-  --secondary: oklch(0.955 0.004 250);
-  --secondary-foreground: oklch(0.3 0.015 250);
-  --muted: oklch(0.945 0.004 250);
-  --muted-foreground: oklch(0.53 0.012 250);
-  --accent: oklch(0.94 0.006 250);
-  --accent-foreground: oklch(0.26 0.014 250);
-  --destructive: oklch(0.53 0.19 25);
-  --destructive-foreground: oklch(0.985 0.002 250);
-  --border: oklch(0.9 0.005 250);
-  --input: oklch(0.9 0.005 250);
-  --ring: oklch(0.55 0.03 250);
+  --primary-foreground: oklch(0.99 0.002 250);
+  --secondary: oklch(0.9 0.007 250);
+  --secondary-foreground: oklch(0.28 0.016 250);
+  --muted: oklch(0.87 0.008 250);
+  --muted-foreground: oklch(0.47 0.014 250);
+  --accent: oklch(0.87 0.01 250);
+  --accent-foreground: oklch(0.24 0.016 250);
+  --destructive: oklch(0.5 0.2 25);
+  --destructive-foreground: oklch(0.99 0.002 250);
+  --border: oklch(0.8 0.008 250);
+  --input: oklch(0.72 0.011 250);
+  --ring: oklch(0.5 0.035 250);
 
   --status-ontrack: oklch(0.94 0.04 155);
   --status-ontrack-foreground: oklch(0.42 0.09 155);
@@ -102,45 +133,56 @@
   --status-risk-foreground: oklch(0.47 0.11 70);
   --status-blocked: oklch(0.95 0.04 25);
   --status-blocked-foreground: oklch(0.48 0.15 25);
-  --status-idle: oklch(0.945 0.004 250);
-  --status-idle-foreground: oklch(0.5 0.012 250);
+  --status-idle: oklch(0.87 0.008 250);
+  --status-idle-foreground: oklch(0.44 0.014 250);
 
   --chart-1: oklch(0.45 0.06 250);
   --chart-2: oklch(0.6 0.08 200);
   --chart-3: oklch(0.65 0.09 155);
   --chart-4: oklch(0.7 0.1 80);
   --chart-5: oklch(0.6 0.13 25);
-  --sidebar: oklch(0.972 0.003 250);
-  --sidebar-foreground: oklch(0.22 0.012 250);
+  --sidebar: oklch(0.885 0.007 250);
+  --sidebar-foreground: oklch(0.2 0.014 250);
   --sidebar-primary: oklch(0.3 0.02 250);
-  --sidebar-primary-foreground: oklch(0.985 0.002 250);
-  --sidebar-accent: oklch(0.945 0.004 250);
-  --sidebar-accent-foreground: oklch(0.26 0.014 250);
-  --sidebar-border: oklch(0.9 0.005 250);
-  --sidebar-ring: oklch(0.55 0.03 250);
+  --sidebar-primary-foreground: oklch(0.99 0.002 250);
+  --sidebar-accent: oklch(0.83 0.01 250);
+  --sidebar-accent-foreground: oklch(0.24 0.016 250);
+  --sidebar-border: oklch(0.8 0.008 250);
+  --sidebar-ring: oklch(0.5 0.035 250);
 }
 
 .dark {
-  --background: oklch(0.185 0.008 250);
-  --foreground: oklch(0.95 0.003 250);
-  --surface: oklch(0.21 0.009 250);
-  --card: oklch(0.225 0.009 250);
-  --card-foreground: oklch(0.95 0.003 250);
-  --popover: oklch(0.225 0.009 250);
-  --popover-foreground: oklch(0.95 0.003 250);
+  /*
+   * The same problem inverted: card 0.225 on background 0.185 is a 1.05:1
+   * separation, and a 0.32 border is 1.35:1 against its own card. Dark mode hid
+   * its structure exactly as badly as light did.
+   *
+   * The ramp is spread the other way — background 0.165 < card 0.235, with
+   * surface at 0.285 ABOVE the card for the same reason it sits below in light
+   * mode: it has to be visible both as a band on a panel and as a panel on the
+   * page. The border goes to 0.42, a step you can actually see without the
+   * panels looking outlined.
+   */
+  --background: oklch(0.165 0.008 250);
+  --foreground: oklch(0.96 0.003 250);
+  --surface: oklch(0.285 0.013 250);
+  --card: oklch(0.235 0.01 250);
+  --card-foreground: oklch(0.96 0.003 250);
+  --popover: oklch(0.235 0.01 250);
+  --popover-foreground: oklch(0.96 0.003 250);
   --primary: oklch(0.9 0.005 250);
   --primary-foreground: oklch(0.2 0.01 250);
-  --secondary: oklch(0.26 0.01 250);
-  --secondary-foreground: oklch(0.95 0.003 250);
-  --muted: oklch(0.27 0.01 250);
-  --muted-foreground: oklch(0.68 0.012 250);
-  --accent: oklch(0.29 0.012 250);
-  --accent-foreground: oklch(0.95 0.003 250);
+  --secondary: oklch(0.28 0.012 250);
+  --secondary-foreground: oklch(0.96 0.003 250);
+  --muted: oklch(0.29 0.012 250);
+  --muted-foreground: oklch(0.73 0.014 250);
+  --accent: oklch(0.32 0.014 250);
+  --accent-foreground: oklch(0.96 0.003 250);
   --destructive: oklch(0.62 0.18 25);
   --destructive-foreground: oklch(0.98 0.002 250);
-  --border: oklch(0.32 0.01 250);
-  --input: oklch(0.32 0.01 250);
-  --ring: oklch(0.6 0.02 250);
+  --border: oklch(0.42 0.014 250);
+  --input: oklch(0.48 0.016 250);
+  --ring: oklch(0.65 0.025 250);
 
   --status-ontrack: oklch(0.31 0.05 155);
   --status-ontrack-foreground: oklch(0.82 0.1 155);
@@ -148,22 +190,22 @@
   --status-risk-foreground: oklch(0.86 0.11 85);
   --status-blocked: oklch(0.32 0.07 25);
   --status-blocked-foreground: oklch(0.83 0.11 25);
-  --status-idle: oklch(0.27 0.01 250);
-  --status-idle-foreground: oklch(0.68 0.012 250);
+  --status-idle: oklch(0.29 0.012 250);
+  --status-idle-foreground: oklch(0.73 0.014 250);
 
   --chart-1: oklch(0.7 0.06 250);
   --chart-2: oklch(0.68 0.09 200);
   --chart-3: oklch(0.7 0.1 155);
   --chart-4: oklch(0.76 0.11 80);
   --chart-5: oklch(0.66 0.14 25);
-  --sidebar: oklch(0.21 0.009 250);
-  --sidebar-foreground: oklch(0.95 0.003 250);
+  --sidebar: oklch(0.205 0.01 250);
+  --sidebar-foreground: oklch(0.96 0.003 250);
   --sidebar-primary: oklch(0.9 0.005 250);
   --sidebar-primary-foreground: oklch(0.2 0.01 250);
-  --sidebar-accent: oklch(0.29 0.012 250);
-  --sidebar-accent-foreground: oklch(0.95 0.003 250);
-  --sidebar-border: oklch(0.32 0.01 250);
-  --sidebar-ring: oklch(0.6 0.02 250);
+  --sidebar-accent: oklch(0.32 0.014 250);
+  --sidebar-accent-foreground: oklch(0.96 0.003 250);
+  --sidebar-border: oklch(0.42 0.014 250);
+  --sidebar-ring: oklch(0.65 0.025 250);
 }
 
 @layer base {
