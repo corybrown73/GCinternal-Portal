@@ -1998,10 +1998,32 @@ async function guardResolutionOrder(
   if (message) throw new Error(message);
 }
 
+import { deliveryActivityChanges } from "./delivery-activity";
+
+export type DeliveryWriteOpts = { actorProfileId?: string | null };
+
+async function recordDeliveryActivity(
+  table: string,
+  rowId: string | null,
+  patch: Record<string, unknown>,
+  opts: DeliveryWriteOpts | undefined,
+  reason: string,
+): Promise<void> {
+  const changes = deliveryActivityChanges(table, rowId, patch, reason);
+  if (!changes.length) return;
+  try {
+    const { recordActivity } = await import("./activity.server");
+    await recordActivity(changes, { actorProfileId: opts?.actorProfileId ?? null });
+  } catch (e) {
+    console.error(`DELIVERY_ACTIVITY_FAILED table=${table} id=${rowId}`, e);
+  }
+}
+
 async function insertDeliveryRow(
   table: string,
   implementationId: string,
   patch: Record<string, unknown>,
+  opts?: DeliveryWriteOpts,
 ) {
   await guardResolutionOrder(table, patch, null);
   const { data, error } = await db()
@@ -2010,17 +2032,25 @@ async function insertDeliveryRow(
     .select("id")
     .maybeSingle();
   if (error) throw deliveryWriteError(table, error.message);
+  const id = (data?.id as string | undefined) ?? null;
+  await recordDeliveryActivity(table, id, patch, opts, "created");
   if (HEALTH_INPUT_TABLES.has(table)) {
     const { recomputeHealthSoon } = await import("./health.server");
     recomputeHealthSoon(implementationId);
   }
-  return { ok: true, id: data?.id ?? null };
+  return { ok: true, id };
 }
 
-async function updateDeliveryRow(table: string, id: string, patch: Record<string, unknown>) {
+async function updateDeliveryRow(
+  table: string,
+  id: string,
+  patch: Record<string, unknown>,
+  opts?: DeliveryWriteOpts,
+) {
   await guardResolutionOrder(table, patch, id);
   const { error } = await db().from(table).update(patch).eq("id", id);
   if (error) throw deliveryWriteError(table, error.message);
+  await recordDeliveryActivity(table, id, patch, opts, "edited");
   if (HEALTH_INPUT_TABLES.has(table)) {
     // The update carries only the row id; the cache is keyed by implementation.
     const { data: row } = await db()
@@ -2034,35 +2064,65 @@ async function updateDeliveryRow(table: string, id: string, patch: Record<string
   return { ok: true, id };
 }
 
-export const createRequirement = (implementationId: string, patch: Record<string, unknown>) =>
-  insertDeliveryRow("requirements", implementationId, patch);
-export const updateRequirement = (id: string, patch: Record<string, unknown>) =>
-  updateDeliveryRow("requirements", id, patch);
+export const createRequirement = (
+  implementationId: string,
+  patch: Record<string, unknown>,
+  opts?: DeliveryWriteOpts,
+) => insertDeliveryRow("requirements", implementationId, patch, opts);
+export const updateRequirement = (
+  id: string,
+  patch: Record<string, unknown>,
+  opts?: DeliveryWriteOpts,
+) => updateDeliveryRow("requirements", id, patch, opts);
 
-export const createRisk = (implementationId: string, patch: Record<string, unknown>) =>
-  insertDeliveryRow("risks", implementationId, patch);
-export const updateRisk = (id: string, patch: Record<string, unknown>) =>
-  updateDeliveryRow("risks", id, patch);
+export const createRisk = (
+  implementationId: string,
+  patch: Record<string, unknown>,
+  opts?: DeliveryWriteOpts,
+) => insertDeliveryRow("risks", implementationId, patch, opts);
+export const updateRisk = (id: string, patch: Record<string, unknown>, opts?: DeliveryWriteOpts) =>
+  updateDeliveryRow("risks", id, patch, opts);
 
-export const createIssue = (implementationId: string, patch: Record<string, unknown>) =>
-  insertDeliveryRow("issues", implementationId, patch);
-export const updateIssue = (id: string, patch: Record<string, unknown>) =>
-  updateDeliveryRow("issues", id, patch);
+export const createIssue = (
+  implementationId: string,
+  patch: Record<string, unknown>,
+  opts?: DeliveryWriteOpts,
+) => insertDeliveryRow("issues", implementationId, patch, opts);
+export const updateIssue = (id: string, patch: Record<string, unknown>, opts?: DeliveryWriteOpts) =>
+  updateDeliveryRow("issues", id, patch, opts);
 
-export const createEscalation = (implementationId: string, patch: Record<string, unknown>) =>
-  insertDeliveryRow("escalations", implementationId, patch);
-export const updateEscalation = (id: string, patch: Record<string, unknown>) =>
-  updateDeliveryRow("escalations", id, patch);
+export const createEscalation = (
+  implementationId: string,
+  patch: Record<string, unknown>,
+  opts?: DeliveryWriteOpts,
+) => insertDeliveryRow("escalations", implementationId, patch, opts);
+export const updateEscalation = (
+  id: string,
+  patch: Record<string, unknown>,
+  opts?: DeliveryWriteOpts,
+) => updateDeliveryRow("escalations", id, patch, opts);
 
-export const createDecision = (implementationId: string, patch: Record<string, unknown>) =>
-  insertDeliveryRow("decisions", implementationId, patch);
-export const updateDecision = (id: string, patch: Record<string, unknown>) =>
-  updateDeliveryRow("decisions", id, patch);
+export const createDecision = (
+  implementationId: string,
+  patch: Record<string, unknown>,
+  opts?: DeliveryWriteOpts,
+) => insertDeliveryRow("decisions", implementationId, patch, opts);
+export const updateDecision = (
+  id: string,
+  patch: Record<string, unknown>,
+  opts?: DeliveryWriteOpts,
+) => updateDeliveryRow("decisions", id, patch, opts);
 
-export const createCommitment = (implementationId: string, patch: Record<string, unknown>) =>
-  insertDeliveryRow("commitments", implementationId, patch);
-export const updateCommitment = (id: string, patch: Record<string, unknown>) =>
-  updateDeliveryRow("commitments", id, patch);
+export const createCommitment = (
+  implementationId: string,
+  patch: Record<string, unknown>,
+  opts?: DeliveryWriteOpts,
+) => insertDeliveryRow("commitments", implementationId, patch, opts);
+export const updateCommitment = (
+  id: string,
+  patch: Record<string, unknown>,
+  opts?: DeliveryWriteOpts,
+) => updateDeliveryRow("commitments", id, patch, opts);
 
 /* ---------- Mutations (Slice 4: evidence + approval requests) ----------
  * Two existing tables, no schema change. Both reuse the delivery insert/update

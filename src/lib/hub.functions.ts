@@ -437,109 +437,121 @@ export const advanceImplementationStage = createServerFn({ method: "POST" })
 export const addRequirement = createServerFn({ method: "POST" })
   .middleware([requireInternalAuth])
   .inputValidator((data: unknown) => createRequirementInput.parse(data))
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
     const { createRequirement } = await import("./hub.server");
     const { implementationId, ...rest } = data;
-    return createRequirement(implementationId, toRequirementPatch(rest));
+    return createRequirement(implementationId, toRequirementPatch(rest), {
+      actorProfileId: context.profile.id,
+    });
   });
 
 export const setRequirement = createServerFn({ method: "POST" })
   .middleware([requireInternalAuth])
   .inputValidator((data: unknown) => updateRequirementInput.parse(data))
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
     const { updateRequirement } = await import("./hub.server");
     const { id, ...rest } = data;
-    return updateRequirement(id, toRequirementPatch(rest));
+    return updateRequirement(id, toRequirementPatch(rest), { actorProfileId: context.profile.id });
   });
 
 export const addRisk = createServerFn({ method: "POST" })
   .middleware([requireInternalAuth])
   .inputValidator((data: unknown) => createRiskInput.parse(data))
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
     const { createRisk } = await import("./hub.server");
     const { implementationId, ...rest } = data;
-    return createRisk(implementationId, toRiskPatch(rest));
+    return createRisk(implementationId, toRiskPatch(rest), {
+      actorProfileId: context.profile.id,
+    });
   });
 
 export const setRisk = createServerFn({ method: "POST" })
   .middleware([requireInternalAuth])
   .inputValidator((data: unknown) => updateRiskInput.parse(data))
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
     const { updateRisk } = await import("./hub.server");
     const { id, ...rest } = data;
-    return updateRisk(id, toRiskPatch(rest));
+    return updateRisk(id, toRiskPatch(rest), { actorProfileId: context.profile.id });
   });
 
 export const addIssue = createServerFn({ method: "POST" })
   .middleware([requireInternalAuth])
   .inputValidator((data: unknown) => createIssueInput.parse(data))
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
     const { createIssue } = await import("./hub.server");
     const { implementationId, ...rest } = data;
-    return createIssue(implementationId, toIssuePatch(rest));
+    return createIssue(implementationId, toIssuePatch(rest), {
+      actorProfileId: context.profile.id,
+    });
   });
 
 export const setIssue = createServerFn({ method: "POST" })
   .middleware([requireInternalAuth])
   .inputValidator((data: unknown) => updateIssueInput.parse(data))
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
     const { updateIssue } = await import("./hub.server");
     const { id, ...rest } = data;
-    return updateIssue(id, toIssuePatch(rest));
+    return updateIssue(id, toIssuePatch(rest), { actorProfileId: context.profile.id });
   });
 
 export const addEscalation = createServerFn({ method: "POST" })
   .middleware([requireInternalAuth])
   .inputValidator((data: unknown) => createEscalationInput.parse(data))
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
     const { createEscalation } = await import("./hub.server");
     const { implementationId, ...rest } = data;
-    return createEscalation(implementationId, toEscalationPatch(rest));
+    return createEscalation(implementationId, toEscalationPatch(rest), {
+      actorProfileId: context.profile.id,
+    });
   });
 
 export const setEscalation = createServerFn({ method: "POST" })
   .middleware([requireInternalAuth])
   .inputValidator((data: unknown) => updateEscalationInput.parse(data))
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
     const { updateEscalation } = await import("./hub.server");
     const { id, ...rest } = data;
-    return updateEscalation(id, toEscalationPatch(rest));
+    return updateEscalation(id, toEscalationPatch(rest), { actorProfileId: context.profile.id });
   });
 
 export const addDecision = createServerFn({ method: "POST" })
   .middleware([requireInternalAuth])
   .inputValidator((data: unknown) => createDecisionInput.parse(data))
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
     const { createDecision } = await import("./hub.server");
     const { implementationId, ...rest } = data;
-    return createDecision(implementationId, toDecisionPatch(rest));
+    return createDecision(implementationId, toDecisionPatch(rest), {
+      actorProfileId: context.profile.id,
+    });
   });
 
 export const setDecision = createServerFn({ method: "POST" })
   .middleware([requireInternalAuth])
   .inputValidator((data: unknown) => updateDecisionInput.parse(data))
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
     const { updateDecision } = await import("./hub.server");
     const { id, ...rest } = data;
-    return updateDecision(id, toDecisionPatch(rest));
+    return updateDecision(id, toDecisionPatch(rest), { actorProfileId: context.profile.id });
   });
 
 export const addCommitment = createServerFn({ method: "POST" })
   .middleware([requireInternalAuth])
   .inputValidator((data: unknown) => createCommitmentInput.parse(data))
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
     const { createCommitment } = await import("./hub.server");
     const { implementationId, ...rest } = data;
-    return createCommitment(implementationId, toCommitmentPatch(rest));
+    return createCommitment(implementationId, toCommitmentPatch(rest), {
+      actorProfileId: context.profile.id,
+    });
   });
 
 export const setCommitment = createServerFn({ method: "POST" })
   .middleware([requireInternalAuth])
   .inputValidator((data: unknown) => updateCommitmentInput.parse(data))
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
     const { updateCommitment } = await import("./hub.server");
     const { id, ...rest } = data;
-    return updateCommitment(id, toCommitmentPatch(rest));
+    return updateCommitment(id, toCommitmentPatch(rest), { actorProfileId: context.profile.id });
   });
 
 /* ---------- Slice 4: evidence + approval request write paths ---------- */
