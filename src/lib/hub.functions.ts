@@ -78,18 +78,59 @@ import {
   toRecordedHealthPatch,
 } from "./implementation-input";
 
+/**
+ * `scope` is the only thing these accept, and the server resolves WHO from
+ * `context.profile` — never from the request. A caller may ask to see all
+ * accounts or a named colleague's; it may not ask to be somebody else.
+ *
+ * The scope also travels back in the response, resolved, so the header can name
+ * whose book is on screen without a second round trip. A filtered list that
+ * does not say it is filtered is how somebody concludes an account was deleted.
+ */
+const scopeInput = (data: unknown) =>
+  z
+    .object({ scope: z.string().trim().max(60).optional() })
+    .optional()
+    .parse(data) ?? {};
+
 export const getHome = createServerFn({ method: "GET" })
   .middleware([requireInternalAuth])
-  .handler(async () => {
+  .inputValidator(scopeInput)
+  .handler(async ({ data, context }) => {
     const { loadHome } = await import("./hub.server");
-    return loadHome();
+    const { resolveScope } = await import("./ownership.server");
+    const { describeScope } = await import("./ownership");
+    const resolved = await resolveScope(context.profile.id, data?.scope ?? null);
+    const home = await loadHome(resolved);
+    return {
+      ...home,
+      scope: {
+        mode: resolved.scope.mode,
+        person_id: resolved.scope.personId,
+        label: describeScope(resolved.scope, resolved.viewer, resolved.personName),
+        viewer_name: resolved.viewer.name,
+      },
+    };
   });
 
 export const getLeadership = createServerFn({ method: "GET" })
   .middleware([requireInternalAuth])
-  .handler(async () => {
+  .inputValidator(scopeInput)
+  .handler(async ({ data, context }) => {
     const { loadLeadership } = await import("./hub.server");
-    return loadLeadership();
+    const { resolveScope } = await import("./ownership.server");
+    const { describeScope } = await import("./ownership");
+    const resolved = await resolveScope(context.profile.id, data?.scope ?? null);
+    const leadership = await loadLeadership(resolved);
+    return {
+      ...leadership,
+      scope: {
+        mode: resolved.scope.mode,
+        person_id: resolved.scope.personId,
+        label: describeScope(resolved.scope, resolved.viewer, resolved.personName),
+        viewer_name: resolved.viewer.name,
+      },
+    };
   });
 
 export const getCustomer360 = createServerFn({ method: "GET" })

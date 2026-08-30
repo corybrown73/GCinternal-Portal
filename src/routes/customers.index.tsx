@@ -8,6 +8,8 @@ import { SavedViews } from "@/components/saved-views";
 import { searchToView } from "@/lib/saved-view-input";
 import { HealthNote } from "@/components/health-note";
 import { PaceChip, StageBadge, StatusDot, NoRows } from "@/components/record";
+import { ScopeSwitch } from "@/components/scope-switch";
+import { useScope } from "@/lib/use-scope";
 import { getHome } from "@/lib/hub.functions";
 import { healthByImplementation } from "@/lib/home-triage";
 import { LIFECYCLE_STAGES } from "@/lib/lifecycle";
@@ -15,10 +17,11 @@ import { daysSince, fmtDate, humanize, normalizeStage, stageIndex } from "@/lib/
 import { datePace, dwellPace } from "@/lib/pace";
 import { cn } from "@/lib/utils";
 
-const implementationsQuery = queryOptions({
-  queryKey: ["home"],
-  queryFn: () => getHome(),
-});
+const implementationsQuery = (scope: string | null) =>
+  queryOptions({
+    queryKey: ["home", scope],
+    queryFn: () => getHome({ data: scope ? { scope } : {} }),
+  });
 
 const SORTS = ["customer", "stage", "status", "owner", "tier", "launch", "days"] as const;
 type SortKey = (typeof SORTS)[number];
@@ -28,6 +31,7 @@ type CustomerSearch = {
   status?: string;
   sort: SortKey;
   dir: "asc" | "desc";
+  scope?: string;
 };
 
 export const Route = createFileRoute("/customers/")({
@@ -52,6 +56,7 @@ export const Route = createFileRoute("/customers/")({
       status?: unknown;
       sort?: unknown;
       dir?: unknown;
+      scope?: unknown;
     };
     const out: CustomerSearch = {
       sort: (SORTS as readonly string[]).includes(String(raw.sort))
@@ -61,10 +66,12 @@ export const Route = createFileRoute("/customers/")({
     };
     if (typeof raw.stage === "string") out.stage = raw.stage;
     if (typeof raw.status === "string") out.status = raw.status;
+    if (typeof raw.scope === "string") out.scope = raw.scope;
     return out;
   },
-  loader: ({ context }) => {
-    context.queryClient.ensureQueryData(implementationsQuery);
+  loaderDeps: ({ search }: { search: CustomerSearch }) => ({ scope: search.scope ?? null }),
+  loader: ({ context, deps }) => {
+    context.queryClient.ensureQueryData(implementationsQuery(deps.scope));
   },
   errorComponent: ({ error }) => (
     <div role="alert" className="p-6 text-[13px] text-destructive">
@@ -79,7 +86,8 @@ export const Route = createFileRoute("/customers/")({
 const STATUSES = ["blocked", "at_risk", "on_track", "no_signal"];
 
 function CustomersPage() {
-  const { data } = useSuspenseQuery(implementationsQuery);
+  const { param, setScope } = useScope();
+  const { data } = useSuspenseQuery(implementationsQuery(param));
   const { stage, status, sort, dir } = Route.useSearch();
   const navigate = useNavigate({ from: Route.fullPath });
 
@@ -159,6 +167,7 @@ function CustomersPage() {
             <span className="font-mono text-[11px] text-muted-foreground">
               {rows.length} / {data.implementations.length}
             </span>
+            <ScopeSwitch scope={data.scope} onChange={setScope} />
             <NewImplementation customers={customerOptions} />
           </div>
         }

@@ -4,6 +4,8 @@ import { ArrowRight, Clock, Info } from "lucide-react";
 
 import { PageBody, PageHeader } from "@/components/page";
 import { Panel, StageBadge, StatusChip, StatusDot, NoRows } from "@/components/record";
+import { ScopeSwitch } from "@/components/scope-switch";
+import { useScope } from "@/lib/use-scope";
 import { getHome } from "@/lib/hub.functions";
 import { fmtDate, fmtDateTime, humanize } from "@/lib/hub-format";
 import { deriveHealth, launchStateConflict } from "@/lib/customer360-derive";
@@ -17,10 +19,13 @@ import {
 } from "@/lib/home-triage";
 import { cn } from "@/lib/utils";
 
-const homeQuery = queryOptions({
-  queryKey: ["home"],
-  queryFn: () => getHome(),
-});
+// The scope is part of the key: switching whose accounts you are looking at
+// has to refetch, and two scopes must never share a cache entry.
+const homeQuery = (scope: string | null) =>
+  queryOptions({
+    queryKey: ["home", scope],
+    queryFn: () => getHome({ data: scope ? { scope } : {} }),
+  });
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -40,8 +45,11 @@ export const Route = createFileRoute("/")({
       { name: "twitter:card", content: "summary" },
     ],
   }),
-  loader: ({ context }) => {
-    context.queryClient.ensureQueryData(homeQuery);
+  validateSearch: (search: Record<string, unknown>): { scope?: string } =>
+    typeof search["scope"] === "string" ? { scope: search["scope"] as string } : {},
+  loaderDeps: ({ search }: { search: { scope?: string } }) => ({ scope: search.scope ?? null }),
+  loader: ({ context, deps }) => {
+    context.queryClient.ensureQueryData(homeQuery(deps.scope));
   },
   errorComponent: ({ error }) => (
     <div role="alert" className="p-6 text-[13px] text-destructive">
@@ -169,7 +177,8 @@ function QueueRowItem({ row, health }: { row: QueueRow; health: HealthResult }) 
 }
 
 function HomePage() {
-  const { data } = useSuspenseQuery(homeQuery);
+  const { param, setScope } = useScope();
+  const { data } = useSuspenseQuery(homeQuery(param));
   const queue = buildQueue(data.implementations, data.triage);
   const healthByImpl: Map<string, HealthResult> = healthByImplementation(
     data.implementations,
@@ -182,10 +191,13 @@ function HomePage() {
         title="Today"
         description="What needs my attention — every implementation sorted by what's driving it, not by task due dates."
         actions={
-          <span className="font-mono text-[11px] text-muted-foreground">
-            {queue.act_now.length} act now · {queue.needs_attention.length} needs attention ·{" "}
-            {queue.moving.length} moving
-          </span>
+          <div className="flex items-center gap-2">
+            <span className="font-mono text-[11px] text-muted-foreground">
+              {queue.act_now.length} act now · {queue.needs_attention.length} needs attention ·{" "}
+              {queue.moving.length} moving
+            </span>
+            <ScopeSwitch scope={data.scope} onChange={setScope} />
+          </div>
         }
       />
       <PageBody className="space-y-4">

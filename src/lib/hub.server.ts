@@ -14,6 +14,8 @@ import type {
   TechnicalSolutionRow,
   TraceStep,
 } from "./hub-types";
+import { matchesScope } from "./ownership";
+import type { ResolvedScope } from "./ownership.server";
 
 const db = () => supabaseAdmin as any;
 
@@ -42,7 +44,27 @@ async function loadTeam() {
   return map;
 }
 
-export async function loadImplementations(): Promise<ImplementationRow[]> {
+/**
+ * Every project, or the scoped subset.
+ *
+ * Scoping happens HERE, once, on rows that were already all in memory — the
+ * query has always fetched every implementation and joined in the browser's
+ * data client. Filtering afterwards therefore costs one extra read
+ * (portal_accounts) and no extra round trips per row.
+ *
+ * Doing it here also means every surface built on this function inherits the
+ * default without having to remember: Home, the customers list and the
+ * leadership portfolio all narrow together, and a new list added next month
+ * narrows for free.
+ *
+ * NOT scoped, deliberately: `loadCustomer360`. Opening a specific account from
+ * a link, a search result or an escalation has to work whoever you are —
+ * scoping the record view would turn "my default view" into "I cannot help my
+ * colleague", which is the opposite of what this is for.
+ */
+export async function loadImplementations(
+  scope?: ResolvedScope | null,
+): Promise<ImplementationRow[]> {
   const team = await loadTeam();
   const [{ data: impls }, { data: customers }, { data: commitments }, { data: escalations }] =
     await Promise.all([
@@ -53,12 +75,46 @@ export async function loadImplementations(): Promise<ImplementationRow[]> {
     ]);
 
   const customerMap = new Map((customers ?? []).map((c: any) => [c.id, c]));
+
+  // The pre-sale account owners (am/se) live on portal_accounts and are
+  // profile ids, not team ids. Read only when a scope actually needs them.
+  const accountsByCustomer = new Map<string, { am: string | null; se: string | null }>();
+  if (scope && scope.scope.mode !== "all") {
+    const { data: accounts } = await db()
+      .from("portal_accounts")
+      .select("customer_id, am_owner_id, se_owner_id");
+    for (const a of (accounts ?? []) as any[]) {
+      if (a.customer_id) {
+        accountsByCustomer.set(a.customer_id, {
+          am: a.am_owner_id ?? null,
+          se: a.se_owner_id ?? null,
+        });
+      }
+    }
+  }
   // Phase 7 demo mode: mask at the server projection, never in the browser.
   // This is the single choke point every customer name reaches Home, the
   // customers list and the leadership portfolio through.
   const demo = await demoMasker();
 
-  return (impls ?? []).map((i: any) => {
+  const inScope = (i: any) => {
+    if (!scope) return true;
+    const account = accountsByCustomer.get(i.customer_id);
+    const c: any = customerMap.get(i.customer_id) ?? {};
+    return matchesScope(
+      {
+        implementationOwnerId: i.owner_id ?? null,
+        csmOwnerId: c.csm_owner_id ?? null,
+        amOwnerProfileId: account?.am ?? null,
+        seOwnerProfileId: account?.se ?? null,
+      },
+      scope.scope,
+      scope.viewer,
+      scope.person ?? null,
+    );
+  };
+
+  return (impls ?? []).filter(inScope).map((i: any) => {
     const c: any = customerMap.get(i.customer_id) ?? {};
     return {
       id: i.id,
@@ -87,9 +143,16 @@ export async function loadImplementations(): Promise<ImplementationRow[]> {
   });
 }
 
-export async function loadHome(): Promise<HomeData> {
-  const [implementations, team] = await Promise.all([loadImplementations(), loadTeam()]);
+export async function loadHome(scope?: ResolvedScope | null): Promise<HomeData> {
+  const [implementations, team] = await Promise.all([loadImplementations(scope), loadTeam()]);
   const implById = new Map(implementations.map((i) => [i.id, i]));
+  // Everything below joins through implById, so narrowing the implementation
+  // set narrows the whole page. The `keep` predicate is what stops a commitment
+  // or a risk from an account outside the scope arriving as an orphan row with
+  // "Unknown customer" next to it — which reads as data loss, not as a filter.
+  const scoped = Boolean(scope && scope.scope.mode !== "all");
+  const keep = (implementationId: string | null | undefined) =>
+    !scoped || (implementationId != null && implById.has(implementationId));
 
   const { data: commitmentRows } = await db()
     .from("commitments")
@@ -99,6 +162,7 @@ export async function loadHome(): Promise<HomeData> {
 
   const commitments: CommitmentRow[] = (commitmentRows ?? [])
     .filter((c: any) => c.status !== "cancelled")
+    .filter((c: any) => keep(c.implementation_id))
     .map((c: any) => {
       const impl = implById.get(c.implementation_id);
       return {
@@ -142,50 +206,58 @@ export async function loadHome(): Promise<HomeData> {
   const isOwnerField = (field: string | null | undefined) => field === "owner_id";
 
   const signal: SignalRow[] = [
-    ...(audit ?? []).map((a: any) => ({
-      key: `audit-${a.id}`,
-      kind: "audit" as const,
-      title: isOwnerField(a.field_name)
-        ? `${a.entity_type} · Owner changed`
-        : a.field_name
-          ? `${a.entity_type} · ${a.field_name} changed`
-          : `${a.entity_type} updated`,
-      detail: isOwnerField(a.field_name)
-        ? `${ownerLabel(a.old_value)} → ${ownerLabel(a.new_value)}${a.change_reason ? ` · ${a.change_reason}` : ""}`
-        : a.field_name
-          ? `${a.old_value ?? "—"} → ${a.new_value ?? "—"}${a.change_reason ? ` · ${a.change_reason}` : ""}`
-          : a.change_reason,
-      at: a.changed_at,
-      actor: a.changed_by ? (team.get(a.changed_by)?.name ?? null) : null,
-      ...implContext(a.entity_type === "implementation" ? a.entity_id : null),
-    })),
-    ...(risks ?? []).map((r: any) => ({
-      key: `risk-${r.id}`,
-      kind: "risk" as const,
-      title: `Risk raised · ${r.title}`,
-      detail: `${r.severity} severity · ${r.likelihood} likelihood · ${r.status}`,
-      at: r.identified_at,
-      actor: null,
-      ...implContext(r.implementation_id),
-    })),
-    ...(issues ?? []).map((r: any) => ({
-      key: `issue-${r.id}`,
-      kind: "issue" as const,
-      title: `Issue opened · ${r.title}`,
-      detail: `${r.severity} severity · ${r.status}`,
-      at: r.raised_at,
-      actor: null,
-      ...implContext(r.implementation_id),
-    })),
-    ...(escalations ?? []).map((r: any) => ({
-      key: `esc-${r.id}`,
-      kind: "escalation" as const,
-      title: `Escalation · ${r.title}`,
-      detail: `${r.severity} · ${r.status}`,
-      at: r.raised_at,
-      actor: r.raised_by ? (team.get(r.raised_by)?.name ?? null) : null,
-      ...implContext(r.implementation_id),
-    })),
+    ...(audit ?? [])
+      .filter((a: any) => (a.entity_type === "implementation" ? keep(a.entity_id) : !scoped))
+      .map((a: any) => ({
+        key: `audit-${a.id}`,
+        kind: "audit" as const,
+        title: isOwnerField(a.field_name)
+          ? `${a.entity_type} · Owner changed`
+          : a.field_name
+            ? `${a.entity_type} · ${a.field_name} changed`
+            : `${a.entity_type} updated`,
+        detail: isOwnerField(a.field_name)
+          ? `${ownerLabel(a.old_value)} → ${ownerLabel(a.new_value)}${a.change_reason ? ` · ${a.change_reason}` : ""}`
+          : a.field_name
+            ? `${a.old_value ?? "—"} → ${a.new_value ?? "—"}${a.change_reason ? ` · ${a.change_reason}` : ""}`
+            : a.change_reason,
+        at: a.changed_at,
+        actor: a.changed_by ? (team.get(a.changed_by)?.name ?? null) : null,
+        ...implContext(a.entity_type === "implementation" ? a.entity_id : null),
+      })),
+    ...(risks ?? [])
+      .filter((r: any) => keep(r.implementation_id))
+      .map((r: any) => ({
+        key: `risk-${r.id}`,
+        kind: "risk" as const,
+        title: `Risk raised · ${r.title}`,
+        detail: `${r.severity} severity · ${r.likelihood} likelihood · ${r.status}`,
+        at: r.identified_at,
+        actor: null,
+        ...implContext(r.implementation_id),
+      })),
+    ...(issues ?? [])
+      .filter((r: any) => keep(r.implementation_id))
+      .map((r: any) => ({
+        key: `issue-${r.id}`,
+        kind: "issue" as const,
+        title: `Issue opened · ${r.title}`,
+        detail: `${r.severity} severity · ${r.status}`,
+        at: r.raised_at,
+        actor: null,
+        ...implContext(r.implementation_id),
+      })),
+    ...(escalations ?? [])
+      .filter((r: any) => keep(r.implementation_id))
+      .map((r: any) => ({
+        key: `esc-${r.id}`,
+        kind: "escalation" as const,
+        title: `Escalation · ${r.title}`,
+        detail: `${r.severity} · ${r.status}`,
+        at: r.raised_at,
+        actor: r.raised_by ? (team.get(r.raised_by)?.name ?? null) : null,
+        ...implContext(r.implementation_id),
+      })),
   ]
     .sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime())
     .slice(0, 30);
@@ -281,8 +353,8 @@ export async function loadHome(): Promise<HomeData> {
  * Leadership layer loader. Built entirely on the Home query set plus stage
  * history durations and a scoped full-record fetch for graduation candidates.
  */
-export async function loadLeadership(): Promise<LeadershipData> {
-  const home = await loadHome();
+export async function loadLeadership(scope?: ResolvedScope | null): Promise<LeadershipData> {
+  const home = await loadHome(scope);
 
   const { data: history } = await db()
     .from("implementation_stage_history")

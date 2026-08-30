@@ -21,6 +21,8 @@ import type {
   StageTransition,
   TamRequest,
 } from "./presale-types";
+import { matchesScope } from "./ownership";
+import type { ResolvedScope } from "./ownership.server";
 
 const db = () => supabaseAdmin as any;
 
@@ -86,7 +88,17 @@ export interface PipelineDeal extends Account {
   se_owner_name: string | null;
 }
 
-export async function loadPipeline(): Promise<{ deals: PipelineDeal[]; stages: PipelineStage[] }> {
+/**
+ * The pre-sale board.
+ *
+ * Scoped on the ACCOUNT's own owners (am/se) rather than through
+ * implementations: a deal in Prospect has no implementation yet, so scoping it
+ * by delivery ownership would empty the left-hand columns of the board — the
+ * columns a seller cares most about.
+ */
+export async function loadPipeline(
+  scope?: ResolvedScope | null,
+): Promise<{ deals: PipelineDeal[]; stages: PipelineStage[] }> {
   // Loaded alongside the deals rather than after them: the board needs both to
   // render one column per configured stage, and a waterfall here is a second
   // round trip on the busiest internal page.
@@ -96,7 +108,21 @@ export async function loadPipeline(): Promise<{ deals: PipelineDeal[]; stages: P
     loadPipelineStages(),
   ]);
   if (error) throw new Error(error.message);
-  const deals = ((accounts ?? []) as Account[]).map((a) => ({
+  const inScope = (a: Account) =>
+    !scope ||
+    matchesScope(
+      {
+        implementationOwnerId: null,
+        csmOwnerId: null,
+        amOwnerProfileId: a.am_owner_id ?? null,
+        seOwnerProfileId: a.se_owner_id ?? null,
+      },
+      scope.scope,
+      scope.viewer,
+      scope.person ?? null,
+    );
+
+  const deals = ((accounts ?? []) as Account[]).filter(inScope).map((a) => ({
     ...a,
     am_owner_name: a.am_owner_id ? (names.get(a.am_owner_id) ?? null) : null,
     se_owner_name: a.se_owner_id ? (names.get(a.se_owner_id) ?? null) : null,

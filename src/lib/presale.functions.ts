@@ -8,9 +8,29 @@ import { STAGES } from "./presale-stages";
 
 export const getPipeline = createServerFn({ method: "GET" })
   .middleware([requireInternalAuth])
-  .handler(async () => {
+  .inputValidator(
+    (data: unknown) =>
+      z
+        .object({ scope: z.string().trim().max(60).optional() })
+        .optional()
+        .parse(data) ?? {},
+  )
+  .handler(async ({ data, context }) => {
     const { loadPipeline } = await import("./presale.server");
-    return loadPipeline();
+    const { resolveScope } = await import("./ownership.server");
+    const { describeScope } = await import("./ownership");
+    // Who is asking comes from the request context, never from `data`.
+    const resolved = await resolveScope(context.profile.id, data?.scope ?? null);
+    const pipeline = await loadPipeline(resolved);
+    return {
+      ...pipeline,
+      scope: {
+        mode: resolved.scope.mode,
+        person_id: resolved.scope.personId,
+        label: describeScope(resolved.scope, resolved.viewer, resolved.personName),
+        viewer_name: resolved.viewer.name,
+      },
+    };
   });
 
 export const addDeal = createServerFn({ method: "POST" })

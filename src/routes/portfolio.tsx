@@ -7,6 +7,8 @@ import { AccountRowList } from "@/components/account-rows";
 
 import { PageBody, PageHeader } from "@/components/page";
 import { NoRows, Panel, SeverityChip, StageBadge } from "@/components/record";
+import { ScopeSwitch } from "@/components/scope-switch";
+import { useScope } from "@/lib/use-scope";
 import { getLeadership } from "@/lib/hub.functions";
 import { fmtDate, fmtMoney, humanize, stageLabel } from "@/lib/hub-format";
 import { READINESS_STATE_LABEL } from "@/lib/graduation-readiness";
@@ -35,10 +37,11 @@ import {
 import type { ImplementationRow } from "@/lib/hub-types";
 import { cn } from "@/lib/utils";
 
-const leadershipQuery = queryOptions({
-  queryKey: ["leadership"],
-  queryFn: () => getLeadership(),
-});
+const leadershipQuery = (scope: string | null) =>
+  queryOptions({
+    queryKey: ["leadership", scope],
+    queryFn: () => getLeadership({ data: scope ? { scope } : {} }),
+  });
 
 export const Route = createFileRoute("/portfolio")({
   head: () => ({
@@ -62,8 +65,11 @@ export const Route = createFileRoute("/portfolio")({
       { name: "twitter:card", content: "summary" },
     ],
   }),
-  loader: ({ context }) => {
-    context.queryClient.ensureQueryData(leadershipQuery);
+  validateSearch: (search: Record<string, unknown>): { scope?: string } =>
+    typeof search["scope"] === "string" ? { scope: search["scope"] as string } : {},
+  loaderDeps: ({ search }: { search: { scope?: string } }) => ({ scope: search.scope ?? null }),
+  loader: ({ context, deps }) => {
+    context.queryClient.ensureQueryData(leadershipQuery(deps.scope));
   },
   errorComponent: ({ error }) => (
     <div role="alert" className="p-6 text-[13px] text-destructive">
@@ -201,7 +207,8 @@ function implMeta(impl: ImplementationRow) {
 }
 
 function LeadershipPage() {
-  const { data } = useSuspenseQuery(leadershipQuery);
+  const { param, setScope } = useScope();
+  const { data } = useSuspenseQuery(leadershipQuery(param));
   const [filter, setFilter] = useState<PortfolioFilterId | null>(null);
   const [stageFilter, setStageFilter] = useState<string | null>(null);
   const [dwellStage, setDwellStage] = useState<string | null>(null);
@@ -238,9 +245,12 @@ function LeadershipPage() {
         title="Leadership"
         description="Where the team needs management intervention — concentration, coverage and the calls only a lead can make. Every row deep-links into the account it came from."
         actions={
-          <span className="font-mono text-[11px] text-muted-foreground">
-            {rollup.total} implementations · {rollup.owners} owners
-          </span>
+          <div className="flex items-center gap-2">
+            <span className="font-mono text-[11px] text-muted-foreground">
+              {rollup.total} implementations · {rollup.owners} owners
+            </span>
+            <ScopeSwitch scope={data.scope} onChange={setScope} />
+          </div>
         }
       />
       <PageBody className="space-y-4">

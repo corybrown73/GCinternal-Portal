@@ -6,13 +6,16 @@ import { PageBody, PageHeader } from "@/components/page";
 import { DealBoard } from "@/components/presale/deal-board";
 import { CsvImportDialog, NewDealDialog } from "@/components/presale/deal-dialogs";
 import { canEditSales, useProfile } from "@/lib/auth";
+import { ScopeSwitch } from "@/components/scope-switch";
+import { useScope } from "@/lib/use-scope";
 import { getPipeline, moveDealStage } from "@/lib/presale.functions";
 import type { AccountStage } from "@/lib/presale-stages";
 
-const pipelineQuery = queryOptions({
-  queryKey: ["pipeline"],
-  queryFn: () => getPipeline(),
-});
+const pipelineQuery = (scope: string | null) =>
+  queryOptions({
+    queryKey: ["pipeline", scope],
+    queryFn: () => getPipeline({ data: scope ? { scope } : {} }),
+  });
 
 export const Route = createFileRoute("/pipeline")({
   head: () => ({
@@ -25,10 +28,13 @@ export const Route = createFileRoute("/pipeline")({
       },
     ],
   }),
-  loader: ({ context }) => {
+  validateSearch: (search: Record<string, unknown>): { scope?: string } =>
+    typeof search["scope"] === "string" ? { scope: search["scope"] as string } : {},
+  loaderDeps: ({ search }: { search: { scope?: string } }) => ({ scope: search.scope ?? null }),
+  loader: ({ context, deps }) => {
     // Prefetch is best-effort: on the SSR pass there is no bearer token, so the
     // auth-gated serverFn fails there and the client fetch takes over.
-    void context.queryClient.ensureQueryData(pipelineQuery).catch(() => {});
+    void context.queryClient.ensureQueryData(pipelineQuery(deps.scope)).catch(() => {});
   },
   errorComponent: ({ error }) => (
     <div role="alert" className="p-6 text-[13px] text-destructive">
@@ -39,7 +45,8 @@ export const Route = createFileRoute("/pipeline")({
 });
 
 function PipelinePage() {
-  const { data } = useSuspenseQuery(pipelineQuery);
+  const { param, setScope } = useScope();
+  const { data } = useSuspenseQuery(pipelineQuery(param));
   const { profile } = useProfile();
   const queryClient = useQueryClient();
   const move = useServerFn(moveDealStage);
@@ -62,6 +69,7 @@ function PipelinePage() {
             <span className="font-mono text-[11px] text-muted-foreground">
               {data.deals.length} deals · ${arrTotal.toLocaleString()}
             </span>
+            <ScopeSwitch scope={data.scope} onChange={setScope} />
             {editable ? (
               <>
                 <CsvImportDialog />
