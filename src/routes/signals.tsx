@@ -199,8 +199,12 @@ function SignalsPage() {
                   {WAITING_ON_LABEL[group.party]}
                 </p>
                 <p className="font-mono text-[18px]">{group.implementations.length}</p>
+                {/* Was slice(0, 6) while the count above used the whole array,
+                    so a group of 9 printed "9" and rendered 6 — three accounts
+                    invisible with nothing saying so. A list that silently
+                    disagrees with its own heading is worse than a long list. */}
                 <ul className="mt-1 space-y-1">
-                  {group.implementations.slice(0, 6).map((row) => (
+                  {group.implementations.map((row) => (
                     <li key={row.implementation_id} className="text-[12px]">
                       <AccountLink
                         customerId={row.customer_id}
