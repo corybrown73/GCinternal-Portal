@@ -56,7 +56,7 @@ import { ADOPTION_KIND_LABEL, type AdoptionKind } from "@/lib/adoption-input";
 import { contactRoleLabel } from "@/lib/customer-contact-input";
 import { AddCustomerContact, EditCustomerContact } from "@/components/customer-contact-write";
 import {
-  AttentionBand,
+  CollapsibleSections,
   Field,
   NoRows,
   Panel,
@@ -89,6 +89,7 @@ import {
   launchStateConflict,
   meaningfulEvents,
   nextAction,
+  NEXT_ACTION_UNKNOWN,
   openItems,
   proveValueState,
   proveValueGaps,
@@ -338,7 +339,7 @@ function Customer360Page() {
             date, its own stages and its own pace. Each lane is that project's
             board at a glance and deep-links to it through `?impl=`. With a
             single project this collapses to just that project's rail. */}
-        <div className="min-w-0 px-6 pt-3">
+        <div className="min-w-0 px-6 pt-2.5">
           <ProjectTimelines
             customerId={customerId}
             tab={tab}
@@ -347,12 +348,16 @@ function Customer360Page() {
           />
         </div>
 
-        <div className="px-6 pb-4 pt-3">
-          <AttentionBand>
-            <PrimarySignal label="What matters now" value={whatMattersNow(record)} />
-            <PrimarySignal label="Next action" value={nextAction(record, impl)} />
-          </AttentionBand>
-        </div>
+        {/* THE ATTENTION BAND, RE-CUT.
+            It used to be a tall muted block holding two label-above-value
+            stacks — four lines and ~120px of header for what is, on most
+            accounts, one short sentence and one instruction.
+
+            Now the label sits on the same baseline as its value in a fixed
+            leading column, so the eye lands on the sentence and the label is
+            available without being read. Two rows instead of four, and the
+            space it gives back is space the sections below get to use. */}
+        <AttentionSummary now={whatMattersNow(record)} next={nextAction(record, impl)} />
 
         <nav className="flex flex-wrap gap-px border-t border-border px-4">
           {TABS.map((t) => (
@@ -374,19 +379,108 @@ function Customer360Page() {
         </nav>
       </header>
 
-      <div className="space-y-4 px-6 py-4">
-        {tab === "overview" ? <OverviewTab record={record} customerId={customerId} /> : null}
-        {tab === "journey" ? <JourneyTab record={record} customerId={customerId} /> : null}
-        {tab === "solution" ? <SolutionTab record={record} customerId={customerId} /> : null}
-        {tab === "requirements" ? (
-          <RequirementsTab record={record} customerId={customerId} />
-        ) : null}
-        {tab === "decisions" ? <DecisionsTab record={record} customerId={customerId} /> : null}
-        {tab === "risks" ? <RisksTab record={record} customerId={customerId} /> : null}
+      <CollapsibleSections scope={`customer:${tab}`}>
+        <div className="space-y-3 px-6 py-4">
+          <SectionControls scope={`customer:${tab}`} />
+          {tab === "overview" ? <OverviewTab record={record} customerId={customerId} /> : null}
+          {tab === "journey" ? <JourneyTab record={record} customerId={customerId} /> : null}
+          {tab === "solution" ? <SolutionTab record={record} customerId={customerId} /> : null}
+          {tab === "requirements" ? (
+            <RequirementsTab record={record} customerId={customerId} />
+          ) : null}
+          {tab === "decisions" ? <DecisionsTab record={record} customerId={customerId} /> : null}
+          {tab === "risks" ? <RisksTab record={record} customerId={customerId} /> : null}
 
-        {tab === "evidence" ? <EvidenceTab record={record} customerId={customerId} /> : null}
-        {tab === "history" ? <HistoryTab record={record} /> : null}
+          {tab === "evidence" ? <EvidenceTab record={record} customerId={customerId} /> : null}
+          {tab === "history" ? <HistoryTab record={record} /> : null}
+        </div>
+      </CollapsibleSections>
+    </div>
+  );
+}
+
+/**
+ * What matters now, and what to do about it — on two lines instead of four.
+ *
+ * Renders NOTHING when there is nothing to say. A permanent band reading
+ * "nothing escalated / next action not recorded" trains people to skip the one
+ * place the app puts urgent things, which is the opposite of what a band like
+ * this is for.
+ */
+function AttentionSummary({ now, next }: { now: string; next: string }) {
+  const hasNow = Boolean(now) && !/^nothing\b/i.test(now);
+  const hasNext = Boolean(next) && next !== NEXT_ACTION_UNKNOWN;
+  if (!hasNow && !hasNext) return null;
+
+  return (
+    <div className="px-6 pb-3 pt-2.5">
+      <div className="rounded-lg bg-muted px-3.5 py-2.5">
+        <dl className="space-y-1.5">
+          {hasNow ? (
+            <div className="flex min-w-0 items-baseline gap-3">
+              <dt className="w-[52px] shrink-0 text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+                Now
+              </dt>
+              <dd className="min-w-0 text-[13px] font-semibold tracking-tight">{now}</dd>
+            </div>
+          ) : null}
+          {hasNext ? (
+            <div className="flex min-w-0 items-baseline gap-3">
+              <dt className="w-[52px] shrink-0 text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+                Next
+              </dt>
+              <dd className="min-w-0 text-[13px] font-semibold tracking-tight">{next}</dd>
+            </div>
+          ) : null}
+        </dl>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Expand all / collapse all for the sections below.
+ *
+ * The reason this exists is the reason collapsing was asked for: landing on a
+ * customer and seeing every section a click away. "Collapse all" gets you that
+ * view in one action instead of eight, and "expand all" gets you back.
+ *
+ * It writes the same localStorage keys the panels read, then reloads the scope
+ * by remounting them through a key change — the panels own their own state, so
+ * this sets the stored value and nudges them to re-read it.
+ */
+function SectionControls({ scope }: { scope: string }) {
+  const setAll = (open: boolean) => {
+    try {
+      const prefix = `panel:${scope}:`;
+      for (let i = 0; i < window.localStorage.length; i += 1) {
+        const k = window.localStorage.key(i);
+        if (k && k.startsWith(prefix)) window.localStorage.setItem(k, open ? "1" : "0");
+      }
+    } catch {
+      /* storage unavailable; the buttons below still work on this render */
+    }
+    // The panels read storage on mount, so a reload is what applies this to all
+    // of them at once. Cheap here — the record is already in the query cache.
+    window.location.reload();
+  };
+
+  return (
+    <div className="flex justify-end gap-1">
+      <button
+        type="button"
+        onClick={() => setAll(false)}
+        className="lift rounded-md bg-card px-2 py-1 text-[11px] font-medium text-muted-foreground hover:text-foreground"
+      >
+        Collapse all
+      </button>
+      <button
+        type="button"
+        onClick={() => setAll(true)}
+        className="lift rounded-md bg-card px-2 py-1 text-[11px] font-medium text-muted-foreground hover:text-foreground"
+      >
+        Expand all
+      </button>
     </div>
   );
 }

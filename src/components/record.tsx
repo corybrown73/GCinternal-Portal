@@ -1,4 +1,6 @@
-import type { ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
+import { ChevronDown } from "lucide-react";
+
 import { cn } from "@/lib/utils";
 import { humanize, stageLabel } from "@/lib/hub-format";
 import { PACE_CHIP, PACE_LABEL, PACE_TEXT, type Pace } from "@/lib/pace";
@@ -184,6 +186,32 @@ export function PrimarySignal({
   );
 }
 
+/**
+ * Turns every Panel beneath it into a collapsible section.
+ *
+ * WHY A CONTEXT RATHER THAN A PROP ON 24 CALL SITES. The point of collapsing is
+ * to see the whole set of sections at once and open the two you need — which
+ * only works if ALL of them collapse. Opting each one in by hand guarantees
+ * that the next section somebody adds is the one that does not, and a row of
+ * foldable headers with one immovable panel in the middle looks broken.
+ *
+ * Scoped, so nothing outside the wrapped subtree changes behaviour.
+ */
+const CollapseScope = createContext<{ scope: string; defaultOpen: boolean } | null>(null);
+
+export function CollapsibleSections({
+  scope,
+  defaultOpen = true,
+  children,
+}: {
+  /** Namespaces the remembered state, e.g. "customer:overview". */
+  scope: string;
+  defaultOpen?: boolean;
+  children: ReactNode;
+}) {
+  return <CollapseScope.Provider value={{ scope, defaultOpen }}>{children}</CollapseScope.Provider>;
+}
+
 export function Panel({
   title,
   count,
@@ -193,6 +221,9 @@ export function Panel({
   className,
   id,
   level = "default",
+  collapsible = false,
+  defaultOpen = true,
+  collapseKey,
 }: {
   title: ReactNode;
   count?: number;
@@ -203,6 +234,21 @@ export function Panel({
   className?: string;
   id?: string;
   /**
+   * Make the whole header a disclosure control.
+   *
+   * WHY THIS IS OPT-IN. A panel that collapses is only useful where there are
+   * several of them competing for one screen — the record tabs. A lone panel
+   * that can be folded away is a control that does nothing for anybody.
+   */
+  collapsible?: boolean;
+  defaultOpen?: boolean;
+  /**
+   * Remembers open/closed per person, per section, across visits. Without it
+   * every navigation re-collapses the sections somebody just opened, which is
+   * worse than not collapsing at all.
+   */
+  collapseKey?: string;
+  /**
    * Visual weight only — no behaviour change.
    * primary: decision-relevant, strongest heading.
    * supporting: shaded container, quieter heading.
@@ -211,6 +257,29 @@ export function Panel({
   level?: "primary" | "default" | "supporting" | "reference";
 }) {
   const bordered = level !== "reference";
+  const scope = useContext(CollapseScope);
+
+  // A `reference` panel has no card and no header band, so there is nothing to
+  // click and nothing to fold. It stays as it is inside a collapsible scope.
+  const isCollapsible = (collapsible || scope !== null) && bordered;
+
+  // An explicit key wins; otherwise the title supplies it, which is why the
+  // title must be a plain string for a panel to remember anything. A panel
+  // whose title is markup still collapses — it just forgets between visits,
+  // which is better than two panels silently sharing one key.
+  const derivedKey =
+    collapseKey ?? (scope && typeof title === "string" ? `${scope.scope}:${title}` : undefined);
+
+  const [open, setOpen] = useCollapseState(
+    derivedKey,
+    scope ? scope.defaultOpen && defaultOpen : defaultOpen,
+    isCollapsible,
+  );
+
+  // Rendered on the header whether or not the panel collapses, so the header's
+  // layout does not jump between a collapsible section and a fixed one.
+  const HeaderTag = isCollapsible ? "button" : "header";
+
   return (
     <section
       id={id}
@@ -235,9 +304,17 @@ export function Panel({
         className,
       )}
     >
-      <header
+      <HeaderTag
+        {...(isCollapsible
+          ? {
+              type: "button" as const,
+              onClick: () => setOpen(!open),
+              "aria-expanded": open,
+              ...(id ? { "aria-controls": `${id}-body` } : {}),
+            }
+          : {})}
         className={cn(
-          "flex items-center justify-between gap-3",
+          "flex w-full items-center justify-between gap-3 text-left",
           bordered ? "px-3 py-2" : "px-0 py-1",
           // EVERY bordered panel now gets a filled header band, not just the
           // `primary` ones. A heading that shares its background with the rows
@@ -246,6 +323,9 @@ export function Panel({
           bordered ? "border-b border-border bg-surface" : null,
           level === "supporting" ? "border-b border-border/70" : null,
           level === "primary" ? "py-2.5" : null,
+          // The whole band is the hit target, not a 12px chevron. A disclosure
+          // you have to aim at is one people stop using.
+          isCollapsible ? "cursor-pointer transition-colors hover:bg-muted" : null,
         )}
       >
         <h2
@@ -269,12 +349,79 @@ export function Panel({
         </h2>
         <div className="flex items-center gap-3">
           {meta ? <div className="text-[11px] text-muted-foreground">{meta}</div> : null}
-          {action}
+          {/* The action lives inside a <button> header when collapsible, and a
+              button inside a button is invalid HTML that browsers silently
+              un-nest. Rendering it as a span with its own click handling would
+              be a second, worse button; instead the action moves below the
+              header, where it is still one click away and still legal. */}
+          {action && !isCollapsible ? action : null}
+          {isCollapsible ? (
+            <ChevronDown
+              className={cn(
+                "h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform duration-150",
+                open ? null : "-rotate-90",
+              )}
+              aria-hidden="true"
+            />
+          ) : null}
         </div>
-      </header>
-      {children}
+      </HeaderTag>
+      {open ? (
+        <div {...(id ? { id: `${id}-body` } : {})}>
+          {action && isCollapsible ? (
+            <div className="flex justify-end border-b border-border px-3 py-1.5">{action}</div>
+          ) : null}
+          {children}
+        </div>
+      ) : null}
     </section>
   );
+}
+
+/**
+ * Open/closed for one collapsible section, remembered per browser.
+ *
+ * Reads on mount rather than during render: the server has no localStorage, so
+ * initialising from it directly would make the first client render disagree
+ * with the HTML that arrived and React would throw away the whole subtree.
+ * Every section therefore renders at its default first and settles a frame
+ * later, which is invisible and correct.
+ *
+ * Every access is wrapped, because storage throws outright in a few real
+ * situations — Safari private browsing, a browser set to block site data — and
+ * a section that cannot remember its state must still open and close.
+ */
+function useCollapseState(
+  key: string | undefined,
+  defaultOpen: boolean,
+  enabled: boolean,
+): [boolean, (next: boolean) => void] {
+  const [open, setOpenState] = useState(defaultOpen);
+
+  useEffect(() => {
+    if (!enabled || !key) return;
+    try {
+      const stored = window.localStorage.getItem(`panel:${key}`);
+      if (stored === "0" || stored === "1") setOpenState(stored === "1");
+    } catch {
+      /* storage unavailable — the default stands */
+    }
+  }, [key, enabled]);
+
+  const setOpen = useCallback(
+    (next: boolean) => {
+      setOpenState(next);
+      if (!key) return;
+      try {
+        window.localStorage.setItem(`panel:${key}`, next ? "1" : "0");
+      } catch {
+        /* the section still opens; it just will not be remembered */
+      }
+    },
+    [key],
+  );
+
+  return [open, setOpen];
 }
 
 export function Field({ label, value }: { label: string; value: ReactNode }) {

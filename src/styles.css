@@ -400,11 +400,27 @@
    * hover feedback at all.
    */
   @media (prefers-reduced-motion: no-preference) {
+    /*
+     * Rise AND grow. The 1px rise alone is honest but quiet; the scale is what
+     * makes a button feel like it comes to meet the pointer, which is the
+     * Salesforce quality being asked for here.
+     *
+     * 1.03 is deliberate and near the ceiling. Text inside a scaled element is
+     * resampled, so anything past about 1.04 goes soft on a non-retina display
+     * for the length of the transition — and a button whose label blurs when
+     * you point at it feels broken rather than lively. At 1.03 a 36px control
+     * grows about 1px: plainly felt, never mushy.
+     *
+     * Scale cannot reflow anything either — like translate, it is applied after
+     * layout — so a row of buttons stays exactly where it is.
+     */
     .lift:hover:not(:disabled):not([aria-disabled="true"]) {
-      transform: translateY(-1px);
+      transform: translateY(-1px) scale(1.03);
     }
+    /* Press returns to BOTH resting values at once. Dropping the rise but
+       keeping the growth would read as stuck rather than pressed. */
     .lift:active:not(:disabled):not([aria-disabled="true"]) {
-      transform: translateY(0);
+      transform: translateY(0) scale(0.99);
     }
     .lift-card:hover:not([aria-disabled="true"]) {
       transform: translateY(-2px);
