@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
+import { Suspense } from "react";
 import { queryOptions, useSuspenseQuery } from "@tanstack/react-query";
 import { ChevronRight, ArrowRight } from "lucide-react";
 
@@ -55,6 +56,10 @@ import { TIS_FULL, TIS_SHORT } from "@/lib/vocabulary";
 import { ADOPTION_KIND_LABEL, type AdoptionKind } from "@/lib/adoption-input";
 import { contactRoleLabel } from "@/lib/customer-contact-input";
 import { AddCustomerContact, EditCustomerContact } from "@/components/customer-contact-write";
+import { AttachmentsPanel } from "@/components/attachments-panel";
+import { StageGatesPanel } from "@/components/stage-gates-panel";
+import { getPlan } from "@/lib/plan.functions";
+import type { LifecycleStageId } from "@/lib/lifecycle";
 import {
   CollapsibleSections,
   Field,
@@ -562,6 +567,10 @@ function OverviewTab({ record, customerId }: { record: Customer360; customerId: 
   return (
     <div className="grid items-start gap-4 xl:grid-cols-3">
       <div className="space-y-4 xl:col-span-2">
+        {/* First on the page, above everything descriptive: the three things
+            that have to be true before this project moves on, and the control
+            that moves it. Ticking the last one IS the prompt to advance. */}
+        <StageGatesSection customerId={customerId} implementationId={impl.id} />
         <Panel title="Current state" level="primary">
           <dl className="grid grid-cols-2 gap-x-6 gap-y-3 px-3 py-2.5 md:grid-cols-4">
             <Field label="Stage" value={timeline.currentStageName} />
@@ -989,6 +998,18 @@ function OverviewTab({ record, customerId }: { record: Customer360; customerId: 
       </div>
 
       <div className="space-y-4">
+        {/* Every SOW, board and deck for this account in one list — including
+            the ones still living in the SOW and discovery-board fields, which
+            are read alongside so nothing that exists today disappears. */}
+        <Suspense
+          fallback={
+            <Panel title="Attachments" level="supporting">
+              <NoRows label="Loading…" />
+            </Panel>
+          }
+        >
+          <AttachmentsPanel implementationId={impl.id} />
+        </Suspense>
         <Panel title="Key people" level="supporting">
           <dl className="grid grid-cols-2 gap-3 px-3 py-2.5">
             <Field label="Implementation owner" value={dash(impl.owner_name)} />
@@ -2392,3 +2413,70 @@ function HistoryTab({ record }: { record: Customer360 }) {
     </Panel>
   );
 }
+
+/**
+ * The current stage's core criteria, loaded from the plan.
+ *
+ * A separate component with its own Suspense boundary so the rest of the
+ * Overview renders while the plan query resolves. Renders nothing at all when
+ * `work_items` is off or the project has no plan — a "To leave this stage"
+ * heading over an empty box is worse than no heading.
+ */
+function StageGatesSection({
+  customerId,
+  implementationId,
+}: {
+  customerId: string;
+  implementationId: string;
+}) {
+  return (
+    <Suspense fallback={null}>
+      <StageGatesInner customerId={customerId} implementationId={implementationId} />
+    </Suspense>
+  );
+}
+
+function StageGatesInner({
+  customerId,
+  implementationId,
+}: {
+  customerId: string;
+  implementationId: string;
+}) {
+  const { data: plan } = useSuspenseQuery(planQuery(implementationId));
+  if (!plan.enabled || plan.stages.length === 0) return null;
+
+  // The stage the project is actually in, from the plan's own rail rather than
+  // the lifecycle constant — a five-stage integration has no "stage 3 of 8".
+  const active = plan.stages.find((st) => st.status === "active") ?? plan.stages[0];
+  if (!active) return null;
+
+  const items = plan.items
+    .filter((i) => i.stage_instance_id === active.id)
+    .map((i) => ({
+      id: i.id,
+      task_key: i.task_key ?? null,
+      title: i.title,
+      status: i.status,
+      is_gate: i.is_gate,
+      party: i.party,
+      owner_name: i.owner_name ?? null,
+      due_at: i.due_at ?? null,
+    }));
+
+  return (
+    <StageGatesPanel
+      customerId={customerId}
+      implementationId={implementationId}
+      currentStage={active.stage_key as LifecycleStageId}
+      stageGateMode={active.gate_mode ?? null}
+      items={items}
+    />
+  );
+}
+
+const planQuery = (implementationId: string) =>
+  queryOptions({
+    queryKey: ["plan", implementationId],
+    queryFn: () => getPlan({ data: { implementationId } }),
+  });
