@@ -6,6 +6,7 @@ import { ExternalAccessError, loadSharedPlan, requireViewEnabled } from "./serve
 import { generateSnapshotToken, hashToken } from "./server/plan-tokens";
 import { buildSnapshotDTO, type SharedPlan, type SharedPlanSnapshot } from "./shared-plan";
 import { recordPlanEvent } from "./external-plan.server";
+import { appUrl } from "./app-url";
 
 /**
  * Weekly plan snapshots.
@@ -172,7 +173,7 @@ export async function mintSnapshotShare(
     payload: { snapshot_id: snapshotId, expires_at: expiresAt },
   });
 
-  const base = process.env["APP_URL"] ?? "http://localhost:3000";
+  const base = appUrl();
   return { url: `${base}/plan/s/${minted.token}`, expires_at: expiresAt };
 }
 

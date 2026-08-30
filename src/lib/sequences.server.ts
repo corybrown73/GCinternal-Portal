@@ -2,12 +2,9 @@ import { SignJWT, jwtVerify } from "jose";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { sendEmail } from "./server/email";
 import { audit } from "./server/audit";
+import { appUrl } from "./app-url";
 
 const db = () => supabaseAdmin as any;
-
-function appUrl(): string {
-  return process.env["APP_URL"] ?? "http://localhost:3000";
-}
 
 function secret(): Uint8Array {
   const s = process.env["TAM_TOKEN_SECRET"];

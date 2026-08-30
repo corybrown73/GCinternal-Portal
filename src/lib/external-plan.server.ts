@@ -22,6 +22,7 @@ import {
   verifyPlanSession,
 } from "./server/plan-tokens";
 import type { SharedPlan } from "./shared-plan";
+import { appUrl } from "./app-url";
 
 /**
  * The signed-link door and the five things a customer can do behind it.
@@ -39,10 +40,6 @@ import type { SharedPlan } from "./shared-plan";
  */
 
 const db = () => supabaseAdmin as any;
-
-function appUrl(): string {
-  return process.env["APP_URL"] ?? "http://localhost:3000";
-}
 
 function escapeHtml(s: string): string {
   return s

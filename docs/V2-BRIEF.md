@@ -2,7 +2,7 @@
 
 ## Who you are and what this is
 
-You are working on an internal post-sale delivery tool ("Implementation Hub" / "GoCanvas Handoff Hub", deployed at g-cinternal-portal.vercel.app — Next.js + Supabase). It tracks a customer from Closed/Won through implementation to handover to Customer Success.
+You are working on an internal post-sale delivery tool ("Implementation Hub" / "GoCanvas Handoff Hub", deployed at gcinternalportal.com — Next.js + Supabase). It tracks a customer from Closed/Won through implementation to handover to Customer Success.
 
 V1 works and has a real point of view. Your job is **not** to rewrite it. Your job is to take it from "a tracker for one kind of project" to "a delivery system that handles every kind of post-sale motion we run, and that customers can see."
 

@@ -7,6 +7,7 @@ import { generatePlanToken, hashPasscode } from "./server/plan-tokens";
 import { loadSharedPlan, type ExternalViewer } from "./server/external-viewer";
 import { recordPlanEvent } from "./external-plan.server";
 import type { SharedPlan } from "./shared-plan";
+import { appUrl } from "./app-url";
 
 /**
  * The internal side of external access: issue, revoke, rotate, set a passcode,
@@ -22,10 +23,6 @@ import type { SharedPlan } from "./shared-plan";
  */
 
 const db = () => supabaseAdmin as any;
-
-function appUrl(): string {
-  return process.env["APP_URL"] ?? "http://localhost:3000";
-}
 
 function escapeHtml(s: string): string {
   return s

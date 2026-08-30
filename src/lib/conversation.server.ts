@@ -13,6 +13,7 @@ import {
   type Participant,
 } from "./conversation";
 import { EVERYONE_HANDLE, makeHandle, parseMentions } from "./mentions";
+import { appUrl } from "./app-url";
 
 /**
  * The project conversation, internal side.
@@ -31,10 +32,6 @@ import { EVERYONE_HANDLE, makeHandle, parseMentions } from "./mentions";
  */
 
 const db = () => supabaseAdmin as any;
-
-function appUrl(): string {
-  return process.env["APP_URL"] ?? "http://localhost:3000";
-}
 
 function escapeHtml(s: string): string {
   return s

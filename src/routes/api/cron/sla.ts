@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { appUrl } from "@/lib/app-url";
 
 /**
  * GET/POST /api/cron/sla — hourly sweep (see vercel.json):
@@ -34,7 +35,7 @@ async function runSlaSweep(): Promise<Response> {
 
   const now = Date.now();
   const nowIso = new Date(now).toISOString();
-  const appUrl = process.env["APP_URL"] ?? "http://localhost:3000";
+  const base = appUrl();
   const summary = {
     warned: 0,
     breached: 0,
@@ -104,7 +105,7 @@ async function runSlaSweep(): Promise<Response> {
         `<div style="font-family:sans-serif;max-width:540px">
           <h2 style="color:#B45309;font-size:17px">First response due in ~${hoursLeft}h</h2>
           <p style="font-size:14px"><b>${escapeHtml(t.subject)}</b> has had no first response and is past half its SLA window.</p>
-          <p style="font-size:14px"><a href="${appUrl}/tickets/${t.id}">Open the ticket</a></p>
+          <p style="font-size:14px"><a href="${base}/tickets/${t.id}">Open the ticket</a></p>
         </div>`,
       );
     }
@@ -132,7 +133,7 @@ async function runSlaSweep(): Promise<Response> {
       kind: "sla_breach",
       severity: "critical",
       title: `SLA breach: ${t.subject}`,
-      detail: `Ticket from ${t.submitter_email ?? "unknown"} got no first response within 24 hours. ${appUrl}/tickets/${t.id}`,
+      detail: `Ticket from ${t.submitter_email ?? "unknown"} got no first response within 24 hours. ${base}/tickets/${t.id}`,
       customerId: t.customer_id,
       implementationId: t.implementation_id,
       payload: { ticket_id: t.id },

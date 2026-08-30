@@ -2,12 +2,9 @@ import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { sendEmail } from "./server/email";
 import { audit } from "./server/audit";
 import type { CallerProfile } from "./portal.server";
+import { appUrl } from "./app-url";
 
 const db = () => supabaseAdmin as any;
-
-function appUrl(): string {
-  return process.env["APP_URL"] ?? "http://localhost:3000";
-}
 
 function escapeHtml(s: string): string {
   return s

@@ -5,10 +5,7 @@ import { signDecisionToken } from "./tokens";
 import { sendEmail } from "./email";
 import { audit } from "./audit";
 import type { Account, TamRequest } from "../presale-types";
-
-function appUrl(): string {
-  return process.env["APP_URL"] ?? "http://localhost:3000";
-}
+import { appUrl } from "../app-url";
 
 export async function createTamRequest(input: {
   accountId: string;

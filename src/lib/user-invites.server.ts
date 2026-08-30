@@ -1,12 +1,9 @@
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { audit } from "./server/audit";
 import { sendEmail } from "./server/email";
+import { appUrl } from "./app-url";
 
 const db = () => supabaseAdmin as any;
-
-function appUrl(): string {
-  return process.env["APP_URL"] ?? "http://localhost:3000";
-}
 
 function escapeHtml(s: string): string {
   return s
