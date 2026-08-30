@@ -537,3 +537,133 @@
       radial-gradient(70rem 35rem at 100% 0%, oklch(0.6 0.06 190 / 0.1), transparent 55%);
   }
 }
+
+/* ---------------------------------------------------------------------------
+ * GoCanvas brand — the OUTWARD-FACING surfaces only
+ * ------------------------------------------------------------------------ */
+/*
+ * WHERE THIS APPLIES AND WHY IT IS SCOPED. Two audiences, two jobs.
+ *
+ * The internal app is a dense working tool for people who live in it all day:
+ * quiet greys, tight rows, information over impression. That stays exactly as
+ * it is.
+ *
+ * The sign-in page and the customer portal are seen by people who were, a
+ * second ago, on gocanvas.com — a customer opening a plan link should not feel
+ * they have been handed off to some other company's software. So those surfaces
+ * borrow the marketing brand: navy, the blue, the orange call to action, and a
+ * lot more air.
+ *
+ * Everything lives under `.gc-brand` rather than in :root. A brand palette
+ * loose in the global scope would creep into the internal app one component at
+ * a time, and the two are supposed to look different.
+ *
+ * Colours read from the gocanvas.com marketing site. They are approximations of
+ * a brand this app does not own the source files for — when the real logo and
+ * palette are dropped in through Appearance settings, that upload wins.
+ */
+.gc-brand {
+  --gc-navy: #0b2c5c;
+  --gc-navy-deep: #061e42;
+  --gc-blue: #1667e8;
+  --gc-blue-hover: #0f56c9;
+  --gc-blue-soft: #eaf1fe;
+  --gc-orange: #f15a29;
+  --gc-orange-hover: #d94a1d;
+  --gc-green: #00a651;
+  --gc-ink: #0a1f44;
+  --gc-body: #3d5378;
+  --gc-line: #d7e2f4;
+
+  background-color: #ffffff;
+  color: var(--gc-ink);
+}
+
+/* The marketing site sets headlines very large, very heavy and very tight. The
+   app's IBM Plex Sans is kept rather than pulling a second family down the
+   wire — the weight and tracking carry most of the character, and a webfont
+   that has not loaded yet is a worse first impression than a near match. */
+.gc-brand .gc-display {
+  font-weight: 700;
+  letter-spacing: -0.028em;
+  line-height: 1.04;
+  color: var(--gc-ink);
+}
+
+.gc-brand .gc-lede {
+  color: var(--gc-body);
+  line-height: 1.55;
+}
+
+/* Pill buttons, straight off the marketing header. */
+.gc-brand .gc-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border-radius: 999px;
+  font-weight: 600;
+  transition:
+    transform 120ms ease-out,
+    box-shadow 120ms ease-out,
+    background-color 120ms ease-out;
+}
+
+.gc-brand .gc-btn-primary {
+  background-color: var(--gc-blue);
+  color: #ffffff;
+}
+.gc-brand .gc-btn-primary:hover:not(:disabled) {
+  background-color: var(--gc-blue-hover);
+}
+
+.gc-brand .gc-btn-cta {
+  background-color: var(--gc-orange);
+  color: #ffffff;
+}
+.gc-brand .gc-btn-cta:hover:not(:disabled) {
+  background-color: var(--gc-orange-hover);
+}
+
+.gc-brand .gc-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .gc-brand .gc-btn:hover:not(:disabled) {
+    transform: translateY(-1px);
+  }
+  .gc-brand .gc-btn:active:not(:disabled) {
+    transform: translateY(0);
+  }
+}
+
+/* The soft blue field the marketing site floats its product shots on. */
+.gc-brand .gc-panel {
+  background-color: var(--gc-blue-soft);
+  border-radius: var(--r-xl);
+}
+
+.gc-brand .gc-card {
+  background-color: #ffffff;
+  border: 1px solid var(--gc-line);
+  border-radius: var(--r-lg);
+}
+
+.gc-brand .gc-topbar {
+  background-color: var(--gc-navy);
+  color: #ffffff;
+}
+
+/* The page wash behind it all — the same two faint radials the app uses, in
+   the brand's blues, so the outward pages feel related to the internal ones
+   without looking like them. */
+.gc-brand-page {
+  background-color: #ffffff;
+  background-image:
+    radial-gradient(70rem 35rem at 100% -5%, rgba(22, 103, 232, 0.09), transparent 60%),
+    radial-gradient(60rem 30rem at -10% 10%, rgba(11, 44, 92, 0.06), transparent 55%);
+  background-attachment: fixed;
+  background-repeat: no-repeat;
+}

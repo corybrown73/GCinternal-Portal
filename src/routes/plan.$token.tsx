@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 
+import { GoCanvasLogo } from "@/components/gocanvas-logo";
 import { SharedPlanView } from "@/components/shared-plan-view";
 import {
   commentOnPlanTask,
@@ -78,7 +79,8 @@ function PlanTokenPage() {
 
   if (state.state === "plan" && plan) {
     return (
-      <div className="min-h-screen bg-background">
+      <div className="gc-brand gc-brand-page min-h-screen">
+        <PlanBrandHeader />
         {error ? (
           <p role="alert" className="bg-destructive/10 px-4 py-2 text-center text-[12px]">
             {error}
@@ -160,14 +162,39 @@ function PlanTokenPage() {
 
 function Centered({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-4">
-      <div className="w-full max-w-sm rounded-md border border-border bg-card p-6">
-        <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-          GoCanvas onboarding
-        </p>
-        <h1 className="mt-1 text-[15px] font-semibold">{title}</h1>
-        {children}
+    <div className="gc-brand gc-brand-page flex min-h-screen flex-col">
+      <PlanBrandHeader />
+      <div className="flex flex-1 items-center justify-center px-4 py-10">
+        <div className="gc-card w-full max-w-md p-7 shadow-sm">
+          <h1 className="gc-display text-[22px]">{title}</h1>
+          {children}
+        </div>
       </div>
     </div>
+  );
+}
+
+/**
+ * The chrome around a plan opened from a link.
+ *
+ * A plan link is often a customer's FIRST contact with any of this — no login,
+ * no portal, just a URL in an email. Without the wordmark and the navy bar the
+ * page is an unattributed checklist from an unknown sender, which is exactly
+ * what a cautious person does not click into.
+ */
+function PlanBrandHeader() {
+  return (
+    <>
+      <div className="gc-topbar">
+        <div className="mx-auto flex h-9 w-full max-w-5xl items-center justify-end px-5 text-[11px]">
+          <span className="opacity-90">p. 703-436-8069</span>
+        </div>
+      </div>
+      <header className="border-b bg-white" style={{ borderColor: "var(--gc-line)" }}>
+        <div className="mx-auto flex h-16 w-full max-w-5xl items-center px-5">
+          <GoCanvasLogo />
+        </div>
+      </header>
+    </>
   );
 }

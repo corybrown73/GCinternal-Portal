@@ -4,6 +4,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { GoCanvasLogo } from "@/components/gocanvas-logo";
+import { Check } from "lucide-react";
 
 export const Route = createFileRoute("/login")({
   component: LoginPage,
@@ -56,132 +58,204 @@ function LoginPage() {
   const microsoftEnabled = import.meta.env["VITE_AUTH_MICROSOFT_ENABLED"] === "true";
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-4">
-      <div className="w-full max-w-sm">
-        <div className="mb-6 text-center">
-          <div className="text-lg font-semibold tracking-tight">GoCanvas Handoff Hub</div>
-          <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-            Sales · Onboarding · Implementation
-          </p>
+    // The brand palette is scoped to this wrapper. The internal app keeps its
+    // dense greys; this page is the first thing anybody sees and belongs to the
+    // marketing brand, not to the working tool behind it.
+    <div className="gc-brand gc-brand-page min-h-screen">
+      <header className="gc-topbar">
+        <div className="mx-auto flex h-11 w-full max-w-6xl items-center justify-end gap-6 px-5 text-[12px]">
+          <span className="opacity-90">p. 703-436-8069</span>
+          <span className="opacity-90">Help Center</span>
+        </div>
+      </header>
+
+      <div className="mx-auto w-full max-w-6xl px-5">
+        <div className="flex h-16 items-center">
+          <GoCanvasLogo />
         </div>
 
-        <div className="rounded-md border border-border bg-card p-5">
-          <div className="mb-4 grid grid-cols-2 gap-1 rounded-sm bg-muted p-0.5">
-            {(
-              [
-                ["internal", "GoCanvas team"],
-                ["customer", "Customer"],
-              ] as const
-            ).map(([m, label]) => (
-              <button
-                key={m}
-                type="button"
-                onClick={() => {
-                  setMode(m);
-                  setError(null);
-                  setLinkSent(false);
-                }}
-                className={`rounded-sm px-2 py-1.5 text-[13px] font-medium transition-colors ${
-                  mode === m ? "bg-card text-foreground shadow-sm" : "text-muted-foreground"
-                }`}
-              >
-                {label}
-              </button>
-            ))}
+        <div className="grid items-center gap-10 py-10 lg:grid-cols-2 lg:gap-16 lg:py-16">
+          {/* The marketing half. A sign-in page that is only a form tells a
+              customer nothing about where they have arrived; this says it in
+              the site's own voice, at the site's own scale. */}
+          <div className="hidden lg:block">
+            <p
+              className="text-[12px] font-semibold uppercase tracking-[0.14em]"
+              style={{ color: "var(--gc-body)" }}
+            >
+              Field Operations Platform
+            </p>
+            <h1 className="gc-display mt-4 text-[54px]">
+              Stop chasing data.
+              <br />
+              <span style={{ color: "var(--gc-blue)" }}>See progress as it happens.</span>
+            </h1>
+            <p className="gc-lede mt-6 max-w-md text-[16px]">
+              One place for the whole handoff — from the deal your AE closed to the crews submitting
+              from the field.
+            </p>
+            <div className="gc-panel mt-10 p-6">
+              <ul className="space-y-3 text-[14px]" style={{ color: "var(--gc-ink)" }}>
+                {[
+                  "Every project, every stage, one plan",
+                  "Your customer sees the same plan you do",
+                  "Nothing lost between sales and delivery",
+                ].map((line) => (
+                  <li key={line} className="flex items-start gap-2.5">
+                    <Check
+                      className="mt-0.5 h-4 w-4 shrink-0"
+                      style={{ color: "var(--gc-blue)" }}
+                    />
+                    {line}
+                  </li>
+                ))}
+              </ul>
+            </div>
           </div>
 
-          {mode === "internal" ? (
-            <form onSubmit={signInInternal} className="flex flex-col gap-3">
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="email">Work email</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  required
-                  autoComplete="email"
-                  placeholder="you@gocanvas.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                />
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="password">Password</Label>
-                  <Link
-                    to="/forgot-password"
-                    className="text-[11px] text-muted-foreground underline-offset-2 hover:underline"
+          <div className="mx-auto w-full max-w-md">
+            <h2 className="gc-display text-[28px] lg:hidden">Sign in</h2>
+            <div className="gc-card mt-4 p-6 shadow-sm lg:mt-0">
+              <div
+                className="mb-5 grid grid-cols-2 gap-1 rounded-full p-1"
+                style={{ backgroundColor: "var(--gc-blue-soft)" }}
+              >
+                {(
+                  [
+                    ["internal", "GoCanvas team"],
+                    ["customer", "Customer"],
+                  ] as const
+                ).map(([m, label]) => (
+                  <button
+                    key={m}
+                    type="button"
+                    onClick={() => {
+                      setMode(m);
+                      setError(null);
+                      setLinkSent(false);
+                    }}
+                    className="rounded-full px-3 py-1.5 text-[13px] font-semibold transition-colors"
+                    style={
+                      mode === m
+                        ? {
+                            backgroundColor: "#ffffff",
+                            color: "var(--gc-ink)",
+                            boxShadow: "0 1px 3px rgb(0 0 0 / .10)",
+                          }
+                        : { color: "var(--gc-body)" }
+                    }
                   >
-                    Forgot password?
-                  </Link>
+                    {label}
+                  </button>
+                ))}
+              </div>
+
+              {mode === "internal" ? (
+                <form onSubmit={signInInternal} className="flex flex-col gap-3">
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="email">Work email</Label>
+                    <Input
+                      id="email"
+                      type="email"
+                      required
+                      autoComplete="email"
+                      placeholder="you@gocanvas.com"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor="password">Password</Label>
+                      <Link
+                        to="/forgot-password"
+                        className="text-[11px] text-muted-foreground underline-offset-2 hover:underline"
+                      >
+                        Forgot password?
+                      </Link>
+                    </div>
+                    <Input
+                      id="password"
+                      type="password"
+                      required
+                      autoComplete="current-password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                    />
+                  </div>
+                  {error && <p className="text-[13px] text-destructive">{error}</p>}
+                  <button
+                    type="submit"
+                    disabled={busy}
+                    className="gc-btn gc-btn-primary mt-1 h-11 px-5 text-[14px]"
+                  >
+                    {busy ? "Signing in…" : "Sign in"}
+                  </button>
+                  {microsoftEnabled && (
+                    <button
+                      type="button"
+                      className="gc-btn h-11 px-5 text-[14px]"
+                      style={{ border: "1px solid var(--gc-line)", color: "var(--gc-ink)" }}
+                      onClick={() =>
+                        supabase.auth.signInWithOAuth({
+                          provider: "azure",
+                          options: {
+                            scopes: "email",
+                            redirectTo: `${window.location.origin}/auth/callback`,
+                          },
+                        })
+                      }
+                    >
+                      Sign in with Microsoft
+                    </button>
+                  )}
+                  <p className="text-center text-[12px] text-muted-foreground">
+                    New here?{" "}
+                    <Link
+                      to="/signup"
+                      className="text-foreground underline-offset-2 hover:underline"
+                    >
+                      Create an account
+                    </Link>
+                  </p>
+                </form>
+              ) : linkSent ? (
+                <div className="py-3 text-center">
+                  <p className="text-[13px] font-medium">Check your inbox</p>
+                  <p className="mt-1 text-[12px] text-muted-foreground">
+                    If you have portal access, a sign-in link for <b>{email}</b> is on its way. It
+                    signs you straight in — no password needed.
+                  </p>
                 </div>
-                <Input
-                  id="password"
-                  type="password"
-                  required
-                  autoComplete="current-password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                />
-              </div>
-              {error && <p className="text-[13px] text-destructive">{error}</p>}
-              <Button type="submit" disabled={busy} className="mt-1">
-                {busy ? "Signing in…" : "Sign in"}
-              </Button>
-              {microsoftEnabled && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() =>
-                    supabase.auth.signInWithOAuth({
-                      provider: "azure",
-                      options: {
-                        scopes: "email",
-                        redirectTo: `${window.location.origin}/auth/callback`,
-                      },
-                    })
-                  }
-                >
-                  Sign in with Microsoft
-                </Button>
+              ) : (
+                <form onSubmit={sendCustomerLink} className="flex flex-col gap-3">
+                  <p className="text-[12px] text-muted-foreground">
+                    Enter the email address your GoCanvas team invited, and we&apos;ll send you a
+                    one-click sign-in link.
+                  </p>
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="cust-email">Email</Label>
+                    <Input
+                      id="cust-email"
+                      type="email"
+                      required
+                      placeholder="you@yourcompany.com"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                    />
+                  </div>
+                  {error && <p className="text-[13px] text-destructive">{error}</p>}
+                  <button
+                    type="submit"
+                    disabled={busy}
+                    className="gc-btn gc-btn-cta h-11 px-5 text-[14px]"
+                  >
+                    {busy ? "Sending…" : "Email me a sign-in link"}
+                  </button>
+                </form>
               )}
-              <p className="text-center text-[12px] text-muted-foreground">
-                New here?{" "}
-                <Link to="/signup" className="text-foreground underline-offset-2 hover:underline">
-                  Create an account
-                </Link>
-              </p>
-            </form>
-          ) : linkSent ? (
-            <div className="py-3 text-center">
-              <p className="text-[13px] font-medium">Check your inbox</p>
-              <p className="mt-1 text-[12px] text-muted-foreground">
-                If you have portal access, a sign-in link for <b>{email}</b> is on its way. It signs
-                you straight in — no password needed.
-              </p>
             </div>
-          ) : (
-            <form onSubmit={sendCustomerLink} className="flex flex-col gap-3">
-              <p className="text-[12px] text-muted-foreground">
-                Enter the email address your GoCanvas team invited, and we&apos;ll send you a
-                one-click sign-in link.
-              </p>
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="cust-email">Email</Label>
-                <Input
-                  id="cust-email"
-                  type="email"
-                  required
-                  placeholder="you@yourcompany.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                />
-              </div>
-              {error && <p className="text-[13px] text-destructive">{error}</p>}
-              <Button type="submit" disabled={busy}>
-                {busy ? "Sending…" : "Email me a sign-in link"}
-              </Button>
-            </form>
-          )}
+          </div>
         </div>
       </div>
     </div>
