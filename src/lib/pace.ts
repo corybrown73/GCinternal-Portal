@@ -1,4 +1,5 @@
 import { STAGE_FLAG_DAYS } from "./hub-format";
+import { calendarDaysBetween, daysSinceInstant, daysUntilDate } from "./dates";
 
 /**
  * Is this on pace, or is it slipping?
@@ -34,17 +35,17 @@ export type Pace = {
   days?: number;
 };
 
-const dayMs = 86_400_000;
-
-/** Whole days between two instants, floored, ignoring clock time. */
-function daysBetween(a: Date, b: Date): number {
-  const x = new Date(a);
-  const y = new Date(b);
-  x.setHours(0, 0, 0, 0);
-  y.setHours(0, 0, 0, 0);
-  return Math.round((x.getTime() - y.getTime()) / dayMs);
-}
-
+/**
+ * This file used to carry its own `daysBetween`, normalising both sides with
+ * LOCAL `setHours(0,0,0,0)`. `target_launch_date` is a Postgres `date`, so it
+ * arrives as "2026-08-02" and parses at UTC midnight — normalising that to
+ * local midnight in UTC-4 walked it back a day, while `fmtDate` rendered the
+ * same value in UTC. That is why Customer 360 and Signals read one day more
+ * than Home and Leadership for the same account.
+ *
+ * All of it now goes through dates.ts, which handles a date-only column as a
+ * calendar date and a timestamp as an instant.
+ */
 function parse(value: string | null | undefined): Date | null {
   if (!value) return null;
   const d = new Date(value);
@@ -70,7 +71,7 @@ export function datePace(
 
   if (done) {
     if (!targetDate) return { level: "done", reason: "Delivered. No target date was set." };
-    const over = daysBetween(done, targetDate);
+    const over = calendarDaysBetween(target, completedAt) ?? 0;
     if (over > 0) {
       return {
         level: "done",
@@ -90,7 +91,7 @@ export function datePace(
 
   if (!targetDate) return { level: "unknown", reason: "No target date set." };
 
-  const remaining = daysBetween(targetDate, now);
+  const remaining = daysUntilDate(target, now) ?? 0;
   if (remaining < 0) {
     return {
       level: "late",
@@ -125,7 +126,7 @@ export function dwellPace(
   const entered = parse(enteredAt);
   if (!entered) return { level: "unknown", reason: "No stage-entry date recorded." };
 
-  const days = Math.max(0, daysBetween(now, entered));
+  const days = daysSinceInstant(enteredAt, now) ?? 0;
   const target = targetDays && targetDays > 0 ? targetDays : null;
 
   if (!target) {

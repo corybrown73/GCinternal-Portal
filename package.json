@@ -12,7 +12,8 @@
     "format": "prettier --write .",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test:tz": "TZ=America/New_York vitest run"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.122.0",

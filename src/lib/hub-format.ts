@@ -4,6 +4,7 @@ import {
   STAGE_ALIASES,
   type LifecycleStageId,
 } from "./lifecycle";
+import { daysSinceInstant } from "./dates";
 
 export const STAGE_FLAG_DAYS = 14;
 
@@ -33,10 +34,14 @@ export function stageIndex(raw: string | null | undefined): number {
   return Object.keys(LIFECYCLE_STAGE_MAP).indexOf(id);
 }
 
+/**
+ * Kept as the name every caller already uses; the counting lives in dates.ts.
+ * This one is for INSTANTS — stage entry, escalation raised. A date-only column
+ * belongs in `daysUntilDate` or `calendarDaysBetween`, which handle it as a
+ * calendar date rather than as midnight somewhere.
+ */
 export function daysSince(iso: string | null | undefined): number | null {
-  if (!iso) return null;
-  const ms = Date.now() - new Date(iso).getTime();
-  return Math.max(0, Math.floor(ms / 86_400_000));
+  return daysSinceInstant(iso);
 }
 
 export function isOverdue(due: string | null | undefined): boolean {

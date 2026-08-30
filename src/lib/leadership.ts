@@ -31,10 +31,12 @@ import {
 } from "./graduation-readiness";
 import { LIFECYCLE_STAGES, type LifecycleStageId } from "./lifecycle";
 import { STAGE_FLAG_DAYS, daysSince, isOverdue, normalizeStage, stageLabel } from "./hub-format";
+import { daysUntilDate } from "./dates";
 
 const DAY = 86_400_000;
-const daysUntil = (date: string | null | undefined) =>
-  date ? Math.ceil((new Date(date).getTime() - Date.now()) / DAY) : null;
+// Identical to the copy that was in home-triage.ts, which is exactly how the
+// two ended up agreeing with each other and disagreeing with pace.ts.
+const daysUntil = (date: string | null | undefined) => daysUntilDate(date);
 
 const bundleFor = (triage: TriageBundle[], id: string) =>
   triage.find((t) => t.implementation_id === id);

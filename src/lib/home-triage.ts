@@ -15,6 +15,7 @@ import {
 import { launchAcceptanceGate } from "./launch-gate";
 import { nextLifecycleStage } from "./stage-advance-input";
 import { normalizeStage } from "./hub-format";
+import { daysUntilDate } from "./dates";
 import {
   STAGE_FLAG_DAYS,
   daysSince,
@@ -49,8 +50,10 @@ export type QueueRow = {
 
 const DAY = 86_400_000;
 
-const daysUntil = (date: string | null | undefined) =>
-  date ? Math.ceil((new Date(date).getTime() - Date.now()) / DAY) : null;
+// Was a local `Math.ceil` against Date.now(). target_launch_date is a Postgres
+// `date`, so it is a calendar date and belongs in the shared helper — which is
+// also what stops this file and leadership.ts drifting apart again.
+const daysUntil = (date: string | null | undefined) => daysUntilDate(date);
 
 /** Build the Customer360-shaped subset the existing derivations consume. */
 function asRecord(bundle: TriageBundle | undefined): Customer360 {

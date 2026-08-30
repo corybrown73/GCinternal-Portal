@@ -19,6 +19,11 @@ jobs:
       - run: npm run lint
       - run: npm run typecheck
       - run: npm test
+      # The day-diff bug that made four screens disagree was invisible under
+      # UTC and only appeared west of it: pace.ts normalised with LOCAL
+      # midnight while the formatter rendered UTC. A suite that never leaves
+      # UTC cannot catch a timezone bug, so it runs again on the east coast.
+      - run: npm run test:tz
       # Public build-time values come from the committed .env.production;
       # server secrets are never needed to build.
       - run: npm run build
