@@ -567,11 +567,11 @@ function OverviewTab({ record, customerId }: { record: Customer360; customerId: 
   // closed the deal may have left, and the record should still say who it was.
   const teamOptions = (record.team ?? []).map((t: { id: string; name: string; role: string }) => ({
     value: t.id,
-    label: `${t.name} · ${t.role}`,
+    label: `${t.name} · ${humanize(t.role)}`,
   }));
   const salesOptions = (record.team ?? []).map((t: { name: string; role: string }) => ({
     value: t.name,
-    label: `${t.name} · ${t.role}`,
+    label: `${t.name} · ${humanize(t.role)}`,
   }));
 
   const approvers = Array.from(

@@ -2,6 +2,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import type { Session } from "@supabase/supabase-js";
+import { TERM_LABELS } from "@/lib/terms";
 
 export type PortalRole =
   | "admin"
@@ -22,17 +23,31 @@ export interface PortalProfile {
   role: PortalRole;
 }
 
+/**
+ * What a login's role is called on screen.
+ *
+ * Sourced from src/lib/terms.ts so that this table and `humanize()` cannot
+ * drift into calling the same role two different things — which they did:
+ * /admin/users read "TAM / SE" from here while the ticket-routing picker
+ * printed "Tam se" from humanize for the identical value.
+ *
+ * Two entries deliberately differ from the dictionary. `am` and `se` are
+ * PORTAL roles here — an account manager's login gets the sales surface, a
+ * solutions engineer's gets the TAM/SE surface — while in the team directory
+ * the same two strings are job titles. The permission this grants is the thing
+ * worth naming in a list of logins, so these say what the login can do.
+ */
 export const ROLE_LABELS: Record<PortalRole, string> = {
-  admin: "Super admin",
-  super_admin: "Super admin",
-  manager: "Manager",
-  sales: "Sales",
-  implementation: "Implementation",
-  tam_se: "TAM / SE",
-  onboarding: "Implementation",
-  am: "Sales",
-  se: "TAM / SE",
-  customer: "Customer",
+  admin: TERM_LABELS.admin,
+  super_admin: TERM_LABELS.super_admin,
+  manager: TERM_LABELS.manager,
+  sales: TERM_LABELS.sales,
+  implementation: TERM_LABELS.implementation,
+  tam_se: TERM_LABELS.tam_se,
+  onboarding: TERM_LABELS.onboarding,
+  am: TERM_LABELS.sales,
+  se: TERM_LABELS.tam_se,
+  customer: TERM_LABELS.customer,
 };
 
 export function isSuperAdmin(role: PortalRole | undefined): boolean {

@@ -6,6 +6,7 @@ import {
   type LifecycleStageId,
 } from "./lifecycle";
 import { daysSinceInstant, isDateOnly } from "./dates";
+import { termLabel } from "./terms";
 
 export const STAGE_FLAG_DAYS = 14;
 
@@ -129,9 +130,17 @@ export function fmtMoney(value: number | null | undefined): string {
   }).format(value);
 }
 
+/**
+ * An enum key, rendered for a person.
+ *
+ * Consults src/lib/terms.ts first, so the acronyms this company actually uses
+ * come out right — "tam_se" as "TAM / SE" rather than "Tam se". Falls back to
+ * underscores-to-spaces for anything the dictionary has no opinion on, which
+ * is what makes a newly added enum value read plainly rather than wrongly.
+ */
 export function humanize(value: string | null | undefined): string {
   if (!value) return "—";
-  return value.replace(/_/g, " ").replace(/^\w/, (c) => c.toUpperCase());
+  return termLabel(value) ?? value.replace(/_/g, " ").replace(/^\w/, (c) => c.toUpperCase());
 }
 
 const OFFSET_BASIS_LABELS: Record<string, string> = {

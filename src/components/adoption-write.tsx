@@ -148,7 +148,7 @@ function AreaForm({
             <option value="">Unassigned</option>
             {team.map((m) => (
               <option key={m.id} value={m.id}>
-                {m.name} · {m.role}
+                {m.name} · {humanize(m.role)}
               </option>
             ))}
           </select>
@@ -232,7 +232,7 @@ function AreaForm({
               <option value="">Not named</option>
               {contacts.map((c) => (
                 <option key={c.id} value={c.id}>
-                  {c.name} · {c.role}
+                  {c.name} · {humanize(c.role)}
                 </option>
               ))}
             </select>
@@ -548,7 +548,7 @@ export function AddAdoptionObservation({
             <option value="">Not recorded</option>
             {team.map((m) => (
               <option key={m.id} value={m.id}>
-                {m.name} · {m.role}
+                {m.name} · {humanize(m.role)}
               </option>
             ))}
           </select>

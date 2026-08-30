@@ -330,7 +330,7 @@ export function CustomerConfirmationEditor({
             </option>
             {contacts.map((c) => (
               <option key={c.id} value={c.id}>
-                {c.name} · {c.role}
+                {c.name} · {humanize(c.role)}
               </option>
             ))}
           </select>

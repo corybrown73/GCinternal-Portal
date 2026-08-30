@@ -4,7 +4,7 @@ import { useServerFn } from "@tanstack/react-start";
 
 import { Panel } from "@/components/record";
 import { getHandover, saveHandoverRecord } from "@/lib/hygiene.functions";
-import { fmtDate } from "@/lib/hub-format";
+import { fmtDate, humanize } from "@/lib/hub-format";
 import type { TeamOption } from "@/components/owner-picker";
 
 const inputClass =
@@ -144,7 +144,7 @@ export function HandoverRecordPanel({
                 <option value="">Not chosen</option>
                 {team.map((t) => (
                   <option key={t.id} value={t.id}>
-                    {t.name} · {t.role}
+                    {t.name} · {humanize(t.role)}
                   </option>
                 ))}
               </select>

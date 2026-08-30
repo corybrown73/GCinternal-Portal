@@ -6,7 +6,7 @@ import { ChevronLeft, Copy } from "lucide-react";
 
 import { PageBody, PageHeader } from "@/components/page";
 import { NoRows, Panel } from "@/components/record";
-import { fmtDateTime } from "@/lib/hub-format";
+import { fmtDateTime, stageLabel } from "@/lib/hub-format";
 import { cn } from "@/lib/utils";
 import {
   addWebhookEndpoint,
@@ -210,7 +210,9 @@ function StatusTab() {
                   <td className={cn(cellClass, "font-mono text-[11px] text-muted-foreground")}>
                     {row.salesforce_opportunity_id ?? "—"}
                   </td>
-                  <td className={cn(cellClass, "text-muted-foreground")}>{row.current_stage}</td>
+                  <td className={cn(cellClass, "text-muted-foreground")}>
+                    {stageLabel(row.current_stage)}
+                  </td>
                   <td className={cn(cellClass, "text-muted-foreground")}>
                     {fmtDateTime(row.created_at)}
                   </td>

@@ -211,7 +211,7 @@ function Person({
         <option value="">{emptyLabel}</option>
         {team.map((m) => (
           <option key={m.id} value={m.id}>
-            {m.name} · {m.role}
+            {m.name} · {humanize(m.role)}
           </option>
         ))}
       </select>

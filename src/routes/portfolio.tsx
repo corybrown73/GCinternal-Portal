@@ -442,7 +442,9 @@ function LeadershipPage() {
                       dwellStage === d.stage && "bg-secondary",
                     )}
                   >
-                    <span className="w-36 shrink-0 text-[13px] font-medium">{d.stage}</span>
+                    <span className="w-36 shrink-0 text-[13px] font-medium">
+                      {stageLabel(d.stage)}
+                    </span>
                     <span className="font-mono text-[11px] text-muted-foreground">
                       {d.transitions} completed · {d.shortest_days}–{d.longest_days}d observed
                     </span>
@@ -512,7 +514,7 @@ function LeadershipPage() {
                     <span className="text-[13px] text-muted-foreground">Customer not recorded</span>
                   )}
                   <span className="font-mono text-[11px] uppercase tracking-[0.08em] text-muted-foreground">
-                    {t.stage}
+                    {stageLabel(t.stage)}
                   </span>
                   <span className="font-mono text-[11px] text-muted-foreground">
                     {fmtDate(t.entered_at)} → {fmtDate(t.exited_at)} · {t.days}d

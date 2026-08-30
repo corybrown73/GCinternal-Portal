@@ -5,6 +5,7 @@ import { Pencil, Plus } from "lucide-react";
 
 import { addSuccessCriterion, setSuccessCriterion } from "@/lib/hub.functions";
 import { LIFECYCLE_STAGES } from "@/lib/lifecycle";
+import { humanize } from "@/lib/hub-format";
 
 const inputClass =
   "h-6 w-full rounded-sm border border-border bg-background px-1.5 text-[12px] text-foreground outline-none focus:ring-1 focus:ring-ring";
@@ -237,7 +238,7 @@ function CriterionForm({
               <option value="">Not named</option>
               {contacts.map((c) => (
                 <option key={c.id} value={c.id}>
-                  {c.name} · {c.role}
+                  {c.name} · {humanize(c.role)}
                 </option>
               ))}
             </select>
