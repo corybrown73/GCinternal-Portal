@@ -266,6 +266,55 @@ export const getUsers = createServerFn({ method: "GET" })
     return listProfiles(context.userId);
   });
 
+/**
+ * Inviting a teammate is ADMIN-only, not manager-only.
+ *
+ * An invite creates a staff account with a role attached, so it is the same
+ * decision as changing a role and is gated the same way — `requireSuperAdmin`
+ * in the server layer, which is what `setUserRole` already uses. A manager can
+ * run their book; they cannot enlarge the team.
+ */
+export const inviteUser = createServerFn({ method: "POST" })
+  .middleware([requireInternalAuth])
+  .inputValidator((data: unknown) =>
+    z
+      .object({
+        email: z.string().trim().email().max(200),
+        fullName: z.string().trim().max(120).optional(),
+        role: z.enum(["manager", "sales", "implementation", "tam_se", "super_admin"]),
+      })
+      .parse(data),
+  )
+  .handler(async ({ data, context }) => {
+    const { requireSuperAdmin } = await import("./presale.server");
+    const inviter = await requireSuperAdmin(context.userId);
+    const { inviteUser: invite } = await import("./user-invites.server");
+    return invite(
+      { id: inviter.id, full_name: inviter.full_name ?? null, email: inviter.email },
+      { email: data.email, fullName: data.fullName ?? null, role: data.role },
+    );
+  });
+
+export const getPendingInvites = createServerFn({ method: "GET" })
+  .middleware([requireInternalAuth])
+  .handler(async ({ context }) => {
+    const { requireSuperAdmin } = await import("./presale.server");
+    await requireSuperAdmin(context.userId);
+    const { listPendingInvites } = await import("./user-invites.server");
+    return listPendingInvites();
+  });
+
+export const revokeUserInvite = createServerFn({ method: "POST" })
+  .middleware([requireInternalAuth])
+  .inputValidator((data: unknown) => z.object({ inviteId: z.string().uuid() }).parse(data))
+  .handler(async ({ data, context }) => {
+    const { requireSuperAdmin } = await import("./presale.server");
+    await requireSuperAdmin(context.userId);
+    const { revokeInvite } = await import("./user-invites.server");
+    await revokeInvite(data.inviteId, context.userId);
+    return { ok: true as const };
+  });
+
 export const setUserRole = createServerFn({ method: "POST" })
   .middleware([requireInternalAuth])
   .inputValidator((data: unknown) =>
