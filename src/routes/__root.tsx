@@ -19,23 +19,41 @@ import { useOrgBranding } from "@/lib/use-branding";
 import { LifecycleRail } from "@/components/lifecycle-rail";
 import { AuthGate } from "@/components/auth-gate";
 import { useProfile } from "@/lib/auth";
+import { Button } from "@/components/ui/button";
 
+/**
+ * What a mistyped URL shows.
+ *
+ * THE BUG THIS FIXES. This component was written and never reached. A 404 is
+ * rendered through the root's <Outlet />, which sits inside <AuthGate> — and
+ * the gate, seeing a path that is not public and a visitor whose session has
+ * not resolved yet, held the tree on "Loading…" and then redirected to /login.
+ * A signed-in person mistyping a URL got a blank page for a moment and then
+ * the app's home screen, with nothing anywhere saying the address was wrong.
+ * The fix is in AuthGate: a not-found path is treated as public, because there
+ * is nothing behind it to protect.
+ *
+ * Rendered without the sidebar on purpose. The address does not correspond to
+ * anything, so there is no "here" for the navigation to be highlighting.
+ */
 function NotFoundComponent() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
       <div className="max-w-md text-center">
-        <h1 className="text-7xl font-bold text-foreground">404</h1>
-        <h2 className="mt-4 text-xl font-semibold text-foreground">Page not found</h2>
-        <p className="mt-2 text-sm text-muted-foreground">
-          The page you're looking for doesn't exist or has been moved.
+        <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
+          404
+        </p>
+        <h1 className="mt-3 text-2xl font-semibold tracking-tight text-foreground">
+          That page isn&apos;t here
+        </h1>
+        <p className="mt-2 text-[13px] text-muted-foreground">
+          The address doesn&apos;t match anything in the portal. It may have been mistyped, or the
+          record it pointed at may have been removed.
         </p>
         <div className="mt-6">
-          <Link
-            to="/"
-            className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
-          >
-            Go home
-          </Link>
+          <Button asChild>
+            <Link to="/">Go to Home</Link>
+          </Button>
         </div>
       </div>
     </div>
@@ -61,22 +79,21 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
         <pre className="mt-3 max-h-40 overflow-auto whitespace-pre-wrap rounded-sm border border-border bg-surface p-2 text-left font-mono text-[11px] text-muted-foreground">
           {String(error?.message ?? error)}
         </pre>
+        {/* The shared Button, not a hand-rolled one: these two were the last
+            pair in the app still carrying their own colour and radius, so they
+            missed the hover lift and the radius scale everything else got. */}
         <div className="mt-6 flex flex-wrap justify-center gap-2">
-          <button
+          <Button
             onClick={() => {
               router.invalidate();
               reset();
             }}
-            className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
           >
             Try again
-          </button>
-          <a
-            href="/"
-            className="inline-flex items-center justify-center rounded-md border border-input bg-background px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-accent"
-          >
-            Go home
-          </a>
+          </Button>
+          <Button variant="outline" asChild>
+            <a href="/">Go home</a>
+          </Button>
         </div>
       </div>
     </div>
@@ -141,7 +158,14 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       const stages = await getLifecycleStages();
       applyStageOverrides(stages as never);
     } catch (e) {
-      console.error("[lifecycle] could not load configured stage labels", e);
+      // An unauthenticated caller is not a fault worth logging: a signed-out
+      // visitor, or anyone on a mistyped URL, reaches this line every time,
+      // and an error that fires on ordinary behaviour trains people to skip
+      // the log. Anything else is a real failure and stays loud.
+      const message = e instanceof Error ? e.message : String(e);
+      if (!/unauthorized|no authorization header/i.test(message)) {
+        console.error("[lifecycle] could not load configured stage labels", e);
+      }
     }
     return null;
   },

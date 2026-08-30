@@ -1,5 +1,5 @@
 import { useEffect, type ReactNode } from "react";
-import { useRouterState } from "@tanstack/react-router";
+import { useMatches, useRouterState } from "@tanstack/react-router";
 import { useProfile } from "@/lib/auth";
 
 // "/plan" (Phase 4) is the signed-link door: the visitor has no account by
@@ -45,7 +45,30 @@ export function AuthGate({
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const { session, profile, loading } = useProfile();
 
-  const publicPage = isPublic(pathname);
+  /**
+   * A path that matched no route is treated as public.
+   *
+   * Without this the 404 page could never be seen. A not-found route renders
+   * through the root's <Outlet />, which is inside this gate; the gate saw a
+   * path that is not in PUBLIC_PREFIXES, held the tree on "Loading…" while the
+   * session resolved, and then either redirected a signed-out visitor to
+   * /login or handed a signed-in one the app shell wrapped around a page they
+   * never got to read. Either way the answer to "did I type that right?" was a
+   * blank screen.
+   *
+   * Safe because there is nothing behind a 404 to protect: no loader ran, no
+   * data was fetched, and the component is a static apology. Authorisation for
+   * real routes is unchanged, and every server function enforces it again
+   * regardless of what this gate decides.
+   */
+  const notFound = useMatches({
+    select: (matches) =>
+      matches.some(
+        (m) => m.status === "notFound" || (m as { globalNotFound?: boolean }).globalNotFound,
+      ),
+  });
+
+  const publicPage = isPublic(pathname) || notFound;
   const isCustomer = profile?.role === "customer";
   const onPortal = pathname === "/portal" || pathname.startsWith("/portal/");
 
