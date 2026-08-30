@@ -230,8 +230,8 @@ function LoginPage() {
               ) : (
                 <form onSubmit={sendCustomerLink} className="flex flex-col gap-3">
                   <p className="text-[12px] text-muted-foreground">
-                    Enter the email address your GoCanvas team invited, and we&apos;ll send you a
-                    one-click sign-in link.
+                    Enter the email your GoCanvas team invited and we&apos;ll send a sign-in link —
+                    no password to remember. You&apos;ll land on your own onboarding plan.
                   </p>
                   <div className="flex flex-col gap-1.5">
                     <Label htmlFor="cust-email">Email</Label>

@@ -9,8 +9,12 @@ import { GoCanvasLogo } from "@/components/gocanvas-logo";
 export const Route = createFileRoute("/portal")({
   head: () => ({
     meta: [
-      { title: "Your onboarding — GoCanvas" },
-      { name: "description", content: "Track your GoCanvas onboarding progress." },
+      { title: "GoCanvas Onboarding Portal" },
+      {
+        name: "description",
+        content:
+          "Your GoCanvas onboarding plan: what is done, what happens next, and what your team needs from you.",
+      },
     ],
   }),
   component: PortalLayout,
@@ -104,7 +108,7 @@ function PortalLayout() {
         <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-3 px-5">
           <GoCanvasLogo className="opacity-70" />
           <p className="text-[12px]" style={{ color: "var(--gc-body)" }}>
-            Your onboarding, run with your GoCanvas team.
+            GoCanvas Onboarding Portal · Questions? Use Help above to reach your team.
           </p>
         </div>
       </footer>

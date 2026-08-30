@@ -30,7 +30,7 @@ import type { SharedPlan } from "@/lib/shared-plan";
 export const Route = createFileRoute("/plan/$token")({
   head: () => ({
     meta: [
-      { title: "Your onboarding plan — GoCanvas" },
+      { title: "Your onboarding plan — GoCanvas Onboarding Portal" },
       { name: "robots", content: "noindex, nofollow" },
       { name: "referrer", content: "no-referrer" },
     ],
@@ -191,8 +191,16 @@ function PlanBrandHeader() {
         </div>
       </div>
       <header className="border-b bg-white" style={{ borderColor: "var(--gc-line)" }}>
-        <div className="mx-auto flex h-16 w-full max-w-5xl items-center px-5">
+        <div className="mx-auto flex h-16 w-full max-w-5xl items-center gap-3 px-5">
           <GoCanvasLogo />
+          {/* A plan link is opened cold, often by somebody who was not on the
+              call. The mark alone says who sent it; this says what it is. */}
+          <span aria-hidden="true" style={{ color: "var(--gc-line)" }}>
+            |
+          </span>
+          <span className="text-[14px] font-medium" style={{ color: "var(--gc-body)" }}>
+            Onboarding Portal
+          </span>
         </div>
       </header>
     </>
