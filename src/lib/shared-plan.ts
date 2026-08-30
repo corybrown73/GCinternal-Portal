@@ -39,6 +39,7 @@ export const SHARED_PLAN_KEYS = [
   "documents",
   "contact",
   "viewer",
+  "conversation",
   "generated_at",
 ] as const;
 
@@ -67,6 +68,13 @@ export const SHARED_DOCUMENT_KEYS = ["ref", "file_name", "size_bytes", "uploaded
 export const SHARED_CONTACT_KEYS = ["name", "email"] as const;
 
 export const SHARED_VIEWER_KEYS = ["kind", "can_complete", "read_only"] as const;
+
+export const SHARED_MESSAGE_KEYS = ["ref", "author", "side", "body", "at", "withdrawn"] as const;
+
+export const SHARED_CONVERSATION_KEYS = ["messages", "can_post", "participants"] as const;
+
+/** A participant, as the customer sees them: a name and a side. No ids, no email. */
+export const SHARED_PARTICIPANT_KEYS = ["name", "side"] as const;
 
 export const SNAPSHOT_KEYS = [
   "plan",
@@ -129,6 +137,42 @@ export type SharedCommitment = {
 
 export type SharedContact = { name: string; email: string | null };
 
+/**
+ * One message in the project conversation, as a customer sees it.
+ *
+ * `side` rather than a role or a title: a customer needs to know whether they
+ * are reading their own team or ours, and nothing finer than that is theirs to
+ * know. There is no author id and no email — the same no-uuids rule as
+ * everywhere else in this file.
+ *
+ * There is no `visibility` field, deliberately. Internal messages are filtered
+ * out before this type exists; carrying a flag that is always "shared" would
+ * invite a future reader to render the other value.
+ */
+export type SharedMessage = {
+  ref: string;
+  author: string;
+  side: "you" | "us";
+  /** Empty when withdrawn — the text is dropped on the way out, not stored empty. */
+  body: string;
+  at: string;
+  withdrawn: boolean;
+};
+
+export type SharedParticipant = { name: string; side: "you" | "us" };
+
+export type SharedConversation = {
+  messages: SharedMessage[];
+  /** False when the actions flag is off, the viewer is read-only, or the link cannot act. */
+  can_post: boolean;
+  /**
+   * Who else is in the thread. Shown so a customer knows who they are talking
+   * to before they say something they would not say to all of them — a
+   * participant list they cannot see is a room with people they cannot see.
+   */
+  participants: SharedParticipant[];
+};
+
 export type SharedViewer = {
   kind: "grant" | "auth" | "preview";
   can_complete: boolean;
@@ -148,6 +192,7 @@ export type SharedPlan = {
   documents: SharedDocument[];
   contact: SharedContact | null;
   viewer: SharedViewer;
+  conversation: SharedConversation;
   generated_at: string;
 };
 
@@ -211,6 +256,25 @@ export type SharedPlanInputs = {
   }>;
   contact: SharedContact | null;
   viewer: SharedViewer;
+  /**
+   * The project conversation. Callers pass ALL messages they read; this
+   * function drops everything that is not `visibility === "shared"`, on the
+   * same principle as work items — a scoping mistake upstream still cannot
+   * render an internal note.
+   */
+  conversation?: {
+    messages: Array<{
+      id: string;
+      author_kind: string;
+      author_name: string;
+      visibility: string;
+      body: string;
+      created_at: string;
+      withdrawn: boolean;
+    }>;
+    participants: Array<{ display_name: string; party_kind: string; removed_at: string | null }>;
+    can_post: boolean;
+  };
   now?: Date;
 };
 
@@ -230,6 +294,10 @@ export function taskRef(id: string): string {
 
 export function fileRef(id: string): string {
   return createHash("sha256").update(`wf:${id}`).digest("hex").slice(0, 16);
+}
+
+export function messageRef(id: string): string {
+  return createHash("sha256").update(`cm:${id}`).digest("hex").slice(0, 16);
 }
 
 function dayKey(value: string | Date): string {
@@ -351,6 +419,31 @@ export function buildSharedPlanDTO(inputs: SharedPlanInputs): SharedPlan {
       return a.title.localeCompare(b.title);
     });
 
+  // The conversation. Two filters, and both matter: `visibility` is the
+  // invariant 0029 enforces in the database, and dropping withdrawn bodies here
+  // is what keeps a withdrawn message a row rather than a lie.
+  const convo = inputs.conversation;
+  const conversation: SharedConversation = {
+    messages: (convo?.messages ?? [])
+      .filter((m) => m.visibility === "shared")
+      .map((m) => ({
+        ref: messageRef(m.id),
+        author: m.author_name,
+        side: m.author_kind === "external" ? ("you" as const) : ("us" as const),
+        body: m.withdrawn ? "" : m.body,
+        at: m.created_at,
+        withdrawn: m.withdrawn,
+      }))
+      .sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0)),
+    can_post: (convo?.can_post ?? false) && !inputs.viewer.read_only,
+    participants: (convo?.participants ?? [])
+      .filter((p) => p.removed_at === null)
+      .map((p) => ({
+        name: p.display_name,
+        side: p.party_kind === "external" ? ("you" as const) : ("us" as const),
+      })),
+  };
+
   return {
     customer_name: inputs.customer.name,
     implementation_name: inputs.implementation.name,
@@ -377,6 +470,7 @@ export function buildSharedPlanDTO(inputs: SharedPlanInputs): SharedPlan {
       can_complete: inputs.viewer.can_complete,
       read_only: inputs.viewer.read_only,
     },
+    conversation,
     generated_at: now.toISOString(),
   };
 }

@@ -6,6 +6,7 @@ import {
   commentOnPlanTask,
   completePlanTask,
   openPlan,
+  postPlanMessage,
   recordPlanOpen,
   reopenPlanTask,
 } from "@/lib/external-plan.functions";
@@ -90,6 +91,7 @@ function PlanTokenPage() {
             onComplete: (ref) => run(() => completePlanTask({ data: { ref } })),
             onReopen: (ref) => run(() => reopenPlanTask({ data: { ref } })),
             onComment: (ref, body) => run(() => commentOnPlanTask({ data: { ref, body } })),
+            onMessage: (body) => run(() => postPlanMessage({ data: { body } })),
           }}
         />
       </div>

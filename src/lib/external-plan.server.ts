@@ -2,6 +2,7 @@ import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { audit } from "./server/audit";
 import { sendEmail } from "./server/email";
 import { CONFIG_DEFAULTS, getConfigNumber } from "./server/app-config";
+import { isFlagOn } from "./app-config.server";
 import {
   ExternalAccessError,
   grantForId,
@@ -499,6 +500,143 @@ export async function addComment(
     `${actorName} commented on "${item.title}"`,
     `${actorName} (${grant.email}) left a comment on "${item.title}".`,
   );
+  return { plan: await loadSharedPlan(viewerForGrant(grant)) };
+}
+
+/**
+ * A customer writes into the project conversation.
+ *
+ * This is the one action here that has no work item behind it — the point of
+ * the thread is that "can we move the kickoff?" is not a comment on a task.
+ *
+ * Four things are forced server-side and none of them are the client's to say:
+ *
+ *  - `author_kind: "external"` and `visibility: "shared"`. 0029's trigger
+ *    refuses an external author writing an internal message, so a bug here is a
+ *    caught error rather than an internal thread a customer can post into.
+ *  - `author_contact_id` comes from the GRANT, re-read this request, never from
+ *    the body.
+ *  - `author_name` is snapshotted from the contact record, not accepted as
+ *    input; a name that arrived from outside would let a link bearer sign a
+ *    message as somebody else.
+ *  - mentions are NOT parsed from a customer's message. A customer can see the
+ *    participant list but not the handles, and letting an outside body create
+ *    mention rows would make an external write able to address the internal
+ *    side directly. They reach us the same way either way: `notifyConversation`
+ *    treats a customer message as crossing the line and mails the internal
+ *    participants.
+ */
+export async function postConversationMessage(
+  cookie: string | undefined,
+  body: string,
+): Promise<{ plan: SharedPlan }> {
+  await requireActionsEnabled();
+  if (!(await isFlagOn("conversations"))) {
+    throw new ExternalAccessError("forbidden", "conversations flag is off");
+  }
+  const grant = await requireSessionGrant(cookie);
+  const text = body.trim();
+  if (!text) throw new ExternalAccessError("forbidden", "empty message");
+  if (text.length > 20000) throw new ExternalAccessError("forbidden", "message too long");
+  if (!grant.contact_id) {
+    // A grant with no contact behind it can read the plan but cannot speak in
+    // the thread: there would be no participant row to attribute the message
+    // to, and an unattributed message in a shared thread is worse than none.
+    throw new ExternalAccessError("forbidden", "grant has no contact to post as");
+  }
+
+  const { ensureConversation, loadParticipants, notifyConversation } =
+    await import("./conversation.server");
+  const conv = await ensureConversation(grant.implementation_id, null);
+  const participants = (await loadParticipants(conv.id)) as any[];
+
+  // The sender has to be in the room to post. They are seeded when the thread
+  // is created and added when a link is issued; this covers the case where a
+  // link was issued before the thread existed.
+  let me = participants.find((p) => p.contact_id === grant.contact_id && p.removed_at === null);
+  if (!me) {
+    const { makeHandle } = await import("./mentions");
+    const actorName = await contactNameFor(grant);
+    const { data: revived } = await db()
+      .from("conversation_participants")
+      .select("id")
+      .eq("conversation_id", conv.id)
+      .eq("contact_id", grant.contact_id)
+      .maybeSingle();
+    if (revived) {
+      await db()
+        .from("conversation_participants")
+        .update({ removed_at: null })
+        .eq("id", revived.id);
+      me = { id: revived.id };
+    } else {
+      const handle = makeHandle(
+        actorName,
+        grant.email,
+        participants.map((p) => p.handle),
+      );
+      const { data: added, error } = await db()
+        .from("conversation_participants")
+        .insert({
+          conversation_id: conv.id,
+          party_kind: "external",
+          contact_id: grant.contact_id,
+          display_name: actorName,
+          email: grant.email,
+          handle,
+        })
+        .select("id")
+        .single();
+      if (error)
+        throw new ExternalAccessError("forbidden", `could not join thread: ${error.message}`);
+      me = added;
+    }
+  }
+
+  const actorName = await contactNameFor(grant);
+  const { data: inserted, error } = await db()
+    .from("conversation_messages")
+    .insert({
+      conversation_id: conv.id,
+      author_kind: "external",
+      author_contact_id: grant.contact_id,
+      author_grant_id: grant.id,
+      author_name: actorName,
+      visibility: "shared",
+      body: text,
+    })
+    .select("id")
+    .single();
+  if (error) throw new ExternalAccessError("forbidden", `message rejected: ${error.message}`);
+
+  await recordPlanEvent({
+    grantId: grant.id,
+    implementationId: grant.implementation_id,
+    contactId: grant.contact_id,
+    event: "comment_added",
+    metadata: { conversation_id: conv.id, message_id: inserted.id, surface: "conversation" },
+  });
+  await auditExternal({
+    grant,
+    actorName,
+    action: "external.conversation_message",
+    entityType: "implementation",
+    entityId: grant.implementation_id,
+    payload: { conversation_id: conv.id, message_id: inserted.id },
+  });
+
+  await notifyConversation({
+    conversationId: conv.id,
+    implementationId: grant.implementation_id,
+    visibility: "shared",
+    authorKind: "external",
+    authorName: actorName,
+    authorParticipantId: me.id,
+    mentionIds: [],
+    body: text,
+    participants: await loadParticipants(conv.id),
+  });
+
   return { plan: await loadSharedPlan(viewerForGrant(grant)) };
 }
 

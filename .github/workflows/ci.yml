@@ -75,3 +75,19 @@ jobs:
               psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$up"
             done
           done
+      - name: Schema invariants
+        # The conversation schema's safety argument is four triggers (0029).
+        # `create or replace function` in a later migration would remove one
+        # without breaking the up/down cycle above, so the triggers are probed
+        # directly: each file asserts that the thing it names is still refused,
+        # AND that it is refused for the right reason. Each runs in one
+        # transaction and rolls back.
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          tests=(supabase/tests/*.sql)
+          if [ ${#tests[@]} -eq 0 ]; then echo "no invariant probes"; exit 0; fi
+          for t in "${tests[@]}"; do
+            echo "== invariants: $t"
+            psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$t"
+          done

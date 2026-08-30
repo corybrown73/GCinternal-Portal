@@ -269,7 +269,7 @@ export async function loadSharedPlan(
   const allItems = (items ?? []) as any[];
   const sharedIds = allItems.filter((w) => w.visibility === "shared").map((w) => w.id);
 
-  const [{ data: comments }, { data: files }, { data: owner }] = await Promise.all([
+  const [{ data: comments }, { data: files }, { data: owner }, { data: conv }] = await Promise.all([
     sharedIds.length
       ? db()
           .from("work_item_comments")
@@ -286,7 +286,41 @@ export async function loadSharedPlan(
     impl.owner_id
       ? db().from("team_members").select("name, email").eq("id", impl.owner_id).maybeSingle()
       : Promise.resolve({ data: null }),
+    db().from("project_conversations").select("id").eq("implementation_id", impl.id).maybeSingle(),
   ]);
+
+  // The conversation. `visibility = 'shared'` is applied in the QUERY as well
+  // as in the DTO: an internal note must not travel from the database to this
+  // process at all when the reader is a customer, because a projection bug is
+  // then a bug about something that is not in memory.
+  //
+  // Withdrawn messages are fetched rather than filtered out here so the DTO can
+  // render "withdrawn" in place — a message that vanishes silently reads as the
+  // customer having imagined it.
+  const conversationsOn = await isFlagOn("conversations");
+  const [{ data: convMessages }, { data: convParticipants }] =
+    conv?.id && conversationsOn
+      ? await Promise.all([
+          db()
+            .from("conversation_messages")
+            .select("id, author_kind, author_name, visibility, body, created_at, deleted_at")
+            .eq("conversation_id", conv.id)
+            .eq("visibility", "shared")
+            .order("created_at"),
+          db()
+            .from("conversation_participants")
+            .select("display_name, party_kind, removed_at")
+            .eq("conversation_id", conv.id),
+        ])
+      : [{ data: [] }, { data: [] }];
+
+  // Posting needs the actions flag AND a link that is allowed to act. Checked
+  // here rather than in the DTO so the button is absent, not merely disabled,
+  // when the flag is off.
+  const canPost =
+    viewer.kind !== "preview" &&
+    conversationsOn &&
+    (await isFlagOn("external_plan_actions_enabled"));
 
   // Names for the people who appear in the projection — resolved here so the
   // DTO never carries an id it would have to be trusted not to render.
@@ -359,6 +393,30 @@ export async function loadSharedPlan(
         created_at: c.created_at,
       })),
     files: (files ?? []) as any[],
+    conversation: {
+      messages: ((convMessages ?? []) as any[])
+        // Belt and braces, exactly as with comments above: the query already
+        // filtered, and so does this.
+        .filter((m) => m.visibility === "shared")
+        .map((m) => ({
+          id: m.id,
+          author_kind: m.author_kind,
+          author_name: m.author_name,
+          visibility: m.visibility,
+          body: m.body,
+          created_at: m.created_at,
+          // Boolean(), not `!== null`: a row read from a source that omits
+          // the column entirely would otherwise read as withdrawn, and a
+          // message that silently blanks itself is the worst kind of bug here.
+          withdrawn: Boolean(m.deleted_at),
+        })),
+      participants: ((convParticipants ?? []) as any[]).map((p) => ({
+        display_name: p.display_name,
+        party_kind: p.party_kind,
+        removed_at: p.removed_at ?? null,
+      })),
+      can_post: canPost,
+    },
     contact: owner ? { name: owner.name, email: owner.email ?? null } : null,
     viewer: {
       kind: viewer.kind,

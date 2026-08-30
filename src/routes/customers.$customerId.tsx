@@ -8,6 +8,7 @@ import { HealthNote } from "@/components/health-note";
 import { PlanPanel } from "@/components/plan-panel";
 import { HandoffPanel } from "@/components/handoff-panel";
 import { ExternalSharePanel } from "@/components/external-share-panel";
+import { ConversationPanel } from "@/components/conversation-panel";
 import { ProjectRail, ProjectTimelines } from "@/components/project-timeline-rail";
 import { buildProjectTimeline, type TimelineInput } from "@/lib/project-timeline";
 import { AdvanceStage } from "@/components/stage-advance-write";
@@ -1350,6 +1351,10 @@ function JourneyTab({ record, customerId }: { record: Customer360; customerId: s
       {/* Phase 4: the customer-facing links onto that plan — issue, revoke,
           rotate, and preview exactly what the customer sees. */}
       <ExternalSharePanel implementationId={impl.id} />
+
+      {/* One thread per project, written by both sides. Placed under the links
+          because the links are what put a customer contact IN it. */}
+      <ConversationPanel implementationId={impl.id} projectName={impl.name} />
 
       {/* Reads the SOW attached to this implementation, proposes a journey and
           lets the Technical Implementation Specialist choose what — if

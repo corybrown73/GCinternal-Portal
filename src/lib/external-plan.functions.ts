@@ -122,6 +122,22 @@ export const commentOnPlanTask = createServerFn({ method: "POST" })
     return addComment(await readSession(), data.ref, data.body);
   });
 
+/**
+ * Post into the project conversation.
+ *
+ * No `ref`: this is the one external action that is not about a task. The
+ * server takes the implementation from the session cookie's grant, re-read on
+ * every request, so there is nothing here for a caller to point somewhere else.
+ */
+export const postPlanMessage = createServerFn({ method: "POST" })
+  .inputValidator((data: unknown) =>
+    z.object({ body: z.string().trim().min(1).max(20000) }).parse(data),
+  )
+  .handler(async ({ data }) => {
+    const { postConversationMessage } = await import("./external-plan.server");
+    return postConversationMessage(await readSession(), data.body);
+  });
+
 export const uploadPlanFile = createServerFn({ method: "POST" })
   .inputValidator((data: unknown) =>
     z

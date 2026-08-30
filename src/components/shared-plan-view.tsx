@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { CalendarDays, CheckCircle2, Circle, Lock, MessageSquare, Paperclip } from "lucide-react";
 
-import type { SharedPlan, SharedTask } from "@/lib/shared-plan";
+import type { SharedMessage, SharedPlan, SharedTask } from "@/lib/shared-plan";
 import { cn } from "@/lib/utils";
 
 /**
@@ -26,6 +26,8 @@ export type PlanActions = {
   onComplete?: (ref: string) => Promise<void> | void;
   onReopen?: (ref: string) => Promise<void> | void;
   onComment?: (ref: string, body: string) => Promise<void> | void;
+  /** Post into the project conversation. Not about any one task. */
+  onMessage?: (body: string) => Promise<void> | void;
   busy?: boolean;
 };
 
@@ -131,6 +133,8 @@ export function SharedPlanView({
         </ul>
       </section>
 
+      <ConversationPanel plan={plan} actions={actions} />
+
       {plan.milestones.length > 0 ? (
         <section className="rounded-md border border-border bg-card">
           <header className="border-b border-border px-4 py-2.5">
@@ -163,6 +167,122 @@ export function SharedPlanView({
         </p>
       ) : null}
     </div>
+  );
+}
+
+/**
+ * The project conversation.
+ *
+ * Placed after the task lists and before the timeline on purpose: somebody
+ * opening this page is here to find out what they owe, and the thread is where
+ * they go when the answer is "it is complicated". Putting it first would bury
+ * the tasks under a wall of chat.
+ *
+ * `plan.conversation.can_post` is decided on the SERVER — the flags, the
+ * viewer's kind and the grant all feed it. This component never re-derives it.
+ */
+function ConversationPanel({
+  plan,
+  actions,
+}: {
+  plan: SharedPlan;
+  actions: PlanActions | undefined;
+}) {
+  const [draft, setDraft] = useState("");
+  const { messages, can_post, participants } = plan.conversation;
+
+  // Nothing to show and nothing to say: render nothing rather than an empty
+  // box that suggests a feature which is switched off.
+  if (messages.length === 0 && !can_post) return null;
+
+  const theirs = participants.filter((p) => p.side === "us").map((p) => p.name);
+
+  return (
+    <section className="rounded-md border border-border bg-card">
+      <header className="flex flex-wrap items-baseline justify-between gap-2 border-b border-border px-4 py-2.5">
+        <h2 className="text-[13px] font-medium">Conversation</h2>
+        {theirs.length > 0 ? (
+          <p className="text-[11px] text-muted-foreground">
+            With {theirs.slice(0, 3).join(", ")}
+            {theirs.length > 3 ? ` and ${theirs.length - 3} more` : ""}
+          </p>
+        ) : null}
+      </header>
+
+      {messages.length === 0 ? (
+        <p className="px-4 py-6 text-center text-[12px] text-muted-foreground">
+          Nothing here yet. Anything you write goes to your GoCanvas team, and stays with the
+          project.
+        </p>
+      ) : (
+        <ul className="divide-y divide-border">
+          {messages.map((m) => (
+            <MessageRow key={m.ref} message={m} />
+          ))}
+        </ul>
+      )}
+
+      {can_post ? (
+        <form
+          className="border-t border-border p-3"
+          onSubmit={async (e) => {
+            e.preventDefault();
+            const body = draft.trim();
+            if (!body) return;
+            // Cleared optimistically: the parent replaces the whole plan on
+            // success, and on failure it shows the error banner. Leaving the
+            // text in the box after a successful send makes people send twice.
+            setDraft("");
+            await actions?.onMessage?.(body);
+          }}
+        >
+          <textarea
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            rows={2}
+            maxLength={20000}
+            placeholder="Write to your GoCanvas team…"
+            className="w-full resize-y rounded-md border border-border bg-background px-3 py-2 text-[13px]"
+          />
+          <div className="mt-2 flex items-center justify-between gap-2">
+            <p className="text-[11px] text-muted-foreground">Everyone on the project sees this.</p>
+            <button
+              type="submit"
+              disabled={actions?.busy || draft.trim().length === 0}
+              className="rounded-md border border-border px-3 py-1.5 text-[12px] disabled:opacity-40"
+            >
+              Send
+            </button>
+          </div>
+        </form>
+      ) : null}
+    </section>
+  );
+}
+
+function MessageRow({ message }: { message: SharedMessage }) {
+  const mine = message.side === "you";
+  return (
+    <li className="px-4 py-3">
+      <p className="flex items-baseline gap-2">
+        <span className={cn("text-[12px] font-medium", mine && "text-muted-foreground")}>
+          {message.author}
+        </span>
+        <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+          {mine ? "your team" : "GoCanvas"}
+        </span>
+        <span className="ml-auto font-mono text-[10px] text-muted-foreground">
+          {message.at.slice(0, 10)}
+        </span>
+      </p>
+      {message.withdrawn ? (
+        // Said plainly rather than removed. A message that disappears without a
+        // trace makes the reader doubt what they saw.
+        <p className="mt-1 text-[13px] italic text-muted-foreground">This message was withdrawn.</p>
+      ) : (
+        <p className="mt-1 whitespace-pre-wrap text-[13px]">{message.body}</p>
+      )}
+    </li>
   );
 }
 

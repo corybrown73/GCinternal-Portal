@@ -60,6 +60,18 @@ export type V2Flags = {
    * migration: with it off nothing here touches the new table at all.
    */
   presale_stage_config: boolean;
+  /**
+   * The per-project conversation (0029): a shared thread with @mentions,
+   * reaching internal staff and customer contacts in one place.
+   *
+   * Gating this separately from the external portal flags is deliberate. The
+   * thread is useful internally on its own — it is where the internal notes
+   * live — and turning it on does not by itself put anything in front of a
+   * customer. What a customer can see is still governed by
+   * `external_plan_view_enabled`, and what they can write by
+   * `external_plan_actions_enabled`.
+   */
+  conversations: boolean;
 };
 
 const DEFAULT_FLAGS: V2Flags = {
@@ -86,6 +98,8 @@ const DEFAULT_FLAGS: V2Flags = {
   api_key_limits: false,
   /* Configurable pre-sale pipeline — see docs/design/presale-stages.md. */
   presale_stage_config: false,
+  /* Per-project conversations — see docs/design/conversations.md. */
+  conversations: false,
 };
 const CACHE_MS = 60_000;
 

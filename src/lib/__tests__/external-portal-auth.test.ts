@@ -26,6 +26,7 @@ const h = vi.hoisted(() => {
     flags: {
       external_plan_view_enabled: true,
       external_plan_actions_enabled: true,
+      conversations: true,
     } as Record<string, boolean>,
     emails: [] as Array<{ to: string; subject: string; html: string }>,
     forward: null as any,
@@ -66,6 +67,7 @@ import {
   recordOpen,
   reassign,
   reopenTask,
+  postConversationMessage,
   sanitizeFileName,
   uploadFile,
 } from "../external-plan.server";
@@ -93,6 +95,11 @@ const GRANT_A = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const GRANT_B = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const OWNER = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 const PROFILE_A = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
+
+const CONV_A = "c0c0c0c0-c0c0-4c0c-8c0c-c0c0c0c0c0c0";
+const CONV_PART_STAFF = "c1c1c1c1-c1c1-4c1c-8c1c-c1c1c1c1c1c1";
+const CONV_PART_CONTACT = "c2c2c2c2-c2c2-4c2c-8c2c-c2c2c2c2c2c2";
+const CONV_PART_GONE = "c3c3c3c3-c3c3-4c3c-8c3c-c3c3c3c3c3c3";
 
 const KEY_A = "a1a1a1a1a1a1a1a1a1";
 const KEY_B = "b2b2b2b2b2b2b2b2b2";
@@ -292,6 +299,113 @@ function seed(): Rows {
     portal_audit_log: [],
     audit_log: [],
     plan_snapshots: [],
+    project_conversations: [
+      {
+        id: CONV_A,
+        implementation_id: IMPL_A,
+        customer_id: CUST_A,
+        last_message_at: past(1),
+        last_shared_message_at: past(2),
+      },
+    ],
+    conversation_participants: [
+      {
+        id: CONV_PART_STAFF,
+        conversation_id: CONV_A,
+        party_kind: "internal",
+        profile_id: PROFILE_A,
+        contact_id: null,
+        display_name: "Cory Brown",
+        email: "cory@gocanvas.example",
+        handle: "cory",
+        notify: true,
+        removed_at: null,
+      },
+      {
+        id: CONV_PART_CONTACT,
+        conversation_id: CONV_A,
+        party_kind: "external",
+        profile_id: null,
+        contact_id: CONTACT_A,
+        display_name: "Dana Reyes",
+        email: "dana@acme.example",
+        handle: "dana",
+        notify: true,
+        removed_at: null,
+      },
+      {
+        // Removed. Must not appear in the participant list the customer sees:
+        // a room that lists people who left is a room nobody can reason about.
+        id: CONV_PART_GONE,
+        conversation_id: CONV_A,
+        party_kind: "external",
+        profile_id: null,
+        contact_id: CONTACT_B,
+        display_name: "Departed Champion",
+        email: "gone@acme.example",
+        handle: "departed",
+        notify: true,
+        removed_at: past(3),
+      },
+    ],
+    conversation_messages: [
+      {
+        id: "f1111111-1111-4111-8111-111111111111",
+        conversation_id: CONV_A,
+        author_kind: "internal",
+        author_profile_id: PROFILE_A,
+        author_contact_id: null,
+        author_name: "Cory Brown",
+        visibility: "shared",
+        body: "Kickoff moved to Tuesday — does that work?",
+        created_at: past(2),
+        deleted_at: null,
+        edited_at: null,
+      },
+      {
+        // The one that must never travel.
+        id: "f2222222-2222-4222-8222-222222222222",
+        conversation_id: CONV_A,
+        author_kind: "internal",
+        author_profile_id: PROFILE_A,
+        author_contact_id: null,
+        author_name: "Cory Brown",
+        visibility: "internal",
+        body: "INTERNAL: the champion is a flight risk, ghosting us since Friday",
+        created_at: past(1),
+        deleted_at: null,
+        edited_at: null,
+      },
+      {
+        id: "f3333333-3333-4333-8333-333333333333",
+        conversation_id: CONV_A,
+        author_kind: "external",
+        author_profile_id: null,
+        author_contact_id: CONTACT_A,
+        author_name: "Dana Reyes",
+        visibility: "shared",
+        body: "Tuesday works for us.",
+        created_at: past(1),
+        deleted_at: null,
+        edited_at: null,
+      },
+      {
+        // Withdrawn: the row survives, the text does not travel.
+        id: "f4444444-4444-4444-8444-444444444444",
+        conversation_id: CONV_A,
+        author_kind: "internal",
+        author_profile_id: PROFILE_A,
+        author_contact_id: null,
+        author_name: "Cory Brown",
+        visibility: "shared",
+        body: "sent to the wrong customer, sorry",
+        created_at: past(1),
+        deleted_at: past(1),
+        edited_at: null,
+      },
+    ],
+    conversation_mentions: [],
+    conversation_reads: [],
     portal_app_config: [
       { key: "external_plan_link_ttl_days", value: 60 },
       { key: "external_plan_reassign_daily_limit", value: 2 },
@@ -325,7 +439,11 @@ beforeEach(() => {
   process.env["APP_URL"] = "https://hub.example";
   fake = createFakeSupabase(seed());
   h.supabase.client = fake.client;
-  h.flags = { external_plan_view_enabled: true, external_plan_actions_enabled: true };
+  h.flags = {
+    external_plan_view_enabled: true,
+    external_plan_actions_enabled: true,
+    conversations: true,
+  };
   h.emails = [];
   resetConfigCache();
 });
@@ -467,6 +585,9 @@ describe("4. projection allowlist, all serializer consumers", () => {
     "INTERNAL",
     "flight risk",
     "ghosting",
+    // The withdrawn message's text. A withdrawn message is rendered as
+    // withdrawn; its body must not ride along in the payload.
+    "sent to the wrong customer",
   ];
 
   const consumers: Array<[string, () => Promise<unknown>]> = [
@@ -522,6 +643,71 @@ describe("4. projection allowlist, all serializer consumers", () => {
       "INTERNAL: escalate to the account team",
     );
     expect(plan.your_tasks.flatMap((t) => t.comments)).toHaveLength(0);
+  });
+
+  it("the conversation carries the shared messages, from both sides", async () => {
+    // Asserted positively as well as negatively. A projection that returned
+    // nothing at all would pass every leak test in this file while shipping a
+    // broken feature.
+    const plan = await loadSharedPlan(viewerA, KEY_A);
+    const bodies = plan.conversation.messages.map((m) => m.body);
+    expect(bodies).toContain("Kickoff moved to Tuesday — does that work?");
+    expect(bodies).toContain("Tuesday works for us.");
+    expect(plan.conversation.messages.map((m) => m.side)).toContain("us");
+    expect(plan.conversation.messages.map((m) => m.side)).toContain("you");
+  });
+
+  it("an INTERNAL conversation message never reaches the customer, through any door", async () => {
+    for (const [name, load] of consumers) {
+      const payload = JSON.stringify(await load());
+      expect(payload, name).not.toContain("flight risk");
+      expect(payload, name).not.toContain("f2222222");
+    }
+  });
+
+  it("a withdrawn message is shown as withdrawn, with no text", async () => {
+    const plan = await loadSharedPlan(viewerA, KEY_A);
+    const withdrawn = plan.conversation.messages.filter((m) => m.withdrawn);
+    expect(withdrawn).toHaveLength(1);
+    expect(withdrawn[0]!.body).toBe("");
+    // The author still shows. A message that vanishes without a trace reads as
+    // the customer having imagined it.
+    expect(withdrawn[0]!.author).toBe("Cory Brown");
+  });
+
+  it("messages come back in time order", async () => {
+    const plan = await loadSharedPlan(viewerA, KEY_A);
+    const times = plan.conversation.messages.map((m) => m.at);
+    expect([...times].sort()).toEqual(times);
+  });
+
+  it("the participant list omits anyone who was removed", async () => {
+    const plan = await loadSharedPlan(viewerA, KEY_A);
+    const names = plan.conversation.participants.map((p) => p.name);
+    expect(names).toContain("Dana Reyes");
+    expect(names).toContain("Cory Brown");
+    expect(names).not.toContain("Departed Champion");
+  });
+
+  it("the conversation is empty and unpostable when the flag is off", async () => {
+    // Server-side, not UI hiding: with the flag off the messages are not read
+    // from the database at all.
+    h.flags["conversations"] = false;
+    const plan = await loadSharedPlan(viewerA, KEY_A);
+    expect(plan.conversation.messages).toEqual([]);
+    expect(plan.conversation.can_post).toBe(false);
+  });
+
+  it("posting is off when the actions flag is off, even with the thread visible", async () => {
+    h.flags["external_plan_actions_enabled"] = false;
+    const plan = await loadSharedPlan(viewerA, KEY_A);
+    expect(plan.conversation.messages.length).toBeGreaterThan(0);
+    expect(plan.conversation.can_post).toBe(false);
+  });
+
+  it("the internal preview can read the thread but never post through it", async () => {
+    const plan = await loadSharedPlan({ kind: "preview", profileId: OWNER }, KEY_A);
+    expect(plan.conversation.can_post).toBe(false);
   });
 
   it("a task blocked by INTERNAL work says so without naming it, and is not completable", async () => {
@@ -642,6 +828,76 @@ describe("7. write scoping", () => {
 /* ------------------------------------------------------------------------- */
 /* 7b. Reassign — inherited expiry is what keeps expiry meaningful            */
 /* ------------------------------------------------------------------------- */
+
+/* ------------------------------------------------------------------------- */
+/* 7a. The conversation, written from outside                                 */
+/* ------------------------------------------------------------------------- */
+
+describe("7a. posting into the conversation from outside", () => {
+  it("writes a shared message attributed to the grant's contact", async () => {
+    const cookie = await cookieFor(GRANT_A);
+    await postConversationMessage(cookie, "Can we push to Wednesday?");
+
+    const written = fake.store["conversation_messages"]!.find(
+      (m) => m.body === "Can we push to Wednesday?",
+    )!;
+    expect(written.conversation_id).toBe(CONV_A);
+    // All four forced server-side. None of them is the caller's to say.
+    expect(written.author_kind).toBe("external");
+    expect(written.visibility).toBe("shared");
+    expect(written.author_contact_id).toBe(CONTACT_A);
+    expect(written.author_profile_id ?? null).toBeNull();
+    expect(written.author_grant_id).toBe(GRANT_A);
+    // Snapshotted from the CONTACT record — note it is "Ada", the name on
+    // customer_contacts, not the display_name on the participant row and not
+    // anything the caller sent.
+    expect(written.author_name).toBe("Ada");
+  });
+
+  it("refuses when the actions flag is off", async () => {
+    h.flags["external_plan_actions_enabled"] = false;
+    const cookie = await cookieFor(GRANT_A);
+    await expect(postConversationMessage(cookie, "hello")).rejects.toThrow(ExternalAccessError);
+    expect(fake.store["conversation_messages"]!.some((m) => m.body === "hello")).toBe(false);
+  });
+
+  it("refuses when the conversations flag is off", async () => {
+    h.flags["conversations"] = false;
+    const cookie = await cookieFor(GRANT_A);
+    await expect(postConversationMessage(cookie, "hello")).rejects.toThrow(ExternalAccessError);
+  });
+
+  it("refuses an empty message and one that is absurdly long", async () => {
+    const cookie = await cookieFor(GRANT_A);
+    await expect(postConversationMessage(cookie, "   ")).rejects.toThrow(ExternalAccessError);
+    await expect(postConversationMessage(cookie, "x".repeat(20001))).rejects.toThrow(
+      ExternalAccessError,
+    );
+  });
+
+  it("refuses without a session cookie", async () => {
+    await expect(postConversationMessage(undefined, "hello")).rejects.toThrow(ExternalAccessError);
+  });
+
+  it("notifies the internal side and never the customer's own colleagues", async () => {
+    const cookie = await cookieFor(GRANT_A);
+    await postConversationMessage(cookie, "Tuesday is tight for us.");
+    const to = h.emails.map((e) => e.to);
+    expect(to).toContain("cory@gocanvas.example");
+    // Not the sender, and not the other contact on their side: cc-ing a
+    // customer's own colleagues on their own message is noise, not one place.
+    expect(to).not.toContain("dana@acme.example");
+    expect(to).not.toContain("gone@acme.example");
+  });
+
+  it("the posted message comes back in the plan it returns", async () => {
+    const cookie = await cookieFor(GRANT_A);
+    const { plan } = await postConversationMessage(cookie, "Confirmed, thank you.");
+    const mine = plan.conversation.messages.find((m) => m.body === "Confirmed, thank you.")!;
+    expect(mine.side).toBe("you");
+    expect(mine.author).toBe("Ada");
+  });
+});
 
 describe("7b. reassign", () => {
   it("the new grant inherits the parent's expiry and passcode exactly", async () => {
