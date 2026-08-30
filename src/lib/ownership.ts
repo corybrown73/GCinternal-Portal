@@ -58,6 +58,10 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
  */
 export function parseScope(raw: string | null | undefined): OwnerScope {
   if (!raw) return DEFAULT_SCOPE;
+  // Note for callers deciding a DEFAULT: this function cannot tell you whether
+  // the user asked for "mine" or asked for nothing — both arrive as MINE. Use
+  // `scopeWasSpecified` first when that difference matters, which it does
+  // whenever you are choosing what an unscoped visit should show.
   const value = raw.trim().toLowerCase();
   if (value === "all") return { mode: "all", personId: null };
   if (value === "mine") return DEFAULT_SCOPE;
@@ -145,4 +149,42 @@ export function describeScope(
 /** True when the view is showing somebody something other than their own book. */
 export function isCovering(scope: OwnerScope): boolean {
   return scope.mode === "person";
+}
+
+/**
+ * Did the request actually name a scope?
+ *
+ * `parseScope` folds "absent" and "mine" into the same answer, which is right
+ * for reading a URL and wrong for choosing a default. An explicit `?scope=mine`
+ * means "show me my book even if it is empty" — somebody checking that they
+ * have nothing assigned needs to be able to see exactly that. An absent scope
+ * means nobody has expressed a preference, and the app should pick well.
+ */
+export function scopeWasSpecified(raw: string | null | undefined): boolean {
+  return typeof raw === "string" && raw.trim() !== "";
+}
+
+/**
+ * What an unscoped visit should show.
+ *
+ * THE BUG THIS FIXES. The default was always "mine", and the only account with
+ * a login owns nothing — so Home, /customers and /pipeline all opened reading
+ * zero against nine live implementations. An app whose front page says "0 act
+ * now" when there are nine projects in flight is not filtering, it is lying,
+ * and the reader has no way to tell which.
+ *
+ * Two cases get "all":
+ *
+ *   * the viewer owns nothing. "Mine" is then an empty page by construction,
+ *     and an empty page as a first impression teaches people the tool is
+ *     broken. Showing everything is both more useful and more honest.
+ *   * the viewer is an admin. Admins are here to see across the team; their own
+ *     book is the unusual view for them, not the default one.
+ *
+ * Everyone else still lands on their own accounts, which is the whole point of
+ * the feature for the people it was built for.
+ */
+export function defaultScopeFor(input: { ownsAnything: boolean; isAdmin: boolean }): OwnerScope {
+  if (input.isAdmin || !input.ownsAnything) return { mode: "all", personId: null };
+  return DEFAULT_SCOPE;
 }

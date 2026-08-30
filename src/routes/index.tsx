@@ -272,9 +272,17 @@ function HomePage() {
           </ul>
         </Panel>
 
+        {/* This used to claim "sign-in isn't set up yet, so this shows every
+            implementation regardless of who owns it". Sign-in has been set up
+            for a long time and the page was in fact showing the viewer's own
+            book — which for an admin who owns nothing meant zero of everything,
+            under a footer insisting it was showing all of it. A caption that
+            contradicts the numbers above it costs more trust than no caption. */}
         <p className="text-[11px] text-muted-foreground">
-          <StatusDot status="idle" className="mr-1 align-middle" /> Sign-in isn't set up yet, so
-          this shows every implementation regardless of who owns it.
+          <StatusDot status="idle" className="mr-1 align-middle" />{" "}
+          {data.scope.mode === "all"
+            ? "Showing every project. Use the scope control above to narrow to one person's accounts."
+            : "Showing a subset. Use the scope control above to see every project."}
         </p>
       </PageBody>
     </>

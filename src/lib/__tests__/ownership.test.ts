@@ -1,12 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
   DEFAULT_SCOPE,
+  defaultScopeFor,
   describeScope,
   isCovering,
   isOwnedBy,
   matchesScope,
   parseScope,
   scopeParam,
+  scopeWasSpecified,
   type OwnershipFacts,
   type Viewer,
 } from "../ownership";
@@ -165,5 +167,45 @@ describe("isCovering", () => {
     expect(isCovering(DEFAULT_SCOPE)).toBe(false);
     expect(isCovering({ mode: "all", personId: null })).toBe(false);
     expect(isCovering({ mode: "person", personId: RAJ.teamMemberId })).toBe(true);
+  });
+});
+
+describe("scopeWasSpecified", () => {
+  it("separates an absent scope from an explicit one", () => {
+    // parseScope folds both into MINE, which is right for reading a URL and
+    // wrong for choosing a default. This is the distinction that makes an
+    // explicit ?scope=mine survive.
+    expect(scopeWasSpecified(null)).toBe(false);
+    expect(scopeWasSpecified(undefined)).toBe(false);
+    expect(scopeWasSpecified("")).toBe(false);
+    expect(scopeWasSpecified("   ")).toBe(false);
+    expect(scopeWasSpecified("mine")).toBe(true);
+    expect(scopeWasSpecified("all")).toBe(true);
+  });
+});
+
+describe("defaultScopeFor", () => {
+  it("shows everything to someone who owns nothing", () => {
+    // THE BUG. The only account with a login owns nothing, so every screen
+    // opened reading zero against nine live implementations.
+    expect(defaultScopeFor({ ownsAnything: false, isAdmin: false })).toEqual({
+      mode: "all",
+      personId: null,
+    });
+  });
+
+  it("shows everything to an admin even when they do own accounts", () => {
+    // An admin is here to see across the team; their own book is the unusual
+    // view for them, not the default one.
+    expect(defaultScopeFor({ ownsAnything: true, isAdmin: true })).toEqual({
+      mode: "all",
+      personId: null,
+    });
+  });
+
+  it("still lands an ordinary owner on their own book", () => {
+    // The whole point of the feature for the people it was built for — a TIS
+    // opening the app should see their projects, not all forty.
+    expect(defaultScopeFor({ ownsAnything: true, isAdmin: false })).toEqual(DEFAULT_SCOPE);
   });
 });

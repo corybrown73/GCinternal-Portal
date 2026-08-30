@@ -1,5 +1,12 @@
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
-import { DEFAULT_SCOPE, parseScope, type OwnerScope, type Viewer } from "./ownership";
+import {
+  DEFAULT_SCOPE,
+  defaultScopeFor,
+  parseScope,
+  scopeWasSpecified,
+  type OwnerScope,
+  type Viewer,
+} from "./ownership";
 
 const db = () => supabaseAdmin as any;
 
@@ -68,11 +75,65 @@ async function viewerForTeamMember(teamMemberId: string): Promise<{
   };
 }
 
+/**
+ * Does this viewer own anything at all, on either side of the identity split?
+ *
+ * Delivery ownership points at team_members; the pre-sale account owners point
+ * at portal_profiles. Somebody can own on one side and not the other, so both
+ * are asked and either counts.
+ */
+async function ownsAnything(viewer: Viewer): Promise<boolean> {
+  const checks: Array<Promise<{ count: number | null }>> = [
+    db()
+      .from("portal_accounts")
+      .select("id", { count: "exact", head: true })
+      .or(`am_owner_id.eq.${viewer.profileId},se_owner_id.eq.${viewer.profileId}`),
+  ];
+  if (viewer.teamMemberId) {
+    checks.push(
+      db()
+        .from("implementations")
+        .select("id", { count: "exact", head: true })
+        .eq("owner_id", viewer.teamMemberId),
+      db()
+        .from("customers")
+        .select("id", { count: "exact", head: true })
+        .or(`csm_owner_id.eq.${viewer.teamMemberId},account_manager_id.eq.${viewer.teamMemberId}`),
+    );
+  }
+  const results = await Promise.all(checks);
+  return results.some((r) => (r.count ?? 0) > 0);
+}
+
+async function isAdmin(profileId: string): Promise<boolean> {
+  const { data } = await db()
+    .from("portal_profiles")
+    .select("role")
+    .eq("id", profileId)
+    .maybeSingle();
+  const role = String(data?.role ?? "").toLowerCase();
+  return role === "admin" || role === "super_admin";
+}
+
 export async function resolveScope(
   profileId: string,
   raw: string | null | undefined,
 ): Promise<ResolvedScope> {
   const viewer = await viewerFor(profileId);
+
+  // NOTHING WAS ASKED FOR. Decide well rather than defaulting to a page that
+  // reads zero. An explicit ?scope=mine skips this entirely — somebody checking
+  // that they have nothing assigned must be able to see exactly that.
+  if (!scopeWasSpecified(raw)) {
+    const [owns, admin] = await Promise.all([ownsAnything(viewer), isAdmin(profileId)]);
+    return {
+      scope: defaultScopeFor({ ownsAnything: owns, isAdmin: admin }),
+      viewer,
+      person: null,
+      personName: null,
+    };
+  }
+
   const scope = parseScope(raw);
 
   if (scope.mode !== "person" || !scope.personId) {
