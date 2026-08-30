@@ -138,9 +138,13 @@ export async function setWorkItemStatus(args: {
     .maybeSingle();
   if (!before) throw new Error("That task no longer exists");
 
-  // completed_by is a team_members id; the caller has a profile id. The 0010
-  // bridge maps one to the other, and an unbridged profile records null rather
-  // than a wrong id.
+  // completed_by is a team_members id — matching owner_id and
+  // implementation_stage_history.entered_by. The caller has a profile id, and
+  // the 0010 bridge maps one to the other; an unbridged profile records null
+  // rather than a wrong id.
+  //
+  // Until 0037 this column FK'd to portal_profiles, so writing the (correct)
+  // team_member id here failed on every single tick.
   let completedBy: string | null = null;
   if (args.actorProfileId) {
     const { data: profile } = await db()
@@ -161,7 +165,12 @@ export async function setWorkItemStatus(args: {
       updated_at: new Date().toISOString(),
     })
     .eq("id", args.workItemId);
-  if (error) throw new Error(error.message);
+  if (error) {
+    // The driver's message names tables and constraints. It goes to the log;
+    // the caller gets a sentence. See lib/errors.ts.
+    const { reportFailure } = await import("./errors");
+    throw new Error(reportFailure("plan", "save that task", error));
+  }
 
   const { recordActivity } = await import("./activity.server");
   await recordActivity(

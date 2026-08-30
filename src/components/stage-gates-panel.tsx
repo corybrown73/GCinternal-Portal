@@ -17,6 +17,7 @@ import {
   stageGateStatus,
   type GateItem,
 } from "@/lib/stage-gates";
+import { userMessage } from "@/lib/errors";
 import { cn } from "@/lib/utils";
 
 /**
@@ -170,11 +171,18 @@ export function StageGatesPanel({
         ) : null}
       </div>
 
+      {/* Both go through userMessage: a server function can still surface a
+          driver message if a write fails somewhere that has not been wrapped
+          yet, and this is the last place before it reaches a person. */}
       {move.error ? (
-        <p className="px-3 py-2 text-[12px] text-destructive">{(move.error as Error).message}</p>
+        <p className="px-3 py-2 text-[12px] text-destructive">
+          {userMessage("move this project on", move.error)}
+        </p>
       ) : null}
       {toggle.error ? (
-        <p className="px-3 py-2 text-[12px] text-destructive">{(toggle.error as Error).message}</p>
+        <p className="px-3 py-2 text-[12px] text-destructive">
+          {userMessage("save that task", toggle.error)}
+        </p>
       ) : null}
     </Panel>
   );
