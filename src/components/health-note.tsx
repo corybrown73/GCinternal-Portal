@@ -12,7 +12,40 @@ import type { ImplHealth } from "@/lib/customer360-derive";
  * though someone did.
  */
 
-const HEALTH_STATUS_VALUES = ["on_track", "at_risk", "blocked"];
+/**
+ * Legacy `status` values worth showing a person.
+ *
+ * NOT "on_track", which every creation path writes by default —
+ * startOnboarding, both Salesforce RPCs and the seed all insert it, and no
+ * edit to `status` is audited anywhere. So an `on_track` flag is the absence
+ * of a statement, not a statement, and this note was rendering it on 100% of
+ * rows: nine of nine implementations in production carried `on_track` with no
+ * recorded health, and every single one of them printed "Legacy flag: On track
+ * (unconfirmed)". A caveat that appears on everything says nothing about
+ * anything, and trains people to stop reading the line it sits on.
+ *
+ * `at_risk` and `blocked` are different: nothing writes them automatically, so
+ * one of them in the column means somebody set it, even though we cannot say
+ * who. That is worth surfacing, with the caveat intact.
+ */
+const NOTEWORTHY_LEGACY_STATUS = ["at_risk", "blocked"];
+
+/**
+ * Whether the legacy flag is worth a line on screen. Exported so the rule can
+ * be tested without a DOM — the whole point of the fix is which rows it stays
+ * silent on, and that is a decision, not a rendering.
+ */
+export function showsLegacyFlag(
+  legacyStatus: string | null | undefined,
+  computed: ImplHealth,
+  recorded?: string | null,
+): boolean {
+  if (recorded) return false;
+  if (!legacyStatus) return false;
+  if (!NOTEWORTHY_LEGACY_STATUS.includes(legacyStatus)) return false;
+  // The flag agreeing with the signals adds nothing to what is already shown.
+  return legacyStatus !== computed;
+}
 
 export function HealthNote({
   recorded,
@@ -53,8 +86,9 @@ export function HealthNote({
   }
 
   // No human statement on file. Show the legacy flag only when it actually
-  // says something, and label what it is — and is not.
-  if (legacyStatus && HEALTH_STATUS_VALUES.includes(legacyStatus) && legacyStatus !== computed) {
+  // says something — see NOTEWORTHY_LEGACY_STATUS — and label what it is and
+  // is not.
+  if (showsLegacyFlag(legacyStatus, computed, recorded)) {
     return (
       <span
         className={className ?? "text-[11px] text-muted-foreground"}

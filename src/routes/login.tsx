@@ -75,31 +75,45 @@ function LoginPage() {
         </div>
 
         <div className="grid items-center gap-10 py-10 lg:grid-cols-2 lg:gap-16 lg:py-16">
-          {/* The marketing half. A sign-in page that is only a form tells a
-              customer nothing about where they have arrived; this says it in
-              the site's own voice, at the site's own scale. */}
+          {/* A sign-in page that is only a form tells a cold arrival nothing
+              about where they have landed. This half says what the page is, in
+              the brand's own voice and at its own scale — and stops there.
+
+              NOT a pitch. Nobody reaches this page to be sold anything: it is
+              GoCanvas staff signing in to work, and customers who were already
+              invited by their onboarding team and are following a link. The
+              customer has bought the product; selling it back to them mid-
+              rollout is noise at best, and at worst makes them wonder whether
+              they have landed somewhere they should not be. So: three
+              statements of fact, no value proposition, no call to action. */}
           <div className="hidden lg:block">
             <p
               className="text-[12px] font-semibold uppercase tracking-[0.14em]"
               style={{ color: "var(--gc-body)" }}
             >
-              Field Operations Platform
+              GoCanvas
             </p>
             <h1 className="gc-display mt-4 text-[54px]">
-              Stop chasing data.
+              Onboarding
               <br />
-              <span style={{ color: "var(--gc-blue)" }}>See progress as it happens.</span>
+              <span style={{ color: "var(--gc-blue)" }}>Portal</span>
             </h1>
             <p className="gc-lede mt-6 max-w-md text-[16px]">
-              One place for the whole handoff — from the deal your AE closed to the crews submitting
-              from the field.
+              Where GoCanvas customers and their onboarding team follow the same rollout plan — from
+              kickoff through to go-live.
             </p>
             <div className="gc-panel mt-10 p-6">
-              <ul className="space-y-3 text-[14px]" style={{ color: "var(--gc-ink)" }}>
+              <p
+                className="text-[11px] font-semibold uppercase tracking-[0.12em]"
+                style={{ color: "var(--gc-body)" }}
+              >
+                What you&apos;ll find here
+              </p>
+              <ul className="mt-3 space-y-3 text-[14px]" style={{ color: "var(--gc-ink)" }}>
                 {[
-                  "Every project, every stage, one plan",
-                  "Your customer sees the same plan you do",
-                  "Nothing lost between sales and delivery",
+                  "Your rollout plan and the dates on it",
+                  "What happens next, and what we need from you",
+                  "Who your onboarding team is and how to reach them",
                 ].map((line) => (
                   <li key={line} className="flex items-start gap-2.5">
                     <Check
