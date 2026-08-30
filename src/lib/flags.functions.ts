@@ -52,7 +52,10 @@ export const setFlag = createServerFn({ method: "POST" })
       actor_id: actor.id,
       action: data.value ? "flag.enabled" : "flag.disabled",
       entity_type: "feature_flag",
-      entity_id: data.flag,
+      // A flag is text-keyed. This was `entity_id`, which is a uuid column, so
+      // every toggle failed the insert and raised a Critical alert instead of
+      // recording the change the Features page promised it would record.
+      entity_key: data.flag,
       payload: { flag: data.flag, value: data.value },
     });
 

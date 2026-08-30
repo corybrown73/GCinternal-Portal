@@ -62,19 +62,73 @@ export type AuditEntry = {
   actor_id?: string | null;
   action: string;
   entity_type?: string;
+  /** For uuid-keyed rows: a customer, an implementation, a ticket. */
   entity_id?: string;
+  /**
+   * For text-keyed entities: a feature flag, a lifecycle stage, a pipeline
+   * stage. Mutually exclusive with entity_id — 0038 enforces that in the
+   * database, because a row naming the changed thing twice gives two answers
+   * to one question.
+   */
+  entity_key?: string;
   payload?: Record<string, unknown>;
 };
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Put each identifier in the column that can hold it.
+ *
+ * WHY THIS COERCES RATHER THAN TRUSTING THE CALLER. Every feature-flag toggle
+ * sent "demo_mode" into a uuid column, Postgres refused it, and the retry-then-
+ * alert path turned each one into a Critical alert — while the Features page
+ * told the user their change had been recorded against their name. The write
+ * that fails loudest in the logs is the one nobody sees on screen.
+ *
+ * A caller passing a non-uuid entity_id is now redirected to entity_key instead
+ * of being sent to the database to fail. That is deliberate belt-and-braces:
+ * `entity_key` is the right API and callers should use it, but the audit trail
+ * should not be the thing that breaks when somebody forgets.
+ */
+export function entityRef(entry: AuditEntry): {
+  entity_id: string | null;
+  entity_key: string | null;
+} {
+  const id = entry.entity_id ?? null;
+  const key = entry.entity_key ?? null;
+
+  if (id && !UUID_RE.test(id)) {
+    // Not a uuid, so it can only be a key. Log it: the caller should be fixed,
+    // and a silent correction would hide that forever.
+    console.warn(
+      `[audit] entity_id "${id}" for action "${entry.action}" is not a uuid; recorded as entity_key`,
+    );
+    return { entity_id: null, entity_key: key ?? id };
+  }
+
+  // Both set is the ambiguous case the database refuses. The uuid wins, because
+  // it is the more specific of the two, and the loss is noted.
+  if (id && key) {
+    console.warn(
+      `[audit] action "${entry.action}" passed both entity_id and entity_key; keeping the id`,
+    );
+    return { entity_id: id, entity_key: null };
+  }
+
+  return { entity_id: id, entity_key: key };
+}
 
 async function insertOnce(entry: AuditEntry): Promise<string | null> {
   const admin = createAdminClient();
   try {
+    const ref = entityRef(entry);
     const { error } = await admin.from("portal_audit_log").insert({
       actor_type: entry.actor_type,
       actor_id: entry.actor_id ?? null,
       action: entry.action,
       entity_type: entry.entity_type ?? null,
-      entity_id: entry.entity_id ?? null,
+      entity_id: ref.entity_id,
+      entity_key: ref.entity_key,
       payload: entry.payload ?? null,
     });
     return error ? (error.message ?? String(error)) : null;
@@ -89,7 +143,7 @@ async function raiseFailureAlert(entry: AuditEntry, message: string, critical: b
     actorType: entry.actor_type,
     actorId: entry.actor_id ?? null,
     entityType: entry.entity_type ?? null,
-    entityId: entry.entity_id ?? null,
+    entityId: entry.entity_id ?? entry.entity_key ?? null,
     message,
     critical,
   });
