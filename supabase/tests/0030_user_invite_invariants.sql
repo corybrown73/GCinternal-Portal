@@ -39,8 +39,13 @@ insert into auth.users (id, email) values
 -- ---------------------------------------------------------------------------
 -- No invite: the allowlist still governs
 -- ---------------------------------------------------------------------------
+-- The id is always supplied explicitly. `auth.users.id` has NO DEFAULT in real
+-- Supabase — GoTrue supplies the uuid — so an insert that omits it fails on the
+-- not-null constraint and never reaches the trigger this file exists to probe.
+-- That is exactly how this test passed locally and failed in CI once.
 select pg_temp.assert_refused($$
-  insert into auth.users (email) values ('stranger@elsewhere.test')
+  insert into auth.users (id, email)
+  values ('00000000-1111-4111-8111-00000000000a', 'stranger@elsewhere.test')
 $$, 'approved email domains',
    'an uninvited signup from an unapproved domain');
 
@@ -111,7 +116,8 @@ insert into portal_user_invites (email, full_name, role, created_at, expires_at)
   values ('stale@elsewhere.test', 'Stale', 'manager', now() - interval '30 days', now() - interval '1 day');
 
 select pg_temp.assert_refused($$
-  insert into auth.users (email) values ('stale@elsewhere.test')
+  insert into auth.users (id, email)
+  values ('00000000-1111-4111-8111-00000000000b', 'stale@elsewhere.test')
 $$, 'approved email domains',
    'signing up on an expired invite from an unapproved domain');
 
