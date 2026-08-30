@@ -1,6 +1,8 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
+import { EDITABLE_DEAL_FIELDS, type EditableDealField } from "./presale-fields";
+
 import { requireInternalAuth } from "@/integrations/supabase/internal-middleware";
 import { STAGES } from "./presale-stages";
 
@@ -71,6 +73,27 @@ export const moveDealStage = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const { transitionDeal } = await import("./presale.server");
     return transitionDeal(context.userId, data.dealId, data.toStage, data.note);
+  });
+
+export const setDealField = createServerFn({ method: "POST" })
+  .middleware([requireInternalAuth])
+  .inputValidator((data: unknown) =>
+    z
+      .object({
+        dealId: z.string().uuid(),
+        // The allowed set lives in one place on the server. Listing the names
+        // again here would let the two drift, and the drift would look like a
+        // field that saves in one build and silently refuses in the next.
+        field: z.enum(
+          Object.keys(EDITABLE_DEAL_FIELDS) as [EditableDealField, ...EditableDealField[]],
+        ),
+        value: z.string().max(2000).nullable(),
+      })
+      .parse(data),
+  )
+  .handler(async ({ data, context }) => {
+    const { updateDealField } = await import("./presale.server");
+    return updateDealField(context.userId, data.dealId, data.field, data.value);
   });
 
 export const importDeals = createServerFn({ method: "POST" })

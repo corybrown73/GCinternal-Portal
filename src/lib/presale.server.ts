@@ -22,6 +22,7 @@ import type {
   TamRequest,
 } from "./presale-types";
 import { matchesScope } from "./ownership";
+import { EDITABLE_DEAL_FIELDS, type EditableDealField } from "./presale-fields";
 import type { ResolvedScope } from "./ownership.server";
 
 const db = () => supabaseAdmin as any;
@@ -287,6 +288,9 @@ export interface DealDetail {
   /** The configured pipeline, so the record renders labels and the Closed Won
    *  control from the same list the board does. */
   stages: PipelineStage[];
+  /** Who an owner field can be set to, resolved once here rather than by a
+   *  second round trip when somebody opens the AM owner dropdown. */
+  owner_options: Array<{ value: string; label: string }>;
 }
 
 export async function loadDeal(dealId: string): Promise<DealDetail | null> {
@@ -333,6 +337,10 @@ export async function loadDeal(dealId: string): Promise<DealDetail | null> {
     account: account as DealDetail["account"],
     am_owner_name: named(account.am_owner_id),
     se_owner_name: named(account.se_owner_id),
+    // Sorted by the name a person will look for, not by id.
+    owner_options: [...names.entries()]
+      .map(([value, label]) => ({ value, label }))
+      .sort((a, b) => a.label.localeCompare(b.label)),
     gong_reports: ((gong.data ?? []) as GongReport[]).map((r) => ({
       ...r,
       uploaded_by_name: named(r.uploaded_by),
@@ -942,3 +950,108 @@ export async function setProfileRole(
 
 /* Re-export for the API routes, which resolve sf_ ids the same way. */
 export { resolveAccountId };
+
+/* ---------- Deal field edits ---------- */
+
+/**
+ * Correct one fact on a deal, from wherever it is displayed.
+ *
+ * WHY ONE FIELD AT A TIME. The caller is an inline editor on a single value,
+ * and a whole-record PATCH from that editor would send back every other field
+ * as the browser last saw it — quietly reverting a colleague's edit made in the
+ * meantime. One field, one write, and the rest of the row is left alone.
+ *
+ * ARR is the reason this exists at all: an account that starts at 5k and grows
+ * to 8k is the fact the pipeline is for. The change is written to `audit_log`
+ * through the shared activity path, so the account carries its own history of
+ * what the number was and when it moved — no separate ARR-history table, and
+ * the same feed picks up owner changes for free.
+ */
+export async function updateDealField(
+  userId: string,
+  dealId: string,
+  field: EditableDealField,
+  value: string | null,
+): Promise<{ ok: true; field: EditableDealField; value: string | number | null }> {
+  await requireSalesEditor(userId);
+
+  const kind = EDITABLE_DEAL_FIELDS[field];
+  if (!kind) throw new Error(`${field} is not editable here`);
+
+  const { data: before } = await db()
+    .from("portal_accounts")
+    .select("*")
+    .eq("id", dealId)
+    .maybeSingle();
+  if (!before) throw new Error("Deal not found");
+
+  let next: string | number | null = value;
+
+  if (kind === "number") {
+    if (value === null || value.trim() === "") {
+      next = null;
+    } else {
+      // Accept what a person actually types into a money field: "48,000",
+      // "$48000", "48000.00". Refusing those and saying "must be a number" is
+      // technically correct and infuriating.
+      const cleaned = value.replace(/[$,\s]/g, "");
+      const n = Number(cleaned);
+      if (!Number.isFinite(n) || n < 0) {
+        throw new Error(`"${value}" is not an amount — enter a number like 48000`);
+      }
+      next = n;
+    }
+  }
+
+  if (kind === "uuid" && next !== null) {
+    // An owner must be a real profile. A free-typed id would save cleanly and
+    // then render as "Unassigned" forever, which looks like the save failed.
+    const { data: profile } = await db()
+      .from("portal_profiles")
+      .select("id")
+      .eq("id", next)
+      .maybeSingle();
+    if (!profile) throw new Error("That person is not a user of this portal");
+  }
+
+  if (field === "name" && (next === null || String(next).trim() === "")) {
+    throw new Error("A deal needs a name");
+  }
+
+  if (field === "salesforce_id" && next !== null) {
+    next = sfId18(String(next));
+  }
+
+  const { error } = await db()
+    .from("portal_accounts")
+    .update({ [field]: next, updated_at: new Date().toISOString() })
+    .eq("id", dealId);
+  if (error) throw new Error(error.message);
+
+  // After the write, never before: a feed row for a save that then failed is a
+  // lie about history.
+  const { recordActivity } = await import("./activity.server");
+  await recordActivity(
+    [
+      {
+        entity_type: "account",
+        entity_id: dealId,
+        field_name: field,
+        old_value: before[field] == null ? null : String(before[field]),
+        new_value: next == null ? null : String(next),
+      },
+    ],
+    { actorProfileId: userId },
+  );
+
+  await audit({
+    actor_type: "user",
+    actor_id: userId,
+    action: "account.field_update",
+    entity_type: "account",
+    entity_id: dealId,
+    payload: { field, from: before[field] ?? null, to: next },
+  });
+
+  return { ok: true, field, value: next };
+}

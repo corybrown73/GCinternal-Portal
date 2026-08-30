@@ -13,6 +13,7 @@ import ReactMarkdown from "react-markdown";
 
 import { PageBody, PageHeader } from "@/components/page";
 import { Field, NoRows, Panel } from "@/components/record";
+import { EditableField } from "@/components/editable-field";
 import { canEditSales, canManage, isSuperAdmin, useProfile } from "@/lib/auth";
 import {
   addNote,
@@ -25,6 +26,7 @@ import {
   removeNote,
   removeReport,
   setNoteReviewed,
+  setDealField,
   startOnboardingForDeal,
 } from "@/lib/presale.functions";
 import {
@@ -35,6 +37,7 @@ import {
   type PipelineStage,
 } from "@/lib/pipeline-stages";
 import { daysSince, fmtDate, fmtDateTime, fmtMoney } from "@/lib/hub-format";
+import type { EditableDealField } from "@/lib/presale-fields";
 import { cn } from "@/lib/utils";
 
 const dealQuery = (dealId: string) =>
@@ -129,6 +132,23 @@ function DealPage() {
 function DealRecord({ deal }: { deal: DealData }) {
   const { account } = deal;
   const days = daysSince(account.stage_entered_at);
+  const { profile } = useProfile();
+  const editable = canEditSales(profile?.role) || canManage(profile?.role);
+
+  const queryClient = useQueryClient();
+  const save = useServerFn(setDealField);
+  const field = useMutation({
+    mutationFn: (v: { field: EditableDealField; value: string | null }) =>
+      save({ data: { dealId: account.id, field: v.field, value: v.value } }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["deal", account.id] });
+      // The board shows ARR and owner too; leaving it stale is how a number
+      // that was just corrected shows up wrong one click later.
+      void queryClient.invalidateQueries({ queryKey: ["pipeline"] });
+    },
+  });
+  const set = (name: EditableDealField) => (value: string | null) =>
+    field.mutateAsync({ field: name, value });
 
   return (
     <>
@@ -145,22 +165,55 @@ function DealRecord({ deal }: { deal: DealData }) {
               {days ?? 0}d in stage
             </span>
           </div>
-          <Field label="ARR" value={account.arr != null ? fmtMoney(account.arr) : "—"} />
-          <Field
-            label="Salesforce"
-            value={
-              account.salesforce_id ? (
-                <span className="font-mono">{account.salesforce_id}</span>
-              ) : (
-                "—"
-              )
-            }
+          {/* ARR leads, and is editable, because an account that starts at 5k
+              and grows to 8k is the fact this pipeline exists to notice. Every
+              change lands in the activity feed, so the account carries its own
+              record of what the number was and when it moved. */}
+          <EditableField
+            label="ARR"
+            value={account.arr != null ? String(account.arr) : null}
+            format={(v) => (v ? fmtMoney(Number(v)) : "—")}
+            type="number"
+            placeholder="48000"
+            onSave={set("arr")}
+            disabled={!editable}
           />
-          <Field label="Domain" value={account.domain ?? "—"} />
-          <Field label="AM owner" value={deal.am_owner_name ?? "Unassigned"} />
-          <Field label="SE owner" value={deal.se_owner_name ?? "—"} />
+          <EditableField
+            label="Salesforce"
+            value={account.salesforce_id ?? null}
+            format={(v) => (v ? <span className="font-mono">{v}</span> : "—")}
+            onSave={set("salesforce_id")}
+            disabled={!editable}
+          />
+          <EditableField
+            label="Domain"
+            value={account.domain ?? null}
+            onSave={set("domain")}
+            disabled={!editable}
+          />
+          <EditableField
+            label="AM owner"
+            value={account.am_owner_id ?? null}
+            display={deal.am_owner_name ?? "Unassigned"}
+            type="select"
+            options={deal.owner_options ?? []}
+            onSave={set("am_owner_id")}
+            disabled={!editable}
+          />
+          <EditableField
+            label="SE owner"
+            value={account.se_owner_id ?? null}
+            display={deal.se_owner_name ?? "Unassigned"}
+            type="select"
+            options={deal.owner_options ?? []}
+            onSave={set("se_owner_id")}
+            disabled={!editable}
+          />
           <Field label="Created" value={fmtDate(account.created_at)} />
         </div>
+        {field.error ? (
+          <p className="text-[12px] text-destructive">{(field.error as Error).message}</p>
+        ) : null}
 
         <div className="grid gap-4 xl:grid-cols-2">
           <div className="space-y-4">
