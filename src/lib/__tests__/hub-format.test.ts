@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatTaskOffset } from "../hub-format";
+import { fmtDate, fmtDateTime, formatTaskOffset } from "../hub-format";
 
 /**
  * Template tasks store a basis plus a signed day offset (0013). Reviewers read
@@ -26,5 +26,37 @@ describe("formatTaskOffset", () => {
   it("falls back readably for an unknown or missing basis", () => {
     expect(formatTaskOffset("first_invoice", 1)).toBe("first invoice +1d");
     expect(formatTaskOffset(null, 1)).toBe("stage entry +1d");
+  });
+});
+
+describe("fmtDate / fmtDateTime", () => {
+  // Bug 10: every timestamp was formatted in UTC and printed bare, so
+  // "Resolved 30 Aug 18:20" read as 18:20 to a reader in Eastern time, where
+  // it was 14:20. The zone is now on the string.
+  it("names the zone on an instant", () => {
+    expect(fmtDateTime("2026-08-30T18:20:00Z")).toBe("30 Aug 2026 18:20 UTC");
+  });
+
+  it("does not invent a time of day for a date-only value", () => {
+    expect(fmtDateTime("2026-08-30")).toBe("30 Aug 2026");
+    expect(fmtDateTime("2026-08-30")).not.toContain("00:00");
+  });
+
+  // A calendar date has no zone, so labelling one would attach a fact to a
+  // value that does not have it.
+  it("leaves a calendar date unlabelled", () => {
+    expect(fmtDate("2026-08-30")).toBe("30 Aug 2026");
+  });
+
+  it("converts an instant to the UTC day it falls on", () => {
+    // 23:30 in New York on the 30th is the 31st in UTC. Stated rather than
+    // hidden: this is the residual documented in src/lib/dates.ts.
+    expect(fmtDate("2026-08-31T03:30:00Z")).toBe("31 Aug 2026");
+  });
+
+  it("renders a missing or unparseable value as a dash", () => {
+    expect(fmtDateTime(null)).toBe("—");
+    expect(fmtDateTime("not a date")).toBe("—");
+    expect(fmtDate(undefined)).toBe("—");
   });
 });

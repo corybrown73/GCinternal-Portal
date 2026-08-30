@@ -5,7 +5,7 @@ import {
   STAGE_ALIASES,
   type LifecycleStageId,
 } from "./lifecycle";
-import { daysSinceInstant } from "./dates";
+import { daysSinceInstant, isDateOnly } from "./dates";
 
 export const STAGE_FLAG_DAYS = 14;
 
@@ -64,6 +64,16 @@ export function isOverdue(due: string | null | undefined): boolean {
   return new Date(due).getTime() < Date.now();
 }
 
+/**
+ * A calendar date. Rendered in UTC, unlabelled, on purpose.
+ *
+ * A `date` column has no time of day and no timezone — "2026-08-12" is the
+ * twelfth wherever you read it — so a zone label here would be noise attached
+ * to a value that does not have one. UTC is the frame because it is the frame
+ * the day arithmetic in src/lib/dates.ts uses, and a date that disagrees with
+ * the "12 days to launch" printed under it is the bug that rule exists to
+ * prevent.
+ */
 export function fmtDate(value: string | null | undefined): string {
   if (!value) return "—";
   const d = new Date(value);
@@ -76,11 +86,38 @@ export function fmtDate(value: string | null | undefined): string {
   });
 }
 
+/**
+ * An instant — when something actually happened. Rendered in UTC, and SAID SO.
+ *
+ * THE BUG THIS FIXES. Every timestamp in the app was formatted with
+ * `timeZone: "UTC"` and printed bare. "Resolved 30 Aug 18:20" read as 18:20 to
+ * the person looking at it, who was in Eastern time, where it was 14:20. There
+ * was nothing on screen to suggest otherwise — a four-hour error with no
+ * visible cause, on the exact values people use to argue about SLA breaches.
+ *
+ * WHY THE LABEL RATHER THAN THE VIEWER'S OWN ZONE. Local time is what a person
+ * really wants, and this is not the place it can be produced. These pages are
+ * server-rendered: the server has no idea what zone the reader is in, so a
+ * local render would differ between the server's HTML and the browser's first
+ * paint, which is a hydration mismatch on every timestamp on the page. Doing it
+ * properly means the zone travelling through React state and every call site
+ * becoming a component — worth doing, and much larger than the fix for a
+ * mislabelled string. Naming the zone makes every existing timestamp correct
+ * now, and stays correct afterwards.
+ */
 export function fmtDateTime(value: string | null | undefined): string {
   if (!value) return "—";
+  // A date-only value has no time of day. Printing "00:00" for it invents one,
+  // and an invented midnight is indistinguishable from a real one.
+  if (isDateOnly(value)) return fmtDate(value);
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return "—";
-  return `${fmtDate(value)} ${d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: "UTC" })}`;
+  const time = d.toLocaleTimeString("en-GB", {
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "UTC",
+  });
+  return `${fmtDate(value)} ${time} UTC`;
 }
 
 export function fmtMoney(value: number | null | undefined): string {
