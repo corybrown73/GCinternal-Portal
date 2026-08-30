@@ -303,7 +303,24 @@ export async function ingestOpportunity(
   const templateApplied = flags.templates && selection.winner !== null;
 
   /* ---- Owner resolution ------------------------------------------------- */
-  const ownerId = input.owner_email ? await port.ownerIdByEmail(input.owner_email) : null;
+  //
+  // WHICH EMAIL BECOMES THE IMPLEMENTATION LEAD. This used to be
+  // `input.owner_email` — the Salesforce Opportunity Owner, i.e. the AE — which
+  // meant every auto-created project listed the AE as its implementation
+  // specialist. The AE is the `sales_owner`; they are not the person who runs
+  // the delivery.
+  //
+  // The order is explicit and stops before the AE: an assigned implementation
+  // owner, then the SE who scoped the deal, then nobody. Unassigned is a
+  // visible state somebody fixes in a second; silently wrong is a state nobody
+  // notices until the first status meeting.
+  const ownerEmailForDelivery = input.implementation_owner_email ?? input.se_email ?? null;
+  const ownerId = ownerEmailForDelivery ? await port.ownerIdByEmail(ownerEmailForDelivery) : null;
+  const ownerSource = input.implementation_owner_email
+    ? ("implementation_owner_email" as const)
+    : input.se_email
+      ? ("se_email" as const)
+      : ("none" as const);
 
   const won = closedWonAt(input);
 
@@ -436,13 +453,16 @@ export async function ingestOpportunity(
           selection.winner && !templateApplied ? "journey_templates flag off" : null,
       },
       owner: {
-        owner_email: input.owner_email ?? null,
+        // What Salesforce sent, which field we took the delivery owner from,
+        // and whether it resolved. An operator looking at an unassigned project
+        // can answer "why" from this row without re-running anything.
+        sales_owner_email: input.owner_email ?? null,
+        implementation_owner_email: input.implementation_owner_email ?? null,
+        se_email: input.se_email ?? null,
+        owner_source: ownerSource,
         resolved_owner_id: ownerId,
-        unresolved: Boolean(input.owner_email) && ownerId === null,
+        unresolved: ownerEmailForDelivery !== null && ownerId === null,
       },
-      // No se_owner column exists; recorded here so a later assignment model
-      // can be backfilled from evidence instead of guesswork.
-      se_email: input.se_email ?? null,
       sf_closed_won_at: won,
       mapped_fields: mapped,
       missing_required_maps: inbound.missingRequired,
@@ -550,6 +570,10 @@ async function replayOrRefuse(existing: ImplementationRow, r: ReplayCtx): Promis
       // says, what the hub says, and the fact that we changed nothing.
       drift: drift.entries,
       fills: drift.fills,
+      // Recorded on a replay too, so a payload that starts carrying an
+      // implementation owner is visible in the log even though a replay
+      // deliberately changes nothing.
+      implementation_owner_email: input.implementation_owner_email ?? null,
       se_email: input.se_email ?? null,
     },
     response_status: 200,

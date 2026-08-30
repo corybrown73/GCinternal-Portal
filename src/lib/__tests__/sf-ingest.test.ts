@@ -48,6 +48,7 @@ type Impl = {
   target_launch_date: string | null;
   sow_value: number | null;
   sales_owner: string | null;
+  owner_id: string | null;
   graduated: boolean;
   [k: string]: unknown;
 };
@@ -108,6 +109,7 @@ class FakeStore {
     oppId: string;
     accountId: string;
     closedWonAt: string | null;
+    ownerId: string | null;
     mapped: Record<string, unknown>;
   }): Impl {
     const impl: Impl = {
@@ -122,6 +124,11 @@ class FakeStore {
       target_launch_date: (args.mapped["target_launch_date"] as string) ?? null,
       sow_value: (args.mapped["sow_value"] as number) ?? null,
       sales_owner: (args.mapped["sales_owner"] as string) ?? null,
+      // Carried through, because the real adapter puts ownerId into the patch
+      // it sends to sf_create_implementation. The double used to drop it, which
+      // is part of why "the AE becomes the implementation lead" survived — no
+      // test could see the field it was writing to.
+      owner_id: args.ownerId,
       graduated: false,
     };
     this.implementations.set(impl.id, impl);
@@ -195,6 +202,7 @@ function makePort(store: FakeStore): IngestPort {
         oppId: args.salesforceOpportunityId,
         accountId: args.salesforceAccountId,
         closedWonAt: args.sfClosedWonAt,
+        ownerId: args.ownerId ?? null,
         mapped: args.mapped,
       });
       return { id: impl.id };
@@ -412,6 +420,7 @@ describe("concurrency", () => {
         name: "Acme — New Logo",
         oppId: OPP_18,
         accountId: ACC_18,
+        ownerId: null,
         closedWonAt: null,
         mapped: {},
       });
@@ -580,11 +589,86 @@ describe("guards", () => {
     expect(store.syncLogs).toHaveLength(2);
   });
 
-  it("records the SE email it cannot store anywhere else, so it can be backfilled later", async () => {
-    await ingestOpportunity(payload(), store.port(), ctx());
+  it("never makes the AE the implementation lead", async () => {
+    // The regression this pins. `owner_email` is the Salesforce Opportunity
+    // Owner — the AE who closed it — and it used to be resolved straight into
+    // implementations.owner_id. Every auto-created project then listed the AE
+    // as its implementation specialist, which is a different person and a
+    // different job, and it looked deliberate.
+    store.owners.set("ae@gocanvas.com", "team-ae");
+    await ingestOpportunity(
+      payload({ se_email: undefined, implementation_owner_email: undefined }),
+      store.port(),
+      ctx(),
+    );
+    const impl = [...store.implementations.values()].at(-1)!;
+    expect(impl["owner_id"] ?? null).toBeNull();
+
     const decision = store.syncLogs[0]!["decision"] as any;
-    expect(decision.se_email).toBe("se@gocanvas.com");
+    expect(decision.owner.owner_source).toBe("none");
+    // Unassigned is not "unresolved": nothing was offered, so nothing failed to
+    // resolve. Reporting a failure here would send somebody looking for a
+    // missing team member who was never named.
+    expect(decision.owner.unresolved).toBe(false);
+  });
+
+  it("takes the implementation lead from implementation_owner_email", async () => {
+    store.owners.set("tis@gocanvas.com", "team-tis");
+    await ingestOpportunity(
+      payload({ implementation_owner_email: "tis@gocanvas.com" }),
+      store.port(),
+      ctx(),
+    );
+    const impl = [...store.implementations.values()].at(-1)!;
+    expect(impl["owner_id"]).toBe("team-tis");
+    expect((store.syncLogs[0]!["decision"] as any).owner.owner_source).toBe(
+      "implementation_owner_email",
+    );
+  });
+
+  it("falls back to the SE, and prefers the assigned owner over them", async () => {
+    store.owners.set("se@gocanvas.com", "team-se");
+    store.owners.set("tis@gocanvas.com", "team-tis");
+
+    await ingestOpportunity(payload(), store.port(), ctx());
+    expect([...store.implementations.values()].at(-1)!["owner_id"]).toBe("team-se");
+
+    store.syncLogs.length = 0;
+    await ingestOpportunity(
+      payload({
+        salesforce_opportunity_id: "006000000000002AAA",
+        implementation_owner_email: "tis@gocanvas.com",
+      }),
+      store.port(),
+      ctx(),
+    );
+    expect([...store.implementations.values()].at(-1)!["owner_id"]).toBe("team-tis");
+  });
+
+  it("says so in the log when the named person is not a team member", async () => {
+    // The email was supplied and matched nobody. That IS unresolved, and an
+    // operator staring at an unassigned project can see why without a re-run.
+    await ingestOpportunity(
+      payload({ implementation_owner_email: "nobody@gocanvas.com" }),
+      store.port(),
+      ctx(),
+    );
+    const decision = store.syncLogs[0]!["decision"] as any;
     expect(decision.owner.unresolved).toBe(true);
+    expect(decision.owner.implementation_owner_email).toBe("nobody@gocanvas.com");
+    expect(decision.owner.owner_source).toBe("implementation_owner_email");
+  });
+
+  it("still records every email it was given, whichever one it used", async () => {
+    await ingestOpportunity(
+      payload({ implementation_owner_email: "tis@gocanvas.com" }),
+      store.port(),
+      ctx(),
+    );
+    const owner = (store.syncLogs[0]!["decision"] as any).owner;
+    expect(owner.sales_owner_email).toBe("ae@gocanvas.com");
+    expect(owner.implementation_owner_email).toBe("tis@gocanvas.com");
+    expect(owner.se_email).toBe("se@gocanvas.com");
   });
 
   it("records the close date as evidence with its provenance, never inferring one", async () => {
