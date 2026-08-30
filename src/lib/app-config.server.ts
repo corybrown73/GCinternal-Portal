@@ -72,6 +72,17 @@ export type V2Flags = {
    * `external_plan_actions_enabled`.
    */
   conversations: boolean;
+  /**
+   * The post-sale lifecycle's labels, intents, colours and order come from
+   * `portal_lifecycle_stages` (0031) rather than from the compiled-in list.
+   *
+   * A DEPLOY gate, like `presale_stage_config`: 0031 seeds the table with
+   * exactly what LIFECYCLE_STAGES contains, so both paths render identically
+   * until somebody edits something. What the flag buys is that this code is
+   * safe to ship ahead of its migration — with it off, nothing here touches
+   * the new table.
+   */
+  lifecycle_stage_config: boolean;
 };
 
 const DEFAULT_FLAGS: V2Flags = {
@@ -100,6 +111,8 @@ const DEFAULT_FLAGS: V2Flags = {
   presale_stage_config: false,
   /* Per-project conversations — see docs/design/conversations.md. */
   conversations: false,
+  /* Editable post-sale stages — see docs/design/lifecycle-stages.md. */
+  lifecycle_stage_config: false,
 };
 const CACHE_MS = 60_000;
 

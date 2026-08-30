@@ -41,9 +41,16 @@ const CARDS = [
   {
     to: "/admin/pipeline-stages",
     icon: Rows3,
-    title: "Pipeline stages",
+    title: "Pre-sale stages",
     description:
       "The pre-sale pipeline: label, colour and order of each stage, and which one means Closed Won. Renaming or reordering never rewrites the stage history.",
+  },
+  {
+    to: "/admin/lifecycle-stages",
+    icon: Rows3,
+    title: "Post-sale stages",
+    description:
+      "The stages after the sale: what each is called, what it says it means, its colour and its order. The eight the application keys off can be renamed but not deleted.",
   },
   {
     to: "/admin/audit",

@@ -32,6 +32,7 @@ import { Route as AdminIndexRouteImport } from './routes/admin.index'
 import { Route as AdminApiKeysRouteImport } from './routes/admin.api-keys'
 import { Route as AdminAuditRouteImport } from './routes/admin.audit'
 import { Route as AdminIntegrationsRouteImport } from './routes/admin.integrations'
+import { Route as AdminLifecycleStagesRouteImport } from './routes/admin.lifecycle-stages'
 import { Route as AdminPipelineStagesRouteImport } from './routes/admin.pipeline-stages'
 import { Route as AdminUsersRouteImport } from './routes/admin.users'
 import { Route as ApiSplatRouteImport } from './routes/api.$'
@@ -184,6 +185,11 @@ const AdminAuditRoute = AdminAuditRouteImport.update({
 const AdminIntegrationsRoute = AdminIntegrationsRouteImport.update({
   id: '/integrations',
   path: '/integrations',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminLifecycleStagesRoute = AdminLifecycleStagesRouteImport.update({
+  id: '/lifecycle-stages',
+  path: '/lifecycle-stages',
   getParentRoute: () => AdminRoute,
 } as any)
 const AdminPipelineStagesRoute = AdminPipelineStagesRouteImport.update({
@@ -401,6 +407,7 @@ export interface FileRoutesByFullPath {
   '/admin/api-keys': typeof AdminApiKeysRoute
   '/admin/audit': typeof AdminAuditRoute
   '/admin/integrations': typeof AdminIntegrationsRoute
+  '/admin/lifecycle-stages': typeof AdminLifecycleStagesRoute
   '/admin/pipeline-stages': typeof AdminPipelineStagesRoute
   '/admin/users': typeof AdminUsersRoute
   '/api/$': typeof ApiSplatRoute
@@ -458,6 +465,7 @@ export interface FileRoutesByTo {
   '/admin/api-keys': typeof AdminApiKeysRoute
   '/admin/audit': typeof AdminAuditRoute
   '/admin/integrations': typeof AdminIntegrationsRoute
+  '/admin/lifecycle-stages': typeof AdminLifecycleStagesRoute
   '/admin/pipeline-stages': typeof AdminPipelineStagesRoute
   '/admin/users': typeof AdminUsersRoute
   '/api/$': typeof ApiSplatRoute
@@ -522,6 +530,7 @@ export interface FileRoutesById {
   '/admin/api-keys': typeof AdminApiKeysRoute
   '/admin/audit': typeof AdminAuditRoute
   '/admin/integrations': typeof AdminIntegrationsRoute
+  '/admin/lifecycle-stages': typeof AdminLifecycleStagesRoute
   '/admin/pipeline-stages': typeof AdminPipelineStagesRoute
   '/admin/users': typeof AdminUsersRoute
   '/api/$': typeof ApiSplatRoute
@@ -587,6 +596,7 @@ export interface FileRouteTypes {
     | '/admin/api-keys'
     | '/admin/audit'
     | '/admin/integrations'
+    | '/admin/lifecycle-stages'
     | '/admin/pipeline-stages'
     | '/admin/users'
     | '/api/$'
@@ -644,6 +654,7 @@ export interface FileRouteTypes {
     | '/admin/api-keys'
     | '/admin/audit'
     | '/admin/integrations'
+    | '/admin/lifecycle-stages'
     | '/admin/pipeline-stages'
     | '/admin/users'
     | '/api/$'
@@ -707,6 +718,7 @@ export interface FileRouteTypes {
     | '/admin/api-keys'
     | '/admin/audit'
     | '/admin/integrations'
+    | '/admin/lifecycle-stages'
     | '/admin/pipeline-stages'
     | '/admin/users'
     | '/api/$'
@@ -952,6 +964,13 @@ declare module '@tanstack/react-router' {
       path: '/integrations'
       fullPath: '/admin/integrations'
       preLoaderRoute: typeof AdminIntegrationsRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/lifecycle-stages': {
+      id: '/admin/lifecycle-stages'
+      path: '/lifecycle-stages'
+      fullPath: '/admin/lifecycle-stages'
+      preLoaderRoute: typeof AdminLifecycleStagesRouteImport
       parentRoute: typeof AdminRoute
     }
     '/admin/pipeline-stages': {
@@ -1227,6 +1246,7 @@ interface AdminRouteChildren {
   AdminApiKeysRoute: typeof AdminApiKeysRoute
   AdminAuditRoute: typeof AdminAuditRoute
   AdminIntegrationsRoute: typeof AdminIntegrationsRoute
+  AdminLifecycleStagesRoute: typeof AdminLifecycleStagesRoute
   AdminPipelineStagesRoute: typeof AdminPipelineStagesRoute
   AdminUsersRoute: typeof AdminUsersRoute
   AdminIndexRoute: typeof AdminIndexRoute
@@ -1236,6 +1256,7 @@ const AdminRouteChildren: AdminRouteChildren = {
   AdminApiKeysRoute: AdminApiKeysRoute,
   AdminAuditRoute: AdminAuditRoute,
   AdminIntegrationsRoute: AdminIntegrationsRoute,
+  AdminLifecycleStagesRoute: AdminLifecycleStagesRoute,
   AdminPipelineStagesRoute: AdminPipelineStagesRoute,
   AdminUsersRoute: AdminUsersRoute,
   AdminIndexRoute: AdminIndexRoute,

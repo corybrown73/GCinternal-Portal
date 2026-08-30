@@ -52,7 +52,7 @@ export type OpenStageSegment = {
 export type ExclusionReason =
   /** No exited_at: the stage has not finished, so there is no dwell to observe. */
   | "still_open"
-  /** Pre-handoff or unknown vocabulary — an upstream step this app does not own. */
+  /** A pre-sales step, or vocabulary this lifecycle does not recognise. */
   | "stage_not_in_lifecycle"
   /** exited_at before entered_at. The table has no DB guard; this is a defect. */
   | "impossible_interval"
@@ -61,7 +61,7 @@ export type ExclusionReason =
 
 export const EXCLUSION_LABEL: Record<ExclusionReason, string> = {
   still_open: "Stage still open — no completed dwell to observe",
-  stage_not_in_lifecycle: "Stage is outside this lifecycle (upstream or unknown)",
+  stage_not_in_lifecycle: "Stage is outside the post-sale lifecycle (pre-sales or unknown)",
   impossible_interval: "Exit recorded before entry — data defect, not a dwell",
   unusable_timestamp: "Entry timestamp missing or unreadable",
 };

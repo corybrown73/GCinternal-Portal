@@ -14,7 +14,7 @@ export function normalizeStage(raw: string | null | undefined): LifecycleStageId
   return STAGE_ALIASES[key] ?? null;
 }
 
-/** True when the value is an upstream (pre-handoff) step this app does not own. */
+/** True when the value is a pre-sales step rather than a post-sale lifecycle stage. */
 export function isPreHandoffStage(raw: string | null | undefined): boolean {
   if (!raw) return false;
   return raw.trim().toLowerCase().replace(/_/g, "-") in PRE_HANDOFF_STAGE_LABELS;

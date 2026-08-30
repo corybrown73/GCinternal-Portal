@@ -58,7 +58,7 @@ describe("stageSegments", () => {
     expect(out.completed[0]?.stage).toBe("adopt");
   });
 
-  it("excludes an upstream pre-handoff stage and names why", () => {
+  it("excludes a pre-sales stage from the post-sale lifecycle, and names why", () => {
     const out = stageSegments(
       [
         row({

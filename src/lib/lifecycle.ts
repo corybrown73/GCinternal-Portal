@@ -38,8 +38,16 @@ export type LifecycleStage = {
 };
 
 /**
- * Upstream company/customer journey steps that this application does NOT own.
- * Documentation only: no ids in the lifecycle, no ownership, no behaviour.
+ * The pre-sales steps, as documentation only.
+ *
+ * These were labelled "upstream — not owned by this app", which was true when
+ * this file was written and stopped being true when the pre-sale pipeline
+ * became a configured thing the application owns (`portal_pipeline_stages`).
+ * The live list lives there and is edited under Admin -> Pre-sale stages; this
+ * constant survives only as the descriptive note about who leads each step,
+ * which the pipeline table does not carry.
+ *
+ * No ids in the post-sale lifecycle, no ownership, no behaviour.
  */
 export const PRE_HANDOFF_CONTEXT: { label: string; note: string }[] = [
   { label: "Qualify", note: "Sales-led. Operating model not yet agreed." },
@@ -51,7 +59,7 @@ export const PRE_HANDOFF_CONTEXT: { label: string; note: string }[] = [
   },
 ];
 
-/** Legacy stage ids recorded upstream, kept readable on historical rows only. */
+/** Legacy pre-sales stage ids, kept readable on historical rows only. */
 export const PRE_HANDOFF_STAGE_LABELS: Record<string, string> = {
   qualify: "Qualify",
   scoping: "Define the Process",
