@@ -22,10 +22,28 @@
   --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, monospace;
 
-  --radius-sm: calc(var(--radius) - 3px);
-  --radius-md: calc(var(--radius) - 1px);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
+  /*
+   * SOFT GEOMETRY — the one radius scale. See DESIGN.md.
+   *
+   * These were derived from a single 6px --radius, which meant every corner in
+   * the app was within 4px of every other and curvature carried no information.
+   * Now each step is a different KIND of thing, so a corner tells you what you
+   * are looking at before you read a word of it:
+   *
+   *   sm  6px   inputs, chips, small controls
+   *   md  10px  buttons
+   *   lg  18px  cards and panels
+   *   xl  28px  page sections
+   *   pill        fully round — counts, avatars, status pills
+   *
+   * No ad-hoc radius values anywhere. A `rounded-[14px]` in a component is a
+   * sixth step nobody agreed to, and six steps read as none.
+   */
+  --radius-sm: var(--r-sm);
+  --radius-md: var(--r-md);
+  --radius-lg: var(--r-lg);
+  --radius-xl: var(--r-xl);
+  --radius-pill: var(--r-pill);
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-surface: var(--surface);
@@ -74,7 +92,40 @@
 }
 
 :root {
-  --radius: 0.375rem;
+  /* The scale itself. Redefining any of these restyles the whole app. */
+  --r-sm: 6px;
+  --r-md: 10px;
+  --r-lg: 18px;
+  --r-xl: 28px;
+  --r-pill: 999px;
+
+  /* Kept: shadcn primitives still read --radius directly in a few places. It
+     is pinned to the small step so an unconverted control stays a control. */
+  --radius: var(--r-sm);
+
+  /*
+   * ELEVATION. Two steps, and the second is only ever reached on hover.
+   * A resting surface that already carries a deep shadow has nowhere to go
+   * when you point at it, which is how an interface ends up feeling inert
+   * however much shadow it has.
+   */
+  --shadow-rest: 0 1px 2px rgb(0 0 0 / 0.08);
+  --shadow-lift: 0 3px 8px rgb(0 0 0 / 0.14);
+  --shadow-rest-card: 0 1px 3px rgb(0 0 0 / 0.07);
+  --shadow-lift-card: 0 8px 20px rgb(0 0 0 / 0.14);
+
+  /*
+   * GLASS. Translucent fill plus a hairline border and an inset top highlight.
+   * Values live here rather than in the utility so dark mode can restate only
+   * what actually differs.
+   */
+  --glass-fill: oklch(1 0 0 / 0.62);
+  --glass-border: oklch(1 0 0 / 0.55);
+  --glass-specular: oklch(1 0 0 / 0.85);
+  --glass-shadow: 0 6px 24px rgb(0 0 0 / 0.1);
+  /* What .glass falls back to where backdrop-filter is unavailable. Opaque, so
+     text keeps its contrast rather than sampling whatever is behind it. */
+  --glass-solid: oklch(0.965 0.003 250);
 
   /*
    * WHY THESE NUMBERS MOVED. The page used to be oklch(0.985) with pure-white
@@ -152,6 +203,19 @@
 }
 
 .dark {
+  --glass-fill: oklch(0.235 0.01 250 / 0.66);
+  --glass-border: oklch(1 0 0 / 0.12);
+  --glass-specular: oklch(1 0 0 / 0.16);
+  --glass-shadow: 0 6px 24px rgb(0 0 0 / 0.45);
+  --glass-solid: oklch(0.245 0.01 250);
+
+  /* Shadows do almost nothing on a dark ground, so the lift leans harder on
+     them to survive at all. Same geometry, more opacity. */
+  --shadow-rest: 0 1px 2px rgb(0 0 0 / 0.4);
+  --shadow-lift: 0 3px 8px rgb(0 0 0 / 0.55);
+  --shadow-rest-card: 0 1px 3px rgb(0 0 0 / 0.35);
+  --shadow-lift-card: 0 8px 20px rgb(0 0 0 / 0.5);
+
   /*
    * The same problem inverted: card 0.225 on background 0.185 is a 1.05:1
    * separation, and a 0.32 border is 1.35:1 against its own card. Dark mode hid
@@ -225,5 +289,235 @@
   h2,
   h3 {
     letter-spacing: -0.011em;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+ * Soft geometry: continuous corners where the browser has them
+ * ------------------------------------------------------------------------ */
+/*
+ * `corner-shape: squircle` draws a continuous curve rather than a circular arc
+ * — the corner eases into the edge instead of meeting it at a tangent. It is
+ * the difference between a rounded rectangle and a shape that looks designed.
+ *
+ * Progressive enhancement only: everything below already has a border-radius,
+ * and browsers without corner-shape simply keep the arc. Nothing is laid out
+ * differently either way, so there is no fallback to maintain.
+ */
+@supports (corner-shape: squircle) {
+  .rounded-md,
+  .rounded-lg,
+  .rounded-xl,
+  .glass,
+  .section-card,
+  [data-soft] {
+    corner-shape: squircle;
+  }
+}
+
+@layer components {
+  /* -------------------------------------------------------------------------
+   * .lift — the press-back-down interaction
+   * ----------------------------------------------------------------------- */
+  /*
+   * WHAT THIS IS NOT. The lift is not how you tell a button is a button: every
+   * variant keeps its border or its fill at rest, so the affordance is there
+   * before the pointer arrives. The lift is CONFIRMATION — "yes, this one" —
+   * and on click it drops back to exactly its resting values, so the thing
+   * feels pressed rather than merely re-coloured.
+   *
+   * THE TRANSFORM IS WHY THIS COSTS NOTHING IN LAYOUT. `translateY` is applied
+   * after layout, so a lifting button cannot reflow its neighbours no matter
+   * how many are in a row. That is the whole reason the movement is a transform
+   * and not a margin: the same effect written as `margin-top: -1px` would shove
+   * every sibling on the line.
+   *
+   * FOCUS USES `outline`, DELIBERATELY. Tailwind's `ring-*` utilities are
+   * implemented as box-shadow, and box-shadow is what the lift animates — a
+   * ring would be overwritten by the hover shadow at the exact moment a
+   * keyboard user needs to see it. `outline` draws in its own channel and, with
+   * a positive offset, sits outside the shadow rather than under it.
+   */
+  .lift {
+    box-shadow: var(--shadow-rest);
+    /* Never `all`: transitioning everything animates layout properties too,
+       which is how a hover ends up costing a frame budget. */
+    transition:
+      transform 120ms ease-out,
+      box-shadow 120ms ease-out,
+      background-color 120ms ease-out,
+      border-color 120ms ease-out;
+  }
+
+  .lift:hover:not(:disabled):not([aria-disabled="true"]) {
+    box-shadow: var(--shadow-lift);
+  }
+
+  .lift:active:not(:disabled):not([aria-disabled="true"]) {
+    box-shadow: var(--shadow-rest);
+  }
+
+  .lift:focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+
+  .lift:disabled,
+  .lift[aria-disabled="true"] {
+    cursor: not-allowed;
+    box-shadow: var(--shadow-rest);
+    transform: none;
+  }
+
+  /* Bigger surfaces travel further, because 1px on a 400px card is invisible. */
+  .lift-card {
+    box-shadow: var(--shadow-rest-card);
+    transition:
+      transform 120ms ease-out,
+      box-shadow 120ms ease-out,
+      background-color 120ms ease-out,
+      border-color 120ms ease-out;
+  }
+
+  .lift-card:hover:not([aria-disabled="true"]) {
+    box-shadow: var(--shadow-lift-card);
+  }
+
+  .lift-card:active:not([aria-disabled="true"]) {
+    box-shadow: var(--shadow-rest-card);
+  }
+
+  .lift-card:focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+
+  /*
+   * Motion is opt-out, and opting out removes ONLY the motion. Someone who
+   * cannot tolerate movement still needs to know which button they are on, so
+   * the shadow and the background keep changing; the element simply does not
+   * travel. Guarding the whole rule instead would leave those users with no
+   * hover feedback at all.
+   */
+  @media (prefers-reduced-motion: no-preference) {
+    .lift:hover:not(:disabled):not([aria-disabled="true"]) {
+      transform: translateY(-1px);
+    }
+    .lift:active:not(:disabled):not([aria-disabled="true"]) {
+      transform: translateY(0);
+    }
+    .lift-card:hover:not([aria-disabled="true"]) {
+      transform: translateY(-2px);
+    }
+    .lift-card:active:not([aria-disabled="true"]) {
+      transform: translateY(0);
+    }
+  }
+
+  /* A table row cannot be transformed — `transform` on a <tr> is undefined in
+     most engines — so a clickable row gets the same intent through its own
+     background and a left marker rather than pretending to rise. */
+  .lift-row {
+    transition:
+      background-color 120ms ease-out,
+      box-shadow 120ms ease-out;
+  }
+
+  .lift-row:hover:not([aria-disabled="true"]) {
+    background-color: var(--muted);
+  }
+
+  .lift-row:focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: -2px;
+  }
+
+  /* -------------------------------------------------------------------------
+   * .glass — floating overlay material
+   * ----------------------------------------------------------------------- */
+  /*
+   * WHERE THIS IS ALLOWED: the sticky top bar, toolbars, modals, popovers and
+   * toasts. Nothing else.
+   *
+   * WHERE IT IS FORBIDDEN, and why: tables, field lists and the record detail
+   * panel. Blur samples whatever is behind it, so the effective contrast of
+   * text on glass varies with the content underneath — fine for a toolbar with
+   * six words on it, unacceptable for a dense table where a row might land over
+   * a dark chart and lose its text. Data surfaces stay solid.
+   *
+   * The blur needs something to sample. A glass bar over a flat fill renders as
+   * plain grey, which is why `body` carries a gradient (below) — the glass
+   * picks up the shift across it and reads as material rather than as a panel
+   * somebody made translucent by accident.
+   */
+  .glass {
+    background-color: var(--glass-solid);
+    border: 1px solid var(--glass-border);
+    box-shadow: var(--glass-shadow);
+    position: relative;
+  }
+
+  /* The specular highlight: a 1px light line inside the top edge, which is what
+     real glass does with an overhead source and what stops the material looking
+     like flat translucent plastic. */
+  .glass::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    background: linear-gradient(to bottom, var(--glass-specular), transparent 1px);
+  }
+
+  @supports (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)) {
+    .glass {
+      background-color: var(--glass-fill);
+      -webkit-backdrop-filter: blur(20px) saturate(180%);
+      backdrop-filter: blur(20px) saturate(180%);
+    }
+  }
+
+  /* -------------------------------------------------------------------------
+   * .section-card — a page section
+   * ----------------------------------------------------------------------- */
+  /*
+   * THE CURVATURE IS THE BOUNDARY. A section is an inset card at the xl radius
+   * sitting on the tinted page, separated from its neighbours by space. It gets
+   * no border, because a border and a 28px radius are two ways of saying the
+   * same thing and saying it twice is what makes an interface look busy.
+   *
+   * The radius must be IDENTICAL on every section. Curvature only reads as a
+   * boundary if it is consistent; vary it and it reads as decoration.
+   */
+  .section-card {
+    background-color: var(--card);
+    border-radius: var(--r-xl);
+    box-shadow: var(--shadow-rest-card);
+  }
+}
+
+@layer base {
+  /*
+   * The ground the glass samples. Two very wide, very faint radial washes over
+   * the page colour — under 2% lightness variation, so it never competes with
+   * content, but enough that a blurred bar picks up a gradient across its width
+   * instead of one flat grey.
+   *
+   * `fixed` so the wash belongs to the viewport rather than the document: a
+   * sticky glass bar must sample the same thing at every scroll position, or
+   * the bar changes colour as the page moves under it.
+   */
+  body {
+    background-image:
+      radial-gradient(80rem 40rem at 12% -10%, oklch(0.62 0.05 250 / 0.07), transparent 60%),
+      radial-gradient(70rem 35rem at 100% 0%, oklch(0.65 0.05 190 / 0.06), transparent 55%);
+    background-attachment: fixed;
+    background-repeat: no-repeat;
+  }
+
+  .dark body {
+    background-image:
+      radial-gradient(80rem 40rem at 12% -10%, oklch(0.62 0.06 250 / 0.13), transparent 60%),
+      radial-gradient(70rem 35rem at 100% 0%, oklch(0.6 0.06 190 / 0.1), transparent 55%);
   }
 }

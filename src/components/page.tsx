@@ -11,10 +11,16 @@ export function PageHeader({
   actions?: ReactNode;
 }) {
   return (
-    // The page header sits on `card` rather than the page background, so the
-    // top of every screen is a distinct band rather than the same grey as the
-    // body with a line under it.
-    <div className="flex items-start justify-between gap-6 border-b border-border bg-card px-6 py-4">
+    // A floating overlay layer, so it is glass: it sticks to the top of the
+    // viewport and the content scrolls under it. That is the whole argument for
+    // the material here — you can see that something is passing beneath the bar
+    // rather than disappearing at a hard edge.
+    //
+    // Glass is allowed here precisely because this surface is sparse. A title,
+    // a line of description and two buttons sit over the blur; a table would
+    // not, because blur samples whatever is behind it and dense text cannot
+    // afford contrast that varies with the content underneath.
+    <div className="glass sticky top-0 z-30 flex items-start justify-between gap-6 rounded-none border-x-0 border-t-0 px-6 py-4">
       <div>
         <h1 className="text-[15px] font-semibold tracking-tight">{title}</h1>
         {description ? (

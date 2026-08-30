@@ -215,14 +215,22 @@ export function Panel({
     <section
       id={id}
       className={cn(
-        // A shadow as well as a border. On a page that is now a real grey, a
-        // white card with one hairline still reads as a region of the page; a
-        // card with a shadow reads as an object sitting on it. That is the
-        // difference between "the sections blur together" and not.
+        // THE CURVATURE IS THE BOUNDARY. A section is an inset card at the xl
+        // radius on the tinted page, and it carries no border — a 28px radius
+        // and a hairline are two ways of saying "this is a section", and saying
+        // it twice is what makes an interface look busy.
+        //
+        // What replaces the border is not nothing. Three things separate a
+        // section from the page now: the surface step (card 1.0 against a 0.945
+        // ground), a resting shadow that makes it an object sitting on the page
+        // rather than a region of it, and the space between it and its
+        // neighbours. The header band below still divides — that is an internal
+        // rule inside a section, not the section's own edge, which is why it
+        // survives.
         level === "supporting"
-          ? "overflow-hidden rounded-md border border-border/70 bg-surface"
+          ? "overflow-hidden rounded-xl bg-surface"
           : bordered
-            ? "overflow-hidden rounded-md border border-border bg-card shadow-sm"
+            ? "section-card overflow-hidden"
             : "border-t-2 border-border pt-2",
         className,
       )}
