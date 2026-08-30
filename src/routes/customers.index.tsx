@@ -88,7 +88,7 @@ const STATUSES = ["blocked", "at_risk", "on_track", "no_signal"];
 function CustomersPage() {
   const { param, setScope } = useScope();
   const { data } = useSuspenseQuery(implementationsQuery(param));
-  const { stage, status, sort, dir } = Route.useSearch();
+  const { stage, status, sort, dir, scope } = Route.useSearch();
   const navigate = useNavigate({ from: Route.fullPath });
 
   const setSearch = (patch: Record<string, unknown>) =>
@@ -196,7 +196,13 @@ function CustomersPage() {
             while the saved_views flag is off. */}
         <SavedViews
           surface="customers"
-          current={searchToView({ stage, status, sort, dir })}
+          // `scope` belongs in a saved view like every other filter. It was
+          // omitted here — not by the serializer, which copies whatever it is
+          // given, but by this hand-built object — so a view saved from
+          // ?scope=all applied as "mine" and showed nothing. A saved view that
+          // silently changes whose accounts you are looking at is worse than
+          // one that does not exist.
+          current={searchToView({ stage, status, sort, dir, scope })}
           onApply={(view) => {
             // A stored view is re-validated on the way back in, exactly as the
             // URL is: it was written months ago against a sort key that may
@@ -204,6 +210,12 @@ function CustomersPage() {
             const savedSort = String(view["sort"] ?? "");
             const savedStage = view["stage"];
             const savedStatus = view["status"];
+            const savedScope = view["scope"];
+            // A view saved BEFORE scope was stored has no opinion about it, and
+            // the honest reading of no opinion is "leave the reader where they
+            // are" — not "send them back to their own book". Only a view that
+            // actually recorded a scope gets to change it.
+            const nextScope = typeof savedScope === "string" ? savedScope : scope;
             void navigate({
               search: () => ({
                 sort: ((SORTS as readonly string[]).includes(savedSort)
@@ -212,6 +224,7 @@ function CustomersPage() {
                 dir: view["dir"] === "asc" ? ("asc" as const) : ("desc" as const),
                 ...(typeof savedStage === "string" ? { stage: savedStage } : {}),
                 ...(typeof savedStatus === "string" ? { status: savedStatus } : {}),
+                ...(nextScope ? { scope: nextScope } : {}),
               }),
             });
           }}
