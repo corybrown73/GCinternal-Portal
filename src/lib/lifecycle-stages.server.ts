@@ -162,7 +162,10 @@ async function afterWrite(
     actor_id: actorId,
     action,
     entity_type: "lifecycle_stage",
-    entity_id: String(payload["key"] ?? ""),
+    // A stage is keyed by text, not a uuid. This was `entity_id` — a uuid
+    // column — so every rename failed its audit write and raised a Critical
+    // alert, the same bug as the feature flags. See 0038.
+    entity_key: String(payload["key"] ?? ""),
     payload,
   });
   return loadLifecycleStageAdminView();
