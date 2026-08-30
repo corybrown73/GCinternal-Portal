@@ -20,8 +20,10 @@ export function PageHeader({
     // a line of description and two buttons sit over the blur; a table would
     // not, because blur samples whatever is behind it and dense text cannot
     // afford contrast that varies with the content underneath.
-    <div className="glass sticky top-0 z-30 flex items-start justify-between gap-6 rounded-none border-x-0 border-t-0 px-6 py-4">
-      <div>
+    // flex-wrap, so a header with a long title and two buttons stacks rather
+    // than pushing the actions off the right edge on a narrow window.
+    <div className="glass sticky top-0 z-30 flex flex-wrap items-start justify-between gap-x-6 gap-y-2 rounded-none border-x-0 border-t-0 px-4 py-4 sm:px-6">
+      <div className="min-w-0">
         <h1 className="text-[15px] font-semibold tracking-tight">{title}</h1>
         {description ? (
           <p className="mt-1 max-w-2xl text-[13px] text-muted-foreground">{description}</p>
@@ -33,7 +35,9 @@ export function PageHeader({
 }
 
 export function PageBody({ children, className }: { children: ReactNode; className?: string }) {
-  return <div className={cn("px-6 py-5", className)}>{children}</div>;
+  // Narrower gutters on a small window: at 820px, 24px of padding either side
+  // is 6% of the viewport spent on nothing.
+  return <div className={cn("px-4 py-5 sm:px-6", className)}>{children}</div>;
 }
 
 export function EmptyState({

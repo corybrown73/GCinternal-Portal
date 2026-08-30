@@ -438,3 +438,36 @@ export function Field({ label, value }: { label: string; value: ReactNode }) {
 export function NoRows({ label = "No records" }: { label?: string }) {
   return <p className="px-3 py-4 text-[12px] text-muted-foreground">{label}</p>;
 }
+
+/**
+ * A table that can be reached at any window width.
+ *
+ * THE BUG THIS FIXES. Below roughly 900px the app had no layout: a dozen
+ * tables sat either in an `overflow-hidden` card or in no container at all, so
+ * the columns past the fold were not merely cramped — they were CLIPPED, with
+ * no scrollbar and no indication that anything had been cut. A person on a
+ * laptop with a narrow window read a table that looked complete and was not.
+ *
+ * `min-w` rather than a mobile card layout, deliberately. These are dense
+ * comparison tables — a queue, a user list, a routing matrix — and their value
+ * is that the rows line up. Restacking each row into a card at 800px would
+ * keep every value on screen and destroy the only reason the table exists. A
+ * sideways scroll is the honest trade: nothing is hidden, and the comparison
+ * survives.
+ */
+export function TableScroll({
+  children,
+  minWidth = 720,
+  className,
+}: {
+  children: ReactNode;
+  /** Below this, the table scrolls sideways instead of crushing its columns. */
+  minWidth?: number;
+  className?: string;
+}) {
+  return (
+    <div className={cn("w-full overflow-x-auto", className)}>
+      <div style={{ minWidth }}>{children}</div>
+    </div>
+  );
+}

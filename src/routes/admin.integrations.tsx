@@ -5,7 +5,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { ChevronLeft, Copy } from "lucide-react";
 
 import { PageBody, PageHeader } from "@/components/page";
-import { NoRows, Panel } from "@/components/record";
+import { NoRows, Panel, TableScroll } from "@/components/record";
 import { fmtDateTime, stageLabel } from "@/lib/hub-format";
 import { cn } from "@/lib/utils";
 import {
@@ -193,33 +193,35 @@ function StatusTab() {
         {needsTemplate.length === 0 ? (
           <NoRows label="Every Salesforce-created implementation has a plan." />
         ) : (
-          <table className="w-full">
-            <tbody className="divide-y divide-border">
-              {needsTemplate.map((row) => (
-                <tr key={row.id}>
-                  <td className={cellClass}>
-                    <Link
-                      to="/customers/$customerId"
-                      params={{ customerId: row.customer_id }}
-                      search={{ impl: row.id } as never}
-                      className="hover:underline"
-                    >
-                      {row.name}
-                    </Link>
-                  </td>
-                  <td className={cn(cellClass, "font-mono text-[11px] text-muted-foreground")}>
-                    {row.salesforce_opportunity_id ?? "—"}
-                  </td>
-                  <td className={cn(cellClass, "text-muted-foreground")}>
-                    {stageLabel(row.current_stage)}
-                  </td>
-                  <td className={cn(cellClass, "text-muted-foreground")}>
-                    {fmtDateTime(row.created_at)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <TableScroll>
+            <table className="w-full">
+              <tbody className="divide-y divide-border">
+                {needsTemplate.map((row) => (
+                  <tr key={row.id}>
+                    <td className={cellClass}>
+                      <Link
+                        to="/customers/$customerId"
+                        params={{ customerId: row.customer_id }}
+                        search={{ impl: row.id } as never}
+                        className="hover:underline"
+                      >
+                        {row.name}
+                      </Link>
+                    </td>
+                    <td className={cn(cellClass, "font-mono text-[11px] text-muted-foreground")}>
+                      {row.salesforce_opportunity_id ?? "—"}
+                    </td>
+                    <td className={cn(cellClass, "text-muted-foreground")}>
+                      {stageLabel(row.current_stage)}
+                    </td>
+                    <td className={cn(cellClass, "text-muted-foreground")}>
+                      {fmtDateTime(row.created_at)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </TableScroll>
         )}
       </Panel>
     </div>
@@ -292,68 +294,70 @@ function SyncLogTab() {
       {rows.length === 0 ? (
         <NoRows label="No exchanges recorded yet." />
       ) : (
-        <table className="w-full">
-          <tbody className="divide-y divide-border">
-            {rows.map((row) => (
-              <Fragment key={row.id}>
-                <tr>
-                  <td className={cn(cellClass, "text-muted-foreground")}>
-                    {fmtDateTime(row.created_at)}
-                  </td>
-                  <td className={cellClass}>{row.kind}</td>
-                  <td className={cn(cellClass, "font-mono text-[11px]")}>
-                    {row.external_id ?? "—"}
-                  </td>
-                  <td className={cellClass}>
-                    <span
-                      className={cn(
-                        "rounded-sm px-1.5 py-0.5 text-[11px]",
-                        row.status === "failed" || row.status === "rejected"
-                          ? "bg-status-blocked text-status-blocked-foreground"
-                          : "bg-muted text-muted-foreground",
-                      )}
-                    >
-                      {row.status}
-                    </span>
-                  </td>
-                  <td className={cn(cellClass, "text-right")}>
-                    <button
-                      type="button"
-                      className={buttonClass}
-                      onClick={() => setOpen(open === row.id ? null : row.id)}
-                    >
-                      {open === row.id ? "Hide" : "Why"}
-                    </button>{" "}
-                    {row.status === "failed" || row.status === "rejected" ? (
+        <TableScroll>
+          <table className="w-full">
+            <tbody className="divide-y divide-border">
+              {rows.map((row) => (
+                <Fragment key={row.id}>
+                  <tr>
+                    <td className={cn(cellClass, "text-muted-foreground")}>
+                      {fmtDateTime(row.created_at)}
+                    </td>
+                    <td className={cellClass}>{row.kind}</td>
+                    <td className={cn(cellClass, "font-mono text-[11px]")}>
+                      {row.external_id ?? "—"}
+                    </td>
+                    <td className={cellClass}>
+                      <span
+                        className={cn(
+                          "rounded-sm px-1.5 py-0.5 text-[11px]",
+                          row.status === "failed" || row.status === "rejected"
+                            ? "bg-status-blocked text-status-blocked-foreground"
+                            : "bg-muted text-muted-foreground",
+                        )}
+                      >
+                        {row.status}
+                      </span>
+                    </td>
+                    <td className={cn(cellClass, "text-right")}>
                       <button
                         type="button"
                         className={buttonClass}
-                        disabled={rerunRow.isPending}
-                        onClick={() => rerunRow.mutate(row.id)}
+                        onClick={() => setOpen(open === row.id ? null : row.id)}
                       >
-                        Re-run
-                      </button>
-                    ) : null}
-                  </td>
-                </tr>
-                {open === row.id ? (
-                  <tr>
-                    <td colSpan={5} className="bg-muted/40 px-2 py-2">
-                      <p className={labelClass}>Decision</p>
-                      <pre className="mt-1 max-h-96 overflow-auto rounded-sm border border-border bg-background p-2 text-[11px]">
-                        {JSON.stringify(row.decision, null, 2)}
-                      </pre>
-                      <p className={cn(labelClass, "mt-2")}>Payload received</p>
-                      <pre className="mt-1 max-h-64 overflow-auto rounded-sm border border-border bg-background p-2 text-[11px]">
-                        {JSON.stringify(row.request_payload, null, 2)}
-                      </pre>
+                        {open === row.id ? "Hide" : "Why"}
+                      </button>{" "}
+                      {row.status === "failed" || row.status === "rejected" ? (
+                        <button
+                          type="button"
+                          className={buttonClass}
+                          disabled={rerunRow.isPending}
+                          onClick={() => rerunRow.mutate(row.id)}
+                        >
+                          Re-run
+                        </button>
+                      ) : null}
                     </td>
                   </tr>
-                ) : null}
-              </Fragment>
-            ))}
-          </tbody>
-        </table>
+                  {open === row.id ? (
+                    <tr>
+                      <td colSpan={5} className="bg-muted/40 px-2 py-2">
+                        <p className={labelClass}>Decision</p>
+                        <pre className="mt-1 max-h-96 overflow-auto rounded-sm border border-border bg-background p-2 text-[11px]">
+                          {JSON.stringify(row.decision, null, 2)}
+                        </pre>
+                        <p className={cn(labelClass, "mt-2")}>Payload received</p>
+                        <pre className="mt-1 max-h-64 overflow-auto rounded-sm border border-border bg-background p-2 text-[11px]">
+                          {JSON.stringify(row.request_payload, null, 2)}
+                        </pre>
+                      </td>
+                    </tr>
+                  ) : null}
+                </Fragment>
+              ))}
+            </tbody>
+          </table>
+        </TableScroll>
       )}
     </Panel>
   );
@@ -394,53 +398,57 @@ function FieldMapsTab() {
         count={maps.length}
         meta="Not the per-implementation customer-data mapping on the Customer 360 — this maps Salesforce payload fields to hub columns and back."
       >
-        <table className="w-full">
-          <thead>
-            <tr className="border-b border-border">
-              <th className={cn(cellClass, "text-left", labelClass)}>Direction</th>
-              <th className={cn(cellClass, "text-left", labelClass)}>Source</th>
-              <th className={cn(cellClass, "text-left", labelClass)}>Target</th>
-              <th className={cn(cellClass, "text-left", labelClass)}>Transform</th>
-              <th className={cn(cellClass, "text-left", labelClass)}>On replay</th>
-              <th />
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-border">
-            {maps.map((m) => (
-              <tr key={m.id}>
-                <td className={cellClass}>{m.direction}</td>
-                <td className={cn(cellClass, "font-mono text-[11px]")}>{m.source_path}</td>
-                <td className={cn(cellClass, "font-mono text-[11px]")}>{m.target_field}</td>
-                <td className={cn(cellClass, "text-muted-foreground")}>{m.transform ?? "none"}</td>
-                <td className={cellClass}>
-                  <select
-                    className={inputClass}
-                    value={m.fill_policy}
-                    disabled={saveMap.isPending}
-                    onChange={(e) =>
-                      saveMap.mutate({
-                        id: m.id ?? null,
-                        direction: m.direction,
-                        source_path: m.source_path,
-                        target_field: m.target_field,
-                        transform: m.transform,
-                        fill_policy: e.target.value as "never" | "if_blank",
-                        required: m.required,
-                        active: m.active,
-                      })
-                    }
-                  >
-                    <option value="never">never fill</option>
-                    <option value="if_blank">fill if blank</option>
-                  </select>
-                </td>
-                <td className={cn(cellClass, "text-muted-foreground")}>
-                  {m.active ? "active" : "off"}
-                </td>
+        <TableScroll>
+          <table className="w-full">
+            <thead>
+              <tr className="border-b border-border">
+                <th className={cn(cellClass, "text-left", labelClass)}>Direction</th>
+                <th className={cn(cellClass, "text-left", labelClass)}>Source</th>
+                <th className={cn(cellClass, "text-left", labelClass)}>Target</th>
+                <th className={cn(cellClass, "text-left", labelClass)}>Transform</th>
+                <th className={cn(cellClass, "text-left", labelClass)}>On replay</th>
+                <th />
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {maps.map((m) => (
+                <tr key={m.id}>
+                  <td className={cellClass}>{m.direction}</td>
+                  <td className={cn(cellClass, "font-mono text-[11px]")}>{m.source_path}</td>
+                  <td className={cn(cellClass, "font-mono text-[11px]")}>{m.target_field}</td>
+                  <td className={cn(cellClass, "text-muted-foreground")}>
+                    {m.transform ?? "none"}
+                  </td>
+                  <td className={cellClass}>
+                    <select
+                      className={inputClass}
+                      value={m.fill_policy}
+                      disabled={saveMap.isPending}
+                      onChange={(e) =>
+                        saveMap.mutate({
+                          id: m.id ?? null,
+                          direction: m.direction,
+                          source_path: m.source_path,
+                          target_field: m.target_field,
+                          transform: m.transform,
+                          fill_policy: e.target.value as "never" | "if_blank",
+                          required: m.required,
+                          active: m.active,
+                        })
+                      }
+                    >
+                      <option value="never">never fill</option>
+                      <option value="if_blank">fill if blank</option>
+                    </select>
+                  </td>
+                  <td className={cn(cellClass, "text-muted-foreground")}>
+                    {m.active ? "active" : "off"}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </TableScroll>
         <p className="px-3 py-2 text-[12px] text-muted-foreground">
           <strong>Fill if blank</strong> lets a later replay write a field a person deliberately
           left empty. Every such fill is audited and posted to the implementation&apos;s journal,
@@ -591,38 +599,40 @@ function WebhooksTab() {
         {endpoints.length === 0 ? (
           <NoRows label="No endpoints. With none configured, the dispatch cron does nothing." />
         ) : (
-          <table className="w-full">
-            <tbody className="divide-y divide-border">
-              {endpoints.map((e) => (
-                <tr key={e.id}>
-                  <td className={cellClass}>{e.name}</td>
-                  <td className={cn(cellClass, "break-all font-mono text-[11px]")}>{e.url}</td>
-                  <td className={cn(cellClass, "text-muted-foreground")}>…{e.secret_last4}</td>
-                  <td className={cn(cellClass, "text-muted-foreground")}>
-                    {e.active ? "active" : (e.disabled_reason ?? "disabled")}
-                  </td>
-                  <td className={cn(cellClass, "text-right")}>
-                    <button
-                      type="button"
-                      className={buttonClass}
-                      disabled={sendTest.isPending}
-                      onClick={() => sendTest.mutate(e.id)}
-                    >
-                      Send test
-                    </button>{" "}
-                    <button
-                      type="button"
-                      className={buttonClass}
-                      disabled={setActive.isPending}
-                      onClick={() => setActive.mutate({ id: e.id, active: !e.active })}
-                    >
-                      {e.active ? "Disable" : "Enable"}
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <TableScroll>
+            <table className="w-full">
+              <tbody className="divide-y divide-border">
+                {endpoints.map((e) => (
+                  <tr key={e.id}>
+                    <td className={cellClass}>{e.name}</td>
+                    <td className={cn(cellClass, "break-all font-mono text-[11px]")}>{e.url}</td>
+                    <td className={cn(cellClass, "text-muted-foreground")}>…{e.secret_last4}</td>
+                    <td className={cn(cellClass, "text-muted-foreground")}>
+                      {e.active ? "active" : (e.disabled_reason ?? "disabled")}
+                    </td>
+                    <td className={cn(cellClass, "text-right")}>
+                      <button
+                        type="button"
+                        className={buttonClass}
+                        disabled={sendTest.isPending}
+                        onClick={() => sendTest.mutate(e.id)}
+                      >
+                        Send test
+                      </button>{" "}
+                      <button
+                        type="button"
+                        className={buttonClass}
+                        disabled={setActive.isPending}
+                        onClick={() => setActive.mutate({ id: e.id, active: !e.active })}
+                      >
+                        {e.active ? "Disable" : "Enable"}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </TableScroll>
         )}
       </Panel>
 
@@ -630,34 +640,36 @@ function WebhooksTab() {
         {deliveries.length === 0 ? (
           <NoRows label="Nothing delivered yet." />
         ) : (
-          <table className="w-full">
-            <tbody className="divide-y divide-border">
-              {deliveries.map((d) => (
-                <tr key={d.id}>
-                  <td className={cn(cellClass, "text-muted-foreground")}>
-                    {fmtDateTime(d.created_at)}
-                  </td>
-                  <td className={cellClass}>{d.status}</td>
-                  <td className={cn(cellClass, "tabular-nums text-muted-foreground")}>
-                    attempt {d.attempt}
-                  </td>
-                  <td className={cn(cellClass, "text-muted-foreground")}>
-                    {d.response_status ?? d.last_error ?? "—"}
-                  </td>
-                  <td className={cn(cellClass, "text-right")}>
-                    <button
-                      type="button"
-                      className={buttonClass}
-                      disabled={resend.isPending}
-                      onClick={() => resend.mutate(d.id)}
-                    >
-                      Redeliver
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <TableScroll>
+            <table className="w-full">
+              <tbody className="divide-y divide-border">
+                {deliveries.map((d) => (
+                  <tr key={d.id}>
+                    <td className={cn(cellClass, "text-muted-foreground")}>
+                      {fmtDateTime(d.created_at)}
+                    </td>
+                    <td className={cellClass}>{d.status}</td>
+                    <td className={cn(cellClass, "tabular-nums text-muted-foreground")}>
+                      attempt {d.attempt}
+                    </td>
+                    <td className={cn(cellClass, "text-muted-foreground")}>
+                      {d.response_status ?? d.last_error ?? "—"}
+                    </td>
+                    <td className={cn(cellClass, "text-right")}>
+                      <button
+                        type="button"
+                        className={buttonClass}
+                        disabled={resend.isPending}
+                        onClick={() => resend.mutate(d.id)}
+                      >
+                        Redeliver
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </TableScroll>
         )}
       </Panel>
     </div>

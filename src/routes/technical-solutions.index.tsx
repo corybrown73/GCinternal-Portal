@@ -144,7 +144,7 @@ function SolutionsQueue() {
           />
         </div>
 
-        <div className="overflow-hidden rounded-md border border-border bg-card">
+        <div className="w-full overflow-x-auto rounded-md border border-border bg-card">
           <table className="w-full text-left">
             <thead className="border-b border-border bg-surface text-[10px] text-muted-foreground">
               <tr>

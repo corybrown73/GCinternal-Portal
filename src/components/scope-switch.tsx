@@ -71,9 +71,15 @@ export function ScopeSwitch({
         )}
         aria-expanded={open}
       >
-        <Users className="h-3 w-3" />
-        {scope.label}
-        <ChevronDown className="h-3 w-3" />
+        <Users className="h-3 w-3 shrink-0" />
+        {/* Truncated with the full text on hover. "Covering for Carrie
+            Pennypacker" is longer than this control should ever be, and a
+            trigger that grows with its own value pushes the rest of the
+            toolbar off the edge. */}
+        <span className="max-w-[13rem] truncate" title={scope.label}>
+          {scope.label}
+        </span>
+        <ChevronDown className="h-3 w-3 shrink-0" />
       </button>
 
       {open ? (
@@ -87,7 +93,7 @@ export function ScopeSwitch({
             className="fixed inset-0 z-10 cursor-default"
             onClick={() => setOpen(false)}
           />
-          <div className="absolute right-0 z-20 mt-1 max-h-80 w-64 overflow-auto rounded-md border border-border bg-card py-1 shadow-md">
+          <div className="absolute right-0 z-20 mt-1 max-h-80 w-72 overflow-auto rounded-md border border-border bg-card py-1 shadow-md">
             <Row
               label={`${scope.viewer_name}'s accounts`}
               hint="Your own book. The default."
@@ -140,11 +146,23 @@ function Row({
     <button
       type="button"
       onClick={onClick}
-      className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[12px] hover:bg-muted"
+      className="flex w-full items-start gap-2 px-3 py-1.5 text-left text-[12px] hover:bg-muted"
     >
-      <Check className={cn("h-3 w-3 shrink-0", active ? "opacity-100" : "opacity-0")} />
-      <span className="min-w-0 flex-1 truncate">{label}</span>
-      {hint ? <span className="shrink-0 text-[10px] text-muted-foreground">{hint}</span> : null}
+      <Check
+        className={cn("mt-0.5 h-3 w-3 shrink-0", active ? "opacity-100" : "opacity-0")}
+        aria-hidden
+      />
+      {/* The hint sits UNDER the name, not beside it. Side by side, the hint
+          was shrink-0 and the name was not, so "Carrie Pennypacker" lost
+          characters to "Your own book. The default." — the row truncated the
+          one word a person came to read in order to preserve the one they
+          did not. Stacking removes the competition instead of retuning it. */}
+      <span className="min-w-0 flex-1">
+        <span className="block truncate" title={label}>
+          {label}
+        </span>
+        {hint ? <span className="block text-[10px] text-muted-foreground">{hint}</span> : null}
+      </span>
     </button>
   );
 }

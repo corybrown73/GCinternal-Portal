@@ -44,7 +44,11 @@ export function AppSidebar({
   return (
     <aside
       style={scheme.vars as React.CSSProperties}
-      className="flex w-[228px] shrink-0 flex-col border-r"
+      /* Narrower below lg. At 228px on an 820px window the nav takes more
+         than a quarter of the screen and the content beside it has nowhere to
+         go. The links stay full-width and readable; only the hint line under
+         each one is dropped, because it is the part a person reads once. */
+      className="flex w-[164px] shrink-0 flex-col border-r lg:w-[228px]"
       data-nav-scheme={scheme.key}
     >
       <div
@@ -87,7 +91,7 @@ export function AppSidebar({
             >
               {item.label}
             </span>
-            <span className="text-[11px]" style={{ color: "var(--nav-muted)" }}>
+            <span className="hidden text-[11px] lg:block" style={{ color: "var(--nav-muted)" }}>
               {item.hint}
             </span>
           </Link>

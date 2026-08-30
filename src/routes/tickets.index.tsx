@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 
 import { PageBody } from "@/components/page";
-import { NoRows } from "@/components/record";
+import { NoRows, TableScroll } from "@/components/record";
 import { addTicket, getTickets } from "@/lib/tickets.functions";
 import { getHome } from "@/lib/hub.functions";
 import { useProfile } from "@/lib/auth";
@@ -199,58 +199,60 @@ function QueueSection({
       {rows.length === 0 ? (
         <NoRows label={emptyLabel} />
       ) : (
-        <table className="w-full text-left">
-          <thead className="border-b border-border bg-surface text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
-            <tr>
-              <th className="px-3 py-1.5 font-medium">Subject</th>
-              <th className="px-3 py-1.5 font-medium">Customer</th>
-              <th className="px-3 py-1.5 font-medium">Category</th>
-              <th className="px-3 py-1.5 font-medium">Priority</th>
-              <th className="px-3 py-1.5 font-medium">Assignee</th>
-              <th className="px-3 py-1.5 font-medium">SLA</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-border">
-            {rows.map((t) => (
-              <tr key={t.id} className="hover:bg-muted/60">
-                <td className="px-3 py-1.5">
-                  <Link
-                    to="/tickets/$ticketId"
-                    params={{ ticketId: t.id }}
-                    className="block text-[13px] font-medium hover:underline"
-                  >
-                    {t.subject}
-                  </Link>
-                  <span className="text-[11px] text-muted-foreground">
-                    {fmtDateTime(t.created_at)} · {t.submitter_email ?? "unknown"}
-                  </span>
-                </td>
-                <td className="px-3 py-1.5 text-[12px]">{t.customer_name ?? "—"}</td>
-                <td className="px-3 py-1.5 font-mono text-[11px]">{t.category}</td>
-                <td className="px-3 py-1.5">
-                  <PriorityChip value={t.priority} />
-                </td>
-                <td className="px-3 py-1.5 text-[12px]">
-                  {t.assignee_name ?? (
-                    <span className="text-muted-foreground">
-                      {t.assigned_role ? `${humanize(t.assigned_role)} (pool)` : "Unassigned"}
-                    </span>
-                  )}
-                </td>
-                <td className="px-3 py-1.5">
-                  <span className="inline-flex items-center gap-1.5">
-                    <SlaChip
-                      slaDueAt={t.sla_due_at}
-                      firstResponseAt={t.first_response_at}
-                      breached={false}
-                    />
-                    {t.sla_breached ? <BreachBadge /> : null}
-                  </span>
-                </td>
+        <TableScroll>
+          <table className="w-full text-left">
+            <thead className="border-b border-border bg-surface text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
+              <tr>
+                <th className="px-3 py-1.5 font-medium">Subject</th>
+                <th className="px-3 py-1.5 font-medium">Customer</th>
+                <th className="px-3 py-1.5 font-medium">Category</th>
+                <th className="px-3 py-1.5 font-medium">Priority</th>
+                <th className="px-3 py-1.5 font-medium">Assignee</th>
+                <th className="px-3 py-1.5 font-medium">SLA</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {rows.map((t) => (
+                <tr key={t.id} className="hover:bg-muted/60">
+                  <td className="px-3 py-1.5">
+                    <Link
+                      to="/tickets/$ticketId"
+                      params={{ ticketId: t.id }}
+                      className="block text-[13px] font-medium hover:underline"
+                    >
+                      {t.subject}
+                    </Link>
+                    <span className="text-[11px] text-muted-foreground">
+                      {fmtDateTime(t.created_at)} · {t.submitter_email ?? "unknown"}
+                    </span>
+                  </td>
+                  <td className="px-3 py-1.5 text-[12px]">{t.customer_name ?? "—"}</td>
+                  <td className="px-3 py-1.5 font-mono text-[11px]">{t.category}</td>
+                  <td className="px-3 py-1.5">
+                    <PriorityChip value={t.priority} />
+                  </td>
+                  <td className="px-3 py-1.5 text-[12px]">
+                    {t.assignee_name ?? (
+                      <span className="text-muted-foreground">
+                        {t.assigned_role ? `${humanize(t.assigned_role)} (pool)` : "Unassigned"}
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-3 py-1.5">
+                    <span className="inline-flex items-center gap-1.5">
+                      <SlaChip
+                        slaDueAt={t.sla_due_at}
+                        firstResponseAt={t.first_response_at}
+                        breached={false}
+                      />
+                      {t.sla_breached ? <BreachBadge /> : null}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </TableScroll>
       )}
     </section>
   );

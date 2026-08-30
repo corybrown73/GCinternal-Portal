@@ -12,6 +12,7 @@ import {
   PrimarySignal,
   StageBadge,
   StatusChip,
+  TableScroll,
 } from "@/components/record";
 import { getTechnicalSolution } from "@/lib/hub.functions";
 import type { TechnicalSolutionDetail } from "@/lib/hub-types";
@@ -245,24 +246,26 @@ function SolutionDetail() {
             meta={<AddFieldMapping solutionId={solution.id} />}
           >
             {record.field_mappings.length ? (
-              <table className="w-full text-left">
-                <thead className="border-b border-border bg-surface text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
-                  <tr>
-                    <th className="px-3 py-1.5 font-medium">Source field</th>
-                    <th className="px-3 py-1.5 font-medium">Source system</th>
-                    <th className="px-3 py-1.5 font-medium">GoCanvas field</th>
-                    <th className="px-3 py-1.5 font-medium">Transformation</th>
-                    <th className="px-3 py-1.5 font-medium">Required</th>
-                    <th className="px-3 py-1.5 font-medium">Status</th>
-                    <th className="px-3 py-1.5 text-right font-medium">Maintain</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border">
-                  {record.field_mappings.map((m: any) => (
-                    <FieldMappingRow key={m.id} solutionId={solution.id} mapping={m} />
-                  ))}
-                </tbody>
-              </table>
+              <TableScroll>
+                <table className="w-full text-left">
+                  <thead className="border-b border-border bg-surface text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
+                    <tr>
+                      <th className="px-3 py-1.5 font-medium">Source field</th>
+                      <th className="px-3 py-1.5 font-medium">Source system</th>
+                      <th className="px-3 py-1.5 font-medium">GoCanvas field</th>
+                      <th className="px-3 py-1.5 font-medium">Transformation</th>
+                      <th className="px-3 py-1.5 font-medium">Required</th>
+                      <th className="px-3 py-1.5 font-medium">Status</th>
+                      <th className="px-3 py-1.5 text-right font-medium">Maintain</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {record.field_mappings.map((m: any) => (
+                      <FieldMappingRow key={m.id} solutionId={solution.id} mapping={m} />
+                    ))}
+                  </tbody>
+                </table>
+              </TableScroll>
             ) : (
               <NoRows label="No field mappings recorded. Add the first one to connect source data to the right fields." />
             )}
