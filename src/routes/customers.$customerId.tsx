@@ -1,7 +1,8 @@
 import type { ReactNode } from "react";
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { Suspense } from "react";
-import { queryOptions, useSuspenseQuery } from "@tanstack/react-query";
+import { queryOptions, useMutation, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
+import { useServerFn } from "@tanstack/react-start";
 import { ChevronRight, ArrowRight } from "lucide-react";
 
 import { CustomerLogo } from "@/components/customer-logo";
@@ -56,6 +57,9 @@ import { TIS_FULL, TIS_SHORT } from "@/lib/vocabulary";
 import { ADOPTION_KIND_LABEL, type AdoptionKind } from "@/lib/adoption-input";
 import { contactRoleLabel } from "@/lib/customer-contact-input";
 import { AddCustomerContact, EditCustomerContact } from "@/components/customer-contact-write";
+import { EditableField } from "@/components/editable-field";
+import { setRecordField } from "@/lib/hub.functions";
+import type { EditableRecordField as EditableRecordFieldKey } from "@/lib/record-fields";
 import { AttachmentsPanel } from "@/components/attachments-panel";
 import { StageGatesPanel } from "@/components/stage-gates-panel";
 import { getPlan } from "@/lib/plan.functions";
@@ -558,6 +562,18 @@ function OverviewTab({ record, customerId }: { record: Customer360; customerId: 
   const solutionOwners = Array.from(
     new Set(record.technical_solutions.map((s: any) => s.owner_name).filter(Boolean)),
   );
+  // The staff directory arrives with the record, so the dropdowns cost no
+  // extra query. Sales owner stores a NAME rather than an id — the person who
+  // closed the deal may have left, and the record should still say who it was.
+  const teamOptions = (record.team ?? []).map((t: { id: string; name: string; role: string }) => ({
+    value: t.id,
+    label: `${t.name} · ${t.role}`,
+  }));
+  const salesOptions = (record.team ?? []).map((t: { name: string; role: string }) => ({
+    value: t.name,
+    label: `${t.name} · ${t.role}`,
+  }));
+
   const approvers = Array.from(
     new Map(
       record.approvals.filter((a: any) => a.approver_name).map((a: any) => [a.approver_name, a]),
@@ -1011,14 +1027,49 @@ function OverviewTab({ record, customerId }: { record: Customer360; customerId: 
           <AttachmentsPanel implementationId={impl.id} />
         </Suspense>
         <Panel title="Key people" level="supporting">
+          {/* Editable in place. These were read-only, so the only way to change
+              who owns a project was to open the full edit form — which sends
+              the WHOLE record back and quietly reverts anything a colleague
+              changed meanwhile. One field, one write.
+
+              Technical solution owners is not here: it is a list derived from
+              the solutions themselves, so it is edited on a solution rather
+              than typed over on the summary. */}
           <dl className="grid grid-cols-2 gap-3 px-3 py-2.5">
-            <Field label="Implementation owner" value={dash(impl.owner_name)} />
-            <Field label="Sales owner" value={dash(impl.sales_owner)} />
+            <EditableRecordField
+              implementationId={impl.id}
+              customerId={customerId}
+              field="owner_id"
+              label="Implementation owner"
+              value={impl.owner_id ?? null}
+              display={dash(impl.owner_name)}
+              type="select"
+              options={teamOptions}
+            />
+            <EditableRecordField
+              implementationId={impl.id}
+              customerId={customerId}
+              field="sales_owner"
+              label="Sales owner"
+              value={impl.sales_owner ?? null}
+              display={dash(impl.sales_owner)}
+              type="select"
+              options={salesOptions}
+            />
             <Field
               label="Technical solution owners"
               value={solutionOwners.length ? solutionOwners.join(", ") : "—"}
             />
-            <Field label="ARR" value={fmtMoney(record.customer.arr)} />
+            <EditableRecordField
+              implementationId={impl.id}
+              customerId={customerId}
+              field="arr"
+              label="ARR"
+              value={record.customer.arr == null ? null : String(record.customer.arr)}
+              format={(v) => (v ? fmtMoney(Number(v)) : "—")}
+              type="number"
+              placeholder="48000"
+            />
           </dl>
           <div className="border-t border-border">
             <div className="px-3 pt-2 text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
@@ -2480,3 +2531,59 @@ const planQuery = (implementationId: string) =>
     queryKey: ["plan", implementationId],
     queryFn: () => getPlan({ data: { implementationId } }),
   });
+
+/**
+ * One editable fact on a delivery record.
+ *
+ * Wraps EditableField with the mutation, so each call site is a description of
+ * the field rather than a repeat of the plumbing. Invalidates the customer
+ * query on success — the owner name shows in three places on this page and a
+ * stale one reads as a save that did not take.
+ */
+function EditableRecordField({
+  implementationId,
+  customerId,
+  field,
+  label,
+  value,
+  display,
+  type,
+  options,
+  format,
+  placeholder,
+}: {
+  implementationId: string;
+  customerId: string;
+  field: EditableRecordFieldKey;
+  label: string;
+  value: string | null;
+  display?: React.ReactNode;
+  type?: "text" | "number" | "date" | "select";
+  options?: ReadonlyArray<{ value: string; label: string }>;
+  format?: (v: string | null) => React.ReactNode;
+  placeholder?: string;
+}) {
+  const queryClient = useQueryClient();
+  const save = useServerFn(setRecordField);
+  const m = useMutation({
+    mutationFn: (next: string | null) => save({ data: { implementationId, field, value: next } }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["customer", customerId] });
+      // The owner and ARR are shown on the list and on Home too.
+      void queryClient.invalidateQueries({ queryKey: ["home"] });
+    },
+  });
+
+  return (
+    <EditableField
+      label={label}
+      value={value}
+      {...(display !== undefined ? { display } : {})}
+      {...(type ? { type } : {})}
+      {...(options ? { options } : {})}
+      {...(format ? { format } : {})}
+      {...(placeholder ? { placeholder } : {})}
+      onSave={(next) => m.mutateAsync(next)}
+    />
+  );
+}

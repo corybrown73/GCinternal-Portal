@@ -17,6 +17,8 @@ import type {
 import { matchesScope } from "./ownership";
 import type { ResolvedScope } from "./ownership.server";
 
+import { EDITABLE_RECORD_FIELDS, type EditableRecordField } from "./record-fields";
+
 const db = () => supabaseAdmin as any;
 
 /**
@@ -2131,4 +2133,100 @@ export async function attachmentLink(path: string) {
     throw new Error(`Could not open the file: ${error?.message ?? "no link returned"}`);
   }
   return { url: data.signedUrl as string };
+}
+
+/* ---------- Single-field edits on a delivery record ---------- */
+
+/**
+ * Correct one fact on an implementation or its customer, from wherever it is
+ * shown.
+ *
+ * WHY NOT `updateImplementation`. That takes the whole record, which is right
+ * for a form and wrong for an inline editor: a whole-record PATCH sends back
+ * every other field as this browser last saw it, silently reverting anything a
+ * colleague changed in the meantime. One field, one write, and the rest of the
+ * row is left alone.
+ *
+ * The activity feed still records it — `updateImplementation` snapshots before
+ * writing, and the customer path records through the same helper — so "who
+ * changed the owner, and when" survives.
+ */
+export async function updateRecordField(args: {
+  implementationId: string;
+  field: EditableRecordField;
+  value: string | null;
+  actorProfileId: string | null;
+}): Promise<{ ok: true; field: EditableRecordField; value: string | number | null }> {
+  const spec = EDITABLE_RECORD_FIELDS[args.field];
+  if (!spec) throw new Error(`${args.field} is not editable here`);
+
+  const { data: impl } = await db()
+    .from("implementations")
+    .select("id, customer_id")
+    .eq("id", args.implementationId)
+    .maybeSingle();
+  if (!impl) throw new Error("That project no longer exists");
+
+  let next: string | number | null = args.value;
+
+  if (spec.kind === "number") {
+    if (next === null || String(next).trim() === "") {
+      next = null;
+    } else {
+      // Accept what a person types into a money field: "48,000", "$48000".
+      const n = Number(String(next).replace(/[$,\s]/g, ""));
+      if (!Number.isFinite(n) || n < 0) {
+        throw new Error(`"${args.value}" is not an amount — enter a number like 48000`);
+      }
+      next = n;
+    }
+  }
+
+  if (spec.kind === "team_member" && next !== null) {
+    // An owner must be somebody on the team. A free-typed id would save
+    // cleanly and then render as "—" forever, which looks like a failed save.
+    const { data: member } = await db()
+      .from("team_members")
+      .select("id")
+      .eq("id", next)
+      .maybeSingle();
+    if (!member) throw new Error("That person is not on the team");
+  }
+
+  if (spec.kind === "date" && next !== null && String(next).trim() === "") next = null;
+
+  if (spec.table === "implementations") {
+    // Through updateImplementation, so the activity feed snapshot and the
+    // old→new diff happen exactly as they do for a full save.
+    await updateImplementation(
+      args.implementationId,
+      { [args.field]: next },
+      { actorProfileId: args.actorProfileId },
+    );
+    return { ok: true, field: args.field, value: next };
+  }
+
+  const { error } = await db()
+    .from("customers")
+    .update({ [args.field]: next })
+    .eq("id", impl.customer_id);
+  if (error) {
+    const { reportFailure } = await import("./errors");
+    throw new Error(reportFailure("record", "save that change", error));
+  }
+
+  const { recordActivity } = await import("./activity.server");
+  await recordActivity(
+    [
+      {
+        entity_type: "customer",
+        entity_id: impl.customer_id as string,
+        field_name: args.field,
+        new_value: next == null ? null : String(next),
+      },
+    ],
+    { actorProfileId: args.actorProfileId },
+  );
+
+  return { ok: true, field: args.field, value: next };
 }

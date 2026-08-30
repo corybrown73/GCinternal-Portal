@@ -1,6 +1,8 @@
 import { requireInternalAuth } from "@/integrations/supabase/internal-middleware";
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
+
+import { EDITABLE_RECORD_FIELD_KEYS, type EditableRecordField } from "./record-fields";
 import { advanceStageInput } from "./stage-advance-input";
 import { analyzeSowInput, applySowProposalInput, setSowDocumentInput } from "./sow-analysis";
 import { SOLUTION_STATUSES } from "./solution-enums";
@@ -357,6 +359,29 @@ export const addImplementation = createServerFn({ method: "POST" })
       patch: toImplementationPatch(data),
       // Authorship of the plan this creates, through the profile id — the same
       // bridge setImplementation uses for the activity feed.
+      actorProfileId: context.profile.id,
+    });
+  });
+
+export const setRecordField = createServerFn({ method: "POST" })
+  .middleware([requireInternalAuth])
+  .inputValidator((data: unknown) =>
+    z
+      .object({
+        implementationId: z.string().uuid(),
+        field: z.enum(
+          EDITABLE_RECORD_FIELD_KEYS as [EditableRecordField, ...EditableRecordField[]],
+        ),
+        value: z.string().max(2000).nullable(),
+      })
+      .parse(data),
+  )
+  .handler(async ({ data, context }) => {
+    const { updateRecordField } = await import("./hub.server");
+    return updateRecordField({
+      implementationId: data.implementationId,
+      field: data.field,
+      value: data.value,
       actorProfileId: context.profile.id,
     });
   });
