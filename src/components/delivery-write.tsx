@@ -507,6 +507,7 @@ type RiskDraft = {
   ownerId: string;
   impact: string;
   mitigation: string;
+  identifiedAt: string;
   resolvedAt: string;
 };
 
@@ -519,6 +520,7 @@ const emptyRisk = (): RiskDraft => ({
   ownerId: "",
   impact: "",
   mitigation: "",
+  identifiedAt: "",
   resolvedAt: "",
 });
 
@@ -531,6 +533,7 @@ const riskPayload = (d: RiskDraft) => ({
   ownerId: nullable(d.ownerId),
   impact: nullable(d.impact),
   mitigation: nullable(d.mitigation),
+  identifiedAt: nullable(d.identifiedAt),
   resolvedAt: nullable(d.resolvedAt),
 });
 
@@ -576,6 +579,12 @@ function RiskFields(
         value={draft.ownerId}
         team={team}
         onChange={(ownerId) => set({ ownerId })}
+        disabled={disabled}
+      />
+      <DateField
+        label="Identified on"
+        value={draft.identifiedAt}
+        onChange={(identifiedAt) => set({ identifiedAt })}
         disabled={disabled}
       />
       <DateField
@@ -654,6 +663,7 @@ export function EditRisk({
         ownerId: risk.owner_id ?? "",
         impact: risk.impact ?? "",
         mitigation: risk.mitigation ?? "",
+        identifiedAt: dateOnly(risk.identified_at),
         resolvedAt: dateOnly(risk.resolved_at),
       })}
       canSave={(d) => d.title.trim() !== ""}
@@ -672,6 +682,7 @@ type IssueDraft = {
   status: string;
   ownerId: string;
   resolution: string;
+  raisedAt: string;
   resolvedAt: string;
 };
 
@@ -682,6 +693,7 @@ const emptyIssue = (): IssueDraft => ({
   status: "open",
   ownerId: "",
   resolution: "",
+  raisedAt: "",
   resolvedAt: "",
 });
 
@@ -692,6 +704,7 @@ const issuePayload = (d: IssueDraft) => ({
   status: d.status as any,
   ownerId: nullable(d.ownerId),
   resolution: nullable(d.resolution),
+  raisedAt: nullable(d.raisedAt),
   resolvedAt: nullable(d.resolvedAt),
 });
 
@@ -730,6 +743,12 @@ function IssueFields(
         value={draft.ownerId}
         team={team}
         onChange={(ownerId) => set({ ownerId })}
+        disabled={disabled}
+      />
+      <DateField
+        label="Raised on"
+        value={draft.raisedAt}
+        onChange={(raisedAt) => set({ raisedAt })}
         disabled={disabled}
       />
       <DateField
@@ -800,6 +819,7 @@ export function EditIssue({
         status: issue.status ?? "open",
         ownerId: issue.owner_id ?? "",
         resolution: issue.resolution ?? "",
+        raisedAt: dateOnly(issue.raised_at),
         resolvedAt: dateOnly(issue.resolved_at),
       })}
       canSave={(d) => d.title.trim() !== ""}
@@ -822,6 +842,7 @@ type EscalationDraft = {
   relatedIssueId: string;
   relatedRiskId: string;
   resolutionSummary: string;
+  raisedAt: string;
   resolvedAt: string;
 };
 
@@ -836,6 +857,7 @@ const emptyEscalation = (): EscalationDraft => ({
   relatedIssueId: "",
   relatedRiskId: "",
   resolutionSummary: "",
+  raisedAt: "",
   resolvedAt: "",
 });
 
@@ -850,6 +872,7 @@ const escalationPayload = (d: EscalationDraft) => ({
   relatedIssueId: nullable(d.relatedIssueId),
   relatedRiskId: nullable(d.relatedRiskId),
   resolutionSummary: nullable(d.resolutionSummary),
+  raisedAt: nullable(d.raisedAt),
   resolvedAt: nullable(d.resolvedAt),
 });
 
@@ -906,6 +929,12 @@ function EscalationFields(
         onChange={(raisedBy) => set({ raisedBy })}
         disabled={disabled}
         emptyLabel="Not recorded"
+      />
+      <DateField
+        label="Raised on"
+        value={draft.raisedAt}
+        onChange={(raisedAt) => set({ raisedAt })}
+        disabled={disabled}
       />
       <DateField
         label="Resolved on"
@@ -1001,6 +1030,7 @@ export function EditEscalation({
         relatedIssueId: escalation.related_issue_id ?? "",
         relatedRiskId: escalation.related_risk_id ?? "",
         resolutionSummary: escalation.resolution_summary ?? "",
+        raisedAt: dateOnly(escalation.raised_at),
         resolvedAt: dateOnly(escalation.resolved_at),
       })}
       canSave={(d) => d.title.trim() !== ""}

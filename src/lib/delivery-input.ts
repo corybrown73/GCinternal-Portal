@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { calendarDaysBetween } from "@/lib/dates";
+
 /**
  * P0 Slice 3 — write paths for the six existing delivery records:
  * requirements, risks, issues, escalations, decisions, commitments.
@@ -46,6 +48,45 @@ export const DECISION_STATUSES = ["active", "superseded", "reversed"] as const;
 export const COMMITMENT_AUDIENCES = ["customer", "internal"] as const;
 export const COMMITMENT_STATUSES = ["open", "met", "missed", "renegotiated"] as const;
 
+/* ---------------- Resolution dates ---------------- */
+
+/**
+ * A record cannot be resolved before it existed.
+ *
+ * THE BUG THIS CLOSES. "Resolved on" was a free date field with nothing behind
+ * it, so a risk identified on 12 August could be saved resolved on 3 August and
+ * every screen would show it that way. Nothing downstream noticed — time-to-
+ * resolve came out negative and the row still counted as closed — so the only
+ * evidence was a date a person had to read carefully.
+ *
+ * WHY CALENDAR DAYS AND NOT INSTANTS. `identified_at` and `raised_at` are
+ * timestamps set by `now()`; "Resolved on" is a date, stored at UTC midnight.
+ * Comparing them as instants would refuse the commonest legitimate entry there
+ * is — a risk raised at 14:00 and resolved the same afternoon, whose midnight
+ * is six hours earlier than its own identification. So both sides are reduced
+ * to the UTC day they fall on, per the rule in src/lib/dates.ts, and only a
+ * strictly earlier day is refused.
+ */
+export function resolutionOrderError(opts: {
+  noun: string;
+  startLabel: string;
+  startedAt: string | Date | null | undefined;
+  resolvedAt: string | null | undefined;
+}): string | null {
+  const { noun, startLabel, startedAt, resolvedAt } = opts;
+  if (!resolvedAt || !startedAt) return null;
+  const days = calendarDaysBetween(startedAt, resolvedAt);
+  if (days === null || days >= 0) return null;
+  return `This ${noun} was ${startLabel} on ${utcDay(startedAt)}, so it cannot be resolved on ${utcDay(resolvedAt)}. Pick the day it was actually resolved, or correct the ${startLabel} date.`;
+}
+
+/** The YYYY-MM-DD a value falls on in UTC — the frame the rest of the app reads dates in. */
+function utcDay(value: string | Date): string {
+  const d =
+    value instanceof Date ? value : new Date(value.length === 10 ? `${value}T00:00:00Z` : value);
+  return Number.isNaN(d.getTime()) ? String(value) : d.toISOString().slice(0, 10);
+}
+
 /* ---------------- Requirements ---------------- */
 
 export const requirementInput = z.object({
@@ -90,12 +131,31 @@ export const riskInput = z.object({
   ownerId: optionalUuid,
   impact: optionalText,
   mitigation: optionalText,
+  /**
+   * Editable so a risk that was spotted last month can be recorded truthfully.
+   * Blank leaves the stored value alone — on a new risk that is `now()`.
+   */
+  identifiedAt: optionalDate,
   /** Only recorded once the risk actually stops being live. */
   resolvedAt: optionalDate,
 });
 
-export const createRiskInput = riskInput.extend({ implementationId: z.string().uuid() });
-export const updateRiskInput = riskInput.extend({ id: z.string().uuid() });
+const checkRiskDates = (data: RiskInput, ctx: z.RefinementCtx) => {
+  const message = resolutionOrderError({
+    noun: "risk",
+    startLabel: "identified",
+    startedAt: data.identifiedAt,
+    resolvedAt: data.resolvedAt,
+  });
+  if (message) ctx.addIssue({ code: "custom", message, path: ["resolvedAt"] });
+};
+
+export const createRiskInput = riskInput
+  .extend({ implementationId: z.string().uuid() })
+  .superRefine(checkRiskDates);
+export const updateRiskInput = riskInput
+  .extend({ id: z.string().uuid() })
+  .superRefine(checkRiskDates);
 export type RiskInput = z.infer<typeof riskInput>;
 
 export function toRiskPatch(data: RiskInput) {
@@ -108,6 +168,9 @@ export function toRiskPatch(data: RiskInput) {
     owner_id: data.ownerId,
     impact: data.impact,
     mitigation: data.mitigation,
+    // Omitted rather than nulled when blank: the column is NOT NULL, and a
+    // blank field means "leave it as it is", not "forget when this started".
+    ...(data.identifiedAt ? { identified_at: `${data.identifiedAt}T00:00:00Z` } : {}),
     resolved_at: data.resolvedAt ? `${data.resolvedAt}T00:00:00Z` : null,
   };
 }
@@ -121,11 +184,27 @@ export const issueInput = z.object({
   status: z.enum(ISSUE_STATUSES),
   ownerId: optionalUuid,
   resolution: optionalText,
+  /** See identifiedAt on riskInput — same reason, different column name. */
+  raisedAt: optionalDate,
   resolvedAt: optionalDate,
 });
 
-export const createIssueInput = issueInput.extend({ implementationId: z.string().uuid() });
-export const updateIssueInput = issueInput.extend({ id: z.string().uuid() });
+const checkIssueDates = (data: IssueInput, ctx: z.RefinementCtx) => {
+  const message = resolutionOrderError({
+    noun: "issue",
+    startLabel: "raised",
+    startedAt: data.raisedAt,
+    resolvedAt: data.resolvedAt,
+  });
+  if (message) ctx.addIssue({ code: "custom", message, path: ["resolvedAt"] });
+};
+
+export const createIssueInput = issueInput
+  .extend({ implementationId: z.string().uuid() })
+  .superRefine(checkIssueDates);
+export const updateIssueInput = issueInput
+  .extend({ id: z.string().uuid() })
+  .superRefine(checkIssueDates);
 export type IssueInput = z.infer<typeof issueInput>;
 
 export function toIssuePatch(data: IssueInput) {
@@ -136,6 +215,7 @@ export function toIssuePatch(data: IssueInput) {
     status: data.status,
     owner_id: data.ownerId,
     resolution: data.resolution,
+    ...(data.raisedAt ? { raised_at: `${data.raisedAt}T00:00:00Z` } : {}),
     resolved_at: data.resolvedAt ? `${data.resolvedAt}T00:00:00Z` : null,
   };
 }
@@ -155,13 +235,27 @@ export const escalationInput = z.object({
   relatedIssueId: optionalUuid,
   relatedRiskId: optionalUuid,
   resolutionSummary: optionalText,
+  /** See identifiedAt on riskInput — same reason, different column name. */
+  raisedAt: optionalDate,
   resolvedAt: optionalDate,
 });
 
-export const createEscalationInput = escalationInput.extend({
-  implementationId: z.string().uuid(),
-});
-export const updateEscalationInput = escalationInput.extend({ id: z.string().uuid() });
+const checkEscalationDates = (data: EscalationInput, ctx: z.RefinementCtx) => {
+  const message = resolutionOrderError({
+    noun: "escalation",
+    startLabel: "raised",
+    startedAt: data.raisedAt,
+    resolvedAt: data.resolvedAt,
+  });
+  if (message) ctx.addIssue({ code: "custom", message, path: ["resolvedAt"] });
+};
+
+export const createEscalationInput = escalationInput
+  .extend({ implementationId: z.string().uuid() })
+  .superRefine(checkEscalationDates);
+export const updateEscalationInput = escalationInput
+  .extend({ id: z.string().uuid() })
+  .superRefine(checkEscalationDates);
 export type EscalationInput = z.infer<typeof escalationInput>;
 
 export function toEscalationPatch(data: EscalationInput) {
@@ -176,6 +270,7 @@ export function toEscalationPatch(data: EscalationInput) {
     related_issue_id: data.relatedIssueId,
     related_risk_id: data.relatedRiskId,
     resolution_summary: data.resolutionSummary,
+    ...(data.raisedAt ? { raised_at: `${data.raisedAt}T00:00:00Z` } : {}),
     resolved_at: data.resolvedAt ? `${data.resolvedAt}T00:00:00Z` : null,
   };
 }

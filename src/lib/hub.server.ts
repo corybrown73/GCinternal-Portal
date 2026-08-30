@@ -1944,11 +1944,66 @@ function deliveryWriteError(table: string, message: string): Error {
 /** Tables deriveHealth reads, so a write to one invalidates the health cache. */
 const HEALTH_INPUT_TABLES = new Set(["risks", "issues", "escalations", "commitments"]);
 
+/**
+ * Tables where a row has a start instant and a resolution date that must not
+ * run backwards. The column names differ per table for historical reasons; the
+ * rule does not.
+ */
+const RESOLUTION_ORDER = {
+  risks: { startColumn: "identified_at", startLabel: "identified", noun: "risk" },
+  issues: { startColumn: "raised_at", startLabel: "raised", noun: "issue" },
+  escalations: { startColumn: "raised_at", startLabel: "raised", noun: "escalation" },
+} as const;
+
+/**
+ * Refuse a resolution date that precedes the day the record started.
+ *
+ * The zod schemas already check the pair when the form sends both, which is the
+ * path that produces a message beside the field. This is the backstop for the
+ * pair the form cannot send: a new row whose start is the database's `now()`,
+ * and an edit that leaves the start date blank so the stored value stands. Both
+ * of those reach here with only half the comparison in hand, so the other half
+ * is read back before the write rather than assumed.
+ */
+async function guardResolutionOrder(
+  table: string,
+  patch: Record<string, unknown>,
+  id: string | null,
+): Promise<void> {
+  const spec = RESOLUTION_ORDER[table as keyof typeof RESOLUTION_ORDER];
+  if (!spec) return;
+  const resolvedAt = patch["resolved_at"];
+  if (typeof resolvedAt !== "string" || !resolvedAt) return;
+
+  let startedAt = patch[spec.startColumn];
+  if (typeof startedAt !== "string" || !startedAt) {
+    if (id) {
+      const { data } = await db().from(table).select(spec.startColumn).eq("id", id).maybeSingle();
+      startedAt = (data as Record<string, unknown> | null)?.[spec.startColumn] ?? null;
+    } else {
+      // A fresh row: the database will stamp `now()`, so that is what the
+      // resolution date is being compared against.
+      startedAt = new Date().toISOString();
+    }
+  }
+  if (typeof startedAt !== "string" || !startedAt) return;
+
+  const { resolutionOrderError } = await import("./delivery-input");
+  const message = resolutionOrderError({
+    noun: spec.noun,
+    startLabel: spec.startLabel,
+    startedAt,
+    resolvedAt,
+  });
+  if (message) throw new Error(message);
+}
+
 async function insertDeliveryRow(
   table: string,
   implementationId: string,
   patch: Record<string, unknown>,
 ) {
+  await guardResolutionOrder(table, patch, null);
   const { data, error } = await db()
     .from(table)
     .insert({ implementation_id: implementationId, ...patch })
@@ -1963,6 +2018,7 @@ async function insertDeliveryRow(
 }
 
 async function updateDeliveryRow(table: string, id: string, patch: Record<string, unknown>) {
+  await guardResolutionOrder(table, patch, id);
   const { error } = await db().from(table).update(patch).eq("id", id);
   if (error) throw deliveryWriteError(table, error.message);
   if (HEALTH_INPUT_TABLES.has(table)) {
