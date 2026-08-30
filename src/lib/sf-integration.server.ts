@@ -83,6 +83,16 @@ export function createIngestPort(ctx: { apiKeyId: string | null }): IngestPort {
       return (data ?? []) as TemplateCandidate[];
     },
 
+    async fallbackTemplateKey() {
+      const { data } = await db()
+        .from("portal_app_config")
+        .select("value")
+        .eq("key", "sf_fallback_template")
+        .maybeSingle();
+      const v = (data as { value?: unknown } | null)?.value;
+      return typeof v === "string" ? v : null;
+    },
+
     async findCustomerBySfAccountId(sfAccountId: string) {
       const { data } = await db()
         .from("customers")

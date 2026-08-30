@@ -1617,6 +1617,14 @@ export async function createImplementation(args: {
     arr: number | null;
   } | null;
   patch: Record<string, unknown>;
+  /**
+   * Who is creating this, as a `portal_profiles` id. Recorded as the author of
+   * the plan (`journey_instantiations.created_by`). NOT the implementation's
+   * `owner_id`, which is a `team_members` id — the two id spaces are bridged,
+   * never interchangeable, and passing one where the other belongs would either
+   * break the foreign key or attribute the plan to a stranger.
+   */
+  actorProfileId?: string | null;
 }) {
   let customerId = args.customerId;
 
@@ -1671,7 +1679,18 @@ export async function createImplementation(args: {
     source: String(args.patch["source"] ?? "manual"),
   });
 
-  return { ok: true, customerId, implementationId: impl.id as string };
+  // Give it a plan, the same way the handoff and the Salesforce endpoint do.
+  // This path used to leave a project with no stage instances and no work
+  // items; the operator saw an empty rail and had no way to tell whether that
+  // meant "no plan" or "nothing to do yet". Never throws — the implementation
+  // exists and is usable either way, and `plan.reason` says what happened.
+  const { applyPlanToNewImplementation } = await import("./server/plan-apply");
+  const plan = await applyPlanToNewImplementation({
+    implementationId: impl.id as string,
+    actorProfileId: args.actorProfileId ?? null,
+  });
+
+  return { ok: true, customerId, implementationId: impl.id as string, plan };
 }
 
 /**

@@ -718,6 +718,21 @@ export async function startOnboarding(
     source: "presale",
   });
 
+  // Give it a plan. Until this call existed, a project handed off from a deal
+  // arrived with no stages and no tasks — an empty rail the operator was left
+  // to interpret. The deal carries no opportunity type or amount, so no
+  // `default_for` rule can match it; this is precisely the case the configured
+  // fallback covers.
+  //
+  // Never throws: the deal is already linked and the pre-sale stage has already
+  // moved, and a handoff that half-succeeds is worse than a project that needs
+  // a template picked by hand.
+  const { applyPlanToNewImplementation } = await import("./server/plan-apply");
+  const plan = await applyPlanToNewImplementation({
+    implementationId: impl.id as string,
+    actorProfileId: userId,
+  });
+
   // (b) link the deal to the customer record (already linked deals keep theirs).
   const alreadyLinked = Boolean(account.customer_id);
   if (!alreadyLinked) {
@@ -756,6 +771,9 @@ export async function startOnboarding(
     payload: {
       customer_id: customerId,
       implementation_id: impl.id,
+      // Whether this project got a plan, and why — the question somebody asks
+      // when they open a project and find an empty rail.
+      plan,
       ...(flagOn ? { matched_by: matchedBy, customer_created: customerCreated } : {}),
     },
   });

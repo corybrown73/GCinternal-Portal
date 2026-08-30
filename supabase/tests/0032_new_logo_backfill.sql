@@ -234,10 +234,17 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------------------
--- A never-instantiated project gets the whole plan
+-- A never-instantiated project is refused, not silently ignored
 -- ---------------------------------------------------------------------------
 -- Two of the six production implementations have no stage instances at all.
--- They are not "past" anything, so forward-only means everything.
+-- Every insert in this function joins stage_instances, so it can only ever
+-- create nothing for them, whatever position the current stage resolves to —
+-- 0032's "give it everything rather than nothing" fallback described an intent
+-- the query could not carry out, and returned a silent zero instead.
+--
+-- 0033 makes it say so. The fix for such a project is apply_journey_template,
+-- and being told that is the difference between a five-second fix and the
+-- weeks Summit Field Services spent at handoff with no plan and no complaint.
 insert into implementations (id, customer_id, name, current_stage)
   values ('44444444-2222-4222-8222-000000000002',
           '44444444-1111-4111-8111-000000000001', 'Never started', 'handoff');
@@ -249,18 +256,21 @@ declare
 begin
   select id into v2_id from journey_templates
    where key = 'new-logo' and version = 2 and status = 'published';
-  made := backfill_template_tasks_forward(
-    '44444444-2222-4222-8222-000000000002', v2_id);
-  -- No stage instances means no rows to join against, so nothing is created.
-  -- That is correct and worth pinning: the fix for such a project is
-  -- instantiate_journey, not this function, and silently creating orphaned
-  -- work items with no stage would be worse than creating none.
-  if made <> 0 then
-    raise exception
-      'INVARIANT CHANGED: a project with no stage instances got % task(s); it should get none from this path',
-      made;
-  end if;
-  raise notice 'ok — a never-instantiated project is left for instantiate_journey, not half-filled';
+  begin
+    made := backfill_template_tasks_forward(
+      '44444444-2222-4222-8222-000000000002', v2_id);
+  exception when others then
+    if position('apply_journey_template' in sqlerrm) = 0 then
+      raise exception
+        'INVARIANT "a project with no stage instances is refused" was refused for the wrong reason: %',
+        sqlerrm;
+    end if;
+    raise notice 'ok — a project with no stage instances is sent to apply_journey_template';
+    return;
+  end;
+  raise exception
+    'INVARIANT NOT ENFORCED: a project with no stage instances returned % rather than being refused',
+    made;
 end $$;
 
 rollback;

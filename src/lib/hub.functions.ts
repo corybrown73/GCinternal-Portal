@@ -349,12 +349,15 @@ export const getTeamOptions = createServerFn({ method: "GET" })
 export const addImplementation = createServerFn({ method: "POST" })
   .middleware([requireInternalAuth])
   .inputValidator((data: unknown) => createImplementationInput.parse(data))
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
     const { createImplementation } = await import("./hub.server");
     return createImplementation({
       customerId: data.customerId,
       newCustomer: data.newCustomer ? toCustomerPatch(data.newCustomer) : null,
       patch: toImplementationPatch(data),
+      // Authorship of the plan this creates, through the profile id — the same
+      // bridge setImplementation uses for the activity feed.
+      actorProfileId: context.profile.id,
     });
   });
 

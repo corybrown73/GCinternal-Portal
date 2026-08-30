@@ -81,7 +81,25 @@ export type TemplateSelection = {
     journey_type: string | null;
     priority: number;
     rule_index: number;
+    /**
+     * How this template came to be chosen. `rule` means a `default_for` clause
+     * matched; `fallback` means none did and the configured catch-all was used.
+     * A reader of a months-old decision log needs to tell those apart: the
+     * first is a deliberate mapping, the second is "nothing was configured for
+     * this deal, so it got the house default".
+     */
+    via: "rule" | "fallback";
   } | null;
+  /**
+   * Why the fallback did or did not step in. Present only on `chooseTemplate`,
+   * which is the function that knows about the config; `selectTemplate` on its
+   * own evaluates rules and nothing else.
+   */
+  fallback?: {
+    key: string | null;
+    used: boolean;
+    reason: string;
+  };
   /** Every rule considered, in the order considered. Evidence, not debug. */
   evaluations: RuleEvaluation[];
   /** Non-empty when two rules tied on priority and the tie-break decided it. */
@@ -268,9 +286,90 @@ export function selectTemplate(
       journey_type: winnerTemplate?.journey_type ?? null,
       priority: top.priority,
       rule_index: top.rule_index,
+      via: "rule",
     },
     evaluations,
     ties,
     inputs,
+  };
+}
+
+/**
+ * Choose a template with the fallback the design always specified.
+ *
+ * WHY THIS EXISTS. `selectTemplate` reads `journey_templates.default_for`, and
+ * in this deployment every template has it NULL — so every candidate is
+ * recorded as "no default_for rules" and the winner has always been null. The
+ * documented answer is at the top of this file: "a catch-all belongs in the
+ * `sf_fallback_template` config, not hidden in a template's rules." 0023 duly
+ * seeded that key. Nothing ever read it.
+ *
+ * The result was a product where no creation path could produce a plan, which
+ * is why three production accounts had zero work items and the pre-sale handoff
+ * produced projects with no stages at all.
+ *
+ * The config holds a template KEY, not an id: ids differ between environments,
+ * and a key follows the family forward, so publishing New Logo v3 moves the
+ * fallback with it instead of pinning it to a superseded version.
+ *
+ * Rules still win. The fallback is what happens when nobody has said anything
+ * about this kind of deal, and it records that it was the fallback — a reader
+ * months later must be able to tell "we mapped this deliberately" from "it got
+ * the house default".
+ */
+export function chooseTemplate(
+  candidates: TemplateCandidate[],
+  inputs: SelectionInputs,
+  fallbackKey: string | null,
+): TemplateSelection {
+  const byRule = selectTemplate(candidates, inputs);
+  if (byRule.winner) {
+    return { ...byRule, fallback: { key: fallbackKey, used: false, reason: "a rule matched" } };
+  }
+
+  const key = typeof fallbackKey === "string" ? fallbackKey.trim() : "";
+  // '"none"' is the placeholder 0023 seeded. Treat it as "not configured"
+  // rather than hunting for a template literally called "none".
+  if (key === "" || key === "none") {
+    return {
+      ...byRule,
+      fallback: { key: fallbackKey, used: false, reason: "no fallback template configured" },
+    };
+  }
+
+  // Only a live published version participates, the same bar `selectTemplate`
+  // holds rules to. A superseded version is not the current plan for anything.
+  const live = candidates.filter((c) => c.key === key && c.status === "published");
+  if (live.length === 0) {
+    return {
+      ...byRule,
+      fallback: {
+        key,
+        used: false,
+        reason: `no published template with key '${key}'`,
+      },
+    };
+  }
+
+  // Candidates are already filtered to `superseded_by_id is null` upstream, but
+  // do not depend on the caller for that: the highest version is the current
+  // one either way, and picking deterministically beats picking whichever row
+  // the database returned first.
+  const chosen = live.reduce((best, c) => (c.version > best.version ? c : best));
+
+  return {
+    ...byRule,
+    winner: {
+      template_id: chosen.id,
+      template_key: chosen.key,
+      template_version: chosen.version,
+      journey_type: chosen.journey_type ?? null,
+      priority: 0,
+      // No rule chose this, and saying rule 0 did would be a lie a decision log
+      // cannot be read past.
+      rule_index: -1,
+      via: "fallback",
+    },
+    fallback: { key, used: true, reason: "no rule matched; used the configured fallback" },
   };
 }

@@ -78,6 +78,12 @@ class FakeStore {
   flags: IngestFlags = { autoCreate: true, presaleBridge: false, templates: false };
   maps: any[] = [];
   templates: any[] = [];
+  /**
+   * `sf_fallback_template`. Null by default so the existing tests keep asserting
+   * exactly what they asserted: rules decide, and nothing else. Production
+   * seeds a real key, and the tests that cover that set it explicitly.
+   */
+  fallbackTemplateKey: string | null = null;
   owners = new Map<string, string>();
   idempotencyCache = new Map<string, { status: number; body: unknown }>();
 
@@ -151,6 +157,9 @@ function makePort(store: FakeStore): IngestPort {
     },
     async publishedTemplates() {
       return store.templates;
+    },
+    async fallbackTemplateKey() {
+      return store.fallbackTemplateKey;
     },
     async findCustomerBySfAccountId(sfAccountId) {
       for (const c of store.customers.values()) {
@@ -554,6 +563,99 @@ describe("template selection", () => {
     store.flags = { ...store.flags, templates: true };
     const out = await ingestOpportunity(payload(), store.port(), ctx());
     expect((out.body["template"] as any).applied).toBe(true);
+  });
+
+  // The state this deployment was actually in: templates published, every one
+  // of them with default_for NULL, so no rule could ever match and every
+  // project arrived with no plan. The configured fallback is the documented
+  // answer and was read by nothing.
+  const unruled = { ...template, default_for: null };
+
+  it("selects nothing when no template carries a rule and no fallback is set", async () => {
+    store.templates = [unruled];
+    store.flags = { ...store.flags, templates: true };
+    store.fallbackTemplateKey = null;
+
+    const out = await ingestOpportunity(payload(), store.port(), ctx());
+
+    expect(out.body["template"]).toBeNull();
+    const decision = store.syncLogs.at(-1)!["decision"] as any;
+    expect(decision.template.evaluations[0].skipped_reason).toContain("no default_for rules");
+    expect(decision.template.fallback).toMatchObject({ used: false });
+  });
+
+  it("falls back to the configured template when no rule matches, and says it did", async () => {
+    store.templates = [unruled];
+    store.flags = { ...store.flags, templates: true };
+    store.fallbackTemplateKey = "new_logo";
+
+    const out = await ingestOpportunity(payload(), store.port(), ctx());
+
+    expect((out.body["template"] as any).template_key).toBe("new_logo");
+    expect((out.body["template"] as any).applied).toBe(true);
+
+    const decision = store.syncLogs.at(-1)!["decision"] as any;
+    // A reader months later must be able to tell a deliberate mapping from
+    // "nothing was configured, so it got the house default".
+    expect(decision.template.winner.via).toBe("fallback");
+    expect(decision.template.winner.rule_index).toBe(-1);
+    expect(decision.template.fallback).toMatchObject({ key: "new_logo", used: true });
+  });
+
+  it("keeps the placeholder 0023 seeded from being treated as a template name", async () => {
+    store.templates = [unruled];
+    store.flags = { ...store.flags, templates: true };
+    store.fallbackTemplateKey = "none";
+
+    const out = await ingestOpportunity(payload(), store.port(), ctx());
+
+    expect(out.body["template"]).toBeNull();
+    const decision = store.syncLogs.at(-1)!["decision"] as any;
+    expect(decision.template.fallback.reason).toContain("no fallback template configured");
+  });
+
+  it("prefers a matching rule over the fallback", async () => {
+    // Two templates: one whose rule matches this opportunity, and a different
+    // one named as the fallback. The rule must win, or configuring a fallback
+    // would silently override every deliberate mapping in the system.
+    store.templates = [template, { ...unruled, id: "tpl-2", key: "house-default", version: 1 }];
+    store.flags = { ...store.flags, templates: true };
+    store.fallbackTemplateKey = "house-default";
+
+    const out = await ingestOpportunity(payload(), store.port(), ctx());
+
+    expect((out.body["template"] as any).template_key).toBe("new_logo");
+    const decision = store.syncLogs.at(-1)!["decision"] as any;
+    expect(decision.template.winner.via).toBe("rule");
+    expect(decision.template.fallback).toMatchObject({ used: false });
+  });
+
+  it("refuses a fallback key naming a template that is not published", async () => {
+    store.templates = [{ ...unruled, status: "draft" }];
+    store.flags = { ...store.flags, templates: true };
+    store.fallbackTemplateKey = "new_logo";
+
+    const out = await ingestOpportunity(payload(), store.port(), ctx());
+
+    expect(out.body["template"]).toBeNull();
+    const decision = store.syncLogs.at(-1)!["decision"] as any;
+    expect(decision.template.fallback.reason).toContain("no published template");
+  });
+
+  it("takes the highest published version when the fallback key names a family", async () => {
+    store.templates = [
+      { ...unruled, id: "tpl-v1", version: 1 },
+      { ...unruled, id: "tpl-v4", version: 4 },
+      { ...unruled, id: "tpl-v2", version: 2 },
+    ];
+    store.flags = { ...store.flags, templates: true };
+    store.fallbackTemplateKey = "new_logo";
+
+    const out = await ingestOpportunity(payload(), store.port(), ctx());
+
+    // The key follows the family forward: publishing v5 moves the fallback
+    // with it rather than pinning it to a superseded version.
+    expect((out.body["template"] as any).template_version).toBe(4);
   });
 });
 

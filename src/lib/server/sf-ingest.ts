@@ -27,7 +27,7 @@
 
 import { sfId18 } from "./sf-id";
 import { applyInboundMaps, driftReport, type DriftReport, type FieldMap } from "./sf-field-maps";
-import { selectTemplate, type TemplateCandidate, type TemplateSelection } from "./template-select";
+import { chooseTemplate, type TemplateCandidate, type TemplateSelection } from "./template-select";
 import type { OpportunityIngestInput } from "./sf-schemas";
 
 /* ------------------------------------------------------------------ types */
@@ -101,6 +101,14 @@ export interface IngestPort {
   flags(): Promise<IngestFlags>;
   fieldMaps(): Promise<FieldMap[]>;
   publishedTemplates(): Promise<TemplateCandidate[]>;
+  /**
+   * `sf_fallback_template` from portal_app_config: the template KEY to use when
+   * no `default_for` rule matches. template-select.ts has always specified this
+   * as where a catch-all belongs; 0023 seeded the key and, until 0033, nothing
+   * read it — which is why selection in this deployment had never once returned
+   * a winner.
+   */
+  fallbackTemplateKey(): Promise<string | null>;
 
   findCustomerBySfAccountId(sfAccountId: string): Promise<CustomerRow | null>;
   findPortalAccountBySfId(sfAccountId: string): Promise<PortalAccountRow | null>;
@@ -299,7 +307,12 @@ export async function ingestOpportunity(
 
   /* ---- Template selection: always evaluated, always recorded ------------ */
   const candidates = await port.publishedTemplates();
-  const selection: TemplateSelection = selectTemplate(candidates, selectionInputsFrom(input));
+  const fallbackKey = await port.fallbackTemplateKey();
+  const selection: TemplateSelection = chooseTemplate(
+    candidates,
+    selectionInputsFrom(input),
+    fallbackKey,
+  );
   const templateApplied = flags.templates && selection.winner !== null;
 
   /* ---- Owner resolution ------------------------------------------------- */
