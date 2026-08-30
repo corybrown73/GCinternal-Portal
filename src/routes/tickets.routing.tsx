@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 
@@ -9,6 +9,7 @@ import { canManage, useProfile } from "@/lib/auth";
 import { humanize } from "@/lib/hub-format";
 import { cn } from "@/lib/utils";
 import { selectClass } from "@/components/tickets/ticket-ui";
+import { assigneeLabel, unlinkedStaffNote } from "@/lib/ticket-assignees";
 
 export const Route = createFileRoute("/tickets/routing")({
   head: () => ({
@@ -47,6 +48,11 @@ function RoutingPage() {
         Each category routes to a role. New tickets go to the person in that role with the fewest
         open tickets; the fallback person catches categories whose role has no members.
       </p>
+      <PoolNote
+        assignable={teamQuery.data?.profiles.length ?? 0}
+        directory={teamQuery.data?.directoryCount ?? 0}
+        ready={!teamQuery.isPending && !teamQuery.isError}
+      />
       {routingQuery.isPending || teamQuery.isPending ? (
         <p className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
           Loading routing…
@@ -68,7 +74,7 @@ function RoutingPage() {
             </thead>
             <tbody className="divide-y divide-border">
               {(routingQuery.data ?? []).map((row) => (
-                <RoutingRow key={row.id} row={row} team={teamQuery.data ?? []} />
+                <RoutingRow key={row.id} row={row} team={teamQuery.data?.profiles ?? []} />
               ))}
             </tbody>
           </table>
@@ -131,7 +137,7 @@ function RoutingRow({
           <option value="">No fallback</option>
           {team.map((p) => (
             <option key={p.id} value={p.id}>
-              {p.full_name ?? p.email} · {humanize(p.role)}
+              {assigneeLabel(p, humanize)}
             </option>
           ))}
         </select>
@@ -152,5 +158,37 @@ function RoutingRow({
         ) : null}
       </td>
     </tr>
+  );
+}
+
+/**
+ * Say why the fallback list is shorter than the staff directory.
+ *
+ * Without this the picker looks broken: the same names that appear everywhere
+ * else in the app are missing here, with nothing on screen to explain it. The
+ * cause is real and not fixable by widening the query — a fallback is routed
+ * live tickets and has to be able to sign in and work them.
+ */
+function PoolNote({
+  assignable,
+  directory,
+  ready,
+}: {
+  assignable: number;
+  directory: number;
+  ready: boolean;
+}) {
+  if (!ready) return null;
+  const note = unlinkedStaffNote({ assignable, directory });
+  if (!note) return null;
+
+  return (
+    <p className="max-w-2xl rounded-md border border-border bg-surface px-3 py-2 text-[12px] text-muted-foreground">
+      {note}{" "}
+      <Link to="/admin/users" className="font-medium text-foreground hover:underline">
+        Invite them on Admin → Users
+      </Link>{" "}
+      to make them routable.
+    </p>
   );
 }

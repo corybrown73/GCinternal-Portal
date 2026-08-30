@@ -81,7 +81,7 @@ function TicketDetailPage() {
   }
 
   const { ticket, comments } = query.data;
-  const team = teamQuery.data ?? [];
+  const team = teamQuery.data?.profiles ?? [];
 
   return (
     <PageBody className="space-y-4">

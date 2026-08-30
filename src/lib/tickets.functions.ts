@@ -104,19 +104,33 @@ export const getTicketRouting = createServerFn({ method: "GET" })
     }>;
   });
 
-/** Internal profiles for assignee/fallback pickers. */
+/**
+ * Internal profiles for assignee/fallback pickers.
+ *
+ * `directoryCount` is the active `team_members` headcount, returned alongside so
+ * the picker can explain why it is shorter than the staff directory people see
+ * elsewhere. See src/lib/ticket-assignees.ts for why the two differ and why
+ * this list must stay accounts rather than directory rows.
+ */
 export const getInternalProfiles = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const profile = await callerProfile(context.userId);
     assertInternal(profile);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data } = await (supabaseAdmin as any)
-      .from("portal_profiles")
-      .select("id, email, full_name, role")
-      .neq("role", "customer")
-      .order("full_name", { ascending: true });
-    return (data ?? []) as CallerProfile[];
+    const db = supabaseAdmin as any;
+    const [profiles, directory] = await Promise.all([
+      db
+        .from("portal_profiles")
+        .select("id, email, full_name, role")
+        .neq("role", "customer")
+        .order("full_name", { ascending: true }),
+      db.from("team_members").select("id", { count: "exact", head: true }).eq("active", true),
+    ]);
+    return {
+      profiles: (profiles.data ?? []) as CallerProfile[],
+      directoryCount: (directory.count ?? 0) as number,
+    };
   });
 
 /* ---------- Ticket writes ---------- */
