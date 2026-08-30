@@ -264,7 +264,7 @@ function TemplatesPage() {
         <PageBody className="max-w-3xl">
           <EmptyState
             title="Journey templates are not enabled yet"
-            description="Template content is seeded but stays hidden until the journey_templates flag is switched on for this environment. Nothing is broken — turn the flag on in portal_app_config (key v2_flags) to review the templates here."
+            description="Template content is seeded but stays hidden until the Journey templates feature is switched on for this deployment. Nothing is broken — a super admin can turn it on under Admin → Features."
             hint="flag: journey_templates — off"
           />
         </PageBody>

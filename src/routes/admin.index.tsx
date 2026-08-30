@@ -8,6 +8,7 @@ import {
   ShieldCheck,
   Upload,
   Users,
+  ToggleRight,
 } from "lucide-react";
 
 import { PageBody, PageHeader } from "@/components/page";
@@ -37,6 +38,13 @@ const CARDS = [
     title: "Integrations",
     description:
       "Salesforce auto-create: the sync log and why each decision was made, field maps, outbound webhooks and the needs-template queue.",
+  },
+  {
+    to: "/admin/flags",
+    icon: ToggleRight,
+    title: "Features",
+    description:
+      "What is switched on for this deployment, what each switch does, and which ones customers can see. A feature is not a permission — roles decide who may act.",
   },
   {
     to: "/admin/pipeline-stages",

@@ -142,6 +142,45 @@ export async function isFlagOn(flag: keyof V2Flags): Promise<boolean> {
   return (await getV2Flags())[flag];
 }
 
+/**
+ * Flip one flag.
+ *
+ * MERGED, never replaced. Writing the whole object back would mean that two
+ * admins on the flags screen at the same time silently undo each other — the
+ * second save carries a copy of the state the first one loaded. `value || {…}`
+ * touches exactly the key being changed and leaves the rest of the row alone.
+ *
+ * Authorization is NOT here. It is in flags.functions.ts, gated on the caller's
+ * role, because this module is imported by everything that reads a flag and a
+ * check here would be a check in the wrong place.
+ *
+ * The cache is per serverless instance, so this clears the local one and other
+ * instances catch up within CACHE_MS. The screen says so; a flag that appears
+ * not to have changed for a minute is otherwise indistinguishable from a flag
+ * that failed to save.
+ */
+export async function setV2Flag(flag: keyof V2Flags, value: boolean): Promise<V2Flags> {
+  const db = supabaseAdmin as any;
+  const { data: existing } = await db
+    .from("portal_app_config")
+    .select("value")
+    .eq("key", "v2_flags")
+    .maybeSingle();
+
+  const next = { ...((existing?.value ?? {}) as Record<string, unknown>), [flag]: value };
+
+  const { error } = existing
+    ? await db
+        .from("portal_app_config")
+        .update({ value: next, updated_at: new Date().toISOString() })
+        .eq("key", "v2_flags")
+    : await db.from("portal_app_config").insert({ key: "v2_flags", value: next });
+  if (error) throw new Error(`Could not save the flag: ${error.message}`);
+
+  resetFlagCache();
+  return getV2Flags();
+}
+
 /** Test seam — drops the per-instance cache. */
 export function resetFlagCache(): void {
   cache = null;
