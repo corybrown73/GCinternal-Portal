@@ -1,4 +1,5 @@
 import {
+  stageDefinition,
   LIFECYCLE_STAGE_MAP,
   PRE_HANDOFF_STAGE_LABELS,
   STAGE_ALIASES,
@@ -21,11 +22,23 @@ export function isPreHandoffStage(raw: string | null | undefined): boolean {
   return raw.trim().toLowerCase().replace(/_/g, "-") in PRE_HANDOFF_STAGE_LABELS;
 }
 
+/**
+ * The name a person should see for a stage.
+ *
+ * Reads `stageDefinition`, not the compiled map, so a rename made in Admin →
+ * Post-sale stages reaches every one of the twenty-two places that renders a
+ * stage name. Before this it reached the database and stopped there, while the
+ * admin page promised "Renaming a stage changes what people read".
+ */
 export function stageLabel(raw: string | null | undefined): string {
   const id = normalizeStage(raw);
-  if (id) return LIFECYCLE_STAGE_MAP[id].label;
+  if (id) return stageDefinition(id)?.label ?? LIFECYCLE_STAGE_MAP[id].label;
   if (!raw) return "—";
-  return PRE_HANDOFF_STAGE_LABELS[raw.trim().toLowerCase().replace(/_/g, "-")] ?? raw;
+  // A stage somebody added in the admin screen has no compiled id to normalize
+  // to, so it is looked up by its own key before falling back to the pre-handoff
+  // labels and finally to the raw value.
+  const key = raw.trim().toLowerCase().replace(/_/g, "-");
+  return stageDefinition(key)?.label ?? PRE_HANDOFF_STAGE_LABELS[key] ?? raw;
 }
 
 export function stageIndex(raw: string | null | undefined): number {

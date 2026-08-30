@@ -147,6 +147,78 @@ export const LIFECYCLE_STAGE_MAP = Object.fromEntries(
   LIFECYCLE_STAGES.map((stage) => [stage.id, stage]),
 ) as Record<LifecycleStageId, LifecycleStage>;
 
+/* ---------------------------------------------------------------------------
+ * Configured overrides
+ * ------------------------------------------------------------------------ */
+/**
+ * WHY THIS EXISTS. `portal_lifecycle_stages` (0031) makes stage labels and
+ * intents editable, the `lifecycle_stage_config` flag is on, and the admin page
+ * promises "Renaming a stage changes what people read". It did not: the rename
+ * reached the database and nothing else, because every one of the twenty-two
+ * places that renders a stage name reads the compiled-in map above.
+ *
+ * Threading configuration through twenty-two call sites would mean twenty-two
+ * chances to miss one, and the one that was missed would be the bug. So the
+ * REGISTRY is what changes, and every reader keeps calling `stageLabel`.
+ *
+ * SINGLE TENANT, AND THAT IS LOAD-BEARING. This is module state on the
+ * server, shared by every in-flight request. That is only sound because there
+ * is one organisation: every request would write identical values, so an
+ * interleaved write cannot produce a wrong answer. If this application ever
+ * serves a second org, this becomes a data leak between them and the overrides
+ * must move into request context instead. Recorded here rather than discovered
+ * later.
+ */
+export type StageOverride = {
+  label: string;
+  intent?: string | null;
+  phase?: LifecyclePhase;
+};
+
+let stageOverrides: Record<string, StageOverride> = {};
+
+/** Replace the configured labels wholesale. Called once per render pass. */
+export function applyStageOverrides(
+  rows: ReadonlyArray<{ key: string; label: string; intent?: string | null; phase?: string }>,
+): void {
+  const next: Record<string, StageOverride> = {};
+  for (const row of rows ?? []) {
+    if (!row?.key || typeof row.label !== "string" || row.label.trim() === "") continue;
+    next[row.key] = {
+      label: row.label,
+      intent: row.intent ?? null,
+      ...(row.phase ? { phase: row.phase as LifecyclePhase } : {}),
+    };
+  }
+  stageOverrides = next;
+}
+
+/** Back to the compiled-in list. The test seam, and the flag-off state. */
+export function resetStageOverrides(): void {
+  stageOverrides = {};
+}
+
+/**
+ * One stage, as it should be READ right now — configuration first, the
+ * compiled-in definition behind it.
+ *
+ * The fallback matters: a stage somebody added in the admin screen has no
+ * compiled definition at all, and a compiled stage nobody has edited has no
+ * override. Both have to render.
+ */
+export function stageDefinition(id: string): (Partial<LifecycleStage> & { label: string }) | null {
+  const base = (LIFECYCLE_STAGE_MAP as Record<string, LifecycleStage>)[id] ?? null;
+  const over = stageOverrides[id];
+  if (!base && !over) return null;
+  if (!over) return base;
+  return {
+    ...(base ?? {}),
+    label: over.label,
+    ...(over.intent !== undefined && over.intent !== null ? { intent: over.intent } : {}),
+    ...(over.phase ? { phase: over.phase } : {}),
+  } as Partial<LifecycleStage> & { label: string };
+}
+
 /**
  * Legacy stage ids recorded before the lifecycle redesign. Kept permanently:
  * implementation_stage_history is append-only, so historical rows legitimately

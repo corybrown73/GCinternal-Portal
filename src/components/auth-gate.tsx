@@ -15,8 +15,17 @@ const PUBLIC_PREFIXES = [
   "/plan",
 ];
 
-function isPublic(pathname: string): boolean {
+/**
+ * Exported so the root loader can ask the same question. Two copies of "which
+ * routes are public" drift, and the drift shows up as a signed-out visitor
+ * triggering an authenticated request on a page that is meant to need nothing.
+ */
+export function isPublicRoute(pathname: string): boolean {
   return PUBLIC_PREFIXES.some((p) => pathname === p || pathname.startsWith(p + "/"));
+}
+
+function isPublic(pathname: string): boolean {
+  return isPublicRoute(pathname);
 }
 
 /**

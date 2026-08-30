@@ -1,4 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { applyStageOverrides } from "@/lib/lifecycle";
+import { isPublicRoute } from "@/components/auth-gate";
 import {
   Outlet,
   Link,
@@ -116,6 +118,33 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { rel: "apple-touch-icon", href: "/favicon.png" },
     ],
   }),
+  /**
+   * Load the configured stage labels before anything renders.
+   *
+   * A loader rather than a component effect, because `stageLabel` is called
+   * during the render of components all over the tree — populating the registry
+   * afterwards would paint the compiled-in names first and swap them a frame
+   * later, which is a visible flicker on every navigation.
+   *
+   * Never throws. Stage names are not worth a blank page: a failure here leaves
+   * the compiled-in labels in place, which is exactly the pre-config behaviour.
+   */
+  loader: async ({ location }) => {
+    // Public routes — a plan link, the sign-in page — have no session, and the
+    // stage config is an authenticated read. Asking anyway would mean a failed
+    // request and a logged error on every single one of them, which is noise
+    // that trains people to ignore the log. Those pages render the compiled-in
+    // labels, which is correct: nothing there shows a configurable stage name.
+    if (isPublicRoute(location.pathname)) return null;
+    try {
+      const { getLifecycleStages } = await import("@/lib/lifecycle-stages.functions");
+      const stages = await getLifecycleStages();
+      applyStageOverrides(stages as never);
+    } catch (e) {
+      console.error("[lifecycle] could not load configured stage labels", e);
+    }
+    return null;
+  },
   shellComponent: RootShell,
   component: RootComponent,
   notFoundComponent: NotFoundComponent,
