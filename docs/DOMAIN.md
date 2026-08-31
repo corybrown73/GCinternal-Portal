@@ -24,22 +24,57 @@ land on their plan.
 
 ## 2. Registrar — DNS
 
-Vercel will show one of two sets of records for the domain you added. Enter
-them at whoever the domain was bought from.
+Do step 1 first. Vercel shows you the exact records for the domain you added,
+and those are the values to enter — not the ones in this document, which are
+here to say what shape the answer has. Vercel has shipped more than one apex
+IP over the years (`76.76.21.21` on older projects, `216.198.79.1` on newer
+ones), so copy from the dashboard rather than from memory.
 
-| Record | Name  | Value                  |
+| Record | Host  | Value                  |
 | ------ | ----- | ---------------------- |
-| A      | `@`   | `76.76.21.21`          |
+| A      | `@`   | *(IP Vercel shows)*    |
 | CNAME  | `www` | `cname.vercel-dns.com` |
 
-Vercel shows the values to use — take them from the dashboard rather than
-from this table, which is here to say what shape the answer has. Some
-registrars call the apex record `@`, some leave the name blank, and some
-(Cloudflare in particular) need the proxy turned OFF or the certificate
-cannot be issued.
+Propagation is usually minutes. Vercel issues the TLS certificate itself once
+the records resolve; there is nothing to do for HTTPS.
 
-Propagation is usually minutes. Vercel issues the TLS certificate on its own
-once the records resolve; there is nothing to do for HTTPS.
+### Namecheap specifically
+
+This domain is registered at Namecheap, whose defaults actively fight the
+records you are about to add.
+
+1. namecheap.com → sign in → **Domain List** → **MANAGE** beside the domain.
+2. On the **Domain** tab, check **NAMESERVERS** reads *Namecheap BasicDNS*.
+   If it says *Custom DNS*, the records live wherever those nameservers
+   point and the rest of this section does not apply.
+3. Open the **Advanced DNS** tab.
+4. **Delete Namecheap's two default records first.** A new domain ships with
+   a parking page wired up, usually as `CNAME | www | parkingpage.cash` and
+   `URL Redirect Record | @ | http://www.<domain>/`. Both collide with what
+   you are adding — a host cannot have a CNAME and another record type at
+   once, and Namecheap will either refuse the save or silently keep serving
+   the parking page. Hover each row and use the bin icon on the right.
+5. **ADD NEW RECORD** → **A Record** → Host `@` → Value: the IP from Vercel →
+   TTL *Automatic*.
+6. **ADD NEW RECORD** → **CNAME Record** → Host `www` → Value
+   `cname.vercel-dns.com` → TTL *Automatic*. Namecheap appends the trailing
+   dot itself.
+7. **Click the green tick at the right of each row.** Namecheap does not
+   save a record until you do, and a half-entered row looks identical to a
+   saved one. This is the single commonest reason a Namecheap cutover
+   "doesn't propagate".
+8. Check the **Redirect Domain** tab is empty. An entry there overrides the
+   host records.
+
+TTL *Automatic* is 30 minutes on BasicDNS. If you are iterating, set both
+records to 1 minute first and put them back to Automatic once it works —
+otherwise a mistake costs half an hour to observe.
+
+**The alternative**, if you would rather Vercel ran DNS: Domain tab →
+NAMESERVERS → *Custom DNS* → `ns1.vercel-dns.com` and `ns2.vercel-dns.com`.
+That hands Vercel the whole zone, which is fewer steps now and one more
+place to go for any future MX or verification record. Not recommended unless
+the domain will only ever serve this app.
 
 ## 3. Vercel — set `APP_URL`
 
@@ -82,13 +117,24 @@ to allow.
 
 ## Checking it worked
 
-1. `https://gcinternalportal.com` loads and the padlock is clean.
-2. The old `*.vercel.app` address redirects to it rather than serving a
-   second copy.
-3. Invite somebody on **Admin → Users** and read the link in the email: it
-   must start with the new domain. This is the only check that covers step 3,
-   and it is the step that fails quietly.
-4. Sign in with a magic link from the new domain — that exercises step 4.
+Run these yourself; each covers a step that nothing else does.
+
+1. **DNS resolves.** `dig gcinternalportal.com +short` returns the IP Vercel
+   gave you, and `dig www.gcinternalportal.com +short` ends at a Vercel
+   host. Or use dnschecker.org if you would rather see it from several
+   places at once. Until this passes, everything below fails for a reason
+   that has nothing to do with the app.
+2. **The site loads** at `https://gcinternalportal.com` with a clean padlock,
+   and Vercel's Domains page shows *Valid Configuration* on both entries.
+3. **The old address redirects** rather than serving a second copy — visit
+   the `*.vercel.app` URL and watch the address bar change. If it does not,
+   the apex is not set as primary in step 1, and every previously emailed
+   customer link is now a second, divergent copy of the app.
+4. **An outbound link carries the new domain.** Invite somebody on
+   **Admin → Users** and read the URL in the email. This is the ONLY check
+   that covers `APP_URL`, and `APP_URL` is the step that fails silently.
+5. **Auth completes.** Sign in with a magic link requested from the new
+   domain. That exercises the Supabase redirect allow list.
 
 ## What does not need changing
 
