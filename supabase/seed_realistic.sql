@@ -6,8 +6,10 @@
 -- WHAT IT DELIBERATELY DOES NOT TOUCH:
 --   * auth.users and portal_profiles — deleting those locks people out of the
 --     app, which is a very expensive way to reset some demo accounts;
---   * journey_templates — New Logo v2 and its task list are the machinery these
---     projects run on, not data about them;
+--   * journey_templates — the current published New Logo and its task list are
+--     the machinery these projects run on, not data about them. The version is
+--     resolved as "published and not superseded", so this always seeds against
+--     whatever version is live rather than a number written down here;
 --   * portal_app_config — feature flags and the pipeline configuration.
 --
 -- WHY THE PROJECTS ARE BUILT FORWARD RATHER THAN INSERTED AT THEIR STAGE.
@@ -25,6 +27,18 @@ begin;
 -- ---------------------------------------------------------------------------
 -- customers cascades to implementations, and implementations cascade to stage
 -- instances, work items, commitments, risks, contacts, packets and the rest.
+-- ORDER MATTERS, and it is not the order the foreign keys suggest.
+--
+-- Deleting a customer cascades to customer_contacts, and that table's delete
+-- trigger (revoke_grants_for_contact) UPDATES external_access_grants to null
+-- the contact. Mid-cascade the grant's own customer row is already gone, so
+-- the update fails its foreign key and takes the whole seed with it. The error
+-- names external_access_grants and points at a customer id that no longer
+-- exists, which reads as corruption rather than as an ordering problem.
+--
+-- Found the first time this seed met a database with a live plan link in it.
+-- Local runs had none, so the bug was invisible until it ran against real data.
+delete from external_access_grants;
 delete from account_files;
 delete from portal_accounts;
 delete from customers;
@@ -98,13 +112,20 @@ begin
             case when p_arr >= 70000 then 'Mid-Market' else 'SMB' end, p_am)
     returning id into v_cust;
 
+  -- Both halves of the sales owner (0042): the text is the durable record of
+  -- who sold it, the id is the live link. Resolved by exact name against the
+  -- active directory — the same rule the backfill uses, so seeded rows are not
+  -- a special case that behaves differently from real ones.
   insert into implementations
     (customer_id, name, current_stage, stage_entered_at, status, source,
-     owner_id, sales_owner, tier, target_launch_date, contract_start_date, sow_value,
-     customer_goals)
+     owner_id, sales_owner, sales_owner_id, tier, target_launch_date,
+     contract_start_date, sow_value, customer_goals)
   values
     (v_cust, p_name, 'handoff', v_start, 'on_track', 'presale',
-     p_tis, p_ae, p_tier, (current_date + p_launch_days), v_start::date, p_arr,
+     p_tis, p_ae,
+     (select id from team_members
+       where active and lower(btrim(name)) = lower(btrim(p_ae)) limit 1),
+     p_tier, (current_date + p_launch_days), v_start::date, p_arr,
      'Replace paper ' || lower(p_industry) || ' forms so crews submit from the field '
      || 'and the office stops re-keying them.')
     returning id into v_impl;
@@ -204,15 +225,24 @@ select seed_project('Fairview Environmental',     'Environmental',  52000, 'stan
 -- LOGIN — and these AEs do not have one yet. Left null rather than pointed at a
 -- team_members id, which would be a foreign key violation dressed up as data.
 -- Invite them from /admin/users and the deal owner dropdowns will offer them.
-insert into portal_accounts (name, stage, arr, domain, summary) values
+-- The champion travels with the deal (0042). Without one, "Confirm the champion
+-- and the decision maker" is a task that can only ever be self-attested, and
+-- the handoff carries a goal but nobody to call about it.
+insert into portal_accounts
+  (name, stage, arr, domain, summary,
+   primary_contact_name, primary_contact_email, primary_contact_role) values
   ('Ridgeline Excavation',   'prospect',   28000, 'ridgelineexc.com',
-   'Corey King — 40 crews on paper dig tickets; wants photo capture and same-day invoicing.'),
+   'Corey King — 40 crews on paper dig tickets; wants photo capture and same-day invoicing.',
+   'Dana Whitfield', 'dana.whitfield@ridgelineexc.com', 'Operations Manager'),
   ('Atlas Crane & Rigging',  'prospect',   87000, 'atlascrane.com',
-   'Mike Schmidt — lift plans and daily inspections across 6 yards. Competitive against incumbent.'),
+   'Mike Schmidt — lift plans and daily inspections across 6 yards. Competitive against incumbent.',
+   'Marcus Bell', 'mbell@atlascrane.com', 'Safety Director'),
   ('Delta Water Works',      'closed_won', 39000, 'deltawaterworks.com',
-   'Corey King — signed, not yet handed off to delivery.'),
+   'Corey King — signed, not yet handed off to delivery.',
+   'Priya Raman', 'praman@deltawaterworks.com', 'VP Operations'),
   ('Summit Line Construction','prospect',  51000, 'summitline.com',
-   'Mike Schmidt — utility line crews, offline-heavy. Technical review booked.');
+   'Mike Schmidt — utility line crews, offline-heavy. Technical review booked.',
+   'Glen Ostrowski', 'gostrowski@summitline.com', 'Field Superintendent');
 
 drop function if exists seed_project(
   text, text, numeric, text, uuid, uuid, text, text, int, int);
