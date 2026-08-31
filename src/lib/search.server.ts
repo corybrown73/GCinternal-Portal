@@ -2,6 +2,8 @@ import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { isFlagOn } from "./app-config.server";
 import { createMasker } from "./demo-mode";
 import { type SavedView, type SavedViewSurface, type SaveViewInput } from "./saved-view-input";
+import { snippet } from "./search-snippet";
+import { stageLabel } from "./hub-format";
 
 const db = () => supabaseAdmin as any;
 
@@ -15,13 +17,30 @@ const db = () => supabaseAdmin as any;
  */
 
 export type SearchGroupId =
-  "customers" | "implementations" | "deals" | "tickets" | "solutions" | "people";
+  | "customers"
+  | "implementations"
+  | "deals"
+  | "notes"
+  | "calls"
+  | "tickets"
+  | "solutions"
+  | "people";
 
 export type SearchHit = {
   id: string;
   title: string;
-  /** One line of context — never a snippet with the query highlighted, which
-   * implies a full-text index this does not have. */
+  /**
+   * One line of context.
+   *
+   * For name-matched rows this is a fact about the row — its segment, its
+   * stage. For BODY-matched rows (notes, call reports, a deal's summary) it is
+   * the text around the match, because a list of note dates says nothing about
+   * why any of them is there.
+   *
+   * Still not a ranked or highlighted snippet. Nothing here is scored, and the
+   * order is the order the database returned — the reader does the ranking,
+   * with the excerpt as evidence rather than a verdict.
+   */
   detail: string | null;
   /** Route + params the UI turns into a Link. Kept as data so the server never
    * builds a URL string the router might disagree with. */
@@ -68,14 +87,52 @@ export async function globalSearch(rawQuery: string): Promise<SearchResult> {
   const demo = createMasker(await isFlagOn("demo_mode"));
   const cap = PER_GROUP + 1;
 
-  const [customers, impls, deals, tickets, solutions, people] = await Promise.all([
+  const [
+    customers,
+    impls,
+    deals,
+    dealsBySummary,
+    notes,
+    callsByBody,
+    callsByTitle,
+    tickets,
+    solutions,
+    people,
+  ] = await Promise.all([
     db().from("customers").select("id,name,segment,industry").ilike("name", pattern).limit(cap),
     db()
       .from("implementations")
       .select("id,name,customer_id,current_stage")
       .ilike("name", pattern)
       .limit(cap),
-    db().from("portal_accounts").select("id,name,stage").ilike("name", pattern).limit(cap),
+    db().from("portal_accounts").select("id,name,stage,summary").ilike("name", pattern).limit(cap),
+    // A deal found by what it SAYS, not only what it is called. Two queries
+    // merged rather than one `.or()`: the filter language is stringly-typed
+    // and a syntax slip returns an empty set rather than an error, which here
+    // would look exactly like "no deal mentions that".
+    db()
+      .from("portal_accounts")
+      .select("id,name,stage,summary")
+      .ilike("summary", pattern)
+      .limit(cap),
+    // The bodies. This is where handoff context actually lives — the reason
+    // they bought, the objection on the third call, the constraint somebody
+    // mentioned once — and none of it was findable.
+    db()
+      .from("portal_onboarding_notes")
+      .select("id,account_id,body_md,created_at")
+      .ilike("body_md", pattern)
+      .limit(cap),
+    db()
+      .from("portal_gong_reports")
+      .select("id,account_id,title,content_md,report_type,created_at")
+      .ilike("content_md", pattern)
+      .limit(cap),
+    db()
+      .from("portal_gong_reports")
+      .select("id,account_id,title,content_md,report_type,created_at")
+      .ilike("title", pattern)
+      .limit(cap),
     db().from("tickets").select("id,subject,status,priority").ilike("subject", pattern).limit(cap),
     db()
       .from("technical_solutions")
@@ -105,6 +162,38 @@ export async function globalSearch(rawQuery: string): Promise<SearchResult> {
   const customerName = new Map<string, string>();
   for (const c of customers.data ?? []) customerName.set(c.id, c.name);
 
+  // Merge the two-query pairs, first occurrence winning, so a deal whose name
+  // AND summary both match appears once rather than twice.
+  const mergeById = <T extends { id: string }>(...lists: (T[] | null | undefined)[]): T[] => {
+    const seen = new Set<string>();
+    const out: T[] = [];
+    for (const list of lists) {
+      for (const row of list ?? []) {
+        if (seen.has(row.id)) continue;
+        seen.add(row.id);
+        out.push(row);
+      }
+    }
+    return out;
+  };
+
+  const dealRows = mergeById<any>(deals.data, dealsBySummary.data);
+  const callRows = mergeById<any>(callsByTitle.data, callsByBody.data);
+  const noteRows = (notes.data ?? []) as any[];
+
+  // Notes and reports hang off a DEAL, and a hit that says only "note, 14
+  // March" is unusable. Every one of them names its deal.
+  const dealAccountIds = Array.from(
+    new Set([...noteRows, ...callRows].map((r: any) => r.account_id).filter(Boolean)),
+  ) as string[];
+  const dealName = new Map<string, string>();
+  for (const d of dealRows) dealName.set(d.id, d.name);
+  const missing = dealAccountIds.filter((id) => !dealName.has(id));
+  if (missing.length) {
+    const { data: named } = await db().from("portal_accounts").select("id,name").in("id", missing);
+    for (const d of (named ?? []) as any[]) dealName.set(d.id, d.name);
+  }
+
   const group = (
     id: SearchGroupId,
     label: string,
@@ -128,17 +217,38 @@ export async function globalSearch(rawQuery: string): Promise<SearchResult> {
     group("implementations", "Implementations", impls.data ?? [], (i) => ({
       id: i.id,
       title: i.name,
-      detail: i.current_stage ? `Stage: ${i.current_stage}` : null,
+      detail: i.current_stage ? stageLabel(i.current_stage) : null,
       to: "/customers/$customerId",
       params: { customerId: i.customer_id },
       search: { impl: i.id },
     })),
-    group("deals", "Deals", deals.data ?? [], (d) => ({
+    group("deals", "Deals", dealRows, (d) => ({
       id: d.id,
       title: demo.org(d.name, d.id),
-      detail: d.stage ? `Stage: ${d.stage}` : null,
+      // The summary excerpt when that is what matched; otherwise the stage.
+      // Through stageLabel, so a stage renamed in Admin does not surface here
+      // as the raw key it is stored under.
+      detail: snippet(d.summary, query) ?? (d.stage ? stageLabel(d.stage) : null),
       to: "/deals/$dealId",
       params: { dealId: d.id },
+    })),
+    group("notes", "Sales notes", noteRows, (n) => ({
+      id: n.id,
+      title: dealName.get(n.account_id)
+        ? `Note · ${demo.org(dealName.get(n.account_id)!, n.account_id)}`
+        : "Note",
+      detail: snippet(n.body_md, query),
+      to: "/deals/$dealId",
+      params: { dealId: n.account_id },
+    })),
+    group("calls", "Call reports", callRows, (r) => ({
+      id: r.id,
+      title: r.title || "Call report",
+      detail:
+        snippet(r.content_md, query) ??
+        (dealName.get(r.account_id) ? demo.org(dealName.get(r.account_id)!, r.account_id) : null),
+      to: "/deals/$dealId",
+      params: { dealId: r.account_id },
     })),
     group("tickets", "Tickets", tickets.data ?? [], (t) => ({
       id: t.id,

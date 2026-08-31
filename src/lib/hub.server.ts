@@ -1651,6 +1651,87 @@ export async function loadDealOptions() {
 }
 
 /**
+ * What sales already wrote, shown beside the delivery record.
+ *
+ * READ-ONLY AND BY REFERENCE. These rows belong to the deal and stay there —
+ * copying them onto the implementation would create a second copy that drifts
+ * the moment somebody corrects the original, and the app's whole discipline is
+ * one record per fact. What crosses at handoff (0042) is the small set of
+ * fields the project OWNS afterwards; this is everything else, still owned by
+ * the deal and one click from it.
+ *
+ * Bodies are truncated here rather than in the component. A Gong transcript is
+ * long enough to dominate the page it is embedded in, and the panel's job is
+ * to say "this exists, and roughly what it says" — the deal page is where you
+ * go to read it.
+ */
+export async function loadSalesContext(implementationId: string) {
+  const { data: impl } = await db()
+    .from("implementations")
+    .select("deal_id")
+    .eq("id", implementationId)
+    .maybeSingle();
+  const dealId = (impl?.deal_id as string | null) ?? null;
+  if (!dealId) return { dealId: null, dealName: null, notes: [], reports: [], brief: null };
+
+  const [dealRes, notesRes, reportsRes, briefRes] = await Promise.all([
+    db().from("portal_accounts").select("id,name,summary").eq("id", dealId).maybeSingle(),
+    db()
+      .from("portal_onboarding_notes")
+      .select("id,body_md,created_at,review_status")
+      .eq("account_id", dealId)
+      .order("created_at", { ascending: false })
+      .limit(5),
+    db()
+      .from("portal_gong_reports")
+      .select("id,title,report_type,content_md,created_at")
+      .eq("account_id", dealId)
+      .order("created_at", { ascending: false })
+      .limit(5),
+    db()
+      .from("portal_briefs")
+      .select("id,status,generator,created_at")
+      .eq("account_id", dealId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+  ]);
+
+  const clip = (body: string | null, max: number) => {
+    if (!body) return null;
+    const flat = body.replace(/\s+/g, " ").trim();
+    return flat.length > max ? `${flat.slice(0, max).trimEnd()}…` : flat;
+  };
+
+  return {
+    dealId,
+    dealName: (dealRes.data?.name as string | null) ?? null,
+    summary: (dealRes.data?.summary as string | null) ?? null,
+    notes: ((notesRes.data ?? []) as any[]).map((n) => ({
+      id: n.id as string,
+      excerpt: clip(n.body_md, 320),
+      created_at: n.created_at as string,
+      review_status: (n.review_status as string | null) ?? null,
+    })),
+    reports: ((reportsRes.data ?? []) as any[]).map((r) => ({
+      id: r.id as string,
+      title: (r.title as string | null) ?? "Call report",
+      report_type: (r.report_type as string | null) ?? null,
+      excerpt: clip(r.content_md, 320),
+      created_at: r.created_at as string,
+    })),
+    brief: briefRes.data
+      ? {
+          id: briefRes.data.id as string,
+          status: (briefRes.data.status as string | null) ?? null,
+          generator: (briefRes.data.generator as string | null) ?? null,
+          created_at: briefRes.data.created_at as string,
+        }
+      : null,
+  };
+}
+
+/**
  * The half of a deal a new project can inherit.
  *
  * The sales owner is resolved through the identity bridge:

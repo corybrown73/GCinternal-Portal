@@ -348,6 +348,14 @@ export const getTeamOptions = createServerFn({ method: "GET" })
     return loadTeamOptions();
   });
 
+export const getSalesContext = createServerFn({ method: "GET" })
+  .middleware([requireInternalAuth])
+  .inputValidator((data: unknown) => z.object({ implementationId: z.string().uuid() }).parse(data))
+  .handler(async ({ data }) => {
+    const { loadSalesContext } = await import("./hub.server");
+    return loadSalesContext(data.implementationId);
+  });
+
 export const getDealCarryover = createServerFn({ method: "GET" })
   .middleware([requireInternalAuth])
   .inputValidator((data: unknown) => z.object({ dealId: z.string().uuid() }).parse(data))

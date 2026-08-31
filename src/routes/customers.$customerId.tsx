@@ -10,6 +10,7 @@ import { HealthNote } from "@/components/health-note";
 import { PlanPanel } from "@/components/plan-panel";
 import { HandoffPanel } from "@/components/handoff-panel";
 import { ExternalSharePanel } from "@/components/external-share-panel";
+import { FromSalesPanel } from "@/components/from-sales-panel";
 import { ConversationPanel } from "@/components/conversation-panel";
 import { ProjectRail, ProjectTimelines } from "@/components/project-timeline-rail";
 import { buildProjectTimeline, type TimelineInput } from "@/lib/project-timeline";
@@ -671,6 +672,11 @@ function OverviewTab({ record, customerId }: { record: Customer360; customerId: 
           />
         </div>
       </Panel>
+
+      {/* Directly under the current state and above the goals: what sales
+          learned is context for reading everything below it, and it is the
+          thing a person new to the account wants first. */}
+      <FromSalesPanel implementationId={impl.id} />
 
       <Panel title="What the customer wants to achieve" level="primary">
         <div className="px-3 py-3">
