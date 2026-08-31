@@ -293,6 +293,8 @@ export interface DealDetail {
   owner_options: Array<{ value: string; label: string }>;
   /** Short-lived signed link to the customer's logo, or null if none is set. */
   logo_url: string | null;
+  /** Short-lived signed link to the uploaded SOW, or null if none was uploaded. */
+  sow_url: string | null;
 }
 
 export async function loadDeal(dealId: string): Promise<DealDetail | null> {
@@ -349,9 +351,22 @@ export async function loadDeal(dealId: string): Promise<DealDetail | null> {
     }
   }
 
+  let sowUrl: string | null = null;
+  if (account.sow_document_path) {
+    try {
+      const { data } = await db()
+        .storage.from("attachments")
+        .createSignedUrl(account.sow_document_path, 60 * 60);
+      sowUrl = data?.signedUrl ?? null;
+    } catch (e) {
+      console.error("[deal] could not sign the sow url", e);
+    }
+  }
+
   return {
     account: account as DealDetail["account"],
     logo_url: logoUrl,
+    sow_url: sowUrl,
     am_owner_name: named(account.am_owner_id),
     se_owner_name: named(account.se_owner_id),
     // Sorted by the name a person will look for, not by id.
@@ -382,6 +397,128 @@ export async function loadDeal(dealId: string): Promise<DealDetail | null> {
     })),
     stages,
   };
+}
+
+/* ---------- the signed SOW ---------- */
+
+/** ~34 MB of base64 is ~25 MB of PDF, the same ceiling account uploads use. */
+const SOW_MAX_BASE64 = 34_000_000;
+
+/**
+ * Upload the countersigned SOW against a deal.
+ *
+ * A FILE, NOT A LINK. What an AE has after close is the PDF; asking them to
+ * park it somewhere else first and paste a URL is why the field stayed empty.
+ * `sow_document_url` survives for a SOW that genuinely lives in Docusign.
+ *
+ * Into the PRIVATE attachments bucket, like every other customer document
+ * here. A contract must never sit behind a URL that works for anyone who has
+ * it — `dealSowLink` mints a short-lived signed link per download.
+ */
+export async function uploadDealSow(
+  userId: string,
+  args: { dealId: string; fileName: string; contentType: string; dataBase64: string },
+): Promise<{ ok: true; path: string; name: string }> {
+  await requireSalesEditor(userId);
+
+  if (args.contentType !== "application/pdf") {
+    throw new Error("The signed SOW should be a PDF");
+  }
+  if (args.dataBase64.length > SOW_MAX_BASE64) {
+    throw new Error("That file is over 25MB — link to it instead");
+  }
+
+  const { data: before } = await db()
+    .from("portal_accounts")
+    .select("sow_document_path")
+    .eq("id", args.dealId)
+    .maybeSingle();
+  if (!before) throw new Error("Deal not found");
+
+  const binary = Buffer.from(args.dataBase64, "base64");
+  const safe = args.fileName.replace(/[^A-Za-z0-9._-]+/g, "-").slice(-120) || "sow.pdf";
+  const path = `deals/${args.dealId}/${crypto.randomUUID()}-${safe}`;
+
+  const { error: upErr } = await db()
+    .storage.from("attachments")
+    .upload(path, binary, { contentType: args.contentType, upsert: false });
+  if (upErr) throw new Error(`Could not upload the SOW: ${upErr.message}`);
+
+  const { error } = await db()
+    .from("portal_accounts")
+    .update({
+      sow_document_path: path,
+      sow_document_name: args.fileName,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", args.dealId);
+  if (error) {
+    // The row failed, so nothing points at the object. Remove it rather than
+    // leaving a customer's contract in the bucket unreachable.
+    try {
+      await db().storage.from("attachments").remove([path]);
+    } catch {
+      /* the row is what matters */
+    }
+    throw new Error(error.message);
+  }
+
+  // Replacing a SOW removes the one it replaced: a superseded contract sitting
+  // in the bucket with nothing pointing at it is a document nobody can find
+  // and nobody can delete.
+  const previous = (before as any).sow_document_path as string | null;
+  if (previous && previous !== path) {
+    try {
+      await db().storage.from("attachments").remove([previous]);
+    } catch (e) {
+      console.error("[sow] uploaded the new SOW but could not remove the old object", e);
+    }
+  }
+
+  const { recordActivity } = await import("./activity.server");
+  await recordActivity(
+    [
+      {
+        entity_type: "account",
+        entity_id: args.dealId,
+        field_name: "sow_document_name",
+        old_value: null,
+        new_value: args.fileName,
+      },
+    ],
+    { actorProfileId: userId },
+  );
+
+  await audit({
+    actor_type: "user",
+    actor_id: userId,
+    action: "account.sow_uploaded",
+    entity_type: "account",
+    entity_id: args.dealId,
+    payload: { file_name: args.fileName, replaced: previous ?? null },
+  });
+
+  return { ok: true, path, name: args.fileName };
+}
+
+/** A short-lived link to the uploaded SOW. The bucket stays private. */
+export async function dealSowLink(userId: string, dealId: string): Promise<{ url: string }> {
+  await requireSalesEditor(userId);
+  const { data } = await db()
+    .from("portal_accounts")
+    .select("sow_document_path")
+    .eq("id", dealId)
+    .maybeSingle();
+  const path = (data as any)?.sow_document_path as string | null | undefined;
+  if (!path) throw new Error("No SOW has been uploaded for this deal");
+
+  const { data: signed, error } = await db()
+    .storage.from("attachments")
+    .createSignedUrl(path, 3600);
+  if (error || !signed?.signedUrl) {
+    throw new Error(`Could not open the SOW: ${error?.message ?? "no link returned"}`);
+  }
+  return { url: signed.signedUrl };
 }
 
 /* ---------- notes & Gong reports ---------- */
@@ -725,6 +862,10 @@ export async function startOnboarding(
       sow_value: account.sow_value ?? null,
       sow_document_url: account.sow_document_url ?? null,
       sow_document_name: account.sow_document_name ?? null,
+      // The uploaded PDF travels as a path, not a re-upload: same bucket, same
+      // object, so the project and the deal point at one contract rather than
+      // two copies that can diverge.
+      sow_document_path: account.sow_document_path ?? null,
     })
     .select("id")
     .single();

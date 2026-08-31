@@ -41,6 +41,8 @@ export interface Account {
   sow_value: number | null;
   sow_document_url: string | null;
   sow_document_name: string | null;
+  /** A path into the private attachments bucket when the PDF was uploaded (0046). */
+  sow_document_path: string | null;
   logo_path: string | null;
   stage_entered_at: string;
   created_at: string;

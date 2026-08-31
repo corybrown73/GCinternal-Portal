@@ -75,6 +75,35 @@ export const moveDealStage = createServerFn({ method: "POST" })
     return transitionDeal(context.userId, data.dealId, data.toStage, data.note);
   });
 
+export const uploadSow = createServerFn({ method: "POST" })
+  .middleware([requireInternalAuth])
+  .inputValidator((data: unknown) =>
+    z
+      .object({
+        dealId: z.string().uuid(),
+        fileName: z.string().trim().min(1).max(200),
+        // PDF only. A signed contract is a PDF, and accepting anything else
+        // means accepting a document format that can carry script from a
+        // signed URL on our own origin.
+        contentType: z.literal("application/pdf"),
+        /** ~34 MB of base64 is ~25 MB of PDF. */
+        dataBase64: z.string().min(1).max(34_000_000),
+      })
+      .parse(data),
+  )
+  .handler(async ({ data, context }) => {
+    const { uploadDealSow } = await import("./presale.server");
+    return uploadDealSow(context.profile.id, data);
+  });
+
+export const getSowLink = createServerFn({ method: "POST" })
+  .middleware([requireInternalAuth])
+  .inputValidator((data: unknown) => z.object({ dealId: z.string().uuid() }).parse(data))
+  .handler(async ({ data, context }) => {
+    const { dealSowLink } = await import("./presale.server");
+    return dealSowLink(context.profile.id, data.dealId);
+  });
+
 export const setDealField = createServerFn({ method: "POST" })
   .middleware([requireInternalAuth])
   .inputValidator((data: unknown) =>

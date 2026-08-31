@@ -8,7 +8,7 @@ import {
   useSuspenseQuery,
 } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { ArrowRight, Download, FileText, Trash2 } from "lucide-react";
+import { ArrowRight, Download, FileText, Trash2, Upload } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 
 import { PageBody, PageHeader } from "@/components/page";
@@ -29,6 +29,7 @@ import {
   setNoteReviewed,
   setDealField,
   startOnboardingForDeal,
+  uploadSow,
 } from "@/lib/presale.functions";
 import {
   BUILTIN_PIPELINE_STAGES,
@@ -476,15 +477,11 @@ function SowPanel({
             onSave={onSave("sow_value")}
             disabled={!editable}
           />
+          <SowDocument deal={deal} editable={editable} />
+          {/* Still here, for a SOW that genuinely lives in Docusign or Drive.
+              Most of the time the AE has the PDF and uploads it above. */}
           <EditableField
-            label="Document name"
-            value={account.sow_document_name ?? null}
-            placeholder="Countersigned SOW.pdf"
-            onSave={onSave("sow_document_name")}
-            disabled={!editable}
-          />
-          <EditableField
-            label="Document link"
+            label="Or link to it"
             value={account.sow_document_url ?? null}
             format={(v) =>
               v ? (
@@ -502,6 +499,111 @@ function SowPanel({
         </div>
       </div>
     </Panel>
+  );
+}
+
+/**
+ * The signed SOW itself.
+ *
+ * An upload, not a URL: what an AE has after close is the PDF, and asking them
+ * to park it somewhere else first and paste a link is why the field stayed
+ * empty. Into the private attachments bucket, opened through a short-lived
+ * signed link — a countersigned contract must never sit behind a URL that
+ * works for anyone who has it.
+ */
+function SowDocument({ deal, editable }: { deal: DealData; editable: boolean }) {
+  const { account } = deal;
+  const qc = useQueryClient();
+  const upload = useServerFn(uploadSow);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const mutation = useMutation({
+    mutationFn: async (file: File) => {
+      const dataBase64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onerror = () => reject(new Error("Could not read that file."));
+        reader.onload = () => resolve(String(reader.result).split(",")[1] ?? "");
+        reader.readAsDataURL(file);
+      });
+      return upload({
+        data: {
+          dealId: account.id,
+          fileName: file.name,
+          contentType: "application/pdf",
+          dataBase64,
+        },
+      });
+    },
+    onSuccess: async () => {
+      setError(null);
+      await qc.invalidateQueries({ queryKey: ["deal", account.id] });
+    },
+    onError: (e: unknown) => setError(e instanceof Error ? e.message : "Upload failed."),
+  });
+
+  const pick = (file: File | undefined) => {
+    if (!file) return;
+    // Checked here as well as on the server so the person gets the reason
+    // immediately rather than after uploading 20MB.
+    if (file.type !== "application/pdf") {
+      setError("The signed SOW should be a PDF.");
+      return;
+    }
+    if (file.size > 25_000_000) {
+      setError(
+        `That file is ${Math.round(file.size / 1_000_000)}MB. The limit is 25MB — link to it instead.`,
+      );
+      return;
+    }
+    setError(null);
+    mutation.mutate(file);
+  };
+
+  return (
+    <div className="space-y-0.5">
+      <span className={labelClass}>Signed document</span>
+      <div className="flex items-center gap-2">
+        {deal.sow_url ? (
+          <a
+            href={deal.sow_url}
+            target="_blank"
+            rel="noreferrer"
+            className="text-[12px] underline"
+            title={account.sow_document_name ?? "Open the signed SOW"}
+          >
+            {account.sow_document_name ?? "Open"}
+          </a>
+        ) : (
+          <span className="text-[12px] text-muted-foreground">Not uploaded</span>
+        )}
+        <input
+          ref={inputRef}
+          type="file"
+          accept="application/pdf"
+          className="sr-only"
+          onChange={(e) => {
+            pick(e.target.files?.[0]);
+            // Reset so choosing the same file twice still fires a change.
+            e.target.value = "";
+          }}
+        />
+        <button
+          type="button"
+          className={buttonClass}
+          disabled={!editable || mutation.isPending}
+          onClick={() => inputRef.current?.click()}
+        >
+          <Upload className="h-3 w-3" aria-hidden />
+          {mutation.isPending ? "Uploading…" : deal.sow_url ? "Replace" : "Upload PDF"}
+        </button>
+      </div>
+      {error ? (
+        <p role="alert" className="text-[11px] text-destructive">
+          {error}
+        </p>
+      ) : null}
+    </div>
   );
 }
 
