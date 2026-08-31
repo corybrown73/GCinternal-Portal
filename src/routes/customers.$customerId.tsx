@@ -68,6 +68,7 @@ import type { LifecycleStageId } from "@/lib/lifecycle";
 import {
   CollapsibleSections,
   Field,
+  useCollapseAll,
   NoRows,
   Panel,
   PrimarySignal,
@@ -414,7 +415,7 @@ function Customer360Page() {
             has nothing to travel through. */}
         <div className="grid items-start gap-4 px-6 py-4 lg:grid-cols-[minmax(0,1fr)_320px]">
           <div className="min-w-0 space-y-3">
-            <SectionControls scope={`customer:${tab}`} />
+            <SectionControls />
             {tab === "overview" ? <OverviewTab record={record} customerId={customerId} /> : null}
             {tab === "journey" ? <JourneyTab record={record} customerId={customerId} /> : null}
             {tab === "solution" ? <SolutionTab record={record} customerId={customerId} /> : null}
@@ -483,21 +484,21 @@ function AttentionSummary({ now, next }: { now: string; next: string }) {
  * by remounting them through a key change — the panels own their own state, so
  * this sets the stored value and nudges them to re-read it.
  */
-function SectionControls({ scope }: { scope: string }) {
-  const setAll = (open: boolean) => {
-    try {
-      const prefix = `panel:${scope}:`;
-      for (let i = 0; i < window.localStorage.length; i += 1) {
-        const k = window.localStorage.key(i);
-        if (k && k.startsWith(prefix)) window.localStorage.setItem(k, open ? "1" : "0");
-      }
-    } catch {
-      /* storage unavailable; the buttons below still work on this render */
-    }
-    // The panels read storage on mount, so a reload is what applies this to all
-    // of them at once. Cheap here — the record is already in the query cache.
-    window.location.reload();
-  };
+/**
+ * Fold or unfold every section on the record.
+ *
+ * THE BUG THIS FIXES. This used to rewrite every localStorage key under the
+ * scope's prefix and then reload the page. It could only reach panels that had
+ * already been toggled by hand, because a panel nobody had clicked had no
+ * stored key to rewrite — and on a fresh browser that is every one of them. So
+ * the button reloaded the page and everything came back open, which looks
+ * exactly like a button wired to nothing.
+ *
+ * It now raises an instruction the panels themselves obey, which reaches
+ * panels with no stored state, needs no reload, and keeps the scroll position.
+ */
+function SectionControls() {
+  const setAll = useCollapseAll();
 
   return (
     <div className="flex justify-end gap-1">

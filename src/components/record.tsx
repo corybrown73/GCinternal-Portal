@@ -1,4 +1,13 @@
-import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { ChevronDown } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -197,7 +206,43 @@ export function PrimarySignal({
  *
  * Scoped, so nothing outside the wrapped subtree changes behaviour.
  */
-const CollapseScope = createContext<{ scope: string; defaultOpen: boolean } | null>(null);
+/**
+ * A "collapse everything" / "expand everything" instruction.
+ *
+ * Versioned rather than a plain boolean so that pressing Collapse all twice
+ * still reaches a section somebody re-opened in between: the panels react to a
+ * NEW instruction, not to a value that has not changed.
+ *
+ * The counter is module-level and monotonic so that versions raised by
+ * different providers are comparable — which is what lets a nested scope
+ * (the account rail) obey an instruction raised by its parent.
+ */
+type CollapseBulk = { version: number; open: boolean };
+let bulkSequence = 0;
+
+/**
+ * Which instruction a scope should obey: its own, or the one its parent raised.
+ *
+ * Newest wins, and versions are globally monotonic so they are comparable
+ * across providers. Extracted and exported because it is the one part of this
+ * with a rule worth stating — the rest is wiring — and because it decides
+ * whether a nested scope (the account rail) obeys a parent's Collapse all.
+ */
+export function resolveBulk(
+  parent: CollapseBulk | null,
+  own: CollapseBulk | null,
+): CollapseBulk | null {
+  if (!parent) return own;
+  if (!own) return parent;
+  return parent.version > own.version ? parent : own;
+}
+
+const CollapseScope = createContext<{
+  scope: string;
+  defaultOpen: boolean;
+  bulk: CollapseBulk | null;
+  setBulk: (open: boolean) => void;
+} | null>(null);
 
 export function CollapsibleSections({
   scope,
@@ -209,7 +254,49 @@ export function CollapsibleSections({
   defaultOpen?: boolean;
   children: ReactNode;
 }) {
-  return <CollapseScope.Provider value={{ scope, defaultOpen }}>{children}</CollapseScope.Provider>;
+  const parent = useContext(CollapseScope);
+  const [bulk, setBulkState] = useState<CollapseBulk | null>(null);
+
+  const setBulk = useCallback((open: boolean) => {
+    bulkSequence += 1;
+    setBulkState({ version: bulkSequence, open });
+  }, []);
+
+  // A nested scope obeys its parent's instruction as well as its own, newest
+  // wins. Without this, "Collapse all" would fold the tab content and leave
+  // the account rail beside it open, which reads as the button half-working.
+  // A nested scope obeys its parent's instruction as well as its own, newest
+  // wins. Without this, "Collapse all" would fold the tab content and leave
+  // the account rail beside it open, which reads as the button half-working.
+  const effective = resolveBulk(parent?.bulk ?? null, bulk);
+
+  const value = useMemo(
+    () => ({ scope, defaultOpen, bulk: effective, setBulk }),
+    [scope, defaultOpen, effective, setBulk],
+  );
+
+  return <CollapseScope.Provider value={value}>{children}</CollapseScope.Provider>;
+}
+
+/**
+ * Fold or unfold every section in the enclosing scope.
+ *
+ * WHAT THIS REPLACES. The old control rewrote every localStorage key under the
+ * scope's prefix and reloaded the page. It could only ever reach panels that
+ * had ALREADY been toggled individually — a panel nobody had clicked had no
+ * stored key, so there was nothing to rewrite. On a fresh browser that is all
+ * of them: the button reloaded the page and everything came back open, which
+ * is indistinguishable from a button wired to nothing.
+ *
+ * Driving the state directly also drops the full page reload, which cost the
+ * scroll position and a second of blank screen to change a piece of local UI.
+ *
+ * Returns a no-op outside a CollapsibleSections, so a stray control cannot
+ * throw.
+ */
+export function useCollapseAll(): (open: boolean) => void {
+  const scope = useContext(CollapseScope);
+  return scope?.setBulk ?? (() => {});
 }
 
 export function Panel({
@@ -274,6 +361,7 @@ export function Panel({
     derivedKey,
     scope ? scope.defaultOpen && defaultOpen : defaultOpen,
     isCollapsible,
+    scope?.bulk ?? null,
   );
 
   // Rendered on the header whether or not the panel collapses, so the header's
@@ -395,6 +483,7 @@ function useCollapseState(
   key: string | undefined,
   defaultOpen: boolean,
   enabled: boolean,
+  bulk: { version: number; open: boolean } | null,
 ): [boolean, (next: boolean) => void] {
   const [open, setOpenState] = useState(defaultOpen);
 
@@ -407,6 +496,23 @@ function useCollapseState(
       /* storage unavailable — the default stands */
     }
   }, [key, enabled]);
+
+  // A Collapse all / Expand all instruction. Tracked by version so the same
+  // panel obeys a repeated press, and persisted so the result survives the
+  // next visit exactly as an individual toggle would — a bulk action that
+  // forgets itself on reload is a different kind of not-working.
+  const lastBulk = useRef(0);
+  useEffect(() => {
+    if (!enabled || !bulk || bulk.version === lastBulk.current) return;
+    lastBulk.current = bulk.version;
+    setOpenState(bulk.open);
+    if (!key) return;
+    try {
+      window.localStorage.setItem(`panel:${key}`, bulk.open ? "1" : "0");
+    } catch {
+      /* the fold still happens; it just will not be remembered */
+    }
+  }, [bulk, enabled, key]);
 
   const setOpen = useCallback(
     (next: boolean) => {
