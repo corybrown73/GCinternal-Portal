@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  canAdvance,
+  advanceLabel,
+  gateOutcome,
+  overridePrompt,
+  requiresReason,
   gateSummary,
   isSettled,
   needsOverride,
@@ -95,7 +98,7 @@ describe("gateSummary", () => {
   });
 });
 
-describe("canAdvance / needsOverride", () => {
+describe("gateOutcome / needsOverride / requiresReason", () => {
   const incomplete = stageGateStatus([item({ status: "done" }), item({ status: "not_started" })]);
   const complete = stageGateStatus([item({ status: "done" })]);
 
@@ -103,20 +106,29 @@ describe("canAdvance / needsOverride", () => {
     // The app records what happened rather than refusing to let people describe
     // reality. Somebody who really did launch without training the crews must
     // be able to say so — they just should not do it by accident.
-    expect(canAdvance(incomplete, "advisory")).toBe(true);
+    expect(gateOutcome(incomplete, "advisory")).toBe("advisory_gap");
     expect(needsOverride(incomplete, "advisory")).toBe(true);
+    expect(requiresReason(incomplete, "advisory")).toBe(false);
   });
 
-  it("refuses a blocking stage with a gap", () => {
-    expect(canAdvance(incomplete, "blocking")).toBe(false);
-    // Nothing to override: it simply cannot be done.
-    expect(needsOverride(incomplete, "blocking")).toBe(false);
+  // THIS REVERSES AN EARLIER DECISION, deliberately. A blocking stage used to
+  // be a dead end: canAdvance said no and needsOverride ALSO said no, because
+  // it read `gateMode !== "blocking"`. So there was no override path at all —
+  // the panel rendered a permanently disabled button. That was survivable only
+  // because one stage in one template was blocking and nothing had reached it;
+  // promoting Handoff would have hard-locked every new project at its first
+  // stage. A gate nobody can pass stops being a gate and becomes a wall.
+  it("lets a blocking stage through only with a stated reason", () => {
+    expect(gateOutcome(incomplete, "blocking")).toBe("blocking_gap");
+    expect(needsOverride(incomplete, "blocking")).toBe(true);
+    expect(requiresReason(incomplete, "blocking")).toBe(true);
   });
 
   it("needs no override once the gates are met, whatever the mode", () => {
     for (const mode of ["advisory", "warn", "blocking", null, undefined]) {
-      expect(canAdvance(complete, mode)).toBe(true);
+      expect(gateOutcome(complete, mode)).toBe("clear");
       expect(needsOverride(complete, mode)).toBe(false);
+      expect(requiresReason(complete, mode)).toBe(false);
     }
   });
 
@@ -124,7 +136,43 @@ describe("canAdvance / needsOverride", () => {
     // A stage nobody has defined criteria for must not become an unexplainable
     // dead end just because its mode happens to be 'blocking'.
     const ungated = stageGateStatus([]);
-    expect(canAdvance(ungated, "blocking")).toBe(true);
+    expect(gateOutcome(ungated, "blocking")).toBe("clear");
     expect(needsOverride(ungated, "blocking")).toBe(false);
+  });
+});
+
+describe("advanceLabel", () => {
+  // "Move to Build" and "Override to advance" are different acts and must not
+  // share a word — the label is the last thing read before the click.
+  it("names the act, not just the destination", () => {
+    expect(advanceLabel("clear", "Build")).toBe("Move to Build");
+    expect(advanceLabel("advisory_gap", "Build")).toBe("Advance anyway");
+    expect(advanceLabel("blocking_gap", "Build")).toBe("Override to advance");
+  });
+});
+
+describe("overridePrompt", () => {
+  const two = stageGateStatus([
+    item({ status: "not_started", title: "Confirm scope against the signed SOW" }),
+    item({ status: "not_started", title: "Confirm the champion and the decision maker" }),
+  ]);
+
+  // Names them rather than counting them: somebody about to sign their name to
+  // skipping two things should read the two things.
+  it("lists every outstanding criterion", () => {
+    const p = overridePrompt(two, "Plan Internally");
+    expect(p).toContain("Confirm scope against the signed SOW");
+    expect(p).toContain("Confirm the champion and the decision maker");
+    expect(p).toContain("Plan Internally");
+  });
+
+  it("says the override is attributed", () => {
+    expect(overridePrompt(two, "Build")).toContain("recorded against your name");
+  });
+
+  it("reads correctly for a single criterion", () => {
+    const one = stageGateStatus([item({ status: "not_started", title: "Sign off the plan" })]);
+    expect(overridePrompt(one, "Build")).toContain("1 criterion outstanding");
+    expect(overridePrompt(one, "Build")).not.toContain("•");
   });
 });

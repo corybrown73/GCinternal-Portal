@@ -438,6 +438,8 @@ export const advanceImplementationStage = createServerFn({ method: "POST" })
     return advanceStage({
       implementationId: data.implementationId,
       toStage: data.toStage,
+      override: data.override ?? null,
+      actorProfileId: context.profile.id,
       // BUG-11: implementation_stage_history.entered_by was null on every row,
       // so the post-sale History tab showed a stage change with no actor while
       // the pre-sale one showed full attribution.

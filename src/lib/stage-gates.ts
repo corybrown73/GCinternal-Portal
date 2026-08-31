@@ -72,22 +72,70 @@ export function gateSummary(s: StageGateStatus): string {
 }
 
 /**
- * Whether the advance control should be enabled.
+ * What advancing from here costs.
  *
- * A stage with unmet gates is NOT hard-blocked. `gate_mode` on the stage decides
- * that, and the default across this app is 'advisory' — the app's standing
- * position is that it records what happened rather than refusing to let people
- * describe reality. Somebody who genuinely launched without training the crews
- * needs to be able to say so; what they should not get is to do it by accident.
+ * THE BUG THIS REPLACES. Two booleans disagreed about what `blocking` means.
+ * `canAdvance` returned false for a blocking stage with unmet gates, and
+ * `needsOverride` ALSO returned false — because it read `gateMode !==
+ * "blocking"`. So a blocking stage was not "advance only with a recorded
+ * override"; it was a dead end with no override path at all, and the panel
+ * rendered a permanently disabled button.
  *
- * So: advisory shows the gap and lets you through, blocking does not.
+ * That went unnoticed because exactly one stage in one template was blocking,
+ * and nothing had reached it. Promoting Handoff to blocking would have hard-
+ * locked every new project at its first stage.
+ *
+ * THE RULE, stated once. This app records what happened rather than refusing
+ * to let people describe reality: somebody who genuinely launched without
+ * training the crews has to be able to say so. What they must not get is to do
+ * it by ACCIDENT, or ANONYMOUSLY. So every stage can always be left, and
+ * `gate_mode` decides the ceremony:
+ *
+ *   clear         — gates met, or none defined. Ordinary control.
+ *   advisory_gap  — gates unmet on an advisory stage. Secondary control,
+ *                   confirm, reason optional.
+ *   blocking_gap  — gates unmet on a blocking stage. Secondary control,
+ *                   confirm, reason REQUIRED, recorded as an override.
  */
-export function canAdvance(s: StageGateStatus, gateMode: string | null | undefined): boolean {
-  if (s.ready || s.ungated) return true;
-  return gateMode !== "blocking";
+export type GateOutcome = "clear" | "advisory_gap" | "blocking_gap";
+
+export function gateOutcome(s: StageGateStatus, gateMode: string | null | undefined): GateOutcome {
+  if (s.ready || s.ungated) return "clear";
+  return gateMode === "blocking" ? "blocking_gap" : "advisory_gap";
 }
 
 /** Whether advancing right now needs a deliberate "yes, anyway". */
 export function needsOverride(s: StageGateStatus, gateMode: string | null | undefined): boolean {
-  return !s.ready && !s.ungated && gateMode !== "blocking";
+  return gateOutcome(s, gateMode) !== "clear";
+}
+
+/** Whether the person has to say WHY, in their own words, before it is allowed. */
+export function requiresReason(s: StageGateStatus, gateMode: string | null | undefined): boolean {
+  return gateOutcome(s, gateMode) === "blocking_gap";
+}
+
+/**
+ * The label on the advance control.
+ *
+ * "Move to Build" and "Override to advance" are different acts and should not
+ * share a word. The middle case says "anyway" because that is what it is.
+ */
+export function advanceLabel(outcome: GateOutcome, nextStageName: string): string {
+  if (outcome === "clear") return `Move to ${nextStageName}`;
+  if (outcome === "advisory_gap") return "Advance anyway";
+  return "Override to advance";
+}
+
+/**
+ * What the confirmation says before an override is recorded.
+ *
+ * Names every unmet criterion rather than counting them: a person about to
+ * sign their name to skipping three things should read the three things.
+ */
+export function overridePrompt(s: StageGateStatus, nextStageName: string): string {
+  const items = s.remaining.map((g) => g.title);
+  const list = items.length === 1 ? items[0]! : items.map((t) => `• ${t}`).join("\n");
+  return `Moving to ${nextStageName} with ${items.length} criteri${
+    items.length === 1 ? "on" : "a"
+  } outstanding:\n\n${list}\n\nThis is recorded against your name in the change history.`;
 }

@@ -10,7 +10,10 @@ import { nextLifecycleStage } from "@/lib/stage-advance-input";
 import { stageLabel } from "@/lib/hub-format";
 import type { LifecycleStageId } from "@/lib/lifecycle";
 import {
-  canAdvance,
+  advanceLabel,
+  gateOutcome,
+  overridePrompt,
+  requiresReason,
   gateSummary,
   isSettled,
   needsOverride,
@@ -67,15 +70,18 @@ export function StageGatesPanel({
   });
 
   const move = useMutation({
-    mutationFn: () =>
+    mutationFn: (v: { reason: string | null }) =>
       advance({
         data: {
           implementationId,
           toStage: next!,
+          // Null: the server resolves the actor from the authenticated caller
+          // rather than asking the client who it is.
           enteredBy: null,
           notes: status.ready
             ? "All core criteria complete"
             : `Advanced with ${status.remaining.length} core criteria outstanding`,
+          override: status.ready ? null : { reason: v.reason },
         },
       }),
     onSuccess: refresh,
@@ -83,8 +89,9 @@ export function StageGatesPanel({
 
   if (status.ungated && items.length === 0) return null;
 
-  const allowed = canAdvance(status, stageGateMode);
+  const outcome = gateOutcome(status, stageGateMode);
   const override = needsOverride(status, stageGateMode);
+  const mustExplain = requiresReason(status, stageGateMode);
 
   return (
     <Panel
@@ -153,20 +160,48 @@ export function StageGatesPanel({
         {next ? (
           <Button
             size="sm"
-            variant={status.ready ? "default" : "outline"}
-            disabled={!allowed || move.isPending}
-            onClick={() => move.mutate()}
-            // The reason lives on the control that is refused, not in a
+            // Demoted whenever anything is outstanding. A primary button is a
+            // recommendation, and skipping the criteria is never the
+            // recommended path — it is the available one.
+            variant={outcome === "clear" ? "default" : "outline"}
+            disabled={move.isPending}
+            onClick={() => {
+              if (outcome === "clear") {
+                move.mutate({ reason: null });
+                return;
+              }
+              // Names every unmet criterion, then asks for words. The typed
+              // reason is what turns "clicked through a dialog" into
+              // "somebody said why", and it is required on a blocking gate.
+              if (!window.confirm(overridePrompt(status, stageLabel(next)))) return;
+              if (!mustExplain) {
+                move.mutate({ reason: null });
+                return;
+              }
+              const reason = window.prompt(
+                `Why are you moving to ${stageLabel(next)} with ${
+                  status.remaining.length
+                } outstanding? This is recorded against your name.`,
+                "",
+              );
+              if (reason === null) return;
+              if (!reason.trim()) {
+                window.alert("A reason is required to override a blocking gate.");
+                return;
+              }
+              move.mutate({ reason: reason.trim() });
+            }}
+            // The reason lives on the control it applies to, not in a
             // paragraph somewhere else on the page.
             title={
-              allowed
-                ? override
-                  ? `Advance anyway — ${status.remaining.length} criteria outstanding`
-                  : `Move to ${stageLabel(next)}`
-                : gateSummary(status)
+              outcome === "clear"
+                ? `Move to ${stageLabel(next)}`
+                : `${gateSummary(status)} — you will be asked to confirm${
+                    mustExplain ? " and say why" : ""
+                  }`
             }
           >
-            {override ? "Advance anyway" : `Move to ${stageLabel(next)}`} <ArrowRight />
+            {advanceLabel(outcome, stageLabel(next))} <ArrowRight />
           </Button>
         ) : null}
       </div>

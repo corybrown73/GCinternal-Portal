@@ -58,6 +58,11 @@ export function AdvanceStage({
           toStage: next!,
           enteredBy: nullable(enteredBy),
           notes: nullable(notes),
+          // This form is the plain "record a move" path with no gate panel in
+          // front of it. It never claims an override; if the stage turns out
+          // to be a blocking gate with work outstanding, the server refuses
+          // and says what is missing.
+          override: null,
         },
       }),
     onSuccess: async () => {

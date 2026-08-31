@@ -2048,6 +2048,10 @@ export async function advanceStage(args: {
   toStage: string;
   enteredBy: string | null;
   notes: string | null;
+  /** The client's "yes anyway". Re-checked here, never trusted. */
+  override?: { reason: string | null } | null;
+  /** portal_profiles id of the caller, for the audit row. */
+  actorProfileId?: string | null;
 }) {
   const { data: impl, error: readError } = await db()
     .from("implementations")
@@ -2091,6 +2095,40 @@ export async function advanceStage(args: {
     if (gate.blocked) throw new Error(launchGateMessage(gate));
   }
 
+  // THE GATE, RECOMPUTED SERVER-SIDE.
+  //
+  // The panel already showed the person their outstanding criteria and took
+  // their answer, and it sends that answer along — but a rule enforced only in
+  // the component it is rendered by is not enforced. Anything that can call a
+  // server function can skip it. So the state is read again here from the work
+  // items, and a blocking stage refuses to be left without a stated reason
+  // whatever arrived in the request.
+  const { stageGateStatus, requiresReason, needsOverride } = await import("./stage-gates");
+  const { data: gateRows } = await db()
+    .from("work_items")
+    .select("id,task_key,title,status,is_gate,party")
+    .eq("implementation_id", args.implementationId)
+    .eq("stage_key", current);
+  const { data: stageRow } = await db()
+    .from("stage_instances")
+    .select("gate_mode")
+    .eq("implementation_id", args.implementationId)
+    .eq("stage_key", current)
+    .maybeSingle();
+
+  const gateState = stageGateStatus((gateRows ?? []) as any[]);
+  const gateMode = (stageRow?.gate_mode as string | null) ?? null;
+  const overriding = needsOverride(gateState, gateMode);
+  const reason = args.override?.reason?.trim() || null;
+
+  if (overriding && requiresReason(gateState, gateMode) && !reason) {
+    throw new Error(
+      `${gateState.remaining.length} core criteri${
+        gateState.remaining.length === 1 ? "on is" : "a are"
+      } still outstanding on this stage, and it is a blocking gate. Say why you are moving on anyway — it is recorded against your name.`,
+    );
+  }
+
   const at = new Date().toISOString();
 
   const { error: closeError } = await db()
@@ -2100,14 +2138,22 @@ export async function advanceStage(args: {
     .is("exited_at", null);
   if (closeError) throw new Error(`Could not close the current stage: ${closeError.message}`);
 
-  const { error: insertError } = await db().from("implementation_stage_history").insert({
-    implementation_id: args.implementationId,
-    stage: expected,
-    entered_at: at,
-    entered_by: args.enteredBy,
-    notes: args.notes,
-    exited_at: null,
-  });
+  // The reason travels in `notes` — the column that has always been there for
+  // it and has been universally empty — with the flag beside it so the change
+  // history can tell "moved on, here is a note" from "moved on with criteria
+  // outstanding". Both, not one: a flag with no words says nothing useful, and
+  // words with no flag cannot be counted.
+  const { error: insertError } = await db()
+    .from("implementation_stage_history")
+    .insert({
+      implementation_id: args.implementationId,
+      stage: expected,
+      entered_at: at,
+      entered_by: args.enteredBy,
+      notes: reason ?? args.notes,
+      advanced_with_gaps: overriding,
+      exited_at: null,
+    });
   if (insertError) throw new Error(`Could not record the new stage: ${insertError.message}`);
 
   const { error: updateError } = await db()
@@ -2143,11 +2189,30 @@ export async function advanceStage(args: {
   await sf.syncPresaleStageFromLifecycle(args.implementationId, expected);
   await sf.emitWriteBack(args.implementationId);
 
+  // Every behavioural change, with a real actor. An override is the one an
+  // auditor comes looking for, so it gets its own action rather than hiding
+  // inside a generic stage.advanced.
+  const { audit } = await import("./server/audit");
+  await audit({
+    actor_type: "user",
+    actor_id: args.actorProfileId ?? null,
+    action: overriding ? "stage.override" : "stage.advanced",
+    entity_type: "implementation",
+    entity_id: args.implementationId,
+    payload: {
+      from: current,
+      to: expected,
+      gate_mode: gateMode,
+      outstanding: gateState.remaining.map((g) => g.title),
+      reason,
+    },
+  });
+
   // Stage dwell is a health input, so the cache is stale the moment we move.
   const { recomputeHealthSoon } = await import("./health.server");
   recomputeHealthSoon(args.implementationId);
 
-  return { ok: true, stage: expected, enteredAt: at };
+  return { ok: true, stage: expected, enteredAt: at, overridden: overriding };
 }
 
 /* ---------- Mutations (P0 Slice 3: delivery records) ----------

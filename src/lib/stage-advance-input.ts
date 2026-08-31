@@ -12,6 +12,20 @@ export const advanceStageInput = z.object({
   toStage: z.string().min(1),
   enteredBy: z.string().uuid().nullable(),
   notes: z.string().trim().min(1).nullable(),
+  /**
+   * Advancing with core criteria still outstanding.
+   *
+   * Sent by the client because the client is what showed the person the gap
+   * and took their "yes anyway" — but never TRUSTED: the server recomputes the
+   * gate state and refuses an override on a blocking stage that arrives
+   * without a reason, whatever the flag says.
+   */
+  override: z
+    .object({
+      /** Their own words. Required when the stage's gate mode is blocking. */
+      reason: z.string().trim().min(1).max(1000).nullable(),
+    })
+    .nullable(),
 });
 
 export type AdvanceStageInput = z.infer<typeof advanceStageInput>;
