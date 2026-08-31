@@ -240,14 +240,24 @@ export async function downloadSowAnalysisPdf({
     for (const g of analysis.gaps) text(`• ${g}`, { indent: 10 });
   }
 
+  // Built in the browser and downloaded; nothing is sent to a server. This
+  // replaces jsPDF's own `doc.save()`, which the kit no longer exposes because
+  // three of the four documents are rendered in Node and return bytes.
   const bytes = pdf.finish();
-  // Built in the browser and downloaded; nothing is sent to a server.
   const url = URL.createObjectURL(
     new Blob([bytes.slice().buffer as ArrayBuffer], { type: "application/pdf" }),
   );
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `${safeFileName(customerName)}-sow-analysis.pdf`;
-  a.click();
-  URL.revokeObjectURL(url);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = `${safeFileName(customerName)}-sow-analysis.pdf`;
+  // In the document and revoked on a later tick: a click on a detached anchor
+  // is ignored by some browsers, and revoking the object URL in the same tick
+  // can cancel the download before it starts.
+  anchor.style.display = "none";
+  document.body.appendChild(anchor);
+  anchor.click();
+  setTimeout(() => {
+    anchor.remove();
+    URL.revokeObjectURL(url);
+  }, 1000);
 }
