@@ -13,27 +13,50 @@ Working example throughout: **gcinternalportal.com**, replacing
 
 Project → Settings → Domains → **Add**.
 
-Add both `gcinternalportal.com` and `www.gcinternalportal.com`, and set the
-apex (`gcinternalportal.com`) as **primary**. Vercel then 308-redirects the
-other names to it, including the old `*.vercel.app` one.
+Add both `gcinternalportal.com` and `www.gcinternalportal.com`. One of them
+serves and the other 308-redirects to it. Vercel defaults to the apex
+redirecting to `www`, which is what this deployment kept.
 
-That redirect is not cosmetic. Plan links and invites already sent to
-customers contain the old host, and they are the reason to keep it resolving
-rather than remove it. A customer who saved a link in February should still
-land on their plan.
+The choice between them is cosmetic — the DNS is identical either way, the
+apex reads better in a customer's inbox, `www` is one fewer thing to change.
+What is NOT cosmetic is that `APP_URL` in step 3 must name whichever one
+SERVES. Point it at the redirecting name and every emailed link takes a
+pointless hop, and breaks outright if that redirect is ever removed.
+
+Decide before any links go out. Afterwards it is permanent in practice:
+links already sitting in customers' inboxes resolve through whatever
+redirect exists at the time.
+
+Keep the old `*.vercel.app` domain attached either way. Plan links and
+invites already sent contain that host, and it is the reason to leave it
+resolving rather than remove it — a customer who saved a link in February
+should still land on their plan. Leaving it serving directly (rather than
+redirecting) is fine here: the app is `noindex`, so two live hosts cost
+nothing and old links skip a hop.
 
 ## 2. Registrar — DNS
 
-Do step 1 first. Vercel shows you the exact records for the domain you added,
-and those are the values to enter — not the ones in this document, which are
-here to say what shape the answer has. Vercel has shipped more than one apex
-IP over the years (`76.76.21.21` on older projects, `216.198.79.1` on newer
-ones), so copy from the dashboard rather than from memory.
+Do step 1 first, then take the values from Vercel's own **View DNS
+configuration** panel. Not from this document, and not from a tutorial.
 
-| Record | Host  | Value                  |
-| ------ | ----- | ---------------------- |
-| A      | `@`   | *(IP Vercel shows)*    |
-| CNAME  | `www` | `cname.vercel-dns.com` |
+| Record | Host  | Value                   |
+| ------ | ----- | ----------------------- |
+| A      | `@`   | *(IP Vercel shows)*     |
+| CNAME  | `www` | *(target Vercel shows)* |
+
+What gcinternalportal.com actually got, recorded for shape rather than for
+copying:
+
+| Record | Host  | Value                                 |
+| ------ | ----- | ------------------------------------- |
+| A      | `@`   | `216.150.1.1`                         |
+| CNAME  | `www` | `95dfe09ebb64aa61.vercel-dns-016.com` |
+
+Neither is the value the internet will tell you to use. The apex IP was
+`76.76.21.21` for years, and Vercel's own panel now describes that and
+`cname.vercel-dns.com` as legacy records that merely continue to work. The
+`www` target carries a per-project hash, so it is not shared between domains
+and cannot be guessed at all.
 
 Propagation is usually minutes. Vercel issues the TLS certificate itself once
 the records resolve; there is nothing to do for HTTPS.
@@ -75,6 +98,19 @@ NAMESERVERS → *Custom DNS* → `ns1.vercel-dns.com` and `ns2.vercel-dns.com`.
 That hands Vercel the whole zone, which is fewer steps now and one more
 place to go for any future MX or verification record. Not recommended unless
 the domain will only ever serve this app.
+
+### The email record already sitting there
+
+Namecheap's **Mail Settings → Email Forwarding** leaves a TXT record on `@`:
+`v=spf1 include:spf.efwd.registrar-servers.com ~all`. It does not conflict
+with anything above and can be left alone while the app sends mail from
+another domain.
+
+It stops being inert the day `EMAIL_FROM` points at this domain. Resend then
+needs its own SPF and DKIM records, and a second unmerged SPF record on the
+same host is the classic way invites start landing in spam — silently, with
+nothing in the app to show for it. Handle it deliberately at that point,
+rather than learning it from a customer who never got their link.
 
 ## 3. Vercel — set `APP_URL`
 
