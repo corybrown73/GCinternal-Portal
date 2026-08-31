@@ -8,6 +8,7 @@ import { analyzeSowInput, applySowProposalInput, setSowDocumentInput } from "./s
 import { SOLUTION_STATUSES } from "./solution-enums";
 import {
   createFieldMappingInput,
+  createSolutionInput,
   createSolutionNoteInput,
   toFieldMappingPatch,
   updateFieldMappingInput,
@@ -213,6 +214,14 @@ export const setTechnicalSolutionStatus = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const { updateTechnicalSolutionStatus } = await import("./hub.server");
     return updateTechnicalSolutionStatus(data.id, data.status);
+  });
+
+export const addSolution = createServerFn({ method: "POST" })
+  .middleware([requireInternalAuth])
+  .inputValidator((data: unknown) => createSolutionInput.parse(data))
+  .handler(async ({ data, context }) => {
+    const { createTechnicalSolution } = await import("./hub.server");
+    return createTechnicalSolution({ ...data, actorProfileId: context.profile.id });
   });
 
 export const createTechnicalSolutionNote = createServerFn({ method: "POST" })

@@ -3,7 +3,7 @@ import { queryOptions, useSuspenseQuery } from "@tanstack/react-query";
 import { ArrowDown, ArrowUp } from "lucide-react";
 
 import { PageBody, PageHeader } from "@/components/page";
-import { NoRows, StatusChip } from "@/components/record";
+import { StatusChip } from "@/components/record";
 import { getTechnicalSolutions } from "@/lib/hub.functions";
 import { humanize } from "@/lib/hub-format";
 import { cn } from "@/lib/utils";
@@ -189,7 +189,31 @@ function SolutionsQueue() {
               {rows.length === 0 ? (
                 <tr>
                   <td colSpan={6}>
-                    <NoRows label="No technical solutions match these filters." />
+                    {data.length === 0 ? (
+                      <div className="px-3 py-4 text-[12px] text-muted-foreground">
+                        Nothing is being built yet. A solution belongs to one account — an
+                        integration, a migration, a form set — and is started from that
+                        account&apos;s Solution tab, where its notes and field mappings live.{" "}
+                        <Link
+                          to="/customers"
+                          search={{ sort: "days", dir: "desc" }}
+                          className="underline"
+                        >
+                          Pick a customer →
+                        </Link>
+                      </div>
+                    ) : (
+                      <div className="px-3 py-4 text-[12px] text-muted-foreground">
+                        {data.length} solution(s) exist, none matching these filters.{" "}
+                        <button
+                          type="button"
+                          className="underline"
+                          onClick={() => setSearch({ owner: undefined, status: undefined })}
+                        >
+                          Clear the filters
+                        </button>
+                      </div>
+                    )}
                   </td>
                 </tr>
               ) : null}

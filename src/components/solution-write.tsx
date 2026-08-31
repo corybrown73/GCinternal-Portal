@@ -12,6 +12,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
+  addSolution,
   createTechnicalSolutionNote,
   setSolutionDesign,
   setTechnicalSolutionOwner,
@@ -498,5 +499,176 @@ export function DesignEditor({
         ) : null}
       </div>
     </div>
+  );
+}
+
+/**
+ * Start a solution on an account.
+ *
+ * WHAT WAS MISSING. Every part of a solution already existed — the design
+ * summary, the working notes, the field mappings, the per-solution record page
+ * — and nothing could create one. Production held zero solutions, zero notes
+ * and zero field mappings, which is why the tab read as pointless: a fully
+ * furnished room with no door.
+ *
+ * An account can have several. An integration, a data migration and a form set
+ * are three different things to build, with different owners and different
+ * notes, and forcing them into one record loses whose is whose.
+ */
+export function NewSolution({
+  implementationId,
+  customerId,
+  team,
+}: {
+  implementationId: string;
+  customerId: string;
+  team: TeamMemberOption[];
+}) {
+  const [open, setOpen] = useState(false);
+  const [title, setTitle] = useState("");
+  const [summary, setSummary] = useState("");
+  const [config, setConfig] = useState("");
+  const [ownerId, setOwnerId] = useState("");
+  const [ownerGroup, setOwnerGroup] = useState<string>(TECHNICAL_SOLUTIONS_ROLE);
+  const [status, setStatus] = useState<string>("draft");
+
+  const queryClient = useQueryClient();
+  const create = useServerFn(addSolution);
+
+  const mutation = useMutation({
+    mutationFn: () =>
+      create({
+        data: {
+          implementationId,
+          title: title.trim(),
+          designSummary: summary.trim() || null,
+          configurationDetails: config.trim() || null,
+          ownerId: ownerId || null,
+          status: status as (typeof SOLUTION_STATUSES)[number],
+        },
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["customer", customerId] });
+      void queryClient.invalidateQueries({ queryKey: ["technical-solutions"] });
+      setOpen(false);
+      setTitle("");
+      setSummary("");
+      setConfig("");
+      setOwnerId("");
+      setOwnerGroup(TECHNICAL_SOLUTIONS_ROLE);
+      setStatus("draft");
+    },
+  });
+
+  return (
+    <>
+      <button type="button" className={iconButtonClass} onClick={() => setOpen(true)}>
+        <Plus className="h-3 w-3" /> New solution
+      </button>
+
+      <Dialog open={open} onOpenChange={(v) => (mutation.isPending ? null : setOpen(v))}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="text-[14px]">New solution</DialogTitle>
+            <DialogDescription className="text-[11px]">
+              One thing this account&apos;s engineers are building — an integration, a migration, a
+              form set. Its notes, field mappings and progress live on its own record.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-2.5">
+            <label className="block space-y-0.5">
+              <span className="text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
+                What is being built
+              </span>
+              <input
+                className="h-7 w-full rounded-sm border border-border bg-background px-1.5 text-[12px] outline-none focus:ring-1 focus:ring-ring"
+                value={title}
+                autoFocus
+                placeholder="Dispatch → ERP work order sync"
+                disabled={mutation.isPending}
+                onChange={(e) => setTitle(e.target.value)}
+              />
+            </label>
+
+            <label className="block space-y-0.5">
+              <span className="text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
+                What it does
+              </span>
+              <textarea
+                className="w-full rounded-sm border border-border bg-background px-1.5 py-1 text-[12px] outline-none focus:ring-1 focus:ring-ring"
+                rows={3}
+                value={summary}
+                placeholder="In the engineer's words: what moves, in which direction, and when."
+                disabled={mutation.isPending}
+                onChange={(e) => setSummary(e.target.value)}
+              />
+            </label>
+
+            <label className="block space-y-0.5">
+              <span className="text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
+                How it is set up
+              </span>
+              <textarea
+                className="w-full rounded-sm border border-border bg-background px-1.5 py-1 text-[12px] outline-none focus:ring-1 focus:ring-ring"
+                rows={3}
+                value={config}
+                placeholder="Endpoints, where the credentials live, sync cadence. Field mappings go on the record itself."
+                disabled={mutation.isPending}
+                onChange={(e) => setConfig(e.target.value)}
+              />
+            </label>
+
+            <div className="flex flex-wrap items-end gap-3">
+              <label className="space-y-0.5">
+                <span className="block text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
+                  Status
+                </span>
+                <select
+                  className={selectClass}
+                  value={status}
+                  disabled={mutation.isPending}
+                  onChange={(e) => setStatus(e.target.value)}
+                >
+                  {SOLUTION_STATUSES.map((v) => (
+                    <option key={v} value={v}>
+                      {humanize(v)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <OwnerPicker
+                team={team}
+                group={ownerGroup}
+                ownerId={ownerId}
+                personLabel="Who is building it"
+                disabled={mutation.isPending}
+                onChange={(next) => {
+                  setOwnerGroup(next.group);
+                  setOwnerId(next.ownerId);
+                }}
+              />
+            </div>
+          </div>
+
+          {mutation.error ? (
+            <p role="alert" className="text-[12px] text-destructive">
+              {(mutation.error as Error).message}
+            </p>
+          ) : null}
+
+          <DialogFooter>
+            <button
+              type="button"
+              className={iconButtonClass}
+              disabled={mutation.isPending || title.trim() === ""}
+              onClick={() => mutation.mutate()}
+            >
+              {mutation.isPending ? "Creating…" : "Create solution"}
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }

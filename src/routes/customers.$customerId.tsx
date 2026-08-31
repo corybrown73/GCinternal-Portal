@@ -52,6 +52,7 @@ import {
   type DiscoveryBoardImplementation,
 } from "@/components/discovery-board-write";
 import { JournalPanel } from "@/components/journal-write";
+import { NewSolution } from "@/components/solution-write";
 import { HandoverRecordPanel } from "@/components/handover-write";
 import { TIS_FULL, TIS_SHORT } from "@/lib/vocabulary";
 
@@ -1870,6 +1871,7 @@ function JourneyTab({ record, customerId }: { record: Customer360; customerId: s
 /* ---------------- 3. SOLUTION ---------------- */
 
 function SolutionTab({ record, customerId }: { record: Customer360; customerId: string }) {
+  const impl = record.implementation!;
   const solutions = record.technical_solutions as any[];
   const mappings = solutions.flatMap((s) =>
     (s.field_mappings ?? []).map((m: any) => ({ ...m, solution_title: s.title })),
@@ -1877,54 +1879,14 @@ function SolutionTab({ record, customerId }: { record: Customer360; customerId: 
 
   return (
     <div className="space-y-4">
-      <Panel title="Business requirements" count={record.requirements.length}>
-        <div className="px-3 py-2.5 text-[12px] text-muted-foreground">
-          {record.requirements.length} requirement(s) drive this solution.{" "}
-          <Link
-            to="/customers/$customerId"
-            params={{ customerId }}
-            search={{ tab: "requirements" }}
-            className="underline"
-          >
-            Open the Requirements tab →
-          </Link>
-        </div>
-      </Panel>
-
-      <Panel title="Solution" count={solutions.length} meta="Design record">
-        {solutions.length ? (
-          <ul className="divide-y divide-border">
-            {solutions.map((s) => (
-              <Row key={s.id}>
-                <div className="flex flex-wrap items-baseline gap-2">
-                  <span className="text-[13px] font-medium">{s.title}</span>
-                  <StatusChip status={s.status} />
-                </div>
-                <div className="mt-1.5 grid gap-2 md:grid-cols-2">
-                  <div>
-                    <div className="text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
-                      Design summary
-                    </div>
-                    <p className="text-[12px] leading-relaxed">{dash(s.design_summary)}</p>
-                  </div>
-                  <div>
-                    <div className="text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
-                      Configuration details
-                    </div>
-                    <p className="whitespace-pre-wrap text-[12px] leading-relaxed">
-                      {dash(s.configuration_details)}
-                    </p>
-                  </div>
-                </div>
-              </Row>
-            ))}
-          </ul>
-        ) : (
-          <NoRows label="No solution recorded" />
-        )}
-      </Panel>
-
-      <Panel title="Solutions" count={solutions.length}>
+      <Panel
+        title="Solutions"
+        count={solutions.length}
+        meta="What the engineers are building"
+        action={
+          <NewSolution implementationId={impl.id} customerId={customerId} team={record.team} />
+        }
+      >
         {solutions.length ? (
           <ul className="divide-y divide-border">
             {solutions.map((s) => (
@@ -1939,11 +1901,27 @@ function SolutionTab({ record, customerId }: { record: Customer360; customerId: 
                   </Link>
                   <StatusChip status={s.status} />
                 </div>
+                <div className="mt-1.5 grid gap-2 md:grid-cols-2">
+                  <div>
+                    <div className="text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
+                      What it does
+                    </div>
+                    <p className="text-[12px] leading-relaxed">{dash(s.design_summary)}</p>
+                  </div>
+                  <div>
+                    <div className="text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
+                      How it is set up
+                    </div>
+                    <p className="whitespace-pre-wrap text-[12px] leading-relaxed">
+                      {dash(s.configuration_details)}
+                    </p>
+                  </div>
+                </div>
                 <Meta
                   items={[
-                    ["Owner", dash(s.owner_name)],
+                    ["Building it", dash(s.owner_name)],
                     ["Implements requirement", dash(s.requirement_title)],
-                    ["Created", fmtDate(s.created_at)],
+                    ["Started", fmtDate(s.created_at)],
                     ["Mappings", (s.field_mappings ?? []).length],
                   ]}
                 />
@@ -1951,11 +1929,15 @@ function SolutionTab({ record, customerId }: { record: Customer360; customerId: 
             ))}
           </ul>
         ) : (
-          <NoRows label="No solutions" />
+          <div className="px-3 py-3 text-[12px] text-muted-foreground">
+            Nothing recorded yet. A solution is one thing being built for this account — an
+            integration, a migration, a form set. Add one and its notes, field mappings and progress
+            live on its own record. An account can carry several.
+          </div>
         )}
       </Panel>
 
-      <Panel title="Field mapping" count={mappings.length}>
+      <Panel title="Field mapping" count={mappings.length} meta="Across every solution">
         {mappings.length ? (
           <div className="overflow-x-auto">
             <table className="w-full text-[12px]">
@@ -1993,6 +1975,18 @@ function SolutionTab({ record, customerId }: { record: Customer360; customerId: 
           <NoRows label="No field mappings recorded" />
         )}
       </Panel>
+
+      <p className="px-1 text-[12px] text-muted-foreground">
+        {record.requirements.length} business requirement(s) are what these solutions answer to.{" "}
+        <Link
+          to="/customers/$customerId"
+          params={{ customerId }}
+          search={{ tab: "requirements" }}
+          className="underline"
+        >
+          Open the Requirements tab →
+        </Link>
+      </p>
     </div>
   );
 }

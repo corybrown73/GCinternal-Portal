@@ -1352,6 +1352,56 @@ export async function updateTechnicalSolutionStatus(id: string, status: string) 
   return { ok: true };
 }
 
+/**
+ * Start a solution on an account.
+ *
+ * The record log for one thing the engineers are building — an integration, a
+ * migration, a form set. An account can carry several, which is why this is a
+ * plain insert against the implementation rather than anything that assumes
+ * one per project.
+ */
+export async function createTechnicalSolution(args: {
+  implementationId: string;
+  title: string;
+  designSummary: string | null;
+  configurationDetails: string | null;
+  ownerId: string | null;
+  status: string;
+  actorProfileId?: string | null;
+}) {
+  const { data, error } = await db()
+    .from("technical_solutions")
+    .insert({
+      implementation_id: args.implementationId,
+      title: args.title,
+      design_summary: args.designSummary,
+      configuration_details: args.configurationDetails,
+      owner_id: args.ownerId,
+      status: args.status,
+      // Left null on purpose — see createSolutionInput. A solution may be
+      // linked to a requirement later; needing one to start is what made this
+      // surface unreachable.
+      requirement_id: null,
+    })
+    .select("id")
+    .single();
+  if (error || !data) {
+    throw new Error(deliveryWriteError("technical_solutions", error?.message ?? "").message);
+  }
+
+  const { audit } = await import("./server/audit");
+  await audit({
+    actor_type: "user",
+    actor_id: args.actorProfileId ?? null,
+    action: "solution.created",
+    entity_type: "technical_solution",
+    entity_id: data.id as string,
+    payload: { implementation_id: args.implementationId, title: args.title },
+  });
+
+  return { ok: true, id: data.id as string };
+}
+
 export async function addTechnicalSolutionNote(args: {
   technicalSolutionId: string;
   noteType: string;
