@@ -1,102 +1,64 @@
+import { BRAND } from "@/lib/brand";
 import type { CompletionDocument } from "@/lib/completion-record";
+
+import { openBrandedPdf, PDF_BODY_SOFT } from "@/lib/pdf-kit";
 
 /**
  * The PDF of a completion record.
- *
- * Same shape of thing as `snapshot-pdf.ts` and for the same reason: jsPDF runs
- * in Node for text and vector output — no DOM, no headless browser on Vercel —
- * so the layout is deliberately text and rules only.
  *
  * It renders the FROZEN document and nothing else. There is no second query
  * and no second serializer, so a completion record's PDF cannot show a fact
  * the record does not contain, and cannot drift as the underlying rows change.
  *
+ * Chrome, type and the cyan rule come from `pdf-kit`, the same system the
+ * customer's plan and the weekly snapshot are set in — this file only decides
+ * what the document says. A section with nothing in it renders as an ABSENCE
+ * panel rather than as body text, because "No risks were recorded" must not
+ * read like an answer.
+ *
  * Accepted limitation, the same one the snapshot carries: a downloaded PDF
  * cannot be revoked.
  */
 export async function renderCompletionPdf(doc: CompletionDocument): Promise<Uint8Array> {
-  const { jsPDF } = await import("jspdf");
-  const pdf = new jsPDF({ unit: "pt", format: "letter" });
+  const pdf = await openBrandedPdf({
+    title: doc.customer_name,
+    subtitle:
+      doc.subject_type === "solution"
+        ? `Solution complete — ${doc.title}`
+        : `Implementation complete — ${doc.title}`,
+    meta: `Recorded ${doc.completed_at.slice(0, 10)}`,
+    dateFor: doc.completed_at,
+  });
 
-  const margin = 54;
-  const width = pdf.internal.pageSize.getWidth() - margin * 2;
-  let y = margin;
-
-  const page = () => {
-    if (y > pdf.internal.pageSize.getHeight() - margin) {
-      pdf.addPage();
-      y = margin;
-    }
-  };
-
-  const line = (
-    text: string,
-    size = 10,
-    style: "normal" | "bold" | "italic" = "normal",
-    gap = 13,
-    indent = 0,
-  ) => {
-    pdf.setFont("helvetica", style);
-    pdf.setFontSize(size);
-    for (const part of pdf.splitTextToSize(text, width - indent) as string[]) {
-      page();
-      pdf.text(part, margin + indent, y);
-      y += gap;
-    }
-  };
-
-  const rule = () => {
-    y += 4;
-    page();
-    pdf.setDrawColor(210);
-    pdf.line(margin, y, margin + width, y);
-    y += 13;
-  };
-
-  line(doc.customer_name, 18, "bold", 22);
-  line(
-    doc.subject_type === "solution"
-      ? `Solution complete — ${doc.title}`
-      : `Implementation complete — ${doc.title}`,
-    12,
-    "normal",
-    18,
-  );
-  rule();
-
-  for (const [k, v] of doc.headline) line(`${k}: ${v}`, 9.5, "normal", 12);
-  rule();
-
-  for (const section of doc.sections) {
-    // Keep a heading with at least its first line rather than stranding it at
-    // the foot of a page.
-    if (y > pdf.internal.pageSize.getHeight() - margin - 60) {
-      pdf.addPage();
-      y = margin;
-    }
-    line(section.heading, 12.5, "bold", 17);
-    if (section.note) line(section.note, 9, "italic", 12);
-    y += 2;
-
-    if (section.entries.length === 0) {
-      line(section.emptyNote, 9.5, "italic", 13, 10);
-    } else {
-      for (const entry of section.entries) {
-        line(entry.title, 10, "bold", 13, 10);
-        if (entry.detail) line(entry.detail, 9.5, "normal", 12, 20);
-        for (const [k, v] of entry.meta ?? []) line(`${k}: ${v}`, 8.5, "normal", 11, 20);
-        y += 4;
-      }
-    }
-    rule();
+  if (doc.headline.length) {
+    pdf.pairs(doc.headline);
   }
 
-  line(
-    `Recorded ${doc.completed_at.slice(0, 10)}. This document is frozen: it shows what the work looked like when it finished, not what the record says today.`,
-    8.5,
-    "italic",
-    11,
+  for (const section of doc.sections) {
+    pdf.section(section.heading, section.note ?? undefined);
+
+    if (section.entries.length === 0) {
+      pdf.absent(section.emptyNote);
+      continue;
+    }
+
+    for (const entry of section.entries) {
+      pdf.line(entry.title, { size: 10.5, style: "bold" });
+      if (entry.detail) {
+        pdf.line(entry.detail, { size: 9.5, color: PDF_BODY_SOFT, gap: 12, indent: 14 });
+      }
+      for (const [k, v] of entry.meta ?? []) {
+        pdf.line(`${k}: ${v}`, { size: 8.5, color: BRAND.grey, gap: 11, indent: 14 });
+      }
+      pdf.gap(4);
+    }
+  }
+
+  pdf.gap(6);
+  pdf.line(
+    "This document is frozen: it shows what the work looked like when it finished, not what the record says today.",
+    { size: 8.5, style: "italic", color: BRAND.grey, gap: 11 },
   );
 
-  return new Uint8Array(pdf.output("arraybuffer"));
+  return pdf.finish();
 }

@@ -2,7 +2,7 @@ import PptxGenJS from "pptxgenjs";
 
 import { BRAND, copyrightLine } from "@/lib/brand";
 import type { DeckPlan, DeckSlide } from "@/lib/kickoff-deck";
-import { WORDMARK_NAVY, WORDMARK_WHITE } from "../brand-assets";
+import { WORDMARK_NAVY, WORDMARK_WHITE } from "@/lib/brand-assets";
 
 /**
  * The kickoff and handoff deck, drawn in the 2026 GoCanvas template's language.

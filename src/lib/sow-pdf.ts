@@ -1,8 +1,14 @@
 // jspdf is ~501 kB and this module is reachable from the Customer 360 route,
 // so a static import made every render of that page parse it — server side too
 // — for a button most visits never press. Loaded at the call site instead, the
-// way src/lib/server/snapshot-pdf.ts already does it.
+// way every other renderer here does.
+//
+// Set in the same system as the documents that leave the building: `pdf-kit`
+// owns the masthead, the type scale, the cyan section rule and the footer, so
+// this file only decides what the analysis says. It used to carry its own
+// greys and its own rule, which is exactly how four documents drift apart.
 
+import { BRAND } from "@/lib/brand";
 import {
   deliveryWindowLabel,
   EXTRACTION_SECTIONS,
@@ -68,20 +74,18 @@ export async function downloadSowAnalysisPdf({
   /** Technical Implementation Specialist adjustments to the proposed weeks, keyed by journey index. */
   overrides?: Record<number, TimingOverride>;
 }) {
-  const { jsPDF } = await import("jspdf");
-  const doc = new jsPDF({ unit: "pt", format: "a4" });
-  const marginX = 48;
-  const marginTop = 56;
-  const bottom = doc.internal.pageSize.getHeight() - 56;
-  const width = doc.internal.pageSize.getWidth() - marginX * 2;
-  let y = marginTop;
-
-  const space = (needed: number) => {
-    if (y + needed > bottom) {
-      doc.addPage();
-      y = marginTop;
-    }
-  };
+  const { openBrandedPdf } = await import("./pdf-kit");
+  const pdf = await openBrandedPdf({
+    title: customerName,
+    subtitle: "SOW analysis and proposed journey",
+    meta: `Source: ${sowName ?? "attached SOW"}   ·   Generated ${analysedAt
+      .toISOString()
+      .slice(0, 16)
+      .replace("T", " ")} UTC`,
+    dateFor: analysedAt,
+    footerLeft: `${customerName} · SOW analysis`,
+    pageNumbers: true,
+  });
 
   const text = (
     value: string,
@@ -90,43 +94,27 @@ export async function downloadSowAnalysisPdf({
       style?: "normal" | "bold" | "italic";
       indent?: number;
       gap?: number;
-      color?: number;
+      color?: string;
     } = {},
   ) => {
     const size = opts.size ?? 10;
-    const indent = opts.indent ?? 0;
-    doc.setFont("helvetica", opts.style ?? "normal");
-    doc.setFontSize(size);
-    doc.setTextColor(opts.color ?? 30);
-    const lines = doc.splitTextToSize(value, width - indent) as string[];
-    for (const line of lines) {
-      space(size + 4);
-      doc.text(line, marginX + indent, y);
-      y += size + 3;
-    }
-    y += opts.gap ?? 0;
+    pdf.line(value, {
+      size,
+      ...(opts.style ? { style: opts.style } : {}),
+      ...(opts.color ? { color: opts.color } : {}),
+      ...(opts.indent ? { indent: opts.indent } : {}),
+      gap: size + 3,
+    });
+    if (opts.gap) pdf.gap(opts.gap);
   };
 
-  const heading = (value: string) => {
-    space(34);
-    y += 8;
-    text(value, { size: 12, style: "bold", gap: 2 });
-    space(8);
-    doc.setDrawColor(210);
-    doc.line(marginX, y - 4, marginX + width, y - 4);
-    y += 4;
-  };
+  const heading = (value: string) => pdf.section(value);
 
-  // Cover block
-  text("SOW analysis and proposed journey", { size: 17, style: "bold", gap: 4 });
-  text(customerName, { size: 12, gap: 2 });
-  text(
-    `Source document: ${sowName ?? "attached SOW"} · Generated ${analysedAt.toISOString().slice(0, 16).replace("T", " ")} UTC`,
-    { size: 9, color: 110, gap: 6 },
-  );
+  // The masthead carries who and when. This is the one thing a reader must
+  // not miss: it is a draft, and the journey is a proposal.
   text(
     "Draft for discussion. The extracted section reflects what the SOW says; the journey is a proposal that a Technical Implementation Specialist (TIS) must confirm before it becomes the plan.",
-    { size: 9, style: "italic", color: 110, gap: 4 },
+    { size: 9, style: "italic", color: BRAND.grey, gap: 4 },
   );
 
   if (analysis.summary) {
@@ -143,12 +131,12 @@ export async function downloadSowAnalysisPdf({
   for (const section of EXTRACTION_SECTIONS) {
     const findings = analysis.extraction[section.key];
     if (findings.length === 0) continue;
-    space(30);
-    y += 4;
+    pdf.gap(4);
     text(section.label, { size: 10, style: "bold", gap: 1 });
     for (const f of findings) {
       text(`• ${f.text}${f.confidence !== "stated" ? ` (${f.confidence})` : ""}`, { indent: 10 });
-      if (f.quote) text(`“${f.quote}”`, { size: 8.5, style: "italic", color: 120, indent: 22 });
+      if (f.quote)
+        text(`“${f.quote}”`, { size: 8.5, style: "italic", color: BRAND.grey, indent: 22 });
     }
   }
 
@@ -163,7 +151,7 @@ export async function downloadSowAnalysisPdf({
     text(`“${analysis.deliveryWindow.quote}”`, {
       size: 8.5,
       style: "italic",
-      color: 120,
+      color: BRAND.grey,
       indent: 10,
     });
 
@@ -175,16 +163,15 @@ export async function downloadSowAnalysisPdf({
         ? `Proposed dates are counted from the recorded start date (${startDate.slice(0, 10)}).`
         : "Timing is shown in relative weeks; no calendar dates are proposed."
     } Estimated from the scope and dependencies the SOW describes — a planning recommendation, not committed dates and not an even split of the total.`,
-    { size: 9, style: "italic", color: 110, gap: 4 },
+    { size: 9, style: "italic", color: BRAND.grey, gap: 4 },
   );
   const groups = groupByStage(
     analysis.proposedJourney.map((stage, i) => ({ stage, timing: timings[i] ?? null })),
   );
   if (groups.length === 0) text("No journey was proposed from this document.");
   for (const group of groups) {
-    space(40);
-    y += 6;
-    text(group.label.toUpperCase(), { size: 9, style: "bold", color: 110, gap: 1 });
+    pdf.gap(6);
+    text(group.label.toUpperCase(), { size: 9, style: "bold", color: BRAND.grey, gap: 1 });
     for (const { stage, timing } of group.stages) {
       text(
         timing
@@ -192,46 +179,54 @@ export async function downloadSowAnalysisPdf({
               timing.overlapsWith.length > 0 ? " · overlaps" : ""
             }`
           : "Timing not proposed — insufficient information in the SOW",
-        { size: 8.5, color: 110, gap: 0 },
+        { size: 8.5, color: BRAND.grey, gap: 0 },
       );
       text(stage.name, { size: 10.5, style: "bold", gap: 1 });
       if (stage.purpose) text(stage.purpose, { indent: 10 });
       if (timing?.statedText)
-        text(`SOW timing: ${timing.statedText}`, { size: 9, color: 110, indent: 16 });
+        text(`SOW timing: ${timing.statedText}`, { size: 9, color: BRAND.grey, indent: 16 });
       if (timing?.rationale)
-        text(`Why this duration: ${timing.rationale}`, { size: 9, color: 110, indent: 16 });
+        text(`Why this duration: ${timing.rationale}`, { size: 9, color: BRAND.grey, indent: 16 });
       if (timing?.dependencyDriver)
-        text(`Timing depends on: ${timing.dependencyDriver}`, { size: 9, color: 110, indent: 16 });
+        text(`Timing depends on: ${timing.dependencyDriver}`, {
+          size: 9,
+          color: BRAND.grey,
+          indent: 16,
+        });
       if (timing && timing.overlapsWith.length > 0)
         text(`Runs alongside: ${timing.overlapsWith.join("; ")}`, {
           size: 9,
-          color: 110,
+          color: BRAND.grey,
           indent: 16,
         });
       if (timing?.beyondSowWindow)
         text("Extends past the delivery window the SOW states.", {
           size: 9,
-          color: 110,
+          color: BRAND.grey,
           indent: 16,
         });
 
       for (const w of stage.workstreams) text(`• ${w}`, { indent: 16 });
       if (stage.dependencies.length > 0)
-        text(`Depends on: ${stage.dependencies.join("; ")}`, { size: 9, color: 110, indent: 16 });
+        text(`Depends on: ${stage.dependencies.join("; ")}`, {
+          size: 9,
+          color: BRAND.grey,
+          indent: 16,
+        });
       if (stage.customerResponsibilities.length > 0)
         text(`Customer has to: ${stage.customerResponsibilities.join("; ")}`, {
           size: 9,
-          color: 110,
+          color: BRAND.grey,
           indent: 16,
         });
       if (stage.acceptanceCriteria.length > 0)
         text(`Accepted when: ${stage.acceptanceCriteria.join("; ")}`, {
           size: 9,
-          color: 110,
+          color: BRAND.grey,
           indent: 16,
           gap: 4,
         });
-      y += 4;
+      pdf.gap(4);
     }
   }
 
@@ -245,15 +240,14 @@ export async function downloadSowAnalysisPdf({
     for (const g of analysis.gaps) text(`• ${g}`, { indent: 10 });
   }
 
-  // Page numbers
-  const pages = doc.getNumberOfPages();
-  for (let i = 1; i <= pages; i += 1) {
-    doc.setPage(i);
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(8);
-    doc.setTextColor(140);
-    doc.text(`${customerName} · SOW analysis · Page ${i} of ${pages}`, marginX, bottom + 28);
-  }
-
-  doc.save(`${safeFileName(customerName)}-sow-analysis.pdf`);
+  const bytes = pdf.finish();
+  // Built in the browser and downloaded; nothing is sent to a server.
+  const url = URL.createObjectURL(
+    new Blob([bytes.slice().buffer as ArrayBuffer], { type: "application/pdf" }),
+  );
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `${safeFileName(customerName)}-sow-analysis.pdf`;
+  a.click();
+  URL.revokeObjectURL(url);
 }
