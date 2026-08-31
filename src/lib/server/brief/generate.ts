@@ -15,7 +15,7 @@ import type { Account, Brief, GongReport, OnboardingNote } from "../../presale-t
 import type { BriefJson } from "../schemas";
 import { appUrl } from "@/lib/app-url";
 import { stageDefinition } from "@/lib/lifecycle";
-import type { DeckPerson, DeckPlanOfWork } from "@/lib/kickoff-deck";
+import type { KickoffPerson, KickoffStage, KickoffTask } from "@/lib/kickoff-fields";
 
 /**
  * Who the customer is about to work with, and the plan they are about to run.
@@ -30,28 +30,76 @@ import type { DeckPerson, DeckPlanOfWork } from "@/lib/kickoff-deck";
  * slide, because "no project has been created yet" is exactly the thing a
  * kickoff meeting needs to discover before it starts.
  */
+type HandoffContext = {
+  team: KickoffPerson[];
+  stages: KickoffStage[];
+  customerTasks: KickoffTask[];
+  risks: Array<{ title: string; mitigation: string | null }>;
+  successCriteria: Array<{ description: string; target: string | null }>;
+  requirements: Array<{ title: string; inScope: boolean }>;
+  solutions: string[];
+  targetLaunchDate: string | null;
+};
+
+/**
+ * What the kickoff deck needs and the brief cannot know.
+ *
+ * The brief is a reading of sales calls. The deck is a meeting with the
+ * customer in the room, so it also needs the people they are about to work
+ * with, the plan they are about to run, and what has been recorded against the
+ * project since it was created.
+ *
+ * All of it degrades to nothing. A deck generated the day a deal closes has no
+ * project; every one of these comes back empty and the renderer marks the
+ * fields for the AE to complete before the call.
+ */
 async function loadHandoffContext(
   admin: SupabaseClient,
   account: Account,
   owners: { am: string | null; se: string | null },
-): Promise<{ team: DeckPerson[]; plan: DeckPlanOfWork | null }> {
-  const team: DeckPerson[] = [];
-  if (owners.am) team.push({ name: owners.am, role: "Account manager — commercial owner" });
-  if (owners.se) team.push({ name: owners.se, role: "Solutions engineer — technical design" });
+): Promise<HandoffContext> {
+  // Roles use the template's own wording, so a generated deck and a
+  // hand-built one read the same.
+  const team: KickoffPerson[] = [];
+  if (owners.se) {
+    team.push({ name: owners.se, role: "Solutions Consultant · Form and workflow build" });
+  }
+  if (owners.am) {
+    team.push({ name: owners.am, role: "Customer Success Manager · Your long-term partner" });
+  }
+
+  const empty: HandoffContext = {
+    team,
+    stages: [],
+    customerTasks: [],
+    risks: [],
+    successCriteria: [],
+    requirements: [],
+    solutions: [],
+    targetLaunchDate: null,
+  };
 
   const customerId = (account as any).customer_id as string | null | undefined;
-  if (!customerId) return { team, plan: null };
+  if (!customerId) return empty;
 
   const { data: impl } = await admin
     .from("implementations")
-    .select("id, name, target_launch_date, owner_id, portal_key")
+    .select("id, name, target_launch_date, owner_id, contract_start_date")
     .eq("customer_id", customerId)
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
-  if (!impl) return { team, plan: null };
+  if (!impl) return empty;
 
-  const [{ data: lead }, { data: stages }, { data: tasks }] = await Promise.all([
+  const [
+    { data: lead },
+    { data: stages },
+    { data: tasks },
+    { data: risks },
+    { data: criteria },
+    { data: requirements },
+    { data: solutions },
+  ] = await Promise.all([
     impl.owner_id
       ? admin.from("team_members").select("name").eq("id", impl.owner_id).maybeSingle()
       : Promise.resolve({ data: null }),
@@ -59,51 +107,86 @@ async function loadHandoffContext(
       .from("stage_instances")
       // `id` is what work_items joins on. Without it every customer-side task
       // resolves its stage to a dash, silently.
-      .select("id, stage_key, name, target_duration_days, position")
+      .select("id, stage_key, name, target_duration_days, position, entered_at")
       .eq("implementation_id", impl.id)
       .order("position", { ascending: true }),
     admin
       .from("work_items")
-      .select("title, stage_instance_id, position, party, status")
+      .select("title, stage_instance_id, position, due_at")
       .eq("implementation_id", impl.id)
       .eq("party", "customer")
       .neq("status", "done")
       .neq("status", "skipped")
       .order("position", { ascending: true })
       .limit(8),
+    admin
+      .from("risks")
+      .select("title, mitigation, severity")
+      .eq("implementation_id", impl.id)
+      .neq("status", "closed")
+      .order("identified_at", { ascending: false })
+      .limit(3),
+    admin
+      .from("success_criteria")
+      .select("description, target_value")
+      .eq("implementation_id", impl.id)
+      .limit(3),
+    admin.from("requirements").select("title, scope_status").eq("implementation_id", impl.id),
+    admin.from("technical_solutions").select("title").eq("implementation_id", impl.id).limit(3),
   ]);
 
   if ((lead as any)?.name) {
-    // First in the list: this is the person the room most needs to know.
+    // First in the list: the person the room most needs to know.
     team.unshift({
       name: (lead as any).name as string,
-      role: "Implementation lead — runs the project from here",
+      role: "Implementation Lead · Your main point of contact",
     });
   }
 
-  const stageName = new Map<string, string>();
   const rows = (stages ?? []) as Array<Record<string, any>>;
-  for (const st of rows) stageName.set(String(st["stage_key"]), String(st["name"]));
 
   return {
     team,
-    plan: {
-      implementationName: (impl.name as string) ?? account.name,
-      targetLaunchDate: (impl.target_launch_date as string | null) ?? null,
-      stages: rows.map((st) => ({
-        name: String(st["name"]),
-        // The template names the stage; the lifecycle definition says what
-        // "done" means there. The second is what a customer actually wants.
-        intent: stageDefinition(String(st["stage_key"]))?.intent ?? null,
-        targetDays: (st["target_duration_days"] as number | null) ?? null,
-      })),
-      firstCustomerTasks: ((tasks ?? []) as Array<Record<string, any>>).map((t) => ({
-        title: String(t["title"]),
-        stage: stageForInstance(rows, String(t["stage_instance_id"] ?? "")),
-      })),
-      planUrl: impl.portal_key ? `${appUrl()}/portal/plan/${impl.portal_key}` : null,
-    },
+    targetLaunchDate: (impl.target_launch_date as string | null) ?? null,
+    stages: rows.map((st) => ({
+      name: String(st["name"]),
+      // The template names the stage; the lifecycle definition says what
+      // "done" means there, which is what a customer actually wants.
+      intent: stageDefinition(String(st["stage_key"]))?.intent ?? null,
+      targetDays: (st["target_duration_days"] as number | null) ?? null,
+      startsOn: (st["entered_at"] as string | null) ?? null,
+    })),
+    customerTasks: ((tasks ?? []) as Array<Record<string, any>>).map((t) => ({
+      title: String(t["title"]),
+      stage: stageForInstance(rows, String(t["stage_instance_id"] ?? "")),
+      // The customer owns it; naming a person would be inventing one.
+      owner: null,
+      due: (t["due_at"] as string | null) ?? null,
+    })),
+    risks: ((risks ?? []) as Array<Record<string, any>>).map((r) => ({
+      title: String(r["title"]),
+      mitigation: (r["mitigation"] as string | null) ?? null,
+    })),
+    successCriteria: ((criteria ?? []) as Array<Record<string, any>>).map((c) => ({
+      description: String(c["description"]),
+      target: (c["target_value"] as string | null) ?? null,
+    })),
+    requirements: ((requirements ?? []) as Array<Record<string, any>>).map((r) => ({
+      title: String(r["title"]),
+      inScope: r["scope_status"] !== "out_of_scope",
+    })),
+    solutions: ((solutions ?? []) as Array<Record<string, any>>).map((s) => String(s["title"])),
   };
+}
+
+/** The deal contact, if their recorded role marks them as the technical one. */
+function itContactFor(account: Account): { name: string; role: string } | null {
+  const name = ((account as any).primary_contact_name as string | null)?.trim();
+  const role = ((account as any).primary_contact_role as string | null)?.trim();
+  if (!name || !role) return null;
+  return /\b(it|technical|system|integration|developer|engineer|cio|cto)\b/i.test(role)
+    ? { name, role }
+    : null;
 }
 
 /** work_items carries the stage as an instance id, not a key. */
@@ -241,44 +324,35 @@ export async function generateBrief(accountId: string, createdBy: string): Promi
       json = buildTemplateBrief(account, reports);
     }
 
-    // The deck is the kickoff and handoff deck, in the 2026 GoCanvas template's
-    // language. What it says is decided by buildKickoffDeck (pure, tested);
-    // this only gathers the three things the brief itself does not carry — what
-    // was sold, who the customer is on the deal record, and which calls it all
-    // came from — plus the customer's logo for the title slide.
-    const { buildKickoffDeck } = await import("@/lib/kickoff-deck");
-    const plan = buildKickoffDeck({
-      brief: json,
-      account: {
-        name: account.name,
-        domain: (account as any).domain ?? null,
-        arr: account.arr ?? null,
-        products: (account as any).products ?? null,
-        primaryContactName: (account as any).primary_contact_name ?? null,
-        primaryContactEmail: (account as any).primary_contact_email ?? null,
-        primaryContactRole: (account as any).primary_contact_role ?? null,
-        salesOwner: ownerNames.am,
-        seOwner: ownerNames.se,
-      },
-      sow: {
-        reference: (account as any).sow_reference ?? null,
-        signedDate: (account as any).sow_signed_date ?? null,
-        value: (account as any).sow_value ?? null,
-        documentName: (account as any).sow_document_name ?? null,
-        documentUrl: (account as any).sow_document_url ?? null,
-      },
-      sources: reports.map((r: GongReport) => ({
-        title: r.title,
-        reportType: r.report_type,
-        createdAt: r.created_at,
-      })),
-      team: handoff.team,
-      plan: handoff.plan,
+    // The deck IS the Client Kickoff Deck Template: what fills which of its
+    // 124 named fields is decided by buildKickoffData (pure, tested), and
+    // ./pptx draws the seventeen slides. Nothing about the layout is decided
+    // here.
+    const { buildKickoffData } = await import("@/lib/kickoff-fields");
+    const deckData = buildKickoffData({
+      clientName: account.name,
       preparedAt: new Date().toISOString(),
+      brief: json,
+      team: handoff.team,
+      // The people the brief named at the customer. Roles come through as the
+      // brief recorded them; inventing a title for somebody is worse than a
+      // blank the AE fills in.
+      clientPeople: json.stakeholders.map((p) => ({ name: p.name, role: p.role })),
+      stages: handoff.stages,
+      customerTasks: handoff.customerTasks,
+      risks: handoff.risks,
+      successCriteria: handoff.successCriteria,
+      requirements: handoff.requirements,
+      solutions: handoff.solutions,
+      targetLaunchDate: handoff.targetLaunchDate,
+      // The deal's champion, only when their recorded role says they are the
+      // technical contact. Putting the ops director on the IT slide because
+      // they are the only contact we have is how a wrong name gets read out.
+      itContact: itContactFor(account),
     });
 
     const { buildKickoffDeckFile } = await import("./pptx");
-    const deck = await buildKickoffDeckFile(plan, await customerLogoDataUri(admin, account));
+    const deck = await buildKickoffDeckFile(deckData, await customerLogoDataUri(admin, account));
     const path = `${accountId}/${briefRow.id}.pptx`;
     const { error: uploadError } = await admin.storage.from("portal-briefs").upload(path, deck, {
       contentType: "application/vnd.openxmlformats-officedocument.presentationml.presentation",

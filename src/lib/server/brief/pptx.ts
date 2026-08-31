@@ -1,59 +1,73 @@
 import PptxGenJS from "pptxgenjs";
 
-import { BRAND, copyrightLine } from "@/lib/brand";
-import type { DeckPlan, DeckSlide } from "@/lib/kickoff-deck";
+import { BRAND, pt } from "@/lib/brand";
 import { WORDMARK_NAVY, WORDMARK_WHITE } from "@/lib/brand-assets";
+import type { KickoffDeckData } from "@/lib/kickoff-fields";
 
 /**
- * The kickoff and handoff deck, drawn in the 2026 GoCanvas template's language.
+ * The Client Kickoff Deck, rendered as the .pptx an AE presents.
  *
- * WHAT IT COPIES FROM THE TEMPLATE, and why each one:
- *  - Navy `ink` title and divider slides with the white wordmark top-left. The
- *    template opens each act this way and it is what makes a deck read as
- *    chapters rather than as forty slides.
- *  - White content slides, navy headings, one cyan rule under each. Cyan is the
- *    only bright colour in the system; using it anywhere else makes it stop
- *    meaning anything.
- *  - The `© <year> GoCanvas` footer on every slide.
- *  - Arial, because that is what the template embeds and an AE will open this
- *    in PowerPoint and edit it.
+ * IT IS THE TEMPLATE. Slide order, copy, layout and colour all come from
+ * `Client Kickoff Deck Template.dc.html`; the sizes are the template's own
+ * pixels carried across by `pt()` (its canvas is 1920 wide, a slide is 720pt)
+ * rather than re-eyeballed. Static copy — the agenda, the About slide, the IT
+ * questions, the support tiers — is reproduced verbatim, because it is written
+ * copy and paraphrasing it would be an unrequested edit to somebody's deck.
  *
- * WHAT IT DOES NOT DO. It makes no decisions about content — which sections
- * exist and what they say is `src/lib/kickoff-deck.ts`, which is pure and
- * tested. This file is a renderer, and a renderer that starts choosing what to
- * include is a renderer nobody can test.
+ * THE ONE DELIBERATE DEVIATION. The HTML template leaves its example copy in
+ * place for a field nobody filled. Here an unfilled field draws a visible
+ * placeholder instead. A designer previewing a layout wants to see "Acme
+ * Construction"; an AE presenting to a customer who is not Acme must not.
+ *
+ * WHAT IT DOES NOT DO. It makes no decisions about content — which fields are
+ * filled and from what is `src/lib/kickoff-fields.ts`, which is pure and
+ * tested.
  */
 
-const MASTER = "GC_CONTENT";
-const MASTER_DARK = "GC_DIVIDER";
+const LIGHT = "GC_LIGHT";
+const DARK = "GC_DARK";
 
-/** LAYOUT_16x9 is 10 × 5.625 inches. Every coordinate below is in inches. */
+/** LAYOUT_16x9 is 10 × 5.625 inches. */
 const W = 10;
 const H = 5.625;
-const M = 0.55;
+/** The template's 120px page gutter. */
+const PAD = pt(120) / 72;
+/** Its 110px top padding. */
+const TOP = pt(110) / 72;
+
+const inch = (px: number) => pt(px) / 72;
 
 type Pptx = InstanceType<typeof PptxGenJS>;
+type Slide = ReturnType<Pptx["addSlide"]>;
 
-function defineMasters(pptx: Pptx, year: string) {
+const FOOT = "Proprietary & Confidential · Copyright 2026, Canvas Solutions, Inc.";
+
+function defineMasters(pptx: Pptx) {
   pptx.defineSlideMaster({
-    title: MASTER,
+    title: LIGHT,
     background: { color: BRAND.white },
     objects: [
-      // The wordmark lives on the master, not on each slide. pptxgenjs embeds
-      // an addImage per call — twenty slides meant twenty copies of the same
-      // PNG in the file, and twenty separate pictures for anyone editing it.
-      { image: { data: WORDMARK_NAVY, x: M, y: H - 0.5, w: 0.98, h: 0.19 } },
+      // The 24px navy strip down the left edge of every content slide.
+      {
+        rect: {
+          x: 0,
+          y: 0,
+          w: inch(24),
+          h: H,
+          fill: { color: BRAND.navy700 },
+          line: { color: BRAND.navy700, width: 0 },
+        },
+      },
       {
         text: {
-          text: year,
+          text: FOOT,
           options: {
-            x: W - 1.8,
-            y: H - 0.36,
-            w: 1.3,
-            h: 0.24,
-            fontSize: 7,
-            color: BRAND.fg2,
-            align: "right",
+            x: PAD,
+            y: H - 0.32,
+            w: W - PAD * 2,
+            h: 0.22,
+            fontSize: 6.5,
+            color: BRAND.ink300,
             fontFace: BRAND.fontSans,
           },
         },
@@ -62,330 +76,1132 @@ function defineMasters(pptx: Pptx, year: string) {
   });
 
   pptx.defineSlideMaster({
-    title: MASTER_DARK,
-    background: { color: BRAND.navy950 },
-    objects: [
-      { image: { data: WORDMARK_WHITE, x: M, y: H - 0.5, w: 0.98, h: 0.19 } },
-      {
-        text: {
-          text: year,
-          options: {
-            x: W - 1.8,
-            y: H - 0.36,
-            w: 1.3,
-            h: 0.24,
-            fontSize: 7,
-            color: "6E7C92",
-            align: "right",
-            fontFace: BRAND.fontSans,
-          },
-        },
-      },
-    ],
+    title: DARK,
+    // pptxgenjs cannot paint the template's radial gradient, so the flat
+    // deep navy is used and the bright end appears as the accent type on it.
+    background: { color: BRAND.navy900 },
+    objects: [{ image: { data: WORDMARK_WHITE, x: PAD, y: H - 0.55, w: 1.15, h: 0.22 } }],
   });
 }
 
-/**
- * The customer's logo, top-right on the title slide.
- *
- * Bounded by height and given the full width to breathe in: a wide wordmark and
- * a square badge both have to survive, and a squashed customer logo on slide
- * one reads as carelessness about the customer.
- */
-function addCustomerLogo(slide: ReturnType<Pptx["addSlide"]>, data: string) {
-  slide.addImage({
-    data,
-    x: W - M - 1.9,
-    y: M,
-    w: 1.9,
-    h: 0.62,
-    sizing: { type: "contain", w: 1.9, h: 0.62 },
-  });
-}
+/* --------------------------------------------------------------- helpers */
 
-function heading(slide: ReturnType<Pptx["addSlide"]>, title: string, subtitle?: string | null) {
-  slide.addText(title, {
-    x: M,
-    y: 0.42,
-    w: W - M * 2,
-    h: 0.42,
-    fontSize: 26,
+/** The uppercase accent line above every content-slide title. */
+function eyebrow(slide: Slide, text: string, color = BRAND.blue500) {
+  slide.addText(text.toUpperCase(), {
+    x: PAD,
+    y: TOP,
+    w: W - PAD * 2,
+    h: 0.24,
+    fontSize: pt(24),
     bold: true,
-    color: BRAND.navy900,
+    charSpacing: 1.6,
+    color,
     fontFace: BRAND.fontSans,
   });
-  // The cyan rule. One per slide, always under the heading, never anywhere else.
-  slide.addShape("rect", {
-    x: M,
-    y: 0.93,
-    w: 0.9,
-    h: 0.035,
-    fill: { color: BRAND.blue500 },
-    line: { color: BRAND.blue500, width: 0 },
-  });
-  if (subtitle) {
-    slide.addText(subtitle, {
-      x: M,
-      y: 1.02,
-      w: W - M * 2,
-      h: 0.3,
-      fontSize: 11.5,
-      color: BRAND.fg2,
-      fontFace: BRAND.fontSans,
-    });
-  }
 }
 
-const BODY_Y = (hasSubtitle: boolean) => (hasSubtitle ? 1.42 : 1.2);
+/** The 72px slide title. */
+function title(slide: Slide, text: string) {
+  slide.addText(text, {
+    x: PAD,
+    y: TOP + 0.24,
+    w: W - PAD * 2,
+    h: 0.5,
+    fontSize: pt(72),
+    bold: true,
+    color: BRAND.fg1,
+    fontFace: BRAND.fontSans,
+  });
+}
 
-function renderSlide(pptx: Pptx, s: DeckSlide) {
-  if (s.divider) {
-    const slide = pptx.addSlide({ masterName: MASTER_DARK });
-    slide.addShape("rect", {
-      x: M,
-      y: 2.2,
-      w: 1.1,
-      h: 0.05,
-      fill: { color: BRAND.blue500 },
-      line: { color: BRAND.blue500, width: 0 },
-    });
-    slide.addText(s.title, {
-      x: M,
-      y: 2.45,
-      w: W - M * 2,
-      h: 0.8,
-      fontSize: 34,
+const BODY_TOP = TOP + 0.95;
+
+export type FieldReader = (key: string) => { text: string; missing: boolean };
+
+/**
+ * Reads a field, or reports it unfilled.
+ *
+ * The placeholder is deliberately conspicuous. A pale, tasteful gap gets
+ * presented; something that looks unfinished gets filled in.
+ */
+function reader(data: KickoffDeckData): FieldReader {
+  return (key: string) => {
+    const v = data.fields[key];
+    return v
+      ? { text: v, missing: false }
+      : { text: "[ complete before the call ]", missing: true };
+  };
+}
+
+function fieldText(
+  slide: Slide,
+  get: FieldReader,
+  key: string,
+  opts: Parameters<Slide["addText"]>[1] & { color?: string },
+) {
+  const { text, missing } = get(key);
+  slide.addText(text, {
+    ...opts,
+    ...(missing ? { color: BRAND.danger, italic: true } : {}),
+    fontFace: BRAND.fontSans,
+  });
+}
+
+function card(slide: Slide, x: number, y: number, w: number, h: number, dark = false) {
+  slide.addShape("roundRect", {
+    x,
+    y,
+    w,
+    h,
+    rectRadius: 0.06,
+    fill: { color: dark ? BRAND.navy900 : BRAND.white },
+    line: { color: dark ? BRAND.navy900 : BRAND.ink100, width: dark ? 0 : 0.75 },
+  });
+}
+
+/* ----------------------------------------------------------- the 17 slides */
+
+function slide01Welcome(pptx: Pptx, get: FieldReader): Slide {
+  const s = pptx.addSlide({ masterName: DARK });
+  fieldText(s, get, "deck_eyebrow", {
+    x: PAD,
+    y: 1.55,
+    w: W - PAD * 2,
+    h: 0.26,
+    fontSize: pt(24),
+    bold: true,
+    charSpacing: 1.6,
+    color: BRAND.blue300,
+  });
+  // The template sets both lines at 128px, which fits "Acme Construction" on
+  // its 1920px canvas and nothing longer. A real customer name is whatever it
+  // is, so the second line is sized to fit rather than allowed to collide with
+  // the first — the failure mode this replaces was the two overlapping.
+  const client = get("client_name");
+  const nameSize = client.text.length <= 18 ? 128 : client.text.length <= 30 ? 92 : 64;
+  s.addText("Welcome,", {
+    x: PAD,
+    y: 1.9,
+    w: W - PAD * 2,
+    h: 0.55,
+    fontSize: pt(nameSize),
+    bold: true,
+    color: BRAND.white,
+    fontFace: BRAND.fontSans,
+  });
+  s.addText(client.text, {
+    x: PAD,
+    y: 1.9 + pt(nameSize) / 72 + 0.06,
+    w: W - PAD * 2,
+    h: 0.6,
+    fontSize: pt(nameSize),
+    bold: true,
+    italic: client.missing,
+    color: client.missing ? BRAND.danger : BRAND.blue300,
+    fontFace: BRAND.fontSans,
+  });
+  s.addText("Field work, digitized. Here's how we get your teams live.", {
+    x: PAD,
+    y: 3.38,
+    w: 5.8,
+    h: 0.32,
+    fontSize: pt(34),
+    color: BRAND.fgOnDark2,
+    fontFace: BRAND.fontSans,
+  });
+  const lead = get("gc_lead_name");
+  s.addText(`Prepared by ${lead.text} · Your GoCanvas implementation team`, {
+    x: PAD,
+    y: 3.78,
+    w: W - PAD * 2,
+    h: 0.26,
+    fontSize: pt(26),
+    color: lead.missing ? BRAND.danger : BRAND.fgOnDark3,
+    italic: lead.missing,
+    fontFace: BRAND.fontSans,
+  });
+  return s;
+}
+
+const AGENDA = [
+  "Introductions",
+  "Your goals and success measures",
+  "Workflows in scope",
+  "Timeline and responsibilities",
+  "Training, integrations and support",
+  "Mutual action plan",
+];
+
+function slide02Agenda(pptx: Pptx) {
+  const s = pptx.addSlide({ masterName: LIGHT });
+  const cardW = inch(660);
+  card(s, PAD, TOP, cardW, H - TOP * 2 + 0.1);
+  s.addText("TODAY", {
+    x: PAD + 0.3,
+    y: TOP + 0.35,
+    w: cardW - 0.6,
+    h: 0.22,
+    fontSize: pt(24),
+    bold: true,
+    charSpacing: 1.6,
+    color: BRAND.blue500,
+    fontFace: BRAND.fontSans,
+  });
+  s.addText("Your\nKickoff.", {
+    x: PAD + 0.3,
+    y: TOP + 0.62,
+    w: cardW - 0.6,
+    h: 0.95,
+    fontSize: pt(96),
+    bold: true,
+    color: BRAND.fg1,
+    fontFace: BRAND.fontSans,
+    lineSpacingMultiple: 0.95,
+  });
+  s.addText("30 minutes. We leave with a plan you've signed off on.", {
+    x: PAD + 0.3,
+    y: TOP + 1.68,
+    w: cardW - 0.6,
+    h: 0.4,
+    fontSize: pt(28),
+    color: BRAND.fg2,
+    fontFace: BRAND.fontSans,
+  });
+  s.addImage({ data: WORDMARK_NAVY, x: PAD + 0.3, y: H - TOP - 0.15, w: 1.05, h: 0.2 });
+
+  const listX = PAD + cardW + inch(80);
+  AGENDA.forEach((item, i) => {
+    const y = 1.35 + i * 0.44;
+    s.addText(String(i + 1).padStart(2, "0"), {
+      x: listX,
+      y,
+      w: 0.4,
+      h: 0.3,
+      fontSize: pt(24),
       bold: true,
-      color: BRAND.white,
+      color: BRAND.blue500,
       fontFace: BRAND.fontSans,
     });
-    if (s.subtitle) {
-      slide.addText(s.subtitle, {
-        x: M,
-        y: 3.3,
-        w: W - M * 2,
-        h: 0.4,
-        fontSize: 13,
-        color: "A9B6C7",
+    s.addText(item, {
+      x: listX + 0.42,
+      y: y - 0.03,
+      w: W - listX - PAD - 0.42,
+      h: 0.34,
+      fontSize: pt(36),
+      bold: true,
+      color: BRAND.fg1,
+      fontFace: BRAND.fontSans,
+    });
+  });
+}
+
+function slide03Introductions(pptx: Pptx, get: FieldReader) {
+  const s = pptx.addSlide({ masterName: LIGHT });
+  eyebrow(s, "Introductions");
+  title(s, "Your Team and Ours");
+
+  const colW = (W - PAD * 2 - inch(56)) / 2;
+  const rightX = PAD + colW + inch(56);
+
+  const heading = (x: number, key: string | null, text: string | null, color: string) => {
+    if (key) {
+      fieldText(s, get, key, {
+        x,
+        y: BODY_TOP,
+        w: colW,
+        h: 0.24,
+        fontSize: pt(26),
+        bold: true,
+        charSpacing: 0.8,
+        color,
+      });
+    } else {
+      s.addText(text!, {
+        x,
+        y: BODY_TOP,
+        w: colW,
+        h: 0.24,
+        fontSize: pt(26),
+        bold: true,
+        charSpacing: 0.8,
+        color,
         fontFace: BRAND.fontSans,
       });
     }
-    return;
-  }
+  };
+  heading(PAD, "client_name_short", null, BRAND.fg2);
+  heading(rightX, null, "GOCANVAS", BRAND.blue500);
 
-  const slide = pptx.addSlide({ masterName: MASTER });
-  heading(slide, s.title, s.subtitle);
-  const y = BODY_Y(Boolean(s.subtitle));
-  const h = H - y - 0.7;
-  const body = s.body;
-  if (!body) return;
-
-  if (body.kind === "absent") {
-    // Not a bullet and not styled like content: this is the deck telling the
-    // room something is missing, and it should not look like an answer.
-    slide.addShape("rect", {
-      x: M,
-      y,
-      w: W - M * 2,
-      h: 0.9,
-      fill: { color: "F2F5F8" },
-      line: { color: BRAND.border, width: 0.75 },
+  const person = (x: number, i: number, nameKey: string, roleKey: string, dark: boolean) => {
+    const y = BODY_TOP + 0.4 + i * 0.72;
+    card(s, x, y, colW, 0.6, dark);
+    fieldText(s, get, nameKey, {
+      x: x + 0.16,
+      y: y + 0.09,
+      w: colW - 0.32,
+      h: 0.24,
+      fontSize: pt(32),
+      bold: true,
+      color: dark ? BRAND.white : BRAND.fg1,
     });
-    slide.addText(body.note, {
-      x: M + 0.22,
-      y: y + 0.14,
-      w: W - M * 2 - 0.44,
-      h: 0.62,
-      fontSize: 12,
-      italic: true,
-      color: BRAND.navy900,
+    fieldText(s, get, roleKey, {
+      x: x + 0.16,
+      y: y + 0.33,
+      w: colW - 0.32,
+      h: 0.2,
+      fontSize: pt(24),
+      color: dark ? BRAND.fgOnDark3 : BRAND.fg2,
+    });
+  };
+
+  for (let i = 0; i < 3; i += 1) {
+    person(PAD, i, `client_person_${i + 1}_name`, `client_person_${i + 1}_role`, false);
+  }
+  person(rightX, 0, "gc_lead_name", "gc_lead_role", true);
+  person(rightX, 1, "gc_person_2_name", "gc_person_2_role", true);
+  person(rightX, 2, "gc_person_3_name", "gc_person_3_role", true);
+}
+
+const ABOUT_FEATURES: Array<[string, string]> = [
+  ["Digital forms", "Built to your workflow, changed in minutes."],
+  ["Dispatch", "Assign and track work in real time."],
+  ["Offline capture", "No signal needed; syncs when you're back."],
+  ["Reporting", "Approvals, alerts and dashboards."],
+];
+
+function slide04About(pptx: Pptx) {
+  const s = pptx.addSlide({ masterName: LIGHT });
+  eyebrow(s, "About GoCanvas");
+  title(s, "Your all-in-one digital solution for field work.");
+  s.addText(
+    "Part of the Nemetschek Group. We replace paper with connected digital workflows — inspections, work orders, dispatch and reporting, linked between the field and the office.",
+    {
+      x: PAD,
+      y: BODY_TOP + 0.15,
+      w: W - PAD * 2,
+      h: 0.4,
+      fontSize: pt(26),
+      color: BRAND.fg2,
       fontFace: BRAND.fontSans,
-      valign: "top",
-    });
-    return;
-  }
-
-  if (body.kind === "prose") {
-    slide.addText(body.text, {
-      x: M,
-      y,
-      w: W - M * 2,
-      h,
-      fontSize: 17,
-      color: "1B2534",
+    },
+  );
+  const colW = (W - PAD * 2 - inch(24) * 3) / 4;
+  ABOUT_FEATURES.forEach(([name, blurb], i) => {
+    const x = PAD + i * (colW + inch(24));
+    card(s, x, BODY_TOP + 0.75, colW, 0.85);
+    s.addText(name, {
+      x: x + 0.14,
+      y: BODY_TOP + 0.87,
+      w: colW - 0.28,
+      h: 0.22,
+      fontSize: pt(28),
+      bold: true,
+      color: BRAND.fg1,
       fontFace: BRAND.fontSans,
-      valign: "top",
-      lineSpacingMultiple: 1.25,
     });
-    return;
-  }
-
-  if (body.kind === "bullets") {
-    slide.addText(
-      body.items.map((b) => ({ text: b, options: { bullet: { code: "2022" }, breakLine: true } })),
-      {
-        x: M,
-        y,
-        w: W - M * 2,
-        h,
-        fontSize: 13.5,
-        color: "1B2534",
-        fontFace: BRAND.fontSans,
-        valign: "top",
-        lineSpacingMultiple: 1.3,
-      },
-    );
-    return;
-  }
-
-  if (body.kind === "pairs") {
-    // Two columns of label/value. A table would put a grid around eight facts
-    // that are not a grid; the template renders "at a glance" as a plain list.
-    slide.addTable(
-      body.items.map(([k, v]) => [
-        {
-          text: k,
-          options: { color: BRAND.fg2, bold: false, fontSize: 10.5, valign: "top" as const },
-        },
-        { text: v, options: { color: "1B2534", fontSize: 12.5, valign: "top" as const } },
-      ]),
-      {
-        x: M,
-        y,
-        w: W - M * 2,
-        colW: [2.4, W - M * 2 - 2.4],
-        fontFace: BRAND.fontSans,
-        border: [
-          { type: "none" },
-          { type: "none" },
-          { type: "solid", color: BRAND.border, pt: 0.5 },
-          { type: "none" },
-        ],
-        rowH: 0.3,
-        autoPage: true,
-        autoPageRepeatHeader: false,
-      },
-    );
-    return;
-  }
-
-  slide.addTable(
+    s.addText(blurb, {
+      x: x + 0.14,
+      y: BODY_TOP + 1.11,
+      w: colW - 0.28,
+      h: 0.44,
+      fontSize: pt(22),
+      color: BRAND.fg2,
+      fontFace: BRAND.fontSans,
+    });
+  });
+  s.addText(
     [
-      body.header.map((cell) => ({
-        text: cell,
-        options: {
-          bold: true,
-          color: BRAND.white,
-          fill: { color: BRAND.navy900 },
-          fontSize: 10.5,
-        },
-      })),
-      ...body.rows.map((r) =>
-        r.map((cell) => ({ text: cell, options: { color: "1B2534", fontSize: 10.5 } })),
-      ),
+      { text: "12,000", options: { bold: true, color: BRAND.blue500, fontSize: pt(60) } },
+      {
+        text: "  companies digitizing field work with us.        ",
+        options: { fontSize: pt(22), color: BRAND.fg2 },
+      },
+      { text: "97%", options: { bold: true, color: BRAND.blue500, fontSize: pt(60) } },
+      { text: "  customer satisfaction.", options: { fontSize: pt(22), color: BRAND.fg2 } },
     ],
     {
-      x: M,
-      y,
-      w: W - M * 2,
+      x: PAD,
+      y: H - TOP - 0.55,
+      w: W - PAD * 2,
+      h: 0.5,
       fontFace: BRAND.fontSans,
-      border: { type: "solid", color: BRAND.border, pt: 0.5 },
-      valign: "top",
-      autoPage: true,
-      autoPageRepeatHeader: true,
-      autoPageSlideStartY: 1.2,
+      valign: "middle",
     },
   );
 }
 
+function divider(pptx: Pptx, section: string, heading: string) {
+  const s = pptx.addSlide({ masterName: DARK });
+  s.addText(section.toUpperCase(), {
+    x: 0,
+    y: 2.15,
+    w: W,
+    h: 0.24,
+    align: "center",
+    fontSize: pt(24),
+    bold: true,
+    charSpacing: 1.6,
+    color: BRAND.blue300,
+    fontFace: BRAND.fontSans,
+  });
+  s.addText(heading, {
+    x: 0,
+    y: 2.45,
+    w: W,
+    h: 0.75,
+    align: "center",
+    fontSize: pt(150),
+    bold: true,
+    color: BRAND.white,
+    fontFace: BRAND.fontSans,
+  });
+}
+
+function slide06Goals(pptx: Pptx, get: FieldReader) {
+  const s = pptx.addSlide({ masterName: LIGHT });
+  eyebrow(s, "Why we're here");
+  title(s, "Your Goals for This Rollout");
+  s.addText("What you told us matters most — confirm or correct.", {
+    x: PAD,
+    y: BODY_TOP - 0.08,
+    w: W - PAD * 2,
+    h: 0.24,
+    fontSize: pt(26),
+    color: BRAND.fg2,
+    italic: true,
+    fontFace: BRAND.fontSans,
+  });
+  for (let i = 0; i < 4; i += 1) {
+    const y = BODY_TOP + 0.35 + i * 0.72;
+    s.addText(String(i + 1).padStart(2, "0"), {
+      x: PAD,
+      y,
+      w: 0.5,
+      h: 0.3,
+      fontSize: pt(32),
+      bold: true,
+      color: BRAND.blue500,
+      fontFace: BRAND.fontSans,
+    });
+    fieldText(s, get, `goal_${i + 1}`, {
+      x: PAD + 0.55,
+      y,
+      w: W - PAD * 2 - 0.55,
+      h: 0.28,
+      fontSize: pt(34),
+      bold: true,
+      color: BRAND.fg1,
+    });
+    const detail = get(`goal_${i + 1}_detail`);
+    if (!detail.missing) {
+      s.addText(detail.text, {
+        x: PAD + 0.55,
+        y: y + 0.28,
+        w: W - PAD * 2 - 0.55,
+        h: 0.24,
+        fontSize: pt(24),
+        color: BRAND.fg2,
+        fontFace: BRAND.fontSans,
+      });
+    }
+  }
+}
+
+function slide07Success(pptx: Pptx, get: FieldReader) {
+  const s = pptx.addSlide({ masterName: LIGHT });
+  eyebrow(s, "Success criteria");
+  title(s, "How We'll Measure Success");
+  const colW = (W - PAD * 2 - inch(28) * 3) / 4;
+  for (let i = 0; i < 4; i += 1) {
+    const x = PAD + i * (colW + inch(28));
+    card(s, x, BODY_TOP + 0.1, colW, 1.4);
+    // The metric is the criterion, not a fixed word. See kickoff-fields.
+    const metric = get(`kpi_${i + 1}_metric`);
+    s.addText(metric.text.toUpperCase(), {
+      x: x + 0.14,
+      y: BODY_TOP + 0.22,
+      w: colW - 0.28,
+      h: 0.3,
+      fontSize: pt(22),
+      bold: true,
+      charSpacing: 1,
+      italic: metric.missing,
+      color: metric.missing ? BRAND.danger : BRAND.blue500,
+      fontFace: BRAND.fontSans,
+    });
+    fieldText(s, get, `kpi_${i + 1}_value`, {
+      x: x + 0.14,
+      y: BODY_TOP + 0.58,
+      w: colW - 0.28,
+      h: 0.52,
+      fontSize: pt(80),
+      bold: true,
+      color: BRAND.blue500,
+    });
+    // The qualifier is left to the presenter, so it is drawn only when it is
+    // there — an empty line beats a red one on a slide the customer reads.
+    const qualifier = get(`kpi_${i + 1}_label`);
+    if (!qualifier.missing) {
+      s.addText(qualifier.text, {
+        x: x + 0.14,
+        y: BODY_TOP + 1.12,
+        w: colW - 0.28,
+        h: 0.26,
+        fontSize: pt(20),
+        color: BRAND.fg2,
+        fontFace: BRAND.fontSans,
+      });
+    }
+  }
+
+  s.addText("WHAT GOOD LOOKS LIKE AT DAY 90", {
+    x: PAD,
+    y: BODY_TOP + 1.68,
+    w: W - PAD * 2,
+    h: 0.2,
+    fontSize: pt(24),
+    bold: true,
+    charSpacing: 1.2,
+    color: BRAND.blue500,
+    fontFace: BRAND.fontSans,
+  });
+  fieldText(s, get, "day_90_definition", {
+    x: PAD,
+    y: BODY_TOP + 1.92,
+    w: W - PAD * 2,
+    h: 0.4,
+    fontSize: pt(26),
+    color: BRAND.fg1,
+  });
+}
+
+/**
+ * A header-and-rows grid in the template's style: tinted header, hairline
+ * rules between rows.
+ *
+ * Row height FOLLOWS the content. A fixed pitch is what put "Send three real
+ * export files from Sage" through the rule under it and split "01" across two
+ * lines — real rows are not all one line, and a table that assumes they are
+ * fails on the first long action item.
+ */
+function grid(
+  s: Slide,
+  y: number,
+  cols: number[],
+  header: string[],
+  rows: Array<Array<{ text: string; missing?: boolean; bold?: boolean; muted?: boolean }>>,
+) {
+  const total = cols.reduce((a, b) => a + b, 0);
+  const scale = (W - PAD * 2) / total;
+  const widths = cols.map((c) => c * scale);
+  const size = pt(26);
+  const lineH = 0.17;
+  const headH = 0.32;
+
+  let x = PAD;
+  header.forEach((h, i) => {
+    s.addShape("rect", {
+      x,
+      y,
+      w: widths[i]!,
+      h: headH,
+      fill: { color: BRAND.ink050 },
+      line: { color: BRAND.ink050, width: 0 },
+    });
+    s.addText(h, {
+      x: x + 0.08,
+      y,
+      w: widths[i]! - 0.16,
+      h: headH,
+      fontSize: size,
+      bold: true,
+      color: BRAND.fg1,
+      valign: "middle",
+      fontFace: BRAND.fontSans,
+    });
+    x += widths[i]!;
+  });
+
+  let ry = y + headH;
+  for (const row of rows) {
+    // Rough but reliable: Arial at this size averages a little under half the
+    // point size per character, so a column's capacity is its width in points
+    // over that. Erring long costs a little whitespace; erring short costs an
+    // overlap, which is the bug this replaces.
+    const lines = Math.max(
+      1,
+      ...row.map((c, i) =>
+        Math.ceil(c.text.length / Math.max(6, (widths[i]! * 72 - 12) / (size * 0.5))),
+      ),
+    );
+    const rowH = Math.max(0.32, lines * lineH + 0.14);
+    let rx = PAD;
+    row.forEach((c, i) => {
+      s.addText(c.text, {
+        x: rx + 0.08,
+        y: ry,
+        w: widths[i]! - 0.16,
+        h: rowH,
+        fontSize: size,
+        bold: c.bold ?? false,
+        italic: c.missing ?? false,
+        color: c.missing ? BRAND.danger : c.muted ? BRAND.fg2 : BRAND.fg1,
+        valign: "middle",
+        fontFace: BRAND.fontSans,
+      });
+      rx += widths[i]!;
+    });
+    ry += rowH;
+    s.addShape("line", {
+      x: PAD,
+      y: ry,
+      w: W - PAD * 2,
+      h: 0,
+      line: { color: BRAND.ink100, width: 0.5 },
+    });
+  }
+  return ry;
+}
+
+function cell(get: FieldReader, key: string, opts: { bold?: boolean; muted?: boolean } = {}) {
+  const { text, missing } = get(key);
+  return { text, missing, ...opts };
+}
+
+function slide08Scope(pptx: Pptx, get: FieldReader) {
+  const s = pptx.addSlide({ masterName: LIGHT });
+  eyebrow(s, "Scope");
+  title(s, "Workflows in Scope");
+  const phase = (i: number) => ({ text: i < 3 ? "Phase 1" : "Phase 2", muted: true });
+  grid(
+    s,
+    BODY_TOP + 0.1,
+    [1, 3, 2.4, 2, 1.6],
+    ["Phase", "Workflow", "Replaces", "Teams", "Build owner"],
+    [0, 1, 2, 3, 4].map((i) => [
+      phase(i),
+      cell(get, `scope_${i + 1}_workflow`, { bold: true }),
+      cell(get, `scope_${i + 1}_replaces`, { muted: true }),
+      cell(get, `scope_${i + 1}_teams`, { muted: true }),
+      i < 3
+        ? { text: "GoCanvas", muted: true }
+        : cell(get, `scope_${i + 1}_owner`, { muted: true }),
+    ]),
+  );
+  const out = get("out_of_scope");
+  s.addText(
+    [
+      { text: "Out of phase one:  ", options: { bold: true, color: BRAND.fg1 } },
+      {
+        text: out.text,
+        options: { color: out.missing ? BRAND.danger : BRAND.fg2, italic: out.missing },
+      },
+    ],
+    {
+      x: PAD,
+      y: H - TOP - 0.35,
+      w: W - PAD * 2,
+      h: 0.3,
+      fontSize: pt(26),
+      fontFace: BRAND.fontSans,
+    },
+  );
+}
+
+function slide10Timeline(pptx: Pptx, get: FieldReader) {
+  const s = pptx.addSlide({ masterName: LIGHT });
+  eyebrow(s, "Next 90 days");
+  title(s, "Implementation Timeline");
+
+  const colW = (W - PAD * 2) / 5;
+  const railY = BODY_TOP + 0.52;
+  s.addShape("line", {
+    x: PAD + colW / 2,
+    y: railY,
+    w: W - PAD * 2 - colW,
+    h: 0,
+    line: { color: BRAND.blue500, width: 1.5 },
+  });
+
+  for (let i = 0; i < 5; i += 1) {
+    const cx = PAD + colW * i + colW / 2;
+    const d = inch(150);
+    s.addShape("ellipse", {
+      x: cx - d / 2,
+      y: railY - d / 2,
+      w: d,
+      h: d,
+      fill: { color: BRAND.white },
+      line: { color: BRAND.blue500, width: 1.5 },
+    });
+    const date = get(`phase_${i + 1}_date`);
+    // Sized so "Week 10" and "Jan 12" both sit on one line inside the circle;
+    // at the template's own 26px they wrapped to "We / ek 1".
+    s.addText(date.text, {
+      x: cx - d / 2,
+      y: railY - d / 2,
+      w: d,
+      h: d,
+      align: "center",
+      valign: "middle",
+      margin: 0,
+      fontSize: pt(date.missing ? 15 : 22),
+      bold: true,
+      color: date.missing ? BRAND.danger : BRAND.fg1,
+      fontFace: BRAND.fontSans,
+    });
+    fieldText(s, get, `phase_${i + 1}_name`, {
+      x: cx - colW / 2,
+      y: railY + 0.45,
+      w: colW,
+      h: 0.24,
+      align: "center",
+      fontSize: pt(28),
+      bold: true,
+      color: BRAND.fg1,
+    });
+    fieldText(s, get, `phase_${i + 1}_detail`, {
+      x: cx - colW / 2 + 0.08,
+      y: railY + 0.69,
+      w: colW - 0.16,
+      h: 0.6,
+      align: "center",
+      fontSize: pt(24),
+      color: BRAND.fg2,
+    });
+  }
+
+  const noteW = (W - PAD * 2 - 0.3) / 2;
+  const noteY = H - TOP - 0.5;
+  const note = (x: number, label: string, key: string) => {
+    s.addText(label.toUpperCase(), {
+      x,
+      y: noteY,
+      w: noteW,
+      h: 0.18,
+      fontSize: pt(22),
+      bold: true,
+      charSpacing: 1.2,
+      color: BRAND.blue500,
+      fontFace: BRAND.fontSans,
+    });
+    fieldText(s, get, key, {
+      x,
+      y: noteY + 0.2,
+      w: noteW,
+      h: 0.3,
+      fontSize: pt(24),
+      color: BRAND.fg1,
+    });
+  };
+  note(PAD, "We need from you", "need_from_client");
+  note(PAD + noteW + 0.3, "Biggest risk to the date", "timeline_risk");
+}
+
+const RACI_ROWS = [
+  "Form and workflow build",
+  "User accounts and permissions",
+  "Devices in the field",
+  "Change management with crews",
+  "Reporting and business reviews",
+];
+
+function slide11Roles(pptx: Pptx, get: FieldReader) {
+  const s = pptx.addSlide({ masterName: LIGHT });
+  eyebrow(s, "Ownership");
+  title(s, "Roles and Responsibilities");
+  grid(
+    s,
+    BODY_TOP + 0.1,
+    [3.4, 2.4, 2.2],
+    ["Responsibility", "Owner", "Supported by"],
+    RACI_ROWS.map((r, i) => [
+      { text: r, bold: true },
+      cell(get, `raci_${i + 1}_owner`),
+      cell(get, `raci_${i + 1}_support`, { muted: true }),
+    ]),
+  );
+}
+
+const TRAINING_BLURBS = [
+  "Your team learns to build and change forms without waiting on us.",
+  "Short, on their phones, on a real job. No classroom time.",
+  "Reading the dashboard, spotting gaps, exporting for audits.",
+];
+
+function slide12Training(pptx: Pptx, get: FieldReader) {
+  const s = pptx.addSlide({ masterName: LIGHT });
+  eyebrow(s, "Adoption");
+  title(s, "Training and Rollout");
+  s.addText("Pilot first, then scale crew by crew.", {
+    x: PAD,
+    y: BODY_TOP - 0.08,
+    w: W - PAD * 2,
+    h: 0.24,
+    fontSize: pt(28),
+    italic: true,
+    color: BRAND.blue500,
+    fontFace: BRAND.fontSans,
+  });
+  const colW = (W - PAD * 2 - inch(28) * 2) / 3;
+  for (let i = 0; i < 3; i += 1) {
+    const x = PAD + i * (colW + inch(28));
+    card(s, x, BODY_TOP + 0.35, colW, 1.35);
+    fieldText(s, get, `training_${i + 1}_title`, {
+      x: x + 0.16,
+      y: BODY_TOP + 0.5,
+      w: colW - 0.32,
+      h: 0.26,
+      fontSize: pt(32),
+      bold: true,
+      color: BRAND.fg1,
+    });
+    fieldText(s, get, `training_${i + 1}_who`, {
+      x: x + 0.16,
+      y: BODY_TOP + 0.78,
+      w: colW - 0.32,
+      h: 0.3,
+      fontSize: pt(24),
+      color: BRAND.blue500,
+    });
+    s.addText(TRAINING_BLURBS[i]!, {
+      x: x + 0.16,
+      y: BODY_TOP + 1.1,
+      w: colW - 0.32,
+      h: 0.5,
+      fontSize: pt(24),
+      color: BRAND.fg2,
+      fontFace: BRAND.fontSans,
+    });
+  }
+  const seats = get("licensed_seats");
+  const renewal = get("renewal_date");
+  s.addText(
+    [
+      { text: "Licensed seats: ", options: { bold: true, color: BRAND.fg1 } },
+      {
+        text: seats.text,
+        options: { color: seats.missing ? BRAND.danger : BRAND.fg2, italic: seats.missing },
+      },
+      { text: "   ·   Renewal ", options: { bold: true, color: BRAND.fg1 } },
+      {
+        text: renewal.text,
+        options: { color: renewal.missing ? BRAND.danger : BRAND.fg2, italic: renewal.missing },
+      },
+    ],
+    {
+      x: PAD,
+      y: H - TOP - 0.3,
+      w: W - PAD * 2,
+      h: 0.3,
+      fontSize: pt(24),
+      fontFace: BRAND.fontSans,
+    },
+  );
+}
+
+const IT_REQUIREMENTS = [
+  "Single sign-on provider and rollout window",
+  "Device model and OS version in the field",
+  "App distribution method (MDM or store)",
+  "Data retention and export requirements",
+];
+
+function slide13Integrations(pptx: Pptx, get: FieldReader) {
+  const s = pptx.addSlide({ masterName: LIGHT });
+  eyebrow(s, "Technical setup");
+  title(s, "Integrations and IT Requirements");
+
+  const colW = (W - PAD * 2 - 0.4) / 2;
+  s.addText("SYSTEMS WE'RE CONNECTING", {
+    x: PAD,
+    y: BODY_TOP + 0.1,
+    w: colW,
+    h: 0.2,
+    fontSize: pt(24),
+    bold: true,
+    charSpacing: 1.2,
+    color: BRAND.blue500,
+    fontFace: BRAND.fontSans,
+  });
+  for (let i = 0; i < 3; i += 1) {
+    fieldText(s, get, `integration_${i + 1}`, {
+      x: PAD,
+      y: BODY_TOP + 0.4 + i * 0.34,
+      w: colW,
+      h: 0.28,
+      fontSize: pt(26),
+      color: BRAND.fg1,
+    });
+  }
+
+  const rx = PAD + colW + 0.4;
+  s.addText("WHAT IT NEEDS TO CONFIRM", {
+    x: rx,
+    y: BODY_TOP + 0.1,
+    w: colW,
+    h: 0.2,
+    fontSize: pt(24),
+    bold: true,
+    charSpacing: 1.2,
+    color: BRAND.blue500,
+    fontFace: BRAND.fontSans,
+  });
+  IT_REQUIREMENTS.forEach((r, i) => {
+    s.addText(`•  ${r}`, {
+      x: rx,
+      y: BODY_TOP + 0.4 + i * 0.3,
+      w: colW,
+      h: 0.26,
+      fontSize: pt(24),
+      color: BRAND.fg1,
+      fontFace: BRAND.fontSans,
+    });
+  });
+
+  const contact = get("it_contact");
+  s.addText(
+    [
+      { text: "Named IT contact: ", options: { bold: true, color: BRAND.fg1 } },
+      {
+        text: contact.text,
+        options: { color: contact.missing ? BRAND.danger : BRAND.fg2, italic: contact.missing },
+      },
+    ],
+    {
+      x: PAD,
+      y: H - TOP - 0.3,
+      w: W - PAD * 2,
+      h: 0.3,
+      fontSize: pt(24),
+      fontFace: BRAND.fontSans,
+    },
+  );
+}
+
+const SUPPORT_TIERS: Array<[string, string]> = [
+  ["Day to day", "Support team"],
+  ["Through go-live", "Your implementation lead"],
+  ["Something urgent", "Escalation path"],
+];
+
+function slide14Support(pptx: Pptx, get: FieldReader) {
+  const s = pptx.addSlide({ masterName: LIGHT });
+  eyebrow(s, "Support");
+  title(s, "How to Reach Us");
+  const colW = (W - PAD * 2 - inch(28) * 2) / 3;
+  SUPPORT_TIERS.forEach(([when, who], i) => {
+    const x = PAD + i * (colW + inch(28));
+    card(s, x, BODY_TOP + 0.15, colW, 1.2);
+    s.addText(when.toUpperCase(), {
+      x: x + 0.16,
+      y: BODY_TOP + 0.3,
+      w: colW - 0.32,
+      h: 0.2,
+      fontSize: pt(22),
+      bold: true,
+      charSpacing: 1.2,
+      color: BRAND.blue500,
+      fontFace: BRAND.fontSans,
+    });
+    s.addText(who, {
+      x: x + 0.16,
+      y: BODY_TOP + 0.54,
+      w: colW - 0.32,
+      h: 0.24,
+      fontSize: pt(30),
+      bold: true,
+      color: BRAND.fg1,
+      fontFace: BRAND.fontSans,
+    });
+    fieldText(s, get, `support_tier_${i + 1}`, {
+      x: x + 0.16,
+      y: BODY_TOP + 0.82,
+      w: colW - 0.32,
+      h: 0.5,
+      fontSize: pt(24),
+      color: BRAND.fg2,
+    });
+  });
+  s.addText("We're here to support your business — not just your account.", {
+    x: PAD,
+    y: H - TOP - 0.3,
+    w: W - PAD * 2,
+    h: 0.3,
+    fontSize: pt(26),
+    italic: true,
+    color: BRAND.fg2,
+    fontFace: BRAND.fontSans,
+  });
+}
+
+function slide15Risks(pptx: Pptx, get: FieldReader) {
+  const s = pptx.addSlide({ masterName: LIGHT });
+  eyebrow(s, "Before we start");
+  title(s, "Risks and Open Questions");
+  for (let i = 0; i < 3; i += 1) {
+    const y = BODY_TOP + 0.15 + i * 0.75;
+    card(s, PAD, y, W - PAD * 2, 0.62);
+    fieldText(s, get, `risk_${i + 1}`, {
+      x: PAD + 0.18,
+      y: y + 0.09,
+      w: W - PAD * 2 - 0.36,
+      h: 0.26,
+      fontSize: pt(30),
+      bold: true,
+      color: BRAND.fg1,
+    });
+    fieldText(s, get, `risk_${i + 1}_mitigation`, {
+      x: PAD + 0.18,
+      y: y + 0.35,
+      w: W - PAD * 2 - 0.36,
+      h: 0.22,
+      fontSize: pt(24),
+      color: BRAND.fg2,
+    });
+  }
+  s.addText("Yours to add — what are we not seeing?", {
+    x: PAD,
+    y: H - TOP - 0.28,
+    w: W - PAD * 2,
+    h: 0.28,
+    fontSize: pt(26),
+    italic: true,
+    color: BRAND.blue500,
+    fontFace: BRAND.fontSans,
+  });
+}
+
+function slide16ActionPlan(pptx: Pptx, get: FieldReader) {
+  const s = pptx.addSlide({ masterName: LIGHT });
+  eyebrow(s, "Next 30 days");
+  title(s, "Mutual Action Plan");
+  grid(
+    s,
+    BODY_TOP + 0.1,
+    [0.8, 3.2, 2.6, 2.1, 1.3],
+    ["#", "Action", "Why it matters", "Owner", "Due"],
+    [0, 1, 2, 3].map((i) => [
+      { text: String(i + 1).padStart(2, "0"), bold: true },
+      cell(get, `action_${i + 1}`, { bold: true }),
+      cell(get, `action_${i + 1}_why`, { muted: true }),
+      cell(get, `action_${i + 1}_owner`),
+      cell(get, `action_${i + 1}_due`),
+    ]),
+  );
+  s.addText("Recap and calendar holds in your inbox within 24 hours.", {
+    x: PAD,
+    y: H - TOP - 0.3,
+    w: W - PAD * 2,
+    h: 0.3,
+    fontSize: pt(26),
+    italic: true,
+    color: BRAND.fg2,
+    fontFace: BRAND.fontSans,
+  });
+}
+
+function slide17Close(pptx: Pptx, get: FieldReader) {
+  const s = pptx.addSlide({ masterName: DARK });
+  s.addText("Thank you", {
+    x: PAD,
+    y: 1.7,
+    w: W - PAD * 2,
+    h: 0.7,
+    fontSize: pt(128),
+    bold: true,
+    color: BRAND.white,
+    fontFace: BRAND.fontSans,
+  });
+  s.addText("Next time we meet, your crews will be filing from the app.", {
+    x: PAD,
+    y: 2.5,
+    w: W - PAD * 2,
+    h: 0.32,
+    fontSize: pt(34),
+    color: BRAND.fgOnDark2,
+    fontFace: BRAND.fontSans,
+  });
+  const items: Array<[string, string]> = [
+    ["Go-live", "kpi_4_value_repeat"],
+    ["Next touchpoint", "next_meeting"],
+    ["Your lead", "gc_lead_name"],
+  ];
+  const colW = (W - PAD * 2) / 3;
+  items.forEach(([label, key], i) => {
+    const x = PAD + i * colW;
+    s.addText(label.toUpperCase(), {
+      x,
+      y: 3.35,
+      w: colW,
+      h: 0.2,
+      fontSize: pt(22),
+      bold: true,
+      charSpacing: 1.2,
+      color: BRAND.blue300,
+      fontFace: BRAND.fontSans,
+    });
+    const v = get(key);
+    s.addText(v.text, {
+      x,
+      y: 3.58,
+      w: colW - 0.2,
+      h: 0.32,
+      fontSize: pt(40),
+      bold: true,
+      italic: v.missing,
+      color: v.missing ? BRAND.warning : BRAND.white,
+      fontFace: BRAND.fontSans,
+    });
+  });
+}
+
+/* -------------------------------------------------------------------- entry */
+
 export async function buildKickoffDeckFile(
-  plan: DeckPlan,
-  customerLogo?: string | null,
+  data: KickoffDeckData,
+  clientLogo?: string | null,
 ): Promise<Buffer> {
   const pptx = new PptxGenJS();
   pptx.layout = "LAYOUT_16x9";
   pptx.author = "GoCanvas";
   pptx.company = "GoCanvas";
-  pptx.title = `Kickoff and handoff — ${plan.accountName}`;
-  defineMasters(pptx, copyrightLine(plan.preparedAt));
+  pptx.title = `Client kickoff — ${data.fields["client_name"] ?? "GoCanvas"}`;
+  defineMasters(pptx);
 
-  /* 1 — Title. The template's opener: navy field, wordmark, big white title. */
-  const title = pptx.addSlide({ masterName: MASTER_DARK });
-  if (customerLogo) addCustomerLogo(title, customerLogo);
-  title.addText("Kickoff & Handoff", {
-    x: M,
-    y: 1.9,
-    w: W - M * 2,
-    h: 0.44,
-    fontSize: 15,
-    color: BRAND.blue500,
-    fontFace: BRAND.fontSans,
-    charSpacing: 2,
-  });
-  title.addText(plan.accountName, {
-    x: M,
-    y: 2.35,
-    w: W - M * 2,
-    h: 1.1,
-    fontSize: 40,
-    bold: true,
-    color: BRAND.white,
-    fontFace: BRAND.fontSans,
-  });
-  title.addText("Sales to implementation — what we heard, what we sold, what happens next", {
-    x: M,
-    y: 3.45,
-    w: W - M * 2,
-    h: 0.4,
-    fontSize: 13,
-    color: "A9B6C7",
-    fontFace: BRAND.fontSans,
-  });
-  title.addText(new Date(plan.preparedAt).toLocaleDateString("en-US", { dateStyle: "long" }), {
-    x: M,
-    y: 4.05,
-    w: W - M * 2,
-    h: 0.3,
-    fontSize: 11,
-    color: "6E7C92",
-    fontFace: BRAND.fontSans,
-  });
+  const get = reader(data);
 
-  /* 2 — Agenda, listing only the acts that are actually in this deck. */
-  const agenda = pptx.addSlide({ masterName: MASTER });
-  heading(agenda, "Agenda");
-  agenda.addText(
-    plan.agenda.map((a, i) => ({
-      text: `${String(i + 1).padStart(2, "0")}   ${a}`,
-      options: { breakLine: true },
-    })),
-    {
-      x: M,
-      y: 1.35,
-      w: W - M * 2,
-      h: H - 2.1,
-      fontSize: 16,
-      color: "1B2534",
-      fontFace: BRAND.fontSans,
-      valign: "top",
-      lineSpacingMultiple: 1.6,
-    },
-  );
-
-  for (const slide of plan.slides) renderSlide(pptx, slide);
-
-  /* Closing. */
-  const end = pptx.addSlide({ masterName: MASTER_DARK });
-  end.addText("Thank you", {
-    x: M,
-    y: 2.4,
-    w: W - M * 2,
-    h: 0.8,
-    fontSize: 34,
-    bold: true,
-    color: BRAND.white,
-    fontFace: BRAND.fontSans,
-  });
+  const welcome = slide01Welcome(pptx, get);
+  if (clientLogo) {
+    // Top-right of the title slide, bounded so a wide wordmark and a square
+    // badge both survive. A squashed customer logo on slide one reads as
+    // carelessness about the customer.
+    welcome.addImage({
+      data: clientLogo,
+      x: W - PAD - 1.9,
+      y: 0.5,
+      w: 1.9,
+      h: 0.62,
+      sizing: { type: "contain", w: 1.9, h: 0.62 },
+    });
+  }
+  slide02Agenda(pptx);
+  slide03Introductions(pptx, get);
+  if (data.optionalSlides.about) slide04About(pptx);
+  divider(pptx, "Section 01", "Your Business");
+  slide06Goals(pptx, get);
+  slide07Success(pptx, get);
+  slide08Scope(pptx, get);
+  divider(pptx, "Section 02", "The Plan");
+  slide10Timeline(pptx, get);
+  slide11Roles(pptx, get);
+  slide12Training(pptx, get);
+  if (data.optionalSlides.integrations) slide13Integrations(pptx, get);
+  if (data.optionalSlides.support) slide14Support(pptx, get);
+  if (data.optionalSlides.risks) slide15Risks(pptx, get);
+  slide16ActionPlan(pptx, get);
+  slide17Close(pptx, get);
 
   const out = await pptx.write({ outputType: "nodebuffer" });
   return out as Buffer;
