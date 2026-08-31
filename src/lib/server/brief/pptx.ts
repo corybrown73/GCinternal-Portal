@@ -37,7 +37,7 @@ type Pptx = InstanceType<typeof PptxGenJS>;
 function defineMasters(pptx: Pptx, year: string) {
   pptx.defineSlideMaster({
     title: MASTER,
-    background: { color: BRAND.paper },
+    background: { color: BRAND.white },
     objects: [
       // The wordmark lives on the master, not on each slide. pptxgenjs embeds
       // an addImage per call — twenty slides meant twenty copies of the same
@@ -52,9 +52,9 @@ function defineMasters(pptx: Pptx, year: string) {
             w: 1.3,
             h: 0.24,
             fontSize: 7,
-            color: BRAND.grey,
+            color: BRAND.fg2,
             align: "right",
-            fontFace: BRAND.fontBody,
+            fontFace: BRAND.fontSans,
           },
         },
       },
@@ -63,7 +63,7 @@ function defineMasters(pptx: Pptx, year: string) {
 
   pptx.defineSlideMaster({
     title: MASTER_DARK,
-    background: { color: BRAND.ink },
+    background: { color: BRAND.navy950 },
     objects: [
       { image: { data: WORDMARK_WHITE, x: M, y: H - 0.5, w: 0.98, h: 0.19 } },
       {
@@ -77,7 +77,7 @@ function defineMasters(pptx: Pptx, year: string) {
             fontSize: 7,
             color: "6E7C92",
             align: "right",
-            fontFace: BRAND.fontBody,
+            fontFace: BRAND.fontSans,
           },
         },
       },
@@ -111,8 +111,8 @@ function heading(slide: ReturnType<Pptx["addSlide"]>, title: string, subtitle?: 
     h: 0.42,
     fontSize: 26,
     bold: true,
-    color: BRAND.navy,
-    fontFace: BRAND.fontHead,
+    color: BRAND.navy900,
+    fontFace: BRAND.fontSans,
   });
   // The cyan rule. One per slide, always under the heading, never anywhere else.
   slide.addShape("rect", {
@@ -120,8 +120,8 @@ function heading(slide: ReturnType<Pptx["addSlide"]>, title: string, subtitle?: 
     y: 0.93,
     w: 0.9,
     h: 0.035,
-    fill: { color: BRAND.cyan },
-    line: { color: BRAND.cyan, width: 0 },
+    fill: { color: BRAND.blue500 },
+    line: { color: BRAND.blue500, width: 0 },
   });
   if (subtitle) {
     slide.addText(subtitle, {
@@ -130,8 +130,8 @@ function heading(slide: ReturnType<Pptx["addSlide"]>, title: string, subtitle?: 
       w: W - M * 2,
       h: 0.3,
       fontSize: 11.5,
-      color: BRAND.grey,
-      fontFace: BRAND.fontBody,
+      color: BRAND.fg2,
+      fontFace: BRAND.fontSans,
     });
   }
 }
@@ -146,8 +146,8 @@ function renderSlide(pptx: Pptx, s: DeckSlide) {
       y: 2.2,
       w: 1.1,
       h: 0.05,
-      fill: { color: BRAND.cyan },
-      line: { color: BRAND.cyan, width: 0 },
+      fill: { color: BRAND.blue500 },
+      line: { color: BRAND.blue500, width: 0 },
     });
     slide.addText(s.title, {
       x: M,
@@ -156,8 +156,8 @@ function renderSlide(pptx: Pptx, s: DeckSlide) {
       h: 0.8,
       fontSize: 34,
       bold: true,
-      color: BRAND.paper,
-      fontFace: BRAND.fontHead,
+      color: BRAND.white,
+      fontFace: BRAND.fontSans,
     });
     if (s.subtitle) {
       slide.addText(s.subtitle, {
@@ -167,7 +167,7 @@ function renderSlide(pptx: Pptx, s: DeckSlide) {
         h: 0.4,
         fontSize: 13,
         color: "A9B6C7",
-        fontFace: BRAND.fontBody,
+        fontFace: BRAND.fontSans,
       });
     }
     return;
@@ -189,7 +189,7 @@ function renderSlide(pptx: Pptx, s: DeckSlide) {
       w: W - M * 2,
       h: 0.9,
       fill: { color: "F2F5F8" },
-      line: { color: BRAND.line, width: 0.75 },
+      line: { color: BRAND.border, width: 0.75 },
     });
     slide.addText(body.note, {
       x: M + 0.22,
@@ -198,8 +198,8 @@ function renderSlide(pptx: Pptx, s: DeckSlide) {
       h: 0.62,
       fontSize: 12,
       italic: true,
-      color: BRAND.navy,
-      fontFace: BRAND.fontBody,
+      color: BRAND.navy900,
+      fontFace: BRAND.fontSans,
       valign: "top",
     });
     return;
@@ -213,7 +213,7 @@ function renderSlide(pptx: Pptx, s: DeckSlide) {
       h,
       fontSize: 17,
       color: "1B2534",
-      fontFace: BRAND.fontBody,
+      fontFace: BRAND.fontSans,
       valign: "top",
       lineSpacingMultiple: 1.25,
     });
@@ -230,7 +230,7 @@ function renderSlide(pptx: Pptx, s: DeckSlide) {
         h,
         fontSize: 13.5,
         color: "1B2534",
-        fontFace: BRAND.fontBody,
+        fontFace: BRAND.fontSans,
         valign: "top",
         lineSpacingMultiple: 1.3,
       },
@@ -245,7 +245,7 @@ function renderSlide(pptx: Pptx, s: DeckSlide) {
       body.items.map(([k, v]) => [
         {
           text: k,
-          options: { color: BRAND.grey, bold: false, fontSize: 10.5, valign: "top" as const },
+          options: { color: BRAND.fg2, bold: false, fontSize: 10.5, valign: "top" as const },
         },
         { text: v, options: { color: "1B2534", fontSize: 12.5, valign: "top" as const } },
       ]),
@@ -254,11 +254,11 @@ function renderSlide(pptx: Pptx, s: DeckSlide) {
         y,
         w: W - M * 2,
         colW: [2.4, W - M * 2 - 2.4],
-        fontFace: BRAND.fontBody,
+        fontFace: BRAND.fontSans,
         border: [
           { type: "none" },
           { type: "none" },
-          { type: "solid", color: BRAND.line, pt: 0.5 },
+          { type: "solid", color: BRAND.border, pt: 0.5 },
           { type: "none" },
         ],
         rowH: 0.3,
@@ -275,8 +275,8 @@ function renderSlide(pptx: Pptx, s: DeckSlide) {
         text: cell,
         options: {
           bold: true,
-          color: BRAND.paper,
-          fill: { color: BRAND.navy },
+          color: BRAND.white,
+          fill: { color: BRAND.navy900 },
           fontSize: 10.5,
         },
       })),
@@ -288,8 +288,8 @@ function renderSlide(pptx: Pptx, s: DeckSlide) {
       x: M,
       y,
       w: W - M * 2,
-      fontFace: BRAND.fontBody,
-      border: { type: "solid", color: BRAND.line, pt: 0.5 },
+      fontFace: BRAND.fontSans,
+      border: { type: "solid", color: BRAND.border, pt: 0.5 },
       valign: "top",
       autoPage: true,
       autoPageRepeatHeader: true,
@@ -318,8 +318,8 @@ export async function buildKickoffDeckFile(
     w: W - M * 2,
     h: 0.44,
     fontSize: 15,
-    color: BRAND.cyan,
-    fontFace: BRAND.fontBody,
+    color: BRAND.blue500,
+    fontFace: BRAND.fontSans,
     charSpacing: 2,
   });
   title.addText(plan.accountName, {
@@ -329,8 +329,8 @@ export async function buildKickoffDeckFile(
     h: 1.1,
     fontSize: 40,
     bold: true,
-    color: BRAND.paper,
-    fontFace: BRAND.fontHead,
+    color: BRAND.white,
+    fontFace: BRAND.fontSans,
   });
   title.addText("Sales to implementation — what we heard, what we sold, what happens next", {
     x: M,
@@ -339,7 +339,7 @@ export async function buildKickoffDeckFile(
     h: 0.4,
     fontSize: 13,
     color: "A9B6C7",
-    fontFace: BRAND.fontBody,
+    fontFace: BRAND.fontSans,
   });
   title.addText(new Date(plan.preparedAt).toLocaleDateString("en-US", { dateStyle: "long" }), {
     x: M,
@@ -348,7 +348,7 @@ export async function buildKickoffDeckFile(
     h: 0.3,
     fontSize: 11,
     color: "6E7C92",
-    fontFace: BRAND.fontBody,
+    fontFace: BRAND.fontSans,
   });
 
   /* 2 — Agenda, listing only the acts that are actually in this deck. */
@@ -366,7 +366,7 @@ export async function buildKickoffDeckFile(
       h: H - 2.1,
       fontSize: 16,
       color: "1B2534",
-      fontFace: BRAND.fontBody,
+      fontFace: BRAND.fontSans,
       valign: "top",
       lineSpacingMultiple: 1.6,
     },
@@ -383,8 +383,8 @@ export async function buildKickoffDeckFile(
     h: 0.8,
     fontSize: 34,
     bold: true,
-    color: BRAND.paper,
-    fontFace: BRAND.fontHead,
+    color: BRAND.white,
+    fontFace: BRAND.fontSans,
   });
 
   const out = await pptx.write({ outputType: "nodebuffer" });

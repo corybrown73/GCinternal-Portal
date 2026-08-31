@@ -39,7 +39,7 @@ export async function renderSnapshotPdf(snapshot: SharedPlanSnapshot): Promise<U
 
   pdf.section("With you");
   if (snapshot.you_owe.length === 0) {
-    pdf.line("Nothing outstanding on your side.", { color: BRAND.grey });
+    pdf.line("Nothing outstanding on your side.", { color: BRAND.fg2 });
   }
   for (const t of snapshot.you_owe) {
     pdf.line(`${MARKS.open}  ${t.title}${t.due_date ? ` — due ${t.due_date}` : ""}`);
@@ -47,7 +47,7 @@ export async function renderSnapshotPdf(snapshot: SharedPlanSnapshot): Promise<U
 
   pdf.section("With GoCanvas");
   if (snapshot.we_owe.length === 0) {
-    pdf.line("Nothing outstanding on our side.", { color: BRAND.grey });
+    pdf.line("Nothing outstanding on our side.", { color: BRAND.fg2 });
   }
   for (const c of snapshot.we_owe) {
     pdf.line(`${MARKS.open}  ${c.description}${c.due_date ? ` — due ${c.due_date}` : ""}`);
@@ -71,7 +71,7 @@ export async function renderSnapshotPdf(snapshot: SharedPlanSnapshot): Promise<U
   pdf.line(`Generated ${plan.generated_at.slice(0, 10)}.`, {
     size: 8.5,
     style: "italic",
-    color: BRAND.grey,
+    color: BRAND.fg2,
     gap: 11,
   });
 

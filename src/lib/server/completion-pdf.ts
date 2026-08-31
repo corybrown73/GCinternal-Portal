@@ -48,7 +48,7 @@ export async function renderCompletionPdf(doc: CompletionDocument): Promise<Uint
         pdf.line(entry.detail, { size: 9.5, color: PDF_BODY_SOFT, gap: 12, indent: 14 });
       }
       for (const [k, v] of entry.meta ?? []) {
-        pdf.line(`${k}: ${v}`, { size: 8.5, color: BRAND.grey, gap: 11, indent: 14 });
+        pdf.line(`${k}: ${v}`, { size: 8.5, color: BRAND.fg2, gap: 11, indent: 14 });
       }
       pdf.gap(4);
     }
@@ -57,7 +57,7 @@ export async function renderCompletionPdf(doc: CompletionDocument): Promise<Uint
   pdf.gap(6);
   pdf.line(
     "This document is frozen: it shows what the work looked like when it finished, not what the record says today.",
-    { size: 8.5, style: "italic", color: BRAND.grey, gap: 11 },
+    { size: 8.5, style: "italic", color: BRAND.fg2, gap: 11 },
   );
 
   return pdf.finish();

@@ -34,7 +34,7 @@ export async function renderPlanPdf(plan: SharedPlan, planUrl: string): Promise<
 
   pdf.line(
     `This is your plan as it stood on ${plan.generated_at.slice(0, 10)}. It changes as work moves — the live version, where you can tick things off, is at ${planUrl}`,
-    { size: 9.5, style: "italic", color: BRAND.grey, gap: 12 },
+    { size: 9.5, style: "italic", color: BRAND.fg2, gap: 12 },
   );
   if (plan.stage_intent) {
     pdf.gap(6);
@@ -59,11 +59,11 @@ export async function renderPlanPdf(plan: SharedPlan, planUrl: string): Promise<
       task.blocked_by.length ? `Waiting on: ${task.blocked_by.join(", ")}` : null,
     ].filter(Boolean);
     if (meta.length) {
-      pdf.line(meta.join("   ·   "), { size: 8.5, color: BRAND.grey, gap: 11, indent: 16 });
+      pdf.line(meta.join("   ·   "), { size: 8.5, color: BRAND.fg2, gap: 11, indent: 16 });
     }
     pdf.gap(3);
   }
-  if (open.length === 0) pdf.line("—", { color: BRAND.grey });
+  if (open.length === 0) pdf.line("—", { color: BRAND.fg2 });
 
   if (done.length) {
     pdf.section("Already done", `${done.length} completed.`);
@@ -80,19 +80,19 @@ export async function renderPlanPdf(plan: SharedPlan, planUrl: string): Promise<
 
   pdf.section("With us", "What GoCanvas has committed to.");
   if (plan.our_commitments.length === 0) {
-    pdf.line("Nothing outstanding on our side.", { color: BRAND.grey });
+    pdf.line("Nothing outstanding on our side.", { color: BRAND.fg2 });
   }
   for (const c of plan.our_commitments) {
     pdf.line(`${c.done ? MARKS.done : MARKS.open}  ${c.description}`, { size: 10.5 });
     const meta = [c.due_date ? `Due ${c.due_date}` : null, c.committed_to].filter(Boolean);
     if (meta.length) {
-      pdf.line(meta.join("   ·   "), { size: 8.5, color: BRAND.grey, gap: 11, indent: 16 });
+      pdf.line(meta.join("   ·   "), { size: 8.5, color: BRAND.fg2, gap: 11, indent: 16 });
     }
   }
 
   pdf.section("The road to launch");
   if (plan.milestones.length === 0) {
-    pdf.line("No milestones have been set yet.", { color: BRAND.grey });
+    pdf.line("No milestones have been set yet.", { color: BRAND.fg2 });
   }
   for (const m of plan.milestones) {
     const when = m.completed_date
@@ -105,7 +105,7 @@ export async function renderPlanPdf(plan: SharedPlan, planUrl: string): Promise<
 
   pdf.section("Documents");
   if (plan.documents.length === 0) {
-    pdf.line("No documents have been shared here yet.", { color: BRAND.grey });
+    pdf.line("No documents have been shared here yet.", { color: BRAND.fg2 });
   }
   for (const d of plan.documents) {
     pdf.line(`${d.file_name}   ·   shared ${d.uploaded_at.slice(0, 10)}`, {
@@ -118,7 +118,7 @@ export async function renderPlanPdf(plan: SharedPlan, planUrl: string): Promise<
     pdf.line("Files are downloaded from the plan link, not from this PDF.", {
       size: 8.5,
       style: "italic",
-      color: BRAND.grey,
+      color: BRAND.fg2,
       gap: 11,
     });
   }

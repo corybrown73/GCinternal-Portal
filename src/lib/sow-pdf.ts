@@ -114,7 +114,7 @@ export async function downloadSowAnalysisPdf({
   // not miss: it is a draft, and the journey is a proposal.
   text(
     "Draft for discussion. The extracted section reflects what the SOW says; the journey is a proposal that a Technical Implementation Specialist (TIS) must confirm before it becomes the plan.",
-    { size: 9, style: "italic", color: BRAND.grey, gap: 4 },
+    { size: 9, style: "italic", color: BRAND.fg2, gap: 4 },
   );
 
   if (analysis.summary) {
@@ -136,7 +136,7 @@ export async function downloadSowAnalysisPdf({
     for (const f of findings) {
       text(`• ${f.text}${f.confidence !== "stated" ? ` (${f.confidence})` : ""}`, { indent: 10 });
       if (f.quote)
-        text(`“${f.quote}”`, { size: 8.5, style: "italic", color: BRAND.grey, indent: 22 });
+        text(`“${f.quote}”`, { size: 8.5, style: "italic", color: BRAND.fg2, indent: 22 });
     }
   }
 
@@ -151,7 +151,7 @@ export async function downloadSowAnalysisPdf({
     text(`“${analysis.deliveryWindow.quote}”`, {
       size: 8.5,
       style: "italic",
-      color: BRAND.grey,
+      color: BRAND.fg2,
       indent: 10,
     });
 
@@ -163,7 +163,7 @@ export async function downloadSowAnalysisPdf({
         ? `Proposed dates are counted from the recorded start date (${startDate.slice(0, 10)}).`
         : "Timing is shown in relative weeks; no calendar dates are proposed."
     } Estimated from the scope and dependencies the SOW describes — a planning recommendation, not committed dates and not an even split of the total.`,
-    { size: 9, style: "italic", color: BRAND.grey, gap: 4 },
+    { size: 9, style: "italic", color: BRAND.fg2, gap: 4 },
   );
   const groups = groupByStage(
     analysis.proposedJourney.map((stage, i) => ({ stage, timing: timings[i] ?? null })),
@@ -171,7 +171,7 @@ export async function downloadSowAnalysisPdf({
   if (groups.length === 0) text("No journey was proposed from this document.");
   for (const group of groups) {
     pdf.gap(6);
-    text(group.label.toUpperCase(), { size: 9, style: "bold", color: BRAND.grey, gap: 1 });
+    text(group.label.toUpperCase(), { size: 9, style: "bold", color: BRAND.fg2, gap: 1 });
     for (const { stage, timing } of group.stages) {
       text(
         timing
@@ -179,30 +179,30 @@ export async function downloadSowAnalysisPdf({
               timing.overlapsWith.length > 0 ? " · overlaps" : ""
             }`
           : "Timing not proposed — insufficient information in the SOW",
-        { size: 8.5, color: BRAND.grey, gap: 0 },
+        { size: 8.5, color: BRAND.fg2, gap: 0 },
       );
       text(stage.name, { size: 10.5, style: "bold", gap: 1 });
       if (stage.purpose) text(stage.purpose, { indent: 10 });
       if (timing?.statedText)
-        text(`SOW timing: ${timing.statedText}`, { size: 9, color: BRAND.grey, indent: 16 });
+        text(`SOW timing: ${timing.statedText}`, { size: 9, color: BRAND.fg2, indent: 16 });
       if (timing?.rationale)
-        text(`Why this duration: ${timing.rationale}`, { size: 9, color: BRAND.grey, indent: 16 });
+        text(`Why this duration: ${timing.rationale}`, { size: 9, color: BRAND.fg2, indent: 16 });
       if (timing?.dependencyDriver)
         text(`Timing depends on: ${timing.dependencyDriver}`, {
           size: 9,
-          color: BRAND.grey,
+          color: BRAND.fg2,
           indent: 16,
         });
       if (timing && timing.overlapsWith.length > 0)
         text(`Runs alongside: ${timing.overlapsWith.join("; ")}`, {
           size: 9,
-          color: BRAND.grey,
+          color: BRAND.fg2,
           indent: 16,
         });
       if (timing?.beyondSowWindow)
         text("Extends past the delivery window the SOW states.", {
           size: 9,
-          color: BRAND.grey,
+          color: BRAND.fg2,
           indent: 16,
         });
 
@@ -210,19 +210,19 @@ export async function downloadSowAnalysisPdf({
       if (stage.dependencies.length > 0)
         text(`Depends on: ${stage.dependencies.join("; ")}`, {
           size: 9,
-          color: BRAND.grey,
+          color: BRAND.fg2,
           indent: 16,
         });
       if (stage.customerResponsibilities.length > 0)
         text(`Customer has to: ${stage.customerResponsibilities.join("; ")}`, {
           size: 9,
-          color: BRAND.grey,
+          color: BRAND.fg2,
           indent: 16,
         });
       if (stage.acceptanceCriteria.length > 0)
         text(`Accepted when: ${stage.acceptanceCriteria.join("; ")}`, {
           size: 9,
-          color: BRAND.grey,
+          color: BRAND.fg2,
           indent: 16,
           gap: 4,
         });

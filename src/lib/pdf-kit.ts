@@ -175,7 +175,7 @@ export async function openBrandedPdf(options: MastheadOptions): Promise<BrandedP
   const footer = () => {
     doc.setFont("helvetica", "normal");
     doc.setFontSize(7.5);
-    setText(BRAND.grey);
+    setText(BRAND.fg2);
     doc.text(copyrightLine(options.dateFor), pageW - margin, pageH - 30, { align: "right" });
     if (options.footerLeft) doc.text(winAnsi(options.footerLeft), margin, pageH - 30);
   };
@@ -204,7 +204,7 @@ export async function openBrandedPdf(options: MastheadOptions): Promise<BrandedP
 
   /* -------------------------------------------------------------- masthead */
 
-  const [ir, ig, ib] = rgb(BRAND.ink);
+  const [ir, ig, ib] = rgb(BRAND.navy950);
   doc.setFillColor(ir, ig, ib);
   doc.rect(0, 0, pageW, options.meta ? 132 : 112, "F");
   doc.addImage(WORDMARK_WHITE, "PNG", pageW - margin - 78, 30, 78, 15);
@@ -233,14 +233,14 @@ export async function openBrandedPdf(options: MastheadOptions): Promise<BrandedP
       room(58);
       y += 8;
       const baseline = y;
-      line(heading, { size: 13.5, style: "bold", color: BRAND.navy, gap: 17 });
-      const [cr, cg, cb] = rgb(BRAND.cyan);
+      line(heading, { size: 13.5, style: "bold", color: BRAND.navy900, gap: 17 });
+      const [cr, cg, cb] = rgb(BRAND.blue500);
       doc.setDrawColor(cr, cg, cb);
       doc.setLineWidth(2);
       doc.line(margin, baseline + 10, margin + 34, baseline + 10);
       doc.setLineWidth(0.5);
       y += 9;
-      if (note) line(note, { size: 9, style: "italic", color: BRAND.grey, gap: 12 });
+      if (note) line(note, { size: 9, style: "italic", color: BRAND.fg2, gap: 12 });
       y += 3;
     },
 
@@ -250,7 +250,7 @@ export async function openBrandedPdf(options: MastheadOptions): Promise<BrandedP
         const at = y;
         doc.setFont("helvetica", "normal");
         doc.setFontSize(8.5);
-        setText(BRAND.grey);
+        setText(BRAND.fg2);
         doc.text(winAnsi(label), margin, at);
         doc.setFontSize(10);
         setText(BODY);
@@ -270,13 +270,13 @@ export async function openBrandedPdf(options: MastheadOptions): Promise<BrandedP
       room(46);
       const top = y - 10;
       const [pr, pg, pb] = rgb("F2F5F8");
-      const [lr, lg, lb] = rgb(BRAND.line);
+      const [lr, lg, lb] = rgb(BRAND.border);
       const height = (doc.splitTextToSize(winAnsi(note), width - 24) as string[]).length * 12 + 16;
       doc.setFillColor(pr, pg, pb);
       doc.setDrawColor(lr, lg, lb);
       doc.rect(margin, top, width, height, "FD");
       y = top + 15;
-      line(note, { size: 9.5, style: "italic", color: BRAND.navy, gap: 12, indent: 12 });
+      line(note, { size: 9.5, style: "italic", color: BRAND.navy900, gap: 12, indent: 12 });
       y = top + height + 10;
     },
 
@@ -293,7 +293,7 @@ export async function openBrandedPdf(options: MastheadOptions): Promise<BrandedP
           doc.setPage(i);
           doc.setFont("helvetica", "normal");
           doc.setFontSize(7.5);
-          setText(BRAND.grey);
+          setText(BRAND.fg2);
           doc.text(`Page ${i} of ${pages}`, pageW / 2, pageH - 30, { align: "center" });
         }
       }

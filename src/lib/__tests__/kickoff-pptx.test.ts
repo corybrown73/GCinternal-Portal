@@ -95,7 +95,7 @@ describe("buildKickoffDeckFile", () => {
   it("paints the title slide in the brand, not in the green that used to be here", async () => {
     const entries = await open(await buildKickoffDeckFile(buildKickoffDeck(bare), null));
     const xml = entries.get("ppt/slides/slide1.xml")!.toString();
-    expect(xml).toContain(BRAND.cyan);
+    expect(xml).toContain(BRAND.blue500);
     expect(xml).not.toContain("237A4B");
   });
 
