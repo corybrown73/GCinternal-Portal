@@ -88,6 +88,7 @@ function PlanTokenPage() {
         ) : null}
         <SharedPlanView
           plan={plan}
+          pdfHref={`/api/plan-pdf/${token}`}
           actions={{
             busy,
             onComplete: (ref) => run(() => completePlanTask({ data: { ref } })),

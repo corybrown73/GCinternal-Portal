@@ -60,6 +60,7 @@ import { Route as ApiCronJourneysRouteImport } from "./routes/api.cron.journeys"
 import { Route as ApiCronPlanSnapshotsRouteImport } from "./routes/api/cron/plan-snapshots";
 import { Route as ApiCronSequencesRouteImport } from "./routes/api.cron.sequences";
 import { Route as ApiCronSlaRouteImport } from "./routes/api/cron/sla";
+import { Route as ApiPlanPdfTokenRouteImport } from "./routes/api/plan-pdf.$token";
 import { Route as ApiPlanSnapshotTokenRouteImport } from "./routes/api/plan-snapshot.$token";
 import { Route as ApiTamDecisionRouteImport } from "./routes/api/tam/decision";
 import { Route as ApiV1AccountsRouteImport } from "./routes/api/v1/accounts";
@@ -329,6 +330,11 @@ const ApiCronSlaRoute = ApiCronSlaRouteImport.update({
   path: "/api/cron/sla",
   getParentRoute: () => rootRouteImport,
 } as any);
+const ApiPlanPdfTokenRoute = ApiPlanPdfTokenRouteImport.update({
+  id: "/api/plan-pdf/$token",
+  path: "/api/plan-pdf/$token",
+  getParentRoute: () => rootRouteImport,
+} as any);
 const ApiPlanSnapshotTokenRoute = ApiPlanSnapshotTokenRouteImport.update({
   id: "/api/plan-snapshot/$token",
   path: "/api/plan-snapshot/$token",
@@ -447,6 +453,7 @@ export interface FileRoutesByFullPath {
   "/api/cron/plan-snapshots": typeof ApiCronPlanSnapshotsRoute;
   "/api/cron/sequences": typeof ApiCronSequencesRoute;
   "/api/cron/sla": typeof ApiCronSlaRoute;
+  "/api/plan-pdf/$token": typeof ApiPlanPdfTokenRoute;
   "/api/plan-snapshot/$token": typeof ApiPlanSnapshotTokenRoute;
   "/api/tam/decision": typeof ApiTamDecisionRoute;
   "/api/v1/accounts": typeof ApiV1AccountsRouteWithChildren;
@@ -507,6 +514,7 @@ export interface FileRoutesByTo {
   "/api/cron/plan-snapshots": typeof ApiCronPlanSnapshotsRoute;
   "/api/cron/sequences": typeof ApiCronSequencesRoute;
   "/api/cron/sla": typeof ApiCronSlaRoute;
+  "/api/plan-pdf/$token": typeof ApiPlanPdfTokenRoute;
   "/api/plan-snapshot/$token": typeof ApiPlanSnapshotTokenRoute;
   "/api/tam/decision": typeof ApiTamDecisionRoute;
   "/api/v1/accounts": typeof ApiV1AccountsRouteWithChildren;
@@ -574,6 +582,7 @@ export interface FileRoutesById {
   "/api/cron/plan-snapshots": typeof ApiCronPlanSnapshotsRoute;
   "/api/cron/sequences": typeof ApiCronSequencesRoute;
   "/api/cron/sla": typeof ApiCronSlaRoute;
+  "/api/plan-pdf/$token": typeof ApiPlanPdfTokenRoute;
   "/api/plan-snapshot/$token": typeof ApiPlanSnapshotTokenRoute;
   "/api/tam/decision": typeof ApiTamDecisionRoute;
   "/api/v1/accounts": typeof ApiV1AccountsRouteWithChildren;
@@ -642,6 +651,7 @@ export interface FileRouteTypes {
     | "/api/cron/plan-snapshots"
     | "/api/cron/sequences"
     | "/api/cron/sla"
+    | "/api/plan-pdf/$token"
     | "/api/plan-snapshot/$token"
     | "/api/tam/decision"
     | "/api/v1/accounts"
@@ -702,6 +712,7 @@ export interface FileRouteTypes {
     | "/api/cron/plan-snapshots"
     | "/api/cron/sequences"
     | "/api/cron/sla"
+    | "/api/plan-pdf/$token"
     | "/api/plan-snapshot/$token"
     | "/api/tam/decision"
     | "/api/v1/accounts"
@@ -768,6 +779,7 @@ export interface FileRouteTypes {
     | "/api/cron/plan-snapshots"
     | "/api/cron/sequences"
     | "/api/cron/sla"
+    | "/api/plan-pdf/$token"
     | "/api/plan-snapshot/$token"
     | "/api/tam/decision"
     | "/api/v1/accounts"
@@ -815,6 +827,7 @@ export interface RootRouteChildren {
   ApiCronPlanSnapshotsRoute: typeof ApiCronPlanSnapshotsRoute;
   ApiCronSequencesRoute: typeof ApiCronSequencesRoute;
   ApiCronSlaRoute: typeof ApiCronSlaRoute;
+  ApiPlanPdfTokenRoute: typeof ApiPlanPdfTokenRoute;
   ApiPlanSnapshotTokenRoute: typeof ApiPlanSnapshotTokenRoute;
   ApiTamDecisionRoute: typeof ApiTamDecisionRoute;
   ApiV1AccountsRoute: typeof ApiV1AccountsRouteWithChildren;
@@ -1186,6 +1199,13 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof ApiCronSlaRouteImport;
       parentRoute: typeof rootRouteImport;
     };
+    "/api/plan-pdf/$token": {
+      id: "/api/plan-pdf/$token";
+      path: "/api/plan-pdf/$token";
+      fullPath: "/api/plan-pdf/$token";
+      preLoaderRoute: typeof ApiPlanPdfTokenRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
     "/api/plan-snapshot/$token": {
       id: "/api/plan-snapshot/$token";
       path: "/api/plan-snapshot/$token";
@@ -1436,6 +1456,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiCronPlanSnapshotsRoute: ApiCronPlanSnapshotsRoute,
   ApiCronSequencesRoute: ApiCronSequencesRoute,
   ApiCronSlaRoute: ApiCronSlaRoute,
+  ApiPlanPdfTokenRoute: ApiPlanPdfTokenRoute,
   ApiPlanSnapshotTokenRoute: ApiPlanSnapshotTokenRoute,
   ApiTamDecisionRoute: ApiTamDecisionRoute,
   ApiV1AccountsRoute: ApiV1AccountsRouteWithChildren,

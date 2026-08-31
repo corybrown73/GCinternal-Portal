@@ -35,10 +35,17 @@ export function SharedPlanView({
   plan,
   actions,
   banner,
+  pdfHref,
 }: {
   plan: SharedPlan;
   actions?: PlanActions;
   banner?: React.ReactNode;
+  /**
+   * Where the printable copy lives. Only the token page passes one — the
+   * internal preview has no share token, and a download link that 404s is
+   * worse than no link.
+   */
+  pdfHref?: string;
 }) {
   const yours = plan.your_tasks.filter((t) => t.owner === "you");
   const ours = plan.your_tasks.filter((t) => t.owner === "us");
@@ -72,6 +79,20 @@ export function SharedPlanView({
         </p>
         {plan.stage_intent ? (
           <p className="mt-1 text-[12px] text-muted-foreground">{plan.stage_intent}</p>
+        ) : null}
+        {pdfHref ? (
+          // For forwarding and for printing. This page is the one to work in —
+          // it is where things get ticked off — so the link says what the PDF
+          // is for rather than presenting it as an equal alternative.
+          <p className="mt-2 text-[12px]">
+            <a href={pdfHref} target="_blank" rel="noreferrer" className="underline">
+              Download this plan as a PDF
+            </a>
+            <span className="text-muted-foreground">
+              {" "}
+              — to forward or print. This page stays the live version.
+            </span>
+          </p>
         ) : null}
       </header>
 
