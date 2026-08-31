@@ -1,94 +1,59 @@
 import PptxGenJS from "pptxgenjs";
-import { BRAND } from "./brand";
-import type { BriefJson } from "../schemas";
 
-const MASTER = "GC_MASTER";
+import { BRAND, copyrightLine } from "@/lib/brand";
+import type { DeckPlan, DeckSlide } from "@/lib/kickoff-deck";
+import { WORDMARK_NAVY, WORDMARK_WHITE } from "../brand-assets";
 
-function chunk<T>(items: T[], size: number): T[][] {
-  const out: T[][] = [];
-  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
-  return out.length ? out : [[]];
-}
+/**
+ * The kickoff and handoff deck, drawn in the 2026 GoCanvas template's language.
+ *
+ * WHAT IT COPIES FROM THE TEMPLATE, and why each one:
+ *  - Navy `ink` title and divider slides with the white wordmark top-left. The
+ *    template opens each act this way and it is what makes a deck read as
+ *    chapters rather than as forty slides.
+ *  - White content slides, navy headings, one cyan rule under each. Cyan is the
+ *    only bright colour in the system; using it anywhere else makes it stop
+ *    meaning anything.
+ *  - The `© <year> GoCanvas` footer on every slide.
+ *  - Arial, because that is what the template embeds and an AE will open this
+ *    in PowerPoint and edit it.
+ *
+ * WHAT IT DOES NOT DO. It makes no decisions about content — which sections
+ * exist and what they say is `src/lib/kickoff-deck.ts`, which is pure and
+ * tested. This file is a renderer, and a renderer that starts choosing what to
+ * include is a renderer nobody can test.
+ */
 
-function addBulletSlide(pptx: PptxGenJS, title: string, bullets: string[]) {
-  const slide = pptx.addSlide({ masterName: MASTER });
-  slide.addText(title, {
-    x: 0.5,
-    y: 0.35,
-    w: 9,
-    h: 0.6,
-    fontSize: 24,
-    bold: true,
-    color: BRAND.green,
-    fontFace: BRAND.fontHead,
-  });
-  slide.addText(
-    bullets.map((b) => ({ text: b, options: { bullet: true, breakLine: true } })),
-    {
-      x: 0.6,
-      y: 1.2,
-      w: 8.8,
-      h: 3.9,
-      fontSize: 14,
-      color: BRAND.ink,
-      fontFace: BRAND.fontBody,
-      valign: "top",
-    },
-  );
-}
+const MASTER = "GC_CONTENT";
+const MASTER_DARK = "GC_DIVIDER";
 
-function addTableSlide(pptx: PptxGenJS, title: string, header: string[], rows: string[][]) {
-  const slide = pptx.addSlide({ masterName: MASTER });
-  slide.addText(title, {
-    x: 0.5,
-    y: 0.35,
-    w: 9,
-    h: 0.6,
-    fontSize: 24,
-    bold: true,
-    color: BRAND.green,
-    fontFace: BRAND.fontHead,
-  });
-  slide.addTable(
-    [
-      header.map((h) => ({
-        text: h,
-        options: { bold: true, color: "FFFFFF", fill: { color: BRAND.green } },
-      })),
-      ...rows.map((r) => r.map((c) => ({ text: c }))),
-    ],
-    {
-      x: 0.5,
-      y: 1.2,
-      w: 9,
-      fontSize: 12,
-      color: BRAND.ink,
-      fontFace: BRAND.fontBody,
-      border: { type: "solid", color: BRAND.line, pt: 0.5 },
-      autoPage: true,
-      autoPageRepeatHeader: true,
-    },
-  );
-}
+/** LAYOUT_16x9 is 10 × 5.625 inches. Every coordinate below is in inches. */
+const W = 10;
+const H = 5.625;
+const M = 0.55;
 
-export async function buildBriefDeck(brief: BriefJson): Promise<Buffer> {
-  const pptx = new PptxGenJS();
-  pptx.layout = "LAYOUT_16x9";
+type Pptx = InstanceType<typeof PptxGenJS>;
+
+function defineMasters(pptx: Pptx, year: string) {
   pptx.defineSlideMaster({
     title: MASTER,
-    background: { color: "FFFFFF" },
+    background: { color: BRAND.paper },
     objects: [
-      { rect: { x: 0, y: 5.32, w: "100%", h: 0.31, fill: { color: BRAND.green } } },
+      // The wordmark lives on the master, not on each slide. pptxgenjs embeds
+      // an addImage per call — twenty slides meant twenty copies of the same
+      // PNG in the file, and twenty separate pictures for anyone editing it.
+      { image: { data: WORDMARK_NAVY, x: M, y: H - 0.5, w: 0.98, h: 0.19 } },
       {
         text: {
-          text: "GoCanvas Internal — Account Brief",
+          text: year,
           options: {
-            x: 0.5,
-            y: 5.32,
-            w: 6,
-            h: 0.3,
-            fontSize: 9,
-            color: "FFFFFF",
+            x: W - 1.8,
+            y: H - 0.36,
+            w: 1.3,
+            h: 0.24,
+            fontSize: 7,
+            color: BRAND.grey,
+            align: "right",
             fontFace: BRAND.fontBody,
           },
         },
@@ -96,95 +61,331 @@ export async function buildBriefDeck(brief: BriefJson): Promise<Buffer> {
     ],
   });
 
-  // 1 — Title
-  const title = pptx.addSlide({ masterName: MASTER });
-  title.addText("Account Brief", {
-    x: 0.5,
-    y: 1.2,
-    w: 9,
-    h: 0.6,
-    fontSize: 20,
-    color: BRAND.slate,
+  pptx.defineSlideMaster({
+    title: MASTER_DARK,
+    background: { color: BRAND.ink },
+    objects: [
+      { image: { data: WORDMARK_WHITE, x: M, y: H - 0.5, w: 0.98, h: 0.19 } },
+      {
+        text: {
+          text: year,
+          options: {
+            x: W - 1.8,
+            y: H - 0.36,
+            w: 1.3,
+            h: 0.24,
+            fontSize: 7,
+            color: "6E7C92",
+            align: "right",
+            fontFace: BRAND.fontBody,
+          },
+        },
+      },
+    ],
+  });
+}
+
+/**
+ * The customer's logo, top-right on the title slide.
+ *
+ * Bounded by height and given the full width to breathe in: a wide wordmark and
+ * a square badge both have to survive, and a squashed customer logo on slide
+ * one reads as carelessness about the customer.
+ */
+function addCustomerLogo(slide: ReturnType<Pptx["addSlide"]>, data: string) {
+  slide.addImage({
+    data,
+    x: W - M - 1.9,
+    y: M,
+    w: 1.9,
+    h: 0.62,
+    sizing: { type: "contain", w: 1.9, h: 0.62 },
+  });
+}
+
+function heading(slide: ReturnType<Pptx["addSlide"]>, title: string, subtitle?: string | null) {
+  slide.addText(title, {
+    x: M,
+    y: 0.42,
+    w: W - M * 2,
+    h: 0.42,
+    fontSize: 26,
+    bold: true,
+    color: BRAND.navy,
     fontFace: BRAND.fontHead,
   });
-  title.addText(brief.account_name, {
-    x: 0.5,
-    y: 1.7,
-    w: 9,
-    h: 1.0,
+  // The cyan rule. One per slide, always under the heading, never anywhere else.
+  slide.addShape("rect", {
+    x: M,
+    y: 0.93,
+    w: 0.9,
+    h: 0.035,
+    fill: { color: BRAND.cyan },
+    line: { color: BRAND.cyan, width: 0 },
+  });
+  if (subtitle) {
+    slide.addText(subtitle, {
+      x: M,
+      y: 1.02,
+      w: W - M * 2,
+      h: 0.3,
+      fontSize: 11.5,
+      color: BRAND.grey,
+      fontFace: BRAND.fontBody,
+    });
+  }
+}
+
+const BODY_Y = (hasSubtitle: boolean) => (hasSubtitle ? 1.42 : 1.2);
+
+function renderSlide(pptx: Pptx, s: DeckSlide) {
+  if (s.divider) {
+    const slide = pptx.addSlide({ masterName: MASTER_DARK });
+    slide.addShape("rect", {
+      x: M,
+      y: 2.2,
+      w: 1.1,
+      h: 0.05,
+      fill: { color: BRAND.cyan },
+      line: { color: BRAND.cyan, width: 0 },
+    });
+    slide.addText(s.title, {
+      x: M,
+      y: 2.45,
+      w: W - M * 2,
+      h: 0.8,
+      fontSize: 34,
+      bold: true,
+      color: BRAND.paper,
+      fontFace: BRAND.fontHead,
+    });
+    if (s.subtitle) {
+      slide.addText(s.subtitle, {
+        x: M,
+        y: 3.3,
+        w: W - M * 2,
+        h: 0.4,
+        fontSize: 13,
+        color: "A9B6C7",
+        fontFace: BRAND.fontBody,
+      });
+    }
+    return;
+  }
+
+  const slide = pptx.addSlide({ masterName: MASTER });
+  heading(slide, s.title, s.subtitle);
+  const y = BODY_Y(Boolean(s.subtitle));
+  const h = H - y - 0.7;
+  const body = s.body;
+  if (!body) return;
+
+  if (body.kind === "absent") {
+    // Not a bullet and not styled like content: this is the deck telling the
+    // room something is missing, and it should not look like an answer.
+    slide.addShape("rect", {
+      x: M,
+      y,
+      w: W - M * 2,
+      h: 0.9,
+      fill: { color: "F2F5F8" },
+      line: { color: BRAND.line, width: 0.75 },
+    });
+    slide.addText(body.note, {
+      x: M + 0.22,
+      y: y + 0.14,
+      w: W - M * 2 - 0.44,
+      h: 0.62,
+      fontSize: 12,
+      italic: true,
+      color: BRAND.navy,
+      fontFace: BRAND.fontBody,
+      valign: "top",
+    });
+    return;
+  }
+
+  if (body.kind === "prose") {
+    slide.addText(body.text, {
+      x: M,
+      y,
+      w: W - M * 2,
+      h,
+      fontSize: 17,
+      color: "1B2534",
+      fontFace: BRAND.fontBody,
+      valign: "top",
+      lineSpacingMultiple: 1.25,
+    });
+    return;
+  }
+
+  if (body.kind === "bullets") {
+    slide.addText(
+      body.items.map((b) => ({ text: b, options: { bullet: { code: "2022" }, breakLine: true } })),
+      {
+        x: M,
+        y,
+        w: W - M * 2,
+        h,
+        fontSize: 13.5,
+        color: "1B2534",
+        fontFace: BRAND.fontBody,
+        valign: "top",
+        lineSpacingMultiple: 1.3,
+      },
+    );
+    return;
+  }
+
+  if (body.kind === "pairs") {
+    // Two columns of label/value. A table would put a grid around eight facts
+    // that are not a grid; the template renders "at a glance" as a plain list.
+    slide.addTable(
+      body.items.map(([k, v]) => [
+        {
+          text: k,
+          options: { color: BRAND.grey, bold: false, fontSize: 10.5, valign: "top" as const },
+        },
+        { text: v, options: { color: "1B2534", fontSize: 12.5, valign: "top" as const } },
+      ]),
+      {
+        x: M,
+        y,
+        w: W - M * 2,
+        colW: [2.4, W - M * 2 - 2.4],
+        fontFace: BRAND.fontBody,
+        border: [
+          { type: "none" },
+          { type: "none" },
+          { type: "solid", color: BRAND.line, pt: 0.5 },
+          { type: "none" },
+        ],
+        rowH: 0.3,
+        autoPage: true,
+        autoPageRepeatHeader: false,
+      },
+    );
+    return;
+  }
+
+  slide.addTable(
+    [
+      body.header.map((cell) => ({
+        text: cell,
+        options: {
+          bold: true,
+          color: BRAND.paper,
+          fill: { color: BRAND.navy },
+          fontSize: 10.5,
+        },
+      })),
+      ...body.rows.map((r) =>
+        r.map((cell) => ({ text: cell, options: { color: "1B2534", fontSize: 10.5 } })),
+      ),
+    ],
+    {
+      x: M,
+      y,
+      w: W - M * 2,
+      fontFace: BRAND.fontBody,
+      border: { type: "solid", color: BRAND.line, pt: 0.5 },
+      valign: "top",
+      autoPage: true,
+      autoPageRepeatHeader: true,
+      autoPageSlideStartY: 1.2,
+    },
+  );
+}
+
+export async function buildKickoffDeckFile(
+  plan: DeckPlan,
+  customerLogo?: string | null,
+): Promise<Buffer> {
+  const pptx = new PptxGenJS();
+  pptx.layout = "LAYOUT_16x9";
+  pptx.author = "GoCanvas";
+  pptx.company = "GoCanvas";
+  pptx.title = `Kickoff and handoff — ${plan.accountName}`;
+  defineMasters(pptx, copyrightLine(plan.preparedAt));
+
+  /* 1 — Title. The template's opener: navy field, wordmark, big white title. */
+  const title = pptx.addSlide({ masterName: MASTER_DARK });
+  if (customerLogo) addCustomerLogo(title, customerLogo);
+  title.addText("Kickoff & Handoff", {
+    x: M,
+    y: 1.9,
+    w: W - M * 2,
+    h: 0.44,
+    fontSize: 15,
+    color: BRAND.cyan,
+    fontFace: BRAND.fontBody,
+    charSpacing: 2,
+  });
+  title.addText(plan.accountName, {
+    x: M,
+    y: 2.35,
+    w: W - M * 2,
+    h: 1.1,
     fontSize: 40,
     bold: true,
-    color: BRAND.green,
+    color: BRAND.paper,
     fontFace: BRAND.fontHead,
   });
-  title.addText(brief.one_liner, {
-    x: 0.5,
-    y: 2.9,
-    w: 9,
-    h: 1.2,
-    fontSize: 16,
-    color: BRAND.ink,
-    fontFace: BRAND.fontBody,
-  });
-  title.addText(`Prepared ${new Date().toLocaleDateString("en-US", { dateStyle: "long" })}`, {
-    x: 0.5,
-    y: 4.4,
-    w: 9,
+  title.addText("Sales to implementation — what we heard, what we sold, what happens next", {
+    x: M,
+    y: 3.45,
+    w: W - M * 2,
     h: 0.4,
-    fontSize: 12,
-    color: BRAND.slate,
+    fontSize: 13,
+    color: "A9B6C7",
+    fontFace: BRAND.fontBody,
+  });
+  title.addText(new Date(plan.preparedAt).toLocaleDateString("en-US", { dateStyle: "long" }), {
+    x: M,
+    y: 4.05,
+    w: W - M * 2,
+    h: 0.3,
+    fontSize: 11,
+    color: "6E7C92",
     fontFace: BRAND.fontBody,
   });
 
-  // 2 — Goals (if any)
-  if (brief.goals.length) addBulletSlide(pptx, "Goals & Why They Bought", brief.goals);
+  /* 2 — Agenda, listing only the acts that are actually in this deck. */
+  const agenda = pptx.addSlide({ masterName: MASTER });
+  heading(agenda, "Agenda");
+  agenda.addText(
+    plan.agenda.map((a, i) => ({
+      text: `${String(i + 1).padStart(2, "0")}   ${a}`,
+      options: { breakLine: true },
+    })),
+    {
+      x: M,
+      y: 1.35,
+      w: W - M * 2,
+      h: H - 2.1,
+      fontSize: 16,
+      color: "1B2534",
+      fontFace: BRAND.fontBody,
+      valign: "top",
+      lineSpacingMultiple: 1.6,
+    },
+  );
 
-  // 3+ — Current process
-  for (const section of brief.current_process) {
-    addBulletSlide(pptx, `Current Process — ${section.title}`, section.bullets);
-  }
+  for (const slide of plan.slides) renderSlide(pptx, slide);
 
-  // What we know
-  if (brief.what_we_know.length) {
-    for (const group of chunk(brief.what_we_know, 6)) {
-      addTableSlide(
-        pptx,
-        "What We Know Today",
-        ["Topic", "Detail"],
-        group.map((w) => [w.topic, w.detail]),
-      );
-    }
-  }
-
-  // Stakeholders
-  if (brief.stakeholders.length) {
-    addTableSlide(
-      pptx,
-      "Stakeholders",
-      ["Name", "Role", "Notes"],
-      brief.stakeholders.map((s) => [s.name, s.role, s.notes]),
-    );
-  }
-
-  // Risks
-  if (brief.risks_open_items.length) {
-    addBulletSlide(pptx, "Risks & Open Items", brief.risks_open_items);
-  }
-
-  // Discovery questions
-  for (const group of chunk(brief.discovery_questions, 5)) {
-    addTableSlide(
-      pptx,
-      "Discovery Questions for Onboarding",
-      ["Question", "Why it matters", "Category"],
-      group.map((q) => [q.question, q.why_it_matters, q.category]),
-    );
-  }
-
-  // Process gaps
-  if (brief.process_gaps.length) {
-    addBulletSlide(pptx, "Process Gaps to Solve", brief.process_gaps);
-  }
+  /* Closing. */
+  const end = pptx.addSlide({ masterName: MASTER_DARK });
+  end.addText("Thank you", {
+    x: M,
+    y: 2.4,
+    w: W - M * 2,
+    h: 0.8,
+    fontSize: 34,
+    bold: true,
+    color: BRAND.paper,
+    fontFace: BRAND.fontHead,
+  });
 
   const out = await pptx.write({ outputType: "nodebuffer" });
   return out as Buffer;
