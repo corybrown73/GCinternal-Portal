@@ -2,7 +2,7 @@ import PptxGenJS from "pptxgenjs";
 
 import { BRAND, pt } from "@/lib/brand";
 import { WORDMARK_NAVY, WORDMARK_WHITE } from "@/lib/brand-assets";
-import type { KickoffDeckData } from "@/lib/kickoff-fields";
+import { RACI_RESPONSIBILITIES, type KickoffDeckData } from "@/lib/kickoff-fields";
 
 /**
  * The Client Kickoff Deck, rendered as the .pptx an AE presents.
@@ -23,6 +23,75 @@ import type { KickoffDeckData } from "@/lib/kickoff-fields";
  * filled and from what is `src/lib/kickoff-fields.ts`, which is pure and
  * tested.
  */
+
+/**
+ * The template's own speaker notes, verbatim.
+ *
+ * They are the deck's operating instructions — "every row needs a human name,
+ * not a department", "get verbal agreement on the go-live date here" — and
+ * they were written by whoever built the template. Dropping them would ship a
+ * deck that looks right and presents worse.
+ */
+const SPEAKER_NOTES: Record<string, string> = {
+  welcome:
+    "Warm welcome by name. Set the frame: 30 minutes, this is their kickoff, we finish with a written plan.",
+  agenda: "Thirty seconds. Flag that the last two items need decisions from them today.",
+  introductions:
+    "Round the room. Ask each client attendee for one sentence on what they need out of this rollout \u2014 capture it, you'll use it on the goals slide.",
+  about:
+    "Optional \u2014 skip for clients who already know us well. Ninety seconds max. Land the 12,000 and 97%, then pivot back to them.",
+  dividerBusiness: "Transition. Hand the pen to the client for the next three slides.",
+  goals:
+    "Read these back from the sales notes and confirm. Edit live if they correct you \u2014 that correction is the most valuable minute of the call.",
+  success:
+    "Targets are pre-filled from the business case. Ask them to change any number they don't own \u2014 an agreed target beats an accurate one.",
+  scope:
+    "Confirm the phase-one list and, more importantly, what is not in phase one. Scope creep starts here.",
+  dividerPlan: "Shift gears. Everything after this has a name and a date attached to it.",
+  timeline:
+    "Fill real dates before the call. Get verbal agreement on the go-live date here \u2014 it anchors everything else.",
+  roles:
+    "Every row needs a human name, not a department. A blank cell at the end of this slide becomes an action item.",
+  training:
+    "The pilot-first approach is the part clients push back on. Explain why one crew for two weeks beats a big-bang launch.",
+  integrations:
+    "Optional \u2014 drop when IT isn't on the call. Otherwise this is the slide that decides whether week three slips.",
+  support:
+    "Optional. Keep it to 30 seconds \u2014 the point is that they know the difference between a support ticket and a call to Jordan.",
+  risks:
+    "Optional but recommended. Ask the room to add one. Anything unresolved here goes straight onto the action plan.",
+  actions:
+    "The one slide that has to be finished before the call ends. Read each row aloud, get a yes from the named owner.",
+  close:
+    "Repeat the go-live date and the first action item out loud. Thank them by name and end early if you can.",
+};
+
+/**
+ * What the presenter has to do before the meeting, on slide one's notes.
+ *
+ * This is where an AE actually looks — a list in the app is a list they have
+ * to remember to open. Two lists, because they need different attention: what
+ * is blank, and what was taken out of a call transcript rather than off a
+ * record and should be checked before it is read aloud to the customer.
+ */
+function prepNotes(data: KickoffDeckData): string {
+  const lines = [SPEAKER_NOTES["welcome"]!];
+  if (data.missing.length) {
+    lines.push(
+      "",
+      `BEFORE THE CALL \u2014 ${data.missing.length} field(s) are blank and show in red on the slides:`,
+      data.missing.join(", "),
+    );
+  }
+  if (data.fromCalls.length) {
+    lines.push(
+      "",
+      `CHECK THESE \u2014 ${data.fromCalls.length} value(s) were read out of the call notes, not taken from a record:`,
+      data.fromCalls.join(", "),
+    );
+  }
+  return lines.join("\n");
+}
 
 const LIGHT = "GC_LIGHT";
 const DARK = "GC_DARK";
@@ -128,9 +197,9 @@ export type FieldReader = (key: string) => { text: string; missing: boolean };
 function reader(data: KickoffDeckData): FieldReader {
   return (key: string) => {
     const v = data.fields[key];
-    return v
-      ? { text: v, missing: false }
-      : { text: "[ complete before the call ]", missing: true };
+    // Short, because it also has to sit in a narrow table cell without
+    // wrapping to three lines. Slide one's speaker notes carry the full list.
+    return v ? { text: v, missing: false } : { text: "[ to complete ]", missing: true };
   };
 }
 
@@ -233,7 +302,7 @@ const AGENDA = [
   "Mutual action plan",
 ];
 
-function slide02Agenda(pptx: Pptx) {
+function slide02Agenda(pptx: Pptx): Slide {
   const s = pptx.addSlide({ masterName: LIGHT });
   const cardW = inch(660);
   card(s, PAD, TOP, cardW, H - TOP * 2 + 0.1);
@@ -294,9 +363,10 @@ function slide02Agenda(pptx: Pptx) {
       fontFace: BRAND.fontSans,
     });
   });
+  return s;
 }
 
-function slide03Introductions(pptx: Pptx, get: FieldReader) {
+function slide03Introductions(pptx: Pptx, get: FieldReader): Slide {
   const s = pptx.addSlide({ masterName: LIGHT });
   eyebrow(s, "Introductions");
   title(s, "Your Team and Ours");
@@ -361,6 +431,7 @@ function slide03Introductions(pptx: Pptx, get: FieldReader) {
   person(rightX, 0, "gc_lead_name", "gc_lead_role", true);
   person(rightX, 1, "gc_person_2_name", "gc_person_2_role", true);
   person(rightX, 2, "gc_person_3_name", "gc_person_3_role", true);
+  return s;
 }
 
 const ABOUT_FEATURES: Array<[string, string]> = [
@@ -370,7 +441,7 @@ const ABOUT_FEATURES: Array<[string, string]> = [
   ["Reporting", "Approvals, alerts and dashboards."],
 ];
 
-function slide04About(pptx: Pptx) {
+function slide04About(pptx: Pptx): Slide {
   const s = pptx.addSlide({ masterName: LIGHT });
   eyebrow(s, "About GoCanvas");
   title(s, "Your all-in-one digital solution for field work.");
@@ -429,9 +500,10 @@ function slide04About(pptx: Pptx) {
       valign: "middle",
     },
   );
+  return s;
 }
 
-function divider(pptx: Pptx, section: string, heading: string) {
+function divider(pptx: Pptx, section: string, heading: string): Slide {
   const s = pptx.addSlide({ masterName: DARK });
   s.addText(section.toUpperCase(), {
     x: 0,
@@ -456,9 +528,10 @@ function divider(pptx: Pptx, section: string, heading: string) {
     color: BRAND.white,
     fontFace: BRAND.fontSans,
   });
+  return s;
 }
 
-function slide06Goals(pptx: Pptx, get: FieldReader) {
+function slide06Goals(pptx: Pptx, get: FieldReader): Slide {
   const s = pptx.addSlide({ masterName: LIGHT });
   eyebrow(s, "Why we're here");
   title(s, "Your Goals for This Rollout");
@@ -506,9 +579,10 @@ function slide06Goals(pptx: Pptx, get: FieldReader) {
       });
     }
   }
+  return s;
 }
 
-function slide07Success(pptx: Pptx, get: FieldReader) {
+function slide07Success(pptx: Pptx, get: FieldReader): Slide {
   const s = pptx.addSlide({ masterName: LIGHT });
   eyebrow(s, "Success criteria");
   title(s, "How We'll Measure Success");
@@ -574,6 +648,7 @@ function slide07Success(pptx: Pptx, get: FieldReader) {
     fontSize: pt(26),
     color: BRAND.fg1,
   });
+  return s;
 }
 
 /**
@@ -669,7 +744,7 @@ function cell(get: FieldReader, key: string, opts: { bold?: boolean; muted?: boo
   return { text, missing, ...opts };
 }
 
-function slide08Scope(pptx: Pptx, get: FieldReader) {
+function slide08Scope(pptx: Pptx, get: FieldReader): Slide {
   const s = pptx.addSlide({ masterName: LIGHT });
   eyebrow(s, "Scope");
   title(s, "Workflows in Scope");
@@ -677,7 +752,7 @@ function slide08Scope(pptx: Pptx, get: FieldReader) {
   grid(
     s,
     BODY_TOP + 0.1,
-    [1, 3, 2.4, 2, 1.6],
+    [1.2, 3, 2.4, 2, 1.6],
     ["Phase", "Workflow", "Replaces", "Teams", "Build owner"],
     [0, 1, 2, 3, 4].map((i) => [
       phase(i),
@@ -707,9 +782,10 @@ function slide08Scope(pptx: Pptx, get: FieldReader) {
       fontFace: BRAND.fontSans,
     },
   );
+  return s;
 }
 
-function slide10Timeline(pptx: Pptx, get: FieldReader) {
+function slide10Timeline(pptx: Pptx, get: FieldReader): Slide {
   const s = pptx.addSlide({ masterName: LIGHT });
   eyebrow(s, "Next 90 days");
   title(s, "Implementation Timeline");
@@ -797,17 +873,10 @@ function slide10Timeline(pptx: Pptx, get: FieldReader) {
   };
   note(PAD, "We need from you", "need_from_client");
   note(PAD + noteW + 0.3, "Biggest risk to the date", "timeline_risk");
+  return s;
 }
 
-const RACI_ROWS = [
-  "Form and workflow build",
-  "User accounts and permissions",
-  "Devices in the field",
-  "Change management with crews",
-  "Reporting and business reviews",
-];
-
-function slide11Roles(pptx: Pptx, get: FieldReader) {
+function slide11Roles(pptx: Pptx, get: FieldReader): Slide {
   const s = pptx.addSlide({ masterName: LIGHT });
   eyebrow(s, "Ownership");
   title(s, "Roles and Responsibilities");
@@ -816,12 +885,13 @@ function slide11Roles(pptx: Pptx, get: FieldReader) {
     BODY_TOP + 0.1,
     [3.4, 2.4, 2.2],
     ["Responsibility", "Owner", "Supported by"],
-    RACI_ROWS.map((r, i) => [
+    RACI_RESPONSIBILITIES.map((r, i) => [
       { text: r, bold: true },
       cell(get, `raci_${i + 1}_owner`),
       cell(get, `raci_${i + 1}_support`, { muted: true }),
     ]),
   );
+  return s;
 }
 
 const TRAINING_BLURBS = [
@@ -830,7 +900,7 @@ const TRAINING_BLURBS = [
   "Reading the dashboard, spotting gaps, exporting for audits.",
 ];
 
-function slide12Training(pptx: Pptx, get: FieldReader) {
+function slide12Training(pptx: Pptx, get: FieldReader): Slide {
   const s = pptx.addSlide({ masterName: LIGHT });
   eyebrow(s, "Adoption");
   title(s, "Training and Rollout");
@@ -899,6 +969,7 @@ function slide12Training(pptx: Pptx, get: FieldReader) {
       fontFace: BRAND.fontSans,
     },
   );
+  return s;
 }
 
 const IT_REQUIREMENTS = [
@@ -908,7 +979,7 @@ const IT_REQUIREMENTS = [
   "Data retention and export requirements",
 ];
 
-function slide13Integrations(pptx: Pptx, get: FieldReader) {
+function slide13Integrations(pptx: Pptx, get: FieldReader): Slide {
   const s = pptx.addSlide({ masterName: LIGHT });
   eyebrow(s, "Technical setup");
   title(s, "Integrations and IT Requirements");
@@ -978,6 +1049,7 @@ function slide13Integrations(pptx: Pptx, get: FieldReader) {
       fontFace: BRAND.fontSans,
     },
   );
+  return s;
 }
 
 const SUPPORT_TIERS: Array<[string, string]> = [
@@ -986,7 +1058,7 @@ const SUPPORT_TIERS: Array<[string, string]> = [
   ["Something urgent", "Escalation path"],
 ];
 
-function slide14Support(pptx: Pptx, get: FieldReader) {
+function slide14Support(pptx: Pptx, get: FieldReader): Slide {
   const s = pptx.addSlide({ masterName: LIGHT });
   eyebrow(s, "Support");
   title(s, "How to Reach Us");
@@ -1034,9 +1106,10 @@ function slide14Support(pptx: Pptx, get: FieldReader) {
     color: BRAND.fg2,
     fontFace: BRAND.fontSans,
   });
+  return s;
 }
 
-function slide15Risks(pptx: Pptx, get: FieldReader) {
+function slide15Risks(pptx: Pptx, get: FieldReader): Slide {
   const s = pptx.addSlide({ masterName: LIGHT });
   eyebrow(s, "Before we start");
   title(s, "Risks and Open Questions");
@@ -1071,9 +1144,10 @@ function slide15Risks(pptx: Pptx, get: FieldReader) {
     color: BRAND.blue500,
     fontFace: BRAND.fontSans,
   });
+  return s;
 }
 
-function slide16ActionPlan(pptx: Pptx, get: FieldReader) {
+function slide16ActionPlan(pptx: Pptx, get: FieldReader): Slide {
   const s = pptx.addSlide({ masterName: LIGHT });
   eyebrow(s, "Next 30 days");
   title(s, "Mutual Action Plan");
@@ -1100,9 +1174,10 @@ function slide16ActionPlan(pptx: Pptx, get: FieldReader) {
     color: BRAND.fg2,
     fontFace: BRAND.fontSans,
   });
+  return s;
 }
 
-function slide17Close(pptx: Pptx, get: FieldReader) {
+function slide17Close(pptx: Pptx, get: FieldReader): Slide {
   const s = pptx.addSlide({ masterName: DARK });
   s.addText("Thank you", {
     x: PAD,
@@ -1155,6 +1230,7 @@ function slide17Close(pptx: Pptx, get: FieldReader) {
       fontFace: BRAND.fontSans,
     });
   });
+  return s;
 }
 
 /* -------------------------------------------------------------------- entry */
@@ -1186,22 +1262,25 @@ export async function buildKickoffDeckFile(
       sizing: { type: "contain", w: 1.9, h: 0.62 },
     });
   }
-  slide02Agenda(pptx);
-  slide03Introductions(pptx, get);
-  if (data.optionalSlides.about) slide04About(pptx);
-  divider(pptx, "Section 01", "Your Business");
-  slide06Goals(pptx, get);
-  slide07Success(pptx, get);
-  slide08Scope(pptx, get);
-  divider(pptx, "Section 02", "The Plan");
-  slide10Timeline(pptx, get);
-  slide11Roles(pptx, get);
-  slide12Training(pptx, get);
-  if (data.optionalSlides.integrations) slide13Integrations(pptx, get);
-  if (data.optionalSlides.support) slide14Support(pptx, get);
-  if (data.optionalSlides.risks) slide15Risks(pptx, get);
-  slide16ActionPlan(pptx, get);
-  slide17Close(pptx, get);
+  welcome.addNotes(prepNotes(data));
+  slide02Agenda(pptx).addNotes(SPEAKER_NOTES["agenda"]!);
+  slide03Introductions(pptx, get).addNotes(SPEAKER_NOTES["introductions"]!);
+  if (data.optionalSlides.about) slide04About(pptx).addNotes(SPEAKER_NOTES["about"]!);
+  divider(pptx, "Section 01", "Your Business").addNotes(SPEAKER_NOTES["dividerBusiness"]!);
+  slide06Goals(pptx, get).addNotes(SPEAKER_NOTES["goals"]!);
+  slide07Success(pptx, get).addNotes(SPEAKER_NOTES["success"]!);
+  slide08Scope(pptx, get).addNotes(SPEAKER_NOTES["scope"]!);
+  divider(pptx, "Section 02", "The Plan").addNotes(SPEAKER_NOTES["dividerPlan"]!);
+  slide10Timeline(pptx, get).addNotes(SPEAKER_NOTES["timeline"]!);
+  slide11Roles(pptx, get).addNotes(SPEAKER_NOTES["roles"]!);
+  slide12Training(pptx, get).addNotes(SPEAKER_NOTES["training"]!);
+  if (data.optionalSlides.integrations) {
+    slide13Integrations(pptx, get).addNotes(SPEAKER_NOTES["integrations"]!);
+  }
+  if (data.optionalSlides.support) slide14Support(pptx, get).addNotes(SPEAKER_NOTES["support"]!);
+  if (data.optionalSlides.risks) slide15Risks(pptx, get).addNotes(SPEAKER_NOTES["risks"]!);
+  slide16ActionPlan(pptx, get).addNotes(SPEAKER_NOTES["actions"]!);
+  slide17Close(pptx, get).addNotes(SPEAKER_NOTES["close"]!);
 
   const out = await pptx.write({ outputType: "nodebuffer" });
   return out as Buffer;

@@ -83,6 +83,14 @@ export type KickoffDeckData = {
   /** The template's `kickoff-data` block. Only keys we could actually fill. */
   fields: Record<string, string>;
   /**
+   * Keys whose value was read out of the call notes rather than taken from a
+   * record somebody entered. They are not marked on the slide — a customer
+   * should not see the deck's plumbing — but the AE gets the list, because a
+   * seat count lifted from a transcript is a different kind of fact from one
+   * on the contract, and the kickoff is where a wrong one gets read aloud.
+   */
+  fromCalls: string[];
+  /**
    * Keys the portal has no source for, in template order. The renderer draws
    * a placeholder for each; the AE gets the list before the call.
    */
@@ -223,6 +231,19 @@ export const TEMPLATE_FIELDS: readonly string[] = [
   "next_meeting",
 ];
 
+/**
+ * The five rows on the deck's responsibilities slide, in its order. Exported
+ * because the renderer draws the same list and the extraction prompt names the
+ * same strings — three copies of five labels is how they drift.
+ */
+export const RACI_RESPONSIBILITIES: readonly string[] = [
+  "Form and workflow build",
+  "User accounts and permissions",
+  "Devices in the field",
+  "Change management with crews",
+  "Reporting and business reviews",
+];
+
 const MONTHS = [
   "January",
   "February",
@@ -275,10 +296,30 @@ export function splitGoal(goal: string): { headline: string; detail: string | nu
 
 export function buildKickoffData(input: KickoffInput): KickoffDeckData {
   const f: Record<string, string> = {};
+  const fromCalls = new Set<string>();
+
   const set = (key: string, value: string | null | undefined) => {
     const v = clean(value ?? null);
     if (v) f[key] = v;
   };
+
+  /**
+   * A value the LLM read out of the call notes.
+   *
+   * RECORDS WIN. `set` runs first for anything the portal actually holds, and
+   * this only fills what is still empty — a requirement somebody typed beats
+   * the same requirement inferred from a transcript, every time. What it does
+   * fill is remembered, so the AE can check it.
+   */
+  const infer = (key: string, value: string | null | undefined) => {
+    if (key in f) return;
+    const v = clean(value ?? null);
+    if (!v) return;
+    f[key] = v;
+    fromCalls.add(key);
+  };
+
+  const k = input.brief.kickoff;
 
   /* ------------------------------------------------------------ 01, 03, 17 */
 
@@ -309,6 +350,8 @@ export function buildKickoffData(input: KickoffInput): KickoffDeckData {
 
   /* ------------------------------------------------------------------- 07 */
 
+  k.kpi_qualifiers.slice(0, 4).forEach((q, i) => infer(`kpi_${i + 1}_label`, q));
+
   input.successCriteria.slice(0, 3).forEach((c, i) => {
     // A card is METRIC / number / qualifier. The template hard-codes the
     // metric ("Users live", "Forms live") because its example criteria are
@@ -335,6 +378,15 @@ export function buildKickoffData(input: KickoffInput): KickoffDeckData {
   const outOfScope = input.requirements.filter((r) => !r.inScope).map((r) => r.title);
   set("out_of_scope", outOfScope.length ? outOfScope.join(", ") : null);
 
+  // The calls carry what the portal cannot: what each workflow retires and who
+  // uses it. Pre-handoff they also carry the workflows themselves.
+  k.scope.slice(0, 5).forEach((row, i) => {
+    infer(`scope_${i + 1}_workflow`, row.workflow);
+    infer(`scope_${i + 1}_replaces`, row.replaces);
+    infer(`scope_${i + 1}_teams`, row.teams);
+  });
+  infer("out_of_scope", k.out_of_scope);
+
   /* ------------------------------------------------------------------- 10 */
 
   input.stages.slice(0, 5).forEach((s, i) => {
@@ -355,7 +407,9 @@ export function buildKickoffData(input: KickoffInput): KickoffDeckData {
   /* ------------------------------------------------------------------- 13 */
 
   input.solutions.slice(0, 3).forEach((s, i) => set(`integration_${i + 1}`, s));
+  k.integrations.slice(0, 3).forEach((s, i) => infer(`integration_${i + 1}`, s));
   set("it_contact", input.itContact ? `${input.itContact.name} · ${input.itContact.role}` : null);
+  infer("it_contact", k.it_contact);
 
   /* ------------------------------------------------------------------- 14 */
 
@@ -379,14 +433,56 @@ export function buildKickoffData(input: KickoffInput): KickoffDeckData {
     set(`action_${i + 1}_due`, shortDate(t.due));
   });
 
-  // A field nobody CAN fill is not the same as one nobody HAS. The KPI
-  // qualifier lines are deliberately left to the person presenting, so they
-  // are omitted rather than flagged red on a customer-facing slide.
-  const optionalByDesign = new Set(["kpi_1_label", "kpi_2_label", "kpi_3_label"]);
+  // A field nobody CAN fill is not the same as one nobody HAS, and `missing`
+  // is a to-do list for the presenter — so it only lists fields that actually
+  // show as blank on a slide. These three groups never do:
+  //   - the IT questions, which the deck renders as fixed copy;
+  //   - the KPI qualifier and goal detail lines, which are simply not drawn
+  //     when there is nothing for them.
+  // Flagging them told the AE to go and fill something already filled.
+  const optionalByDesign = new Set([
+    "kpi_1_label",
+    "kpi_2_label",
+    "kpi_3_label",
+    "goal_1_detail",
+    "goal_2_detail",
+    "goal_3_detail",
+    "goal_4_detail",
+    "it_req_1",
+    "it_req_2",
+    "it_req_3",
+    "it_req_4",
+  ]);
+  /* ---------------------------------------------------------- 11, 12, 17 */
+
+  // The five responsibilities the slide lists, in its order. A row is filled
+  // only when the notes named an owner for that exact one — matching loosely
+  // would put the person who owns devices against the build.
+  RACI_RESPONSIBILITIES.forEach((responsibility, i) => {
+    const hit = k.roles.find(
+      (r) => r.responsibility.trim().toLowerCase() === responsibility.toLowerCase(),
+    );
+    if (!hit) return;
+    infer(`raci_${i + 1}_owner`, hit.owner);
+    infer(`raci_${i + 1}_support`, hit.support);
+  });
+
+  k.training.slice(0, 3).forEach((t, i) => {
+    infer(`training_${i + 1}_title`, t.title);
+    infer(`training_${i + 1}_who`, t.who);
+  });
+  infer("licensed_seats", k.licensed_seats);
+  infer("renewal_date", k.renewal_date);
+  infer("next_meeting", k.next_meeting);
+  infer("day_90_definition", k.day_90_definition);
+
   const missing = TEMPLATE_FIELDS.filter((k) => !(k in f) && !optionalByDesign.has(k));
 
   return {
     fields: f,
+    fromCalls: [...fromCalls].sort(
+      (a, b) => TEMPLATE_FIELDS.indexOf(a) - TEMPLATE_FIELDS.indexOf(b),
+    ),
     missing,
     optionalSlides: {
       // The template's note: skip for clients who already know us well. There

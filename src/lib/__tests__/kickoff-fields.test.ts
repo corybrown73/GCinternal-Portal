@@ -20,6 +20,19 @@ const emptyBrief: BriefJson = {
   risks_open_items: [],
   discovery_questions: [],
   process_gaps: [],
+  kickoff: {
+    day_90_definition: null,
+    scope: [],
+    out_of_scope: null,
+    integrations: [],
+    roles: [],
+    licensed_seats: null,
+    renewal_date: null,
+    it_contact: null,
+    training: [],
+    kpi_qualifiers: [],
+    next_meeting: null,
+  },
 };
 
 function input(over: Partial<KickoffInput> = {}): KickoffInput {
@@ -257,10 +270,16 @@ describe("regressions found by rendering the deck", () => {
     expect(fields["kpi_1_value"]).toBe("0");
   });
 
-  it("does not flag the KPI qualifier lines, which are the presenter's to write", () => {
+  it("only flags fields that actually show blank on a slide", () => {
+    // `missing` is the presenter's to-do list. The IT questions are fixed copy
+    // and the qualifier and goal-detail lines are simply not drawn when empty,
+    // so flagging them sent the AE to fill something already filled.
     const { missing } = buildKickoffData(input());
     expect(missing).not.toContain("kpi_1_label");
+    expect(missing).not.toContain("goal_1_detail");
+    expect(missing).not.toContain("it_req_1");
     expect(missing).toContain("day_90_definition");
+    expect(missing).toContain("raci_1_owner");
   });
 
   it("formats the date on the first ask, rather than printing an ISO string", () => {
@@ -273,5 +292,151 @@ describe("regressions found by rendering the deck", () => {
       }),
     );
     expect(fields["need_from_client"]).toBe("Send three export files by May 8");
+  });
+});
+
+describe("filling the deck from the call notes", () => {
+  const calls = (over: Partial<BriefJson["kickoff"]> = {}): BriefJson["kickoff"] => ({
+    ...emptyBrief.kickoff,
+    ...over,
+  });
+
+  it("reads what a workflow replaces and who uses it — things no record holds", () => {
+    const { fields, fromCalls } = buildKickoffData(
+      input({
+        requirements: [{ title: "Daily Safety Inspection", inScope: true }],
+        brief: {
+          ...emptyBrief,
+          kickoff: calls({
+            scope: [
+              {
+                workflow: "Daily Safety Inspection",
+                replaces: "Carbon-copy pad",
+                teams: "All crews · 240",
+              },
+            ],
+          }),
+        },
+      }),
+    );
+    expect(fields["scope_1_replaces"]).toBe("Carbon-copy pad");
+    expect(fields["scope_1_teams"]).toBe("All crews · 240");
+    // The workflow itself came from the record, so it is not flagged.
+    expect(fromCalls).not.toContain("scope_1_workflow");
+    expect(fromCalls).toContain("scope_1_replaces");
+  });
+
+  it("lets a recorded requirement beat the same one heard on a call", () => {
+    const { fields, fromCalls } = buildKickoffData(
+      input({
+        requirements: [{ title: "Daily Safety Inspection", inScope: true }],
+        brief: {
+          ...emptyBrief,
+          kickoff: calls({
+            scope: [{ workflow: "Daily safety checks", replaces: null, teams: null }],
+          }),
+        },
+      }),
+    );
+    expect(fields["scope_1_workflow"]).toBe("Daily Safety Inspection");
+    expect(fromCalls).not.toContain("scope_1_workflow");
+  });
+
+  it("fills a workflow from the calls when no requirement was recorded", () => {
+    const { fields, fromCalls } = buildKickoffData(
+      input({
+        brief: {
+          ...emptyBrief,
+          kickoff: calls({
+            scope: [{ workflow: "Work Order Closeout", replaces: "Excel", teams: null }],
+          }),
+        },
+      }),
+    );
+    expect(fields["scope_1_workflow"]).toBe("Work Order Closeout");
+    expect(fromCalls).toContain("scope_1_workflow");
+  });
+
+  it("matches a RACI owner to its own row and no other", () => {
+    const { fields } = buildKickoffData(
+      input({
+        brief: {
+          ...emptyBrief,
+          kickoff: calls({
+            roles: [
+              { responsibility: "Devices in the field", owner: "Northwind · IT", support: null },
+              {
+                responsibility: "Form and workflow build",
+                owner: "GoCanvas · Cory Brown",
+                support: "Tom Whitfield",
+              },
+            ],
+          }),
+        },
+      }),
+    );
+    expect(fields["raci_1_owner"]).toBe("GoCanvas · Cory Brown");
+    expect(fields["raci_1_support"]).toBe("Tom Whitfield");
+    expect(fields["raci_3_owner"]).toBe("Northwind · IT");
+    // Nothing was said about accounts, so that row stays for the meeting.
+    expect(fields["raci_2_owner"]).toBeUndefined();
+  });
+
+  it("ignores a responsibility the slide does not have a row for", () => {
+    const { fields } = buildKickoffData(
+      input({
+        brief: {
+          ...emptyBrief,
+          kickoff: calls({
+            roles: [{ responsibility: "Catering", owner: "Somebody", support: null }],
+          }),
+        },
+      }),
+    );
+    expect(Object.keys(fields).filter((key) => key.startsWith("raci_"))).toHaveLength(0);
+  });
+
+  it("takes the seat count, renewal and day-90 line straight from what was said", () => {
+    const { fields, missing, fromCalls } = buildKickoffData(
+      input({
+        brief: {
+          ...emptyBrief,
+          kickoff: calls({
+            licensed_seats: "310 on the Business plan",
+            renewal_date: "April 30, 2027",
+            day_90_definition:
+              "Every crew files their daily inspection from the app before leaving site.",
+            next_meeting: "Discovery · May 6",
+          }),
+        },
+      }),
+    );
+    expect(fields["licensed_seats"]).toBe("310 on the Business plan");
+    expect(missing).not.toContain("licensed_seats");
+    expect(missing).not.toContain("day_90_definition");
+    expect(fromCalls).toContain("renewal_date");
+    expect(fromCalls).toContain("next_meeting");
+  });
+
+  it("still reports a field the calls did not answer either", () => {
+    const { missing, fromCalls } = buildKickoffData(input());
+    expect(missing).toContain("licensed_seats");
+    expect(fromCalls).toHaveLength(0);
+  });
+
+  it("lists what came from the calls in the deck's own field order", () => {
+    const { fromCalls } = buildKickoffData(
+      input({
+        brief: {
+          ...emptyBrief,
+          kickoff: calls({
+            next_meeting: "Discovery · May 6",
+            day_90_definition: "Crews file from the app.",
+            integrations: ["QuickBooks · invoice from closed work orders"],
+          }),
+        },
+      }),
+    );
+    expect(fromCalls).toEqual(["day_90_definition", "integration_1", "next_meeting"]);
   });
 });

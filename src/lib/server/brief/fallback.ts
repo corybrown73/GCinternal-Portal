@@ -1,4 +1,26 @@
 import type { BriefJson } from "../schemas";
+
+/**
+ * The deck extraction the template path cannot do.
+ *
+ * Reading "310 on the Business plan", or a named RACI owner, out of prose is
+ * the one thing this deterministic generator has no way to attempt. Empty is
+ * the honest answer: the deck marks each field for the presenter rather than
+ * guessing from a keyword match.
+ */
+const NO_KICKOFF: BriefJson["kickoff"] = {
+  day_90_definition: null,
+  scope: [],
+  out_of_scope: null,
+  integrations: [],
+  roles: [],
+  licensed_seats: null,
+  renewal_date: null,
+  it_contact: null,
+  training: [],
+  kpi_qualifiers: [],
+  next_meeting: null,
+};
 import type { Account, GongReport } from "../../presale-types";
 
 // Deterministic no-LLM path: sections the report markdown into topics and
@@ -101,5 +123,6 @@ export function buildTemplateBrief(account: Account, reports: GongReport[]): Bri
     process_gaps: [
       "Confirm with the client which current process steps are manual or paper-based.",
     ],
+    kickoff: NO_KICKOFF,
   };
 }

@@ -26,6 +26,10 @@ export async function generateBriefWithLLM(
     const response = await client.messages.parse({
       model: "claude-opus-5",
       max_tokens: 16000,
+      // Reading a seat count, a named owner and what each workflow replaces out
+      // of unstructured call notes — while holding the line on "say null" — is
+      // exactly the kind of work adaptive thinking is for.
+      thinking: { type: "adaptive" },
       system: BRIEF_SYSTEM_PROMPT,
       messages: [{ role: "user", content: userPrompt }],
 

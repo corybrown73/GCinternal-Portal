@@ -48,5 +48,56 @@ export const briefJsonSchema = z.object({
     z.object({ question: z.string(), why_it_matters: z.string(), category: z.string() }),
   ),
   process_gaps: z.array(z.string()),
+  /**
+   * What the kickoff deck needs and the brief proper does not carry.
+   *
+   * WHY IT IS HERE. The deck has 124 named fields and the portal can only
+   * record a fraction of them — roles, seat counts, what each workflow
+   * replaces, which systems are being connected. All of that is discussed on
+   * the sales calls, so it is read out of the same notes rather than left for
+   * somebody to retype from a transcript they no longer remember.
+   *
+   * EVERY FIELD IS NULLABLE, AND NULL IS THE RIGHT ANSWER when the notes do
+   * not say. These land on a slide a customer reads: an invented seat count or
+   * a guessed owner is worse than a blank the presenter fills in.
+   */
+  kickoff: z.object({
+    /** One sentence: what "good" looks like ninety days after go-live. */
+    day_90_definition: z.string().nullable(),
+    /** Workflows in phase one, in the client's own words. */
+    scope: z.array(
+      z.object({
+        workflow: z.string(),
+        /** The paper or manual process this retires. */
+        replaces: z.string().nullable(),
+        /** Who uses it, and how many, e.g. "All crews · 240". */
+        teams: z.string().nullable(),
+      }),
+    ),
+    /** What the client said is NOT in phase one. */
+    out_of_scope: z.string().nullable(),
+    /** Systems to connect, e.g. "QuickBooks · invoice from closed work orders". */
+    integrations: z.array(z.string()),
+    /** Named owners for the five responsibilities the deck's RACI slide lists. */
+    roles: z.array(
+      z.object({
+        /** One of: build, accounts, devices, change management, reporting. */
+        responsibility: z.string(),
+        owner: z.string(),
+        support: z.string().nullable(),
+      }),
+    ),
+    /** Licensing as stated, e.g. "310 on the Business plan". */
+    licensed_seats: z.string().nullable(),
+    renewal_date: z.string().nullable(),
+    /** The technical contact, if the notes name one. */
+    it_contact: z.string().nullable(),
+    /** Training as discussed: who is trained, how, and for how long. */
+    training: z.array(z.object({ title: z.string(), who: z.string() })),
+    /** The qualifier under each success number, e.g. "by end of quarter two". */
+    kpi_qualifiers: z.array(z.string()),
+    /** The next scheduled touchpoint, if one was agreed. */
+    next_meeting: z.string().nullable(),
+  }),
 });
 export type BriefJson = z.infer<typeof briefJsonSchema>;
