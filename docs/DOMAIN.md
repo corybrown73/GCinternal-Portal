@@ -143,8 +143,31 @@ Keep the old `https://g-cinternal-portal.vercel.app/auth/callback` in the
 list until you are sure no unopened invite emails are still out there. An
 invite sent before the cutover carries the old callback, and a redirect URL
 that is not on the allow list does not fail loudly — Supabase silently sends
-the visitor to the Site URL instead, so the person clicking gets a sign-in
-page rather than the thing they were invited to.
+the visitor to the **Site URL** instead, so the person clicking gets a
+sign-in page rather than the thing they were invited to.
+
+That is not hypothetical: it is exactly what happened during this cutover.
+A password reset requested from the new domain arrived fine and landed the
+user back on `g-cinternal-portal.vercel.app`, because the callback was not
+yet allow-listed and Supabase substituted the then-stale Site URL. No error,
+in the app or the dashboard — just the wrong destination.
+
+**Add the wildcard, not only the exact callback.** The password-reset link is
+built as `/auth/callback?next=/forgot-password`, and query strings are where
+exact-match allow lists get fussy. The pair that works:
+
+    https://www.gcinternalportal.com/auth/callback
+    https://www.gcinternalportal.com/**
+
+A wildcard scoped to your own domain costs nothing — an allow list exists to
+stop redirects to *other people's* domains, not to your own paths.
+
+Two mechanical notes on that screen. Entries in the Redirect URLs list save
+as you add each one; **Site URL does not** — it needs the *Save changes*
+button, which stays greyed out until there is something pending. And a reset
+or invite email has its destination baked in at send time, so after changing
+any of this you must request a **fresh** one. Re-clicking the email already
+in your inbox fails identically no matter what you fixed.
 
 Every auth link in the app lands on `/auth/callback`; there is no second path
 to allow.
