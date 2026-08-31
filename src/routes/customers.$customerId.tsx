@@ -389,19 +389,25 @@ function Customer360Page() {
       </header>
 
       <CollapsibleSections scope={`customer:${tab}`}>
-        <div className="space-y-3 px-6 py-4">
-          <SectionControls scope={`customer:${tab}`} />
-          {tab === "overview" ? <OverviewTab record={record} customerId={customerId} /> : null}
-          {tab === "journey" ? <JourneyTab record={record} customerId={customerId} /> : null}
-          {tab === "solution" ? <SolutionTab record={record} customerId={customerId} /> : null}
-          {tab === "requirements" ? (
-            <RequirementsTab record={record} customerId={customerId} />
-          ) : null}
-          {tab === "decisions" ? <DecisionsTab record={record} customerId={customerId} /> : null}
-          {tab === "risks" ? <RisksTab record={record} customerId={customerId} /> : null}
-
-          {tab === "evidence" ? <EvidenceTab record={record} customerId={customerId} /> : null}
-          {tab === "history" ? <HistoryTab record={record} /> : null}
+        {/* Content and rail, side by side on a wide screen and stacked below
+            `lg`. `items-start` is what lets the rail stick: a stretched grid
+            item is already as tall as the row, so `position: sticky` inside it
+            has nothing to travel through. */}
+        <div className="grid items-start gap-4 px-6 py-4 lg:grid-cols-[minmax(0,1fr)_320px]">
+          <div className="min-w-0 space-y-3">
+            <SectionControls scope={`customer:${tab}`} />
+            {tab === "overview" ? <OverviewTab record={record} customerId={customerId} /> : null}
+            {tab === "journey" ? <JourneyTab record={record} customerId={customerId} /> : null}
+            {tab === "solution" ? <SolutionTab record={record} customerId={customerId} /> : null}
+            {tab === "requirements" ? (
+              <RequirementsTab record={record} customerId={customerId} />
+            ) : null}
+            {tab === "decisions" ? <DecisionsTab record={record} customerId={customerId} /> : null}
+            {tab === "risks" ? <RisksTab record={record} customerId={customerId} /> : null}
+            {tab === "evidence" ? <EvidenceTab record={record} customerId={customerId} /> : null}
+            {tab === "history" ? <HistoryTab record={record} /> : null}
+          </div>
+          <AccountRail record={record} customerId={customerId} />
         </div>
       </CollapsibleSections>
     </div>
@@ -550,7 +556,6 @@ function OverviewTab({ record, customerId }: { record: Customer360; customerId: 
     discovery_board_image_name: impl.discovery_board_image_name,
     discovery_board_notes: impl.discovery_board_notes,
   };
-  const events = meaningfulEvents(record);
   const waiting = waitingOnForCustomer(record);
   const valueGaps = proveValueGaps(record.success_criteria, impl.current_stage);
   // Behavioural only — never derived from success criteria or health.
@@ -559,9 +564,434 @@ function OverviewTab({ record, customerId }: { record: Customer360; customerId: 
   const readiness = graduationReadiness(record, impl);
   const readinessSummary = graduationReadinessSummary(readiness);
   const gradEvidence = graduationEvidence(record, impl);
-  const solutionOwners = Array.from(
-    new Set(record.technical_solutions.map((s: any) => s.owner_name).filter(Boolean)),
+  return (
+    <div className="space-y-4">
+      {/* First on the page, above everything descriptive: the three things
+            that have to be true before this project moves on, and the control
+            that moves it. Ticking the last one IS the prompt to advance. */}
+      <StageGatesSection customerId={customerId} implementationId={impl.id} />
+      <Panel title="Current state" level="primary">
+        {/* Stage, health, target launch and progress used to head this
+              panel. They now live in the account rail, which is on screen from
+              every tab rather than only this one — so repeating them here would
+              be the same four facts twice on the same screen. What is left is
+              what the rail deliberately does not carry: the reasoning. */}
+        <div className="space-y-2 px-3 py-3">
+          <PrimarySignal
+            label="Waiting on"
+            emphasis="medium"
+            value={
+              waiting.party === "none" ? "No current dependency" : WAITING_ON_LABEL[waiting.party]
+            }
+            detail={
+              waiting.party === "none"
+                ? undefined
+                : // Phase 6: the wait is dated from the record that decided it
+                  // (the approval, the commitment), never from stage entry.
+                  `${waiting.reason.replace(/^Waiting on [^—]+ — /, "")}${
+                    waiting.since ? ` · since ${fmtDate(waiting.since)}` : ""
+                  }`
+            }
+          />
+          {valueGaps.length ? (
+            <p className="text-[12px] leading-snug text-muted-foreground">
+              Value proof · {valueGaps.length} success criteri
+              {valueGaps.length > 1 ? "a" : "on"} late — {valueGaps[0]!.reason}
+            </p>
+          ) : null}
+          {adoption ? (
+            <p className="text-[12px] leading-snug text-muted-foreground">
+              Usage · {ADOPTION_LEVEL_LABEL[adoption.level]} — {adoption.reason}
+            </p>
+          ) : null}
+        </div>
+
+        <div className="border-t border-border px-3 py-2">
+          <p className="mb-1 text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
+            Statement of work
+          </p>
+          <SowPanel
+            customerId={customerId}
+            implementation={{
+              id: impl.id,
+              name: impl.name,
+              owner_id: impl.owner_id,
+              sales_owner: impl.sales_owner,
+              tier: impl.tier,
+              status: impl.status,
+              sow_reference: impl.sow_reference,
+              sow_document_url: impl.sow_document_url,
+              sow_document_name: impl.sow_document_name,
+              sow_value: impl.sow_value,
+              sow_signed_date: impl.sow_signed_date,
+              contract_start_date: impl.contract_start_date,
+              target_launch_date: impl.target_launch_date,
+              actual_launch_date: impl.actual_launch_date,
+              customer_goals: impl.customer_goals,
+            }}
+          />
+        </div>
+        <div className="border-t border-border px-3 py-2">
+          <EditImplementation
+            customerId={customerId}
+            implementation={{
+              id: impl.id,
+              name: impl.name,
+              owner_id: impl.owner_id,
+              sales_owner: impl.sales_owner,
+              tier: impl.tier,
+              status: impl.status,
+              sow_reference: impl.sow_reference,
+              sow_value: impl.sow_value,
+              sow_signed_date: impl.sow_signed_date,
+              contract_start_date: impl.contract_start_date,
+              target_launch_date: impl.target_launch_date,
+              actual_launch_date: impl.actual_launch_date,
+              customer_goals: impl.customer_goals,
+            }}
+            team={record.team}
+          />
+        </div>
+      </Panel>
+
+      <Panel title="What the customer wants to achieve" level="primary">
+        <div className="px-3 py-3">
+          <CustomerGoalsPanel customerId={customerId} implementation={boardImpl} />
+        </div>
+        <div className="border-t border-border bg-surface px-3 py-2">
+          <p className="mb-1 text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
+            Discovery board (Miro) · supporting context
+          </p>
+          <DiscoveryBoardPanel customerId={customerId} implementation={boardImpl} />
+        </div>
+      </Panel>
+
+      <Panel title="What success looks like" count={record.success_criteria.length} level="primary">
+        <p className="border-b border-border px-3 py-2 text-[11px] leading-relaxed text-muted-foreground">
+          Each measure records what success looks like, how it will be measured, the starting point
+          and target where they apply, and who owns it. Working context belongs in the {TIS_SHORT}{" "}
+          journal, not here.
+        </p>
+
+        {/* Kickoff intake: the named customer people outcomes and adoption are
+              owned by, and who confirms value. Reuses the customer contact record. */}
+        <div className="border-b border-border px-3 py-2">
+          <p className="text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
+            Customer contacts
+          </p>
+          {record.contacts.length ? (
+            <ul className="mt-1 divide-y divide-border border-y border-border">
+              {record.contacts.map((c) => (
+                <li key={c.id} className="py-1.5">
+                  <div className="flex flex-wrap items-baseline gap-2 text-[12px]">
+                    <span className="font-medium">{c.name}</span>
+                    <span className="rounded border border-border px-1 py-0.5 text-[10px] uppercase tracking-[0.08em] text-muted-foreground">
+                      {contactRoleLabel(c.role) ?? c.role}
+                    </span>
+                    <span className="text-[11px] text-muted-foreground">{dash(c.email)}</span>
+                    <span className="ml-auto">
+                      <EditCustomerContact customerId={customerId} contact={c} />
+                    </span>
+                  </div>
+                  {c.notes ? (
+                    <p className="mt-0.5 text-[11px] text-muted-foreground">{c.notes}</p>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="mt-0.5 text-[12px] text-muted-foreground">
+              No customer contacts recorded — outcome ownership, value confirmation and adoption
+              ownership cannot be attributed yet.
+            </p>
+          )}
+          <div className="mt-1.5">
+            <AddCustomerContact customerId={customerId} />
+          </div>
+        </div>
+        {record.success_criteria.length ? (
+          <ul className="divide-y divide-border">
+            {record.success_criteria.map((s) => (
+              <SuccessCriterionRow
+                key={s.id}
+                criterion={s}
+                customerId={customerId}
+                implementationId={impl.id}
+                team={record.team}
+                contacts={record.contacts}
+                evidence={record.evidence}
+                currentStage={impl.current_stage}
+              />
+            ))}
+          </ul>
+        ) : (
+          <div className="flex flex-wrap items-center gap-3 px-3 py-3">
+            <span className="text-[12px] text-muted-foreground">
+              No success measures recorded yet. Add one so we can measure whether this
+              implementation delivers value.
+            </span>
+          </div>
+        )}
+        <div className="border-t border-border px-3 py-2">
+          <AddSuccessCriterion
+            customerId={customerId}
+            implementationId={impl.id}
+            team={record.team}
+            contacts={record.contacts}
+          />
+        </div>
+      </Panel>
+
+      {/* Adoption is behavioural ("are they using it as intended?") and is kept
+            deliberately separate from Value & success above. */}
+      <Panel
+        title="How the customer will use it"
+        count={record.adoption.length}
+        meta={adoption ? ADOPTION_LEVEL_LABEL[adoption.level] : undefined}
+        level="supporting"
+      >
+        <p className="border-b border-border px-3 py-2 text-[11px] text-muted-foreground">
+          Each row records how the customer is expected to use the solution — the intended users,
+          how often, and what counts as being in use. Usage observations underneath record what is
+          actually happening; the discovery board is supporting context only.
+        </p>
+
+        {adoption?.workarounds.length ? (
+          <p className="border-b border-border px-3 py-2 text-[12px]">
+            <span className="text-muted-foreground">Workarounds still in use · </span>
+            {adoption.workarounds
+              .map((w) => `${w.name}${w.description ? ` (${w.description})` : ""}`)
+              .join("; ")}
+          </p>
+        ) : null}
+        {record.adoption.length ? (
+          <ul className="divide-y divide-border">
+            {record.adoption.map((a) => (
+              <AdoptionAreaRow
+                key={a.id}
+                area={a}
+                customerId={customerId}
+                team={record.team}
+                contacts={record.contacts}
+                evidence={record.evidence}
+              />
+            ))}
+          </ul>
+        ) : (
+          <div className="px-3 py-3 text-[12px] text-muted-foreground">
+            No usage areas recorded yet.
+          </div>
+        )}
+        <div className="border-t border-border px-3 py-2">
+          <AddAdoptionArea
+            customerId={customerId}
+            implementationId={impl.id}
+            team={record.team}
+            contacts={record.contacts}
+          />
+        </div>
+      </Panel>
+
+      {/* Read-only readiness view. Not a gate: it never blocks or moves a stage. */}
+      <Panel title="Ready to hand over" level="supporting" meta={readinessSummary.line}>
+        <p className="border-b border-border px-3 py-2 text-[11px] text-muted-foreground">
+          Read-only assessment of whether this customer is actually ready for handover to Customer
+          Success. Nothing here blocks stage movement.
+        </p>
+        <ul className="divide-y divide-border">
+          {readiness.map((area) => (
+            <li key={area.id} className="flex items-start gap-3 px-3 py-2">
+              <span
+                className={cn(
+                  "mt-0.5 shrink-0 rounded-sm border px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-[0.08em]",
+                  area.state === "ready"
+                    ? "border-border text-foreground"
+                    : area.state === "needs_attention"
+                      ? "border-destructive/60 text-destructive"
+                      : "border-border text-muted-foreground",
+                )}
+              >
+                {READINESS_STATE_LABEL[area.state]}
+              </span>
+              <div className="min-w-0">
+                <p className="text-[12px] font-medium">{area.label}</p>
+                <p className="text-[12px] text-muted-foreground">{area.reason}</p>
+              </div>
+              {area.tab && area.tab !== "overview" ? (
+                <Link
+                  to="/customers/$customerId"
+                  params={{ customerId }}
+                  search={{ tab: area.tab as TabId }}
+                  className="ml-auto shrink-0 text-[11px] text-muted-foreground underline hover:text-foreground"
+                >
+                  {TAB_LABEL[area.tab as TabId]}
+                </Link>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+        {gradEvidence.hasRecord ? (
+          <>
+            <div className="border-t border-border px-3 py-2">
+              <p className="text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
+                Verified by structured records
+              </p>
+              <dl className="mt-2 grid grid-cols-2 gap-x-6 gap-y-2 md:grid-cols-4">
+                {gradEvidence.verified.map((f) => (
+                  <Field key={f.label} label={f.label} value={f.value} />
+                ))}
+              </dl>
+            </div>
+            {gradEvidence.narrative.length ? (
+              <div className="border-t border-dashed border-border bg-muted/40 px-3 py-2">
+                <p className="text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
+                  Recorded as narrative — not independently verified
+                </p>
+                <ul className="mt-2 space-y-2">
+                  {gradEvidence.narrative.map((n) => (
+                    <li
+                      key={n.label}
+                      className="border-l-2 border-dashed border-muted-foreground/40 pl-2"
+                    >
+                      <p className="text-[10px] uppercase tracking-[0.08em] text-muted-foreground">
+                        {n.label} · {n.source}
+                      </p>
+                      <p className="text-[12px] italic text-muted-foreground">{n.value}</p>
+                    </li>
+                  ))}
+                </ul>
+                {gradEvidence.corroboration ? (
+                  <p className="mt-2 border-t border-dashed border-border pt-2 text-[11px] text-destructive">
+                    {gradEvidence.corroboration}
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
+          </>
+        ) : (
+          <p className="border-t border-border px-3 py-2 text-[12px] text-muted-foreground">
+            No handover record exists yet — nothing is assumed on its behalf.
+          </p>
+        )}
+      </Panel>
+
+      {/* Phase 7. The writer for the record the panel above reads. Two tables
+            modelled this one event in 0003 and neither had a write path;
+            cs_handoffs is now the record, graduations is deprecated and folded
+            forward. Renders nothing while handover_record is off. */}
+      <HandoverRecordPanel implementationId={impl.id} team={record.team} />
+
+      <Panel
+        title="Open items"
+        level="primary"
+        meta={`${
+          open.commitments.length + open.risks.length + open.issues.length + open.escalations.length
+        } open`}
+      >
+        <div className="grid grid-cols-2 divide-x divide-border border-b border-border md:grid-cols-4">
+          {(
+            [
+              ["Commitments", open.commitments.length],
+              ["Risks", open.risks.length],
+              ["Issues", open.issues.length],
+              ["Escalations", open.escalations.length],
+            ] as const
+          ).map(([k, v]) => (
+            <div key={k} className="px-3 py-2">
+              <div className="text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
+                {k}
+              </div>
+              <div className="font-mono text-[16px]">{v}</div>
+            </div>
+          ))}
+        </div>
+        <ul className="divide-y divide-border">
+          {[
+            ...open.escalations.map((e: any) => ({
+              id: `e-${e.id}`,
+              kind: "Escalation",
+              title: e.title,
+              severity: e.severity,
+              extra: e.status,
+            })),
+            ...open.risks.map((r: any) => ({
+              id: `r-${r.id}`,
+              kind: "Risk",
+              title: r.title,
+              severity: r.severity,
+              extra: `${r.likelihood} likelihood`,
+            })),
+            ...open.issues.map((r: any) => ({
+              id: `i-${r.id}`,
+              kind: "Issue",
+              title: r.title,
+              severity: r.severity,
+              extra: r.status,
+            })),
+            ...open.commitments.map((c: any) => ({
+              id: `c-${c.id}`,
+              kind: "Commitment",
+              title: c.description,
+              severity: null,
+              extra: c.due_date
+                ? `${isOverdue(c.due_date) ? "Overdue" : "Due"} ${fmtDate(c.due_date)}`
+                : "No due date",
+            })),
+          ]
+            .slice(0, 10)
+            .map((row) => (
+              <Row key={row.id} className="flex flex-wrap items-baseline gap-2">
+                <span className="w-20 shrink-0 text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
+                  {row.kind}
+                </span>
+                <span className="text-[13px]">{row.title}</span>
+                {row.severity ? <SeverityChip value={row.severity} /> : null}
+                <span className="text-[11px] text-muted-foreground">{row.extra}</span>
+              </Row>
+            ))}
+          {open.commitments.length +
+            open.risks.length +
+            open.issues.length +
+            open.escalations.length ===
+          0 ? (
+            <NoRows label="Nothing open" />
+          ) : null}
+        </ul>
+      </Panel>
+    </div>
   );
+}
+
+/**
+ * The account rail — what stays on screen wherever you are in the record.
+ *
+ * WHAT THIS FIXES. Customer 360 is eight tabs, and seven of them used to be a
+ * bare full-width column. The moment you left Overview to look at a risk or a
+ * requirement, every fact about WHOSE account it is went away: the owner, the
+ * account manager, the stage, the launch date, what is open. People answered
+ * those questions by clicking back to Overview, reading, and clicking forward
+ * again — which is the tell that they belong to the record rather than to one
+ * tab of it.
+ *
+ * So the rail is page-level and sticky, the way a Salesforce record keeps its
+ * highlights and related lists beside you the whole way down. Below `lg` it
+ * stacks underneath the content instead: a 320px column beside a table on a
+ * narrow window makes both unreadable, and the tab content is what a person
+ * came for.
+ *
+ * The rule for what belongs here: a fact you would want from ANY tab. The
+ * reasoning behind a fact — why health is amber, what the wait is on, what the
+ * SOW says — stays on Overview, because that is a thing you go and read, not a
+ * thing you glance at. Anything carried here is removed from Overview rather
+ * than duplicated; two copies of one fact on one screen is how they start
+ * disagreeing.
+ */
+function AccountRail({ record, customerId }: { record: Customer360; customerId: string }) {
+  const impl = record.implementation!;
+  const timeline = buildProjectTimeline(projectInput(record, impl));
+  const health = deriveHealth(record, impl);
+  const open = openItems(record);
+  const events = meaningfulEvents(record);
   // The staff directory arrives with the record, so the dropdowns cost no
   // extra query. Sales owner stores a NAME rather than an id — the person who
   // closed the deal may have left, and the record should still say who it was.
@@ -573,7 +1003,11 @@ function OverviewTab({ record, customerId }: { record: Customer360; customerId: 
     value: t.name,
     label: `${t.name} · ${humanize(t.role)}`,
   }));
-
+  // Derived rather than assigned: solution owners come from the solutions
+  // themselves and approvers from the approvals, so neither is editable here.
+  const solutionOwners = Array.from(
+    new Set(record.technical_solutions.map((s: any) => s.owner_name).filter(Boolean)),
+  );
   const approvers = Array.from(
     new Map(
       record.approvals.filter((a: any) => a.approver_name).map((a: any) => [a.approver_name, a]),
@@ -581,29 +1015,20 @@ function OverviewTab({ record, customerId }: { record: Customer360; customerId: 
   );
 
   return (
-    <div className="grid items-start gap-4 xl:grid-cols-3">
-      <div className="space-y-4 xl:col-span-2">
-        {/* First on the page, above everything descriptive: the three things
-            that have to be true before this project moves on, and the control
-            that moves it. Ticking the last one IS the prompt to advance. */}
-        <StageGatesSection customerId={customerId} implementationId={impl.id} />
-        <Panel title="Current state" level="primary">
-          <dl className="grid grid-cols-2 gap-x-6 gap-y-3 px-3 py-2.5 md:grid-cols-4">
+    // Its OWN collapse scope, not the page's. Panels inherit collapsibility
+    // from whatever CollapsibleSections encloses them, and the page's scope is
+    // keyed per tab — so under it, folding "Key people" away on Overview would
+    // have it spring back open on Risks. The rail is one thing wherever you
+    // are, so its open/closed state has to be one thing too.
+    <CollapsibleSections scope="customer:rail">
+      <aside
+        aria-label="Account summary"
+        className="space-y-4 lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto lg:pb-4"
+      >
+        <Panel title="At a glance" level="supporting">
+          <dl className="grid grid-cols-2 gap-x-4 gap-y-3 px-3 py-2.5">
             <Field label="Stage" value={timeline.currentStageName} />
-            <Field
-              label="Health"
-              value={<StatusChip status={deriveHealth(record, impl).level} />}
-            />
-            <Field
-              label="Target launch"
-              value={
-                <PaceChip
-                  pace={timeline.launch}
-                  label={fmtDate(impl.target_launch_date)}
-                  className="font-mono"
-                />
-              }
-            />
+            <Field label="Health" value={<StatusChip status={health.level} />} />
             <Field
               label="Progress"
               value={
@@ -621,319 +1046,42 @@ function OverviewTab({ record, customerId }: { record: Customer360; customerId: 
                 </span>
               }
             />
-          </dl>
-          <div className="space-y-2 border-t border-border px-3 py-3">
-            <PrimarySignal
-              label="Waiting on"
-              emphasis="medium"
+            <Field
+              label="Target launch"
               value={
-                waiting.party === "none" ? "No current dependency" : WAITING_ON_LABEL[waiting.party]
-              }
-              detail={
-                waiting.party === "none"
-                  ? undefined
-                  : // Phase 6: the wait is dated from the record that decided it
-                    // (the approval, the commitment), never from stage entry.
-                    `${waiting.reason.replace(/^Waiting on [^—]+ — /, "")}${
-                      waiting.since ? ` · since ${fmtDate(waiting.since)}` : ""
-                    }`
-              }
-            />
-            {valueGaps.length ? (
-              <p className="text-[12px] leading-snug text-muted-foreground">
-                Value proof · {valueGaps.length} success criteri
-                {valueGaps.length > 1 ? "a" : "on"} late — {valueGaps[0]!.reason}
-              </p>
-            ) : null}
-            {adoption ? (
-              <p className="text-[12px] leading-snug text-muted-foreground">
-                Usage · {ADOPTION_LEVEL_LABEL[adoption.level]} — {adoption.reason}
-              </p>
-            ) : null}
-          </div>
-
-          <div className="border-t border-border px-3 py-2">
-            <p className="mb-1 text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
-              Statement of work
-            </p>
-            <SowPanel
-              customerId={customerId}
-              implementation={{
-                id: impl.id,
-                name: impl.name,
-                owner_id: impl.owner_id,
-                sales_owner: impl.sales_owner,
-                tier: impl.tier,
-                status: impl.status,
-                sow_reference: impl.sow_reference,
-                sow_document_url: impl.sow_document_url,
-                sow_document_name: impl.sow_document_name,
-                sow_value: impl.sow_value,
-                sow_signed_date: impl.sow_signed_date,
-                contract_start_date: impl.contract_start_date,
-                target_launch_date: impl.target_launch_date,
-                actual_launch_date: impl.actual_launch_date,
-                customer_goals: impl.customer_goals,
-              }}
-            />
-          </div>
-          <div className="border-t border-border px-3 py-2">
-            <EditImplementation
-              customerId={customerId}
-              implementation={{
-                id: impl.id,
-                name: impl.name,
-                owner_id: impl.owner_id,
-                sales_owner: impl.sales_owner,
-                tier: impl.tier,
-                status: impl.status,
-                sow_reference: impl.sow_reference,
-                sow_value: impl.sow_value,
-                sow_signed_date: impl.sow_signed_date,
-                contract_start_date: impl.contract_start_date,
-                target_launch_date: impl.target_launch_date,
-                actual_launch_date: impl.actual_launch_date,
-                customer_goals: impl.customer_goals,
-              }}
-              team={record.team}
-            />
-          </div>
-        </Panel>
-
-        <Panel title="What the customer wants to achieve" level="primary">
-          <div className="px-3 py-3">
-            <CustomerGoalsPanel customerId={customerId} implementation={boardImpl} />
-          </div>
-          <div className="border-t border-border bg-surface px-3 py-2">
-            <p className="mb-1 text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
-              Discovery board (Miro) · supporting context
-            </p>
-            <DiscoveryBoardPanel customerId={customerId} implementation={boardImpl} />
-          </div>
-        </Panel>
-
-        <Panel
-          title="What success looks like"
-          count={record.success_criteria.length}
-          level="primary"
-        >
-          <p className="border-b border-border px-3 py-2 text-[11px] leading-relaxed text-muted-foreground">
-            Each measure records what success looks like, how it will be measured, the starting
-            point and target where they apply, and who owns it. Working context belongs in the{" "}
-            {TIS_SHORT} journal, not here.
-          </p>
-
-          {/* Kickoff intake: the named customer people outcomes and adoption are
-              owned by, and who confirms value. Reuses the customer contact record. */}
-          <div className="border-b border-border px-3 py-2">
-            <p className="text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
-              Customer contacts
-            </p>
-            {record.contacts.length ? (
-              <ul className="mt-1 divide-y divide-border border-y border-border">
-                {record.contacts.map((c) => (
-                  <li key={c.id} className="py-1.5">
-                    <div className="flex flex-wrap items-baseline gap-2 text-[12px]">
-                      <span className="font-medium">{c.name}</span>
-                      <span className="rounded border border-border px-1 py-0.5 text-[10px] uppercase tracking-[0.08em] text-muted-foreground">
-                        {contactRoleLabel(c.role) ?? c.role}
-                      </span>
-                      <span className="text-[11px] text-muted-foreground">{dash(c.email)}</span>
-                      <span className="ml-auto">
-                        <EditCustomerContact customerId={customerId} contact={c} />
-                      </span>
-                    </div>
-                    {c.notes ? (
-                      <p className="mt-0.5 text-[11px] text-muted-foreground">{c.notes}</p>
-                    ) : null}
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="mt-0.5 text-[12px] text-muted-foreground">
-                No customer contacts recorded — outcome ownership, value confirmation and adoption
-                ownership cannot be attributed yet.
-              </p>
-            )}
-            <div className="mt-1.5">
-              <AddCustomerContact customerId={customerId} />
-            </div>
-          </div>
-          {record.success_criteria.length ? (
-            <ul className="divide-y divide-border">
-              {record.success_criteria.map((s) => (
-                <SuccessCriterionRow
-                  key={s.id}
-                  criterion={s}
-                  customerId={customerId}
-                  implementationId={impl.id}
-                  team={record.team}
-                  contacts={record.contacts}
-                  evidence={record.evidence}
-                  currentStage={impl.current_stage}
+                <PaceChip
+                  pace={timeline.launch}
+                  label={fmtDate(impl.target_launch_date)}
+                  className="font-mono"
                 />
-              ))}
-            </ul>
-          ) : (
-            <div className="flex flex-wrap items-center gap-3 px-3 py-3">
-              <span className="text-[12px] text-muted-foreground">
-                No success measures recorded yet. Add one so we can measure whether this
-                implementation delivers value.
-              </span>
-            </div>
-          )}
-          <div className="border-t border-border px-3 py-2">
-            <AddSuccessCriterion
-              customerId={customerId}
-              implementationId={impl.id}
-              team={record.team}
-              contacts={record.contacts}
+              }
             />
-          </div>
+            <EditableRecordField
+              implementationId={impl.id}
+              customerId={customerId}
+              field="tier"
+              label="Tier"
+              value={impl.tier ?? null}
+              display={dash(impl.tier)}
+            />
+            <EditableRecordField
+              implementationId={impl.id}
+              customerId={customerId}
+              field="arr"
+              label="ARR"
+              value={record.customer.arr == null ? null : String(record.customer.arr)}
+              type="number"
+              format={(v) => (v == null || v === "" ? dash(null) : fmtMoney(Number(v)))}
+            />
+          </dl>
         </Panel>
 
-        {/* Adoption is behavioural ("are they using it as intended?") and is kept
-            deliberately separate from Value & success above. */}
+        {/* The counts only, linking to where the detail is. The full lists live
+          on Overview and on Risks & Issues; repeating them here would make the
+          rail a second copy of two panels rather than a way back to them. */}
         <Panel
-          title="How the customer will use it"
-          count={record.adoption.length}
-          meta={adoption ? ADOPTION_LEVEL_LABEL[adoption.level] : undefined}
+          title="Open"
           level="supporting"
-        >
-          <p className="border-b border-border px-3 py-2 text-[11px] text-muted-foreground">
-            Each row records how the customer is expected to use the solution — the intended users,
-            how often, and what counts as being in use. Usage observations underneath record what is
-            actually happening; the discovery board is supporting context only.
-          </p>
-
-          {adoption?.workarounds.length ? (
-            <p className="border-b border-border px-3 py-2 text-[12px]">
-              <span className="text-muted-foreground">Workarounds still in use · </span>
-              {adoption.workarounds
-                .map((w) => `${w.name}${w.description ? ` (${w.description})` : ""}`)
-                .join("; ")}
-            </p>
-          ) : null}
-          {record.adoption.length ? (
-            <ul className="divide-y divide-border">
-              {record.adoption.map((a) => (
-                <AdoptionAreaRow
-                  key={a.id}
-                  area={a}
-                  customerId={customerId}
-                  team={record.team}
-                  contacts={record.contacts}
-                  evidence={record.evidence}
-                />
-              ))}
-            </ul>
-          ) : (
-            <div className="px-3 py-3 text-[12px] text-muted-foreground">
-              No usage areas recorded yet.
-            </div>
-          )}
-          <div className="border-t border-border px-3 py-2">
-            <AddAdoptionArea
-              customerId={customerId}
-              implementationId={impl.id}
-              team={record.team}
-              contacts={record.contacts}
-            />
-          </div>
-        </Panel>
-
-        {/* Read-only readiness view. Not a gate: it never blocks or moves a stage. */}
-        <Panel title="Ready to hand over" level="supporting" meta={readinessSummary.line}>
-          <p className="border-b border-border px-3 py-2 text-[11px] text-muted-foreground">
-            Read-only assessment of whether this customer is actually ready for handover to Customer
-            Success. Nothing here blocks stage movement.
-          </p>
-          <ul className="divide-y divide-border">
-            {readiness.map((area) => (
-              <li key={area.id} className="flex items-start gap-3 px-3 py-2">
-                <span
-                  className={cn(
-                    "mt-0.5 shrink-0 rounded-sm border px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-[0.08em]",
-                    area.state === "ready"
-                      ? "border-border text-foreground"
-                      : area.state === "needs_attention"
-                        ? "border-destructive/60 text-destructive"
-                        : "border-border text-muted-foreground",
-                  )}
-                >
-                  {READINESS_STATE_LABEL[area.state]}
-                </span>
-                <div className="min-w-0">
-                  <p className="text-[12px] font-medium">{area.label}</p>
-                  <p className="text-[12px] text-muted-foreground">{area.reason}</p>
-                </div>
-                {area.tab && area.tab !== "overview" ? (
-                  <Link
-                    to="/customers/$customerId"
-                    params={{ customerId }}
-                    search={{ tab: area.tab as TabId }}
-                    className="ml-auto shrink-0 text-[11px] text-muted-foreground underline hover:text-foreground"
-                  >
-                    {TAB_LABEL[area.tab as TabId]}
-                  </Link>
-                ) : null}
-              </li>
-            ))}
-          </ul>
-          {gradEvidence.hasRecord ? (
-            <>
-              <div className="border-t border-border px-3 py-2">
-                <p className="text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
-                  Verified by structured records
-                </p>
-                <dl className="mt-2 grid grid-cols-2 gap-x-6 gap-y-2 md:grid-cols-4">
-                  {gradEvidence.verified.map((f) => (
-                    <Field key={f.label} label={f.label} value={f.value} />
-                  ))}
-                </dl>
-              </div>
-              {gradEvidence.narrative.length ? (
-                <div className="border-t border-dashed border-border bg-muted/40 px-3 py-2">
-                  <p className="text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
-                    Recorded as narrative — not independently verified
-                  </p>
-                  <ul className="mt-2 space-y-2">
-                    {gradEvidence.narrative.map((n) => (
-                      <li
-                        key={n.label}
-                        className="border-l-2 border-dashed border-muted-foreground/40 pl-2"
-                      >
-                        <p className="text-[10px] uppercase tracking-[0.08em] text-muted-foreground">
-                          {n.label} · {n.source}
-                        </p>
-                        <p className="text-[12px] italic text-muted-foreground">{n.value}</p>
-                      </li>
-                    ))}
-                  </ul>
-                  {gradEvidence.corroboration ? (
-                    <p className="mt-2 border-t border-dashed border-border pt-2 text-[11px] text-destructive">
-                      {gradEvidence.corroboration}
-                    </p>
-                  ) : null}
-                </div>
-              ) : null}
-            </>
-          ) : (
-            <p className="border-t border-border px-3 py-2 text-[12px] text-muted-foreground">
-              No handover record exists yet — nothing is assumed on its behalf.
-            </p>
-          )}
-        </Panel>
-
-        {/* Phase 7. The writer for the record the panel above reads. Two tables
-            modelled this one event in 0003 and neither had a write path;
-            cs_handoffs is now the record, graduations is deprecated and folded
-            forward. Renders nothing while handover_record is off. */}
-        <HandoverRecordPanel implementationId={impl.id} team={record.team} />
-
-        <Panel
-          title="Open items"
-          level="primary"
           meta={`${
             open.commitments.length +
             open.risks.length +
@@ -941,82 +1089,42 @@ function OverviewTab({ record, customerId }: { record: Customer360; customerId: 
             open.escalations.length
           } open`}
         >
-          <div className="grid grid-cols-2 divide-x divide-border border-b border-border md:grid-cols-4">
+          <ul className="divide-y divide-border">
             {(
               [
-                ["Commitments", open.commitments.length],
-                ["Risks", open.risks.length],
-                ["Issues", open.issues.length],
-                ["Escalations", open.escalations.length],
-              ] as const
-            ).map(([k, v]) => (
-              <div key={k} className="px-3 py-2">
-                <div className="text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
-                  {k}
-                </div>
-                <div className="font-mono text-[16px]">{v}</div>
-              </div>
-            ))}
-          </div>
-          <ul className="divide-y divide-border">
-            {[
-              ...open.escalations.map((e: any) => ({
-                id: `e-${e.id}`,
-                kind: "Escalation",
-                title: e.title,
-                severity: e.severity,
-                extra: e.status,
-              })),
-              ...open.risks.map((r: any) => ({
-                id: `r-${r.id}`,
-                kind: "Risk",
-                title: r.title,
-                severity: r.severity,
-                extra: `${r.likelihood} likelihood`,
-              })),
-              ...open.issues.map((r: any) => ({
-                id: `i-${r.id}`,
-                kind: "Issue",
-                title: r.title,
-                severity: r.severity,
-                extra: r.status,
-              })),
-              ...open.commitments.map((c: any) => ({
-                id: `c-${c.id}`,
-                kind: "Commitment",
-                title: c.description,
-                severity: null,
-                extra: c.due_date
-                  ? `${isOverdue(c.due_date) ? "Overdue" : "Due"} ${fmtDate(c.due_date)}`
-                  : "No due date",
-              })),
-            ]
-              .slice(0, 10)
-              .map((row) => (
-                <Row key={row.id} className="flex flex-wrap items-baseline gap-2">
-                  <span className="w-20 shrink-0 text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
-                    {row.kind}
+                ["Commitments", open.commitments.length, "journey"],
+                ["Risks", open.risks.length, "risks"],
+                ["Issues", open.issues.length, "risks"],
+                ["Escalations", open.escalations.length, "risks"],
+              ] as Array<[string, number, TabId]>
+            ).map(([label, count, tab]) => (
+              <li key={label}>
+                <Link
+                  to="/customers/$customerId"
+                  params={{ customerId }}
+                  search={{ tab }}
+                  className="flex items-center justify-between px-3 py-1.5 text-[12px] hover:bg-muted/60"
+                >
+                  <span className={count ? "text-foreground" : "text-muted-foreground"}>
+                    {label}
                   </span>
-                  <span className="text-[13px]">{row.title}</span>
-                  {row.severity ? <SeverityChip value={row.severity} /> : null}
-                  <span className="text-[11px] text-muted-foreground">{row.extra}</span>
-                </Row>
-              ))}
-            {open.commitments.length +
-              open.risks.length +
-              open.issues.length +
-              open.escalations.length ===
-            0 ? (
-              <NoRows label="Nothing open" />
-            ) : null}
+                  <span
+                    className={cn(
+                      "font-mono text-[12px]",
+                      count ? "font-medium text-foreground" : "text-muted-foreground",
+                    )}
+                  >
+                    {count}
+                  </span>
+                </Link>
+              </li>
+            ))}
           </ul>
         </Panel>
-      </div>
 
-      <div className="space-y-4">
         {/* Every SOW, board and deck for this account in one list — including
-            the ones still living in the SOW and discovery-board fields, which
-            are read alongside so nothing that exists today disappears. */}
+          the ones still living in the SOW and discovery-board fields, which
+          are read alongside so nothing that exists today disappears. */}
         <Suspense
           fallback={
             <Panel title="Attachments" level="supporting">
@@ -1028,13 +1136,13 @@ function OverviewTab({ record, customerId }: { record: Customer360; customerId: 
         </Suspense>
         <Panel title="Key people" level="supporting">
           {/* Editable in place. These were read-only, so the only way to change
-              who owns a project was to open the full edit form — which sends
-              the WHOLE record back and quietly reverts anything a colleague
-              changed meanwhile. One field, one write.
+            who owns a project was to open the full edit form — which sends
+            the WHOLE record back and quietly reverts anything a colleague
+            changed meanwhile. One field, one write.
 
-              Technical solution owners is not here: it is a list derived from
-              the solutions themselves, so it is edited on a solution rather
-              than typed over on the summary. */}
+            Technical solution owners is not here: it is a list derived from
+            the solutions themselves, so it is edited on a solution rather
+            than typed over on the summary. */}
           <dl className="grid grid-cols-2 gap-3 px-3 py-2.5">
             <EditableRecordField
               implementationId={impl.id}
@@ -1132,8 +1240,8 @@ function OverviewTab({ record, customerId }: { record: Customer360; customerId: 
             </Link>
           </div>
         </Panel>
-      </div>
-    </div>
+      </aside>
+    </CollapsibleSections>
   );
 }
 
