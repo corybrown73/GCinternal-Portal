@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/dialog";
 import {
   addImplementation,
+  getDealOptions,
   getTeamOptions,
   setImplementation,
   uploadAttachment,
@@ -56,6 +57,7 @@ type Draft = {
   targetLaunchDate: string;
   customerGoals: string;
   externalRef: string;
+  dealId: string;
 };
 
 const emptyDraft: Draft = {
@@ -79,6 +81,7 @@ const emptyDraft: Draft = {
   targetLaunchDate: "",
   customerGoals: "",
   externalRef: "",
+  dealId: "",
 };
 
 const nullable = (v: string) => (v.trim() === "" ? null : v.trim());
@@ -113,6 +116,7 @@ function payload(draft: Draft) {
     targetLaunchDate: nullable(draft.targetLaunchDate),
     customerGoals: nullable(draft.customerGoals),
     externalRef: nullable(draft.externalRef),
+    dealId: nullable(draft.dealId),
   };
 }
 
@@ -130,6 +134,14 @@ export function NewImplementation({ customers }: { customers: CustomerOption[] }
     queryFn: () => getTeamOptions(),
     enabled: open,
   });
+  const deals = useQuery<
+    Array<{ id: string; name: string; stage: string | null; linked_customer_id: string | null }>
+  >({
+    queryKey: ["deal-options"],
+    queryFn: () => getDealOptions(),
+    enabled: open,
+  });
+  const chosenDeal = (deals.data ?? []).find((d) => d.id === draft.dealId);
 
   const set = (patch: Partial<Draft>) => setDraft((d) => ({ ...d, ...patch }));
 
@@ -198,11 +210,43 @@ export function NewImplementation({ customers }: { customers: CustomerOption[] }
           <DialogHeader>
             <DialogTitle className="text-[14px]">New implementation</DialogTitle>
             <DialogDescription className="text-[11px]">
-              Originates the record at Handoff. Nothing else is created or inferred.
+              Originates the record at Handoff. Naming the deal it came from keeps the sales context
+              reachable from the project; nothing else is created or inferred.
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-3">
+            {/* Where this came from. Above the details rather than buried at
+                the bottom: it is the question that explains every field below
+                it, and the answer is usually already known when the dialog is
+                opened from a deal. */}
+            <label className="block space-y-0.5">
+              <span className={labelClass}>From deal</span>
+              <select
+                className={selectClass}
+                aria-label="From deal"
+                value={draft.dealId}
+                disabled={mutation.isPending || deals.isLoading}
+                onChange={(e) => set({ dealId: e.target.value })}
+              >
+                <option value="">
+                  {deals.isLoading ? "Loading deals…" : "No deal — created here"}
+                </option>
+                {(deals.data ?? []).map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {d.name}
+                    {d.stage ? ` · ${d.stage}` : ""}
+                  </option>
+                ))}
+              </select>
+              {chosenDeal && !chosenDeal.linked_customer_id ? (
+                <span className="block text-[11px] text-muted-foreground">
+                  This deal has no account yet. Creating the project here will not link it back —
+                  use Start onboarding on the deal if you want that.
+                </span>
+              ) : null}
+            </label>
+
             {/* Customer */}
             <div className="space-y-2 rounded-sm border border-border/70 bg-muted/30 p-2">
               <div className="flex items-center gap-1.5">

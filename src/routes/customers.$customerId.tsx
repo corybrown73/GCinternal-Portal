@@ -315,10 +315,28 @@ function Customer360Page() {
               />
               <h1 className="text-[17px] font-semibold tracking-tight">{customer.name}</h1>
             </div>
-            <p className="mt-0.5 text-[12px] text-muted-foreground">
-              {[customer.industry, impl.tier, customer.segment].filter(Boolean).join(" · ") || "—"}
-              {" · Owner "}
-              {impl.owner_name ?? "Unassigned"}
+            <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] text-muted-foreground">
+              <span>
+                {[customer.industry, impl.tier, customer.segment].filter(Boolean).join(" · ") ||
+                  "—"}
+                {" · Owner "}
+                {impl.owner_name ?? "Unassigned"}
+              </span>
+              {/* Provenance, one click away and always in the same place.
+                  Everything a deal knows — the goal, the named contact, who
+                  sold it, what was said on the calls — was a join away and
+                  unreachable from here, so it got re-gathered by asking the
+                  customer questions they had already answered to sales. */}
+              {impl.deal_id ? (
+                <Link
+                  to="/deals/$dealId"
+                  params={{ dealId: impl.deal_id }}
+                  className="lift inline-flex items-center gap-1 rounded-full border border-border bg-card px-2 py-0.5 text-[11px] hover:text-foreground"
+                  title="Open the deal this project came from"
+                >
+                  From deal · {impl.deal_name ?? "Untitled deal"}
+                </Link>
+              ) : null}
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-3">

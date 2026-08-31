@@ -11,6 +11,7 @@ const optionalDate = z
   .regex(/^\d{4}-\d{2}-\d{2}$/)
   .nullable();
 const optionalNumber = z.number().finite().nullable();
+const optionalUuid = z.string().uuid().nullable();
 
 /** New customer capture reuses the customers table exactly — no new columns. */
 export const newCustomerInput = z.object({
@@ -41,6 +42,13 @@ export const createImplementationInput = z
     targetLaunchDate: optionalDate,
     customerGoals: optionalText,
     externalRef: optionalText,
+    /**
+     * The pre-sales deal this project came from. Optional because plenty of
+     * projects have no deal record — an expansion agreed on a call, a migration
+     * the TIS opened themselves — and a required field would be answered with
+     * whatever is nearest.
+     */
+    dealId: optionalUuid,
   })
   .refine((v) => (v.customerId === null) !== (v.newCustomer === null), {
     message: "Provide either an existing customer or a new customer, not both",
@@ -64,6 +72,7 @@ export function toImplementationPatch(data: CreateImplementationInput) {
     target_launch_date: data.targetLaunchDate,
     customer_goals: data.customerGoals,
     external_ref: data.externalRef,
+    deal_id: data.dealId,
   };
 }
 

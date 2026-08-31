@@ -348,6 +348,13 @@ export const getTeamOptions = createServerFn({ method: "GET" })
     return loadTeamOptions();
   });
 
+export const getDealOptions = createServerFn({ method: "GET" })
+  .middleware([requireInternalAuth])
+  .handler(async () => {
+    const { loadDealOptions } = await import("./hub.server");
+    return loadDealOptions();
+  });
+
 export const addImplementation = createServerFn({ method: "POST" })
   .middleware([requireInternalAuth])
   .inputValidator((data: unknown) => createImplementationInput.parse(data))

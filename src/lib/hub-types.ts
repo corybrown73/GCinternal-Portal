@@ -238,6 +238,9 @@ export type Customer360 = {
     health_recorded_at: string | null;
     owner_id: string | null;
     owner_name: string | null;
+    /** The pre-sales deal this project came from, and its name for display. */
+    deal_id: string | null;
+    deal_name: string | null;
     sales_owner: string | null;
     tier: string | null;
     sow_reference: string | null;

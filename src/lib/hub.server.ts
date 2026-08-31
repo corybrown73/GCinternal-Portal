@@ -419,6 +419,24 @@ export async function loadCustomer360(
   const customer = customerRes.data;
   if (!customer) return null;
 
+  // The deal each of this customer's projects came from, by name.
+  //
+  // A second small query rather than a join: PostgREST would need an embedded
+  // resource on a nullable FK, and every project on the page is one of at most
+  // a handful of deals. Keyed by deal id so the selected project can name its
+  // own without another round trip.
+  const dealIds = Array.from(
+    new Set(((implRes.data ?? []) as any[]).map((i) => i.deal_id).filter(Boolean)),
+  ) as string[];
+  const dealNames = new Map<string, string>();
+  if (dealIds.length) {
+    const { data: dealRows } = await db()
+      .from("portal_accounts")
+      .select("id,name")
+      .in("id", dealIds);
+    for (const d of (dealRows ?? []) as any[]) dealNames.set(d.id, d.name);
+  }
+
   const teamOptions = (activeTeamRes.data ?? []).map((t: any) => ({
     id: t.id,
     name: t.name,
@@ -847,6 +865,11 @@ export async function loadCustomer360(
       health_recorded_at: impl.health_recorded_at ?? null,
       owner_id: impl.owner_id ?? null,
       owner_name: named(impl.owner_id),
+      // Provenance, not a field to edit here: where this project came from.
+      // Named as well as identified, because a chip reading "From deal ·
+      // 4f3a-…" is a link nobody clicks.
+      deal_id: impl.deal_id ?? null,
+      deal_name: impl.deal_id ? (dealNames.get(impl.deal_id) ?? null) : null,
       sales_owner: impl.sales_owner,
       tier: impl.tier,
       sow_reference: impl.sow_reference,
@@ -1602,6 +1625,29 @@ export async function loadTeamOptions() {
     .eq("active", true)
     .order("name");
   return (data ?? []).map((t: any) => ({ id: t.id, name: t.name, role: t.role }));
+}
+
+/**
+ * Deals a new project can be created from.
+ *
+ * Every deal, not only unlinked ones. A customer legitimately runs several
+ * projects off one deal — the new logo and the integration they added three
+ * months later — so filtering to "not yet used" would hide the right answer
+ * exactly when somebody is recording the second project. `linked_customer_id`
+ * travels so the dialog can say a deal already has an account rather than
+ * silently creating a second one.
+ */
+export async function loadDealOptions() {
+  const { data } = await db()
+    .from("portal_accounts")
+    .select("id,name,stage,customer_id")
+    .order("name");
+  return (data ?? []).map((d: any) => ({
+    id: d.id,
+    name: d.name,
+    stage: d.stage ?? null,
+    linked_customer_id: d.customer_id ?? null,
+  }));
 }
 
 /**

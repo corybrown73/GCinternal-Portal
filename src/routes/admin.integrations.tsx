@@ -160,7 +160,7 @@ function StatusTab() {
           <FlagRow
             name="sf_presale_bridge"
             title="Presale stage bridge"
-            detail="Moves the matched deal's stage — closed-won on ingest, and the onboarding tail forward from delivery progress. Forward only, never backward. The deal↔customer link is NOT gated by this: it is part of auto-create, because it is what stops a human duplicating the same records from the deal page."
+            detail="Moves the matched deal's stage — closed-won on ingest, and the onboarding tail forward from delivery progress. Forward only, never backward. It does not gate the deal↔customer link, which Start onboarding writes on the deal page under the account model and needs no Salesforce at all; auto-create writes the same link for opportunities that arrive through the API."
             enabled={status.flags.sf_presale_bridge}
             busy={flip.isPending}
             onToggle={(enabled) => flip.mutate({ flag: "sf_presale_bridge", enabled })}
