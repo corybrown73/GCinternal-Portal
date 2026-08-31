@@ -46,12 +46,52 @@ export type DeckSource = {
   createdAt: string;
 };
 
+/** Someone on the GoCanvas side, and what they are here to do. */
+export type DeckPerson = {
+  name: string;
+  role: string;
+};
+
+/** One stage of the plan the project will actually run. */
+export type DeckStage = {
+  name: string;
+  /** The template's own words for what this stage is for. */
+  intent: string | null;
+  targetDays: number | null;
+};
+
+/**
+ * The plan, if a project exists yet.
+ *
+ * A deck generated the day a deal closes has none, and one generated after
+ * handoff has the real thing. Nullable rather than optional, so the deck has
+ * to decide what to say when there is none instead of quietly dropping a
+ * section the room was expecting.
+ */
+export type DeckPlanOfWork = {
+  implementationName: string;
+  targetLaunchDate: string | null;
+  stages: DeckStage[];
+  /** The first things that are on the customer, not on us. */
+  firstCustomerTasks: Array<{ title: string; stage: string }>;
+  /** Where they will track it, once they have a link. */
+  planUrl: string | null;
+};
+
 export type KickoffDeckInput = {
   brief: BriefJson;
   account: DeckAccount;
   sow: DeckSow | null;
   /** The Gong reports the brief was generated from. Provenance, not decoration. */
   sources: DeckSource[];
+  /**
+   * The GoCanvas people the customer is about to work with. The single most
+   * important fact in a handoff deck and the one the brief cannot know: the
+   * customer met sales, and is about to work with somebody else entirely.
+   */
+  team: DeckPerson[];
+  /** The plan, if the project exists yet. */
+  plan: DeckPlanOfWork | null;
   preparedAt: string;
 };
 
@@ -250,6 +290,81 @@ export function buildKickoffDeck(input: KickoffDeckInput): DeckPlan {
           note: "No SOW is recorded on this deal. Implementation is being asked to deliver a scope nobody has attached — get the reference and the signed document onto the deal before kickoff.",
         },
   });
+
+  /* ----------------------------------------------------- working together */
+
+  act("Working together", "Who takes it from here, and what happens next");
+
+  slides.push({
+    title: "Your GoCanvas team",
+    subtitle: "From today",
+    body: input.team.length
+      ? {
+          kind: "table",
+          header: ["Name", "What they do"],
+          rows: input.team.map((p) => [p.name, p.role]),
+        }
+      : {
+          kind: "absent",
+          note: "Nobody is assigned on the GoCanvas side. The customer is being handed to a team that does not exist yet — assign an implementation lead before this meeting.",
+        },
+  });
+
+  const plan = input.plan;
+
+  slides.push({
+    title: "The plan",
+    subtitle: plan?.targetLaunchDate ? `Target launch ${plan.targetLaunchDate}` : null,
+    body: plan
+      ? plan.stages.length
+        ? {
+            kind: "table",
+            header: ["Stage", "What happens", "Typical length"],
+            rows: plan.stages.map((st) => [
+              st.name,
+              fit(st.intent ?? "—", 160),
+              st.targetDays ? `${st.targetDays} days` : "—",
+            ]),
+          }
+        : {
+            kind: "absent",
+            note: "The project exists but has no plan attached, so there are no stages to show. Apply a journey template before the kickoff.",
+          }
+      : {
+          kind: "absent",
+          note: "No project has been created for this account yet, so there is no plan to show. Start onboarding from the deal and this slide fills itself in.",
+        },
+  });
+
+  slides.push({
+    title: "What we need from you first",
+    subtitle: "Before we can start building",
+    body: plan
+      ? plan.firstCustomerTasks.length
+        ? {
+            kind: "table",
+            header: ["What we need", "By which stage"],
+            rows: plan.firstCustomerTasks.map((t) => [t.title, t.stage]),
+          }
+        : {
+            kind: "absent",
+            note: "Nothing on this plan is assigned to the customer. Either the plan is missing its customer-side tasks, or somebody is about to be surprised.",
+          }
+      : {
+          kind: "absent",
+          note: "Nothing to ask for yet — there is no project and therefore no task list.",
+        },
+  });
+
+  if (plan?.planUrl) {
+    slides.push({
+      title: "Where to follow it",
+      body: {
+        kind: "prose",
+        text: `Everything above lives at ${plan.planUrl}. You can see what is with you, tick things off, and ask questions there — it stays current, and this deck does not.`,
+      },
+    });
+  }
 
   /* ----------------------------------------------------- starting delivery */
 

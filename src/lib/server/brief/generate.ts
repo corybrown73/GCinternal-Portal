@@ -13,6 +13,104 @@ import { audit } from "../audit";
 import { buildTemplateBrief } from "./fallback";
 import type { Account, Brief, GongReport, OnboardingNote } from "../../presale-types";
 import type { BriefJson } from "../schemas";
+import { appUrl } from "@/lib/app-url";
+import { stageDefinition } from "@/lib/lifecycle";
+import type { DeckPerson, DeckPlanOfWork } from "@/lib/kickoff-deck";
+
+/**
+ * Who the customer is about to work with, and the plan they are about to run.
+ *
+ * NEITHER IS IN THE BRIEF, and both are what makes this a handoff document
+ * rather than a summary of sales calls. The customer met an AE; from the
+ * kickoff onward they work with an implementation lead they have never met,
+ * against a plan that was generated when the project was created.
+ *
+ * Both are null-tolerant by design. A deck generated the day a deal closes has
+ * no project and therefore no plan; the deck says so rather than dropping the
+ * slide, because "no project has been created yet" is exactly the thing a
+ * kickoff meeting needs to discover before it starts.
+ */
+async function loadHandoffContext(
+  admin: SupabaseClient,
+  account: Account,
+  owners: { am: string | null; se: string | null },
+): Promise<{ team: DeckPerson[]; plan: DeckPlanOfWork | null }> {
+  const team: DeckPerson[] = [];
+  if (owners.am) team.push({ name: owners.am, role: "Account manager — commercial owner" });
+  if (owners.se) team.push({ name: owners.se, role: "Solutions engineer — technical design" });
+
+  const customerId = (account as any).customer_id as string | null | undefined;
+  if (!customerId) return { team, plan: null };
+
+  const { data: impl } = await admin
+    .from("implementations")
+    .select("id, name, target_launch_date, owner_id, portal_key")
+    .eq("customer_id", customerId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (!impl) return { team, plan: null };
+
+  const [{ data: lead }, { data: stages }, { data: tasks }] = await Promise.all([
+    impl.owner_id
+      ? admin.from("team_members").select("name").eq("id", impl.owner_id).maybeSingle()
+      : Promise.resolve({ data: null }),
+    admin
+      .from("stage_instances")
+      // `id` is what work_items joins on. Without it every customer-side task
+      // resolves its stage to a dash, silently.
+      .select("id, stage_key, name, target_duration_days, position")
+      .eq("implementation_id", impl.id)
+      .order("position", { ascending: true }),
+    admin
+      .from("work_items")
+      .select("title, stage_instance_id, position, party, status")
+      .eq("implementation_id", impl.id)
+      .eq("party", "customer")
+      .neq("status", "done")
+      .neq("status", "skipped")
+      .order("position", { ascending: true })
+      .limit(8),
+  ]);
+
+  if ((lead as any)?.name) {
+    // First in the list: this is the person the room most needs to know.
+    team.unshift({
+      name: (lead as any).name as string,
+      role: "Implementation lead — runs the project from here",
+    });
+  }
+
+  const stageName = new Map<string, string>();
+  const rows = (stages ?? []) as Array<Record<string, any>>;
+  for (const st of rows) stageName.set(String(st["stage_key"]), String(st["name"]));
+
+  return {
+    team,
+    plan: {
+      implementationName: (impl.name as string) ?? account.name,
+      targetLaunchDate: (impl.target_launch_date as string | null) ?? null,
+      stages: rows.map((st) => ({
+        name: String(st["name"]),
+        // The template names the stage; the lifecycle definition says what
+        // "done" means there. The second is what a customer actually wants.
+        intent: stageDefinition(String(st["stage_key"]))?.intent ?? null,
+        targetDays: (st["target_duration_days"] as number | null) ?? null,
+      })),
+      firstCustomerTasks: ((tasks ?? []) as Array<Record<string, any>>).map((t) => ({
+        title: String(t["title"]),
+        stage: stageForInstance(rows, String(t["stage_instance_id"] ?? "")),
+      })),
+      planUrl: impl.portal_key ? `${appUrl()}/portal/plan/${impl.portal_key}` : null,
+    },
+  };
+}
+
+/** work_items carries the stage as an instance id, not a key. */
+function stageForInstance(stages: Array<Record<string, any>>, instanceId: string): string {
+  const hit = stages.find((s) => String(s["id"]) === instanceId);
+  return hit ? String(hit["name"]) : "—";
+}
 
 /** am_owner_id / se_owner_id → names, or null where nobody is assigned. */
 async function resolveOwnerNames(
@@ -108,6 +206,9 @@ export async function generateBrief(accountId: string, createdBy: string): Promi
   // The two owners are team_members ids on the deal. A deck that prints a uuid
   // where a name belongs is worse than one that prints nothing.
   const ownerNames = await resolveOwnerNames(admin, account);
+  // Who takes over, and the plan they run. Null when the deal has not been
+  // handed off yet — the deck says so on the slide.
+  const handoff = await loadHandoffContext(admin, account, ownerNames);
 
   const { data: briefRow, error: insertError } = await admin
     .from("portal_briefs")
@@ -171,6 +272,8 @@ export async function generateBrief(accountId: string, createdBy: string): Promi
         reportType: r.report_type,
         createdAt: r.created_at,
       })),
+      team: handoff.team,
+      plan: handoff.plan,
       preparedAt: new Date().toISOString(),
     });
 

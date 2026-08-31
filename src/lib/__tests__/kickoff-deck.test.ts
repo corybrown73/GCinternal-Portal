@@ -31,6 +31,8 @@ function input(over: Partial<KickoffDeckInput> = {}): KickoffDeckInput {
     },
     sow: null,
     sources: [],
+    team: [],
+    plan: null,
     preparedAt: "2026-08-31T14:00:00.000Z",
     ...over,
   };
@@ -48,8 +50,76 @@ describe("buildKickoffDeck", () => {
       "The account",
       "What we heard",
       "What we sold",
+      "Working together",
       "Starting delivery",
     ]);
+  });
+
+  it("names the GoCanvas team, because that is the fact a handoff turns on", () => {
+    const plan = buildKickoffDeck(
+      input({
+        team: [
+          { name: "Dana Okafor", role: "Implementation lead — runs the project from here" },
+          { name: "Marcus Webb", role: "Account manager — commercial owner" },
+        ],
+      }),
+    );
+    const rows = (slide(plan, "Your GoCanvas team").body as { rows: string[][] }).rows;
+    expect(rows[0]).toEqual(["Dana Okafor", "Implementation lead — runs the project from here"]);
+  });
+
+  it("says nobody is assigned rather than showing an empty team table", () => {
+    const note = (slide(buildKickoffDeck(input()), "Your GoCanvas team").body as { note: string })
+      .note;
+    expect(note).toContain("handed to a team that does not exist yet");
+  });
+
+  it("shows the plan when the project exists", () => {
+    const plan = buildKickoffDeck(
+      input({
+        plan: {
+          implementationName: "Field inspections rollout",
+          targetLaunchDate: "2026-04-01",
+          stages: [
+            { name: "Onboarding", intent: "Kickoff held and access granted.", targetDays: 14 },
+            { name: "Build", intent: "Forms and integrations configured.", targetDays: 30 },
+          ],
+          firstCustomerTasks: [{ title: "Send three sample export files", stage: "Onboarding" }],
+          planUrl: "https://example.test/portal/plan/abc",
+        },
+      }),
+    );
+    const stages = (slide(plan, "The plan").body as { rows: string[][] }).rows;
+    expect(stages[0]).toEqual(["Onboarding", "Kickoff held and access granted.", "14 days"]);
+    expect(slide(plan, "The plan").subtitle).toBe("Target launch 2026-04-01");
+    const asks = (slide(plan, "What we need from you first").body as { rows: string[][] }).rows;
+    expect(asks[0]).toEqual(["Send three sample export files", "Onboarding"]);
+    expect(slide(plan, "Where to follow it")).toBeDefined();
+  });
+
+  it("says no project exists yet rather than pretending there is a plan", () => {
+    const plan = buildKickoffDeck(input());
+    expect((slide(plan, "The plan").body as { note: string }).note).toContain(
+      "No project has been created",
+    );
+    expect(plan.slides.some((s) => s.title === "Where to follow it")).toBe(false);
+  });
+
+  it("flags a plan that asks nothing of the customer", () => {
+    const plan = buildKickoffDeck(
+      input({
+        plan: {
+          implementationName: "x",
+          targetLaunchDate: null,
+          stages: [{ name: "Build", intent: null, targetDays: null }],
+          firstCustomerTasks: [],
+          planUrl: null,
+        },
+      }),
+    );
+    expect((slide(plan, "What we need from you first").body as { note: string }).note).toContain(
+      "somebody is about to be surprised",
+    );
   });
 
   it("says the SOW is missing rather than dropping the slide", () => {
