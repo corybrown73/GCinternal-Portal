@@ -2153,18 +2153,35 @@ export async function advanceStage(args: {
   // server function can skip it. So the state is read again here from the work
   // items, and a blocking stage refuses to be left without a stated reason
   // whatever arrived in the request.
+  //
+  // The stage instance is read FIRST and the work items are found through it.
+  // `work_items` has no `stage_key` column — the stage a task belongs to is
+  // `stage_instance_id` — and filtering on a column that does not exist does
+  // not raise here: PostgREST returns an error, the destructured `data` is
+  // null, and an empty gate reads as a clear one. The gate would have been
+  // silently open on every advance.
   const { stageGateStatus, requiresReason, needsOverride } = await import("./stage-gates");
-  const { data: gateRows } = await db()
-    .from("work_items")
-    .select("id,task_key,title,status,is_gate,party")
-    .eq("implementation_id", args.implementationId)
-    .eq("stage_key", current);
   const { data: stageRow } = await db()
     .from("stage_instances")
-    .select("gate_mode")
+    .select("id,gate_mode")
     .eq("implementation_id", args.implementationId)
     .eq("stage_key", current)
     .maybeSingle();
+  const { data: gateRows, error: gateError } = stageRow?.id
+    ? await db()
+        .from("work_items")
+        .select("id,task_key,title,status,is_gate,party")
+        .eq("implementation_id", args.implementationId)
+        .eq("stage_instance_id", stageRow.id)
+    : { data: [], error: null };
+  // A gate that cannot be read is not a gate that is satisfied. Refusing here
+  // is the only honest answer: the alternative is advancing past criteria
+  // nobody checked, and recording that they were clear.
+  if (gateError) {
+    throw new Error(
+      `Could not read this stage's criteria, so the advance was refused rather than guessed: ${gateError.message}`,
+    );
+  }
 
   const gateState = stageGateStatus((gateRows ?? []) as any[]);
   const gateMode = (stageRow?.gate_mode as string | null) ?? null;
