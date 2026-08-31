@@ -6,7 +6,12 @@ export function PageHeader({
   description,
   actions,
 }: {
-  title: string;
+  /**
+   * ReactNode, not string: a record page puts the customer's logo beside their
+   * name, and that belongs in the heading rather than pushed into `actions`
+   * where it would sit next to the buttons.
+   */
+  title: ReactNode;
   description?: string;
   actions?: ReactNode;
 }) {

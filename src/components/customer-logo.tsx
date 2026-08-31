@@ -29,11 +29,19 @@ import { cn } from "@/lib/utils";
 const ACCEPT = "image/png,image/jpeg,image/webp,image/gif";
 const MAX_BYTES = 1_000_000;
 
+/**
+ * `subject` picks which record the logo belongs to. A deal and the customer it
+ * becomes both want one — the kickoff deck is built pre-sale and is the
+ * document that most needs the logo — and they share a bucket, a column name
+ * and this component so the two never drift into looking different.
+ */
 export function CustomerLogo({
+  subject = "customer",
   customerId,
   customerName,
   logoUrl,
 }: {
+  subject?: "customer" | "deal";
   customerId: string;
   customerName: string;
   logoUrl: string | null;
@@ -55,6 +63,7 @@ export function CustomerLogo({
       });
       return upload({
         data: {
+          subject,
           customerId,
           fileName: file.name,
           contentType: file.type as "image/png",
@@ -64,7 +73,9 @@ export function CustomerLogo({
     },
     onSuccess: async () => {
       setError(null);
-      await qc.invalidateQueries({ queryKey: ["customer360", customerId] });
+      await qc.invalidateQueries({
+        queryKey: subject === "deal" ? ["deal", customerId] : ["customer360", customerId],
+      });
     },
     onError: (e: unknown) => setError(e instanceof Error ? e.message : "Upload failed."),
   });

@@ -12,6 +12,7 @@ import { ArrowRight, Download, FileText, Trash2 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 
 import { PageBody, PageHeader } from "@/components/page";
+import { CustomerLogo } from "@/components/customer-logo";
 import { Field, NoRows, Panel } from "@/components/record";
 import { EditableField } from "@/components/editable-field";
 import { canEditSales, canManage, isSuperAdmin, useProfile } from "@/lib/auth";
@@ -153,7 +154,20 @@ function DealRecord({ deal }: { deal: DealData }) {
   return (
     <>
       <PageHeader
-        title={account.name}
+        title={
+          <span className="inline-flex items-center gap-2">
+            {/* The customer's logo, captured here rather than after handoff:
+                the kickoff deck is built from this record and is the document
+                that most needs it. Carried into the customer at handoff. */}
+            <CustomerLogo
+              subject="deal"
+              customerId={account.id}
+              customerName={account.name}
+              logoUrl={deal.logo_url}
+            />
+            {account.name}
+          </span>
+        }
         {...(account.summary ? { description: account.summary } : {})}
         actions={<StartOnboarding deal={deal} />}
       />
@@ -241,6 +255,7 @@ function DealRecord({ deal }: { deal: DealData }) {
 
         <div className="grid gap-4 xl:grid-cols-2">
           <div className="space-y-4">
+            <SowPanel deal={deal} onSave={set} editable={editable} />
             <ReportsPanel deal={deal} />
             <NotesPanel deal={deal} />
           </div>
@@ -401,6 +416,94 @@ function StartOnboarding({ deal }: { deal: DealData }) {
 }
 
 /* ---------- Notes & Gong reports ---------- */
+
+/**
+ * What was sold.
+ *
+ * On the deal because that is when it is signed. Implementation used to be the
+ * only place a SOW could be recorded, which meant it could not be recorded
+ * until after the handoff it was supposed to inform — and in production, not
+ * one project had one. It prints on the kickoff deck, and the deck says
+ * plainly when it is missing.
+ */
+function SowPanel({
+  deal,
+  onSave,
+  editable,
+}: {
+  deal: DealData;
+  onSave: (field: EditableDealField) => (value: string | null) => Promise<unknown>;
+  editable: boolean;
+}) {
+  const { account } = deal;
+  const recorded =
+    account.sow_reference ||
+    account.sow_signed_date ||
+    account.sow_value != null ||
+    account.sow_document_url;
+
+  return (
+    <Panel title="Statement of work" meta={recorded ? "On the kickoff deck" : "Not recorded"}>
+      <div className="space-y-2 px-3 py-2.5">
+        {!recorded ? (
+          <p className="text-[12px] text-muted-foreground">
+            Nothing recorded. The kickoff deck will say so, in front of the customer — the reference
+            and the signed document are what implementation builds against.
+          </p>
+        ) : null}
+        <div className="flex flex-wrap items-end gap-x-6 gap-y-2">
+          <EditableField
+            label="Reference"
+            value={account.sow_reference ?? null}
+            placeholder="SOW-2026-0114"
+            onSave={onSave("sow_reference")}
+            disabled={!editable}
+          />
+          <EditableField
+            label="Signed"
+            value={account.sow_signed_date ?? null}
+            format={(v) => (v ? fmtDate(v) : "—")}
+            placeholder="2026-01-14"
+            onSave={onSave("sow_signed_date")}
+            disabled={!editable}
+          />
+          <EditableField
+            label="Value"
+            value={account.sow_value != null ? String(account.sow_value) : null}
+            format={(v) => (v ? fmtMoney(Number(v)) : "—")}
+            type="number"
+            placeholder="84000"
+            onSave={onSave("sow_value")}
+            disabled={!editable}
+          />
+          <EditableField
+            label="Document name"
+            value={account.sow_document_name ?? null}
+            placeholder="Countersigned SOW.pdf"
+            onSave={onSave("sow_document_name")}
+            disabled={!editable}
+          />
+          <EditableField
+            label="Document link"
+            value={account.sow_document_url ?? null}
+            format={(v) =>
+              v ? (
+                <a href={v} target="_blank" rel="noreferrer" className="underline">
+                  Open
+                </a>
+              ) : (
+                "—"
+              )
+            }
+            placeholder="https://…"
+            onSave={onSave("sow_document_url")}
+            disabled={!editable}
+          />
+        </div>
+      </div>
+    </Panel>
+  );
+}
 
 function ReportsPanel({ deal }: { deal: DealData }) {
   const { profile } = useProfile();

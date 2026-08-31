@@ -2652,17 +2652,21 @@ export async function storeAttachment(args: {
  * already gone, and a broken image where their brand used to be.
  */
 export async function storeCustomerLogo(args: {
+  subject: "customer" | "deal";
   customerId: string;
   fileName: string;
   contentType: string;
   dataBase64: string;
 }) {
+  // One bucket and one column name on both sides, so the handoff carry in
+  // 0045 is a straight path copy rather than a re-upload.
+  const table = args.subject === "deal" ? "portal_accounts" : "customers";
   const binary = Buffer.from(args.dataBase64, "base64");
   const ext = (args.contentType.split("/")[1] ?? "png").replace(/[^a-z0-9]/g, "");
   const path = `${args.customerId}/${crypto.randomUUID()}.${ext}`;
 
   const { data: before } = await db()
-    .from("customers")
+    .from(table)
     .select("logo_path")
     .eq("id", args.customerId)
     .maybeSingle();
@@ -2672,10 +2676,7 @@ export async function storeCustomerLogo(args: {
     .upload(path, binary, { contentType: args.contentType, upsert: false });
   if (upErr) throw new Error(`Could not upload the logo: ${upErr.message}`);
 
-  const { error } = await db()
-    .from("customers")
-    .update({ logo_path: path })
-    .eq("id", args.customerId);
+  const { error } = await db().from(table).update({ logo_path: path }).eq("id", args.customerId);
   if (error) throw new Error(`Could not save the logo: ${error.message}`);
 
   const previous = (before as any)?.logo_path as string | null | undefined;

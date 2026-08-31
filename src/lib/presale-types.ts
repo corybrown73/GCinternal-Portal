@@ -31,6 +31,17 @@ export interface Account {
   primary_contact_name: string | null;
   primary_contact_email: string | null;
   primary_contact_role: string | null;
+  /**
+   * The SOW as recorded on the deal, and the customer's logo (0045). Both live
+   * here because both arrive before there is an implementation to put them on,
+   * and the kickoff deck needs them. Carried forward at handoff.
+   */
+  sow_reference: string | null;
+  sow_signed_date: string | null;
+  sow_value: number | null;
+  sow_document_url: string | null;
+  sow_document_name: string | null;
+  logo_path: string | null;
   stage_entered_at: string;
   created_at: string;
   updated_at: string;

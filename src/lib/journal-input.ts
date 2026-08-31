@@ -49,6 +49,13 @@ export function splitLinks(links: string | null | undefined): string[] {
  * and it would be served from a signed URL on our own origin.
  */
 export const uploadCustomerLogoInput = z.object({
+  /**
+   * A customer, or the deal that will become one. The logo is wanted on the
+   * kickoff deck, which is built pre-sale from the deal — waiting for a
+   * customer row means the one document that most needs the logo never has it.
+   * Carried into customers.logo_path at handoff (0045).
+   */
+  subject: z.enum(["customer", "deal"]),
   customerId: z.string().uuid(),
   fileName: z.string().trim().min(1).max(200),
   contentType: z.enum(["image/png", "image/jpeg", "image/webp", "image/gif"]),

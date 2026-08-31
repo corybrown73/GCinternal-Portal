@@ -291,6 +291,8 @@ export interface DealDetail {
   /** Who an owner field can be set to, resolved once here rather than by a
    *  second round trip when somebody opens the AM owner dropdown. */
   owner_options: Array<{ value: string; label: string }>;
+  /** Short-lived signed link to the customer's logo, or null if none is set. */
+  logo_url: string | null;
 }
 
 export async function loadDeal(dealId: string): Promise<DealDetail | null> {
@@ -333,8 +335,23 @@ export async function loadDeal(dealId: string): Promise<DealDetail | null> {
 
   const named = (id: string | null | undefined) => (id ? (names.get(id) ?? null) : null);
 
+  // Guarded on logo_path: signing a null path throws, and most deals have no
+  // logo. A logo that cannot be signed is a plainer page, never a failed load.
+  let logoUrl: string | null = null;
+  if (account.logo_path) {
+    try {
+      const { data } = await db()
+        .storage.from("customer-branding")
+        .createSignedUrl(account.logo_path, 60 * 60);
+      logoUrl = data?.signedUrl ?? null;
+    } catch (e) {
+      console.error("[deal] could not sign the logo url", e);
+    }
+  }
+
   return {
     account: account as DealDetail["account"],
+    logo_url: logoUrl,
     am_owner_name: named(account.am_owner_id),
     se_owner_name: named(account.se_owner_id),
     // Sorted by the name a person will look for, not by id.
@@ -674,6 +691,11 @@ export async function startOnboarding(
         ...(flagOn && account.salesforce_id
           ? { salesforce_account_id: sfId18(account.salesforce_id) }
           : {}),
+        // 0045: the same bucket and the same column name on both sides, so
+        // this is a path copy and not a re-upload. Only on a customer being
+        // created — a logo carried onto an existing account would silently
+        // replace one somebody already chose there.
+        ...(account.logo_path ? { logo_path: account.logo_path } : {}),
       })
       .select("id")
       .single();
@@ -695,6 +717,14 @@ export async function startOnboarding(
       stage_entered_at: now,
       status: "on_track",
       source: "presale",
+      // What was sold, carried from the deal (0045). Delivery keeps its own
+      // copy: correcting the reference on the project must not rewrite what
+      // the deal says was signed.
+      sow_reference: account.sow_reference ?? null,
+      sow_signed_date: account.sow_signed_date ?? null,
+      sow_value: account.sow_value ?? null,
+      sow_document_url: account.sow_document_url ?? null,
+      sow_document_name: account.sow_document_name ?? null,
     })
     .select("id")
     .single();
@@ -1012,6 +1042,37 @@ export async function updateDealField(
       .eq("id", next)
       .maybeSingle();
     if (!profile) throw new Error("That person is not a user of this portal");
+  }
+
+  if (kind === "date" && next !== null) {
+    const t = String(next).trim();
+    if (t === "") {
+      next = null;
+    } else if (!/^\d{4}-\d{2}-\d{2}$/.test(t) || Number.isNaN(Date.parse(t))) {
+      throw new Error(`"${next}" is not a date — enter it as YYYY-MM-DD`);
+    } else {
+      next = t;
+    }
+  }
+
+  if (kind === "url" && next !== null) {
+    const t = String(next).trim();
+    if (t === "") {
+      next = null;
+    } else {
+      // http(s) only. A `javascript:` or `data:` link saved here is rendered
+      // as an anchor on the deal page and put into a deck a customer opens.
+      let parsed: URL;
+      try {
+        parsed = new URL(t);
+      } catch {
+        throw new Error(`"${t}" is not a link — paste the full https:// address`);
+      }
+      if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
+        throw new Error("Only http and https links can be saved here");
+      }
+      next = parsed.toString();
+    }
   }
 
   if (field === "name" && (next === null || String(next).trim() === "")) {

@@ -28,6 +28,17 @@ export const EDITABLE_DEAL_FIELDS = {
   primary_contact_name: "text",
   primary_contact_email: "text",
   primary_contact_role: "text",
+  /**
+   * The SOW, recorded where it actually arrives. It is signed before close,
+   * and the kickoff deck that has to show it is built from this record before
+   * an implementation exists (0045). Carried into implementations.sow_* at
+   * handoff; both sides keep their own copy.
+   */
+  sow_reference: "text",
+  sow_signed_date: "date",
+  sow_value: "number",
+  sow_document_url: "url",
+  sow_document_name: "text",
 } as const;
 
 export type EditableDealField = keyof typeof EDITABLE_DEAL_FIELDS;
