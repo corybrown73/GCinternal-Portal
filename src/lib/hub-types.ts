@@ -335,6 +335,16 @@ export type Customer360 = {
     notes: string | null;
     entered_by_name: string | null;
   }>;
+  completion_records: Array<{
+    id: string;
+    subject_type: "implementation" | "solution";
+    subject_id: string;
+    version: number;
+    title: string;
+    created_at: string;
+    /** Null only if the attachment row it filed itself as was deleted. */
+    url: string | null;
+  }>;
   audit_log: Array<{
     id: string;
     entity_type: string;

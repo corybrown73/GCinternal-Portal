@@ -8,1268 +8,1287 @@
 // You should NOT make any changes in this file as it will be overwritten.
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
-import { Route as rootRouteImport } from './routes/__root'
-import { Route as IndexRouteImport } from './routes/index'
-import { Route as AccessRouteImport } from './routes/access'
-import { Route as AdminRouteImport } from './routes/admin'
-import { Route as AlertsRouteImport } from './routes/alerts'
-import { Route as CustomersRouteImport } from './routes/customers'
-import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
-import { Route as JourneysRouteImport } from './routes/journeys'
-import { Route as LoginRouteImport } from './routes/login'
-import { Route as PipelineRouteImport } from './routes/pipeline'
-import { Route as PortalRouteImport } from './routes/portal'
-import { Route as PortfolioRouteImport } from './routes/portfolio'
-import { Route as SearchRouteImport } from './routes/search'
-import { Route as SequencesRouteImport } from './routes/sequences'
-import { Route as SettingsRouteImport } from './routes/settings'
-import { Route as SignalsRouteImport } from './routes/signals'
-import { Route as SignupRouteImport } from './routes/signup'
-import { Route as TechnicalSolutionsRouteImport } from './routes/technical-solutions'
-import { Route as TemplatesRouteImport } from './routes/templates'
-import { Route as TicketsRouteImport } from './routes/tickets'
-import { Route as AdminIndexRouteImport } from './routes/admin.index'
-import { Route as AdminApiKeysRouteImport } from './routes/admin.api-keys'
-import { Route as AdminAuditRouteImport } from './routes/admin.audit'
-import { Route as AdminFlagsRouteImport } from './routes/admin.flags'
-import { Route as AdminIntegrationsRouteImport } from './routes/admin.integrations'
-import { Route as AdminLifecycleStagesRouteImport } from './routes/admin.lifecycle-stages'
-import { Route as AdminPipelineStagesRouteImport } from './routes/admin.pipeline-stages'
-import { Route as AdminUsersRouteImport } from './routes/admin.users'
-import { Route as ApiSplatRouteImport } from './routes/api.$'
-import { Route as AuthCallbackRouteImport } from './routes/auth.callback'
-import { Route as CustomersIndexRouteImport } from './routes/customers.index'
-import { Route as CustomersCustomerIdRouteImport } from './routes/customers.$customerId'
-import { Route as DealsDealIdRouteImport } from './routes/deals.$dealId'
-import { Route as JourneysJourneyIdRouteImport } from './routes/journeys.$journeyId'
-import { Route as OwnersOwnerRouteImport } from './routes/owners.$owner'
-import { Route as PlanTokenRouteImport } from './routes/plan.$token'
-import { Route as PortalIndexRouteImport } from './routes/portal.index'
-import { Route as PortalTicketsRouteImport } from './routes/portal.tickets'
-import { Route as SequencesIndexRouteImport } from './routes/sequences.index'
-import { Route as SequencesSequenceIdRouteImport } from './routes/sequences.$sequenceId'
-import { Route as TechnicalSolutionsIndexRouteImport } from './routes/technical-solutions.index'
-import { Route as TechnicalSolutionsIdRouteImport } from './routes/technical-solutions.$id'
-import { Route as TicketsIndexRouteImport } from './routes/tickets.index'
-import { Route as TicketsTicketIdRouteImport } from './routes/tickets.$ticketId'
-import { Route as TicketsRoutingRouteImport } from './routes/tickets.routing'
-import { Route as ViewTokenRouteImport } from './routes/view.$token'
-import { Route as ApiCronDispatchRouteImport } from './routes/api/cron/dispatch'
-import { Route as ApiCronJourneysRouteImport } from './routes/api.cron.journeys'
-import { Route as ApiCronPlanSnapshotsRouteImport } from './routes/api/cron/plan-snapshots'
-import { Route as ApiCronSequencesRouteImport } from './routes/api.cron.sequences'
-import { Route as ApiCronSlaRouteImport } from './routes/api/cron/sla'
-import { Route as ApiPlanSnapshotTokenRouteImport } from './routes/api/plan-snapshot.$token'
-import { Route as ApiTamDecisionRouteImport } from './routes/api/tam/decision'
-import { Route as ApiV1AccountsRouteImport } from './routes/api/v1/accounts'
-import { Route as ApiV1AlertsRouteImport } from './routes/api/v1/alerts'
-import { Route as ApiV1DocsRouteImport } from './routes/api/v1/docs'
-import { Route as ApiV1ImplementationsRouteImport } from './routes/api/v1/implementations'
-import { Route as ApiV1OpenapiDotjsonRouteImport } from './routes/api/v1/openapi[.]json'
-import { Route as ApiV1TamRequestsRouteImport } from './routes/api/v1/tam-requests'
-import { Route as ApiV1TicketsRouteImport } from './routes/api/v1/tickets'
-import { Route as PlanSSnapshotTokenRouteImport } from './routes/plan.s.$snapshotToken'
-import { Route as PortalPlanPortalKeyRouteImport } from './routes/portal.plan.$portalKey'
-import { Route as ApiV1AccountsIdRouteImport } from './routes/api/v1/accounts.$id'
-import { Route as ApiV1AccountsIdTransitionRouteImport } from './routes/api/v1/accounts.$id.transition'
+import { Route as rootRouteImport } from "./routes/__root";
+import { Route as IndexRouteImport } from "./routes/index";
+import { Route as AccessRouteImport } from "./routes/access";
+import { Route as AdminRouteImport } from "./routes/admin";
+import { Route as AlertsRouteImport } from "./routes/alerts";
+import { Route as CustomersRouteImport } from "./routes/customers";
+import { Route as ForgotPasswordRouteImport } from "./routes/forgot-password";
+import { Route as JourneysRouteImport } from "./routes/journeys";
+import { Route as LoginRouteImport } from "./routes/login";
+import { Route as PipelineRouteImport } from "./routes/pipeline";
+import { Route as PortalRouteImport } from "./routes/portal";
+import { Route as PortfolioRouteImport } from "./routes/portfolio";
+import { Route as SearchRouteImport } from "./routes/search";
+import { Route as SequencesRouteImport } from "./routes/sequences";
+import { Route as SettingsRouteImport } from "./routes/settings";
+import { Route as SignalsRouteImport } from "./routes/signals";
+import { Route as SignupRouteImport } from "./routes/signup";
+import { Route as TechnicalSolutionsRouteImport } from "./routes/technical-solutions";
+import { Route as TemplatesRouteImport } from "./routes/templates";
+import { Route as TicketsRouteImport } from "./routes/tickets";
+import { Route as AdminIndexRouteImport } from "./routes/admin.index";
+import { Route as AdminApiKeysRouteImport } from "./routes/admin.api-keys";
+import { Route as AdminAuditRouteImport } from "./routes/admin.audit";
+import { Route as AdminFlagsRouteImport } from "./routes/admin.flags";
+import { Route as AdminIntegrationsRouteImport } from "./routes/admin.integrations";
+import { Route as AdminLifecycleStagesRouteImport } from "./routes/admin.lifecycle-stages";
+import { Route as AdminPipelineStagesRouteImport } from "./routes/admin.pipeline-stages";
+import { Route as AdminUsersRouteImport } from "./routes/admin.users";
+import { Route as ApiSplatRouteImport } from "./routes/api.$";
+import { Route as AuthCallbackRouteImport } from "./routes/auth.callback";
+import { Route as CustomersIndexRouteImport } from "./routes/customers.index";
+import { Route as CustomersCustomerIdRouteImport } from "./routes/customers.$customerId";
+import { Route as DealsDealIdRouteImport } from "./routes/deals.$dealId";
+import { Route as JourneysJourneyIdRouteImport } from "./routes/journeys.$journeyId";
+import { Route as OwnersOwnerRouteImport } from "./routes/owners.$owner";
+import { Route as PlanTokenRouteImport } from "./routes/plan.$token";
+import { Route as PortalIndexRouteImport } from "./routes/portal.index";
+import { Route as PortalTicketsRouteImport } from "./routes/portal.tickets";
+import { Route as SequencesIndexRouteImport } from "./routes/sequences.index";
+import { Route as SequencesSequenceIdRouteImport } from "./routes/sequences.$sequenceId";
+import { Route as TechnicalSolutionsIndexRouteImport } from "./routes/technical-solutions.index";
+import { Route as TechnicalSolutionsIdRouteImport } from "./routes/technical-solutions.$id";
+import { Route as TicketsIndexRouteImport } from "./routes/tickets.index";
+import { Route as TicketsTicketIdRouteImport } from "./routes/tickets.$ticketId";
+import { Route as TicketsRoutingRouteImport } from "./routes/tickets.routing";
+import { Route as ViewTokenRouteImport } from "./routes/view.$token";
+import { Route as ApiCompletionRecordTokenRouteImport } from "./routes/api/completion-record.$token";
+import { Route as ApiCronDispatchRouteImport } from "./routes/api/cron/dispatch";
+import { Route as ApiCronJourneysRouteImport } from "./routes/api.cron.journeys";
+import { Route as ApiCronPlanSnapshotsRouteImport } from "./routes/api/cron/plan-snapshots";
+import { Route as ApiCronSequencesRouteImport } from "./routes/api.cron.sequences";
+import { Route as ApiCronSlaRouteImport } from "./routes/api/cron/sla";
+import { Route as ApiPlanSnapshotTokenRouteImport } from "./routes/api/plan-snapshot.$token";
+import { Route as ApiTamDecisionRouteImport } from "./routes/api/tam/decision";
+import { Route as ApiV1AccountsRouteImport } from "./routes/api/v1/accounts";
+import { Route as ApiV1AlertsRouteImport } from "./routes/api/v1/alerts";
+import { Route as ApiV1DocsRouteImport } from "./routes/api/v1/docs";
+import { Route as ApiV1ImplementationsRouteImport } from "./routes/api/v1/implementations";
+import { Route as ApiV1OpenapiDotjsonRouteImport } from "./routes/api/v1/openapi[.]json";
+import { Route as ApiV1TamRequestsRouteImport } from "./routes/api/v1/tam-requests";
+import { Route as ApiV1TicketsRouteImport } from "./routes/api/v1/tickets";
+import { Route as PlanSSnapshotTokenRouteImport } from "./routes/plan.s.$snapshotToken";
+import { Route as PortalPlanPortalKeyRouteImport } from "./routes/portal.plan.$portalKey";
+import { Route as ApiV1AccountsIdRouteImport } from "./routes/api/v1/accounts.$id";
+import { Route as ApiV1AccountsIdTransitionRouteImport } from "./routes/api/v1/accounts.$id.transition";
 
 const IndexRoute = IndexRouteImport.update({
-  id: '/',
-  path: '/',
+  id: "/",
+  path: "/",
   getParentRoute: () => rootRouteImport,
-} as any)
+} as any);
 const AccessRoute = AccessRouteImport.update({
-  id: '/access',
-  path: '/access',
+  id: "/access",
+  path: "/access",
   getParentRoute: () => rootRouteImport,
-} as any)
+} as any);
 const AdminRoute = AdminRouteImport.update({
-  id: '/admin',
-  path: '/admin',
+  id: "/admin",
+  path: "/admin",
   getParentRoute: () => rootRouteImport,
-} as any)
+} as any);
 const AlertsRoute = AlertsRouteImport.update({
-  id: '/alerts',
-  path: '/alerts',
+  id: "/alerts",
+  path: "/alerts",
   getParentRoute: () => rootRouteImport,
-} as any)
+} as any);
 const CustomersRoute = CustomersRouteImport.update({
-  id: '/customers',
-  path: '/customers',
+  id: "/customers",
+  path: "/customers",
   getParentRoute: () => rootRouteImport,
-} as any)
+} as any);
 const ForgotPasswordRoute = ForgotPasswordRouteImport.update({
-  id: '/forgot-password',
-  path: '/forgot-password',
+  id: "/forgot-password",
+  path: "/forgot-password",
   getParentRoute: () => rootRouteImport,
-} as any)
+} as any);
 const JourneysRoute = JourneysRouteImport.update({
-  id: '/journeys',
-  path: '/journeys',
+  id: "/journeys",
+  path: "/journeys",
   getParentRoute: () => rootRouteImport,
-} as any)
+} as any);
 const LoginRoute = LoginRouteImport.update({
-  id: '/login',
-  path: '/login',
+  id: "/login",
+  path: "/login",
   getParentRoute: () => rootRouteImport,
-} as any)
+} as any);
 const PipelineRoute = PipelineRouteImport.update({
-  id: '/pipeline',
-  path: '/pipeline',
+  id: "/pipeline",
+  path: "/pipeline",
   getParentRoute: () => rootRouteImport,
-} as any)
+} as any);
 const PortalRoute = PortalRouteImport.update({
-  id: '/portal',
-  path: '/portal',
+  id: "/portal",
+  path: "/portal",
   getParentRoute: () => rootRouteImport,
-} as any)
+} as any);
 const PortfolioRoute = PortfolioRouteImport.update({
-  id: '/portfolio',
-  path: '/portfolio',
+  id: "/portfolio",
+  path: "/portfolio",
   getParentRoute: () => rootRouteImport,
-} as any)
+} as any);
 const SearchRoute = SearchRouteImport.update({
-  id: '/search',
-  path: '/search',
+  id: "/search",
+  path: "/search",
   getParentRoute: () => rootRouteImport,
-} as any)
+} as any);
 const SequencesRoute = SequencesRouteImport.update({
-  id: '/sequences',
-  path: '/sequences',
+  id: "/sequences",
+  path: "/sequences",
   getParentRoute: () => rootRouteImport,
-} as any)
+} as any);
 const SettingsRoute = SettingsRouteImport.update({
-  id: '/settings',
-  path: '/settings',
+  id: "/settings",
+  path: "/settings",
   getParentRoute: () => rootRouteImport,
-} as any)
+} as any);
 const SignalsRoute = SignalsRouteImport.update({
-  id: '/signals',
-  path: '/signals',
+  id: "/signals",
+  path: "/signals",
   getParentRoute: () => rootRouteImport,
-} as any)
+} as any);
 const SignupRoute = SignupRouteImport.update({
-  id: '/signup',
-  path: '/signup',
+  id: "/signup",
+  path: "/signup",
   getParentRoute: () => rootRouteImport,
-} as any)
+} as any);
 const TechnicalSolutionsRoute = TechnicalSolutionsRouteImport.update({
-  id: '/technical-solutions',
-  path: '/technical-solutions',
+  id: "/technical-solutions",
+  path: "/technical-solutions",
   getParentRoute: () => rootRouteImport,
-} as any)
+} as any);
 const TemplatesRoute = TemplatesRouteImport.update({
-  id: '/templates',
-  path: '/templates',
+  id: "/templates",
+  path: "/templates",
   getParentRoute: () => rootRouteImport,
-} as any)
+} as any);
 const TicketsRoute = TicketsRouteImport.update({
-  id: '/tickets',
-  path: '/tickets',
+  id: "/tickets",
+  path: "/tickets",
   getParentRoute: () => rootRouteImport,
-} as any)
+} as any);
 const AdminIndexRoute = AdminIndexRouteImport.update({
-  id: '/',
-  path: '/',
+  id: "/",
+  path: "/",
   getParentRoute: () => AdminRoute,
-} as any)
+} as any);
 const AdminApiKeysRoute = AdminApiKeysRouteImport.update({
-  id: '/api-keys',
-  path: '/api-keys',
+  id: "/api-keys",
+  path: "/api-keys",
   getParentRoute: () => AdminRoute,
-} as any)
+} as any);
 const AdminAuditRoute = AdminAuditRouteImport.update({
-  id: '/audit',
-  path: '/audit',
+  id: "/audit",
+  path: "/audit",
   getParentRoute: () => AdminRoute,
-} as any)
+} as any);
 const AdminFlagsRoute = AdminFlagsRouteImport.update({
-  id: '/flags',
-  path: '/flags',
+  id: "/flags",
+  path: "/flags",
   getParentRoute: () => AdminRoute,
-} as any)
+} as any);
 const AdminIntegrationsRoute = AdminIntegrationsRouteImport.update({
-  id: '/integrations',
-  path: '/integrations',
+  id: "/integrations",
+  path: "/integrations",
   getParentRoute: () => AdminRoute,
-} as any)
+} as any);
 const AdminLifecycleStagesRoute = AdminLifecycleStagesRouteImport.update({
-  id: '/lifecycle-stages',
-  path: '/lifecycle-stages',
+  id: "/lifecycle-stages",
+  path: "/lifecycle-stages",
   getParentRoute: () => AdminRoute,
-} as any)
+} as any);
 const AdminPipelineStagesRoute = AdminPipelineStagesRouteImport.update({
-  id: '/pipeline-stages',
-  path: '/pipeline-stages',
+  id: "/pipeline-stages",
+  path: "/pipeline-stages",
   getParentRoute: () => AdminRoute,
-} as any)
+} as any);
 const AdminUsersRoute = AdminUsersRouteImport.update({
-  id: '/users',
-  path: '/users',
+  id: "/users",
+  path: "/users",
   getParentRoute: () => AdminRoute,
-} as any)
+} as any);
 const ApiSplatRoute = ApiSplatRouteImport.update({
-  id: '/api/$',
-  path: '/api/$',
+  id: "/api/$",
+  path: "/api/$",
   getParentRoute: () => rootRouteImport,
-} as any)
+} as any);
 const AuthCallbackRoute = AuthCallbackRouteImport.update({
-  id: '/auth/callback',
-  path: '/auth/callback',
+  id: "/auth/callback",
+  path: "/auth/callback",
   getParentRoute: () => rootRouteImport,
-} as any)
+} as any);
 const CustomersIndexRoute = CustomersIndexRouteImport.update({
-  id: '/',
-  path: '/',
+  id: "/",
+  path: "/",
   getParentRoute: () => CustomersRoute,
-} as any)
+} as any);
 const CustomersCustomerIdRoute = CustomersCustomerIdRouteImport.update({
-  id: '/$customerId',
-  path: '/$customerId',
+  id: "/$customerId",
+  path: "/$customerId",
   getParentRoute: () => CustomersRoute,
-} as any)
+} as any);
 const DealsDealIdRoute = DealsDealIdRouteImport.update({
-  id: '/deals/$dealId',
-  path: '/deals/$dealId',
+  id: "/deals/$dealId",
+  path: "/deals/$dealId",
   getParentRoute: () => rootRouteImport,
-} as any)
+} as any);
 const JourneysJourneyIdRoute = JourneysJourneyIdRouteImport.update({
-  id: '/$journeyId',
-  path: '/$journeyId',
+  id: "/$journeyId",
+  path: "/$journeyId",
   getParentRoute: () => JourneysRoute,
-} as any)
+} as any);
 const OwnersOwnerRoute = OwnersOwnerRouteImport.update({
-  id: '/owners/$owner',
-  path: '/owners/$owner',
+  id: "/owners/$owner",
+  path: "/owners/$owner",
   getParentRoute: () => rootRouteImport,
-} as any)
+} as any);
 const PlanTokenRoute = PlanTokenRouteImport.update({
-  id: '/plan/$token',
-  path: '/plan/$token',
+  id: "/plan/$token",
+  path: "/plan/$token",
   getParentRoute: () => rootRouteImport,
-} as any)
+} as any);
 const PortalIndexRoute = PortalIndexRouteImport.update({
-  id: '/',
-  path: '/',
+  id: "/",
+  path: "/",
   getParentRoute: () => PortalRoute,
-} as any)
+} as any);
 const PortalTicketsRoute = PortalTicketsRouteImport.update({
-  id: '/tickets',
-  path: '/tickets',
+  id: "/tickets",
+  path: "/tickets",
   getParentRoute: () => PortalRoute,
-} as any)
+} as any);
 const SequencesIndexRoute = SequencesIndexRouteImport.update({
-  id: '/',
-  path: '/',
+  id: "/",
+  path: "/",
   getParentRoute: () => SequencesRoute,
-} as any)
+} as any);
 const SequencesSequenceIdRoute = SequencesSequenceIdRouteImport.update({
-  id: '/$sequenceId',
-  path: '/$sequenceId',
+  id: "/$sequenceId",
+  path: "/$sequenceId",
   getParentRoute: () => SequencesRoute,
-} as any)
+} as any);
 const TechnicalSolutionsIndexRoute = TechnicalSolutionsIndexRouteImport.update({
-  id: '/',
-  path: '/',
+  id: "/",
+  path: "/",
   getParentRoute: () => TechnicalSolutionsRoute,
-} as any)
+} as any);
 const TechnicalSolutionsIdRoute = TechnicalSolutionsIdRouteImport.update({
-  id: '/$id',
-  path: '/$id',
+  id: "/$id",
+  path: "/$id",
   getParentRoute: () => TechnicalSolutionsRoute,
-} as any)
+} as any);
 const TicketsIndexRoute = TicketsIndexRouteImport.update({
-  id: '/',
-  path: '/',
+  id: "/",
+  path: "/",
   getParentRoute: () => TicketsRoute,
-} as any)
+} as any);
 const TicketsTicketIdRoute = TicketsTicketIdRouteImport.update({
-  id: '/$ticketId',
-  path: '/$ticketId',
+  id: "/$ticketId",
+  path: "/$ticketId",
   getParentRoute: () => TicketsRoute,
-} as any)
+} as any);
 const TicketsRoutingRoute = TicketsRoutingRouteImport.update({
-  id: '/routing',
-  path: '/routing',
+  id: "/routing",
+  path: "/routing",
   getParentRoute: () => TicketsRoute,
-} as any)
+} as any);
 const ViewTokenRoute = ViewTokenRouteImport.update({
-  id: '/view/$token',
-  path: '/view/$token',
+  id: "/view/$token",
+  path: "/view/$token",
   getParentRoute: () => rootRouteImport,
-} as any)
+} as any);
+const ApiCompletionRecordTokenRoute = ApiCompletionRecordTokenRouteImport.update({
+  id: "/api/completion-record/$token",
+  path: "/api/completion-record/$token",
+  getParentRoute: () => rootRouteImport,
+} as any);
 const ApiCronDispatchRoute = ApiCronDispatchRouteImport.update({
-  id: '/api/cron/dispatch',
-  path: '/api/cron/dispatch',
+  id: "/api/cron/dispatch",
+  path: "/api/cron/dispatch",
   getParentRoute: () => rootRouteImport,
-} as any)
+} as any);
 const ApiCronJourneysRoute = ApiCronJourneysRouteImport.update({
-  id: '/api/cron/journeys',
-  path: '/api/cron/journeys',
+  id: "/api/cron/journeys",
+  path: "/api/cron/journeys",
   getParentRoute: () => rootRouteImport,
-} as any)
+} as any);
 const ApiCronPlanSnapshotsRoute = ApiCronPlanSnapshotsRouteImport.update({
-  id: '/api/cron/plan-snapshots',
-  path: '/api/cron/plan-snapshots',
+  id: "/api/cron/plan-snapshots",
+  path: "/api/cron/plan-snapshots",
   getParentRoute: () => rootRouteImport,
-} as any)
+} as any);
 const ApiCronSequencesRoute = ApiCronSequencesRouteImport.update({
-  id: '/api/cron/sequences',
-  path: '/api/cron/sequences',
+  id: "/api/cron/sequences",
+  path: "/api/cron/sequences",
   getParentRoute: () => rootRouteImport,
-} as any)
+} as any);
 const ApiCronSlaRoute = ApiCronSlaRouteImport.update({
-  id: '/api/cron/sla',
-  path: '/api/cron/sla',
+  id: "/api/cron/sla",
+  path: "/api/cron/sla",
   getParentRoute: () => rootRouteImport,
-} as any)
+} as any);
 const ApiPlanSnapshotTokenRoute = ApiPlanSnapshotTokenRouteImport.update({
-  id: '/api/plan-snapshot/$token',
-  path: '/api/plan-snapshot/$token',
+  id: "/api/plan-snapshot/$token",
+  path: "/api/plan-snapshot/$token",
   getParentRoute: () => rootRouteImport,
-} as any)
+} as any);
 const ApiTamDecisionRoute = ApiTamDecisionRouteImport.update({
-  id: '/api/tam/decision',
-  path: '/api/tam/decision',
+  id: "/api/tam/decision",
+  path: "/api/tam/decision",
   getParentRoute: () => rootRouteImport,
-} as any)
+} as any);
 const ApiV1AccountsRoute = ApiV1AccountsRouteImport.update({
-  id: '/api/v1/accounts',
-  path: '/api/v1/accounts',
+  id: "/api/v1/accounts",
+  path: "/api/v1/accounts",
   getParentRoute: () => rootRouteImport,
-} as any)
+} as any);
 const ApiV1AlertsRoute = ApiV1AlertsRouteImport.update({
-  id: '/api/v1/alerts',
-  path: '/api/v1/alerts',
+  id: "/api/v1/alerts",
+  path: "/api/v1/alerts",
   getParentRoute: () => rootRouteImport,
-} as any)
+} as any);
 const ApiV1DocsRoute = ApiV1DocsRouteImport.update({
-  id: '/api/v1/docs',
-  path: '/api/v1/docs',
+  id: "/api/v1/docs",
+  path: "/api/v1/docs",
   getParentRoute: () => rootRouteImport,
-} as any)
+} as any);
 const ApiV1ImplementationsRoute = ApiV1ImplementationsRouteImport.update({
-  id: '/api/v1/implementations',
-  path: '/api/v1/implementations',
+  id: "/api/v1/implementations",
+  path: "/api/v1/implementations",
   getParentRoute: () => rootRouteImport,
-} as any)
+} as any);
 const ApiV1OpenapiDotjsonRoute = ApiV1OpenapiDotjsonRouteImport.update({
-  id: '/api/v1/openapi.json',
-  path: '/api/v1/openapi.json',
+  id: "/api/v1/openapi.json",
+  path: "/api/v1/openapi.json",
   getParentRoute: () => rootRouteImport,
-} as any)
+} as any);
 const ApiV1TamRequestsRoute = ApiV1TamRequestsRouteImport.update({
-  id: '/api/v1/tam-requests',
-  path: '/api/v1/tam-requests',
+  id: "/api/v1/tam-requests",
+  path: "/api/v1/tam-requests",
   getParentRoute: () => rootRouteImport,
-} as any)
+} as any);
 const ApiV1TicketsRoute = ApiV1TicketsRouteImport.update({
-  id: '/api/v1/tickets',
-  path: '/api/v1/tickets',
+  id: "/api/v1/tickets",
+  path: "/api/v1/tickets",
   getParentRoute: () => rootRouteImport,
-} as any)
+} as any);
 const PlanSSnapshotTokenRoute = PlanSSnapshotTokenRouteImport.update({
-  id: '/plan/s/$snapshotToken',
-  path: '/plan/s/$snapshotToken',
+  id: "/plan/s/$snapshotToken",
+  path: "/plan/s/$snapshotToken",
   getParentRoute: () => rootRouteImport,
-} as any)
+} as any);
 const PortalPlanPortalKeyRoute = PortalPlanPortalKeyRouteImport.update({
-  id: '/plan/$portalKey',
-  path: '/plan/$portalKey',
+  id: "/plan/$portalKey",
+  path: "/plan/$portalKey",
   getParentRoute: () => PortalRoute,
-} as any)
+} as any);
 const ApiV1AccountsIdRoute = ApiV1AccountsIdRouteImport.update({
-  id: '/$id',
-  path: '/$id',
+  id: "/$id",
+  path: "/$id",
   getParentRoute: () => ApiV1AccountsRoute,
-} as any)
-const ApiV1AccountsIdTransitionRoute =
-  ApiV1AccountsIdTransitionRouteImport.update({
-    id: '/transition',
-    path: '/transition',
-    getParentRoute: () => ApiV1AccountsIdRoute,
-  } as any)
+} as any);
+const ApiV1AccountsIdTransitionRoute = ApiV1AccountsIdTransitionRouteImport.update({
+  id: "/transition",
+  path: "/transition",
+  getParentRoute: () => ApiV1AccountsIdRoute,
+} as any);
 
 export interface FileRoutesByFullPath {
-  '/': typeof IndexRoute
-  '/access': typeof AccessRoute
-  '/admin': typeof AdminRouteWithChildren
-  '/alerts': typeof AlertsRoute
-  '/customers': typeof CustomersRouteWithChildren
-  '/forgot-password': typeof ForgotPasswordRoute
-  '/journeys': typeof JourneysRouteWithChildren
-  '/login': typeof LoginRoute
-  '/pipeline': typeof PipelineRoute
-  '/portal': typeof PortalRouteWithChildren
-  '/portfolio': typeof PortfolioRoute
-  '/search': typeof SearchRoute
-  '/sequences': typeof SequencesRouteWithChildren
-  '/settings': typeof SettingsRoute
-  '/signals': typeof SignalsRoute
-  '/signup': typeof SignupRoute
-  '/technical-solutions': typeof TechnicalSolutionsRouteWithChildren
-  '/templates': typeof TemplatesRoute
-  '/tickets': typeof TicketsRouteWithChildren
-  '/admin/api-keys': typeof AdminApiKeysRoute
-  '/admin/audit': typeof AdminAuditRoute
-  '/admin/flags': typeof AdminFlagsRoute
-  '/admin/integrations': typeof AdminIntegrationsRoute
-  '/admin/lifecycle-stages': typeof AdminLifecycleStagesRoute
-  '/admin/pipeline-stages': typeof AdminPipelineStagesRoute
-  '/admin/users': typeof AdminUsersRoute
-  '/api/$': typeof ApiSplatRoute
-  '/auth/callback': typeof AuthCallbackRoute
-  '/customers/$customerId': typeof CustomersCustomerIdRoute
-  '/deals/$dealId': typeof DealsDealIdRoute
-  '/journeys/$journeyId': typeof JourneysJourneyIdRoute
-  '/owners/$owner': typeof OwnersOwnerRoute
-  '/plan/$token': typeof PlanTokenRoute
-  '/portal/tickets': typeof PortalTicketsRoute
-  '/sequences/$sequenceId': typeof SequencesSequenceIdRoute
-  '/technical-solutions/$id': typeof TechnicalSolutionsIdRoute
-  '/tickets/$ticketId': typeof TicketsTicketIdRoute
-  '/tickets/routing': typeof TicketsRoutingRoute
-  '/view/$token': typeof ViewTokenRoute
-  '/admin/': typeof AdminIndexRoute
-  '/customers/': typeof CustomersIndexRoute
-  '/portal/': typeof PortalIndexRoute
-  '/sequences/': typeof SequencesIndexRoute
-  '/technical-solutions/': typeof TechnicalSolutionsIndexRoute
-  '/tickets/': typeof TicketsIndexRoute
-  '/api/cron/dispatch': typeof ApiCronDispatchRoute
-  '/api/cron/journeys': typeof ApiCronJourneysRoute
-  '/api/cron/plan-snapshots': typeof ApiCronPlanSnapshotsRoute
-  '/api/cron/sequences': typeof ApiCronSequencesRoute
-  '/api/cron/sla': typeof ApiCronSlaRoute
-  '/api/plan-snapshot/$token': typeof ApiPlanSnapshotTokenRoute
-  '/api/tam/decision': typeof ApiTamDecisionRoute
-  '/api/v1/accounts': typeof ApiV1AccountsRouteWithChildren
-  '/api/v1/alerts': typeof ApiV1AlertsRoute
-  '/api/v1/docs': typeof ApiV1DocsRoute
-  '/api/v1/implementations': typeof ApiV1ImplementationsRoute
-  '/api/v1/openapi.json': typeof ApiV1OpenapiDotjsonRoute
-  '/api/v1/tam-requests': typeof ApiV1TamRequestsRoute
-  '/api/v1/tickets': typeof ApiV1TicketsRoute
-  '/plan/s/$snapshotToken': typeof PlanSSnapshotTokenRoute
-  '/portal/plan/$portalKey': typeof PortalPlanPortalKeyRoute
-  '/api/v1/accounts/$id': typeof ApiV1AccountsIdRouteWithChildren
-  '/api/v1/accounts/$id/transition': typeof ApiV1AccountsIdTransitionRoute
+  "/": typeof IndexRoute;
+  "/access": typeof AccessRoute;
+  "/admin": typeof AdminRouteWithChildren;
+  "/alerts": typeof AlertsRoute;
+  "/customers": typeof CustomersRouteWithChildren;
+  "/forgot-password": typeof ForgotPasswordRoute;
+  "/journeys": typeof JourneysRouteWithChildren;
+  "/login": typeof LoginRoute;
+  "/pipeline": typeof PipelineRoute;
+  "/portal": typeof PortalRouteWithChildren;
+  "/portfolio": typeof PortfolioRoute;
+  "/search": typeof SearchRoute;
+  "/sequences": typeof SequencesRouteWithChildren;
+  "/settings": typeof SettingsRoute;
+  "/signals": typeof SignalsRoute;
+  "/signup": typeof SignupRoute;
+  "/technical-solutions": typeof TechnicalSolutionsRouteWithChildren;
+  "/templates": typeof TemplatesRoute;
+  "/tickets": typeof TicketsRouteWithChildren;
+  "/admin/api-keys": typeof AdminApiKeysRoute;
+  "/admin/audit": typeof AdminAuditRoute;
+  "/admin/flags": typeof AdminFlagsRoute;
+  "/admin/integrations": typeof AdminIntegrationsRoute;
+  "/admin/lifecycle-stages": typeof AdminLifecycleStagesRoute;
+  "/admin/pipeline-stages": typeof AdminPipelineStagesRoute;
+  "/admin/users": typeof AdminUsersRoute;
+  "/api/$": typeof ApiSplatRoute;
+  "/auth/callback": typeof AuthCallbackRoute;
+  "/customers/$customerId": typeof CustomersCustomerIdRoute;
+  "/deals/$dealId": typeof DealsDealIdRoute;
+  "/journeys/$journeyId": typeof JourneysJourneyIdRoute;
+  "/owners/$owner": typeof OwnersOwnerRoute;
+  "/plan/$token": typeof PlanTokenRoute;
+  "/portal/tickets": typeof PortalTicketsRoute;
+  "/sequences/$sequenceId": typeof SequencesSequenceIdRoute;
+  "/technical-solutions/$id": typeof TechnicalSolutionsIdRoute;
+  "/tickets/$ticketId": typeof TicketsTicketIdRoute;
+  "/tickets/routing": typeof TicketsRoutingRoute;
+  "/view/$token": typeof ViewTokenRoute;
+  "/admin/": typeof AdminIndexRoute;
+  "/customers/": typeof CustomersIndexRoute;
+  "/portal/": typeof PortalIndexRoute;
+  "/sequences/": typeof SequencesIndexRoute;
+  "/technical-solutions/": typeof TechnicalSolutionsIndexRoute;
+  "/tickets/": typeof TicketsIndexRoute;
+  "/api/completion-record/$token": typeof ApiCompletionRecordTokenRoute;
+  "/api/cron/dispatch": typeof ApiCronDispatchRoute;
+  "/api/cron/journeys": typeof ApiCronJourneysRoute;
+  "/api/cron/plan-snapshots": typeof ApiCronPlanSnapshotsRoute;
+  "/api/cron/sequences": typeof ApiCronSequencesRoute;
+  "/api/cron/sla": typeof ApiCronSlaRoute;
+  "/api/plan-snapshot/$token": typeof ApiPlanSnapshotTokenRoute;
+  "/api/tam/decision": typeof ApiTamDecisionRoute;
+  "/api/v1/accounts": typeof ApiV1AccountsRouteWithChildren;
+  "/api/v1/alerts": typeof ApiV1AlertsRoute;
+  "/api/v1/docs": typeof ApiV1DocsRoute;
+  "/api/v1/implementations": typeof ApiV1ImplementationsRoute;
+  "/api/v1/openapi.json": typeof ApiV1OpenapiDotjsonRoute;
+  "/api/v1/tam-requests": typeof ApiV1TamRequestsRoute;
+  "/api/v1/tickets": typeof ApiV1TicketsRoute;
+  "/plan/s/$snapshotToken": typeof PlanSSnapshotTokenRoute;
+  "/portal/plan/$portalKey": typeof PortalPlanPortalKeyRoute;
+  "/api/v1/accounts/$id": typeof ApiV1AccountsIdRouteWithChildren;
+  "/api/v1/accounts/$id/transition": typeof ApiV1AccountsIdTransitionRoute;
 }
 export interface FileRoutesByTo {
-  '/': typeof IndexRoute
-  '/access': typeof AccessRoute
-  '/alerts': typeof AlertsRoute
-  '/forgot-password': typeof ForgotPasswordRoute
-  '/journeys': typeof JourneysRouteWithChildren
-  '/login': typeof LoginRoute
-  '/pipeline': typeof PipelineRoute
-  '/portfolio': typeof PortfolioRoute
-  '/search': typeof SearchRoute
-  '/settings': typeof SettingsRoute
-  '/signals': typeof SignalsRoute
-  '/signup': typeof SignupRoute
-  '/templates': typeof TemplatesRoute
-  '/admin/api-keys': typeof AdminApiKeysRoute
-  '/admin/audit': typeof AdminAuditRoute
-  '/admin/flags': typeof AdminFlagsRoute
-  '/admin/integrations': typeof AdminIntegrationsRoute
-  '/admin/lifecycle-stages': typeof AdminLifecycleStagesRoute
-  '/admin/pipeline-stages': typeof AdminPipelineStagesRoute
-  '/admin/users': typeof AdminUsersRoute
-  '/api/$': typeof ApiSplatRoute
-  '/auth/callback': typeof AuthCallbackRoute
-  '/customers/$customerId': typeof CustomersCustomerIdRoute
-  '/deals/$dealId': typeof DealsDealIdRoute
-  '/journeys/$journeyId': typeof JourneysJourneyIdRoute
-  '/owners/$owner': typeof OwnersOwnerRoute
-  '/plan/$token': typeof PlanTokenRoute
-  '/portal/tickets': typeof PortalTicketsRoute
-  '/sequences/$sequenceId': typeof SequencesSequenceIdRoute
-  '/technical-solutions/$id': typeof TechnicalSolutionsIdRoute
-  '/tickets/$ticketId': typeof TicketsTicketIdRoute
-  '/tickets/routing': typeof TicketsRoutingRoute
-  '/view/$token': typeof ViewTokenRoute
-  '/admin': typeof AdminIndexRoute
-  '/customers': typeof CustomersIndexRoute
-  '/portal': typeof PortalIndexRoute
-  '/sequences': typeof SequencesIndexRoute
-  '/technical-solutions': typeof TechnicalSolutionsIndexRoute
-  '/tickets': typeof TicketsIndexRoute
-  '/api/cron/dispatch': typeof ApiCronDispatchRoute
-  '/api/cron/journeys': typeof ApiCronJourneysRoute
-  '/api/cron/plan-snapshots': typeof ApiCronPlanSnapshotsRoute
-  '/api/cron/sequences': typeof ApiCronSequencesRoute
-  '/api/cron/sla': typeof ApiCronSlaRoute
-  '/api/plan-snapshot/$token': typeof ApiPlanSnapshotTokenRoute
-  '/api/tam/decision': typeof ApiTamDecisionRoute
-  '/api/v1/accounts': typeof ApiV1AccountsRouteWithChildren
-  '/api/v1/alerts': typeof ApiV1AlertsRoute
-  '/api/v1/docs': typeof ApiV1DocsRoute
-  '/api/v1/implementations': typeof ApiV1ImplementationsRoute
-  '/api/v1/openapi.json': typeof ApiV1OpenapiDotjsonRoute
-  '/api/v1/tam-requests': typeof ApiV1TamRequestsRoute
-  '/api/v1/tickets': typeof ApiV1TicketsRoute
-  '/plan/s/$snapshotToken': typeof PlanSSnapshotTokenRoute
-  '/portal/plan/$portalKey': typeof PortalPlanPortalKeyRoute
-  '/api/v1/accounts/$id': typeof ApiV1AccountsIdRouteWithChildren
-  '/api/v1/accounts/$id/transition': typeof ApiV1AccountsIdTransitionRoute
+  "/": typeof IndexRoute;
+  "/access": typeof AccessRoute;
+  "/alerts": typeof AlertsRoute;
+  "/forgot-password": typeof ForgotPasswordRoute;
+  "/journeys": typeof JourneysRouteWithChildren;
+  "/login": typeof LoginRoute;
+  "/pipeline": typeof PipelineRoute;
+  "/portfolio": typeof PortfolioRoute;
+  "/search": typeof SearchRoute;
+  "/settings": typeof SettingsRoute;
+  "/signals": typeof SignalsRoute;
+  "/signup": typeof SignupRoute;
+  "/templates": typeof TemplatesRoute;
+  "/admin/api-keys": typeof AdminApiKeysRoute;
+  "/admin/audit": typeof AdminAuditRoute;
+  "/admin/flags": typeof AdminFlagsRoute;
+  "/admin/integrations": typeof AdminIntegrationsRoute;
+  "/admin/lifecycle-stages": typeof AdminLifecycleStagesRoute;
+  "/admin/pipeline-stages": typeof AdminPipelineStagesRoute;
+  "/admin/users": typeof AdminUsersRoute;
+  "/api/$": typeof ApiSplatRoute;
+  "/auth/callback": typeof AuthCallbackRoute;
+  "/customers/$customerId": typeof CustomersCustomerIdRoute;
+  "/deals/$dealId": typeof DealsDealIdRoute;
+  "/journeys/$journeyId": typeof JourneysJourneyIdRoute;
+  "/owners/$owner": typeof OwnersOwnerRoute;
+  "/plan/$token": typeof PlanTokenRoute;
+  "/portal/tickets": typeof PortalTicketsRoute;
+  "/sequences/$sequenceId": typeof SequencesSequenceIdRoute;
+  "/technical-solutions/$id": typeof TechnicalSolutionsIdRoute;
+  "/tickets/$ticketId": typeof TicketsTicketIdRoute;
+  "/tickets/routing": typeof TicketsRoutingRoute;
+  "/view/$token": typeof ViewTokenRoute;
+  "/admin": typeof AdminIndexRoute;
+  "/customers": typeof CustomersIndexRoute;
+  "/portal": typeof PortalIndexRoute;
+  "/sequences": typeof SequencesIndexRoute;
+  "/technical-solutions": typeof TechnicalSolutionsIndexRoute;
+  "/tickets": typeof TicketsIndexRoute;
+  "/api/completion-record/$token": typeof ApiCompletionRecordTokenRoute;
+  "/api/cron/dispatch": typeof ApiCronDispatchRoute;
+  "/api/cron/journeys": typeof ApiCronJourneysRoute;
+  "/api/cron/plan-snapshots": typeof ApiCronPlanSnapshotsRoute;
+  "/api/cron/sequences": typeof ApiCronSequencesRoute;
+  "/api/cron/sla": typeof ApiCronSlaRoute;
+  "/api/plan-snapshot/$token": typeof ApiPlanSnapshotTokenRoute;
+  "/api/tam/decision": typeof ApiTamDecisionRoute;
+  "/api/v1/accounts": typeof ApiV1AccountsRouteWithChildren;
+  "/api/v1/alerts": typeof ApiV1AlertsRoute;
+  "/api/v1/docs": typeof ApiV1DocsRoute;
+  "/api/v1/implementations": typeof ApiV1ImplementationsRoute;
+  "/api/v1/openapi.json": typeof ApiV1OpenapiDotjsonRoute;
+  "/api/v1/tam-requests": typeof ApiV1TamRequestsRoute;
+  "/api/v1/tickets": typeof ApiV1TicketsRoute;
+  "/plan/s/$snapshotToken": typeof PlanSSnapshotTokenRoute;
+  "/portal/plan/$portalKey": typeof PortalPlanPortalKeyRoute;
+  "/api/v1/accounts/$id": typeof ApiV1AccountsIdRouteWithChildren;
+  "/api/v1/accounts/$id/transition": typeof ApiV1AccountsIdTransitionRoute;
 }
 export interface FileRoutesById {
-  __root__: typeof rootRouteImport
-  '/': typeof IndexRoute
-  '/access': typeof AccessRoute
-  '/admin': typeof AdminRouteWithChildren
-  '/alerts': typeof AlertsRoute
-  '/customers': typeof CustomersRouteWithChildren
-  '/forgot-password': typeof ForgotPasswordRoute
-  '/journeys': typeof JourneysRouteWithChildren
-  '/login': typeof LoginRoute
-  '/pipeline': typeof PipelineRoute
-  '/portal': typeof PortalRouteWithChildren
-  '/portfolio': typeof PortfolioRoute
-  '/search': typeof SearchRoute
-  '/sequences': typeof SequencesRouteWithChildren
-  '/settings': typeof SettingsRoute
-  '/signals': typeof SignalsRoute
-  '/signup': typeof SignupRoute
-  '/technical-solutions': typeof TechnicalSolutionsRouteWithChildren
-  '/templates': typeof TemplatesRoute
-  '/tickets': typeof TicketsRouteWithChildren
-  '/admin/api-keys': typeof AdminApiKeysRoute
-  '/admin/audit': typeof AdminAuditRoute
-  '/admin/flags': typeof AdminFlagsRoute
-  '/admin/integrations': typeof AdminIntegrationsRoute
-  '/admin/lifecycle-stages': typeof AdminLifecycleStagesRoute
-  '/admin/pipeline-stages': typeof AdminPipelineStagesRoute
-  '/admin/users': typeof AdminUsersRoute
-  '/api/$': typeof ApiSplatRoute
-  '/auth/callback': typeof AuthCallbackRoute
-  '/customers/$customerId': typeof CustomersCustomerIdRoute
-  '/deals/$dealId': typeof DealsDealIdRoute
-  '/journeys/$journeyId': typeof JourneysJourneyIdRoute
-  '/owners/$owner': typeof OwnersOwnerRoute
-  '/plan/$token': typeof PlanTokenRoute
-  '/portal/tickets': typeof PortalTicketsRoute
-  '/sequences/$sequenceId': typeof SequencesSequenceIdRoute
-  '/technical-solutions/$id': typeof TechnicalSolutionsIdRoute
-  '/tickets/$ticketId': typeof TicketsTicketIdRoute
-  '/tickets/routing': typeof TicketsRoutingRoute
-  '/view/$token': typeof ViewTokenRoute
-  '/admin/': typeof AdminIndexRoute
-  '/customers/': typeof CustomersIndexRoute
-  '/portal/': typeof PortalIndexRoute
-  '/sequences/': typeof SequencesIndexRoute
-  '/technical-solutions/': typeof TechnicalSolutionsIndexRoute
-  '/tickets/': typeof TicketsIndexRoute
-  '/api/cron/dispatch': typeof ApiCronDispatchRoute
-  '/api/cron/journeys': typeof ApiCronJourneysRoute
-  '/api/cron/plan-snapshots': typeof ApiCronPlanSnapshotsRoute
-  '/api/cron/sequences': typeof ApiCronSequencesRoute
-  '/api/cron/sla': typeof ApiCronSlaRoute
-  '/api/plan-snapshot/$token': typeof ApiPlanSnapshotTokenRoute
-  '/api/tam/decision': typeof ApiTamDecisionRoute
-  '/api/v1/accounts': typeof ApiV1AccountsRouteWithChildren
-  '/api/v1/alerts': typeof ApiV1AlertsRoute
-  '/api/v1/docs': typeof ApiV1DocsRoute
-  '/api/v1/implementations': typeof ApiV1ImplementationsRoute
-  '/api/v1/openapi.json': typeof ApiV1OpenapiDotjsonRoute
-  '/api/v1/tam-requests': typeof ApiV1TamRequestsRoute
-  '/api/v1/tickets': typeof ApiV1TicketsRoute
-  '/plan/s/$snapshotToken': typeof PlanSSnapshotTokenRoute
-  '/portal/plan/$portalKey': typeof PortalPlanPortalKeyRoute
-  '/api/v1/accounts/$id': typeof ApiV1AccountsIdRouteWithChildren
-  '/api/v1/accounts/$id/transition': typeof ApiV1AccountsIdTransitionRoute
+  __root__: typeof rootRouteImport;
+  "/": typeof IndexRoute;
+  "/access": typeof AccessRoute;
+  "/admin": typeof AdminRouteWithChildren;
+  "/alerts": typeof AlertsRoute;
+  "/customers": typeof CustomersRouteWithChildren;
+  "/forgot-password": typeof ForgotPasswordRoute;
+  "/journeys": typeof JourneysRouteWithChildren;
+  "/login": typeof LoginRoute;
+  "/pipeline": typeof PipelineRoute;
+  "/portal": typeof PortalRouteWithChildren;
+  "/portfolio": typeof PortfolioRoute;
+  "/search": typeof SearchRoute;
+  "/sequences": typeof SequencesRouteWithChildren;
+  "/settings": typeof SettingsRoute;
+  "/signals": typeof SignalsRoute;
+  "/signup": typeof SignupRoute;
+  "/technical-solutions": typeof TechnicalSolutionsRouteWithChildren;
+  "/templates": typeof TemplatesRoute;
+  "/tickets": typeof TicketsRouteWithChildren;
+  "/admin/api-keys": typeof AdminApiKeysRoute;
+  "/admin/audit": typeof AdminAuditRoute;
+  "/admin/flags": typeof AdminFlagsRoute;
+  "/admin/integrations": typeof AdminIntegrationsRoute;
+  "/admin/lifecycle-stages": typeof AdminLifecycleStagesRoute;
+  "/admin/pipeline-stages": typeof AdminPipelineStagesRoute;
+  "/admin/users": typeof AdminUsersRoute;
+  "/api/$": typeof ApiSplatRoute;
+  "/auth/callback": typeof AuthCallbackRoute;
+  "/customers/$customerId": typeof CustomersCustomerIdRoute;
+  "/deals/$dealId": typeof DealsDealIdRoute;
+  "/journeys/$journeyId": typeof JourneysJourneyIdRoute;
+  "/owners/$owner": typeof OwnersOwnerRoute;
+  "/plan/$token": typeof PlanTokenRoute;
+  "/portal/tickets": typeof PortalTicketsRoute;
+  "/sequences/$sequenceId": typeof SequencesSequenceIdRoute;
+  "/technical-solutions/$id": typeof TechnicalSolutionsIdRoute;
+  "/tickets/$ticketId": typeof TicketsTicketIdRoute;
+  "/tickets/routing": typeof TicketsRoutingRoute;
+  "/view/$token": typeof ViewTokenRoute;
+  "/admin/": typeof AdminIndexRoute;
+  "/customers/": typeof CustomersIndexRoute;
+  "/portal/": typeof PortalIndexRoute;
+  "/sequences/": typeof SequencesIndexRoute;
+  "/technical-solutions/": typeof TechnicalSolutionsIndexRoute;
+  "/tickets/": typeof TicketsIndexRoute;
+  "/api/completion-record/$token": typeof ApiCompletionRecordTokenRoute;
+  "/api/cron/dispatch": typeof ApiCronDispatchRoute;
+  "/api/cron/journeys": typeof ApiCronJourneysRoute;
+  "/api/cron/plan-snapshots": typeof ApiCronPlanSnapshotsRoute;
+  "/api/cron/sequences": typeof ApiCronSequencesRoute;
+  "/api/cron/sla": typeof ApiCronSlaRoute;
+  "/api/plan-snapshot/$token": typeof ApiPlanSnapshotTokenRoute;
+  "/api/tam/decision": typeof ApiTamDecisionRoute;
+  "/api/v1/accounts": typeof ApiV1AccountsRouteWithChildren;
+  "/api/v1/alerts": typeof ApiV1AlertsRoute;
+  "/api/v1/docs": typeof ApiV1DocsRoute;
+  "/api/v1/implementations": typeof ApiV1ImplementationsRoute;
+  "/api/v1/openapi.json": typeof ApiV1OpenapiDotjsonRoute;
+  "/api/v1/tam-requests": typeof ApiV1TamRequestsRoute;
+  "/api/v1/tickets": typeof ApiV1TicketsRoute;
+  "/plan/s/$snapshotToken": typeof PlanSSnapshotTokenRoute;
+  "/portal/plan/$portalKey": typeof PortalPlanPortalKeyRoute;
+  "/api/v1/accounts/$id": typeof ApiV1AccountsIdRouteWithChildren;
+  "/api/v1/accounts/$id/transition": typeof ApiV1AccountsIdTransitionRoute;
 }
 export interface FileRouteTypes {
-  fileRoutesByFullPath: FileRoutesByFullPath
+  fileRoutesByFullPath: FileRoutesByFullPath;
   fullPaths:
-    | '/'
-    | '/access'
-    | '/admin'
-    | '/alerts'
-    | '/customers'
-    | '/forgot-password'
-    | '/journeys'
-    | '/login'
-    | '/pipeline'
-    | '/portal'
-    | '/portfolio'
-    | '/search'
-    | '/sequences'
-    | '/settings'
-    | '/signals'
-    | '/signup'
-    | '/technical-solutions'
-    | '/templates'
-    | '/tickets'
-    | '/admin/api-keys'
-    | '/admin/audit'
-    | '/admin/flags'
-    | '/admin/integrations'
-    | '/admin/lifecycle-stages'
-    | '/admin/pipeline-stages'
-    | '/admin/users'
-    | '/api/$'
-    | '/auth/callback'
-    | '/customers/$customerId'
-    | '/deals/$dealId'
-    | '/journeys/$journeyId'
-    | '/owners/$owner'
-    | '/plan/$token'
-    | '/portal/tickets'
-    | '/sequences/$sequenceId'
-    | '/technical-solutions/$id'
-    | '/tickets/$ticketId'
-    | '/tickets/routing'
-    | '/view/$token'
-    | '/admin/'
-    | '/customers/'
-    | '/portal/'
-    | '/sequences/'
-    | '/technical-solutions/'
-    | '/tickets/'
-    | '/api/cron/dispatch'
-    | '/api/cron/journeys'
-    | '/api/cron/plan-snapshots'
-    | '/api/cron/sequences'
-    | '/api/cron/sla'
-    | '/api/plan-snapshot/$token'
-    | '/api/tam/decision'
-    | '/api/v1/accounts'
-    | '/api/v1/alerts'
-    | '/api/v1/docs'
-    | '/api/v1/implementations'
-    | '/api/v1/openapi.json'
-    | '/api/v1/tam-requests'
-    | '/api/v1/tickets'
-    | '/plan/s/$snapshotToken'
-    | '/portal/plan/$portalKey'
-    | '/api/v1/accounts/$id'
-    | '/api/v1/accounts/$id/transition'
-  fileRoutesByTo: FileRoutesByTo
+    | "/"
+    | "/access"
+    | "/admin"
+    | "/alerts"
+    | "/customers"
+    | "/forgot-password"
+    | "/journeys"
+    | "/login"
+    | "/pipeline"
+    | "/portal"
+    | "/portfolio"
+    | "/search"
+    | "/sequences"
+    | "/settings"
+    | "/signals"
+    | "/signup"
+    | "/technical-solutions"
+    | "/templates"
+    | "/tickets"
+    | "/admin/api-keys"
+    | "/admin/audit"
+    | "/admin/flags"
+    | "/admin/integrations"
+    | "/admin/lifecycle-stages"
+    | "/admin/pipeline-stages"
+    | "/admin/users"
+    | "/api/$"
+    | "/auth/callback"
+    | "/customers/$customerId"
+    | "/deals/$dealId"
+    | "/journeys/$journeyId"
+    | "/owners/$owner"
+    | "/plan/$token"
+    | "/portal/tickets"
+    | "/sequences/$sequenceId"
+    | "/technical-solutions/$id"
+    | "/tickets/$ticketId"
+    | "/tickets/routing"
+    | "/view/$token"
+    | "/admin/"
+    | "/customers/"
+    | "/portal/"
+    | "/sequences/"
+    | "/technical-solutions/"
+    | "/tickets/"
+    | "/api/completion-record/$token"
+    | "/api/cron/dispatch"
+    | "/api/cron/journeys"
+    | "/api/cron/plan-snapshots"
+    | "/api/cron/sequences"
+    | "/api/cron/sla"
+    | "/api/plan-snapshot/$token"
+    | "/api/tam/decision"
+    | "/api/v1/accounts"
+    | "/api/v1/alerts"
+    | "/api/v1/docs"
+    | "/api/v1/implementations"
+    | "/api/v1/openapi.json"
+    | "/api/v1/tam-requests"
+    | "/api/v1/tickets"
+    | "/plan/s/$snapshotToken"
+    | "/portal/plan/$portalKey"
+    | "/api/v1/accounts/$id"
+    | "/api/v1/accounts/$id/transition";
+  fileRoutesByTo: FileRoutesByTo;
   to:
-    | '/'
-    | '/access'
-    | '/alerts'
-    | '/forgot-password'
-    | '/journeys'
-    | '/login'
-    | '/pipeline'
-    | '/portfolio'
-    | '/search'
-    | '/settings'
-    | '/signals'
-    | '/signup'
-    | '/templates'
-    | '/admin/api-keys'
-    | '/admin/audit'
-    | '/admin/flags'
-    | '/admin/integrations'
-    | '/admin/lifecycle-stages'
-    | '/admin/pipeline-stages'
-    | '/admin/users'
-    | '/api/$'
-    | '/auth/callback'
-    | '/customers/$customerId'
-    | '/deals/$dealId'
-    | '/journeys/$journeyId'
-    | '/owners/$owner'
-    | '/plan/$token'
-    | '/portal/tickets'
-    | '/sequences/$sequenceId'
-    | '/technical-solutions/$id'
-    | '/tickets/$ticketId'
-    | '/tickets/routing'
-    | '/view/$token'
-    | '/admin'
-    | '/customers'
-    | '/portal'
-    | '/sequences'
-    | '/technical-solutions'
-    | '/tickets'
-    | '/api/cron/dispatch'
-    | '/api/cron/journeys'
-    | '/api/cron/plan-snapshots'
-    | '/api/cron/sequences'
-    | '/api/cron/sla'
-    | '/api/plan-snapshot/$token'
-    | '/api/tam/decision'
-    | '/api/v1/accounts'
-    | '/api/v1/alerts'
-    | '/api/v1/docs'
-    | '/api/v1/implementations'
-    | '/api/v1/openapi.json'
-    | '/api/v1/tam-requests'
-    | '/api/v1/tickets'
-    | '/plan/s/$snapshotToken'
-    | '/portal/plan/$portalKey'
-    | '/api/v1/accounts/$id'
-    | '/api/v1/accounts/$id/transition'
+    | "/"
+    | "/access"
+    | "/alerts"
+    | "/forgot-password"
+    | "/journeys"
+    | "/login"
+    | "/pipeline"
+    | "/portfolio"
+    | "/search"
+    | "/settings"
+    | "/signals"
+    | "/signup"
+    | "/templates"
+    | "/admin/api-keys"
+    | "/admin/audit"
+    | "/admin/flags"
+    | "/admin/integrations"
+    | "/admin/lifecycle-stages"
+    | "/admin/pipeline-stages"
+    | "/admin/users"
+    | "/api/$"
+    | "/auth/callback"
+    | "/customers/$customerId"
+    | "/deals/$dealId"
+    | "/journeys/$journeyId"
+    | "/owners/$owner"
+    | "/plan/$token"
+    | "/portal/tickets"
+    | "/sequences/$sequenceId"
+    | "/technical-solutions/$id"
+    | "/tickets/$ticketId"
+    | "/tickets/routing"
+    | "/view/$token"
+    | "/admin"
+    | "/customers"
+    | "/portal"
+    | "/sequences"
+    | "/technical-solutions"
+    | "/tickets"
+    | "/api/completion-record/$token"
+    | "/api/cron/dispatch"
+    | "/api/cron/journeys"
+    | "/api/cron/plan-snapshots"
+    | "/api/cron/sequences"
+    | "/api/cron/sla"
+    | "/api/plan-snapshot/$token"
+    | "/api/tam/decision"
+    | "/api/v1/accounts"
+    | "/api/v1/alerts"
+    | "/api/v1/docs"
+    | "/api/v1/implementations"
+    | "/api/v1/openapi.json"
+    | "/api/v1/tam-requests"
+    | "/api/v1/tickets"
+    | "/plan/s/$snapshotToken"
+    | "/portal/plan/$portalKey"
+    | "/api/v1/accounts/$id"
+    | "/api/v1/accounts/$id/transition";
   id:
-    | '__root__'
-    | '/'
-    | '/access'
-    | '/admin'
-    | '/alerts'
-    | '/customers'
-    | '/forgot-password'
-    | '/journeys'
-    | '/login'
-    | '/pipeline'
-    | '/portal'
-    | '/portfolio'
-    | '/search'
-    | '/sequences'
-    | '/settings'
-    | '/signals'
-    | '/signup'
-    | '/technical-solutions'
-    | '/templates'
-    | '/tickets'
-    | '/admin/api-keys'
-    | '/admin/audit'
-    | '/admin/flags'
-    | '/admin/integrations'
-    | '/admin/lifecycle-stages'
-    | '/admin/pipeline-stages'
-    | '/admin/users'
-    | '/api/$'
-    | '/auth/callback'
-    | '/customers/$customerId'
-    | '/deals/$dealId'
-    | '/journeys/$journeyId'
-    | '/owners/$owner'
-    | '/plan/$token'
-    | '/portal/tickets'
-    | '/sequences/$sequenceId'
-    | '/technical-solutions/$id'
-    | '/tickets/$ticketId'
-    | '/tickets/routing'
-    | '/view/$token'
-    | '/admin/'
-    | '/customers/'
-    | '/portal/'
-    | '/sequences/'
-    | '/technical-solutions/'
-    | '/tickets/'
-    | '/api/cron/dispatch'
-    | '/api/cron/journeys'
-    | '/api/cron/plan-snapshots'
-    | '/api/cron/sequences'
-    | '/api/cron/sla'
-    | '/api/plan-snapshot/$token'
-    | '/api/tam/decision'
-    | '/api/v1/accounts'
-    | '/api/v1/alerts'
-    | '/api/v1/docs'
-    | '/api/v1/implementations'
-    | '/api/v1/openapi.json'
-    | '/api/v1/tam-requests'
-    | '/api/v1/tickets'
-    | '/plan/s/$snapshotToken'
-    | '/portal/plan/$portalKey'
-    | '/api/v1/accounts/$id'
-    | '/api/v1/accounts/$id/transition'
-  fileRoutesById: FileRoutesById
+    | "__root__"
+    | "/"
+    | "/access"
+    | "/admin"
+    | "/alerts"
+    | "/customers"
+    | "/forgot-password"
+    | "/journeys"
+    | "/login"
+    | "/pipeline"
+    | "/portal"
+    | "/portfolio"
+    | "/search"
+    | "/sequences"
+    | "/settings"
+    | "/signals"
+    | "/signup"
+    | "/technical-solutions"
+    | "/templates"
+    | "/tickets"
+    | "/admin/api-keys"
+    | "/admin/audit"
+    | "/admin/flags"
+    | "/admin/integrations"
+    | "/admin/lifecycle-stages"
+    | "/admin/pipeline-stages"
+    | "/admin/users"
+    | "/api/$"
+    | "/auth/callback"
+    | "/customers/$customerId"
+    | "/deals/$dealId"
+    | "/journeys/$journeyId"
+    | "/owners/$owner"
+    | "/plan/$token"
+    | "/portal/tickets"
+    | "/sequences/$sequenceId"
+    | "/technical-solutions/$id"
+    | "/tickets/$ticketId"
+    | "/tickets/routing"
+    | "/view/$token"
+    | "/admin/"
+    | "/customers/"
+    | "/portal/"
+    | "/sequences/"
+    | "/technical-solutions/"
+    | "/tickets/"
+    | "/api/completion-record/$token"
+    | "/api/cron/dispatch"
+    | "/api/cron/journeys"
+    | "/api/cron/plan-snapshots"
+    | "/api/cron/sequences"
+    | "/api/cron/sla"
+    | "/api/plan-snapshot/$token"
+    | "/api/tam/decision"
+    | "/api/v1/accounts"
+    | "/api/v1/alerts"
+    | "/api/v1/docs"
+    | "/api/v1/implementations"
+    | "/api/v1/openapi.json"
+    | "/api/v1/tam-requests"
+    | "/api/v1/tickets"
+    | "/plan/s/$snapshotToken"
+    | "/portal/plan/$portalKey"
+    | "/api/v1/accounts/$id"
+    | "/api/v1/accounts/$id/transition";
+  fileRoutesById: FileRoutesById;
 }
 export interface RootRouteChildren {
-  IndexRoute: typeof IndexRoute
-  AccessRoute: typeof AccessRoute
-  AdminRoute: typeof AdminRouteWithChildren
-  AlertsRoute: typeof AlertsRoute
-  CustomersRoute: typeof CustomersRouteWithChildren
-  ForgotPasswordRoute: typeof ForgotPasswordRoute
-  JourneysRoute: typeof JourneysRouteWithChildren
-  LoginRoute: typeof LoginRoute
-  PipelineRoute: typeof PipelineRoute
-  PortalRoute: typeof PortalRouteWithChildren
-  PortfolioRoute: typeof PortfolioRoute
-  SearchRoute: typeof SearchRoute
-  SequencesRoute: typeof SequencesRouteWithChildren
-  SettingsRoute: typeof SettingsRoute
-  SignalsRoute: typeof SignalsRoute
-  SignupRoute: typeof SignupRoute
-  TechnicalSolutionsRoute: typeof TechnicalSolutionsRouteWithChildren
-  TemplatesRoute: typeof TemplatesRoute
-  TicketsRoute: typeof TicketsRouteWithChildren
-  ApiSplatRoute: typeof ApiSplatRoute
-  AuthCallbackRoute: typeof AuthCallbackRoute
-  DealsDealIdRoute: typeof DealsDealIdRoute
-  OwnersOwnerRoute: typeof OwnersOwnerRoute
-  PlanTokenRoute: typeof PlanTokenRoute
-  ViewTokenRoute: typeof ViewTokenRoute
-  ApiCronDispatchRoute: typeof ApiCronDispatchRoute
-  ApiCronJourneysRoute: typeof ApiCronJourneysRoute
-  ApiCronPlanSnapshotsRoute: typeof ApiCronPlanSnapshotsRoute
-  ApiCronSequencesRoute: typeof ApiCronSequencesRoute
-  ApiCronSlaRoute: typeof ApiCronSlaRoute
-  ApiPlanSnapshotTokenRoute: typeof ApiPlanSnapshotTokenRoute
-  ApiTamDecisionRoute: typeof ApiTamDecisionRoute
-  ApiV1AccountsRoute: typeof ApiV1AccountsRouteWithChildren
-  ApiV1AlertsRoute: typeof ApiV1AlertsRoute
-  ApiV1DocsRoute: typeof ApiV1DocsRoute
-  ApiV1ImplementationsRoute: typeof ApiV1ImplementationsRoute
-  ApiV1OpenapiDotjsonRoute: typeof ApiV1OpenapiDotjsonRoute
-  ApiV1TamRequestsRoute: typeof ApiV1TamRequestsRoute
-  ApiV1TicketsRoute: typeof ApiV1TicketsRoute
-  PlanSSnapshotTokenRoute: typeof PlanSSnapshotTokenRoute
+  IndexRoute: typeof IndexRoute;
+  AccessRoute: typeof AccessRoute;
+  AdminRoute: typeof AdminRouteWithChildren;
+  AlertsRoute: typeof AlertsRoute;
+  CustomersRoute: typeof CustomersRouteWithChildren;
+  ForgotPasswordRoute: typeof ForgotPasswordRoute;
+  JourneysRoute: typeof JourneysRouteWithChildren;
+  LoginRoute: typeof LoginRoute;
+  PipelineRoute: typeof PipelineRoute;
+  PortalRoute: typeof PortalRouteWithChildren;
+  PortfolioRoute: typeof PortfolioRoute;
+  SearchRoute: typeof SearchRoute;
+  SequencesRoute: typeof SequencesRouteWithChildren;
+  SettingsRoute: typeof SettingsRoute;
+  SignalsRoute: typeof SignalsRoute;
+  SignupRoute: typeof SignupRoute;
+  TechnicalSolutionsRoute: typeof TechnicalSolutionsRouteWithChildren;
+  TemplatesRoute: typeof TemplatesRoute;
+  TicketsRoute: typeof TicketsRouteWithChildren;
+  ApiSplatRoute: typeof ApiSplatRoute;
+  AuthCallbackRoute: typeof AuthCallbackRoute;
+  DealsDealIdRoute: typeof DealsDealIdRoute;
+  OwnersOwnerRoute: typeof OwnersOwnerRoute;
+  PlanTokenRoute: typeof PlanTokenRoute;
+  ViewTokenRoute: typeof ViewTokenRoute;
+  ApiCompletionRecordTokenRoute: typeof ApiCompletionRecordTokenRoute;
+  ApiCronDispatchRoute: typeof ApiCronDispatchRoute;
+  ApiCronJourneysRoute: typeof ApiCronJourneysRoute;
+  ApiCronPlanSnapshotsRoute: typeof ApiCronPlanSnapshotsRoute;
+  ApiCronSequencesRoute: typeof ApiCronSequencesRoute;
+  ApiCronSlaRoute: typeof ApiCronSlaRoute;
+  ApiPlanSnapshotTokenRoute: typeof ApiPlanSnapshotTokenRoute;
+  ApiTamDecisionRoute: typeof ApiTamDecisionRoute;
+  ApiV1AccountsRoute: typeof ApiV1AccountsRouteWithChildren;
+  ApiV1AlertsRoute: typeof ApiV1AlertsRoute;
+  ApiV1DocsRoute: typeof ApiV1DocsRoute;
+  ApiV1ImplementationsRoute: typeof ApiV1ImplementationsRoute;
+  ApiV1OpenapiDotjsonRoute: typeof ApiV1OpenapiDotjsonRoute;
+  ApiV1TamRequestsRoute: typeof ApiV1TamRequestsRoute;
+  ApiV1TicketsRoute: typeof ApiV1TicketsRoute;
+  PlanSSnapshotTokenRoute: typeof PlanSSnapshotTokenRoute;
 }
 
-declare module '@tanstack/react-router' {
+declare module "@tanstack/react-router" {
   interface FileRoutesByPath {
-    '/': {
-      id: '/'
-      path: '/'
-      fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/access': {
-      id: '/access'
-      path: '/access'
-      fullPath: '/access'
-      preLoaderRoute: typeof AccessRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/admin': {
-      id: '/admin'
-      path: '/admin'
-      fullPath: '/admin'
-      preLoaderRoute: typeof AdminRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/alerts': {
-      id: '/alerts'
-      path: '/alerts'
-      fullPath: '/alerts'
-      preLoaderRoute: typeof AlertsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/customers': {
-      id: '/customers'
-      path: '/customers'
-      fullPath: '/customers'
-      preLoaderRoute: typeof CustomersRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/forgot-password': {
-      id: '/forgot-password'
-      path: '/forgot-password'
-      fullPath: '/forgot-password'
-      preLoaderRoute: typeof ForgotPasswordRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/journeys': {
-      id: '/journeys'
-      path: '/journeys'
-      fullPath: '/journeys'
-      preLoaderRoute: typeof JourneysRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/login': {
-      id: '/login'
-      path: '/login'
-      fullPath: '/login'
-      preLoaderRoute: typeof LoginRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/pipeline': {
-      id: '/pipeline'
-      path: '/pipeline'
-      fullPath: '/pipeline'
-      preLoaderRoute: typeof PipelineRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/portal': {
-      id: '/portal'
-      path: '/portal'
-      fullPath: '/portal'
-      preLoaderRoute: typeof PortalRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/portfolio': {
-      id: '/portfolio'
-      path: '/portfolio'
-      fullPath: '/portfolio'
-      preLoaderRoute: typeof PortfolioRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/search': {
-      id: '/search'
-      path: '/search'
-      fullPath: '/search'
-      preLoaderRoute: typeof SearchRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/sequences': {
-      id: '/sequences'
-      path: '/sequences'
-      fullPath: '/sequences'
-      preLoaderRoute: typeof SequencesRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/settings': {
-      id: '/settings'
-      path: '/settings'
-      fullPath: '/settings'
-      preLoaderRoute: typeof SettingsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/signals': {
-      id: '/signals'
-      path: '/signals'
-      fullPath: '/signals'
-      preLoaderRoute: typeof SignalsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/signup': {
-      id: '/signup'
-      path: '/signup'
-      fullPath: '/signup'
-      preLoaderRoute: typeof SignupRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/technical-solutions': {
-      id: '/technical-solutions'
-      path: '/technical-solutions'
-      fullPath: '/technical-solutions'
-      preLoaderRoute: typeof TechnicalSolutionsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/templates': {
-      id: '/templates'
-      path: '/templates'
-      fullPath: '/templates'
-      preLoaderRoute: typeof TemplatesRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/tickets': {
-      id: '/tickets'
-      path: '/tickets'
-      fullPath: '/tickets'
-      preLoaderRoute: typeof TicketsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/admin/': {
-      id: '/admin/'
-      path: '/'
-      fullPath: '/admin/'
-      preLoaderRoute: typeof AdminIndexRouteImport
-      parentRoute: typeof AdminRoute
-    }
-    '/admin/api-keys': {
-      id: '/admin/api-keys'
-      path: '/api-keys'
-      fullPath: '/admin/api-keys'
-      preLoaderRoute: typeof AdminApiKeysRouteImport
-      parentRoute: typeof AdminRoute
-    }
-    '/admin/audit': {
-      id: '/admin/audit'
-      path: '/audit'
-      fullPath: '/admin/audit'
-      preLoaderRoute: typeof AdminAuditRouteImport
-      parentRoute: typeof AdminRoute
-    }
-    '/admin/flags': {
-      id: '/admin/flags'
-      path: '/flags'
-      fullPath: '/admin/flags'
-      preLoaderRoute: typeof AdminFlagsRouteImport
-      parentRoute: typeof AdminRoute
-    }
-    '/admin/integrations': {
-      id: '/admin/integrations'
-      path: '/integrations'
-      fullPath: '/admin/integrations'
-      preLoaderRoute: typeof AdminIntegrationsRouteImport
-      parentRoute: typeof AdminRoute
-    }
-    '/admin/lifecycle-stages': {
-      id: '/admin/lifecycle-stages'
-      path: '/lifecycle-stages'
-      fullPath: '/admin/lifecycle-stages'
-      preLoaderRoute: typeof AdminLifecycleStagesRouteImport
-      parentRoute: typeof AdminRoute
-    }
-    '/admin/pipeline-stages': {
-      id: '/admin/pipeline-stages'
-      path: '/pipeline-stages'
-      fullPath: '/admin/pipeline-stages'
-      preLoaderRoute: typeof AdminPipelineStagesRouteImport
-      parentRoute: typeof AdminRoute
-    }
-    '/admin/users': {
-      id: '/admin/users'
-      path: '/users'
-      fullPath: '/admin/users'
-      preLoaderRoute: typeof AdminUsersRouteImport
-      parentRoute: typeof AdminRoute
-    }
-    '/api/$': {
-      id: '/api/$'
-      path: '/api/$'
-      fullPath: '/api/$'
-      preLoaderRoute: typeof ApiSplatRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/auth/callback': {
-      id: '/auth/callback'
-      path: '/auth/callback'
-      fullPath: '/auth/callback'
-      preLoaderRoute: typeof AuthCallbackRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/customers/': {
-      id: '/customers/'
-      path: '/'
-      fullPath: '/customers/'
-      preLoaderRoute: typeof CustomersIndexRouteImport
-      parentRoute: typeof CustomersRoute
-    }
-    '/customers/$customerId': {
-      id: '/customers/$customerId'
-      path: '/$customerId'
-      fullPath: '/customers/$customerId'
-      preLoaderRoute: typeof CustomersCustomerIdRouteImport
-      parentRoute: typeof CustomersRoute
-    }
-    '/deals/$dealId': {
-      id: '/deals/$dealId'
-      path: '/deals/$dealId'
-      fullPath: '/deals/$dealId'
-      preLoaderRoute: typeof DealsDealIdRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/journeys/$journeyId': {
-      id: '/journeys/$journeyId'
-      path: '/$journeyId'
-      fullPath: '/journeys/$journeyId'
-      preLoaderRoute: typeof JourneysJourneyIdRouteImport
-      parentRoute: typeof JourneysRoute
-    }
-    '/owners/$owner': {
-      id: '/owners/$owner'
-      path: '/owners/$owner'
-      fullPath: '/owners/$owner'
-      preLoaderRoute: typeof OwnersOwnerRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/plan/$token': {
-      id: '/plan/$token'
-      path: '/plan/$token'
-      fullPath: '/plan/$token'
-      preLoaderRoute: typeof PlanTokenRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/portal/': {
-      id: '/portal/'
-      path: '/'
-      fullPath: '/portal/'
-      preLoaderRoute: typeof PortalIndexRouteImport
-      parentRoute: typeof PortalRoute
-    }
-    '/portal/tickets': {
-      id: '/portal/tickets'
-      path: '/tickets'
-      fullPath: '/portal/tickets'
-      preLoaderRoute: typeof PortalTicketsRouteImport
-      parentRoute: typeof PortalRoute
-    }
-    '/sequences/': {
-      id: '/sequences/'
-      path: '/'
-      fullPath: '/sequences/'
-      preLoaderRoute: typeof SequencesIndexRouteImport
-      parentRoute: typeof SequencesRoute
-    }
-    '/sequences/$sequenceId': {
-      id: '/sequences/$sequenceId'
-      path: '/$sequenceId'
-      fullPath: '/sequences/$sequenceId'
-      preLoaderRoute: typeof SequencesSequenceIdRouteImport
-      parentRoute: typeof SequencesRoute
-    }
-    '/technical-solutions/': {
-      id: '/technical-solutions/'
-      path: '/'
-      fullPath: '/technical-solutions/'
-      preLoaderRoute: typeof TechnicalSolutionsIndexRouteImport
-      parentRoute: typeof TechnicalSolutionsRoute
-    }
-    '/technical-solutions/$id': {
-      id: '/technical-solutions/$id'
-      path: '/$id'
-      fullPath: '/technical-solutions/$id'
-      preLoaderRoute: typeof TechnicalSolutionsIdRouteImport
-      parentRoute: typeof TechnicalSolutionsRoute
-    }
-    '/tickets/': {
-      id: '/tickets/'
-      path: '/'
-      fullPath: '/tickets/'
-      preLoaderRoute: typeof TicketsIndexRouteImport
-      parentRoute: typeof TicketsRoute
-    }
-    '/tickets/$ticketId': {
-      id: '/tickets/$ticketId'
-      path: '/$ticketId'
-      fullPath: '/tickets/$ticketId'
-      preLoaderRoute: typeof TicketsTicketIdRouteImport
-      parentRoute: typeof TicketsRoute
-    }
-    '/tickets/routing': {
-      id: '/tickets/routing'
-      path: '/routing'
-      fullPath: '/tickets/routing'
-      preLoaderRoute: typeof TicketsRoutingRouteImport
-      parentRoute: typeof TicketsRoute
-    }
-    '/view/$token': {
-      id: '/view/$token'
-      path: '/view/$token'
-      fullPath: '/view/$token'
-      preLoaderRoute: typeof ViewTokenRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/cron/dispatch': {
-      id: '/api/cron/dispatch'
-      path: '/api/cron/dispatch'
-      fullPath: '/api/cron/dispatch'
-      preLoaderRoute: typeof ApiCronDispatchRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/cron/journeys': {
-      id: '/api/cron/journeys'
-      path: '/api/cron/journeys'
-      fullPath: '/api/cron/journeys'
-      preLoaderRoute: typeof ApiCronJourneysRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/cron/plan-snapshots': {
-      id: '/api/cron/plan-snapshots'
-      path: '/api/cron/plan-snapshots'
-      fullPath: '/api/cron/plan-snapshots'
-      preLoaderRoute: typeof ApiCronPlanSnapshotsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/cron/sequences': {
-      id: '/api/cron/sequences'
-      path: '/api/cron/sequences'
-      fullPath: '/api/cron/sequences'
-      preLoaderRoute: typeof ApiCronSequencesRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/cron/sla': {
-      id: '/api/cron/sla'
-      path: '/api/cron/sla'
-      fullPath: '/api/cron/sla'
-      preLoaderRoute: typeof ApiCronSlaRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/plan-snapshot/$token': {
-      id: '/api/plan-snapshot/$token'
-      path: '/api/plan-snapshot/$token'
-      fullPath: '/api/plan-snapshot/$token'
-      preLoaderRoute: typeof ApiPlanSnapshotTokenRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/tam/decision': {
-      id: '/api/tam/decision'
-      path: '/api/tam/decision'
-      fullPath: '/api/tam/decision'
-      preLoaderRoute: typeof ApiTamDecisionRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/v1/accounts': {
-      id: '/api/v1/accounts'
-      path: '/api/v1/accounts'
-      fullPath: '/api/v1/accounts'
-      preLoaderRoute: typeof ApiV1AccountsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/v1/alerts': {
-      id: '/api/v1/alerts'
-      path: '/api/v1/alerts'
-      fullPath: '/api/v1/alerts'
-      preLoaderRoute: typeof ApiV1AlertsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/v1/docs': {
-      id: '/api/v1/docs'
-      path: '/api/v1/docs'
-      fullPath: '/api/v1/docs'
-      preLoaderRoute: typeof ApiV1DocsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/v1/implementations': {
-      id: '/api/v1/implementations'
-      path: '/api/v1/implementations'
-      fullPath: '/api/v1/implementations'
-      preLoaderRoute: typeof ApiV1ImplementationsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/v1/openapi.json': {
-      id: '/api/v1/openapi.json'
-      path: '/api/v1/openapi.json'
-      fullPath: '/api/v1/openapi.json'
-      preLoaderRoute: typeof ApiV1OpenapiDotjsonRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/v1/tam-requests': {
-      id: '/api/v1/tam-requests'
-      path: '/api/v1/tam-requests'
-      fullPath: '/api/v1/tam-requests'
-      preLoaderRoute: typeof ApiV1TamRequestsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/v1/tickets': {
-      id: '/api/v1/tickets'
-      path: '/api/v1/tickets'
-      fullPath: '/api/v1/tickets'
-      preLoaderRoute: typeof ApiV1TicketsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/plan/s/$snapshotToken': {
-      id: '/plan/s/$snapshotToken'
-      path: '/plan/s/$snapshotToken'
-      fullPath: '/plan/s/$snapshotToken'
-      preLoaderRoute: typeof PlanSSnapshotTokenRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/portal/plan/$portalKey': {
-      id: '/portal/plan/$portalKey'
-      path: '/plan/$portalKey'
-      fullPath: '/portal/plan/$portalKey'
-      preLoaderRoute: typeof PortalPlanPortalKeyRouteImport
-      parentRoute: typeof PortalRoute
-    }
-    '/api/v1/accounts/$id': {
-      id: '/api/v1/accounts/$id'
-      path: '/$id'
-      fullPath: '/api/v1/accounts/$id'
-      preLoaderRoute: typeof ApiV1AccountsIdRouteImport
-      parentRoute: typeof ApiV1AccountsRoute
-    }
-    '/api/v1/accounts/$id/transition': {
-      id: '/api/v1/accounts/$id/transition'
-      path: '/transition'
-      fullPath: '/api/v1/accounts/$id/transition'
-      preLoaderRoute: typeof ApiV1AccountsIdTransitionRouteImport
-      parentRoute: typeof ApiV1AccountsIdRoute
-    }
+    "/": {
+      id: "/";
+      path: "/";
+      fullPath: "/";
+      preLoaderRoute: typeof IndexRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/access": {
+      id: "/access";
+      path: "/access";
+      fullPath: "/access";
+      preLoaderRoute: typeof AccessRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/admin": {
+      id: "/admin";
+      path: "/admin";
+      fullPath: "/admin";
+      preLoaderRoute: typeof AdminRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/alerts": {
+      id: "/alerts";
+      path: "/alerts";
+      fullPath: "/alerts";
+      preLoaderRoute: typeof AlertsRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/customers": {
+      id: "/customers";
+      path: "/customers";
+      fullPath: "/customers";
+      preLoaderRoute: typeof CustomersRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/forgot-password": {
+      id: "/forgot-password";
+      path: "/forgot-password";
+      fullPath: "/forgot-password";
+      preLoaderRoute: typeof ForgotPasswordRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/journeys": {
+      id: "/journeys";
+      path: "/journeys";
+      fullPath: "/journeys";
+      preLoaderRoute: typeof JourneysRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/login": {
+      id: "/login";
+      path: "/login";
+      fullPath: "/login";
+      preLoaderRoute: typeof LoginRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/pipeline": {
+      id: "/pipeline";
+      path: "/pipeline";
+      fullPath: "/pipeline";
+      preLoaderRoute: typeof PipelineRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/portal": {
+      id: "/portal";
+      path: "/portal";
+      fullPath: "/portal";
+      preLoaderRoute: typeof PortalRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/portfolio": {
+      id: "/portfolio";
+      path: "/portfolio";
+      fullPath: "/portfolio";
+      preLoaderRoute: typeof PortfolioRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/search": {
+      id: "/search";
+      path: "/search";
+      fullPath: "/search";
+      preLoaderRoute: typeof SearchRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/sequences": {
+      id: "/sequences";
+      path: "/sequences";
+      fullPath: "/sequences";
+      preLoaderRoute: typeof SequencesRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/settings": {
+      id: "/settings";
+      path: "/settings";
+      fullPath: "/settings";
+      preLoaderRoute: typeof SettingsRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/signals": {
+      id: "/signals";
+      path: "/signals";
+      fullPath: "/signals";
+      preLoaderRoute: typeof SignalsRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/signup": {
+      id: "/signup";
+      path: "/signup";
+      fullPath: "/signup";
+      preLoaderRoute: typeof SignupRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/technical-solutions": {
+      id: "/technical-solutions";
+      path: "/technical-solutions";
+      fullPath: "/technical-solutions";
+      preLoaderRoute: typeof TechnicalSolutionsRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/templates": {
+      id: "/templates";
+      path: "/templates";
+      fullPath: "/templates";
+      preLoaderRoute: typeof TemplatesRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/tickets": {
+      id: "/tickets";
+      path: "/tickets";
+      fullPath: "/tickets";
+      preLoaderRoute: typeof TicketsRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/admin/": {
+      id: "/admin/";
+      path: "/";
+      fullPath: "/admin/";
+      preLoaderRoute: typeof AdminIndexRouteImport;
+      parentRoute: typeof AdminRoute;
+    };
+    "/admin/api-keys": {
+      id: "/admin/api-keys";
+      path: "/api-keys";
+      fullPath: "/admin/api-keys";
+      preLoaderRoute: typeof AdminApiKeysRouteImport;
+      parentRoute: typeof AdminRoute;
+    };
+    "/admin/audit": {
+      id: "/admin/audit";
+      path: "/audit";
+      fullPath: "/admin/audit";
+      preLoaderRoute: typeof AdminAuditRouteImport;
+      parentRoute: typeof AdminRoute;
+    };
+    "/admin/flags": {
+      id: "/admin/flags";
+      path: "/flags";
+      fullPath: "/admin/flags";
+      preLoaderRoute: typeof AdminFlagsRouteImport;
+      parentRoute: typeof AdminRoute;
+    };
+    "/admin/integrations": {
+      id: "/admin/integrations";
+      path: "/integrations";
+      fullPath: "/admin/integrations";
+      preLoaderRoute: typeof AdminIntegrationsRouteImport;
+      parentRoute: typeof AdminRoute;
+    };
+    "/admin/lifecycle-stages": {
+      id: "/admin/lifecycle-stages";
+      path: "/lifecycle-stages";
+      fullPath: "/admin/lifecycle-stages";
+      preLoaderRoute: typeof AdminLifecycleStagesRouteImport;
+      parentRoute: typeof AdminRoute;
+    };
+    "/admin/pipeline-stages": {
+      id: "/admin/pipeline-stages";
+      path: "/pipeline-stages";
+      fullPath: "/admin/pipeline-stages";
+      preLoaderRoute: typeof AdminPipelineStagesRouteImport;
+      parentRoute: typeof AdminRoute;
+    };
+    "/admin/users": {
+      id: "/admin/users";
+      path: "/users";
+      fullPath: "/admin/users";
+      preLoaderRoute: typeof AdminUsersRouteImport;
+      parentRoute: typeof AdminRoute;
+    };
+    "/api/$": {
+      id: "/api/$";
+      path: "/api/$";
+      fullPath: "/api/$";
+      preLoaderRoute: typeof ApiSplatRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/auth/callback": {
+      id: "/auth/callback";
+      path: "/auth/callback";
+      fullPath: "/auth/callback";
+      preLoaderRoute: typeof AuthCallbackRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/customers/": {
+      id: "/customers/";
+      path: "/";
+      fullPath: "/customers/";
+      preLoaderRoute: typeof CustomersIndexRouteImport;
+      parentRoute: typeof CustomersRoute;
+    };
+    "/customers/$customerId": {
+      id: "/customers/$customerId";
+      path: "/$customerId";
+      fullPath: "/customers/$customerId";
+      preLoaderRoute: typeof CustomersCustomerIdRouteImport;
+      parentRoute: typeof CustomersRoute;
+    };
+    "/deals/$dealId": {
+      id: "/deals/$dealId";
+      path: "/deals/$dealId";
+      fullPath: "/deals/$dealId";
+      preLoaderRoute: typeof DealsDealIdRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/journeys/$journeyId": {
+      id: "/journeys/$journeyId";
+      path: "/$journeyId";
+      fullPath: "/journeys/$journeyId";
+      preLoaderRoute: typeof JourneysJourneyIdRouteImport;
+      parentRoute: typeof JourneysRoute;
+    };
+    "/owners/$owner": {
+      id: "/owners/$owner";
+      path: "/owners/$owner";
+      fullPath: "/owners/$owner";
+      preLoaderRoute: typeof OwnersOwnerRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/plan/$token": {
+      id: "/plan/$token";
+      path: "/plan/$token";
+      fullPath: "/plan/$token";
+      preLoaderRoute: typeof PlanTokenRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/portal/": {
+      id: "/portal/";
+      path: "/";
+      fullPath: "/portal/";
+      preLoaderRoute: typeof PortalIndexRouteImport;
+      parentRoute: typeof PortalRoute;
+    };
+    "/portal/tickets": {
+      id: "/portal/tickets";
+      path: "/tickets";
+      fullPath: "/portal/tickets";
+      preLoaderRoute: typeof PortalTicketsRouteImport;
+      parentRoute: typeof PortalRoute;
+    };
+    "/sequences/": {
+      id: "/sequences/";
+      path: "/";
+      fullPath: "/sequences/";
+      preLoaderRoute: typeof SequencesIndexRouteImport;
+      parentRoute: typeof SequencesRoute;
+    };
+    "/sequences/$sequenceId": {
+      id: "/sequences/$sequenceId";
+      path: "/$sequenceId";
+      fullPath: "/sequences/$sequenceId";
+      preLoaderRoute: typeof SequencesSequenceIdRouteImport;
+      parentRoute: typeof SequencesRoute;
+    };
+    "/technical-solutions/": {
+      id: "/technical-solutions/";
+      path: "/";
+      fullPath: "/technical-solutions/";
+      preLoaderRoute: typeof TechnicalSolutionsIndexRouteImport;
+      parentRoute: typeof TechnicalSolutionsRoute;
+    };
+    "/technical-solutions/$id": {
+      id: "/technical-solutions/$id";
+      path: "/$id";
+      fullPath: "/technical-solutions/$id";
+      preLoaderRoute: typeof TechnicalSolutionsIdRouteImport;
+      parentRoute: typeof TechnicalSolutionsRoute;
+    };
+    "/tickets/": {
+      id: "/tickets/";
+      path: "/";
+      fullPath: "/tickets/";
+      preLoaderRoute: typeof TicketsIndexRouteImport;
+      parentRoute: typeof TicketsRoute;
+    };
+    "/tickets/$ticketId": {
+      id: "/tickets/$ticketId";
+      path: "/$ticketId";
+      fullPath: "/tickets/$ticketId";
+      preLoaderRoute: typeof TicketsTicketIdRouteImport;
+      parentRoute: typeof TicketsRoute;
+    };
+    "/tickets/routing": {
+      id: "/tickets/routing";
+      path: "/routing";
+      fullPath: "/tickets/routing";
+      preLoaderRoute: typeof TicketsRoutingRouteImport;
+      parentRoute: typeof TicketsRoute;
+    };
+    "/view/$token": {
+      id: "/view/$token";
+      path: "/view/$token";
+      fullPath: "/view/$token";
+      preLoaderRoute: typeof ViewTokenRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/api/completion-record/$token": {
+      id: "/api/completion-record/$token";
+      path: "/api/completion-record/$token";
+      fullPath: "/api/completion-record/$token";
+      preLoaderRoute: typeof ApiCompletionRecordTokenRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/api/cron/dispatch": {
+      id: "/api/cron/dispatch";
+      path: "/api/cron/dispatch";
+      fullPath: "/api/cron/dispatch";
+      preLoaderRoute: typeof ApiCronDispatchRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/api/cron/journeys": {
+      id: "/api/cron/journeys";
+      path: "/api/cron/journeys";
+      fullPath: "/api/cron/journeys";
+      preLoaderRoute: typeof ApiCronJourneysRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/api/cron/plan-snapshots": {
+      id: "/api/cron/plan-snapshots";
+      path: "/api/cron/plan-snapshots";
+      fullPath: "/api/cron/plan-snapshots";
+      preLoaderRoute: typeof ApiCronPlanSnapshotsRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/api/cron/sequences": {
+      id: "/api/cron/sequences";
+      path: "/api/cron/sequences";
+      fullPath: "/api/cron/sequences";
+      preLoaderRoute: typeof ApiCronSequencesRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/api/cron/sla": {
+      id: "/api/cron/sla";
+      path: "/api/cron/sla";
+      fullPath: "/api/cron/sla";
+      preLoaderRoute: typeof ApiCronSlaRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/api/plan-snapshot/$token": {
+      id: "/api/plan-snapshot/$token";
+      path: "/api/plan-snapshot/$token";
+      fullPath: "/api/plan-snapshot/$token";
+      preLoaderRoute: typeof ApiPlanSnapshotTokenRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/api/tam/decision": {
+      id: "/api/tam/decision";
+      path: "/api/tam/decision";
+      fullPath: "/api/tam/decision";
+      preLoaderRoute: typeof ApiTamDecisionRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/api/v1/accounts": {
+      id: "/api/v1/accounts";
+      path: "/api/v1/accounts";
+      fullPath: "/api/v1/accounts";
+      preLoaderRoute: typeof ApiV1AccountsRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/api/v1/alerts": {
+      id: "/api/v1/alerts";
+      path: "/api/v1/alerts";
+      fullPath: "/api/v1/alerts";
+      preLoaderRoute: typeof ApiV1AlertsRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/api/v1/docs": {
+      id: "/api/v1/docs";
+      path: "/api/v1/docs";
+      fullPath: "/api/v1/docs";
+      preLoaderRoute: typeof ApiV1DocsRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/api/v1/implementations": {
+      id: "/api/v1/implementations";
+      path: "/api/v1/implementations";
+      fullPath: "/api/v1/implementations";
+      preLoaderRoute: typeof ApiV1ImplementationsRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/api/v1/openapi.json": {
+      id: "/api/v1/openapi.json";
+      path: "/api/v1/openapi.json";
+      fullPath: "/api/v1/openapi.json";
+      preLoaderRoute: typeof ApiV1OpenapiDotjsonRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/api/v1/tam-requests": {
+      id: "/api/v1/tam-requests";
+      path: "/api/v1/tam-requests";
+      fullPath: "/api/v1/tam-requests";
+      preLoaderRoute: typeof ApiV1TamRequestsRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/api/v1/tickets": {
+      id: "/api/v1/tickets";
+      path: "/api/v1/tickets";
+      fullPath: "/api/v1/tickets";
+      preLoaderRoute: typeof ApiV1TicketsRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/plan/s/$snapshotToken": {
+      id: "/plan/s/$snapshotToken";
+      path: "/plan/s/$snapshotToken";
+      fullPath: "/plan/s/$snapshotToken";
+      preLoaderRoute: typeof PlanSSnapshotTokenRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/portal/plan/$portalKey": {
+      id: "/portal/plan/$portalKey";
+      path: "/plan/$portalKey";
+      fullPath: "/portal/plan/$portalKey";
+      preLoaderRoute: typeof PortalPlanPortalKeyRouteImport;
+      parentRoute: typeof PortalRoute;
+    };
+    "/api/v1/accounts/$id": {
+      id: "/api/v1/accounts/$id";
+      path: "/$id";
+      fullPath: "/api/v1/accounts/$id";
+      preLoaderRoute: typeof ApiV1AccountsIdRouteImport;
+      parentRoute: typeof ApiV1AccountsRoute;
+    };
+    "/api/v1/accounts/$id/transition": {
+      id: "/api/v1/accounts/$id/transition";
+      path: "/transition";
+      fullPath: "/api/v1/accounts/$id/transition";
+      preLoaderRoute: typeof ApiV1AccountsIdTransitionRouteImport;
+      parentRoute: typeof ApiV1AccountsIdRoute;
+    };
   }
 }
 
 interface AdminRouteChildren {
-  AdminApiKeysRoute: typeof AdminApiKeysRoute
-  AdminAuditRoute: typeof AdminAuditRoute
-  AdminFlagsRoute: typeof AdminFlagsRoute
-  AdminIntegrationsRoute: typeof AdminIntegrationsRoute
-  AdminLifecycleStagesRoute: typeof AdminLifecycleStagesRoute
-  AdminPipelineStagesRoute: typeof AdminPipelineStagesRoute
-  AdminUsersRoute: typeof AdminUsersRoute
-  AdminIndexRoute: typeof AdminIndexRoute
+  AdminApiKeysRoute: typeof AdminApiKeysRoute;
+  AdminAuditRoute: typeof AdminAuditRoute;
+  AdminFlagsRoute: typeof AdminFlagsRoute;
+  AdminIntegrationsRoute: typeof AdminIntegrationsRoute;
+  AdminLifecycleStagesRoute: typeof AdminLifecycleStagesRoute;
+  AdminPipelineStagesRoute: typeof AdminPipelineStagesRoute;
+  AdminUsersRoute: typeof AdminUsersRoute;
+  AdminIndexRoute: typeof AdminIndexRoute;
 }
 
 const AdminRouteChildren: AdminRouteChildren = {
@@ -1281,116 +1300,109 @@ const AdminRouteChildren: AdminRouteChildren = {
   AdminPipelineStagesRoute: AdminPipelineStagesRoute,
   AdminUsersRoute: AdminUsersRoute,
   AdminIndexRoute: AdminIndexRoute,
-}
+};
 
-const AdminRouteWithChildren = AdminRoute._addFileChildren(AdminRouteChildren)
+const AdminRouteWithChildren = AdminRoute._addFileChildren(AdminRouteChildren);
 
 interface CustomersRouteChildren {
-  CustomersCustomerIdRoute: typeof CustomersCustomerIdRoute
-  CustomersIndexRoute: typeof CustomersIndexRoute
+  CustomersCustomerIdRoute: typeof CustomersCustomerIdRoute;
+  CustomersIndexRoute: typeof CustomersIndexRoute;
 }
 
 const CustomersRouteChildren: CustomersRouteChildren = {
   CustomersCustomerIdRoute: CustomersCustomerIdRoute,
   CustomersIndexRoute: CustomersIndexRoute,
-}
+};
 
-const CustomersRouteWithChildren = CustomersRoute._addFileChildren(
-  CustomersRouteChildren,
-)
+const CustomersRouteWithChildren = CustomersRoute._addFileChildren(CustomersRouteChildren);
 
 interface JourneysRouteChildren {
-  JourneysJourneyIdRoute: typeof JourneysJourneyIdRoute
+  JourneysJourneyIdRoute: typeof JourneysJourneyIdRoute;
 }
 
 const JourneysRouteChildren: JourneysRouteChildren = {
   JourneysJourneyIdRoute: JourneysJourneyIdRoute,
-}
+};
 
-const JourneysRouteWithChildren = JourneysRoute._addFileChildren(
-  JourneysRouteChildren,
-)
+const JourneysRouteWithChildren = JourneysRoute._addFileChildren(JourneysRouteChildren);
 
 interface PortalRouteChildren {
-  PortalTicketsRoute: typeof PortalTicketsRoute
-  PortalIndexRoute: typeof PortalIndexRoute
-  PortalPlanPortalKeyRoute: typeof PortalPlanPortalKeyRoute
+  PortalTicketsRoute: typeof PortalTicketsRoute;
+  PortalIndexRoute: typeof PortalIndexRoute;
+  PortalPlanPortalKeyRoute: typeof PortalPlanPortalKeyRoute;
 }
 
 const PortalRouteChildren: PortalRouteChildren = {
   PortalTicketsRoute: PortalTicketsRoute,
   PortalIndexRoute: PortalIndexRoute,
   PortalPlanPortalKeyRoute: PortalPlanPortalKeyRoute,
-}
+};
 
-const PortalRouteWithChildren =
-  PortalRoute._addFileChildren(PortalRouteChildren)
+const PortalRouteWithChildren = PortalRoute._addFileChildren(PortalRouteChildren);
 
 interface SequencesRouteChildren {
-  SequencesSequenceIdRoute: typeof SequencesSequenceIdRoute
-  SequencesIndexRoute: typeof SequencesIndexRoute
+  SequencesSequenceIdRoute: typeof SequencesSequenceIdRoute;
+  SequencesIndexRoute: typeof SequencesIndexRoute;
 }
 
 const SequencesRouteChildren: SequencesRouteChildren = {
   SequencesSequenceIdRoute: SequencesSequenceIdRoute,
   SequencesIndexRoute: SequencesIndexRoute,
-}
+};
 
-const SequencesRouteWithChildren = SequencesRoute._addFileChildren(
-  SequencesRouteChildren,
-)
+const SequencesRouteWithChildren = SequencesRoute._addFileChildren(SequencesRouteChildren);
 
 interface TechnicalSolutionsRouteChildren {
-  TechnicalSolutionsIdRoute: typeof TechnicalSolutionsIdRoute
-  TechnicalSolutionsIndexRoute: typeof TechnicalSolutionsIndexRoute
+  TechnicalSolutionsIdRoute: typeof TechnicalSolutionsIdRoute;
+  TechnicalSolutionsIndexRoute: typeof TechnicalSolutionsIndexRoute;
 }
 
 const TechnicalSolutionsRouteChildren: TechnicalSolutionsRouteChildren = {
   TechnicalSolutionsIdRoute: TechnicalSolutionsIdRoute,
   TechnicalSolutionsIndexRoute: TechnicalSolutionsIndexRoute,
-}
+};
 
-const TechnicalSolutionsRouteWithChildren =
-  TechnicalSolutionsRoute._addFileChildren(TechnicalSolutionsRouteChildren)
+const TechnicalSolutionsRouteWithChildren = TechnicalSolutionsRoute._addFileChildren(
+  TechnicalSolutionsRouteChildren,
+);
 
 interface TicketsRouteChildren {
-  TicketsTicketIdRoute: typeof TicketsTicketIdRoute
-  TicketsRoutingRoute: typeof TicketsRoutingRoute
-  TicketsIndexRoute: typeof TicketsIndexRoute
+  TicketsTicketIdRoute: typeof TicketsTicketIdRoute;
+  TicketsRoutingRoute: typeof TicketsRoutingRoute;
+  TicketsIndexRoute: typeof TicketsIndexRoute;
 }
 
 const TicketsRouteChildren: TicketsRouteChildren = {
   TicketsTicketIdRoute: TicketsTicketIdRoute,
   TicketsRoutingRoute: TicketsRoutingRoute,
   TicketsIndexRoute: TicketsIndexRoute,
-}
+};
 
-const TicketsRouteWithChildren =
-  TicketsRoute._addFileChildren(TicketsRouteChildren)
+const TicketsRouteWithChildren = TicketsRoute._addFileChildren(TicketsRouteChildren);
 
 interface ApiV1AccountsIdRouteChildren {
-  ApiV1AccountsIdTransitionRoute: typeof ApiV1AccountsIdTransitionRoute
+  ApiV1AccountsIdTransitionRoute: typeof ApiV1AccountsIdTransitionRoute;
 }
 
 const ApiV1AccountsIdRouteChildren: ApiV1AccountsIdRouteChildren = {
   ApiV1AccountsIdTransitionRoute: ApiV1AccountsIdTransitionRoute,
-}
+};
 
 const ApiV1AccountsIdRouteWithChildren = ApiV1AccountsIdRoute._addFileChildren(
   ApiV1AccountsIdRouteChildren,
-)
+);
 
 interface ApiV1AccountsRouteChildren {
-  ApiV1AccountsIdRoute: typeof ApiV1AccountsIdRouteWithChildren
+  ApiV1AccountsIdRoute: typeof ApiV1AccountsIdRouteWithChildren;
 }
 
 const ApiV1AccountsRouteChildren: ApiV1AccountsRouteChildren = {
   ApiV1AccountsIdRoute: ApiV1AccountsIdRouteWithChildren,
-}
+};
 
 const ApiV1AccountsRouteWithChildren = ApiV1AccountsRoute._addFileChildren(
   ApiV1AccountsRouteChildren,
-)
+);
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
@@ -1418,6 +1430,7 @@ const rootRouteChildren: RootRouteChildren = {
   OwnersOwnerRoute: OwnersOwnerRoute,
   PlanTokenRoute: PlanTokenRoute,
   ViewTokenRoute: ViewTokenRoute,
+  ApiCompletionRecordTokenRoute: ApiCompletionRecordTokenRoute,
   ApiCronDispatchRoute: ApiCronDispatchRoute,
   ApiCronJourneysRoute: ApiCronJourneysRoute,
   ApiCronPlanSnapshotsRoute: ApiCronPlanSnapshotsRoute,
@@ -1433,17 +1446,17 @@ const rootRouteChildren: RootRouteChildren = {
   ApiV1TamRequestsRoute: ApiV1TamRequestsRoute,
   ApiV1TicketsRoute: ApiV1TicketsRoute,
   PlanSSnapshotTokenRoute: PlanSSnapshotTokenRoute,
-}
+};
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
-  ._addFileTypes<FileRouteTypes>()
+  ._addFileTypes<FileRouteTypes>();
 
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
+import type { getRouter } from "./router.tsx";
+import type { startInstance } from "./start.ts";
+declare module "@tanstack/react-start" {
   interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+    ssr: true;
+    router: Awaited<ReturnType<typeof getRouter>>;
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>;
   }
 }

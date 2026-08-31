@@ -21,6 +21,7 @@ import { SignJWT, jwtVerify } from "jose";
 
 export const PLAN_TOKEN_PREFIX = "gcpl_";
 export const SNAPSHOT_TOKEN_PREFIX = "gcps_";
+export const COMPLETION_TOKEN_PREFIX = "gccr_";
 export const PLAN_COOKIE = "gc_plan";
 /** 24h. A viewer whose session lapses simply clicks their link again. */
 export const PLAN_SESSION_TTL_SECONDS = 24 * 60 * 60;
@@ -43,6 +44,18 @@ export function generatePlanToken(): MintedToken {
 
 export function generateSnapshotToken(): MintedToken {
   return mint(SNAPSHOT_TOKEN_PREFIX);
+}
+
+/**
+ * The link a completion record is reachable at. Unlike a plan link this one
+ * has no grant behind it and no expiry: a Salesforce note written today is
+ * opened years later by whoever is reading the account, and a record of
+ * finished work that stops resolving is worse than useless. The token is the
+ * whole of the authorization, so it is 32 random bytes and only its hash is
+ * stored.
+ */
+export function generateCompletionToken(): MintedToken {
+  return mint(COMPLETION_TOKEN_PREFIX);
 }
 
 /* ---------------------------------- passcode ---------------------------- */

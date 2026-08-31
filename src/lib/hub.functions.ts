@@ -211,9 +211,9 @@ export const setTechnicalSolutionStatus = createServerFn({ method: "POST" })
   .inputValidator((data: unknown) =>
     z.object({ id: z.string().uuid(), status: z.enum(SOLUTION_STATUSES) }).parse(data),
   )
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
     const { updateTechnicalSolutionStatus } = await import("./hub.server");
-    return updateTechnicalSolutionStatus(data.id, data.status);
+    return updateTechnicalSolutionStatus(data.id, data.status, context.profile.id);
   });
 
 export const addSolution = createServerFn({ method: "POST" })

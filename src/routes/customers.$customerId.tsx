@@ -1160,6 +1160,56 @@ function AccountRail({ record, customerId }: { record: Customer360; customerId: 
         >
           <AttachmentsPanel implementationId={impl.id} />
         </Suspense>
+
+        {/* What was finished, frozen. Its own panel rather than a row in
+          Attachments: these are not documents somebody uploaded, they are the
+          account's record of completed work, and they answer a different
+          question — "what did we actually deliver?" */}
+        <Panel
+          title="Completion records"
+          count={record.completion_records.length}
+          level="supporting"
+          meta="Frozen at completion"
+        >
+          {record.completion_records.length ? (
+            <ul className="divide-y divide-border">
+              {record.completion_records.map((c) => (
+                <Row key={c.id}>
+                  <div className="flex flex-wrap items-baseline gap-2">
+                    {c.url ? (
+                      <a
+                        href={c.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-[13px] font-medium hover:underline"
+                      >
+                        {c.title}
+                      </a>
+                    ) : (
+                      <span className="text-[13px] font-medium">{c.title}</span>
+                    )}
+                    <span className="text-[11px] text-muted-foreground">
+                      {c.subject_type === "solution" ? "Solution" : "Project"}
+                      {c.version > 1 ? ` · reissued, v${c.version}` : ""}
+                    </span>
+                  </div>
+                  <Meta
+                    items={[
+                      ["Recorded", fmtDate(c.created_at)],
+                      ["Document", c.url ? "PDF" : "The attachment row was removed"],
+                    ]}
+                  />
+                </Row>
+              ))}
+            </ul>
+          ) : (
+            <div className="px-3 py-2.5 text-[12px] text-muted-foreground">
+              One is written when a solution is marked validated, or when this project moves to
+              Handover to CS. It freezes what was done at that moment and is filed against the
+              Salesforce account.
+            </div>
+          )}
+        </Panel>
         <Panel title="Key people" level="supporting">
           {/* Editable in place. These were read-only, so the only way to change
             who owns a project was to open the full edit form — which sends

@@ -18,6 +18,7 @@ import { matchesScope } from "./ownership";
 import type { ResolvedScope } from "./ownership.server";
 
 import { EDITABLE_RECORD_FIELDS, type EditableRecordField } from "./record-fields";
+import { SOLUTION_COMPLETE_STATUS } from "./solution-enums";
 
 const db = () => supabaseAdmin as any;
 
@@ -533,6 +534,7 @@ export async function loadCustomer360(
     evidence: [],
     approvals: [],
     stage_history: [],
+    completion_records: [],
     audit_log: [],
   };
   if (!impl) return base;
@@ -559,6 +561,7 @@ export async function loadCustomer360(
     handoffRes,
     journalRes,
     stageInstanceRes,
+    completionRes,
   ] = await Promise.all([
     child("requirements", "created_at"),
     child("success_criteria", "created_at"),
@@ -573,6 +576,15 @@ export async function loadCustomer360(
     child("evidence", "created_at", false),
     child("approvals", "requested_at", false),
     child("implementation_stage_history", "entered_at"),
+    // Completion records, with the link they are reachable at. The token is
+    // never stored — only its hash — so the working URL lives on the
+    // `account_files` row the record filed itself as, and is read back through
+    // it rather than being reconstructed.
+    db()
+      .from("completion_records")
+      .select("id,subject_type,subject_id,version,title,created_at,account_files(external_url)")
+      .eq("implementation_id", impl.id)
+      .order("created_at", { ascending: false }),
     // These four used to run in three further sequential waves AFTER this one,
     // even though not one of them needs anything this batch returns. They only
     // need impl.id, which is already known here.
@@ -1047,6 +1059,16 @@ export async function loadCustomer360(
       approved_entity_label: entityLabelFor(a.approved_entity_type, a.approved_entity_id),
     })),
 
+    completion_records: (completionRes.data ?? []).map((c: any) => ({
+      id: c.id,
+      subject_type: c.subject_type,
+      subject_id: c.subject_id,
+      version: c.version,
+      title: c.title,
+      created_at: c.created_at,
+      url: c.account_files?.external_url ?? null,
+    })),
+
     stage_history: (stageHistory.data ?? []).map((h: any) => ({
       id: h.id,
       stage: h.stage,
@@ -1346,9 +1368,39 @@ export async function updateTechnicalSolutionOwner(id: string, ownerId: string |
   return { ok: true };
 }
 
-export async function updateTechnicalSolutionStatus(id: string, status: string) {
+/**
+ * Mark a solution's progress.
+ *
+ * `validated` is the end of the line in SOLUTION_STATUSES — the engineer
+ * saying this is built and proven — so reaching it issues a completion record:
+ * everything on the solution's log, frozen, filed in the account's
+ * attachments, and put on the outbox for Salesforce. Only on the TRANSITION.
+ * Re-saving `validated` over `validated` is a no-op, not a second document;
+ * moving back and then forward again is a real reissue and gets a new version.
+ */
+export async function updateTechnicalSolutionStatus(
+  id: string,
+  status: string,
+  actorProfileId?: string | null,
+) {
+  const { data: before } = await db()
+    .from("technical_solutions")
+    .select("status")
+    .eq("id", id)
+    .maybeSingle();
+
   const { error } = await db().from("technical_solutions").update({ status }).eq("id", id);
   if (error) throw new Error(error.message);
+
+  if (status === SOLUTION_COMPLETE_STATUS && before?.status !== SOLUTION_COMPLETE_STATUS) {
+    const { generateCompletionRecord } = await import("./completion.server");
+    // Never throws — the status change is already saved and is the authority.
+    await generateCompletionRecord({
+      subject: { type: "solution", id },
+      actorProfileId: actorProfileId ?? null,
+    });
+  }
+
   return { ok: true };
 }
 
@@ -2274,6 +2326,19 @@ export async function advanceStage(args: {
       reason,
     },
   });
+
+  // The project is finished. Freeze what was done into a completion record,
+  // file it in the account's attachments and put it on the outbox for
+  // Salesforce. Never throws: the advance is already in history and is the
+  // authority on this move, and a record that failed to issue can be issued
+  // again without redoing the work.
+  if (expected === sf.TERMINAL_LIFECYCLE_STAGE) {
+    const { generateCompletionRecord } = await import("./completion.server");
+    await generateCompletionRecord({
+      subject: { type: "implementation", id: args.implementationId },
+      actorProfileId: args.actorProfileId ?? null,
+    });
+  }
 
   // Stage dwell is a health input, so the cache is stale the moment we move.
   const { recomputeHealthSoon } = await import("./health.server");
