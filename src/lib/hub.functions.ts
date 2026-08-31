@@ -348,6 +348,14 @@ export const getTeamOptions = createServerFn({ method: "GET" })
     return loadTeamOptions();
   });
 
+export const getDealCarryover = createServerFn({ method: "GET" })
+  .middleware([requireInternalAuth])
+  .inputValidator((data: unknown) => z.object({ dealId: z.string().uuid() }).parse(data))
+  .handler(async ({ data }) => {
+    const { loadDealCarryover } = await import("./hub.server");
+    return loadDealCarryover(data.dealId);
+  });
+
 export const getDealOptions = createServerFn({ method: "GET" })
   .middleware([requireInternalAuth])
   .handler(async () => {
@@ -364,6 +372,7 @@ export const addImplementation = createServerFn({ method: "POST" })
       customerId: data.customerId,
       newCustomer: data.newCustomer ? toCustomerPatch(data.newCustomer) : null,
       patch: toImplementationPatch(data),
+      carried: data.carried,
       // Authorship of the plan this creates, through the profile id — the same
       // bridge setImplementation uses for the activity feed.
       actorProfileId: context.profile.id,

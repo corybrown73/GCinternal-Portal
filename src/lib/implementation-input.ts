@@ -49,6 +49,21 @@ export const createImplementationInput = z
      * whatever is nearest.
      */
     dealId: optionalUuid,
+    /** Resolved through the identity bridge; the text name stays authoritative. */
+    salesOwnerId: optionalUuid,
+    /**
+     * What the dialog showed under "Carried from the deal" and the person
+     * accepted. Sent back rather than re-read server-side so that what is
+     * written is what they saw and could edit.
+     */
+    carried: z
+      .object({
+        domain: optionalText,
+        contactName: optionalText,
+        contactEmail: optionalText,
+        contactRole: optionalText,
+      })
+      .nullable(),
   })
   .refine((v) => (v.customerId === null) !== (v.newCustomer === null), {
     message: "Provide either an existing customer or a new customer, not both",
@@ -73,6 +88,7 @@ export function toImplementationPatch(data: CreateImplementationInput) {
     customer_goals: data.customerGoals,
     external_ref: data.externalRef,
     deal_id: data.dealId,
+    sales_owner_id: data.salesOwnerId,
   };
 }
 

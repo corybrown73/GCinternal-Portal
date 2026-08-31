@@ -20,6 +20,14 @@ export const EDITABLE_DEAL_FIELDS = {
   summary: "text",
   am_owner_id: "uuid",
   se_owner_id: "uuid",
+  /**
+   * The champion. Editable here because this is where they are met — the deal
+   * page is the only screen anyone is on while talking to them, and a contact
+   * captured after the handoff has already failed at the moment it was needed.
+   */
+  primary_contact_name: "text",
+  primary_contact_email: "text",
+  primary_contact_role: "text",
 } as const;
 
 export type EditableDealField = keyof typeof EDITABLE_DEAL_FIELDS;

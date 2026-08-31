@@ -27,6 +27,10 @@ export interface Account {
   am_owner_id: string | null;
   se_owner_id: string | null;
   summary: string | null;
+  /** The champion, carried into customer_contacts when this deal becomes a project. */
+  primary_contact_name: string | null;
+  primary_contact_email: string | null;
+  primary_contact_role: string | null;
   stage_entered_at: string;
   created_at: string;
   updated_at: string;

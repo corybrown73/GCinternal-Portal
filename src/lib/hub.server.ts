@@ -1651,6 +1651,66 @@ export async function loadDealOptions() {
 }
 
 /**
+ * The half of a deal a new project can inherit.
+ *
+ * The sales owner is resolved through the identity bridge:
+ * `portal_accounts.am_owner_id` references portal_profiles (a LOGIN), while
+ * the project records a team_members id (a PERSON). Two people here hold
+ * logins and thirteen are in the directory, so a deal owned by somebody
+ * without one resolves to a name and no id — which the pair of columns is
+ * designed to survive. AM before SE: the account manager is the commercial
+ * owner, which is what "who sold this" means.
+ */
+export async function loadDealCarryover(dealId: string) {
+  const { data: deal } = await db()
+    .from("portal_accounts")
+    .select(
+      "id,name,domain,summary,primary_contact_name,primary_contact_email,primary_contact_role,am_owner_id,se_owner_id",
+    )
+    .eq("id", dealId)
+    .maybeSingle();
+  if (!deal) return null;
+
+  const ownerProfileId = (deal.am_owner_id as string | null) ?? (deal.se_owner_id as string | null);
+  let salesOwnerId: string | null = null;
+  let salesOwnerName: string | null = null;
+  if (ownerProfileId) {
+    const { data: profile } = await db()
+      .from("portal_profiles")
+      .select("full_name,email,team_member_id")
+      .eq("id", ownerProfileId)
+      .maybeSingle();
+    if (profile) {
+      salesOwnerName = (profile.full_name as string | null) ?? (profile.email as string | null);
+      const teamMemberId = profile.team_member_id as string | null;
+      if (teamMemberId) {
+        // Confirm the directory row is real and active before linking to it.
+        const { data: member } = await db()
+          .from("team_members")
+          .select("id,name,active")
+          .eq("id", teamMemberId)
+          .maybeSingle();
+        if (member?.active) {
+          salesOwnerId = member.id as string;
+          salesOwnerName = (member.name as string) ?? salesOwnerName;
+        }
+      }
+    }
+  }
+
+  return {
+    dealName: deal.name as string,
+    summary: (deal.summary as string | null) ?? null,
+    domain: (deal.domain as string | null) ?? null,
+    contactName: (deal.primary_contact_name as string | null) ?? null,
+    contactEmail: (deal.primary_contact_email as string | null) ?? null,
+    contactRole: (deal.primary_contact_role as string | null) ?? null,
+    salesOwnerId,
+    salesOwnerName,
+  };
+}
+
+/**
  * Origination of an implementation. The lifecycle starts at Handoff; the single
  * implementation_stage_history row is the first row of an append-only table
  * (no prior stage is closed — this is not stage advancement).
@@ -1673,6 +1733,18 @@ export async function createImplementation(args: {
    * break the foreign key or attribute the plan to a stranger.
    */
   actorProfileId?: string | null;
+  /**
+   * Fields the dialog showed as carried from the deal, confirmed by the person
+   * creating the record. Sent back explicitly rather than re-read from the deal
+   * here: what gets written must be what they SAW and could edit, not what the
+   * deal happens to say at the moment the request lands.
+   */
+  carried?: {
+    domain?: string | null;
+    contactName?: string | null;
+    contactEmail?: string | null;
+    contactRole?: string | null;
+  } | null;
 }) {
   let customerId = args.customerId;
 
@@ -1686,6 +1758,21 @@ export async function createImplementation(args: {
     // Only proceed once the customer row actually exists.
     if (error || !created) throw new Error(error?.message ?? "Could not create the customer");
     customerId = created.id as string;
+  }
+
+  // The domain belongs to the CUSTOMER, not the project, so it is written
+  // here — and only into an empty field. An existing account's domain was set
+  // by somebody who knew the account; a deal is not entitled to overwrite it.
+  const carriedDomain = args.carried?.domain?.trim();
+  if (carriedDomain) {
+    const { data: existing } = await db()
+      .from("customers")
+      .select("domain")
+      .eq("id", customerId)
+      .maybeSingle();
+    if (!existing?.domain) {
+      await db().from("customers").update({ domain: carriedDomain }).eq("id", customerId);
+    }
   }
 
   const { data: impl, error: implError } = await db()
@@ -1726,6 +1813,42 @@ export async function createImplementation(args: {
     customerId,
     source: String(args.patch["source"] ?? "manual"),
   });
+
+  // The champion, carried across the door between one contact and many.
+  //
+  // After the implementation insert so a failure here cannot lose the project,
+  // and never overwriting: a contact with this email already on the account
+  // means somebody recorded them, and a handoff is not the moment to
+  // second-guess that. Never throws — a project without its contact row is
+  // worse than one with it, and much better than no project.
+  const contactName = args.carried?.contactName?.trim();
+  if (contactName) {
+    try {
+      const email = args.carried?.contactEmail?.trim() || null;
+      const { data: dupes } = email
+        ? await db()
+            .from("customer_contacts")
+            .select("id")
+            .eq("customer_id", customerId)
+            .ilike("email", email)
+        : { data: [] as any[] };
+      if (!dupes?.length) {
+        await db()
+          .from("customer_contacts")
+          .insert({
+            customer_id: customerId,
+            name: contactName,
+            email,
+            // NOT NULL on the table, and "the deal named them" is the honest
+            // answer when the deal did not say what they do.
+            role: args.carried?.contactRole?.trim() || "Named on the deal",
+            notes: "Carried from the deal at handoff.",
+          });
+      }
+    } catch (e) {
+      console.error("DEAL_CONTACT_CARRY_FAILED", e);
+    }
+  }
 
   // Give it a plan, the same way the handoff and the Salesforce endpoint do.
   // This path used to leave a project with no stage instances and no work

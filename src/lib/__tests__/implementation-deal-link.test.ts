@@ -17,6 +17,11 @@ const base = {
   customerGoals: null,
   externalRef: null,
   dealId: null,
+  salesOwnerId: null,
+  // Present-but-null rather than absent: every key in this schema is required
+  // and its value nullable, so a caller has to say "nothing" out loud rather
+  // than forgetting a field and having it silently mean the same thing.
+  carried: null,
 };
 
 describe("creating an implementation from a deal", () => {

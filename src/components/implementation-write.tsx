@@ -11,8 +11,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { applyCarryover, carryoverSummary, type CarriedField } from "@/lib/deal-carryover";
 import {
   addImplementation,
+  getDealCarryover,
   getDealOptions,
   getTeamOptions,
   setImplementation,
@@ -58,6 +60,11 @@ type Draft = {
   customerGoals: string;
   externalRef: string;
   dealId: string;
+  salesOwnerId: string;
+  domain: string;
+  contactName: string;
+  contactEmail: string;
+  contactRole: string;
 };
 
 const emptyDraft: Draft = {
@@ -82,6 +89,11 @@ const emptyDraft: Draft = {
   customerGoals: "",
   externalRef: "",
   dealId: "",
+  salesOwnerId: "",
+  domain: "",
+  contactName: "",
+  contactEmail: "",
+  contactRole: "",
 };
 
 const nullable = (v: string) => (v.trim() === "" ? null : v.trim());
@@ -117,6 +129,13 @@ function payload(draft: Draft) {
     customerGoals: nullable(draft.customerGoals),
     externalRef: nullable(draft.externalRef),
     dealId: nullable(draft.dealId),
+    salesOwnerId: nullable(draft.salesOwnerId),
+    carried: {
+      domain: nullable(draft.domain),
+      contactName: nullable(draft.contactName),
+      contactEmail: nullable(draft.contactEmail),
+      contactRole: nullable(draft.contactRole),
+    },
   };
 }
 
@@ -142,6 +161,45 @@ export function NewImplementation({ customers }: { customers: CustomerOption[] }
     enabled: open,
   });
   const chosenDeal = (deals.data ?? []).find((d) => d.id === draft.dealId);
+  const [carried, setCarried] = useState<CarriedField[]>([]);
+
+  /**
+   * Pull the deal's context in and say what came across.
+   *
+   * The fetch is imperative rather than a query-plus-effect on purpose: this
+   * writes into a form the user is editing, and it must happen exactly once,
+   * on the click that chooses the deal. A query keyed on dealId would re-run
+   * on refocus and quietly re-fill fields somebody had just cleared.
+   */
+  const readDeal = useServerFn(getDealCarryover);
+  const chooseDeal = async (dealId: string) => {
+    set({ dealId });
+    if (!dealId) {
+      setCarried([]);
+      return;
+    }
+    try {
+      const deal = await readDeal({ data: { dealId } });
+      if (!deal) return;
+      setDraft((d) => {
+        const result = applyCarryover(deal, {
+          customerGoals: d.customerGoals,
+          domain: d.domain,
+          contactName: d.contactName,
+          contactEmail: d.contactEmail,
+          contactRole: d.contactRole,
+          salesOwner: d.salesOwner,
+          salesOwnerId: d.salesOwnerId,
+        });
+        setCarried(result.carried);
+        return { ...d, ...result.target, dealId };
+      });
+    } catch {
+      // A deal that will not load is not a reason to block creating the
+      // project. The picker keeps the link; nothing is pre-filled.
+      setCarried([]);
+    }
+  };
 
   const set = (patch: Partial<Draft>) => setDraft((d) => ({ ...d, ...patch }));
 
@@ -178,6 +236,7 @@ export function NewImplementation({ customers }: { customers: CustomerOption[] }
       await queryClient.invalidateQueries({ queryKey: ["home"] });
       setOpen(false);
       setDraft(emptyDraft);
+      setCarried([]);
       setSowFile(null);
       navigate({
         to: "/customers/$customerId",
@@ -199,6 +258,7 @@ export function NewImplementation({ customers }: { customers: CustomerOption[] }
         onClick={() => {
           mutation.reset();
           setDraft(emptyDraft);
+          setCarried([]);
           setOpen(true);
         }}
       >
@@ -227,7 +287,7 @@ export function NewImplementation({ customers }: { customers: CustomerOption[] }
                 aria-label="From deal"
                 value={draft.dealId}
                 disabled={mutation.isPending || deals.isLoading}
-                onChange={(e) => set({ dealId: e.target.value })}
+                onChange={(e) => void chooseDeal(e.target.value)}
               >
                 <option value="">
                   {deals.isLoading ? "Loading deals…" : "No deal — created here"}
@@ -246,6 +306,33 @@ export function NewImplementation({ customers }: { customers: CustomerOption[] }
                 </span>
               ) : null}
             </label>
+
+            {/* Carried from the deal.
+                Named before it is saved, because a field that fills itself
+                silently is indistinguishable from one the user filled — and
+                the first time that matters is when it is wrong and nobody can
+                say where it came from. Every line here is editable in the form
+                below; this block says which ones to look at. */}
+            {draft.dealId ? (
+              <div className="rounded-sm border border-border/70 bg-muted/30 p-2">
+                <p className={labelClass}>Carried from the deal</p>
+                <p className="mt-1 text-[11px] text-muted-foreground">
+                  {carryoverSummary(carried)}
+                </p>
+                {carried.length ? (
+                  <dl className="mt-1.5 space-y-0.5">
+                    {carried.map((c) => (
+                      <div key={c.field} className="flex gap-2 text-[11px]">
+                        <dt className="w-40 shrink-0 text-muted-foreground">{c.label}</dt>
+                        <dd className="min-w-0 flex-1 truncate" title={c.value}>
+                          {c.value}
+                        </dd>
+                      </div>
+                    ))}
+                  </dl>
+                ) : null}
+              </div>
+            ) : null}
 
             {/* Customer */}
             <div className="space-y-2 rounded-sm border border-border/70 bg-muted/30 p-2">
@@ -496,6 +583,56 @@ export function NewImplementation({ customers }: { customers: CustomerOption[] }
                   disabled={mutation.isPending}
                   placeholder="What the customer said they want to achieve"
                   onChange={(e) => set({ customerGoals: e.target.value })}
+                />
+              </label>
+              {/* The champion and the domain. Both are CUSTOMER facts rather
+                  than project ones, and both land on the customer record —
+                  but this is the moment they are known, and asking for them
+                  again later is how "Confirm the champion" gets ticked
+                  against an empty contact list. */}
+              <label className="block space-y-0.5">
+                <span className={labelClass}>Contact</span>
+                <input
+                  className={inputClass}
+                  aria-label="Contact"
+                  value={draft.contactName}
+                  disabled={mutation.isPending}
+                  placeholder="Who to call at the customer"
+                  onChange={(e) => set({ contactName: e.target.value })}
+                />
+              </label>
+              <label className="block space-y-0.5">
+                <span className={labelClass}>Contact email</span>
+                <input
+                  className={inputClass}
+                  aria-label="Contact email"
+                  type="email"
+                  value={draft.contactEmail}
+                  disabled={mutation.isPending}
+                  placeholder="name@company.com"
+                  onChange={(e) => set({ contactEmail: e.target.value })}
+                />
+              </label>
+              <label className="block space-y-0.5">
+                <span className={labelClass}>Contact role</span>
+                <input
+                  className={inputClass}
+                  aria-label="Contact role"
+                  value={draft.contactRole}
+                  disabled={mutation.isPending}
+                  placeholder="Champion, sponsor, ops lead"
+                  onChange={(e) => set({ contactRole: e.target.value })}
+                />
+              </label>
+              <label className="block space-y-0.5">
+                <span className={labelClass}>Domain</span>
+                <input
+                  className={inputClass}
+                  aria-label="Domain"
+                  value={draft.domain}
+                  disabled={mutation.isPending}
+                  placeholder="company.com"
+                  onChange={(e) => set({ domain: e.target.value })}
                 />
               </label>
             </div>

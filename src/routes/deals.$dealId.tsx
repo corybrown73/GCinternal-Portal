@@ -209,6 +209,30 @@ function DealRecord({ deal }: { deal: DealData }) {
             onSave={set("se_owner_id")}
             disabled={!editable}
           />
+          {/* The champion, and the two facts that make them reachable.
+              Carried into customer_contacts when this deal becomes a project,
+              which is the point at which one contact becomes many. */}
+          <EditableField
+            label="Contact"
+            value={account.primary_contact_name ?? null}
+            placeholder="Who to call at the customer"
+            onSave={set("primary_contact_name")}
+            disabled={!editable}
+          />
+          <EditableField
+            label="Contact email"
+            value={account.primary_contact_email ?? null}
+            placeholder="name@company.com"
+            onSave={set("primary_contact_email")}
+            disabled={!editable}
+          />
+          <EditableField
+            label="Contact role"
+            value={account.primary_contact_role ?? null}
+            placeholder="Champion, sponsor, ops lead"
+            onSave={set("primary_contact_role")}
+            disabled={!editable}
+          />
           <Field label="Created" value={fmtDate(account.created_at)} />
         </div>
         {field.error ? (
