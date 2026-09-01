@@ -37,6 +37,7 @@ import { Route as AdminLifecycleStagesRouteImport } from "./routes/admin.lifecyc
 import { Route as AdminPipelineStagesRouteImport } from "./routes/admin.pipeline-stages";
 import { Route as AdminUsersRouteImport } from "./routes/admin.users";
 import { Route as ApiSplatRouteImport } from "./routes/api.$";
+import { Route as ApiMcpRouteImport } from "./routes/api/mcp";
 import { Route as AuthCallbackRouteImport } from "./routes/auth.callback";
 import { Route as CustomersIndexRouteImport } from "./routes/customers.index";
 import { Route as CustomersCustomerIdRouteImport } from "./routes/customers.$customerId";
@@ -213,6 +214,11 @@ const AdminUsersRoute = AdminUsersRouteImport.update({
 const ApiSplatRoute = ApiSplatRouteImport.update({
   id: "/api/$",
   path: "/api/$",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const ApiMcpRoute = ApiMcpRouteImport.update({
+  id: "/api/mcp",
+  path: "/api/mcp",
   getParentRoute: () => rootRouteImport,
 } as any);
 const AuthCallbackRoute = AuthCallbackRouteImport.update({
@@ -429,6 +435,7 @@ export interface FileRoutesByFullPath {
   "/admin/pipeline-stages": typeof AdminPipelineStagesRoute;
   "/admin/users": typeof AdminUsersRoute;
   "/api/$": typeof ApiSplatRoute;
+  "/api/mcp": typeof ApiMcpRoute;
   "/auth/callback": typeof AuthCallbackRoute;
   "/customers/$customerId": typeof CustomersCustomerIdRoute;
   "/deals/$dealId": typeof DealsDealIdRoute;
@@ -490,6 +497,7 @@ export interface FileRoutesByTo {
   "/admin/pipeline-stages": typeof AdminPipelineStagesRoute;
   "/admin/users": typeof AdminUsersRoute;
   "/api/$": typeof ApiSplatRoute;
+  "/api/mcp": typeof ApiMcpRoute;
   "/auth/callback": typeof AuthCallbackRoute;
   "/customers/$customerId": typeof CustomersCustomerIdRoute;
   "/deals/$dealId": typeof DealsDealIdRoute;
@@ -558,6 +566,7 @@ export interface FileRoutesById {
   "/admin/pipeline-stages": typeof AdminPipelineStagesRoute;
   "/admin/users": typeof AdminUsersRoute;
   "/api/$": typeof ApiSplatRoute;
+  "/api/mcp": typeof ApiMcpRoute;
   "/auth/callback": typeof AuthCallbackRoute;
   "/customers/$customerId": typeof CustomersCustomerIdRoute;
   "/deals/$dealId": typeof DealsDealIdRoute;
@@ -627,6 +636,7 @@ export interface FileRouteTypes {
     | "/admin/pipeline-stages"
     | "/admin/users"
     | "/api/$"
+    | "/api/mcp"
     | "/auth/callback"
     | "/customers/$customerId"
     | "/deals/$dealId"
@@ -688,6 +698,7 @@ export interface FileRouteTypes {
     | "/admin/pipeline-stages"
     | "/admin/users"
     | "/api/$"
+    | "/api/mcp"
     | "/auth/callback"
     | "/customers/$customerId"
     | "/deals/$dealId"
@@ -755,6 +766,7 @@ export interface FileRouteTypes {
     | "/admin/pipeline-stages"
     | "/admin/users"
     | "/api/$"
+    | "/api/mcp"
     | "/auth/callback"
     | "/customers/$customerId"
     | "/deals/$dealId"
@@ -816,6 +828,7 @@ export interface RootRouteChildren {
   TemplatesRoute: typeof TemplatesRoute;
   TicketsRoute: typeof TicketsRouteWithChildren;
   ApiSplatRoute: typeof ApiSplatRoute;
+  ApiMcpRoute: typeof ApiMcpRoute;
   AuthCallbackRoute: typeof AuthCallbackRoute;
   DealsDealIdRoute: typeof DealsDealIdRoute;
   OwnersOwnerRoute: typeof OwnersOwnerRoute;
@@ -1036,6 +1049,13 @@ declare module "@tanstack/react-router" {
       path: "/api/$";
       fullPath: "/api/$";
       preLoaderRoute: typeof ApiSplatRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/api/mcp": {
+      id: "/api/mcp";
+      path: "/api/mcp";
+      fullPath: "/api/mcp";
+      preLoaderRoute: typeof ApiMcpRouteImport;
       parentRoute: typeof rootRouteImport;
     };
     "/auth/callback": {
@@ -1445,6 +1465,7 @@ const rootRouteChildren: RootRouteChildren = {
   TemplatesRoute: TemplatesRoute,
   TicketsRoute: TicketsRouteWithChildren,
   ApiSplatRoute: ApiSplatRoute,
+  ApiMcpRoute: ApiMcpRoute,
   AuthCallbackRoute: AuthCallbackRoute,
   DealsDealIdRoute: DealsDealIdRoute,
   OwnersOwnerRoute: OwnersOwnerRoute,

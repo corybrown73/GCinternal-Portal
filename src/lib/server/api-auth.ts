@@ -13,6 +13,12 @@ export const API_SCOPES = [
   // Phase 5 — the Salesforce opportunity hook and its read-back.
   "implementations:read",
   "implementations:write",
+  // The MCP server. `handoff:read` hands a model the call notes and the SOW;
+  // `handoff:write` lets it render a deck into an account's attachments. Two
+  // scopes because reading a customer's transcripts and writing a document
+  // into their account are different amounts of trust.
+  "handoff:read",
+  "handoff:write",
 ] as const;
 export type ApiScope = (typeof API_SCOPES)[number];
 

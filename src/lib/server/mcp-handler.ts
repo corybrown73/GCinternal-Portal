@@ -1,0 +1,176 @@
+import { apiError, requireApiKey } from "./api-auth";
+import {
+  FIELD_GUIDE,
+  MCP_PROTOCOL_VERSION,
+  rpcError,
+  rpcResult,
+  SERVER_INFO,
+  toolResult,
+  TOOL_SCOPES,
+  TOOLS,
+} from "./mcp";
+
+/**
+ * The MCP request loop.
+ *
+ * Split from the route so it is a plain function over a Request — testable,
+ * and out of the file whose only job is to exist at a URL.
+ */
+
+const json = (body: unknown, status = 200) =>
+  new Response(JSON.stringify(body), {
+    status,
+    headers: { "content-type": "application/json", "cache-control": "no-store" },
+  });
+
+export async function handleMcpRequest(request: Request): Promise<Response> {
+  let body: any;
+  try {
+    body = await request.json();
+  } catch {
+    return json(rpcError(null, -32700, "Parse error: the body is not JSON"), 400);
+  }
+
+  // Batches are a list. Notifications (no id) get no response at all.
+  const single = !Array.isArray(body);
+  const messages: any[] = single ? [body] : body;
+  const replies: unknown[] = [];
+
+  for (const message of messages) {
+    if (message?.jsonrpc !== "2.0" || typeof message?.method !== "string") {
+      replies.push(rpcError(message?.id ?? null, -32600, "Invalid Request"));
+      continue;
+    }
+    const isNotification = message.id === undefined;
+    const reply = await dispatch(request, message);
+    // A notification's result is discarded; an error on one is still dropped,
+    // because a notification by definition expects nothing back.
+    if (!isNotification && reply !== null) replies.push(reply);
+  }
+
+  if (replies.length === 0) return new Response(null, { status: 202 });
+  return json(single ? replies[0] : replies);
+}
+
+async function dispatch(request: Request, message: any): Promise<unknown | null> {
+  const { id, method, params } = message;
+
+  switch (method) {
+    case "initialize":
+      return rpcResult(id, {
+        // Echo the client's version when it names one it can speak; otherwise
+        // state ours. This is what the spec asks for.
+        protocolVersion:
+          typeof params?.protocolVersion === "string"
+            ? params.protocolVersion
+            : MCP_PROTOCOL_VERSION,
+        capabilities: { tools: { listChanged: false } },
+        serverInfo: SERVER_INFO,
+        instructions:
+          "Use this to turn a pre-sale deal into the client kickoff deck. find_deal to get an id, " +
+          "get_handoff_context to read the call notes and SOW verbatim, describe_deck_fields to see " +
+          "what the template accepts, then generate_kickoff_deck to render it into the account. " +
+          "Read the context's `gaps` before writing anything: leaving a field out is always better " +
+          "than filling it with a guess, because the deck marks a blank for the presenter and reads " +
+          "an invention aloud to the customer as fact.",
+      });
+
+    case "notifications/initialized":
+      return null;
+
+    case "ping":
+      return rpcResult(id, {});
+
+    case "tools/list":
+      return rpcResult(id, { tools: TOOLS });
+
+    case "tools/call": {
+      const name = params?.name as string | undefined;
+      const scope = name ? TOOL_SCOPES[name] : undefined;
+      if (!name || !scope) {
+        return rpcError(id, -32602, `Unknown tool: ${String(name)}`);
+      }
+
+      // Authorized per call, with the scope that tool actually needs.
+      const auth = await requireApiKey(request, scope);
+      if (auth instanceof Response) {
+        const detail = await auth
+          .clone()
+          .json()
+          .catch(() => null);
+        return rpcError(
+          id,
+          -32001,
+          (detail as any)?.error?.message ?? "Not authorized",
+          (detail as any)?.error,
+        );
+      }
+
+      try {
+        const text = await runTool(name, (params?.arguments ?? {}) as Record<string, unknown>);
+        return rpcResult(id, toolResult(text));
+      } catch (e) {
+        // A tool that fails is a RESULT with isError, not an RPC error: the
+        // model is supposed to see what went wrong and try something else.
+        const msg = e instanceof Error ? e.message : "The tool failed";
+        return rpcResult(id, toolResult(msg, true));
+      }
+    }
+
+    default:
+      return rpcError(id, -32601, `Method not found: ${method}`);
+  }
+}
+
+async function runTool(name: string, args: Record<string, unknown>): Promise<string> {
+  switch (name) {
+    case "describe_deck_fields":
+      return JSON.stringify(
+        {
+          template: "Client Kickoff Deck",
+          howToUse:
+            "Supply only fields you can support from the notes. An omitted field renders as a visible placeholder for the presenter to complete; a wrong one gets read to the customer as fact.",
+          groups: FIELD_GUIDE,
+        },
+        null,
+        2,
+      );
+
+    case "find_deal": {
+      const query = String(args["query"] ?? "").trim();
+      if (!query) throw new Error("Pass a company name to search for");
+      const { findDeals } = await import("./handoff-tools");
+      return JSON.stringify(await findDeals(query), null, 2);
+    }
+
+    case "get_handoff_context": {
+      const dealId = String(args["dealId"] ?? "").trim();
+      if (!dealId) throw new Error("Pass the deal's id — use find_deal to get one");
+      const { loadHandoffContext } = await import("./handoff-context");
+      const context = await loadHandoffContext(dealId);
+      if (!context) throw new Error(`No deal with id ${dealId}`);
+      return JSON.stringify(context, null, 2);
+    }
+
+    case "generate_kickoff_deck": {
+      const dealId = String(args["dealId"] ?? "").trim();
+      if (!dealId) throw new Error("Pass the deal's id");
+      const fields = args["fields"];
+      if (!fields || typeof fields !== "object" || Array.isArray(fields)) {
+        throw new Error("`fields` must be an object of field name to string value");
+      }
+      const { generateDeckFromMcp } = await import("./handoff-tools");
+      const result = await generateDeckFromMcp({
+        dealId,
+        fields: fields as Record<string, unknown>,
+        note: typeof args["note"] === "string" ? args["note"] : null,
+      });
+      return JSON.stringify(result, null, 2);
+    }
+
+    default:
+      throw new Error(`Unknown tool: ${name}`);
+  }
+}
+
+export { apiError };
