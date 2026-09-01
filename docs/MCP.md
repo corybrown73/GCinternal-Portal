@@ -30,12 +30,28 @@ it against the account's Attachments.
 
 1. **Admin → API keys → Add.** Give it `handoff:read`, and `handoff:write` if
    it should be able to file decks. The key is shown once.
-2. Add the server to Claude (Settings → Connectors, or `claude mcp add`):
+2. Add the server to Claude.
+
+   **claude.ai custom connectors** have no field for a static header — they
+   offer a URL and OAuth — so the key goes in the URL:
+
+   ```
+   URL: https://www.gcinternalportal.com/api/mcp?key=gcp_live_...
+   ```
+
+   **Anywhere a header can be set** (`claude mcp add --header`, Claude Code,
+   your own client), prefer it — a URL is written to proxy logs and history in
+   a way a header is not:
 
    ```
    URL:    https://www.gcinternalportal.com/api/mcp
-   Header: Authorization: Bearer gcp_live_…
+   Header: Authorization: Bearer gcp_live_...
    ```
+
+   A header always wins over a `?key=`, so a stale link cannot downgrade a
+   request that carried a good key. Treat a connector URL containing a key as
+   the key itself: do not paste it into a ticket or a shared doc, and rotate
+   it at Admin → API keys if it goes somewhere it should not have.
 
 3. Ask for what you want: *"Build the kickoff deck for Ridgeline Excavation."*
 
