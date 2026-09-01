@@ -11,9 +11,14 @@ import { TEMPLATE_FIELDS } from "@/lib/kickoff-fields";
  * live here, and a deck built anywhere else is a deck that drifts from the
  * template and lands in somebody's downloads folder instead of the account.
  *
- * So there are three tools and they form one sentence: find the deal, read
- * everything about it, hand back the field values and get a deck filed against
- * the account.
+ * The tools form one sentence: find the deal (or create it and ask the intake
+ * questions), record what comes back from the call, read everything about it,
+ * hand back the field values and get a deck filed against the account.
+ *
+ * THE WRITE TOOLS ARE DELIBERATELY NARROW. A model can add what it learned on
+ * a call — the transcript, the contact, the SOW's facts. It cannot advance a
+ * stage, assign an owner or mark a deal handed off, because those have
+ * consequences elsewhere in the app and belong to somebody who meant them.
  *
  * WHY THIS IS NOT THE SDK. The server is stateless and lives in a serverless
  * function; Streamable HTTP with no sessions is three JSON-RPC methods —
@@ -120,6 +125,83 @@ export const TOOLS: ToolDefinition[] = [
       "The Client Kickoff Deck's field names, what each one is for, and which the portal fills by itself. Call this before generate_kickoff_deck.",
     inputSchema: { type: "object", properties: {}, additionalProperties: false },
   },
+  {
+    name: "create_deal",
+    title: "Create a pre-sale deal",
+    description:
+      "Create a new deal in the pre-sale pipeline. Search with find_deal first — a duplicate is refused, because a transcript filed against the wrong copy is invisible on the real one. Returns the deal id and the intake questions to ask before any deck is generated.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        name: { type: "string", description: "The company name, as the customer writes it." },
+        domain: { type: "string", description: "Their web domain, e.g. ridgeline-exc.com." },
+        stage: {
+          type: "string",
+          enum: [
+            "prospect",
+            "closed_won",
+            "onboarding_kickoff",
+            "in_onboarding",
+            "onboarding_complete",
+          ],
+          description: "Defaults to prospect.",
+        },
+        primaryContactName: { type: "string" },
+        primaryContactEmail: { type: "string" },
+        primaryContactRole: {
+          type: "string",
+          description: "Their job title, e.g. 'VP Operations'.",
+        },
+        summary: { type: "string", description: "One or two lines on who they are." },
+      },
+      required: ["name"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "add_call_notes",
+    title: "File a call transcript",
+    description:
+      "Store a Gong transcript or call notes against a deal, verbatim. Paste the whole thing rather than a summary: get_handoff_context hands these back unsummarised, and a summary loses the sentence where the customer said what they actually wanted.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        dealId: { type: "string", description: "The deal's uuid." },
+        title: {
+          type: "string",
+          description: "What this call was, e.g. 'Discovery call, 12 March'.",
+        },
+        markdown: { type: "string", description: "The transcript or notes, in full." },
+        kind: {
+          type: "string",
+          enum: ["call_notes", "account_map"],
+          description: "Defaults to call_notes.",
+        },
+      },
+      required: ["dealId", "title", "markdown"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "update_deal",
+    title: "Record the deal's facts",
+    description:
+      "Record what is known about a deal: the SOW's reference, signed date and value, the contact, and what was sold. The SOW or contract PDF itself is uploaded in the portal — an MCP call carries text, not file bytes — so sowDocumentUrl is a link to a file kept elsewhere, not the uploaded copy. Stage, owners and handoff are not settable here.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        dealId: { type: "string", description: "The deal's uuid." },
+        fields: {
+          type: "object",
+          description:
+            "Any of: domain, summary, primaryContactName, primaryContactEmail, primaryContactRole, sowReference, sowSignedDate (YYYY-MM-DD), sowValue, sowDocumentUrl, sowDocumentName, arr, products.",
+          additionalProperties: true,
+        },
+      },
+      required: ["dealId", "fields"],
+      additionalProperties: false,
+    },
+  },
 ];
 
 /** The scope each tool needs. Reading transcripts is not writing documents. */
@@ -128,6 +210,9 @@ export const TOOL_SCOPES: Record<string, "handoff:read" | "handoff:write"> = {
   get_handoff_context: "handoff:read",
   describe_deck_fields: "handoff:read",
   generate_kickoff_deck: "handoff:write",
+  create_deal: "handoff:write",
+  add_call_notes: "handoff:write",
+  update_deal: "handoff:write",
 };
 
 /**

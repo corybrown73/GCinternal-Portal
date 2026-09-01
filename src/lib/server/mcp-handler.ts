@@ -203,9 +203,61 @@ async function runTool(name: string, args: Record<string, unknown>): Promise<str
       return JSON.stringify(result, null, 2);
     }
 
+    case "create_deal": {
+      const { createDeal } = await import("./handoff-tools");
+      return JSON.stringify(
+        await createDeal({
+          name: String(args["name"] ?? ""),
+          domain: str(args["domain"]),
+          stage: str(args["stage"]),
+          primaryContactName: str(args["primaryContactName"]),
+          primaryContactEmail: str(args["primaryContactEmail"]),
+          primaryContactRole: str(args["primaryContactRole"]),
+          summary: str(args["summary"]),
+        }),
+        null,
+        2,
+      );
+    }
+
+    case "add_call_notes": {
+      const { addCallNotes } = await import("./handoff-tools");
+      return JSON.stringify(
+        await addCallNotes({
+          dealId: String(args["dealId"] ?? ""),
+          title: String(args["title"] ?? ""),
+          markdown: String(args["markdown"] ?? ""),
+          kind: str(args["kind"]),
+        }),
+        null,
+        2,
+      );
+    }
+
+    case "update_deal": {
+      const fields = args["fields"];
+      if (!fields || typeof fields !== "object" || Array.isArray(fields)) {
+        throw new Error("`fields` must be an object — see the tool's description for the names");
+      }
+      const { updateDeal } = await import("./handoff-tools");
+      return JSON.stringify(
+        await updateDeal({
+          dealId: String(args["dealId"] ?? ""),
+          fields: fields as Record<string, unknown>,
+        }),
+        null,
+        2,
+      );
+    }
+
     default:
       throw new Error(`Unknown tool: ${name}`);
   }
+}
+
+/** Optional string arguments: absent and empty are the same thing here. */
+function str(v: unknown): string | null {
+  return typeof v === "string" && v.trim() !== "" ? v : null;
 }
 
 export { apiError };

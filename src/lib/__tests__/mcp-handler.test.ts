@@ -64,10 +64,13 @@ describe("tools/list", () => {
   it("lists every tool with a schema", async () => {
     const body = await (await post(rpc("tools/list"))).json();
     expect(body.result.tools.map((t: any) => t.name).sort()).toEqual([
+      "add_call_notes",
+      "create_deal",
       "describe_deck_fields",
       "find_deal",
       "generate_kickoff_deck",
       "get_handoff_context",
+      "update_deal",
     ]);
   });
 });

@@ -5,7 +5,7 @@ the reading and the portal doing the rendering.
 
 **Endpoint:** `POST https://www.gcinternalportal.com/api/mcp`
 **Auth:** the portal's own API key — `Authorization: Bearer gcp_live_…`
-**Scopes:** `handoff:read` to read a deal, `handoff:write` to file a deck
+**Scopes:** `handoff:read` to read a deal, `handoff:write` to create, record against, or file a deck into one
 
 ---
 
@@ -38,6 +38,38 @@ it against the account's Attachments.
    ```
 
 3. Ask for what you want: *"Build the kickoff deck for Ridgeline Excavation."*
+
+If a tool call comes back as a bare "execution failed", the connector is almost
+certainly missing that header. The tool list is unauthenticated, so the
+connection looks healthy right up until the first real call. The server now
+answers that case with the reason and the fix in the tool result itself.
+
+## Starting from nothing
+
+A deal that does not exist yet is `create_deal`, and it hands back the intake
+questions with the id — because a deal one second old has nothing in it, and a
+deck generated from it would be entirely placeholders. The order is:
+
+1. `find_deal` first. A duplicate company is refused; a transcript filed
+   against the wrong copy is invisible on the real one.
+2. `create_deal` — returns the deal id and the questions to ask.
+3. Ask them, then `add_call_notes` with the transcript **in full**. Not a
+   summary: `get_handoff_context` hands these back verbatim precisely because
+   the sentence where the customer said what they wanted is the one a summary
+   drops.
+4. `update_deal` for the SOW's reference, signed date and value, and what was
+   sold.
+5. `generate_kickoff_deck` last.
+
+**The PDF itself cannot come through the connector.** An MCP call carries text,
+not file bytes, so the SOW or contract document is uploaded in the portal;
+`sowDocumentUrl` records a link to a file living somewhere else, and is kept
+separate from the uploaded copy so nobody mistakes one for the other.
+
+**What the write tools will not touch:** `stage`, the owners, and
+`customer_id`. Advancing a deal or marking it handed off has consequences
+elsewhere in the app and belongs to somebody who meant it, not to a model
+reading a transcript.
 
 ## The four tools
 
