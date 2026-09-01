@@ -102,6 +102,29 @@ describe("authorization", () => {
     expect(body.result.content[0].text).toContain("handoff:write");
   });
 
+  // The scope branch was written against a guessed code (`insufficient_scope`)
+  // and never fired: the first connector to hit it got the generic fallback
+  // instead of the sentence saying where to fix it. api-auth emits
+  // `missing_scope`, so that is what this asserts.
+  it("tells a scoped-out key where scopes are set", async () => {
+    const { requireApiKey } = await import("../server/api-auth");
+    vi.mocked(requireApiKey).mockResolvedValueOnce(
+      Response.json(
+        { error: { code: "missing_scope", message: "This key does not have the scope" } },
+        { status: 403 },
+      ),
+    );
+    const body = await (
+      await post(rpc("tools/call", { name: "find_deal", arguments: { query: "x" } }))
+    ).json();
+    const text = body.result.content[0].text;
+    expect(body.result.isError).toBe(true);
+    expect(text).toContain("does not have the 'handoff:read' scope");
+    expect(text).toContain("Admin -> API keys");
+    // Not the generic branch, which would print the raw code instead.
+    expect(text).not.toContain("(missing_scope)");
+  });
+
   it("refuses an unknown tool before it ever reaches the key check", async () => {
     const body = await (await post(rpc("tools/call", { name: "drop_everything" }))).json();
     expect(body.error.code).toBe(-32602);

@@ -151,8 +151,17 @@ function authHelp(code: string, message: string, scope: string): string {
       `Mint the key at Admin -> API keys -> Add, with the '${scope}' scope.`,
     ].join("\n");
   }
-  if (code === "insufficient_scope") {
-    return `Not authorized: this key is missing the '${scope}' scope. Add it at Admin -> API keys, or use a key that has it.`;
+  // The code api-auth actually emits is `missing_scope`. This branch guessed
+  // `insufficient_scope` and so never fired — the first real connector to hit
+  // it got the generic fallback instead of the sentence saying where to fix it.
+  if (code === "missing_scope") {
+    return [
+      `Not authorized: this key does not have the '${scope}' scope.`,
+      "",
+      "Go to Admin -> API keys. Scopes are fixed when a key is created, so add a",
+      "new key with both 'handoff:read' and 'handoff:write', then put it in the",
+      "connector in place of the current one. Revoke the old key once it works.",
+    ].join("\n");
   }
   return `Not authorized (${code}): ${message}`;
 }
