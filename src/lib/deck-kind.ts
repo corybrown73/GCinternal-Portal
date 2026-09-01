@@ -18,10 +18,14 @@
  *
  * HOW WE TELL. The journey template already encodes it — `new-logo` versus
  * `integration` / `add-on` / `data-migration` — so a project that has one is
- * simply asked. Before handoff there is no project, so the question becomes
- * whether this customer has ever run an implementation before. A second
- * implementation for a customer who already has one is an expansion by
- * definition.
+ * simply asked. Mind the separator: `journey_templates.key` is hyphenated but
+ * `implementations.journey_type` is underscored (`new_logo`), so the key is
+ * canonicalised before it is matched. Comparing raw would match nothing and
+ * quietly call every project a new logo.
+ *
+ * Before handoff there is no project, so the question becomes whether this
+ * customer has ever run an implementation before. A second implementation for
+ * a customer who already has one is an expansion by definition.
  *
  * Pure, so the rule is testable and stated once.
  */
@@ -47,7 +51,9 @@ export type DeckKindDecision = {
 const EXPANSION_KEYS = new Set(["integration", "add-on", "data-migration", "upsell"]);
 
 export function deckKindFor(signal: DeckKindSignal): DeckKindDecision {
-  const key = signal.journeyKey?.trim().toLowerCase() ?? null;
+  // `_` and `-` are the same word here: the two columns that carry this value
+  // disagree on the separator, and either may be handed to us.
+  const key = signal.journeyKey?.trim().toLowerCase().replace(/_/g, "-") || null;
 
   // The project's own template is the strongest signal, because somebody chose
   // it. It beats a count of prior work either way.
