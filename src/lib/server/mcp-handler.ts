@@ -98,12 +98,16 @@ async function dispatch(request: Request, message: any): Promise<unknown | null>
           .clone()
           .json()
           .catch(() => null);
-        return rpcError(
-          id,
-          -32001,
-          (detail as any)?.error?.message ?? "Not authorized",
-          (detail as any)?.error,
-        );
+        const code = (detail as any)?.error?.code ?? "not_authorized";
+        const message = (detail as any)?.error?.message ?? "Not authorized";
+
+        // A JSON-RPC error here is protocol-correct and practically useless:
+        // every MCP client renders one as an opaque "tool execution failed",
+        // so a connector configured without its key sends its owner to the
+        // server logs to discover a one-line configuration mistake. This is a
+        // result with isError instead, for the same reason a failing tool is —
+        // whoever is looking at the conversation gets to see the actual cause.
+        return rpcResult(id, toolResult(authHelp(code, message, scope), true));
       }
 
       try {
@@ -120,6 +124,37 @@ async function dispatch(request: Request, message: any): Promise<unknown | null>
     default:
       return rpcError(id, -32601, `Method not found: ${method}`);
   }
+}
+
+/**
+ * What to actually do about it, not just what went wrong.
+ *
+ * The tool list is unauthenticated and every tool call is not, so the failure
+ * a misconfigured connector hits is this one — and it hits it after a
+ * handshake that looked entirely healthy. Saying which header is missing, and
+ * which scope the key needs, turns that into a fix rather than an
+ * investigation.
+ */
+function authHelp(code: string, message: string, scope: string): string {
+  if (code === "missing_api_key") {
+    return [
+      "Not authorized: this request carried no API key.",
+      "",
+      "The MCP connector must send the portal's API key on every call. The tool",
+      "list is public, which is why the connection looks healthy until a tool is",
+      "actually called.",
+      "",
+      "Fix it where the connector is configured, by adding a header:",
+      "    Authorization: Bearer gcp_live_...",
+      "(x-api-key: gcp_live_... works too.)",
+      "",
+      `Mint the key at Admin -> API keys -> Add, with the '${scope}' scope.`,
+    ].join("\n");
+  }
+  if (code === "insufficient_scope") {
+    return `Not authorized: this key is missing the '${scope}' scope. Add it at Admin -> API keys, or use a key that has it.`;
+  }
+  return `Not authorized (${code}): ${message}`;
 }
 
 async function runTool(name: string, args: Record<string, unknown>): Promise<string> {

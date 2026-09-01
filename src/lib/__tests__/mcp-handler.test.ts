@@ -73,12 +73,30 @@ describe("tools/list", () => {
 });
 
 describe("authorization", () => {
-  it("refuses a tool call with no key, and says how to pass one", async () => {
+  // This was an RPC error until a connector went live without its key: the
+  // client rendered it as "tool execution failed" with no detail, the tool list
+  // had worked, and the visible evidence pointed at everything except the
+  // cause. A result the caller can read is worth more than the correct code.
+  it("refuses a tool call with no key as a readable result, not an opaque error", async () => {
     const body = await (
       await post(rpc("tools/call", { name: "find_deal", arguments: { query: "x" } }))
     ).json();
-    expect(body.error.code).toBe(-32001);
-    expect(body.error.message).toContain("Authorization: Bearer");
+
+    expect(body.error).toBeUndefined();
+    expect(body.result.isError).toBe(true);
+    const text = body.result.content[0].text;
+    expect(text).toContain("carried no API key");
+    expect(text).toContain("Authorization: Bearer");
+    // It must name the scope this particular tool needs, so the key gets minted
+    // right the first time.
+    expect(text).toContain("handoff:read");
+  });
+
+  it("names the write scope when the failing tool is the one that files a deck", async () => {
+    const body = await (
+      await post(rpc("tools/call", { name: "generate_kickoff_deck", arguments: {} }))
+    ).json();
+    expect(body.result.content[0].text).toContain("handoff:write");
   });
 
   it("refuses an unknown tool before it ever reaches the key check", async () => {
