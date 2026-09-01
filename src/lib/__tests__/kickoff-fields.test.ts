@@ -33,6 +33,16 @@ const emptyBrief: BriefJson = {
     kpi_qualifiers: [],
     next_meeting: null,
   },
+  expansion: {
+    integration_target: null,
+    form_already_built: null,
+    historical_data: null,
+    current_process: null,
+    time_saved: null,
+    data_flows: [],
+    environment_notes: [],
+    blockers: [],
+  },
 };
 
 function input(over: Partial<KickoffInput> = {}): KickoffInput {

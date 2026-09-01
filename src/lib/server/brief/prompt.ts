@@ -20,7 +20,17 @@ The \`kickoff\` object fills a deck the client themselves will read in the kicko
 - roles: only the five the deck asks about — form and workflow build, user accounts and permissions, devices in the field, change management with crews, reporting and business reviews. Use exactly those responsibility strings. Include a row only when the notes name an owner for it.
 - integrations: systems being connected, each as "System · what it does for them".
 - kpi_qualifiers: the short phrase under a success number, in the order the goals appear, e.g. "by end of quarter two", "against today's baseline".
-- day_90_definition: one concrete sentence describing what is true ninety days after go-live if this worked, drawn from what they said matters.`;
+- day_90_definition: one concrete sentence describing what is true ninety days after go-live if this worked, drawn from what they said matters.
+
+The \`expansion\` object is for a customer who ALREADY runs GoCanvas and has bought something more — usually an integration. Same null rule, same standard. If this is a first rollout, leave every field null and both arrays empty.
+- integration_target: the system being connected, named the way the client names it ("QuickBooks Online", not "accounting").
+- form_already_built: whether the form this connects to exists and is in use, and which one. The plan changes completely depending on the answer, so say what the notes say and nothing more.
+- historical_data: whether there is history to bring across, and how much, if stated.
+- current_process: how this work gets done today, before the connection exists — the manual steps being removed.
+- time_saved: only what THEY said. "Two days a month" if they said two days a month. Never your own estimate.
+- data_flows: what has to move and which way, one line each, e.g. what "Approved job", direction "GoCanvas -> QuickBooks Online".
+- environment_notes: anything said about their instance — edition, version, hosting, add-ons — that would change how this is built.
+- blockers: what this cannot start without, if the notes name any.`;
 
 export function buildBriefUserPrompt(
   account: Account,

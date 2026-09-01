@@ -99,5 +99,35 @@ export const briefJsonSchema = z.object({
     /** The next scheduled touchpoint, if one was agreed. */
     next_meeting: z.string().nullable(),
   }),
+  /**
+   * The expansion deck's own reading, when this is work for a customer we
+   * already have rather than a first rollout.
+   *
+   * A DIFFERENT MEETING. Nobody needs "here is what GoCanvas does" — they run
+   * it. They need to know what connecting their accounting system to the forms
+   * their crews already fill in will take, and what it gives back. The four
+   * questions below are the ones an account manager is actually asked, and
+   * three of them have answers sitting in the SOW and the call notes.
+   *
+   * Null throughout when this is a new logo, or when the notes do not say.
+   */
+  expansion: z.object({
+    /** The system being connected, as the client names it: "QuickBooks Online". */
+    integration_target: z.string().nullable(),
+    /** Is the form already built and in use? The whole plan hinges on it. */
+    form_already_built: z.string().nullable(),
+    /** Historical data to bring across, and roughly how much. */
+    historical_data: z.string().nullable(),
+    /** How the work gets done today, before this connection exists. */
+    current_process: z.string().nullable(),
+    /** The time this saves, in the client's own numbers. Never estimated here. */
+    time_saved: z.string().nullable(),
+    /** What has to move, and which way, e.g. "Approved job -> QBO invoice". */
+    data_flows: z.array(z.object({ what: z.string(), direction: z.string() })),
+    /** Anything the notes say about their instance: version, edition, add-ons. */
+    environment_notes: z.array(z.string()),
+    /** Open questions this integration cannot start without. */
+    blockers: z.array(z.string()),
+  }),
 });
 export type BriefJson = z.infer<typeof briefJsonSchema>;

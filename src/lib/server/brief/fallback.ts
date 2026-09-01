@@ -21,6 +21,18 @@ const NO_KICKOFF: BriefJson["kickoff"] = {
   kpi_qualifiers: [],
   next_meeting: null,
 };
+
+/** Likewise: reading an integration out of prose is not something this path does. */
+const NO_EXPANSION: BriefJson["expansion"] = {
+  integration_target: null,
+  form_already_built: null,
+  historical_data: null,
+  current_process: null,
+  time_saved: null,
+  data_flows: [],
+  environment_notes: [],
+  blockers: [],
+};
 import type { Account, GongReport } from "../../presale-types";
 
 // Deterministic no-LLM path: sections the report markdown into topics and
@@ -124,5 +136,6 @@ export function buildTemplateBrief(account: Account, reports: GongReport[]): Bri
       "Confirm with the client which current process steps are manual or paper-based.",
     ],
     kickoff: NO_KICKOFF,
+    expansion: NO_EXPANSION,
   };
 }
