@@ -156,6 +156,45 @@ function defineMasters(pptx: Pptx) {
 /* --------------------------------------------------------------- helpers */
 
 /** The uppercase accent line above every content-slide title. */
+/**
+ * The largest size at which text actually fits, rather than the size the
+ * template used for the example copy.
+ *
+ * WHY THIS IS NEEDED. Every heading in this deck was sized against the
+ * template's own placeholder — "Acme Construction" — and a real customer is
+ * called whatever it is called. When the text is longer than the box,
+ * PowerPoint does not clip it: it overflows, and because the box is centred it
+ * overflows UPWARDS into whatever sits above. That is how the client name came
+ * to be printed through the word "Welcome," on slide one.
+ *
+ * The estimate is deliberately pessimistic. Bold Inter averages nearer 0.52em
+ * per glyph, but a heading that comes out slightly small is a deck nobody
+ * notices; a heading that overlaps the line above is one nobody can present.
+ */
+export function fitSize(
+  text: string,
+  boxWidthIn: number,
+  maxPx: number,
+  minPx: number,
+  lines = 1,
+  /**
+   * Average glyph width as a fraction of the font size. 0.58 suits prose. Pass
+   * more for strings of digits, arrows and slashes — "60/wk -> 0" is nine
+   * characters and nearly all of them are full-width, so at the prose estimate
+   * it wrapped out of its card.
+   */
+  emPerGlyph = 0.58,
+): number {
+  const perLine = Math.max(1, Math.ceil(text.length / lines));
+  const maxPt = (boxWidthIn * 72) / (perLine * emPerGlyph);
+  // Sizes in this file are template pixels; pt() converts to slide points.
+  const px = Math.floor(maxPt / 0.375);
+  return Math.max(minPx, Math.min(maxPx, px));
+}
+
+/** One line of text at a given template-pixel size, in inches. */
+const lineHeightIn = (px: number) => (pt(px) * 1.22) / 72;
+
 function eyebrow(slide: Slide, text: string, color = BRAND.blue500) {
   slide.addText(text.toUpperCase(), {
     x: PAD,
@@ -172,12 +211,16 @@ function eyebrow(slide: Slide, text: string, color = BRAND.blue500) {
 
 /** The 72px slide title. */
 function title(slide: Slide, text: string) {
+  // Sized to hold one line. `valign: top` is the load-bearing part: without it
+  // a title that wraps grows in both directions and strikes through the
+  // eyebrow above it, which is what "ABOUT GOCANVAS" used to look like.
   slide.addText(text, {
     x: PAD,
     y: TOP + 0.24,
     w: W - PAD * 2,
-    h: 0.5,
-    fontSize: pt(72),
+    h: 0.62,
+    valign: "top",
+    fontSize: pt(fitSize(text, W - PAD * 2, 72, 46, 1)),
     bold: true,
     color: BRAND.fg1,
     fontFace: BRAND.fontSans,
@@ -244,16 +287,33 @@ function slide01Welcome(pptx: Pptx, get: FieldReader): Slide {
     color: BRAND.blue300,
   });
   // The template sets both lines at 128px, which fits "Acme Construction" on
-  // its 1920px canvas and nothing longer. A real customer name is whatever it
-  // is, so the second line is sized to fit rather than allowed to collide with
-  // the first — the failure mode this replaces was the two overlapping.
+  // its 1920px canvas and nothing longer. A real customer is called whatever it
+  // is called.
+  //
+  // The previous attempt at this stepped the size down by name length but
+  // still placed the name a single line-height below "Welcome," while giving
+  // "Welcome," a taller fixed box — so the two overlapped anyway, and
+  // "Maverick Well Pluggers & Remediation Services" printed straight through
+  // the greeting. Both boxes are now sized from the SAME computed line height
+  // and stacked from it, so the arithmetic cannot disagree with itself.
+  //
+  // One line is preferred. A name only wraps to two when it cannot be set on
+  // one without dropping below the size where the slide still reads as a title,
+  // and the two-line ceiling is set so the block still clears the tagline.
   const client = get("client_name");
-  const nameSize = client.text.length <= 18 ? 128 : client.text.length <= 30 ? 92 : 64;
+  const asOneLine = fitSize(client.text, W - PAD * 2, 120, 1, 1);
+  const twoLines = asOneLine < 84;
+  const nameSize = twoLines ? fitSize(client.text, W - PAD * 2, 76, 52, 2) : asOneLine;
+  const line = lineHeightIn(nameSize);
+  const top = 1.9;
+
   s.addText("Welcome,", {
     x: PAD,
-    y: 1.9,
+    y: top,
     w: W - PAD * 2,
-    h: 0.55,
+    h: line,
+    valign: "top",
+    margin: 0,
     fontSize: pt(nameSize),
     bold: true,
     color: BRAND.white,
@@ -261,20 +321,29 @@ function slide01Welcome(pptx: Pptx, get: FieldReader): Slide {
   });
   s.addText(client.text, {
     x: PAD,
-    y: 1.9 + pt(nameSize) / 72 + 0.06,
+    y: top + line,
     w: W - PAD * 2,
-    h: 0.6,
+    h: line * (twoLines ? 2 : 1),
+    valign: "top",
+    margin: 0,
     fontSize: pt(nameSize),
     bold: true,
     italic: client.missing,
     color: client.missing ? BRAND.danger : BRAND.blue300,
     fontFace: BRAND.fontSans,
   });
+  // The tagline follows the name block rather than sitting at a fixed y. A
+  // one-line name lands exactly where the template puts it; a two-line name
+  // pushes this down instead of being crowded by it. Fixing the size alone was
+  // not enough — the longest names came out flush against this line.
+  const nameBottom = top + line * (twoLines ? 3 : 2);
   s.addText("Field work, digitized. Here's how we get your teams live.", {
     x: PAD,
-    y: 3.38,
+    y: Math.max(3.38, nameBottom + 0.16),
     w: 5.8,
     h: 0.32,
+    valign: "top",
+    margin: 0,
     fontSize: pt(34),
     color: BRAND.fgOnDark2,
     fontFace: BRAND.fontSans,
@@ -282,7 +351,7 @@ function slide01Welcome(pptx: Pptx, get: FieldReader): Slide {
   const lead = get("gc_lead_name");
   s.addText(`Prepared by ${lead.text} · Your GoCanvas implementation team`, {
     x: PAD,
-    y: 3.78,
+    y: Math.max(3.38, nameBottom + 0.16) + 0.4,
     w: W - PAD * 2,
     h: 0.26,
     fontSize: pt(26),
@@ -604,14 +673,23 @@ function slide07Success(pptx: Pptx, get: FieldReader): Slide {
       color: metric.missing ? BRAND.danger : BRAND.blue500,
       fontFace: BRAND.fontSans,
     });
-    fieldText(s, get, `kpi_${i + 1}_value`, {
+    // 80px fits "24" and "97%" and nothing wider. A real target reads
+    // "60/wk -> 0", which wrapped to two lines and spilled out of the card —
+    // over the label above it and through the card's own bottom edge. The
+    // value is sized to the tile it has to live in.
+    const value = get(`kpi_${i + 1}_value`);
+    s.addText(value.text, {
       x: x + 0.14,
       y: BODY_TOP + 0.58,
       w: colW - 0.28,
       h: 0.52,
-      fontSize: pt(80),
+      valign: "top",
+      margin: 0,
+      fontSize: pt(fitSize(value.text, colW - 0.28, 80, 26, 1, 0.72)),
       bold: true,
-      color: BRAND.blue500,
+      italic: value.missing,
+      color: value.missing ? BRAND.danger : BRAND.blue500,
+      fontFace: BRAND.fontSans,
     });
     // The qualifier is left to the presenter, so it is drawn only when it is
     // there — an empty line beats a red one on a slide the customer reads.
