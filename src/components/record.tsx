@@ -20,6 +20,22 @@ const STATUS_CLASS: Record<string, string> = {
   blocked: "bg-status-blocked text-status-blocked-foreground",
   idle: "bg-status-idle text-status-idle-foreground",
   no_signal: "border border-dashed border-border bg-transparent text-muted-foreground",
+
+  // Risk / issue / escalation / commitment workflow statuses. Open and
+  // still-being-worked states get the same attention treatment as `at_risk`;
+  // a missed commitment — the one broken promise in this vocabulary — gets
+  // the strongest treatment. Settled states recede: a positive resolution
+  // reads as `on_track`, a status that just closes the item without saying
+  // it went well recedes to `idle` alongside `no_signal`.
+  open: "bg-status-risk text-status-risk-foreground",
+  in_progress: "bg-status-risk text-status-risk-foreground",
+  renegotiated: "bg-status-risk text-status-risk-foreground",
+  missed: "bg-status-blocked text-status-blocked-foreground",
+  mitigated: "bg-status-ontrack text-status-ontrack-foreground",
+  resolved: "bg-status-ontrack text-status-ontrack-foreground",
+  met: "bg-status-ontrack text-status-ontrack-foreground",
+  accepted: "bg-status-idle text-status-idle-foreground",
+  closed: "bg-status-idle text-status-idle-foreground",
 };
 
 const DOT_CLASS: Record<string, string> = {

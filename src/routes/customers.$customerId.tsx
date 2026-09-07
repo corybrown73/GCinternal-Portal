@@ -106,6 +106,8 @@ import {
   proveValueState,
   proveValueGaps,
   PROVE_VALUE_LABEL,
+  severityRank,
+  TERMINAL_STATUSES,
   whatMattersNow,
   waitingOnForCustomer,
   WAITING_ON_LABEL,
@@ -2198,11 +2200,31 @@ function DecisionsTab({ record, customerId }: { record: Customer360; customerId:
 
 /* ---------------- 6. RISKS & ISSUES ---------------- */
 
+/**
+ * Open first, most severe first within that — so the most important problem
+ * is the first row, not wherever it happened to be created. `kind` picks the
+ * terminal-status list that decides "open" for that table (each of the three
+ * has its own status vocabulary; see TERMINAL_STATUSES).
+ */
+function bySeverityOpenFirst(kind: keyof typeof TERMINAL_STATUSES) {
+  const isOpen = (status: string | null | undefined) =>
+    !(TERMINAL_STATUSES[kind] as readonly string[]).includes((status ?? "").toLowerCase());
+  return (a: { status: string; severity: string }, b: { status: string; severity: string }) => {
+    const aOpen = isOpen(a.status);
+    const bOpen = isOpen(b.status);
+    if (aOpen !== bOpen) return aOpen ? -1 : 1;
+    return severityRank(a.severity) - severityRank(b.severity);
+  };
+}
+
 function RisksTab({ record, customerId }: { record: Customer360; customerId: string }) {
   const impl = record.implementation!;
-  const risks = record.risks as any[];
-  const issues = record.issues as any[];
-  const escalations = record.escalations as any[];
+  // Sorted for display only — a `.slice()` copy, never the cached record array.
+  const risks = (record.risks as any[]).slice().sort(bySeverityOpenFirst("risks"));
+  const issues = (record.issues as any[]).slice().sort(bySeverityOpenFirst("issues"));
+  const escalations = (record.escalations as any[])
+    .slice()
+    .sort(bySeverityOpenFirst("escalations"));
   const riskOptions = risks.map((r) => ({ id: r.id, title: r.title }));
   const issueOptions = issues.map((r) => ({ id: r.id, title: r.title }));
 
