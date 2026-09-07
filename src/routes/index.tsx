@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { queryOptions, useQuery, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
-import { ArrowRight, Clock, Info } from "lucide-react";
+import { ArrowRight, Info } from "lucide-react";
 
 import { PageBody, PageHeader } from "@/components/page";
 import { Panel, StageBadge, StatusChip, StatusDot, NoRows } from "@/components/record";
@@ -8,7 +8,7 @@ import { ScopeSwitch } from "@/components/scope-switch";
 import { AddCommitment, type TeamOption } from "@/components/delivery-write";
 import { useScope } from "@/lib/use-scope";
 import { getHome, getTeamOptions } from "@/lib/hub.functions";
-import { fmtDate, fmtDateTime, fmtMoney, humanize } from "@/lib/hub-format";
+import { fmtDate, fmtMoney } from "@/lib/hub-format";
 import { NEXT_ACTION_UNKNOWN, deriveHealth, launchStateConflict } from "@/lib/customer360-derive";
 
 type HealthResult = ReturnType<typeof deriveHealth>;
@@ -102,34 +102,49 @@ function humanizeReason(reason: string): string {
   return reason;
 }
 
+/** Padding and type weight per bucket — the only things that vary by bucket. */
+const CARD_DENSITY: Record<TriageBucket, { pad: string; reason: string; metaGap: string }> = {
+  act_now: { pad: "p-3", reason: "text-[13px] font-medium", metaGap: "mt-2" },
+  needs_attention: { pad: "p-2.5", reason: "text-[13px]", metaGap: "mt-1.5" },
+  moving: { pad: "p-2", reason: "text-[12px] text-muted-foreground", metaGap: "mt-1" },
+};
+
 /**
- * The "WHAT NEEDS ME" card — the same QueueRow/health data the lists below
- * use, presented as one answerable unit: what's happening, what to do next,
- * what it's waiting for, and a one-click way to update the next step.
+ * The one implementation card used everywhere on Today — Needs action, Keep
+ * an eye on and On track alike. Same fields, same rules, in every bucket:
+ * what changes is how much there is to say, not how it's said. No eyebrow
+ * labels — position and the arrow prefix carry the meaning instead of a
+ * repeated "WHAT'S HAPPENING" / "WHAT TO DO" / "OWNER" on every line.
  *
- * Deliberately does not wrap the whole card in a Link the way QueueRowItem
- * does below: the quick-action form needs its own clicks (inputs, Save,
- * Cancel), and a button nested inside an anchor is both invalid HTML and a
- * click-handling trap.
+ * `bucket` decides exactly one thing beyond density: whether a missing next
+ * step is worth mentioning. On "Needs action" or "Keep an eye on", nobody
+ * having written down what to do is itself a gap worth surfacing. On "On
+ * track" it's the ordinary case — nothing is open, so there is nothing to
+ * schedule — and calling that out on every clean account would be the exact
+ * "empty field forced onto an on-track row" this design is trying to avoid.
  */
-function MyWorkCard({
+function ImplementationCard({
   row,
   health,
   team,
+  bucket,
   onNextActionSaved,
 }: {
   row: QueueRow;
   health: HealthResult;
   team: TeamOption[];
+  bucket: TriageBucket;
   onNextActionSaved: () => void;
 }) {
   const { impl } = row;
   const conflict = launchStateConflict(impl);
   const waiting = row.dependency.party !== "none" ? row.dependency : null;
   const noNextAction = row.next_action === NEXT_ACTION_UNKNOWN;
+  const showNextAction = !noNextAction || bucket !== "moving";
+  const density = CARD_DENSITY[bucket];
 
   return (
-    <li className="rounded-lg border border-border bg-card p-3">
+    <li className={cn("rounded-lg border border-border bg-card", density.pad)}>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
         <CustomerLink
           customerId={impl.customer_id}
@@ -151,38 +166,17 @@ function MyWorkCard({
         </Link>
       </div>
 
-      <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-0.5 text-[11px] text-muted-foreground">
-        <span>
-          <span className="uppercase tracking-[0.08em]">Target launch</span> ·{" "}
-          {fmtDate(impl.target_launch_date)}
-        </span>
-        <span>
-          <span className="uppercase tracking-[0.08em]">ARR</span> · {fmtMoney(impl.arr)}
-        </span>
-        <span>
-          <span className="uppercase tracking-[0.08em]">Owner</span> ·{" "}
-          {impl.owner_name ?? "Unassigned"}
-        </span>
-      </div>
+      <p className={cn("mt-1.5", density.reason)}>{humanizeReason(row.reason)}</p>
 
-      <p className="mt-2 text-[13px] font-medium">
-        <span className="text-[11px] font-normal uppercase tracking-[0.08em] text-muted-foreground">
-          What's happening
-        </span>{" "}
-        · {humanizeReason(row.reason)}
-      </p>
-
-      <p className={cn("mt-1 text-[13px]", noNextAction && "italic text-muted-foreground")}>
-        <span className="text-[11px] font-normal uppercase tracking-[0.08em] text-muted-foreground">
-          What to do
-        </span>{" "}
-        · {noNextAction ? "Next step hasn't been recorded yet." : row.next_action}
-      </p>
+      {showNextAction ? (
+        <p className={cn("mt-1 text-[13px]", noNextAction && "italic text-muted-foreground")}>
+          → {noNextAction ? "Next step hasn't been recorded yet." : row.next_action}
+        </p>
+      ) : null}
 
       {waiting ? (
         <p className="mt-1 text-[12px] text-muted-foreground">
-          <span className="uppercase tracking-[0.08em]">Waiting for</span> ·{" "}
-          {waiting.reason.replace(/^Waiting on /i, "")}
+          {waiting.reason}
           {waiting.since ? ` (since ${fmtDate(waiting.since)})` : ""}
         </p>
       ) : null}
@@ -196,15 +190,28 @@ function MyWorkCard({
         </p>
       ) : null}
 
-      <div className="mt-2">
-        <AddCommitment
-          customerId={impl.customer_id}
-          implementationId={impl.id}
-          team={team}
-          addLabel="Update next step"
-          onSaved={onNextActionSaved}
-        />
-      </div>
+      <p
+        className={cn("flex flex-wrap gap-x-3 text-[11px] text-muted-foreground", density.metaGap)}
+      >
+        <span>{fmtDate(impl.target_launch_date)}</span>
+        <span>{fmtMoney(impl.arr)}</span>
+        <span>{impl.owner_name ?? "Unassigned"}</span>
+      </p>
+
+      {/* On track has nothing to act on, so there is nothing to update — the
+          action itself, not just its text, is one of the "empty action
+          areas" an on-track card should stay free of. */}
+      {bucket !== "moving" ? (
+        <div className="mt-1.5">
+          <AddCommitment
+            customerId={impl.customer_id}
+            implementationId={impl.id}
+            team={team}
+            addLabel="Update next step"
+            onSaved={onNextActionSaved}
+          />
+        </div>
+      ) : null}
     </li>
   );
 }
@@ -212,94 +219,32 @@ function MyWorkCard({
 const SECTIONS: Array<{
   bucket: TriageBucket;
   title: string;
-  meta: string;
   accent: string;
   empty: string;
+  level: "primary" | "default" | "supporting";
 }> = [
   {
     bucket: "act_now",
     title: "Needs action",
-    meta: "Blocked, escalated, a critical risk, an overdue promise to the customer, or a launch date already gone by",
     accent: "bg-status-blocked-foreground",
     empty: "Nothing needs immediate action. Everything else is in the lists below.",
+    level: "primary",
   },
   {
     bucket: "needs_attention",
     title: "Keep an eye on",
-    meta: "Open risk or issue, other overdue commitments, no movement for more than 14 days, something due in the next 7 days, or flagged at risk",
-
     accent: "bg-status-risk-foreground",
     empty: "Nothing to keep an eye on right now.",
+    level: "default",
   },
   {
     bucket: "moving",
     title: "On track",
-    meta: "On track, with nothing open against them",
-    accent: "bg-status-on-track-foreground",
+    accent: "bg-status-ontrack-foreground",
     empty: "No implementations are moving cleanly — check the lists above.",
+    level: "supporting",
   },
 ];
-
-function QueueRowItem({ row, health }: { row: QueueRow; health: HealthResult }) {
-  const { impl } = row;
-  const conflict = launchStateConflict(impl);
-  return (
-    <li className="group relative hover:bg-muted/60">
-      <Link
-        to="/customers/$customerId"
-        params={{ customerId: impl.customer_id }}
-        search={{ tab: row.tab, impl: impl.id }}
-        className="block px-3 py-2.5"
-      >
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-          <span className="text-[13px] font-medium group-hover:underline">
-            {impl.customer_name}
-          </span>
-          <StageBadge stage={impl.current_stage} />
-          <StatusChip status={health.level} />
-          {impl.status !== "on_track" ? (
-            <span className="text-[11px] text-muted-foreground">
-              Marked as: {humanize(impl.status)}
-            </span>
-          ) : null}
-          <span className="ml-auto flex items-center gap-1 font-mono text-[11px] text-muted-foreground">
-            {row.tab}
-            <ArrowRight className="h-3 w-3" strokeWidth={2} />
-          </span>
-        </div>
-
-        <p className="mt-1 text-[13px]">{row.reason}</p>
-
-        {conflict ? (
-          <p className="mt-1 inline-flex items-center gap-1.5 rounded-sm border border-dashed border-border px-1.5 py-0.5 text-[11px] text-muted-foreground">
-            <Info className="h-3 w-3" strokeWidth={1.75} />
-            This is past the launch stage, but no actual launch date has been recorded.
-          </p>
-        ) : null}
-
-        <div className="mt-1 grid gap-x-6 gap-y-0.5 text-[11px] text-muted-foreground md:grid-cols-[1fr_1fr_10rem]">
-          <span>
-            <span className="uppercase tracking-[0.08em]">Impact</span> · {row.impact}
-          </span>
-          <span>
-            <span className="uppercase tracking-[0.08em]">Next</span> · {row.next_action}
-          </span>
-          <span>
-            <span className="uppercase tracking-[0.08em]">Owner</span> ·{" "}
-            {impl.owner_name ?? "Unassigned"}
-          </span>
-          {/* Phase 6: the dependency is the spine — who owes the next move, and
-              since when. Dated from the deciding record, never from stage entry. */}
-          <span className="md:col-span-3">
-            <span className="uppercase tracking-[0.08em]">Waiting on</span> ·{" "}
-            {row.dependency.reason}
-            {row.dependency.since ? ` (since ${fmtDate(row.dependency.since)})` : ""}
-          </span>
-        </div>
-      </Link>
-    </li>
-  );
-}
 
 function HomePage() {
   const { param, setScope } = useScope();
@@ -310,10 +255,6 @@ function HomePage() {
     data.triage,
   );
 
-  // The same rank order buildQueue already produced, just not cut into
-  // buckets: highest priority first, whichever bucket it landed in.
-  const myWork = [...queue.act_now, ...queue.needs_attention, ...queue.moving].slice(0, 5);
-
   const queryClient = useQueryClient();
   const team = useQuery({ queryKey: ["team-options"], queryFn: () => getTeamOptions() });
   const refreshHome = () => queryClient.invalidateQueries({ queryKey: ["home", param] });
@@ -323,109 +264,42 @@ function HomePage() {
       <PageHeader
         title="Today"
         description="What needs my attention — every implementation sorted by what's driving it, not by task due dates."
-        actions={
-          <div className="flex items-center gap-2">
-            <span className="font-mono text-[11px] text-muted-foreground">
-              {queue.act_now.length} needs action · {queue.needs_attention.length} keep an eye on ·{" "}
-              {queue.moving.length} on track
-            </span>
-            <ScopeSwitch scope={data.scope} onChange={setScope} />
-          </div>
-        }
+        actions={<ScopeSwitch scope={data.scope} onChange={setScope} />}
       />
       <PageBody className="space-y-4">
-        <Panel
-          title="What needs me"
-          count={myWork.length}
-          meta="Implementations that need you to do something."
-        >
-          {myWork.length === 0 ? (
-            <NoRows label="Nothing in your book right now. Use the scope control above to see everyone else's." />
-          ) : (
-            <ul className="space-y-2 p-2">
-              {myWork.map((row) => (
-                <MyWorkCard
-                  key={row.impl.id}
-                  row={row}
-                  health={healthByImpl.get(row.impl.id)!}
-                  team={team.data ?? []}
-                  onNextActionSaved={refreshHome}
-                />
-              ))}
-            </ul>
-          )}
-        </Panel>
-
         {SECTIONS.map((section) => {
           const rows = queue[section.bucket];
           return (
             <Panel
               key={section.bucket}
+              level={section.level}
               title={
                 <span className="flex items-center gap-2">
                   <span className={cn("h-2 w-2 rounded-full", section.accent)} />
                   {section.title}
                 </span>
               }
-
               count={rows.length}
-              meta={section.meta}
             >
-              <ul className="divide-y divide-border">
-                {rows.map((row) => (
-                  <QueueRowItem
-                    key={row.impl.id}
-                    row={row}
-                    health={healthByImpl.get(row.impl.id)!}
-                  />
-                ))}
-                {rows.length === 0 ? <NoRows label={section.empty} /> : null}
-              </ul>
+              {rows.length === 0 ? (
+                <NoRows label={section.empty} />
+              ) : (
+                <ul className="space-y-2 p-2">
+                  {rows.map((row) => (
+                    <ImplementationCard
+                      key={row.impl.id}
+                      row={row}
+                      health={healthByImpl.get(row.impl.id)!}
+                      team={team.data ?? []}
+                      bucket={section.bucket}
+                      onNextActionSaved={refreshHome}
+                    />
+                  ))}
+                </ul>
+              )}
             </Panel>
           );
         })}
-
-        <Panel
-          title="Recent activity"
-          count={data.signal.length}
-          meta="Newest first · the context behind the lists above"
-        >
-          <ul className="divide-y divide-border">
-            {data.signal.slice(0, 12).map((s) => (
-              <li key={s.key} className="flex gap-3 px-3 py-2">
-                <Clock
-                  className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground"
-                  strokeWidth={1.75}
-                />
-                <div className="min-w-0 flex-1">
-                  <p className="text-[13px]">
-                    {s.title}
-                    {s.customer_id && s.customer_name ? (
-                      <>
-                        {" — "}
-                        <CustomerLink
-                          customerId={s.customer_id}
-                          implementationId={s.implementation_id}
-                          className="font-medium"
-                        >
-                          {s.customer_name}
-                        </CustomerLink>
-                      </>
-                    ) : null}
-                  </p>
-                  {s.detail ? (
-                    <p className="mt-0.5 text-[12px] text-muted-foreground">{s.detail}</p>
-                  ) : null}
-                </div>
-                <span className="shrink-0 font-mono text-[11px] text-muted-foreground">
-                  {fmtDateTime(s.at)}
-                  {s.actor ? ` · ${s.actor}` : ""}
-                </span>
-              </li>
-            ))}
-            {data.signal.length === 0 ? <NoRows label="No activity recorded yet." /> : null}
-          </ul>
-        </Panel>
 
         {/* This used to claim "sign-in isn't set up yet, so this shows every
             implementation regardless of who owns it". Sign-in has been set up
