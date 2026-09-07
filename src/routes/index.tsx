@@ -198,15 +198,20 @@ function ImplementationCard({
         <span>{impl.owner_name ?? "Unassigned"}</span>
       </p>
 
-      <div className="mt-1.5">
-        <AddCommitment
-          customerId={impl.customer_id}
-          implementationId={impl.id}
-          team={team}
-          addLabel="Update next step"
-          onSaved={onNextActionSaved}
-        />
-      </div>
+      {/* On track has nothing to act on, so there is nothing to update — the
+          action itself, not just its text, is one of the "empty action
+          areas" an on-track card should stay free of. */}
+      {bucket !== "moving" ? (
+        <div className="mt-1.5">
+          <AddCommitment
+            customerId={impl.customer_id}
+            implementationId={impl.id}
+            team={team}
+            addLabel="Update next step"
+            onSaved={onNextActionSaved}
+          />
+        </div>
+      ) : null}
     </li>
   );
 }
@@ -214,7 +219,6 @@ function ImplementationCard({
 const SECTIONS: Array<{
   bucket: TriageBucket;
   title: string;
-  meta: string;
   accent: string;
   empty: string;
   level: "primary" | "default" | "supporting";
@@ -222,7 +226,6 @@ const SECTIONS: Array<{
   {
     bucket: "act_now",
     title: "Needs action",
-    meta: "Blocked, escalated, a critical risk, an overdue promise to the customer, or a launch date already gone by",
     accent: "bg-status-blocked-foreground",
     empty: "Nothing needs immediate action. Everything else is in the lists below.",
     level: "primary",
@@ -230,7 +233,6 @@ const SECTIONS: Array<{
   {
     bucket: "needs_attention",
     title: "Keep an eye on",
-    meta: "Open risk or issue, other overdue commitments, no movement for more than 14 days, something due in the next 7 days, or flagged at risk",
     accent: "bg-status-risk-foreground",
     empty: "Nothing to keep an eye on right now.",
     level: "default",
@@ -238,7 +240,6 @@ const SECTIONS: Array<{
   {
     bucket: "moving",
     title: "On track",
-    meta: "On track, with nothing open against them",
     accent: "bg-status-ontrack-foreground",
     empty: "No implementations are moving cleanly — check the lists above.",
     level: "supporting",
@@ -263,15 +264,7 @@ function HomePage() {
       <PageHeader
         title="Today"
         description="What needs my attention — every implementation sorted by what's driving it, not by task due dates."
-        actions={
-          <div className="flex items-center gap-2">
-            <span className="font-mono text-[11px] text-muted-foreground">
-              {queue.act_now.length} needs action · {queue.needs_attention.length} keep an eye on ·{" "}
-              {queue.moving.length} on track
-            </span>
-            <ScopeSwitch scope={data.scope} onChange={setScope} />
-          </div>
-        }
+        actions={<ScopeSwitch scope={data.scope} onChange={setScope} />}
       />
       <PageBody className="space-y-4">
         {SECTIONS.map((section) => {
@@ -287,7 +280,6 @@ function HomePage() {
                 </span>
               }
               count={rows.length}
-              meta={section.meta}
             >
               {rows.length === 0 ? (
                 <NoRows label={section.empty} />
