@@ -86,9 +86,26 @@ function CustomerLink({
 }
 
 /**
- * The "MY WORK" card — the same QueueRow/health data the sections below use,
- * presented as one answerable unit: why this customer is here, what to do
- * next, who's waiting on what, and a one-click way to update the next action.
+ * Reword the handful of reason strings that read as a system report rather
+ * than something a person would say — only the two phrasings called out
+ * explicitly. Everything else in row.reason already reads as plain English
+ * and is left untouched. Presentation only: never changes which bucket a
+ * row lands in, only how this one card describes it.
+ */
+function humanizeReason(reason: string): string {
+  const overdueLaunch = reason.match(/^Target launch passed .+\((\d+)d over\)$/);
+  if (overdueLaunch) return `Launch is ${overdueLaunch[1]} days overdue.`;
+
+  const stalled = reason.match(/^Stalled (\d+) days? in /);
+  if (stalled) return `No movement for ${stalled[1]} days.`;
+
+  return reason;
+}
+
+/**
+ * The "WHAT NEEDS ME" card — the same QueueRow/health data the lists below
+ * use, presented as one answerable unit: what's happening, what to do next,
+ * what it's waiting for, and a one-click way to update the next step.
  *
  * Deliberately does not wrap the whole card in a Link the way QueueRowItem
  * does below: the quick-action form needs its own clicks (inputs, Save,
@@ -129,7 +146,7 @@ function MyWorkCard({
           search={{ tab: row.tab, impl: impl.id }}
           className="ml-auto flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground hover:underline"
         >
-          Open customer
+          Open
           <ArrowRight className="h-3 w-3" strokeWidth={2} />
         </Link>
       </div>
@@ -148,18 +165,24 @@ function MyWorkCard({
         </span>
       </div>
 
-      <p className="mt-2 text-[13px] font-medium">{row.reason}</p>
+      <p className="mt-2 text-[13px] font-medium">
+        <span className="text-[11px] font-normal uppercase tracking-[0.08em] text-muted-foreground">
+          What's happening
+        </span>{" "}
+        · {humanizeReason(row.reason)}
+      </p>
 
       <p className={cn("mt-1 text-[13px]", noNextAction && "italic text-muted-foreground")}>
         <span className="text-[11px] font-normal uppercase tracking-[0.08em] text-muted-foreground">
-          Next action
+          What to do
         </span>{" "}
-        · {row.next_action}
+        · {noNextAction ? "Next step hasn't been recorded yet." : row.next_action}
       </p>
 
       {waiting ? (
         <p className="mt-1 text-[12px] text-muted-foreground">
-          <span className="uppercase tracking-[0.08em]">Waiting on</span> · {waiting.reason}
+          <span className="uppercase tracking-[0.08em]">Waiting for</span> ·{" "}
+          {waiting.reason.replace(/^Waiting on /i, "")}
           {waiting.since ? ` (since ${fmtDate(waiting.since)})` : ""}
         </p>
       ) : null}
@@ -178,7 +201,7 @@ function MyWorkCard({
           customerId={impl.customer_id}
           implementationId={impl.id}
           team={team}
-          addLabel="Set next action"
+          addLabel="Update next step"
           onSaved={onNextActionSaved}
         />
       </div>
@@ -195,14 +218,14 @@ const SECTIONS: Array<{
 }> = [
   {
     bucket: "act_now",
-    title: "Act now",
+    title: "Needs action",
     meta: "Blocked, escalated, a critical risk, an overdue promise to the customer, or a launch date already gone by",
     accent: "bg-status-blocked-foreground",
     empty: "Nothing needs immediate action. Everything else is in the lists below.",
   },
   {
     bucket: "needs_attention",
-    title: "Needs attention",
+    title: "Keep an eye on",
     meta: "Open risk or issue, other overdue commitments, no movement for more than 14 days, something due in the next 7 days, or flagged at risk",
 
     accent: "bg-status-risk-foreground",
@@ -210,7 +233,7 @@ const SECTIONS: Array<{
   },
   {
     bucket: "moving",
-    title: "Moving",
+    title: "On track",
     meta: "On track, with nothing open against them",
     accent: "bg-status-on-track-foreground",
     empty: "No implementations are moving cleanly — check the lists above.",
@@ -303,8 +326,8 @@ function HomePage() {
         actions={
           <div className="flex items-center gap-2">
             <span className="font-mono text-[11px] text-muted-foreground">
-              {queue.act_now.length} act now · {queue.needs_attention.length} needs attention ·{" "}
-              {queue.moving.length} moving
+              {queue.act_now.length} needs action · {queue.needs_attention.length} keep an eye on ·{" "}
+              {queue.moving.length} on track
             </span>
             <ScopeSwitch scope={data.scope} onChange={setScope} />
           </div>
@@ -312,9 +335,9 @@ function HomePage() {
       />
       <PageBody className="space-y-4">
         <Panel
-          title="My work"
+          title="What needs me"
           count={myWork.length}
-          meta="Your highest-priority customers, act-now first — the same signals as the lists below, just the top of them"
+          meta="Implementations that need you to do something."
         >
           {myWork.length === 0 ? (
             <NoRows label="Nothing in your book right now. Use the scope control above to see everyone else's." />
