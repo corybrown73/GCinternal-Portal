@@ -1,14 +1,15 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { queryOptions, useSuspenseQuery } from "@tanstack/react-query";
+import { queryOptions, useQuery, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
 import { ArrowRight, Clock, Info } from "lucide-react";
 
 import { PageBody, PageHeader } from "@/components/page";
 import { Panel, StageBadge, StatusChip, StatusDot, NoRows } from "@/components/record";
 import { ScopeSwitch } from "@/components/scope-switch";
+import { AddCommitment, type TeamOption } from "@/components/delivery-write";
 import { useScope } from "@/lib/use-scope";
-import { getHome } from "@/lib/hub.functions";
-import { fmtDate, fmtDateTime, humanize } from "@/lib/hub-format";
-import { deriveHealth, launchStateConflict } from "@/lib/customer360-derive";
+import { getHome, getTeamOptions } from "@/lib/hub.functions";
+import { fmtDate, fmtDateTime, fmtMoney, humanize } from "@/lib/hub-format";
+import { NEXT_ACTION_UNKNOWN, deriveHealth, launchStateConflict } from "@/lib/customer360-derive";
 
 type HealthResult = ReturnType<typeof deriveHealth>;
 import {
@@ -81,6 +82,107 @@ function CustomerLink({
     >
       {children}
     </Link>
+  );
+}
+
+/**
+ * The "MY WORK" card — the same QueueRow/health data the sections below use,
+ * presented as one answerable unit: why this customer is here, what to do
+ * next, who's waiting on what, and a one-click way to update the next action.
+ *
+ * Deliberately does not wrap the whole card in a Link the way QueueRowItem
+ * does below: the quick-action form needs its own clicks (inputs, Save,
+ * Cancel), and a button nested inside an anchor is both invalid HTML and a
+ * click-handling trap.
+ */
+function MyWorkCard({
+  row,
+  health,
+  team,
+  onNextActionSaved,
+}: {
+  row: QueueRow;
+  health: HealthResult;
+  team: TeamOption[];
+  onNextActionSaved: () => void;
+}) {
+  const { impl } = row;
+  const conflict = launchStateConflict(impl);
+  const waiting = row.dependency.party !== "none" ? row.dependency : null;
+  const noNextAction = row.next_action === NEXT_ACTION_UNKNOWN;
+
+  return (
+    <li className="rounded-lg border border-border bg-card p-3">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+        <CustomerLink
+          customerId={impl.customer_id}
+          implementationId={impl.id}
+          className="text-[14px] font-semibold"
+        >
+          {impl.customer_name}
+        </CustomerLink>
+        <StageBadge stage={impl.current_stage} />
+        <StatusChip status={health.level} />
+        <Link
+          to="/customers/$customerId"
+          params={{ customerId: impl.customer_id }}
+          search={{ tab: row.tab, impl: impl.id }}
+          className="ml-auto flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground hover:underline"
+        >
+          Open customer
+          <ArrowRight className="h-3 w-3" strokeWidth={2} />
+        </Link>
+      </div>
+
+      <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-0.5 text-[11px] text-muted-foreground">
+        <span>
+          <span className="uppercase tracking-[0.08em]">Target launch</span> ·{" "}
+          {fmtDate(impl.target_launch_date)}
+        </span>
+        <span>
+          <span className="uppercase tracking-[0.08em]">ARR</span> · {fmtMoney(impl.arr)}
+        </span>
+        <span>
+          <span className="uppercase tracking-[0.08em]">Owner</span> ·{" "}
+          {impl.owner_name ?? "Unassigned"}
+        </span>
+      </div>
+
+      <p className="mt-2 text-[13px] font-medium">{row.reason}</p>
+
+      <p className={cn("mt-1 text-[13px]", noNextAction && "italic text-muted-foreground")}>
+        <span className="text-[11px] font-normal uppercase tracking-[0.08em] text-muted-foreground">
+          Next action
+        </span>{" "}
+        · {row.next_action}
+      </p>
+
+      {waiting ? (
+        <p className="mt-1 text-[12px] text-muted-foreground">
+          <span className="uppercase tracking-[0.08em]">Waiting on</span> · {waiting.reason}
+          {waiting.since ? ` (since ${fmtDate(waiting.since)})` : ""}
+        </p>
+      ) : null}
+
+      {/* Data-quality note, deliberately subordinate: this is a missing-field
+          flag, not a claim that anything is actually blocked. */}
+      {conflict ? (
+        <p className="mt-1 inline-flex items-center gap-1.5 rounded-sm border border-dashed border-border px-1.5 py-0.5 text-[11px] text-muted-foreground">
+          <Info className="h-3 w-3" strokeWidth={1.75} />
+          Data quality: past the launch stage, but no actual launch date recorded.
+        </p>
+      ) : null}
+
+      <div className="mt-2">
+        <AddCommitment
+          customerId={impl.customer_id}
+          implementationId={impl.id}
+          team={team}
+          addLabel="Set next action"
+          onSaved={onNextActionSaved}
+        />
+      </div>
+    </li>
   );
 }
 
@@ -185,6 +287,14 @@ function HomePage() {
     data.triage,
   );
 
+  // The same rank order buildQueue already produced, just not cut into
+  // buckets: highest priority first, whichever bucket it landed in.
+  const myWork = [...queue.act_now, ...queue.needs_attention, ...queue.moving].slice(0, 5);
+
+  const queryClient = useQueryClient();
+  const team = useQuery({ queryKey: ["team-options"], queryFn: () => getTeamOptions() });
+  const refreshHome = () => queryClient.invalidateQueries({ queryKey: ["home", param] });
+
   return (
     <>
       <PageHeader
@@ -201,6 +311,28 @@ function HomePage() {
         }
       />
       <PageBody className="space-y-4">
+        <Panel
+          title="My work"
+          count={myWork.length}
+          meta="Your highest-priority customers, act-now first — the same signals as the lists below, just the top of them"
+        >
+          {myWork.length === 0 ? (
+            <NoRows label="Nothing in your book right now. Use the scope control above to see everyone else's." />
+          ) : (
+            <ul className="space-y-2 p-2">
+              {myWork.map((row) => (
+                <MyWorkCard
+                  key={row.impl.id}
+                  row={row}
+                  health={healthByImpl.get(row.impl.id)!}
+                  team={team.data ?? []}
+                  onNextActionSaved={refreshHome}
+                />
+              ))}
+            </ul>
+          )}
+        </Panel>
+
         {SECTIONS.map((section) => {
           const rows = queue[section.bucket];
           return (
