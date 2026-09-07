@@ -267,6 +267,7 @@ function WriteShell<D>({
   submit,
   render,
   customerId,
+  onSaved,
 }: {
   mode: "add" | "edit";
   addLabel: string;
@@ -276,6 +277,10 @@ function WriteShell<D>({
   submit: (draft: D) => Promise<unknown>;
   render: (draft: D, set: (patch: Partial<D>) => void, disabled: boolean) => ReactNode;
   customerId: string;
+  /** Called after a successful save, once the Customer 360 cache has been
+   * invalidated — for callers (e.g. Home) that also cache this record under
+   * a different query key and need to refetch it too. */
+  onSaved?: () => void;
 }) {
   const initial = mode === "edit" && from ? from : empty;
   const [open, setOpen] = useState(false);
@@ -287,6 +292,7 @@ function WriteShell<D>({
     onSuccess: async () => {
       // Refetch the Customer 360 record so the new/updated row renders immediately.
       await invalidate();
+      onSaved?.();
       if (mode === "add") setDraft(empty());
       setOpen(false);
     },
@@ -1261,21 +1267,28 @@ export function AddCommitment({
   customerId,
   implementationId,
   team,
+  addLabel = "Add commitment",
+  onSaved,
 }: {
   customerId: string;
   implementationId: string;
   team: TeamOption[];
+  /** Override the trigger button's label — e.g. "Set next action" from Home,
+   * where a commitment is how the next-action signal is actually recorded. */
+  addLabel?: string;
+  onSaved?: () => void;
 }) {
   const save = useServerFn(addCommitment);
   return (
     <WriteShell<CommitmentDraft>
       mode="add"
-      addLabel="Add commitment"
+      addLabel={addLabel}
       customerId={customerId}
       empty={emptyCommitment}
       canSave={(d) => d.description.trim() !== ""}
       submit={(d) => save({ data: { implementationId, ...commitmentPayload(d) } })}
       render={(d, set, disabled) => CommitmentFields(d, set, disabled, team)}
+      {...(onSaved ? { onSaved } : {})}
     />
   );
 }
