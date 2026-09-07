@@ -387,7 +387,11 @@ function Customer360Page() {
             leading column, so the eye lands on the sentence and the label is
             available without being read. Two rows instead of four, and the
             space it gives back is space the sections below get to use. */}
-        <AttentionSummary now={whatMattersNow(record)} next={nextAction(record, impl)} />
+        <AttentionSummary
+          now={whatMattersNow(record)}
+          next={nextAction(record, impl)}
+          waiting={waitingOnLine(record)}
+        />
 
         <nav className="flex flex-wrap gap-px border-t border-border px-4">
           {TABS.map((t) => (
@@ -436,17 +440,42 @@ function Customer360Page() {
 }
 
 /**
- * What matters now, and what to do about it — on two lines instead of four.
+ * The full "Waiting on" sentence, for the header. Same source of truth the
+ * Overview tab's "Current state" panel reads (`waitingOnForCustomer`) — this
+ * just formats it for a one-line band instead of a label + detail stack, and
+ * drops the leading "Waiting on " since the row's own `dt` already says that.
+ */
+function waitingOnLine(record: Customer360): string | null {
+  const waiting = waitingOnForCustomer(record);
+  if (waiting.party === "none") return null;
+  const since = waiting.since ? ` (since ${fmtDate(waiting.since)})` : "";
+  return `${waiting.reason.replace(/^Waiting on /i, "")}${since}`;
+}
+
+/**
+ * What matters now, what to do about it, and who/what it's waiting on — on up
+ * to three lines instead of four-per-fact scattered across tabs.
  *
  * Renders NOTHING when there is nothing to say. A permanent band reading
  * "nothing escalated / next action not recorded" trains people to skip the one
  * place the app puts urgent things, which is the opposite of what a band like
- * this is for.
+ * this is for. Each row is independently optional for the same reason: an
+ * implementation with nothing blocking it shouldn't have to display "waiting
+ * on: nothing" just to keep the layout consistent.
  */
-function AttentionSummary({ now, next }: { now: string; next: string }) {
+function AttentionSummary({
+  now,
+  next,
+  waiting,
+}: {
+  now: string;
+  next: string;
+  waiting: string | null;
+}) {
   const hasNow = Boolean(now) && !/^nothing\b/i.test(now);
   const hasNext = Boolean(next) && next !== NEXT_ACTION_UNKNOWN;
-  if (!hasNow && !hasNext) return null;
+  const hasWaiting = Boolean(waiting);
+  if (!hasNow && !hasNext && !hasWaiting) return null;
 
   return (
     <div className="px-6 pb-3 pt-2.5">
@@ -466,6 +495,14 @@ function AttentionSummary({ now, next }: { now: string; next: string }) {
                 Next
               </dt>
               <dd className="min-w-0 text-[13px] font-semibold tracking-tight">{next}</dd>
+            </div>
+          ) : null}
+          {hasWaiting ? (
+            <div className="flex min-w-0 items-baseline gap-3">
+              <dt className="w-[52px] shrink-0 text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+                Waiting
+              </dt>
+              <dd className="min-w-0 text-[13px] font-semibold tracking-tight">{waiting}</dd>
             </div>
           ) : null}
         </dl>
