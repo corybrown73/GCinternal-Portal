@@ -1,9 +1,8 @@
 import { Link } from "@tanstack/react-router";
 import { canManage, isSuperAdmin, ROLE_LABELS, signOut, type PortalProfile } from "@/lib/auth";
+import { NO_HIDDEN, visibleNav, type NavVisibility } from "@/lib/nav-visibility";
 import { DEFAULT_BRANDING, schemeFor, type OrgBrandingView } from "@/lib/org-branding";
 import { cn } from "@/lib/utils";
-
-type NavItem = { to: string; label: string; hint: string; exact?: boolean };
 
 /**
  * The scheme is applied as CSS variables on the <aside> only, so nothing
@@ -13,33 +12,25 @@ type NavItem = { to: string; label: string; hint: string; exact?: boolean };
 export function AppSidebar({
   profile,
   branding,
+  visibility,
 }: {
   profile?: PortalProfile | null;
   branding?: OrgBrandingView | null;
+  /** Which sections a super admin has switched off. Absent = everything. */
+  visibility?: NavVisibility | null;
 }) {
   const role = profile?.role;
   const scheme = schemeFor(branding?.nav_scheme);
   const appName = branding?.app_name ?? DEFAULT_BRANDING.app_name;
 
-  const nav: NavItem[] = [
-    { to: "/", label: "Home", hint: "What needs attention", exact: true },
-    // Phase 7. The page itself explains and does nothing while global_search is
-    // off; the link is unconditional so the nav does not depend on a server
-    // round-trip to decide whether to render.
-    { to: "/search", label: "Search", hint: "Across every surface" },
-    { to: "/pipeline", label: "Pipeline", hint: "Deals & handoff" },
-    { to: "/customers", label: "Customers", hint: "All implementations" },
-    { to: "/technical-solutions", label: "Solutions", hint: "Technical work" },
-    { to: "/tickets", label: "Tickets", hint: "Requests & SLA" },
-    { to: "/sequences", label: "Sequences", hint: "Automated onboarding" },
-    { to: "/templates", label: "Journey templates", hint: "How onboarding runs" },
-    { to: "/access", label: "Customer access", hint: "Portal invites" },
-    ...(canManage(role) ? [{ to: "/portfolio", label: "Leadership", hint: "Team overview" }] : []),
-    // Phase 6: read-only, internal-only. Not flag-gated — see docs/design/signals.md §8.
-    { to: "/signals", label: "Signals", hint: "Velocity, dwell & waiting on" },
-    ...(canManage(role) ? [{ to: "/settings", label: "Settings", hint: "Stages & defaults" }] : []),
-    ...(isSuperAdmin(role) ? [{ to: "/admin", label: "Admin", hint: "Keys, users, routing" }] : []),
-  ];
+  // One catalogue, narrowed by role and then by what has been switched off.
+  // The list itself lives in lib/nav-visibility so the admin screen that
+  // toggles sections and the sidebar that draws them cannot disagree about
+  // what the sections are.
+  const nav = visibleNav(visibility ?? NO_HIDDEN, {
+    canManage: canManage(role),
+    isSuperAdmin: isSuperAdmin(role),
+  });
 
   return (
     <aside

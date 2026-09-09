@@ -16,6 +16,7 @@ import appCss from "../styles.css?url";
 import { reportClientError } from "../lib/error-reporting";
 import { AppSidebar } from "@/components/app-sidebar";
 import { useOrgBranding } from "@/lib/use-branding";
+import { useNavVisibility } from "@/lib/use-nav-visibility";
 import { LifecycleRail } from "@/components/lifecycle-rail";
 import { AuthGate } from "@/components/auth-gate";
 import { useProfile } from "@/lib/auth";
@@ -218,9 +219,10 @@ function RootComponent() {
 function ShellWithSidebar({ showGlobalRail }: { showGlobalRail: boolean }) {
   const { profile } = useProfile();
   const branding = useOrgBranding();
+  const visibility = useNavVisibility();
   return (
     <div className="flex min-h-screen w-full bg-background text-foreground">
-      <AppSidebar profile={profile ?? null} branding={branding} />
+      <AppSidebar profile={profile ?? null} branding={branding} visibility={visibility} />
       <div className="flex min-w-0 flex-1 flex-col">
         {showGlobalRail ? <LifecycleRail /> : null}
         <main className="min-w-0 flex-1">

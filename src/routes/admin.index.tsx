@@ -2,6 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import {
   ArrowRight,
   KeyRound,
+  PanelLeft,
   Plug,
   Route as RouteIcon,
   Rows3,
@@ -24,6 +25,13 @@ const CARDS = [
     title: "API keys",
     description:
       "Create and revoke scoped keys for Salesforce, Zapier and monitoring integrations calling /api/v1/*.",
+  },
+  {
+    to: "/admin/navigation",
+    icon: PanelLeft,
+    title: "Navigation",
+    description:
+      "Which sections are in the sidebar, for everyone. Hide what a team does not use — or what a demo does not need.",
   },
   {
     to: "/admin/users",
