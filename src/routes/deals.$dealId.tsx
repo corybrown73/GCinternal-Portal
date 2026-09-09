@@ -24,6 +24,7 @@ import {
   generateBriefForDeal,
   getBriefDownloadUrl,
   getDeal,
+  getDeckPrompt,
   getHandoffOptions,
   removeNote,
   removeReport,
@@ -415,6 +416,50 @@ function StartOnboarding({ deal }: { deal: DealData }) {
       </div>
       {error}
     </div>
+  );
+}
+
+/* ---------- the deck prompt, for Claude ---------- */
+
+/**
+ * Copies a complete prompt to the clipboard: the calls verbatim, the SOW, the
+ * intake, the field contract and the design tokens. Paste it into claude.ai
+ * and paste the JSON it returns back here. No API key, no connector — the
+ * path that works on any laptop in any room, when the other two do not.
+ */
+function ClaudePromptButton({ dealId }: { dealId: string }) {
+  const fetchPrompt = useServerFn(getDeckPrompt);
+  const [state, setState] = useState<"idle" | "busy" | "copied" | "failed">("idle");
+
+  const copy = async () => {
+    setState("busy");
+    try {
+      const { prompt } = await fetchPrompt({ data: { dealId } });
+      await navigator.clipboard.writeText(prompt);
+      setState("copied");
+      setTimeout(() => setState("idle"), 2500);
+    } catch {
+      setState("failed");
+      setTimeout(() => setState("idle"), 2500);
+    }
+  };
+
+  return (
+    <button
+      type="button"
+      className={buttonClass}
+      disabled={state === "busy"}
+      onClick={() => void copy()}
+      title="Copy everything Claude needs to write the deck — paste it into claude.ai"
+    >
+      {state === "busy"
+        ? "Preparing…"
+        : state === "copied"
+          ? "Copied — paste into Claude"
+          : state === "failed"
+            ? "Could not copy"
+            : "Copy prompt for Claude"}
+    </button>
   );
 }
 
@@ -824,14 +869,17 @@ function BriefsPanel({ deal }: { deal: DealData }) {
       title="Account brief"
       count={deal.briefs.length}
       action={
-        <button
-          type="button"
-          className={buttonClass}
-          disabled={generateMutation.isPending}
-          onClick={() => generateMutation.mutate()}
-        >
-          {generateMutation.isPending ? "Generating…" : "Generate brief"}
-        </button>
+        <div className="flex items-center gap-1.5">
+          <ClaudePromptButton dealId={deal.account.id} />
+          <button
+            type="button"
+            className={buttonClass}
+            disabled={generateMutation.isPending}
+            onClick={() => generateMutation.mutate()}
+          >
+            {generateMutation.isPending ? "Generating…" : "Generate brief"}
+          </button>
+        </div>
       }
     >
       {generateMutation.isError ? (

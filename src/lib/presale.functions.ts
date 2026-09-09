@@ -436,3 +436,13 @@ export const getIntakeFormLink = createServerFn({ method: "POST" })
     const { intakeFormLink } = await import("./presale.server");
     return intakeFormLink(data.dealId, data.path);
   });
+
+/* ---------- the deck prompt, for pasting into Claude ---------- */
+
+export const getDeckPrompt = createServerFn({ method: "POST" })
+  .middleware([requireInternalAuth])
+  .inputValidator((data: unknown) => z.object({ dealId: z.string().uuid() }).parse(data))
+  .handler(async ({ data }) => {
+    const { buildDeckPrompt } = await import("./server/deck-prompt");
+    return { prompt: await buildDeckPrompt(data.dealId) };
+  });
