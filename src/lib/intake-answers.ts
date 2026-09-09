@@ -66,6 +66,28 @@ export const intakeAnswersSchema = z.object({
   current_process: z.string().trim().max(4000).nullable().default(null),
   /** Templates from the library they pointed at. Ids, so a renamed card still resolves. */
   chosen_templates: z.array(z.string().uuid()).default([]),
+  /**
+   * The seven-day plan's knobs (src/lib/onboarding-timeline.ts). The plan is
+   * computed from the close date; only what a person changed is stored, so
+   * a moved date survives and everything else follows the rule.
+   */
+  timeline: z
+    .object({
+      /** YYYY-MM-DD. Defaults to the deal's closed-won date when absent. */
+      close_date: z
+        .string()
+        .regex(/^\d{4}-\d{2}-\d{2}$/)
+        .nullable()
+        .default(null),
+      /** milestone key → YYYY-MM-DD, for dates moved by hand. */
+      overrides: z.record(z.string(), z.string()).default({}),
+      holidays: z.array(z.string().regex(/^\d{4}-\d{2}-\d{2}$/)).default([]),
+      integration_tier: z.number().int().min(0).max(5).default(0),
+      integration_target: z.string().trim().max(120).nullable().default(null),
+      /** Who at the customer runs the form on real jobs. */
+      field_tester: z.string().trim().max(120).nullable().default(null),
+    })
+    .default({}),
   updated_at: z.string().nullable().default(null),
 });
 
