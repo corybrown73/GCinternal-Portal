@@ -91,9 +91,25 @@ export function normalizeClosedWonRow(raw: unknown): Record<string, unknown> {
   return out;
 }
 
+/**
+ * Slack renders `&` as `&amp;` and a Zap copies the rendering, not the text,
+ * so "West-Com & TV-Direct" arrived as "West-Com &amp; TV-Direct" and became
+ * a customer by that name. Decoded on the way in, for every text field.
+ */
+export function decodeEntities(s: string): string {
+  return s
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;|&apos;/g, "'")
+    .replace(/&nbsp;/g, " ");
+}
+
 const optionalText = (max: number) =>
   z.preprocess(
-    (v) => (v === null || v === undefined ? undefined : String(v).trim() || undefined),
+    (v) =>
+      v === null || v === undefined ? undefined : decodeEntities(String(v)).trim() || undefined,
     z.string().max(max).optional(),
   );
 
@@ -134,7 +150,7 @@ export const closedWonSchema = z
   .transform((row) => {
     const r = row as Record<string, unknown>;
     return {
-      company: String(r["company"] ?? "").trim(),
+      company: decodeEntities(String(r["company"] ?? "")).trim(),
       opportunity: optionalText(300).parse(r["opportunity"]),
       amount: parseMoney(r["amount"]),
       products: parseProducts(r["products"]),

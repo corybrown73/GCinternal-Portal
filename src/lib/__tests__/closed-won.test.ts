@@ -77,6 +77,21 @@ describe("the schema", () => {
   });
 });
 
+describe("what Slack does to text", () => {
+  // The first real row: Slack renders "&" as "&amp;", the Zap copies the
+  // rendering, and a customer was created under the wrong name.
+  it("decodes HTML entities in every text field", () => {
+    const r = closedWonSchema.parse({
+      company: "West-Com &amp; TV-Direct",
+      opportunity: "Q3 &quot;Forms&quot; deal",
+      notes: "Closed won &#39;yesterday&#39; &lt;3",
+    });
+    expect(r.company).toBe("West-Com & TV-Direct");
+    expect(r.opportunity).toBe('Q3 "Forms" deal');
+    expect(r.notes).toBe("Closed won 'yesterday' <3");
+  });
+});
+
 describe("parsing cells", () => {
   it("reads money the way a person types it, and refuses words", () => {
     expect(parseMoney("$48,000")).toBe(48000);

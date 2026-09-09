@@ -7,6 +7,8 @@ import { resolveSalesforceIdWrite } from "./sf-account-match";
 import type { AccountUpsertInput } from "./schemas";
 import type { Account, TransitionSource } from "../presale-types";
 import type { AccountStage } from "../presale-stages";
+import { stageOrder } from "../pipeline-stages";
+import { loadPipelineStages } from "../pipeline-stages.server";
 
 export interface ActorContext {
   source: TransitionSource;
@@ -142,10 +144,21 @@ export async function upsertAccount(
       .single<Account>();
     if (error) throw new Error(error.message);
     account = data;
+    // FORWARD ONLY. Integrations re-deliver: Zapier retries, an edited Sheets
+    // row fires "New or Updated Row" again, Salesforce resyncs. Each of those
+    // carries the stage the deal was in when the row was written — and the
+    // first one to arrive after onboarding started dragged a deal from
+    // Onboarding Kickoff back to Closed Won, orphaning the project it already
+    // had. The Integrations screen has always said this hook moves a deal
+    // "forward only, never backward"; now it does.
     if (input.stage && input.stage !== existing.stage) {
-      const { changed } = await transitionStage(existing.id, input.stage, ctx);
-      stageChanged = changed;
-      account = { ...account, stage: input.stage };
+      const pipeline = await loadPipelineStages();
+      const forward = stageOrder(pipeline, input.stage) > stageOrder(pipeline, existing.stage);
+      if (forward) {
+        const { changed } = await transitionStage(existing.id, input.stage, ctx);
+        stageChanged = changed;
+        account = { ...account, stage: input.stage };
+      }
     }
   } else {
     const initialStage = input.stage ?? "prospect";
