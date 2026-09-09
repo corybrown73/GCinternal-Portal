@@ -381,3 +381,58 @@ export const setUserRole = createServerFn({ method: "POST" })
     const { setProfileRole } = await import("./presale.server");
     return setProfileRole(context.userId, context.supabase, data.profileId, data.role);
   });
+
+/* ---------- onboarding intake (0047) ---------- */
+
+export const saveIntake = createServerFn({ method: "POST" })
+  .middleware([requireInternalAuth])
+  .inputValidator((data: unknown) =>
+    z
+      .object({
+        dealId: z.string().uuid(),
+        // A partial: the panel saves one answer at a time, as it is given.
+        patch: z
+          .object({
+            forms_built: z.boolean().nullable().optional(),
+            industry: z.string().trim().max(80).nullable().optional(),
+            company_size: z.string().trim().max(20).nullable().optional(),
+            field_users: z.number().int().nonnegative().nullable().optional(),
+            current_process: z.string().trim().max(4000).nullable().optional(),
+            chosen_templates: z.array(z.string().uuid()).optional(),
+          })
+          .strict(),
+      })
+      .parse(data),
+  )
+  .handler(async ({ data, context }) => {
+    const { saveDealIntake } = await import("./presale.server");
+    return saveDealIntake(context.profile.id, data.dealId, data.patch);
+  });
+
+export const uploadIntakeForm = createServerFn({ method: "POST" })
+  .middleware([requireInternalAuth])
+  .inputValidator((data: unknown) =>
+    z
+      .object({
+        dealId: z.string().uuid(),
+        fileName: z.string().trim().min(1).max(200),
+        // What a customer has: a PDF of the form, or a photo of the paper one.
+        contentType: z.enum(["application/pdf", "image/png", "image/jpeg", "image/webp"]),
+        dataBase64: z.string().min(1).max(34_000_000),
+      })
+      .parse(data),
+  )
+  .handler(async ({ data, context }) => {
+    const { uploadDealIntakeForm } = await import("./presale.server");
+    return uploadDealIntakeForm(context.profile.id, data);
+  });
+
+export const getIntakeFormLink = createServerFn({ method: "POST" })
+  .middleware([requireInternalAuth])
+  .inputValidator((data: unknown) =>
+    z.object({ dealId: z.string().uuid(), path: z.string().min(1) }).parse(data),
+  )
+  .handler(async ({ data }) => {
+    const { intakeFormLink } = await import("./presale.server");
+    return intakeFormLink(data.dealId, data.path);
+  });

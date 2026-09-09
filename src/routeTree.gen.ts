@@ -15,6 +15,7 @@ import { Route as AdminRouteImport } from './routes/admin'
 import { Route as AlertsRouteImport } from './routes/alerts'
 import { Route as CustomersRouteImport } from './routes/customers'
 import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
+import { Route as FormTemplatesRouteImport } from './routes/form-templates'
 import { Route as JourneysRouteImport } from './routes/journeys'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as PipelineRouteImport } from './routes/pipeline'
@@ -106,6 +107,11 @@ const CustomersRoute = CustomersRouteImport.update({
 const ForgotPasswordRoute = ForgotPasswordRouteImport.update({
   id: '/forgot-password',
   path: '/forgot-password',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const FormTemplatesRoute = FormTemplatesRouteImport.update({
+  id: '/form-templates',
+  path: '/form-templates',
   getParentRoute: () => rootRouteImport,
 } as any)
 const JourneysRoute = JourneysRouteImport.update({
@@ -428,6 +434,7 @@ export interface FileRoutesByFullPath {
   '/alerts': typeof AlertsRoute
   '/customers': typeof CustomersRouteWithChildren
   '/forgot-password': typeof ForgotPasswordRoute
+  '/form-templates': typeof FormTemplatesRoute
   '/journeys': typeof JourneysRouteWithChildren
   '/login': typeof LoginRoute
   '/pipeline': typeof PipelineRoute
@@ -496,6 +503,7 @@ export interface FileRoutesByTo {
   '/access': typeof AccessRoute
   '/alerts': typeof AlertsRoute
   '/forgot-password': typeof ForgotPasswordRoute
+  '/form-templates': typeof FormTemplatesRoute
   '/journeys': typeof JourneysRouteWithChildren
   '/login': typeof LoginRoute
   '/pipeline': typeof PipelineRoute
@@ -563,6 +571,7 @@ export interface FileRoutesById {
   '/alerts': typeof AlertsRoute
   '/customers': typeof CustomersRouteWithChildren
   '/forgot-password': typeof ForgotPasswordRoute
+  '/form-templates': typeof FormTemplatesRoute
   '/journeys': typeof JourneysRouteWithChildren
   '/login': typeof LoginRoute
   '/pipeline': typeof PipelineRoute
@@ -635,6 +644,7 @@ export interface FileRouteTypes {
     | '/alerts'
     | '/customers'
     | '/forgot-password'
+    | '/form-templates'
     | '/journeys'
     | '/login'
     | '/pipeline'
@@ -703,6 +713,7 @@ export interface FileRouteTypes {
     | '/access'
     | '/alerts'
     | '/forgot-password'
+    | '/form-templates'
     | '/journeys'
     | '/login'
     | '/pipeline'
@@ -769,6 +780,7 @@ export interface FileRouteTypes {
     | '/alerts'
     | '/customers'
     | '/forgot-password'
+    | '/form-templates'
     | '/journeys'
     | '/login'
     | '/pipeline'
@@ -840,6 +852,7 @@ export interface RootRouteChildren {
   AlertsRoute: typeof AlertsRoute
   CustomersRoute: typeof CustomersRouteWithChildren
   ForgotPasswordRoute: typeof ForgotPasswordRoute
+  FormTemplatesRoute: typeof FormTemplatesRoute
   JourneysRoute: typeof JourneysRouteWithChildren
   LoginRoute: typeof LoginRoute
   PipelineRoute: typeof PipelineRoute
@@ -922,6 +935,13 @@ declare module '@tanstack/react-router' {
       path: '/forgot-password'
       fullPath: '/forgot-password'
       preLoaderRoute: typeof ForgotPasswordRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/form-templates': {
+      id: '/form-templates'
+      path: '/form-templates'
+      fullPath: '/form-templates'
+      preLoaderRoute: typeof FormTemplatesRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/journeys': {
@@ -1501,6 +1521,7 @@ const rootRouteChildren: RootRouteChildren = {
   AlertsRoute: AlertsRoute,
   CustomersRoute: CustomersRouteWithChildren,
   ForgotPasswordRoute: ForgotPasswordRoute,
+  FormTemplatesRoute: FormTemplatesRoute,
   JourneysRoute: JourneysRouteWithChildren,
   LoginRoute: LoginRoute,
   PipelineRoute: PipelineRoute,

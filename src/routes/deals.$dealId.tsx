@@ -15,6 +15,7 @@ import { PageBody, PageHeader } from "@/components/page";
 import { CustomerLogo } from "@/components/customer-logo";
 import { Field, NoRows, Panel } from "@/components/record";
 import { EditableField } from "@/components/editable-field";
+import { IntakePanel } from "@/components/intake-panel";
 import { canEditSales, canManage, isSuperAdmin, useProfile } from "@/lib/auth";
 import {
   addNote,
@@ -257,6 +258,7 @@ function DealRecord({ deal }: { deal: DealData }) {
         <div className="grid gap-4 xl:grid-cols-2">
           <div className="space-y-4">
             <SowPanel deal={deal} onSave={set} editable={editable} />
+            <IntakePanel dealId={deal.account.id} raw={deal.account.intake} editable={editable} />
             <ReportsPanel deal={deal} />
             <NotesPanel deal={deal} />
           </div>

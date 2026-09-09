@@ -1,4 +1,5 @@
 import type { AccountStage } from "./presale-stages";
+import type { IntakeAnswers } from "./intake-answers";
 
 export type UserRole = "admin" | "am" | "se" | "onboarding";
 export type TamStatus = "pending" | "approved" | "declined" | "expired";
@@ -44,6 +45,13 @@ export interface Account {
   /** A path into the private attachments bucket when the PDF was uploaded (0046). */
   sow_document_path: string | null;
   logo_path: string | null;
+  /**
+   * The onboarding intake answers (0047). Typed as the answers shape so the
+   * record stays serializable across a server function; what the column
+   * actually holds is still read through readIntake(), which tolerates
+   * anything and never throws.
+   */
+  intake: IntakeAnswers | null;
   stage_entered_at: string;
   created_at: string;
   updated_at: string;

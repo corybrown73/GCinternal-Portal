@@ -1286,3 +1286,128 @@ export async function updateDealField(
 
   return { ok: true, field, value: next };
 }
+
+/* ---------- onboarding intake (0047) ---------- */
+
+/**
+ * The intake answers on a deal, saved one at a time as the conversation
+ * gives them. Merged, never replaced: two people on the same deal must not
+ * undo each other, and an upload must not wipe an answer typed a minute ago.
+ */
+export async function saveDealIntake(
+  userId: string,
+  dealId: string,
+  patch: Record<string, unknown>,
+): Promise<import("./intake-answers").IntakeAnswers> {
+  await requireSalesEditor(userId);
+  const { readIntake, intakeAnswersSchema } = await import("./intake-answers");
+
+  const { data: before } = await db()
+    .from("portal_accounts")
+    .select("intake")
+    .eq("id", dealId)
+    .maybeSingle();
+  if (!before) throw new Error("Deal not found");
+
+  const current = readIntake((before as any).intake);
+  const next = intakeAnswersSchema.parse({
+    ...current,
+    ...patch,
+    updated_at: new Date().toISOString(),
+  });
+
+  const { error } = await db()
+    .from("portal_accounts")
+    .update({ intake: next, updated_at: new Date().toISOString() })
+    .eq("id", dealId);
+  if (error) throw new Error(`Could not save the intake: ${error.message}`);
+
+  await audit({
+    actor_type: "user",
+    actor_id: userId,
+    action: "deal.intake_updated",
+    entity_type: "account",
+    entity_id: dealId,
+    payload: { fields: Object.keys(patch) },
+  });
+
+  return next;
+}
+
+/**
+ * A form the customer already has, filed against the deal. The same private
+ * bucket and signed-link rule as the SOW: a customer's own paperwork is not
+ * something that sits behind a URL that works for anyone who has it.
+ */
+export async function uploadDealIntakeForm(
+  userId: string,
+  args: { dealId: string; fileName: string; contentType: string; dataBase64: string },
+): Promise<import("./intake-answers").IntakeAnswers> {
+  await requireSalesEditor(userId);
+  if (args.dataBase64.length > SOW_MAX_BASE64) {
+    throw new Error("That file is over 25MB — a photo of the form is enough");
+  }
+  const { readIntake, intakeAnswersSchema } = await import("./intake-answers");
+
+  const { data: before } = await db()
+    .from("portal_accounts")
+    .select("intake")
+    .eq("id", args.dealId)
+    .maybeSingle();
+  if (!before) throw new Error("Deal not found");
+
+  const binary = Buffer.from(args.dataBase64, "base64");
+  const safe = args.fileName.replace(/[^A-Za-z0-9._-]+/g, "-").slice(-120) || "form";
+  const path = `deals/${args.dealId}/forms/${crypto.randomUUID()}-${safe}`;
+
+  const { error: upErr } = await db()
+    .storage.from("attachments")
+    .upload(path, binary, { contentType: args.contentType, upsert: false });
+  if (upErr) throw new Error(`Could not upload the form: ${upErr.message}`);
+
+  const current = readIntake((before as any).intake);
+  const next = intakeAnswersSchema.parse({
+    ...current,
+    forms_built: true,
+    uploaded_forms: [
+      ...current.uploaded_forms,
+      { path, name: args.fileName, uploaded_at: new Date().toISOString() },
+    ],
+    updated_at: new Date().toISOString(),
+  });
+
+  const { error } = await db()
+    .from("portal_accounts")
+    .update({ intake: next, updated_at: new Date().toISOString() })
+    .eq("id", args.dealId);
+  if (error) {
+    try {
+      await db().storage.from("attachments").remove([path]);
+    } catch {
+      /* the row is what matters */
+    }
+    throw new Error(error.message);
+  }
+
+  await audit({
+    actor_type: "user",
+    actor_id: userId,
+    action: "deal.intake_form_uploaded",
+    entity_type: "account",
+    entity_id: args.dealId,
+    payload: { name: args.fileName, content_type: args.contentType },
+  });
+
+  return next;
+}
+
+export async function intakeFormLink(dealId: string, path: string): Promise<{ url: string }> {
+  // The path must belong to this deal: a signed link for any path a caller
+  // names would turn this into a read of the whole bucket.
+  if (!path.startsWith(`deals/${dealId}/forms/`)) throw new Error("That file is not on this deal");
+  const { data, error } = await db()
+    .storage.from("attachments")
+    .createSignedUrl(path, 60 * 60);
+  if (error || !data?.signedUrl) throw new Error("Could not open that file");
+  return { url: data.signedUrl as string };
+}
