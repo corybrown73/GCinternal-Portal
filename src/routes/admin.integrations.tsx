@@ -83,7 +83,7 @@ const inputClass =
 const labelClass = "text-[10px] uppercase tracking-[0.1em] text-muted-foreground";
 const cellClass = "px-2 py-1.5 align-top text-[12px]";
 
-const TABS = ["Status", "Sync log", "Field maps", "Webhooks"] as const;
+const TABS = ["Zapier", "Status", "Sync log", "Field maps", "Webhooks"] as const;
 type Tab = (typeof TABS)[number];
 
 function IntegrationsPage() {
@@ -119,6 +119,7 @@ function IntegrationsPage() {
           ))}
         </div>
 
+        {tab === "Zapier" ? <ZapierTab /> : null}
         {tab === "Status" ? <StatusTab /> : null}
         {tab === "Sync log" ? <SyncLogTab /> : null}
         {tab === "Field maps" ? <FieldMapsTab /> : null}
@@ -487,6 +488,150 @@ function FieldMapsTab() {
           ) : null}
         </div>
       </Panel>
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------------- zapier */
+
+/**
+ * Closed-won in, project out — the setup, on the page where it is needed.
+ *
+ * The Zap is three steps and none of them is in this app: a Sheets trigger,
+ * a webhook action, and a key. What this tab does is make the second step a
+ * copy-paste instead of a guess — the URL, the header and the body with the
+ * column names the endpoint already understands.
+ */
+function ZapierTab() {
+  const origin = typeof window === "undefined" ? "" : window.location.origin;
+  const url = `${origin}/api/v1/closed-won`;
+  const [copied, setCopied] = useState<string | null>(null);
+  const copy = (label: string, text: string) =>
+    void navigator.clipboard.writeText(text).then(() => setCopied(label));
+
+  const body = `{
+  "company":       "{{Account Name}}",
+  "opportunity":   "{{Opportunity Name}}",
+  "amount":        "{{Amount}}",
+  "products":      "{{Products}}",
+  "rep_email":     "{{Rep Email}}",
+  "close_date":    "{{Close Date}}",
+  "contact_name":  "{{Contact Name}}",
+  "contact_email": "{{Contact Email}}",
+  "contact_role":  "{{Contact Title}}",
+  "salesforce_url":"{{Salesforce Link}}",
+  "notes":         "{{Slack Message}}"
+}`;
+
+  return (
+    <div className="max-w-3xl space-y-3">
+      <Panel title="Closed won → onboarding, from a Google Sheet" level="primary">
+        <div className="space-y-3 px-3 py-2.5 text-[12px]">
+          <p className="text-muted-foreground">
+            A new row in the closed-won sheet becomes a deal at Closed Won <em>and</em> a project
+            with its plan, in one call. Delivering the same row twice updates the deal and never
+            makes a second project.
+          </p>
+
+          <ol className="list-decimal space-y-3 pl-5">
+            <li>
+              <span className="font-medium text-foreground">A key.</span>{" "}
+              <Link to="/admin/api-keys" className="underline">
+                Admin → API keys → Add
+              </Link>{" "}
+              with the <code className="font-mono">accounts:write</code> scope. It is shown once.
+            </li>
+            <li>
+              <span className="font-medium text-foreground">The Zap.</span> Trigger:{" "}
+              <em>Google Sheets → New Spreadsheet Row</em>. Action:{" "}
+              <em>Webhooks by Zapier → POST</em>, payload type <em>json</em>.
+            </li>
+            <li>
+              <span className="font-medium text-foreground">The action, exactly.</span>
+              <div className="mt-1.5 space-y-1.5">
+                <Row
+                  label="URL"
+                  value={url}
+                  onCopy={() => copy("url", url)}
+                  copied={copied === "url"}
+                />
+                <Row
+                  label="Header"
+                  value="Authorization: Bearer gcp_live_…"
+                  onCopy={() => copy("header", "Authorization")}
+                  copied={copied === "header"}
+                />
+              </div>
+              <p className="mt-1.5 text-muted-foreground">
+                Body — map each value to the matching column. Only{" "}
+                <code className="font-mono">company</code> is required; leave out any column the
+                sheet does not have.
+              </p>
+              <div className="relative mt-1">
+                <pre className="overflow-x-auto rounded-md border border-border bg-muted/30 p-2.5 font-mono text-[11px] leading-relaxed">
+                  {body}
+                </pre>
+                <button
+                  type="button"
+                  onClick={() => copy("body", body)}
+                  className="absolute right-2 top-2 inline-flex items-center gap-1 rounded-sm border border-border bg-background px-1.5 py-0.5 text-[11px] hover:bg-muted"
+                >
+                  <Copy className="h-3 w-3" /> {copied === "body" ? "Copied" : "Copy"}
+                </button>
+              </div>
+            </li>
+            <li>
+              <span className="font-medium text-foreground">Test it.</span> Add a row. Within a
+              minute the company is on the{" "}
+              <Link to="/pipeline" className="underline">
+                pipeline
+              </Link>{" "}
+              at Closed Won with a project behind it.
+            </li>
+          </ol>
+
+          <div className="rounded-md border border-dashed border-border bg-muted/20 px-3 py-2 text-muted-foreground">
+            <p className="font-medium text-foreground">Column names are forgiving.</p>
+            <p className="mt-0.5">
+              <code className="font-mono">Account Name</code>,{" "}
+              <code className="font-mono">account</code> and{" "}
+              <code className="font-mono">customer</code> all mean company;{" "}
+              <code className="font-mono">Deal Value</code>, <code className="font-mono">ARR</code>{" "}
+              and <code className="font-mono">amount</code> all mean amount, and “$48,000” is read
+              as a number. A Salesforce link yields the account id. A bad email is dropped, not a
+              reason to reject the row.
+            </p>
+          </div>
+        </div>
+      </Panel>
+    </div>
+  );
+}
+
+function Row({
+  label,
+  value,
+  onCopy,
+  copied,
+}: {
+  label: string;
+  value: string;
+  onCopy: () => void;
+  copied: boolean;
+}) {
+  return (
+    <div className="flex items-center gap-2">
+      <span className="w-14 shrink-0 text-muted-foreground">{label}</span>
+      <code className="min-w-0 flex-1 truncate rounded-sm border border-border bg-muted/30 px-2 py-1 font-mono text-[11px]">
+        {value}
+      </code>
+      <button
+        type="button"
+        onClick={onCopy}
+        className="inline-flex shrink-0 items-center gap-1 rounded-sm border border-border px-1.5 py-1 text-[11px] hover:bg-muted"
+      >
+        <Copy className="h-3 w-3" /> {copied ? "Copied" : "Copy"}
+      </button>
     </div>
   );
 }

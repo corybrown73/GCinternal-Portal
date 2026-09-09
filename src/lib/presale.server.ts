@@ -733,12 +733,37 @@ export interface StartOnboardingResult {
   matchedBy: "deal_link" | "salesforce" | "chosen" | "created" | null;
 }
 
+/**
+ * Who is starting onboarding. A person on the deal page, or an integration
+ * (the closed-won webhook) with no person behind it — the same work either way,
+ * with the audit trail and the plan's "applied by" naming whichever it was.
+ */
+export type OnboardingActor =
+  { kind: "user"; profileId: string } | { kind: "api_key"; apiKeyId: string };
+
 export async function startOnboarding(
   userId: string,
   dealId: string,
   options: StartOnboardingOptions = {},
 ): Promise<StartOnboardingResult> {
   await requireSalesEditor(userId);
+  return startOnboardingAs({ kind: "user", profileId: userId }, dealId, options);
+}
+
+/**
+ * The body of startOnboarding, with the role check already done by the caller.
+ *
+ * Split out so the closed-won webhook can run exactly this — customer,
+ * implementation, plan, deal link, stage move — under an API key. Before the
+ * split, an integration could create the deal but not kick anything off, and
+ * "a deal appeared, somebody go and press Start onboarding" is not a handoff.
+ */
+export async function startOnboardingAs(
+  actor: OnboardingActor,
+  dealId: string,
+  options: StartOnboardingOptions = {},
+): Promise<StartOnboardingResult> {
+  const userId = actor.kind === "user" ? actor.profileId : null;
 
   const { data: account } = await db()
     .from("portal_accounts")
@@ -933,8 +958,12 @@ export async function startOnboarding(
     await transitionStage(
       dealId,
       next.key as AccountStage,
-      { source: "ui", actorProfileId: userId },
-      "Onboarding started from the deal record",
+      actor.kind === "user"
+        ? { source: "ui", actorProfileId: actor.profileId }
+        : { source: "api", actorApiKeyId: actor.apiKeyId },
+      actor.kind === "user"
+        ? "Onboarding started from the deal record"
+        : "Onboarding started by the closed-won webhook",
     );
   }
 
@@ -942,8 +971,8 @@ export async function startOnboarding(
 
   // (d) audit.
   await audit({
-    actor_type: "user",
-    actor_id: userId,
+    actor_type: actor.kind === "user" ? "user" : "api_key",
+    actor_id: actor.kind === "user" ? actor.profileId : actor.apiKeyId,
     action: "account.start_onboarding",
     entity_type: "account",
     entity_id: dealId,
