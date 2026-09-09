@@ -16,6 +16,7 @@ import { CustomerLogo } from "@/components/customer-logo";
 import { Field, NoRows, Panel } from "@/components/record";
 import { EditableField } from "@/components/editable-field";
 import { IntakePanel } from "@/components/intake-panel";
+import { TimelinePanel } from "@/components/timeline-panel";
 import { canEditSales, canManage, isSuperAdmin, useProfile } from "@/lib/auth";
 import {
   addNote,
@@ -260,6 +261,13 @@ function DealRecord({ deal }: { deal: DealData }) {
           <div className="space-y-4">
             <SowPanel deal={deal} onSave={set} editable={editable} />
             <IntakePanel dealId={deal.account.id} raw={deal.account.intake} editable={editable} />
+            <TimelinePanel
+              dealId={deal.account.id}
+              raw={deal.account.intake}
+              stageHistory={deal.stage_history}
+              wonStageKey={wonStage(deal.stages).key}
+              editable={editable}
+            />
             <ReportsPanel deal={deal} />
             <NotesPanel deal={deal} />
           </div>

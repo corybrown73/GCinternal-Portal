@@ -399,6 +399,22 @@ export const saveIntake = createServerFn({ method: "POST" })
             field_users: z.number().int().nonnegative().nullable().optional(),
             current_process: z.string().trim().max(4000).nullable().optional(),
             chosen_templates: z.array(z.string().uuid()).optional(),
+            // The seven-day plan's knobs, saved whole: the panel sends the
+            // complete object so a cleared override is a cleared override.
+            timeline: z
+              .object({
+                close_date: z
+                  .string()
+                  .regex(/^\d{4}-\d{2}-\d{2}$/)
+                  .nullable(),
+                overrides: z.record(z.string(), z.string().regex(/^\d{4}-\d{2}-\d{2}$/)),
+                holidays: z.array(z.string().regex(/^\d{4}-\d{2}-\d{2}$/)).max(30),
+                integration_tier: z.number().int().min(0).max(5),
+                integration_target: z.string().trim().max(120).nullable(),
+                field_tester: z.string().trim().max(120).nullable(),
+              })
+              .strict()
+              .optional(),
           })
           .strict(),
       })
@@ -445,4 +461,18 @@ export const getDeckPrompt = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const { buildDeckPrompt } = await import("./server/deck-prompt");
     return { prompt: await buildDeckPrompt(data.dealId) };
+  });
+
+/**
+ * The six-slide onboarding deck, rendered from the record and filed. Anyone
+ * who can edit the deal can generate it; the deck is a plan, not a contract.
+ */
+export const generateOnboardingDeck = createServerFn({ method: "POST" })
+  .middleware([requireInternalAuth])
+  .inputValidator((data: unknown) => z.object({ dealId: z.string().uuid() }).parse(data))
+  .handler(async ({ data, context }) => {
+    const { requireSalesEditor } = await import("./presale.server");
+    await requireSalesEditor(context.profile.id);
+    const { generateOnboardingDeck: run } = await import("./server/onboarding-deck-generate");
+    return run(context.profile.id, data.dealId);
   });
