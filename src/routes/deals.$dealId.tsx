@@ -23,6 +23,7 @@ import {
   addNote,
   addReport,
   createTamRequestForDeal,
+  generateBriefForDeal,
   getBriefDownloadUrl,
   getDeal,
   getDeckPrompt,
@@ -863,6 +864,17 @@ type DiscoveryQuestion = { question: string; why_it_matters: string; category: s
  */
 function BriefsPanel({ deal }: { deal: DealData }) {
   const download = useServerFn(getBriefDownloadUrl);
+  const synthesize = useServerFn(generateBriefForDeal);
+  const queryClient = useQueryClient();
+  // Reads every Gong report and reviewed note on the deal and writes the
+  // synthesis. The welcome page borrows from it where the intake is blank.
+  const synthesis = useMutation({
+    mutationFn: () => synthesize({ data: { dealId: deal.account.id } }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["deal", deal.account.id] });
+      void queryClient.invalidateQueries({ queryKey: ["welcome", deal.account.id] });
+    },
+  });
 
   const downloadMutation = useMutation({
     mutationFn: (briefId: string) => download({ data: { briefId } }),
@@ -886,6 +898,19 @@ function BriefsPanel({ deal }: { deal: DealData }) {
       count={deal.briefs.length}
       action={
         <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            className={buttonClass}
+            disabled={synthesis.isPending || deal.gong_reports.length === 0}
+            onClick={() => synthesis.mutate()}
+            title={
+              deal.gong_reports.length === 0
+                ? "Add a Gong report or call notes first — the synthesis reads those"
+                : "Read every call note on this deal and synthesise the brief with AI"
+            }
+          >
+            {synthesis.isPending ? "Synthesising…" : "Synthesise with AI"}
+          </button>
           <ClaudePromptButton dealId={deal.account.id} />
           <Link
             to="/onboarding-plan/$dealId"
@@ -901,11 +926,20 @@ function BriefsPanel({ deal }: { deal: DealData }) {
       <p className="border-b border-border px-3 py-2 text-[12px] text-muted-foreground">
         The brief is the welcome page: your team, the timeline with dates, what&apos;s expected, how
         we get there. It reads from this record, so it is always current — present it on the
-        kickoff, print it to PDF, or send the customer their link.
+        kickoff, print it to PDF, or send the customer their link. Synthesise with AI to read the
+        call notes into it: how the job runs today, what comes after the first form, who owns it on
+        their side — wherever the intake has not said.
       </p>
-      {downloadMutation.isError ? (
+      {downloadMutation.isError || synthesis.isError ? (
         <p className="border-b border-border px-3 py-2 text-[11px] text-destructive">
-          {(downloadMutation.error as Error).message}
+          {((synthesis.error ?? downloadMutation.error) as Error).message}
+        </p>
+      ) : null}
+      {synthesis.isSuccess ? (
+        <p className="border-b border-border px-3 py-2 text-[11px] text-emerald-700 dark:text-emerald-400">
+          {synthesis.data.status === "complete"
+            ? "Synthesised. The welcome page now reads it wherever the intake is blank — today in their words, what comes next, their project owner."
+            : (synthesis.data.error ?? "The synthesis did not complete.")}
         </p>
       ) : null}
 

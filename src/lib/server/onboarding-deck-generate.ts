@@ -1,6 +1,7 @@
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { companyNameFrom } from "@/lib/company-name";
 import { readIntake } from "@/lib/intake-answers";
+import { synthesisFromBrief } from "@/lib/welcome-synthesis";
 import { closeDateFor, timelineFor } from "@/lib/onboarding-plan";
 import { loadPipelineStages } from "@/lib/pipeline-stages.server";
 import { wonStage } from "@/lib/pipeline-stages";
@@ -85,6 +86,19 @@ export async function buildOnboardingDeckInput(dealId: string): Promise<Onboardi
     next = shelf;
   }
 
+  // The latest AI synthesis of the calls, when one has been run. It fills
+  // only what the intake left blank — the person's answer always wins.
+  const { data: briefRow } = await db()
+    .from("portal_briefs")
+    .select("structured_json")
+    .eq("account_id", dealId)
+    .eq("status", "complete")
+    .eq("generator", "llm")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const synth = synthesisFromBrief(briefRow?.structured_json ?? null);
+
   const { loadHandoffContext } = await import("./handoff-context");
   const context = await loadHandoffContext(dealId);
   const lead = context?.project?.lead ?? context?.deal.seOwner ?? context?.deal.amOwner ?? null;
@@ -94,8 +108,11 @@ export async function buildOnboardingDeckInput(dealId: string): Promise<Onboardi
     solutionsEngineer: context?.deal.seOwner ?? null,
     champion: context?.deal.primaryContact.name
       ? { name: context.deal.primaryContact.name, role: context.deal.primaryContact.role }
-      : null,
+      : (synth?.champion ?? null),
   };
+  const nextUseCases = next.length
+    ? next.slice(0, 3).map((t) => ({ name: t.name, objective: t.description }))
+    : (synth?.nextUseCases ?? []);
 
   return {
     clientName: companyNameFrom(String(deal.name)) || String(deal.name),
@@ -103,10 +120,10 @@ export async function buildOnboardingDeckInput(dealId: string): Promise<Onboardi
     timeline,
     lead,
     fieldTester: intake.timeline.field_tester,
-    currentProcess: intake.current_process,
+    currentProcess: intake.current_process ?? synth?.currentProcess ?? null,
     team,
     firstForm,
-    nextUseCases: next.slice(0, 3).map((t) => ({ name: t.name, objective: t.description })),
+    nextUseCases,
     clientLogo: await clientLogo(deal.logo_path as string | null),
   };
 }
