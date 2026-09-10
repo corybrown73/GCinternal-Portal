@@ -11,6 +11,7 @@ import {
   Users,
   ToggleRight,
   Image,
+  UserRoundCheck,
 } from "lucide-react";
 
 import { PageBody, PageHeader } from "@/components/page";
@@ -26,6 +27,13 @@ const CARDS = [
     title: "API keys",
     description:
       "Create and revoke scoped keys for Salesforce, Zapier and monitoring integrations calling /api/v1/*.",
+  },
+  {
+    to: "/admin/assignment",
+    icon: UserRoundCheck,
+    title: "Assignment",
+    description:
+      "Who gets the next account. The pool, the weights, and every pick with its reason — closed won to a named person in minutes.",
   },
   {
     to: "/admin/industry-photos",

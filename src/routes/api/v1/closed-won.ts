@@ -68,6 +68,14 @@ export const Route = createFileRoute("/api/v1/closed-won")({
                 // row; a person can merge later if it turns out to exist.
                 createNewCustomer: true,
               }),
+            recordFacts: async (dealId, facts) => {
+              const { saveDealIntakeFacts } = await import("@/lib/presale.server");
+              await saveDealIntakeFacts(dealId, facts);
+            },
+            assign: async (dealId, implementationId, ownerEmail) => {
+              const { assignDeal } = await import("@/lib/assignment.server");
+              return assignDeal({ dealId, implementationId, ownerEmail, actorProfileId: null });
+            },
             existingImplementation: async (customerId) => {
               const { data } = await db
                 .from("implementations")

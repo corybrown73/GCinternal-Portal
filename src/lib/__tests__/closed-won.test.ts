@@ -239,3 +239,42 @@ describe("ingesting a row", () => {
     expect(call.summary).toContain("3 crews");
   });
 });
+
+describe("assignment on kickoff", () => {
+  it("hands the new project to a person, passing the owner the row named", async () => {
+    const assign = vi.fn(async () => ({ assigneeName: "Priya Nair" }));
+    const recordFacts = vi.fn(async () => {});
+    const { d } = deps({ assign, recordFacts });
+    const withOwner = closedWonSchema.parse({
+      company: "Acme Roofing",
+      amount: "$90,000",
+      seats: "120 users",
+      integration: "Advanced",
+      implementation_owner_email: "priya.nair@gocanvas.com",
+    });
+    const out = await ingestClosedWon(withOwner, d);
+    expect(withOwner.seats).toBe(120);
+    expect(withOwner.integration_tier).toBe(3);
+    expect(recordFacts).toHaveBeenCalledWith("deal-1", { seats: 120, integrationTier: 3 });
+    expect(assign).toHaveBeenCalledWith("deal-1", "impl-1", "priya.nair@gocanvas.com");
+    expect(out.assigned_to).toBe("Priya Nair");
+    expect(out.kicked_off).toBe(true);
+  });
+
+  it("never fails the ingest when assignment throws", async () => {
+    const assign = vi.fn(async () => {
+      throw new Error("pool exploded");
+    });
+    const { d } = deps({ assign });
+    const out = await ingestClosedWon(row, d);
+    expect(out.kicked_off).toBe(true);
+    expect(out.assigned_to).toBeNull();
+  });
+
+  it("says so when the pool is empty", async () => {
+    const { d } = deps({ assign: vi.fn(async () => null) });
+    const out = await ingestClosedWon(row, d);
+    expect(out.assigned_to).toBeNull();
+    expect(out.note).toMatch(/pool/i);
+  });
+});

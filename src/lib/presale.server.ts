@@ -1335,6 +1335,37 @@ export async function saveDealIntake(
 }
 
 /**
+ * Facts an integration knows at close time — seats, the integration tier —
+ * onto the intake without a person, so the plan panel and the assignment
+ * weight already have them. Never overwrites what a person typed.
+ */
+export async function saveDealIntakeFacts(
+  dealId: string,
+  facts: { seats?: number | undefined; integrationTier?: number | undefined },
+): Promise<void> {
+  const { readIntake, intakeAnswersSchema } = await import("./intake-answers");
+  const { data: before } = await db()
+    .from("portal_accounts")
+    .select("intake")
+    .eq("id", dealId)
+    .maybeSingle();
+  if (!before) return;
+  const current = readIntake((before as any).intake);
+  const next = intakeAnswersSchema.parse({
+    ...current,
+    field_users: current.field_users ?? facts.seats ?? null,
+    timeline: {
+      ...current.timeline,
+      integration_tier:
+        current.timeline.integration_tier ||
+        (facts.integrationTier ?? current.timeline.integration_tier),
+    },
+    updated_at: new Date().toISOString(),
+  });
+  await db().from("portal_accounts").update({ intake: next }).eq("id", dealId);
+}
+
+/**
  * A form the customer already has, filed against the deal. The same private
  * bucket and signed-link rule as the SOW: a customer's own paperwork is not
  * something that sits behind a URL that works for anyone who has it.

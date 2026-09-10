@@ -1,3 +1,4 @@
+import { integrationTierFrom } from "@/lib/assignment";
 import { companyNameFrom } from "@/lib/company-name";
 import { z } from "zod";
 
@@ -53,6 +54,8 @@ const ALIASES: Record<string, string[]> = {
     "specialist_email",
   ],
   close_date: ["close_date", "closed_date", "closed_at", "closed_won_at", "date"],
+  seats: ["seats", "users", "licenses", "field_users", "user_count", "seat_count"],
+  integration_tier: ["integration_tier", "integration", "tier", "complexity", "complexity_tier"],
   contact_name: ["contact_name", "contact", "primary_contact", "champion"],
   contact_email: ["contact_email", "primary_contact_email", "champion_email"],
   contact_role: ["contact_role", "contact_title", "title"],
@@ -158,6 +161,8 @@ export const closedWonSchema = z
       rep_email: emailOrUndefined(r["rep_email"]),
       implementation_owner_email: emailOrUndefined(r["implementation_owner_email"]),
       close_date: optionalText(40).parse(r["close_date"]),
+      seats: parseCount(r["seats"]),
+      integration_tier: integrationTierFrom(r["integration_tier"]) ?? undefined,
       contact_name: optionalText(200).parse(r["contact_name"]),
       contact_email: emailOrUndefined(r["contact_email"]),
       contact_role: optionalText(200).parse(r["contact_role"]),
@@ -175,6 +180,15 @@ export const closedWonSchema = z
   });
 
 export type ClosedWonInput = z.infer<typeof closedWonSchema>;
+
+/** "24", 24, "24 users" → 24. Anything without a digit is not a count. */
+function parseCount(v: unknown): number | undefined {
+  if (v === null || v === undefined || v === "") return undefined;
+  const s = String(v);
+  if (!/\d/.test(s)) return undefined;
+  const n = Number(s.replace(/[^0-9.]/g, ""));
+  return Number.isFinite(n) && n >= 0 ? Math.round(n) : undefined;
+}
 
 function emailOrUndefined(v: unknown): string | undefined {
   if (typeof v !== "string") return undefined;
@@ -209,9 +223,29 @@ export type ClosedWonDeps = {
   }>;
   /** The implementation a linked customer already has, if any. */
   existingImplementation: (customerId: string) => Promise<string | null>;
+  /**
+   * Seats and the integration tier, onto the deal's intake, so the plan panel
+   * already knows them. Optional: a caller without the intake does nothing.
+   */
+  recordFacts?: (
+    dealId: string,
+    facts: { seats?: number | undefined; integrationTier?: number | undefined },
+  ) => Promise<void>;
+  /**
+   * Hand the new project to a person: the rule, or the owner the row named.
+   * Optional, and never allowed to fail the ingest — an unassigned account
+   * with a project beats no project.
+   */
+  assign?: (
+    dealId: string,
+    implementationId: string,
+    ownerEmail: string | undefined,
+  ) => Promise<{ assigneeName: string | null } | null>;
 };
 
 export type ClosedWonOutcome = {
+  /** Who was handed the project, when somebody was. */
+  assigned_to: string | null;
   deal_id: string;
   deal_created: boolean;
   customer_id: string | null;
@@ -257,12 +291,19 @@ export async function ingestClosedWon(
       role: input.contact_role,
     });
   }
+  if (deps.recordFacts && (input.seats !== undefined || input.integration_tier !== undefined)) {
+    await deps.recordFacts(account.id, {
+      seats: input.seats,
+      integrationTier: input.integration_tier,
+    });
+  }
 
   // Already onboarding: the second delivery of the same row, or a company
   // whose project a person had already started. Report what exists.
   if (account.customer_id) {
     const implementationId = await deps.existingImplementation(account.customer_id);
     return {
+      assigned_to: null,
       deal_id: account.id,
       deal_created: created,
       customer_id: account.customer_id,
@@ -275,6 +316,7 @@ export async function ingestClosedWon(
   const started = await deps.startOnboarding(account.id);
   if (started.outcome !== "started") {
     return {
+      assigned_to: null,
       deal_id: account.id,
       deal_created: created,
       customer_id: started.customerId || null,
@@ -287,12 +329,34 @@ export async function ingestClosedWon(
     };
   }
 
+  // Eyes on it within minutes: hand the project to a person, by rule or by
+  // the owner the row named. A failure here is logged and reported, never
+  // thrown — the project exists, and a person can assign by hand.
+  let assignedTo: string | null = null;
+  if (deps.assign) {
+    try {
+      const r = await deps.assign(
+        account.id,
+        started.implementationId,
+        input.implementation_owner_email,
+      );
+      assignedTo = r?.assigneeName ?? null;
+    } catch (e) {
+      console.error("[closed-won] assignment failed; project left unassigned", e);
+    }
+  }
+
   return {
+    assigned_to: assignedTo,
     deal_id: account.id,
     deal_created: created,
     customer_id: started.customerId,
     implementation_id: started.implementationId,
     kicked_off: true,
-    note: null,
+    note: assignedTo
+      ? null
+      : deps.assign
+        ? "Nobody is in the assignment pool yet — assign by hand from the deal."
+        : null,
   };
 }

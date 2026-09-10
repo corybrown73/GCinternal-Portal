@@ -15,6 +15,7 @@ import { PageBody, PageHeader } from "@/components/page";
 import { CustomerLogo } from "@/components/customer-logo";
 import { Field, NoRows, Panel } from "@/components/record";
 import { EditableField } from "@/components/editable-field";
+import { AssignmentPanel } from "@/components/assignment-panel";
 import { IntakePanel } from "@/components/intake-panel";
 import { TimelinePanel } from "@/components/timeline-panel";
 import { canEditSales, canManage, isSuperAdmin, useProfile } from "@/lib/auth";
@@ -278,6 +279,7 @@ function DealRecord({ deal }: { deal: DealData }) {
             <NotesPanel deal={deal} />
           </div>
           <div className="space-y-4">
+            <AssignmentPanel dealId={deal.account.id} editable={editable} />
             <BriefsPanel deal={deal} />
             <TamPanel deal={deal} />
             <HistoryPanel deal={deal} />

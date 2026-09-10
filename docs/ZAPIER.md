@@ -47,6 +47,9 @@ Column names are forgiving, because a sheet has whatever columns somebody gave i
 | contact | `contact_name` / `champion`, `contact_email`, `contact_role` / `title` |
 | notes | `notes`, `summary`, `slack_message`, `message` |
 | Salesforce | `salesforce_id`, or a `salesforce_url` — the **account** id (001…) is taken from a Lightning link |
+| seats | `seats`, `users`, `licenses`, `field_users` — `"120 users"` is read as `120` |
+| integration | `integration_tier`, `integration`, `tier`, `complexity` — `0`–`5`, or a name: none, standard, intermediate, advanced, complex, unknown |
+| implementation owner | `implementation_owner_email`, `onboarding_owner`, `specialist_email` — names the person; skips the rule |
 
 Keys are matched case- and separator-insensitively: `Account Name`, `account-name`
 and `accountName` are the same column. Blank cells are ignored. A malformed email
@@ -60,6 +63,17 @@ is dropped rather than failing the row.
 3. Onboarding starts under the API key: the customer, the implementation, the
    journey template and its plan, the deal↔customer link, and the deal moves to
    the next stage. This is the **same code** the Start onboarding button runs.
+4. Seats and the integration tier land on the deal's onboarding intake, so the
+   plan panel and the welcome page already know them.
+5. **Somebody is assigned.** The deal is weighed (base + ARR band + seat band +
+   integration tier, tuned under Admin → Assignment) and handed to whoever in
+   the pool is carrying the least over the counting window — so the person who
+   just took the tier-4 integration is skipped on the next small one. If the
+   row named an `implementation_owner_email`, that person gets it instead. They
+   receive an email with the three things to do first: grab the Gong recording,
+   upload the SOW, open the welcome page. The response carries `assigned_to`.
+   An empty pool never fails the row; the project is created unassigned and the
+   deal page says so.
 
 ## Delivering the same row twice
 
