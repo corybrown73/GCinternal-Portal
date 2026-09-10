@@ -50,6 +50,61 @@ async function viewFor(deal: any, opts: { internal: boolean }): Promise<WelcomeV
     if (typeof homework[k] === "string") homeworkDone[k] = homework[k] as string;
   }
 
+  const readiness: WelcomeView["readiness"] = [];
+  if (opts.internal) {
+    if (!input.industry)
+      readiness.push({
+        key: "industry",
+        label: "Industry",
+        hint: "Onboarding intake → industry. Picks the icon, the phone's fields and the photo.",
+      });
+    if (!input.firstForm)
+      readiness.push({
+        key: "form",
+        label: "First form",
+        hint: "Onboarding intake → pick a library card or upload what they have.",
+      });
+    if (!input.currentProcess)
+      readiness.push({
+        key: "process",
+        label: "The process today, in their words",
+        hint: "Onboarding intake → the process today. It is the 'now' on screen five.",
+      });
+    if (!input.team?.champion)
+      readiness.push({
+        key: "champion",
+        label: "Their project owner",
+        hint: "Deal → contact name and role. Named on the team screen.",
+      });
+    if (!input.fieldTester)
+      readiness.push({
+        key: "tester",
+        label: "Their field tester",
+        hint: "Onboarding plan → field tester. The most important name on the page.",
+      });
+    if (!input.lead)
+      readiness.push({
+        key: "lead",
+        label: "Our onboarding lead",
+        hint: "Deal → SE or AM owner, or the project's lead once it exists.",
+      });
+    if (!photoUrl)
+      readiness.push({
+        key: "photo",
+        label: `A photo for ${input.industry ?? "the industry"}`,
+        hint: "Admin → Industry photos. The icon composition stands in until then.",
+      });
+    const calls = input.timeline.milestones.filter(
+      (m) => m.key === "kickoff" || m.key === "working",
+    );
+    if (calls.some((m) => !m.time))
+      readiness.push({
+        key: "times",
+        label: "Times for both calls",
+        hint: "Onboarding plan → set a time on the kickoff and the working session, then send the invites.",
+      });
+  }
+
   return {
     dealId: String(deal.id),
     clientName: input.clientName,
@@ -70,6 +125,7 @@ async function viewFor(deal: any, opts: { internal: boolean }): Promise<WelcomeV
     photoUrl,
     clientLogoUrl,
     homeworkDone,
+    readiness,
     // The URL needs the raw token, which we do not have after issue; the
     // internal view says a link exists and when, and the issue call is what
     // hands the URL back (once, to be copied).

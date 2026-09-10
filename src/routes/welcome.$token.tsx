@@ -61,6 +61,7 @@ function WelcomeTokenPage() {
     <WelcomePage
       view={view}
       mode="shared"
+      icsBase={`/api/welcome-ics/${token}`}
       onTick={async (key, done) => {
         const { homeworkDone } = await tick({ data: { token, key, done } });
         setView((v) => (v ? { ...v, homeworkDone } : v));

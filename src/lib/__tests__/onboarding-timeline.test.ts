@@ -5,6 +5,7 @@ import {
   addWeeks,
   buildTimeline,
   daysToValue,
+  daysToValueActual,
   INTEGRATION_TIERS,
   SEVEN_DAY_PLAN,
   shortDay,
@@ -241,5 +242,41 @@ describe("moving a date moves everything after it", () => {
     expect(t.integration.milestones.slice(1).every((m) => m.shifted)).toBe(true);
     // Two weeks after the planned Mon Sep 21 was Mon Oct 5; +5 business days → Mon Oct 12.
     expect(t.integration.endsOn).toBe("2026-10-12");
+  });
+});
+
+describe("done marks", () => {
+  it("records what actually happened and counts progress", () => {
+    const t = buildTimeline({
+      closeDate: "2026-09-09",
+      completed: { kickoff: "2026-09-10", homework: "2026-09-12" },
+      times: { kickoff: "10:00" },
+      timezone: "America/Chicago",
+    });
+    const by = (k: string) => t.milestones.find((m) => m.key === k)!;
+    expect(by("kickoff").doneOn).toBe("2026-09-10");
+    expect(by("kickoff").time).toBe("10:00");
+    expect(by("working").doneOn).toBeNull();
+    expect(t.progress).toEqual({ done: 2, total: 7 });
+    expect(t.timezone).toBe("America/Chicago");
+  });
+
+  it("marking the form live opens the phase-2 gate and gives the actual days to value", () => {
+    const t = buildTimeline({
+      closeDate: "2026-09-09",
+      integrationTier: 3,
+      completed: { live: "2026-09-17" },
+    });
+    expect(t.liveDoneOn).toBe("2026-09-17");
+    expect(t.integration.tentative).toBe(false);
+    expect(t.integration.provenOn).toBe("2026-09-17");
+    expect(t.integration.startsOn! > "2026-09-17").toBe(true);
+    expect(daysToValueActual(t)).toBe(8);
+    expect(daysToValueActual(buildTimeline({ closeDate: "2026-09-09" }))).toBeNull();
+  });
+
+  it("ignores a done date that is not a date", () => {
+    const t = buildTimeline({ closeDate: "2026-09-09", completed: { kickoff: "yesterday" } });
+    expect(t.milestones.find((m) => m.key === "kickoff")!.doneOn).toBeNull();
   });
 });

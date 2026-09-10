@@ -33,6 +33,11 @@ export type WelcomeView = {
   clientLogoUrl: string | null;
   /** Homework key → ISO timestamp when the customer ticked it. */
   homeworkDone: Record<string, string>;
+  /**
+   * What is still blank before the page should go to a customer. Empty means
+   * ready. Internal only; the customer's view carries an empty list.
+   */
+  readiness: Array<{ key: string; label: string; hint: string }>;
   /** Present when the viewer is internal and a link has been issued. */
   shareUrl: string | null;
   sharedAt: string | null;

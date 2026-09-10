@@ -2412,3 +2412,58 @@ body.gc-presenting {
 .gc-welcome .wp-journey-col p {
   font-size: 12px;
 }
+
+/* ---- done marks and booked times */
+.gc-welcome .wp-node-tile {
+  position: relative;
+  display: inline-flex;
+}
+.gc-welcome .wp-done-badge {
+  position: absolute;
+  right: -6px;
+  top: -6px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--wp-green);
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 0 0 3px #fff;
+}
+.gc-welcome .wp-done-badge.is-sm {
+  width: 16px;
+  height: 16px;
+  right: -5px;
+  top: -5px;
+  box-shadow: 0 0 0 2px #fff;
+}
+.gc-welcome .wp-node-date.is-done {
+  color: var(--wp-green);
+}
+.gc-welcome .wp-phase2-step.is-done .wp-phase2-date {
+  color: var(--wp-green);
+}
+.gc-welcome .wp-call-ics {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 10px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--wp-blue-line);
+  background: #fff;
+  color: var(--wp-blue);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  text-decoration: none;
+  vertical-align: middle;
+}
+@media print {
+  .gc-welcome .wp-call-ics {
+    display: none;
+  }
+}

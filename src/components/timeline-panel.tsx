@@ -1,19 +1,31 @@
 import { useState } from "react";
 import { Link } from "@tanstack/react-router";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { CalendarDays, Download, ExternalLink, RotateCcw, X } from "lucide-react";
+import {
+  CalendarDays,
+  CalendarPlus,
+  Check,
+  Download,
+  ExternalLink,
+  RotateCcw,
+  X,
+} from "lucide-react";
 
 import { Panel } from "@/components/record";
 import { readIntake, type IntakeAnswers } from "@/lib/intake-answers";
+import { buildIcs } from "@/lib/ics";
 import { closeDateFor, timelineFor } from "@/lib/onboarding-plan";
 import {
   daysToValue,
+  daysToValueActual,
   INTEGRATION_TIERS,
   shortDay,
   type Milestone,
 } from "@/lib/onboarding-timeline";
 import { generateOnboardingDeck, saveIntake } from "@/lib/presale.functions";
+import { isCall, planEvents } from "@/lib/welcome-events";
+import { getWelcome } from "@/lib/welcome.functions";
 import { cn } from "@/lib/utils";
 
 /**
@@ -48,6 +60,7 @@ export function TimelinePanel({
   const qc = useQueryClient();
   const save = useServerFn(saveIntake);
   const generate = useServerFn(generateOnboardingDeck);
+  const loadWelcome = useServerFn(getWelcome);
   const [error, setError] = useState<string | null>(null);
   const [holiday, setHoliday] = useState("");
   const [tester, setTester] = useState(knobs.field_tester ?? "");
@@ -86,11 +99,55 @@ export function TimelinePanel({
     else overrides[m.key] = iso;
     set({ overrides });
   };
+  const markDone = (m: Milestone, iso: string | null) => {
+    const completed = { ...knobs.completed };
+    if (iso) completed[m.key] = iso;
+    else delete completed[m.key];
+    set({ completed });
+  };
+  const setTime = (m: Milestone, hhmm: string) => {
+    const times = { ...knobs.times };
+    if (hhmm) times[m.key] = hhmm;
+    else delete times[m.key];
+    set({
+      times,
+      timezone: knobs.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone ?? null,
+    });
+  };
+  const today = new Date().toISOString().slice(0, 10);
+
+  // What the page still needs, from the same server view the page renders.
+  const welcome = useQuery({
+    queryKey: ["welcome", dealId],
+    queryFn: () => loadWelcome({ data: { dealId } }),
+    staleTime: 30_000,
+  });
+  const readiness = welcome.data?.readiness ?? [];
+
+  const downloadIcs = (only?: string) => {
+    const events = planEvents({
+      timeline,
+      clientName: welcome.data?.clientName ?? "Customer",
+      url: null,
+      only: only ?? null,
+    });
+    const blob = new Blob([buildIcs(events)], { type: "text/calendar;charset=utf-8" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `${only ?? "onboarding-plan"}.ics`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  };
+  const actual = daysToValueActual(timeline);
 
   return (
     <Panel
       title="Onboarding plan"
-      meta={`Live ${shortDay(timeline.liveDate)} · ${daysToValue(timeline)} days`}
+      meta={
+        actual !== null
+          ? `Live ${shortDay(timeline.liveDoneOn!)} · ${actual} days to value · ${timeline.progress.done}/${timeline.progress.total} done`
+          : `Live ${shortDay(timeline.liveDate)} · ${daysToValue(timeline)} days planned · ${timeline.progress.done}/${timeline.progress.total} done`
+      }
       level="primary"
       action={
         <div className="flex items-center gap-1.5">
@@ -132,6 +189,27 @@ export function TimelinePanel({
           </p>
         ) : null}
 
+        {/* What the page still needs before it goes to the customer. */}
+        {readiness.length ? (
+          <div className="rounded-md border border-amber-500/40 bg-amber-500/5 p-2.5">
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-amber-700 dark:text-amber-400">
+              Before this goes to the customer · {readiness.length} to fill in
+            </p>
+            <ul className="mt-1.5 space-y-1">
+              {readiness.map((r) => (
+                <li key={r.key} className="text-[12px]">
+                  <span className="font-medium">{r.label}</span>
+                  <span className="text-muted-foreground"> — {r.hint}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : welcome.data ? (
+          <p className="flex items-center gap-1.5 text-[12px] text-emerald-700 dark:text-emerald-400">
+            <Check className="h-3.5 w-3.5" /> The page has everything it needs.
+          </p>
+        ) : null}
+
         {/* The close date: where the whole plan starts. */}
         <div className="flex flex-wrap items-end gap-3 rounded-md border border-border bg-muted/20 p-2.5">
           <label className="space-y-1 text-[11px] text-muted-foreground">
@@ -158,7 +236,22 @@ export function TimelinePanel({
         {/* The milestones, each with a date that can be moved. */}
         <ol className="divide-y divide-border rounded-md border border-border bg-background">
           {timeline.milestones.map((m) => (
-            <li key={m.key} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-2.5 py-1.5">
+            <li
+              key={m.key}
+              className={cn(
+                "flex flex-wrap items-center gap-x-3 gap-y-1 px-2.5 py-1.5",
+                m.doneOn && "bg-emerald-500/5",
+              )}
+            >
+              <input
+                type="checkbox"
+                aria-label={`${m.label} done`}
+                className="h-3.5 w-3.5 accent-emerald-600"
+                checked={Boolean(m.doneOn)}
+                disabled={busy}
+                onChange={(e) => markDone(m, e.target.checked ? today : null)}
+                title={m.doneOn ? `Done ${shortDay(m.doneOn)}` : "Mark done"}
+              />
               <span className="w-12 shrink-0 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
                 Day {m.day}
               </span>
@@ -171,9 +264,47 @@ export function TimelinePanel({
                     </span>
                   ) : null}
                 </span>
-                <span className="block truncate text-[11px] text-muted-foreground">{m.detail}</span>
+                <span className="block truncate text-[11px] text-muted-foreground">
+                  {m.doneOn ? (
+                    <span className="text-emerald-700 dark:text-emerald-400">
+                      Done{" "}
+                      <input
+                        type="date"
+                        aria-label={`${m.label} done on`}
+                        className="rounded-sm border border-border bg-background px-1 text-[11px]"
+                        value={m.doneOn}
+                        max={today}
+                        disabled={busy}
+                        onChange={(e) => markDone(m, e.target.value || null)}
+                      />
+                    </span>
+                  ) : (
+                    m.detail
+                  )}
+                </span>
               </span>
               <OwnerChip owner={m.owner} />
+              {isCall(m) ? (
+                <span className="flex items-center gap-1">
+                  <input
+                    type="time"
+                    aria-label={`${m.label} time`}
+                    className={input}
+                    value={m.time ?? ""}
+                    disabled={busy}
+                    onChange={(e) => setTime(m, e.target.value)}
+                  />
+                  <button
+                    type="button"
+                    className="text-muted-foreground hover:text-foreground disabled:opacity-50"
+                    title={m.time ? "Add to calendar" : "Set a time first"}
+                    disabled={!m.time}
+                    onClick={() => downloadIcs(m.key)}
+                  >
+                    <CalendarPlus className="h-3.5 w-3.5" />
+                  </button>
+                </span>
+              ) : null}
               {m.shifted ? (
                 <span
                   className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground"
@@ -206,12 +337,22 @@ export function TimelinePanel({
             </li>
           ))}
         </ol>
-        {moved ? (
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="text-[11px] text-muted-foreground">
-            {moved} date{moved === 1 ? "" : "s"} moved by hand. Everything after a moved date
-            follows it by the same number of business days.
+            {moved
+              ? `${moved} date${moved === 1 ? "" : "s"} moved by hand. Everything after a moved date follows it by the same number of business days.`
+              : "Tick a step when it happens; the customer's page shows the progress."}
+            {timeline.timezone ? ` Call times are ${timeline.timezone}.` : ""}
           </p>
-        ) : null}
+          <button
+            type="button"
+            className="inline-flex items-center gap-1 rounded-sm border border-border px-1.5 py-0.5 text-[11px] text-muted-foreground hover:text-foreground"
+            onClick={() => downloadIcs()}
+            title="Every date on the plan as one calendar file; calls with a time are timed"
+          >
+            <CalendarPlus className="h-3 w-3" /> All dates (.ics)
+          </button>
+        </div>
 
         <div className="grid gap-3 sm:grid-cols-2">
           {/* Holidays: shift everything after them. */}
@@ -331,7 +472,7 @@ export function TimelinePanel({
                 </span>
                 <span className="text-[12px]">
                   {timeline.integration.tentative
-                    ? "Starts once the form is tested and dialed in. Dates below are the earliest they could be."
+                    ? "Starts once the form is tested and dialed in — tick 'Live — first value' above, or set the date here. Dates below are the earliest they could be."
                     : `Form dialed in ${shortDay(timeline.integration.provenOn!)}. Phase 2 starts ${shortDay(timeline.integration.startsOn!)}.`}
                 </span>
                 <span className="ml-auto flex items-center gap-1.5">
@@ -362,8 +503,26 @@ export function TimelinePanel({
                 {timeline.integration.milestones.map((m) => (
                   <li
                     key={m.key}
-                    className="flex flex-wrap items-center gap-x-3 gap-y-1 px-2.5 py-1.5"
+                    className={cn(
+                      "flex flex-wrap items-center gap-x-3 gap-y-1 px-2.5 py-1.5",
+                      m.doneOn && "bg-emerald-500/5",
+                    )}
                   >
+                    <input
+                      type="checkbox"
+                      aria-label={`${m.label} done`}
+                      className="h-3.5 w-3.5 accent-emerald-600"
+                      checked={Boolean(m.doneOn)}
+                      disabled={busy || timeline.integration.tentative}
+                      onChange={(e) => markDone(m, e.target.checked ? today : null)}
+                      title={
+                        timeline.integration.tentative
+                          ? "Phase 2 is gated until the form is dialed in"
+                          : m.doneOn
+                            ? `Done ${shortDay(m.doneOn)}`
+                            : "Mark done"
+                      }
+                    />
                     <span className="w-12 shrink-0 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
                       Ph. 2
                     </span>
@@ -381,6 +540,27 @@ export function TimelinePanel({
                       </span>
                     </span>
                     <OwnerChip owner={m.owner} />
+                    {isCall(m) ? (
+                      <span className="flex items-center gap-1">
+                        <input
+                          type="time"
+                          aria-label={`${m.label} time`}
+                          className={input}
+                          value={m.time ?? ""}
+                          disabled={busy}
+                          onChange={(e) => setTime(m, e.target.value)}
+                        />
+                        <button
+                          type="button"
+                          className="text-muted-foreground hover:text-foreground disabled:opacity-50"
+                          title={m.time ? "Add to calendar" : "Set a time first"}
+                          disabled={!m.time}
+                          onClick={() => downloadIcs(m.key)}
+                        >
+                          <CalendarPlus className="h-3.5 w-3.5" />
+                        </button>
+                      </span>
+                    ) : null}
                     {m.shifted ? (
                       <span
                         className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground"

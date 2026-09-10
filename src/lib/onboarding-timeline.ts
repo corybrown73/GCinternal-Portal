@@ -233,6 +233,12 @@ export type TimelineOptions = {
    * not yet unlocked and its dates are the earliest they could be.
    */
   formProvenOn?: string | null;
+  /** Milestone key → ISO date it was actually done. */
+  completed?: Record<string, string>;
+  /** Milestone key → "HH:MM" local time, for the calls. */
+  times?: Record<string, string>;
+  /** IANA zone the times are in. */
+  timezone?: string | null;
 };
 
 export type Milestone = MilestoneSpec & {
@@ -244,6 +250,10 @@ export type Milestone = MilestoneSpec & {
   shifted: boolean;
   /** The date the plan would have given it, after earlier moves are applied. */
   plannedDate: string;
+  /** ISO date it was actually done, when somebody marked it. */
+  doneOn: string | null;
+  /** "HH:MM" local time, for a call with one booked. */
+  time: string | null;
 };
 
 export type Timeline = {
@@ -251,6 +261,12 @@ export type Timeline = {
   milestones: Milestone[];
   /** The live date — the last of the seven days, after overrides. */
   liveDate: string;
+  /** The day the form actually went live, when marked. */
+  liveDoneOn: string | null;
+  /** IANA zone the call times are in, when any are set. */
+  timezone: string | null;
+  /** How many of the plan's steps are marked done. */
+  progress: { done: number; total: number };
   integration: {
     tier: IntegrationTier;
     name: string;
@@ -341,6 +357,8 @@ export function buildTimeline(options: TimelineOptions): Timeline {
   if (!ISO.test(options.closeDate)) throw new Error("closeDate must be YYYY-MM-DD");
   const holidays = options.holidays ?? [];
   const overrides = options.overrides ?? {};
+  const completed = options.completed ?? {};
+  const times = options.times ?? {};
 
   // The cascade: a hand-moved date sets a shift, in business days, that
   // every later date inherits until another hand-moved date resets it.
@@ -356,6 +374,8 @@ export function buildTimeline(options: TimelineOptions): Timeline {
       const moved = Boolean(override && ISO.test(override) && override !== plannedDate);
       const date = moved ? override! : plannedDate;
       if (moved) shift = businessDaysBetween(base, date, holidays);
+      const done = completed[spec.key];
+      const time = times[spec.key];
       return {
         ...spec,
         day: spec.day ?? 0,
@@ -363,6 +383,8 @@ export function buildTimeline(options: TimelineOptions): Timeline {
         plannedDate,
         moved,
         shifted: !moved && shift !== 0 && date !== base,
+        doneOn: done && ISO.test(done) ? done : null,
+        time: time && /^\d{2}:\d{2}$/.test(time) ? time : null,
       };
     });
   };
@@ -372,12 +394,15 @@ export function buildTimeline(options: TimelineOptions): Timeline {
   );
 
   const liveDate = milestones[milestones.length - 1]!.date;
+  const liveDoneOn = milestones[milestones.length - 1]!.doneOn;
 
   const tierNo = options.integrationTier ?? 0;
   const tier = INTEGRATION_TIERS.find((t) => t.tier === tierNo) ?? INTEGRATION_TIERS[0];
   const hasIntegration = tier.weeks > 0;
+  // The gate opens when a person says so, or when the form is marked live —
+  // whichever is recorded. Marking the form live IS saying it is dialed in.
   const provenOn =
-    options.formProvenOn && ISO.test(options.formProvenOn) ? options.formProvenOn : null;
+    options.formProvenOn && ISO.test(options.formProvenOn) ? options.formProvenOn : liveDoneOn;
   // Phase 2 anchors on the day the form was proven; until then, the earliest
   // it could be is the business day after the form is live. Never before.
   const anchor = provenOn && provenOn > liveDate ? provenOn : liveDate;
@@ -405,10 +430,14 @@ export function buildTimeline(options: TimelineOptions): Timeline {
   const startsOn = phase2[0]?.date ?? null;
   const endsOn = phase2[phase2.length - 1]?.date ?? null;
 
+  const all = [...milestones, ...phase2];
   return {
     closeDate: options.closeDate,
     milestones,
     liveDate,
+    liveDoneOn,
+    timezone: options.timezone ?? null,
+    progress: { done: all.filter((m) => m.doneOn).length, total: all.length },
     integration: {
       tier: tier.tier,
       name: tier.name,
@@ -427,6 +456,12 @@ export function buildTimeline(options: TimelineOptions): Timeline {
 /** Calendar days from close to live, for the "N days" headline. */
 export function daysToValue(t: Timeline): number {
   return Math.round((parseIso(t.liveDate).getTime() - parseIso(t.closeDate).getTime()) / DAY_MS);
+}
+
+/** Calendar days from close to the day the form actually went live; null until it has. */
+export function daysToValueActual(t: Timeline): number | null {
+  if (!t.liveDoneOn) return null;
+  return Math.round((parseIso(t.liveDoneOn).getTime() - parseIso(t.closeDate).getTime()) / DAY_MS);
 }
 
 /** "Tue 10 Sep" — short enough for a slide, unambiguous enough for a plan. */

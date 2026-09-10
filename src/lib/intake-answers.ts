@@ -92,6 +92,12 @@ export const intakeAnswersSchema = z.object({
         .regex(/^\d{4}-\d{2}-\d{2}$/)
         .nullable()
         .default(null),
+      /** Milestone key → ISO date it was actually done. */
+      completed: z.record(z.string(), z.string().regex(/^\d{4}-\d{2}-\d{2}$/)).default({}),
+      /** Milestone key → "HH:MM", for the calls that are booked. */
+      times: z.record(z.string(), z.string().regex(/^\d{2}:\d{2}$/)).default({}),
+      /** IANA zone the times are in, e.g. America/Chicago. */
+      timezone: z.string().trim().max(64).nullable().default(null),
     })
     .default({}),
   updated_at: z.string().nullable().default(null),

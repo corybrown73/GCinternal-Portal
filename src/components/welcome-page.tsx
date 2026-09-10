@@ -3,6 +3,7 @@ import {
   AirVent,
   ArrowLeft,
   Building2,
+  CalendarPlus,
   Camera,
   ChevronRight,
   Cloud,
@@ -41,6 +42,7 @@ import {
 
 import { daysToValue, shortDay } from "@/lib/onboarding-timeline";
 import { HOMEWORK_KEYS, type HomeworkKey, type WelcomeView } from "@/lib/welcome";
+import { whenLabel } from "@/lib/welcome-events";
 import { cn } from "@/lib/utils";
 
 /**
@@ -108,6 +110,7 @@ export function WelcomePage({
   onDownloadPptx,
   backHref,
   notesHref,
+  icsBase,
 }: {
   view: WelcomeView;
   mode: WelcomeMode;
@@ -120,6 +123,8 @@ export function WelcomePage({
   backHref?: string | null;
   /** Internal: the talk track for this customer. */
   notesHref?: string | null;
+  /** Shared: the calendar-file route for this link, e.g. /api/welcome-ics/<token>. */
+  icsBase?: string | null;
 }) {
   const [present, setPresent] = useState(false);
   const [at, setAt] = useState(0);
@@ -153,7 +158,7 @@ export function WelcomePage({
     <Plan key="plan" view={view} />,
     <Together key="together" view={view} mode={mode} onTick={onTick} />,
     <FirstForm key="form" view={view} />,
-    <Business key="business" view={view} />,
+    <Business key="business" view={view} icsBase={icsBase ?? null} />,
   ];
 
   return (
@@ -171,7 +176,7 @@ export function WelcomePage({
           notesHref={notesHref ?? null}
         />
       ) : null}
-      {mode === "shared" ? <SharedBar view={view} /> : null}
+      {mode === "shared" ? <SharedBar view={view} icsBase={icsBase ?? null} /> : null}
 
       {present ? (
         <div className="wp-present" onClick={() => setAt((i) => Math.min(total - 1, i + 1))}>
@@ -354,16 +359,23 @@ function Toolbar({
   );
 }
 
-function SharedBar({ view }: { view: WelcomeView }) {
+function SharedBar({ view, icsBase }: { view: WelcomeView; icsBase: string | null }) {
+  const p = view.timeline.progress;
   return (
     <div className="wp-toolbar is-shared print:hidden">
       <div className="wp-toolbar-left">
         <img src="/branding/gocanvas-wordmark-navy.png" alt="GoCanvas" className="h-5 w-auto" />
         <span className="wp-toolbar-meta">
           Your onboarding plan · live {shortDay(view.timeline.liveDate)}
+          {p.done ? ` · ${p.done} of ${p.total} steps done` : ""}
         </span>
       </div>
       <div className="wp-toolbar-right">
+        {icsBase ? (
+          <a href={icsBase} className="wp-tool">
+            <CalendarPlus className="h-3.5 w-3.5" /> Add all dates to calendar
+          </a>
+        ) : null}
         <button type="button" className="wp-tool" onClick={() => window.print()}>
           <Printer className="h-3.5 w-3.5" /> Save as PDF
         </button>
@@ -776,9 +788,18 @@ function Plan({ view }: { view: WelcomeView }) {
         {t.milestones.map((m) => (
           <div key={m.key} className={cn("wp-node", m.key === "live" && "is-live")}>
             <span className="wp-node-day">Day {m.day}</span>
-            <Tile name={m.icon} size="lg" tone={m.key === "live" ? "navy" : "blue"} />
+            <span className={cn("wp-node-tile", m.doneOn && "is-done")}>
+              <Tile name={m.icon} size="lg" tone={m.key === "live" ? "navy" : "blue"} />
+              {m.doneOn ? (
+                <span className="wp-done-badge" title={`Done ${shortDay(m.doneOn)}`}>
+                  <Check className="h-3 w-3" strokeWidth={3} />
+                </span>
+              ) : null}
+            </span>
             <span className="wp-node-label">{CUSTOMER_LABEL[m.key] ?? m.label}</span>
-            <span className={cn("wp-node-date", m.moved && "is-moved")}>{shortDay(m.date)}</span>
+            <span className={cn("wp-node-date", m.moved && "is-moved", m.doneOn && "is-done")}>
+              {m.doneOn ? `Done ${shortDay(m.doneOn)}` : whenLabel(m, t.timezone)}
+            </span>
             <Owner owner={m.owner} />
             {m.minutes ? <span className="wp-node-min">{m.minutes} min</span> : null}
           </div>
@@ -800,8 +821,15 @@ function Plan({ view }: { view: WelcomeView }) {
           </div>
           <div className="wp-phase2-steps">
             {t.integration.milestones.map((m, i) => (
-              <div key={m.key} className="wp-phase2-step">
-                <Tile name={m.icon} size="sm" tone={i === 3 ? "navy" : "blue"} />
+              <div key={m.key} className={cn("wp-phase2-step", m.doneOn && "is-done")}>
+                <span className="wp-node-tile is-sm">
+                  <Tile name={m.icon} size="sm" tone={i === 3 ? "navy" : "blue"} />
+                  {m.doneOn ? (
+                    <span className="wp-done-badge is-sm">
+                      <Check className="h-2.5 w-2.5" strokeWidth={3} />
+                    </span>
+                  ) : null}
+                </span>
                 <span className="wp-phase2-label">{m.label}</span>
                 <span className="wp-phase2-date">
                   {t.integration.tentative ? "≈ " : ""}
@@ -1038,7 +1066,7 @@ function Row({
   );
 }
 
-function Business({ view }: { view: WelcomeView }) {
+function Business({ view, icsBase }: { view: WelcomeView; icsBase: string | null }) {
   const t = view.timeline;
   const kickoff = t.milestones.find((m) => m.key === "kickoff");
   const working = t.milestones.find((m) => m.key === "working");
@@ -1059,7 +1087,12 @@ function Business({ view }: { view: WelcomeView }) {
             <Tile name="PhoneCall" size="lg" tone="blue" />
             <div>
               <p className="wp-call-when">
-                {kickoff ? shortDay(kickoff.date) : "Day 1"} · {kickoff?.minutes ?? 60} min
+                {kickoff ? whenLabel(kickoff, t.timezone) : "Day 1"} · {kickoff?.minutes ?? 60} min
+                {icsBase && kickoff ? (
+                  <a className="wp-call-ics" href={`${icsBase}?event=kickoff`}>
+                    <CalendarPlus className="h-3 w-3" /> Add to calendar
+                  </a>
+                ) : null}
               </p>
               <h3>Kickoff &amp; build session</h3>
               <p>
@@ -1072,7 +1105,12 @@ function Business({ view }: { view: WelcomeView }) {
             <Tile name="Wrench" size="lg" tone="blue" />
             <div>
               <p className="wp-call-when">
-                {working ? shortDay(working.date) : "Day 3"} · {working?.minutes ?? 30} min
+                {working ? whenLabel(working, t.timezone) : "Day 3"} · {working?.minutes ?? 30} min
+                {icsBase && working ? (
+                  <a className="wp-call-ics" href={`${icsBase}?event=working`}>
+                    <CalendarPlus className="h-3 w-3" /> Add to calendar
+                  </a>
+                ) : null}
               </p>
               <h3>Working session</h3>
               <p>

@@ -417,6 +417,11 @@ export const saveIntake = createServerFn({ method: "POST" })
                   .regex(/^\d{4}-\d{2}-\d{2}$/)
                   .nullable()
                   .optional(),
+                completed: z
+                  .record(z.string().max(40), z.string().regex(/^\d{4}-\d{2}-\d{2}$/))
+                  .optional(),
+                times: z.record(z.string().max(40), z.string().regex(/^\d{2}:\d{2}$/)).optional(),
+                timezone: z.string().trim().max(64).nullable().optional(),
               })
               .strict()
               .optional(),

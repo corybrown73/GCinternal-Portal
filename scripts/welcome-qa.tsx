@@ -49,6 +49,7 @@ const base: Omit<WelcomeView, "timeline"> = {
   photoUrl: null,
   clientLogoUrl: null,
   homeworkDone: { app: "2026-09-10T10:00:00Z" },
+  readiness: [],
   team: {
     lead: "Priya Nair",
     accountManager: "Marcus Bell",
@@ -78,7 +79,13 @@ const out = process.argv[2]!;
 page(
   {
     ...base,
-    timeline: buildTimeline({ closeDate: "2026-09-09", overrides: { working: "2026-09-15" } }),
+    timeline: buildTimeline({
+      closeDate: "2026-09-09",
+      overrides: { working: "2026-09-15" },
+      completed: { close: "2026-09-09", kickoff: "2026-09-10", homework: "2026-09-11" },
+      times: { kickoff: "10:00", working: "14:30" },
+      timezone: "America/Chicago",
+    }),
   },
   "internal",
   `${out}/plain.html`,

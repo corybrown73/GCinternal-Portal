@@ -78,6 +78,7 @@ import { Route as ApiV1ImplementationsRouteImport } from './routes/api/v1/implem
 import { Route as ApiV1OpenapiDotjsonRouteImport } from './routes/api/v1/openapi[.]json'
 import { Route as ApiV1TamRequestsRouteImport } from './routes/api/v1/tam-requests'
 import { Route as ApiV1TicketsRouteImport } from './routes/api/v1/tickets'
+import { Route as ApiWelcomeIcsTokenRouteImport } from './routes/api/welcome-ics.$token'
 import { Route as PlanSSnapshotTokenRouteImport } from './routes/plan.s.$snapshotToken'
 import { Route as PortalPlanPortalKeyRouteImport } from './routes/portal.plan.$portalKey'
 import { Route as ApiV1AccountsIdRouteImport } from './routes/api/v1/accounts.$id'
@@ -429,6 +430,11 @@ const ApiV1TicketsRoute = ApiV1TicketsRouteImport.update({
   path: '/api/v1/tickets',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiWelcomeIcsTokenRoute = ApiWelcomeIcsTokenRouteImport.update({
+  id: '/api/welcome-ics/$token',
+  path: '/api/welcome-ics/$token',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const PlanSSnapshotTokenRoute = PlanSSnapshotTokenRouteImport.update({
   id: '/plan/s/$snapshotToken',
   path: '/plan/s/$snapshotToken',
@@ -521,6 +527,7 @@ export interface FileRoutesByFullPath {
   '/api/v1/openapi.json': typeof ApiV1OpenapiDotjsonRoute
   '/api/v1/tam-requests': typeof ApiV1TamRequestsRoute
   '/api/v1/tickets': typeof ApiV1TicketsRoute
+  '/api/welcome-ics/$token': typeof ApiWelcomeIcsTokenRoute
   '/plan/s/$snapshotToken': typeof PlanSSnapshotTokenRoute
   '/portal/plan/$portalKey': typeof PortalPlanPortalKeyRoute
   '/api/v1/accounts/$id': typeof ApiV1AccountsIdRouteWithChildren
@@ -590,6 +597,7 @@ export interface FileRoutesByTo {
   '/api/v1/openapi.json': typeof ApiV1OpenapiDotjsonRoute
   '/api/v1/tam-requests': typeof ApiV1TamRequestsRoute
   '/api/v1/tickets': typeof ApiV1TicketsRoute
+  '/api/welcome-ics/$token': typeof ApiWelcomeIcsTokenRoute
   '/plan/s/$snapshotToken': typeof PlanSSnapshotTokenRoute
   '/portal/plan/$portalKey': typeof PortalPlanPortalKeyRoute
   '/api/v1/accounts/$id': typeof ApiV1AccountsIdRouteWithChildren
@@ -666,6 +674,7 @@ export interface FileRoutesById {
   '/api/v1/openapi.json': typeof ApiV1OpenapiDotjsonRoute
   '/api/v1/tam-requests': typeof ApiV1TamRequestsRoute
   '/api/v1/tickets': typeof ApiV1TicketsRoute
+  '/api/welcome-ics/$token': typeof ApiWelcomeIcsTokenRoute
   '/plan/s/$snapshotToken': typeof PlanSSnapshotTokenRoute
   '/portal/plan/$portalKey': typeof PortalPlanPortalKeyRoute
   '/api/v1/accounts/$id': typeof ApiV1AccountsIdRouteWithChildren
@@ -743,6 +752,7 @@ export interface FileRouteTypes {
     | '/api/v1/openapi.json'
     | '/api/v1/tam-requests'
     | '/api/v1/tickets'
+    | '/api/welcome-ics/$token'
     | '/plan/s/$snapshotToken'
     | '/portal/plan/$portalKey'
     | '/api/v1/accounts/$id'
@@ -812,6 +822,7 @@ export interface FileRouteTypes {
     | '/api/v1/openapi.json'
     | '/api/v1/tam-requests'
     | '/api/v1/tickets'
+    | '/api/welcome-ics/$token'
     | '/plan/s/$snapshotToken'
     | '/portal/plan/$portalKey'
     | '/api/v1/accounts/$id'
@@ -887,6 +898,7 @@ export interface FileRouteTypes {
     | '/api/v1/openapi.json'
     | '/api/v1/tam-requests'
     | '/api/v1/tickets'
+    | '/api/welcome-ics/$token'
     | '/plan/s/$snapshotToken'
     | '/portal/plan/$portalKey'
     | '/api/v1/accounts/$id'
@@ -941,6 +953,7 @@ export interface RootRouteChildren {
   ApiV1OpenapiDotjsonRoute: typeof ApiV1OpenapiDotjsonRoute
   ApiV1TamRequestsRoute: typeof ApiV1TamRequestsRoute
   ApiV1TicketsRoute: typeof ApiV1TicketsRoute
+  ApiWelcomeIcsTokenRoute: typeof ApiWelcomeIcsTokenRoute
   PlanSSnapshotTokenRoute: typeof PlanSSnapshotTokenRoute
 }
 
@@ -1429,6 +1442,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiV1TicketsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/welcome-ics/$token': {
+      id: '/api/welcome-ics/$token'
+      path: '/api/welcome-ics/$token'
+      fullPath: '/api/welcome-ics/$token'
+      preLoaderRoute: typeof ApiWelcomeIcsTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/plan/s/$snapshotToken': {
       id: '/plan/s/$snapshotToken'
       path: '/plan/s/$snapshotToken'
@@ -1643,6 +1663,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiV1OpenapiDotjsonRoute: ApiV1OpenapiDotjsonRoute,
   ApiV1TamRequestsRoute: ApiV1TamRequestsRoute,
   ApiV1TicketsRoute: ApiV1TicketsRoute,
+  ApiWelcomeIcsTokenRoute: ApiWelcomeIcsTokenRoute,
   PlanSSnapshotTokenRoute: PlanSSnapshotTokenRoute,
 }
 export const routeTree = rootRouteImport
