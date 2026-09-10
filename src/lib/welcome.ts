@@ -14,6 +14,12 @@ export type WelcomeView = {
   timeline: Timeline;
   lead: string | null;
   fieldTester: string | null;
+  team: {
+    lead: string | null;
+    accountManager: string | null;
+    solutionsEngineer: string | null;
+    champion: { name: string; role: string | null } | null;
+  };
   firstForm: {
     name: string;
     objective: string | null;

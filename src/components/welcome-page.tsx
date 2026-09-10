@@ -3,6 +3,12 @@ import {
   AirVent,
   ArrowLeft,
   Building2,
+  Camera,
+  ChevronRight,
+  Cloud,
+  FileText,
+  PenLine,
+  Table2,
   Check,
   ClipboardCheck,
   Copy,
@@ -33,7 +39,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
-import { INTEGRATION_TIERS, daysToValue, shortDay } from "@/lib/onboarding-timeline";
+import { daysToValue, shortDay } from "@/lib/onboarding-timeline";
 import { HOMEWORK_KEYS, type HomeworkKey, type WelcomeView } from "@/lib/welcome";
 import { cn } from "@/lib/utils";
 
@@ -140,11 +146,11 @@ export function WelcomePage({
 
   const screens = [
     <Cover key="cover" view={view} />,
+    <Team key="team" view={view} />,
     <Plan key="plan" view={view} />,
     <Together key="together" view={view} mode={mode} onTick={onTick} />,
     <FirstForm key="form" view={view} />,
-    <DaySeven key="seven" view={view} />,
-    <Next key="next" view={view} />,
+    <Business key="business" view={view} />,
   ];
 
   return (
@@ -456,6 +462,133 @@ function Tick({ children }: { children: ReactNode }) {
   );
 }
 
+/* ------------------------------------------------------ the phone mock */
+
+/**
+ * The customer's first form, on a phone, drawn in CSS. The reference deck's
+ * strongest element is a device with a form in it; this one shows THEIR
+ * form name with fields their industry recognises, so the cover says
+ * "this is yours" before a word is read.
+ */
+type FieldKind = "text" | "select" | "photo" | "sign";
+const FIELDS: Record<string, Array<[string, FieldKind]>> = {
+  "oil & gas": [
+    ["Well / lease", "select"],
+    ["Load volume (bbl)", "text"],
+    ["Driver", "select"],
+    ["Ticket photo", "photo"],
+    ["Customer signature", "sign"],
+  ],
+  construction: [
+    ["Project", "select"],
+    ["Crew on site", "text"],
+    ["Hazards identified", "text"],
+    ["Site photos", "photo"],
+    ["Foreman signature", "sign"],
+  ],
+  utilities: [
+    ["Asset / pole ID", "text"],
+    ["Condition", "select"],
+    ["Reading", "text"],
+    ["Photo", "photo"],
+    ["Technician signature", "sign"],
+  ],
+  hvac: [
+    ["Customer", "select"],
+    ["Unit / model", "text"],
+    ["Work performed", "text"],
+    ["Before / after photos", "photo"],
+    ["Customer signature", "sign"],
+  ],
+  roofing: [
+    ["Property", "select"],
+    ["Roof condition", "select"],
+    ["Measurements", "text"],
+    ["Photos", "photo"],
+    ["Homeowner signature", "sign"],
+  ],
+  "field service": [
+    ["Customer", "select"],
+    ["Job type", "select"],
+    ["Parts used", "text"],
+    ["Photo of work", "photo"],
+    ["Customer signature", "sign"],
+  ],
+  manufacturing: [
+    ["Line / station", "select"],
+    ["Checklist", "select"],
+    ["Defects found", "text"],
+    ["Photo", "photo"],
+    ["Inspector signature", "sign"],
+  ],
+  logistics: [
+    ["Vehicle", "select"],
+    ["Route / stop", "text"],
+    ["Condition check", "select"],
+    ["Photo", "photo"],
+    ["Driver signature", "sign"],
+  ],
+};
+const DEFAULT_FIELDS: Array<[string, FieldKind]> = [
+  ["Customer / site", "select"],
+  ["Job details", "text"],
+  ["Status", "select"],
+  ["Photos", "photo"],
+  ["Signature", "sign"],
+];
+
+function PhoneMock({ view, className }: { view: WelcomeView; className?: string }) {
+  const fields = FIELDS[(view.industry ?? "").trim().toLowerCase()] ?? DEFAULT_FIELDS;
+  const title = view.firstForm?.name ?? "Your first form";
+  return (
+    <div className={cn("wp-phone", className)}>
+      <div className="wp-phone-screen">
+        <div className="wp-phone-top">
+          <img src="/branding/gocanvas-wordmark-white.png" alt="" />
+          <span>{view.clientName.split(" ").slice(0, 2).join(" ")}</span>
+        </div>
+        <div className="wp-phone-title">{title}</div>
+        <ul className="wp-phone-fields">
+          {fields.map(([label, kind]) => (
+            <li key={label} className={cn("wp-field", `is-${kind}`)}>
+              <span className="wp-field-label">{label}</span>
+              {kind === "text" ? <span className="wp-field-line" /> : null}
+              {kind === "select" ? (
+                <span className="wp-field-select">
+                  <span className="wp-field-line" />
+                  <ChevronRight className="h-3 w-3" />
+                </span>
+              ) : null}
+              {kind === "photo" ? (
+                <span className="wp-field-photo">
+                  <Camera className="h-4 w-4" />
+                  <i />
+                  <i />
+                </span>
+              ) : null}
+              {kind === "sign" ? (
+                <span className="wp-field-sign">
+                  <svg viewBox="0 0 120 28" aria-hidden="true">
+                    <path
+                      d="M4 20c10-18 16-14 20-4s8 10 16-2 12-10 18 0 10 8 18-4 12-6 20 2 10 6 18-2"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                    />
+                  </svg>
+                  <PenLine className="h-3 w-3" />
+                </span>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+        <div className="wp-phone-submit">Submit</div>
+      </div>
+    </div>
+  );
+}
+
 /* --------------------------------------------------------- the screens */
 
 function Cover({ view }: { view: WelcomeView }) {
@@ -510,17 +643,15 @@ function Cover({ view }: { view: WelcomeView }) {
               <div className="wp-art-disc">
                 <Icon name={view.icon} className="wp-art-icon" strokeWidth={1.5} />
               </div>
-              <span className="wp-art-chip is-a">
-                <Icon name="ClipboardCheck" className="h-6 w-6" />
-              </span>
-              <span className="wp-art-chip is-b">
-                <Icon name="Smartphone" className="h-6 w-6" />
-              </span>
-              <span className="wp-art-chip is-c">
-                <Icon name="Rocket" className="h-6 w-6" />
-              </span>
             </div>
           )}
+          <PhoneMock view={view} className="is-cover" />
+          <span className="wp-art-chip is-a">
+            <Icon name="ClipboardCheck" className="h-6 w-6" />
+          </span>
+          <span className="wp-art-chip is-b">
+            <Icon name="Rocket" className="h-6 w-6" />
+          </span>
         </div>
       </div>
       <footer className="wp-foot">
@@ -536,12 +667,87 @@ function Cover({ view }: { view: WelcomeView }) {
   );
 }
 
+function Team({ view }: { view: WelcomeView }) {
+  const t = view.team;
+  const people: Array<{
+    name: string;
+    role: string;
+    does: string;
+    icon: string;
+    side: "gocanvas" | "client";
+  }> = [];
+  if (t.lead)
+    people.push({
+      name: t.lead,
+      role: "Onboarding lead, GoCanvas",
+      does: "Runs both calls, builds the first form with you, watches the first submissions.",
+      icon: "Wrench",
+      side: "gocanvas",
+    });
+  if (t.accountManager && t.accountManager !== t.lead)
+    people.push({
+      name: t.accountManager,
+      role: "Account manager, GoCanvas",
+      does: "Your commercial contact from here on. Loops in when scope changes.",
+      icon: "Users",
+      side: "gocanvas",
+    });
+  if (
+    t.solutionsEngineer &&
+    t.solutionsEngineer !== t.lead &&
+    t.solutionsEngineer !== t.accountManager
+  )
+    people.push({
+      name: t.solutionsEngineer,
+      role: "Solutions engineer, GoCanvas",
+      does: "Knows what was promised in the sale. Handles the integration when there is one.",
+      icon: "Workflow",
+      side: "gocanvas",
+    });
+  people.push({
+    name: t.champion?.name ?? "Your project owner",
+    role: t.champion?.role ? `${t.champion.role}, ${view.clientName}` : view.clientName,
+    does: "Owns the plan on your side. Makes the last changes to the form in the working session.",
+    icon: "Flag",
+    side: "client",
+  });
+  people.push({
+    name: view.fieldTester ?? "Your field tester",
+    role: `Field tester, ${view.clientName}`,
+    does: "One crew, real jobs, from the field-test day. What they say is what we fix.",
+    icon: "HardHat",
+    side: "client",
+  });
+  return (
+    <Frame
+      page={2}
+      eyebrow="Your team"
+      title="Two teams,"
+      accent="one plan"
+      lede="Small on purpose. Everyone here has a job in the next seven days, and nobody on this page is a ticket queue."
+      band="Questions go to your onboarding lead directly — by name, not through a form."
+      bandIcon="PhoneCall"
+    >
+      <div className={cn("wp-team", people.length > 4 && "is-five")}>
+        {people.map((p) => (
+          <div key={p.name + p.role} className={cn("wp-person", `is-${p.side}`)}>
+            <Tile name={p.icon} size="lg" tone={p.side === "client" ? "navy" : "blue"} />
+            <p className="wp-person-name">{p.name}</p>
+            <p className="wp-person-role">{p.role}</p>
+            <p className="wp-person-does">{p.does}</p>
+          </div>
+        ))}
+      </div>
+    </Frame>
+  );
+}
+
 function Plan({ view }: { view: WelcomeView }) {
   const t = view.timeline;
   return (
     <Frame
-      page={2}
-      eyebrow="The plan at a glance"
+      page={3}
+      eyebrow="Your timeline"
       title="Seven days to a"
       accent="form in the field"
       lede="Two short working sessions, a little homework, one crew on real jobs. Every day below has an owner."
@@ -595,8 +801,8 @@ function Together({
   const [busy, setBusy] = useState<string | null>(null);
   return (
     <Frame
-      page={3}
-      eyebrow="How we work together"
+      page={4}
+      eyebrow="What's expected"
       title="We build it"
       accent="with you, not for you"
       lede="A form you built yourself is one you will change yourself — and the second use case shows up on its own."
@@ -682,32 +888,58 @@ function FirstForm({ view }: { view: WelcomeView }) {
         : "Starting point: chosen together on the kickoff call";
   return (
     <Frame
-      page={4}
-      eyebrow="Your first form"
+      page={5}
+      eyebrow="How we get there"
       title="The star of"
       accent="the show"
-      lede="One workflow, one crew, real jobs. Everything else waits until this one has been proven in the field."
       band="Proven in the field before anything is connected to it. That is what makes the mapping right later."
       bandIcon="Target"
     >
       <div className="wp-form-grid">
-        <div className="wp-card is-tint wp-form-card">
-          {view.photoUrl ? (
-            <div className="wp-card-photo">
-              <img src={view.photoUrl} alt="" />
+        <div className="wp-flow">
+          <div className="wp-flow-step">
+            <div className="wp-paper">
+              <FileText className="h-7 w-7" />
+              <i />
+              <i />
+              <i />
+              <i />
             </div>
-          ) : null}
-          <div className="wp-card-head">
-            <Tile name={view.icon} size="lg" tone="blue" />
-            <h3>{f?.name ?? "To be chosen on the kickoff call"}</h3>
+            <span className="wp-flow-cap">The paper ticket today</span>
           </div>
-          <p className="wp-card-body">
-            {f?.objective ??
-              "We pick the starting point together from the form library, in the words your crews already use."}
-          </p>
-          <p className="wp-card-source">{source}</p>
+          <span className="wp-flow-arrow" />
+          <div className="wp-flow-step">
+            <PhoneMock view={view} className="is-flow" />
+            <span className="wp-flow-cap">
+              On the crew&apos;s phone, {at("kickoff") ? shortDay(at("kickoff")!.date) : "day one"}
+            </span>
+          </div>
+          <span className="wp-flow-arrow" />
+          <div className="wp-flow-step">
+            <div className="wp-office">
+              <span className="wp-office-tile">
+                <Cloud className="h-6 w-6" />
+              </span>
+              <span className="wp-office-tile">
+                <Table2 className="h-6 w-6" />
+              </span>
+              <span className="wp-office-tile is-pdf">PDF</span>
+            </div>
+            <span className="wp-flow-cap">In the office the same day</span>
+          </div>
         </div>
         <div className="wp-rows">
+          <div className="wp-card is-tint wp-form-card">
+            <div className="wp-card-head">
+              <Tile name={view.icon} tone="blue" />
+              <h3>{f?.name ?? "To be chosen on the kickoff call"}</h3>
+            </div>
+            <p className="wp-card-body">
+              {f?.objective ??
+                "We pick the starting point together from the form library, in the words your crews already use."}
+            </p>
+            <p className="wp-card-source">{source}</p>
+          </div>
           <Row
             icon="PhoneCall"
             head={`Built live · ${at("kickoff") ? shortDay(at("kickoff")!.date) : "kickoff"}`}
@@ -756,140 +988,89 @@ function Row({
   );
 }
 
-function DaySeven({ view }: { view: WelcomeView }) {
-  const working = view.timeline.milestones.find((m) => m.key === "working");
-  const agenda: Array<[string, string]> = [
-    ["5 min", "Debrief the homework and what you found in the account"],
-    ["15 min", "Finish the form together — your hands on the keyboard"],
-    ["5 min", "Logic, routing and the notifications the office wants"],
-    ["5 min", "Name the field tester and book the field-test window"],
-  ];
-  return (
-    <Frame
-      page={5}
-      eyebrow={`Day ${view.timeline.milestones[view.timeline.milestones.length - 1]?.day ?? 7}`}
-      title="What good looks like on"
-      accent={shortDay(view.timeline.liveDate)}
-      band="If any of the four on the left is not true on day seven, we are not done — and we say so."
-      bandIcon="Flag"
-    >
-      <div className="wp-seven">
-        <div className="wp-outcomes">
-          <Row icon="Smartphone" head="Same day">
-            Your crew submits from the phone, on the job, with photos and a signature.
-          </Row>
-          <Row icon="Building2" head="One place">
-            The office sees the work as it happens — no retyping, no Friday pile.
-          </Row>
-          <Row icon="ClipboardCheck" head="Zero">
-            The first report goes out without anyone touching a spreadsheet.
-          </Row>
-          <Row icon="Users" head="Heard">
-            The crew has asked for a change, and it was made the same day.
-          </Row>
-        </div>
-        <div className="wp-card wp-agenda">
-          <div className="wp-card-head">
-            <Tile name="Wrench" tone="navy" />
-            <div>
-              <h3>The 30-minute working session</h3>
-              <p className="wp-card-sub">
-                {working ? `${shortDay(working.date)} · ${working.minutes ?? 30} minutes` : "Day 3"}
-              </p>
-            </div>
-          </div>
-          <ol className="wp-agenda-list">
-            {agenda.map(([m, w]) => (
-              <li key={w}>
-                <b>{m}</b>
-                <span>{w}</span>
-              </li>
-            ))}
-          </ol>
-        </div>
-      </div>
-    </Frame>
-  );
-}
-
-function Next({ view }: { view: WelcomeView }) {
-  const integ = view.timeline.integration;
-  if (integ.weeks > 0 && integ.startsOn) {
-    const tiers = INTEGRATION_TIERS.filter((x) => x.tier >= 1);
-    return (
-      <Frame
-        page={6}
-        eyebrow="After the form is live"
-        title="Then we connect it"
-        accent={integ.target ? `to ${integ.target}` : "to your systems"}
-        lede={`Starts ${shortDay(integ.startsOn)}, the business day after your form is live. About ${integ.weeks} week${integ.weeks === 1 ? "" : "s"}.`}
-        band="The form first, always. Field mapping is the whole of an integration, and it cannot be right until a crew has used the form on a real job."
-        bandIcon="Route"
-      >
-        <div className="wp-tiers">
-          {tiers.map((x) => (
-            <div key={x.tier} className={cn("wp-tier", x.tier === integ.tier && "is-on")}>
-              <span className="wp-tier-no">Tier {x.tier}</span>
-              <span className="wp-tier-name">{x.name}</span>
-              <span className="wp-tier-wk">
-                {x.weeks ? `${x.weeks} wk${x.weeks === 1 ? "" : "s"}` : "—"}
-              </span>
-            </div>
-          ))}
-        </div>
-        <div className="wp-card wp-integ">
-          <div className="wp-card-head">
-            <Tile name="Workflow" tone="blue" />
-            <div>
-              <h3>{integ.name} integration — what that means</h3>
-              <p className="wp-card-sub">
-                {integ.summary} We map the fields from the form your crew has already run — which is
-                why it comes second.
-              </p>
-            </div>
-          </div>
-          <div className="wp-bar">
-            <div className="wp-bar-track">
-              <div className="wp-bar-head" />
-              <span className="wp-bar-mark" />
-            </div>
-            <div className="wp-bar-labels">
-              <span className="is-navy">Form live · {shortDay(view.timeline.liveDate)}</span>
-              <span>Integration starts · {shortDay(integ.startsOn)}</span>
-              <span>Target finish · {integ.endsOn ? shortDay(integ.endsOn) : "to be agreed"}</span>
-            </div>
-          </div>
-        </div>
-      </Frame>
-    );
-  }
-  const cards = view.nextUseCases.slice(0, 3);
+function Business({ view }: { view: WelcomeView }) {
+  const t = view.timeline;
+  const kickoff = t.milestones.find((m) => m.key === "kickoff");
+  const working = t.milestones.find((m) => m.key === "working");
+  const integ = t.integration;
+  const next = view.nextUseCases.slice(0, 3);
   return (
     <Frame
       page={6}
-      eyebrow="After the form is live"
-      title="Your next"
-      accent="use cases"
-      lede="Three forms your industry runs next. You will build these yourselves — that is the point of the first seven days."
-      band="Support is built in: the same team, the same working-session format, whenever the next form is ready to start."
-      bandIcon="Users"
+      eyebrow="Let's get into business"
+      title="Two calls, then"
+      accent="it's yours"
+      band={`Live on ${shortDay(t.liveDate)}. If any of the three on the right is not true that day, we are not done — and we say so.`}
+      bandIcon="Rocket"
     >
-      <div className="wp-three">
-        {cards.length === 0 ? (
-          <p className="wp-lede">
-            We will pick these together once the first form is in the field.
-          </p>
-        ) : null}
-        {cards.map((c, i) => (
-          <div key={c.name} className="wp-card wp-usecase">
-            <div className="wp-usecase-top">
-              <Tile name={view.icon} size="lg" tone={i === 0 ? "navy" : "blue"} />
-              <span className="wp-usecase-no">{String(i + 1).padStart(2, "0")}</span>
+      <div className="wp-business">
+        <div className="wp-calls">
+          <div className="wp-call">
+            <Tile name="PhoneCall" size="lg" tone="blue" />
+            <div>
+              <p className="wp-call-when">
+                {kickoff ? shortDay(kickoff.date) : "Day 1"} · {kickoff?.minutes ?? 60} min
+              </p>
+              <h3>Kickoff &amp; build session</h3>
+              <p>
+                Meet, agree how we work, and build the first form live on the call. You leave with
+                three homework items.
+              </p>
             </div>
-            <h3>{c.name}</h3>
-            {c.objective ? <p className="wp-card-body">{c.objective}</p> : null}
           </div>
-        ))}
+          <div className="wp-call">
+            <Tile name="Wrench" size="lg" tone="blue" />
+            <div>
+              <p className="wp-call-when">
+                {working ? shortDay(working.date) : "Day 3"} · {working?.minutes ?? 30} min
+              </p>
+              <h3>Working session</h3>
+              <p>
+                Your hands on the keyboard. Finish the form, add the logic and notifications, hand
+                it to the field tester.
+              </p>
+            </div>
+          </div>
+          <div className="wp-after">
+            {integ.weeks > 0 && integ.startsOn ? (
+              <>
+                <p className="wp-after-title">
+                  Then, from {shortDay(integ.startsOn)}:{" "}
+                  {integ.target ? `connect it to ${integ.target}` : "the integration"} · about{" "}
+                  {integ.weeks} week{integ.weeks === 1 ? "" : "s"}
+                </p>
+                <p className="wp-after-body">
+                  Tier {integ.tier}, {integ.name.toLowerCase()}. The form first, always — field
+                  mapping cannot be right until a crew has used it on a real job.
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="wp-after-title">Then, the next ones — built by you</p>
+                <p className="wp-after-body">
+                  {next.length
+                    ? next.map((n) => n.name).join(" · ")
+                    : "We pick these together once the first form is in the field."}
+                </p>
+              </>
+            )}
+          </div>
+        </div>
+        <div className="wp-card wp-good">
+          <p className="wp-good-eyebrow">What good looks like on {shortDay(t.liveDate)}</p>
+          <ul className="wp-ticks">
+            <Tick>Your crew submits from the phone, on the job, with photos and a signature.</Tick>
+            <Tick>The office sees the work as it happens — no retyping, no Friday pile.</Tick>
+            <Tick>The crew asked for a change, and it was made the same day.</Tick>
+          </ul>
+          <div className="wp-good-cta">
+            <span className="wp-good-cta-label">Your next step</span>
+            <span className="wp-good-cta-text">
+              Accept the kickoff invite for {kickoff ? shortDay(kickoff.date) : "day one"} and
+              download the app.
+            </span>
+          </div>
+        </div>
       </div>
     </Frame>
   );

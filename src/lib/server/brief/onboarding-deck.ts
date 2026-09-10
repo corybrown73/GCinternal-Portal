@@ -43,6 +43,13 @@ export type OnboardingDeckInput = {
   lead: string | null;
   /** Who at the customer runs the form on real jobs. */
   fieldTester: string | null;
+  /** Who is on it, both sides. The deck names them on the team slide. */
+  team?: {
+    lead: string | null;
+    accountManager: string | null;
+    solutionsEngineer: string | null;
+    champion: { name: string; role: string | null } | null;
+  };
   firstForm: {
     name: string;
     objective: string | null;

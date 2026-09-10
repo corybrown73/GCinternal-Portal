@@ -47,6 +47,12 @@ const base: Omit<WelcomeView, "timeline"> = {
   photoUrl: null,
   clientLogoUrl: null,
   homeworkDone: { app: "2026-09-10T10:00:00Z" },
+  team: {
+    lead: "Priya Nair",
+    accountManager: "Marcus Bell",
+    solutionsEngineer: "Priya Nair",
+    champion: { name: "Tom Alvarez", role: "Operations Manager" },
+  },
   shareUrl: null,
   sharedAt: "2026-09-10T09:00:00Z",
   openedAt: null,

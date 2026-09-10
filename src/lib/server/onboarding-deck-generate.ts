@@ -70,6 +70,14 @@ export async function buildOnboardingDeckInput(dealId: string): Promise<Onboardi
   const { loadHandoffContext } = await import("./handoff-context");
   const context = await loadHandoffContext(dealId);
   const lead = context?.project?.lead ?? context?.deal.seOwner ?? context?.deal.amOwner ?? null;
+  const team = {
+    lead,
+    accountManager: context?.deal.amOwner ?? null,
+    solutionsEngineer: context?.deal.seOwner ?? null,
+    champion: context?.deal.primaryContact.name
+      ? { name: context.deal.primaryContact.name, role: context.deal.primaryContact.role }
+      : null,
+  };
 
   return {
     clientName: String(deal.name),
@@ -77,6 +85,7 @@ export async function buildOnboardingDeckInput(dealId: string): Promise<Onboardi
     timeline,
     lead,
     fieldTester: intake.timeline.field_tester,
+    team,
     firstForm,
     nextUseCases: next.slice(0, 3).map((t) => ({ name: t.name, objective: t.description })),
     clientLogo: await clientLogo(deal.logo_path as string | null),
