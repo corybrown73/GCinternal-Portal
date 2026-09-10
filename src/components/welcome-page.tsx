@@ -928,12 +928,9 @@ function Plan({ view, page }: { view: WelcomeView; page: number }) {
       {t.phases.length ? (
         <p className="wp-next-hint">
           After the form:{" "}
-          {t.phases
-            .map(
-              (ph) => `${ph.label.toLowerCase()} — ${ph.services.map((x) => x.name).join(" + ")}`,
-            )
-            .join("; ")}
-          . Each on its own screen, next.
+          {t.phases.length === 1
+            ? "phase 2 has its own screen, next."
+            : `phases 2 to ${t.phases[t.phases.length - 1]!.phase} each have their own screen, next.`}
         </p>
       ) : null}
       <div className="wp-legend">
@@ -1269,6 +1266,9 @@ function FirstForm({ view, page }: { view: WelcomeView; page: number }) {
             Built live {at("kickoff") ? shortDay(at("kickoff")!.date) : "on the kickoff"}, finished
             by your hands {at("working") ? shortDay(at("working")!.date) : "in the working session"}
             , proven by {view.fieldTester ?? "your field tester"} on real jobs.
+            {view.timeline.alongside.length
+              ? ` Alongside it: ${view.timeline.alongside.map((x) => x.name).join(" + ")}.`
+              : ""}
           </p>
           <ul className="wp-journey-wins">
             <li>Same day in the office</li>
@@ -1278,11 +1278,7 @@ function FirstForm({ view, page }: { view: WelcomeView; page: number }) {
         </div>
         <span className="wp-journey-arrow" />
         <div className="wp-journey-col is-future">
-          <span className="wp-journey-tag is-navy">
-            {phase2
-              ? `Phase 2${view.timeline.phases.length > 1 ? ` of ${view.timeline.phases.length + 1}` : ""}`
-              : "Then"}
-          </span>
+          <span className="wp-journey-tag is-navy">{phase2 ? "After the form" : "Then"}</span>
           <div className="wp-journey-art">
             <div className="wp-office">
               <span className="wp-office-tile">
@@ -1297,24 +1293,10 @@ function FirstForm({ view, page }: { view: WelcomeView; page: number }) {
               <span className="wp-office-tile is-pdf">PDF</span>
             </div>
           </div>
-          <h3>
-            {phase2
-              ? phase2.services.map((x) => x.name).join(" + ")
-              : "The next forms, built by you"}
-          </h3>
+          <h3>{phase2 ? "Connected to the office" : "The next forms, built by you"}</h3>
           <p>
             {phase2
-              ? `${phase2.services.length > 1 ? "Worked on at the same time, " : ""}once the form is tested and dialed in — ${phase2.tentative ? `earliest ${shortDay(phase2.startsOn!)}` : `from ${shortDay(phase2.startsOn!)}`}.${
-                  view.timeline.phases.length > 1
-                    ? ` Then ${view.timeline.phases
-                        .slice(1)
-                        .map(
-                          (p) =>
-                            `${p.label.toLowerCase()}: ${p.services.map((x) => x.name).join(" + ")}`,
-                        )
-                        .join("; ")}.`
-                    : ""
-                }`
+              ? `Once the form is proven on real jobs, the rest of your order builds on it — ${view.timeline.phases.length === 1 ? "phase 2, on its own screen" : `phases 2 to ${view.timeline.phases[view.timeline.phases.length - 1]!.phase}, each on its own screen`}.`
               : view.nextUseCases.length
                 ? `${view.nextUseCases.map((n) => n.name).join(" · ")}. Same team, same working-session format, whenever you are ready.`
                 : "We pick them together once the first form is in the field."}
@@ -1411,24 +1393,17 @@ function Business({
           <div className="wp-after">
             {t.phases.length ? (
               <>
-                {t.phases.map((ph) => (
-                  <p key={ph.phase} className={cn("wp-after-title", ph.phase > 2 && "is-later")}>
-                    {ph.label}:{" "}
-                    {ph.services
-                      .map((x) => `${x.name} (${x.weeks} wk${x.weeks === 1 ? "" : "s"})`)
-                      .join(" + ")}
-                    {ph.services.length > 1 ? ", at the same time" : ""}
-                    {" · "}
-                    {ph.done
-                      ? `done ${shortDay(ph.endsOn!)}`
-                      : ph.tentative
-                        ? `${ph.gate.toLowerCase()} — earliest ${shortDay(ph.startsOn!)}`
-                        : `${shortDay(ph.startsOn!)} → ${shortDay(ph.endsOn!)}`}
-                  </p>
-                ))}
+                <p className="wp-after-title">
+                  After the form:{" "}
+                  {t.phases.length === 1
+                    ? "phase 2"
+                    : `phases 2 to ${t.phases[t.phases.length - 1]!.phase}`}
+                  , on {t.phases.length === 1 ? "its" : "their"} own screen
+                  {t.phases.length === 1 ? "" : "s"}
+                </p>
                 <p className="wp-after-body">
                   Each one opens with a thirty-minute kickoff to gather the final details. The form
-                  first, always — nothing here starts until a crew has run it on real jobs.
+                  first, always — nothing there starts until a crew has run it on real jobs.
                 </p>
               </>
             ) : (

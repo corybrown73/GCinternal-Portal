@@ -99,6 +99,7 @@ page(
       closeDate: "2026-09-09",
       services: [
         { id: "haul", kind: "paid_form", name: "Chemical Delivery Ticket", phase: 1 },
+        { id: "jsa", kind: "paid_form", name: "Job Safety Analysis", phase: 1 },
         { id: "qb", kind: "integration", name: "QuickBooks Online", phase: 2, tier: 3 },
         { id: "pdf", kind: "custom_pdf", name: "Invoice PDF", phase: 2 },
         { id: "dash", kind: "analytics", name: "Ops dashboard", phase: 3 },
