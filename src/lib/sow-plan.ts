@@ -73,6 +73,21 @@ export function catalogueForPrompt(): string {
   return `Service kinds:\n${kinds}\n\nIntegration tiers (integrations only):\n${tiers}`;
 }
 
+/**
+ * The model's phases, brought back to the rule. A form build, a data load
+ * or a training block starts with the form — phase 1 — whatever order the
+ * SOW happens to list things in. A person can still move one later in the
+ * review; the default is what fifteen years say works.
+ */
+export function normalizeProposal(p: SowPlanProposal): SowPlanProposal {
+  return {
+    ...p,
+    services: p.services.map((row) =>
+      SERVICE_KINDS[row.kind].defaultPhase === 1 && row.phase !== 1 ? { ...row, phase: 1 } : row,
+    ),
+  };
+}
+
 /** A proposal row → the service the plan stores. Ids are fresh; the plan computes the dates. */
 export function rowToService(row: SowPlanRow, id: string): ServiceSpec {
   const spec: ServiceSpec = { id, kind: row.kind, name: row.name, phase: row.phase };

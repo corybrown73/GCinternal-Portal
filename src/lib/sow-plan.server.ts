@@ -3,7 +3,12 @@ import type Anthropic from "@anthropic-ai/sdk";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 
 import { requireInternal } from "./presale.server";
-import { catalogueForPrompt, sowPlanProposalSchema, type SowPlanProposal } from "./sow-plan";
+import {
+  catalogueForPrompt,
+  normalizeProposal,
+  sowPlanProposalSchema,
+  type SowPlanProposal,
+} from "./sow-plan";
 
 /**
  * Read the deal's signed SOW and propose the services list.
@@ -25,7 +30,7 @@ The implementation team runs every customer the same way: phase 1 is the first f
 Your job is the reading, not the calendar:
 - List every purchased service as a row using ONLY the catalogue kinds. Use the name the SOW uses ("QuickBooks Online", "Invoice PDF", "Job Safety Analysis form"). One row per distinct thing: three additional forms are three paid_form rows with their names, not one row.
 - The FIRST form is not a service — it is phase 1 itself. Put its name in first_form and do not list it as a paid_form row. Every additional form build is a paid_form row.
-- Choose the phase from the catalogue default unless the SOW says otherwise. Things built on real submissions (integrations, custom PDFs, dashboards) belong in phase 2 or later; a form build, a data load or training can run in phase 1.
+- Phases: paid_form, data_load and training rows are ALWAYS phase 1 — they run alongside the first form from the kickoff call, two or three forms at once is normal. integration, custom_pdf, analytics and other rows are phase 2 unless the SOW clearly sequences one after another purchased item, in which case phase 3.
 - tier: integrations only, from the tiers below, by the complexity the SOW describes. weeks: only when the SOW states a duration for that item, else null. needs: only when the SOW names something the customer must provide for that item, else null.
 - evidence: a short verbatim quote for each row when one exists. confidence: "stated" when the SOW says it plainly, "implied" when it is a reasonable reading, "uncertain" when thin.
 - seats: the licensed user count when stated, else null.
@@ -141,6 +146,7 @@ export async function proposePlanFromSow(
   let proposal = tryParse(await ask());
   if (!proposal) proposal = tryParse(await ask());
   if (!proposal) throw new Error("The reading came back incomplete. Run it again.");
+  proposal = normalizeProposal(proposal);
   if (!proposal.readable) {
     throw new Error(
       proposal.problem ??

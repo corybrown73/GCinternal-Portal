@@ -4,6 +4,7 @@ import { buildTimeline } from "../onboarding-timeline";
 import {
   catalogueForPrompt,
   mergeProposal,
+  normalizeProposal,
   rowToService,
   rowWeeks,
   sowPlanProposalSchema,
@@ -123,5 +124,25 @@ describe("the SOW read into the plan", () => {
     }
     expect(text).toContain("tier 3");
     expect(text).not.toContain("tier 0");
+  });
+});
+
+describe("normalizeProposal", () => {
+  it("puts form builds, data loads and training in phase 1 whatever the model said, and leaves the rest", () => {
+    const p = normalizeProposal({
+      readable: true,
+      problem: null,
+      summary: "",
+      first_form: null,
+      seats: null,
+      services: [
+        { ...jsa, phase: 2 },
+        { ...jsa, kind: "data_load", name: "Well list", phase: 3 },
+        { ...qb, phase: 3 },
+      ],
+      notes: [],
+      gaps: [],
+    });
+    expect(p.services.map((r) => r.phase)).toEqual([1, 1, 3]);
   });
 });
