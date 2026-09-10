@@ -35,6 +35,8 @@ import {
   type Timeline,
 } from "@/lib/onboarding-timeline";
 import { generateOnboardingDeck, saveIntake } from "@/lib/presale.functions";
+import { mergeProposal, rowWeeks, type SowPlanProposal, type SowPlanRow } from "@/lib/sow-plan";
+import { proposePlanFromSowFn } from "@/lib/sow-plan.functions";
 import { isCall, planEvents } from "@/lib/welcome-events";
 import { getWelcome } from "@/lib/welcome.functions";
 import { cn } from "@/lib/utils";
@@ -56,12 +58,15 @@ export function TimelinePanel({
   stageHistory,
   wonStageKey,
   editable,
+  hasSow,
 }: {
   dealId: string;
   raw: unknown;
   stageHistory: ReadonlyArray<{ to_stage: string; occurred_at: string }>;
   wonStageKey: string;
   editable: boolean;
+  /** True when the deal has a signed SOW attached — the plan can be read from it. */
+  hasSow?: boolean | undefined;
 }) {
   const answers = readIntake(raw);
   const close = closeDateFor({ intake: answers, stageHistory, wonStageKey });
@@ -103,6 +108,41 @@ export function TimelinePanel({
     writeServices(services.map((x) => (x.id === id ? { ...x, ...patch } : x)));
   const removeService = (id: string) => writeServices(services.filter((x) => x.id !== id));
   const [deck, setDeck] = useState<{ url: string; fileName: string } | null>(null);
+
+  // Reading the SOW: the model proposes rows, a person edits and ticks them,
+  // apply merges them into the list and the dates follow from the rule.
+  const readSow = useServerFn(proposePlanFromSowFn);
+  const [proposal, setProposal] = useState<{
+    sowName: string | null;
+    proposal: SowPlanProposal;
+    rows: Array<SowPlanRow & { accept: boolean }>;
+  } | null>(null);
+  const sowRead = useMutation({
+    mutationFn: () => readSow({ data: { dealId } }),
+    onMutate: () => setError(null),
+    onSuccess: (r) =>
+      setProposal({
+        sowName: r.sowName,
+        proposal: r.proposal,
+        rows: r.proposal.services.map((row) => ({
+          ...row,
+          accept: row.confidence !== "uncertain",
+        })),
+      }),
+    onError: (e) => setError((e as Error).message),
+  });
+  const editRow = (i: number, patch: Partial<SowPlanRow & { accept: boolean }>) =>
+    setProposal((p) =>
+      p ? { ...p, rows: p.rows.map((r, j) => (j === i ? { ...r, ...patch } : r)) } : p,
+    );
+  const applyProposal = (replace: boolean) => {
+    if (!proposal) return;
+    const accepted = proposal.rows.filter((r) => r.accept);
+    const makeId = (row: SowPlanRow) =>
+      `${row.kind.slice(0, 4)}-${Math.random().toString(36).slice(2, 8)}`;
+    writeServices(mergeProposal(replace ? [] : services, accepted, makeId));
+    setProposal(null);
+  };
 
   const mutation = useMutation({
     mutationFn: (timeline: IntakeAnswers["timeline"]) =>
@@ -506,10 +546,184 @@ export function TimelinePanel({
             <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
               Beyond the form · services from the SOW
             </p>
-            <a href="#sow" className="text-[11px] text-muted-foreground hover:text-foreground">
-              The SOW is the record — attach it above
-            </a>
+            <span className="flex items-center gap-2">
+              {editable ? (
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-1 rounded-sm bg-primary px-2 py-1 text-[11px] font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+                  disabled={!hasSow || sowRead.isPending}
+                  onClick={() => sowRead.mutate()}
+                  title={
+                    hasSow
+                      ? "Read the signed SOW and propose the services — you review every row before it lands"
+                      : "Upload the signed SOW first"
+                  }
+                >
+                  {sowRead.isPending ? "Reading the SOW…" : "Read the SOW into the plan"}
+                </button>
+              ) : null}
+              <a href="#sow" className="text-[11px] text-muted-foreground hover:text-foreground">
+                The SOW is the record{hasSow ? "" : " — attach it above"}
+              </a>
+            </span>
           </div>
+
+          {proposal ? (
+            <div className="space-y-2 rounded-md border border-primary/40 bg-background p-2.5">
+              <div className="flex flex-wrap items-baseline justify-between gap-2">
+                <p className="text-[12px]">
+                  <span className="font-semibold">From the SOW</span>
+                  {proposal.sowName ? (
+                    <span className="text-muted-foreground"> · {proposal.sowName}</span>
+                  ) : null}
+                  {proposal.proposal.summary ? (
+                    <span className="text-muted-foreground"> — {proposal.proposal.summary}</span>
+                  ) : null}
+                </p>
+                <p className="text-[11px] text-muted-foreground">
+                  Tick what is right, fix what is not. Dates follow once you apply.
+                </p>
+              </div>
+              {proposal.rows.length ? (
+                <ul className="divide-y divide-border rounded-md border border-border">
+                  {proposal.rows.map((row, i) => (
+                    <li
+                      key={i}
+                      className={cn(
+                        "flex flex-wrap items-center gap-x-2 gap-y-1 px-2.5 py-1.5",
+                        !row.accept && "opacity-60",
+                      )}
+                    >
+                      <input
+                        type="checkbox"
+                        className="h-3.5 w-3.5 accent-primary"
+                        checked={row.accept}
+                        onChange={(e) => editRow(i, { accept: e.target.checked })}
+                        aria-label={`Accept ${row.name}`}
+                      />
+                      <span className="rounded-sm bg-muted px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-muted-foreground">
+                        {SERVICE_KINDS[row.kind].label}
+                      </span>
+                      <input
+                        className={cn(input, "min-w-0 flex-1")}
+                        value={row.name}
+                        onChange={(e) => editRow(i, { name: e.target.value })}
+                      />
+                      <label className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                        Phase
+                        <select
+                          className={input}
+                          value={row.phase}
+                          onChange={(e) => editRow(i, { phase: Number(e.target.value) })}
+                        >
+                          {PHASE_OPTIONS.map((o) => (
+                            <option key={o.value} value={o.value}>
+                              {o.label}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      {row.kind === "integration" ? (
+                        <select
+                          className={input}
+                          value={row.tier ?? 3}
+                          onChange={(e) => editRow(i, { tier: Number(e.target.value) })}
+                        >
+                          {INTEGRATION_TIERS.filter((t) => t.weeks > 0).map((t) => (
+                            <option key={t.tier} value={t.tier}>
+                              Tier {t.tier} · {t.name} · {t.weeks} wk{t.weeks === 1 ? "" : "s"}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <label className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                          <input
+                            type="number"
+                            min={0.5}
+                            step={0.5}
+                            className={cn(input, "w-16")}
+                            value={row.weeks ?? rowWeeks(row)}
+                            onChange={(e) => editRow(i, { weeks: Number(e.target.value) || null })}
+                          />
+                          wks
+                        </label>
+                      )}
+                      <span
+                        className={cn(
+                          "rounded-sm px-1.5 py-0.5 text-[10px] uppercase tracking-wider",
+                          row.confidence === "stated"
+                            ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
+                            : row.confidence === "implied"
+                              ? "bg-sky-500/10 text-sky-700 dark:text-sky-400"
+                              : "bg-amber-500/10 text-amber-700 dark:text-amber-400",
+                        )}
+                        title={row.evidence ?? undefined}
+                      >
+                        {row.confidence}
+                      </span>
+                      {row.evidence ? (
+                        <span className="w-full truncate text-[11px] italic text-muted-foreground">
+                          “{row.evidence}”
+                        </span>
+                      ) : null}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-[12px] text-muted-foreground">
+                  The SOW names nothing beyond the first form. Nothing to add.
+                </p>
+              )}
+              {proposal.proposal.first_form || proposal.proposal.seats != null ? (
+                <p className="text-[11px] text-muted-foreground">
+                  {proposal.proposal.first_form
+                    ? `First form: ${proposal.proposal.first_form}. `
+                    : ""}
+                  {proposal.proposal.seats != null ? `Seats: ${proposal.proposal.seats}.` : ""}
+                </p>
+              ) : null}
+              {proposal.proposal.notes.length ? (
+                <ul className="list-disc space-y-0.5 pl-4 text-[11px] text-muted-foreground">
+                  {proposal.proposal.notes.map((n, i) => (
+                    <li key={i}>{n}</li>
+                  ))}
+                </ul>
+              ) : null}
+              {proposal.proposal.gaps.length ? (
+                <p className="text-[11px] text-amber-700 dark:text-amber-400">
+                  Ask on the kickoff: {proposal.proposal.gaps.join(" · ")}
+                </p>
+              ) : null}
+              <div className="flex flex-wrap items-center gap-1.5">
+                <button
+                  type="button"
+                  className="rounded-sm bg-primary px-2 py-1 text-[11px] font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+                  disabled={busy || !proposal.rows.some((r) => r.accept)}
+                  onClick={() => applyProposal(false)}
+                >
+                  Add {proposal.rows.filter((r) => r.accept).length} to the plan
+                </button>
+                {services.length ? (
+                  <button
+                    type="button"
+                    className="rounded-sm border border-border px-2 py-1 text-[11px] hover:bg-muted disabled:opacity-50"
+                    disabled={busy || !proposal.rows.some((r) => r.accept)}
+                    onClick={() => applyProposal(true)}
+                    title="Drop what is on the plan now and use the ticked rows instead"
+                  >
+                    Replace the plan
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  className="rounded-sm border border-border px-2 py-1 text-[11px] hover:bg-muted"
+                  onClick={() => setProposal(null)}
+                >
+                  Discard
+                </button>
+              </div>
+            </div>
+          ) : null}
 
           {services.length ? (
             <ul className="divide-y divide-border rounded-md border border-border bg-background">

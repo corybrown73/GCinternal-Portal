@@ -275,6 +275,7 @@ function DealRecord({ deal }: { deal: DealData }) {
               stageHistory={deal.stage_history}
               wonStageKey={wonStage(deal.stages).key}
               editable={editable}
+              hasSow={Boolean(deal.sow_url)}
             />
             <ReportsPanel deal={deal} />
             <NotesPanel deal={deal} />
