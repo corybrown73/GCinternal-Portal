@@ -199,3 +199,47 @@ describe("phase 2 dates land on business days", () => {
     }
   });
 });
+
+describe("moving a date moves everything after it", () => {
+  it("shifts every later milestone by the same number of business days", () => {
+    // Kickoff planned Thu Sep 10; moved to Mon Sep 14 = +2 business days.
+    const t = buildTimeline({ closeDate: "2026-09-09", overrides: { kickoff: "2026-09-14" } });
+    const by = (k: string) => t.milestones.find((m) => m.key === k)!;
+    expect(by("kickoff").moved).toBe(true);
+    expect(by("homework").date).toBe("2026-09-15");
+    expect(by("homework").shifted).toBe(true);
+    expect(by("working").date).toBe("2026-09-16");
+    expect(by("live").date).toBe("2026-09-22");
+    expect(t.liveDate).toBe("2026-09-22");
+    // Nothing before it moved.
+    expect(by("close").date).toBe("2026-09-09");
+    expect(by("close").shifted).toBe(false);
+  });
+
+  it("lets a later hand-moved date set its own shift", () => {
+    const t = buildTimeline({
+      closeDate: "2026-09-09",
+      overrides: { kickoff: "2026-09-14", working: "2026-09-15" },
+    });
+    const by = (k: string) => t.milestones.find((m) => m.key === k)!;
+    // Working was planned Wed Sep 16 after the kickoff shift; a person pulled it to Tue.
+    expect(by("working").moved).toBe(true);
+    expect(by("working").plannedDate).toBe("2026-09-16");
+    // Field test follows the working session's shift (+1 from its base of Sep 15 → Sep 16).
+    expect(by("fieldtest").date).toBe("2026-09-16");
+  });
+
+  it("moves the whole of phase 2 when its kickoff is moved", () => {
+    const t = buildTimeline({
+      closeDate: "2026-09-09",
+      integrationTier: 3,
+      formProvenOn: "2026-09-18",
+      overrides: { integ_kickoff: "2026-09-28" },
+    });
+    expect(t.integration.startsOn).toBe("2026-09-28");
+    expect(t.integration.milestones[0]!.moved).toBe(true);
+    expect(t.integration.milestones.slice(1).every((m) => m.shifted)).toBe(true);
+    // Two weeks after the planned Mon Sep 21 was Mon Oct 5; +5 business days → Mon Oct 12.
+    expect(t.integration.endsOn).toBe("2026-10-12");
+  });
+});

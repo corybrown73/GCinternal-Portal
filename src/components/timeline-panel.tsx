@@ -22,9 +22,10 @@ import { cn } from "@/lib/utils";
  * Computed from the close date by the rule in onboarding-timeline, shown as a
  * list of dated milestones with an owner on each. Any date can be moved — a
  * weird holiday, a customer closed Fridays — and the move is stored as an
- * override so everything else keeps following the rule. Adding a holiday
- * shifts every date after it; moving one date moves only that date. The
- * deck prints exactly what this panel shows.
+ * override. Moving a date moves everything after it by the same number of
+ * business days, never anything before it; a later date moved by hand sets
+ * its own shift from there. Adding a holiday shifts every date after it.
+ * The page and the deck print exactly what this panel shows.
  */
 export function TimelinePanel({
   dealId,
@@ -149,7 +150,8 @@ export function TimelinePanel({
               : close.source === "intake"
                 ? "Set by hand."
                 : "Not closed yet — planned as if it closed today."}{" "}
-            Kickoff is the next business day; the form is live within seven.
+            Kickoff is the next business day; the form is live within seven. Move any date and the
+            ones after it move with it.
           </p>
         </div>
 
@@ -172,6 +174,14 @@ export function TimelinePanel({
                 <span className="block truncate text-[11px] text-muted-foreground">{m.detail}</span>
               </span>
               <OwnerChip owner={m.owner} />
+              {m.shifted ? (
+                <span
+                  className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground"
+                  title="Moved because an earlier date was moved"
+                >
+                  follows
+                </span>
+              ) : null}
               <span className="flex items-center gap-1">
                 <input
                   type="date"
@@ -198,7 +208,8 @@ export function TimelinePanel({
         </ol>
         {moved ? (
           <p className="text-[11px] text-muted-foreground">
-            {moved} date{moved === 1 ? "" : "s"} moved by hand. The rest follow the rule.
+            {moved} date{moved === 1 ? "" : "s"} moved by hand. Everything after a moved date
+            follows it by the same number of business days.
           </p>
         ) : null}
 
@@ -370,6 +381,14 @@ export function TimelinePanel({
                       </span>
                     </span>
                     <OwnerChip owner={m.owner} />
+                    {m.shifted ? (
+                      <span
+                        className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground"
+                        title="Moved because an earlier date was moved"
+                      >
+                        follows
+                      </span>
+                    ) : null}
                     <span className="flex items-center gap-1">
                       <input
                         type="date"

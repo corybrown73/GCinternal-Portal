@@ -24,8 +24,11 @@
  * extends by the tier's weeks. It never delays the form.
  *
  * Pure. Business days only; holidays are a parameter, and every date can be
- * overridden by hand (a weird holiday, a customer who is closed Fridays) —
- * the override wins, and the plan reports where it was moved.
+ * moved by hand (a weird holiday, a customer who is closed Fridays). MOVING
+ * A DATE MOVES EVERYTHING AFTER IT by the same number of business days —
+ * a kickoff that slips two days slips the whole week — and never anything
+ * before it. A later date moved by hand sets its own shift from there. The
+ * plan reports which date a person moved and which ones followed.
  */
 
 export type MilestoneOwner = "gocanvas" | "client" | "both";
@@ -235,9 +238,11 @@ export type TimelineOptions = {
 export type Milestone = MilestoneSpec & {
   /** ISO date. */
   date: string;
-  /** True when a person moved it off the computed date. */
+  /** True when a person moved this one by hand. */
   moved: boolean;
-  /** The date the plan would have given it. */
+  /** True when it moved because an earlier date was moved by hand. */
+  shifted: boolean;
+  /** The date the plan would have given it, after earlier moves are applied. */
   plannedDate: string;
 };
 
@@ -282,16 +287,38 @@ function isWeekend(d: Date): boolean {
   return day === 0 || day === 6;
 }
 
-/** `n` business days after `from`, skipping weekends and the given holidays. */
+/**
+ * `n` business days after `from` (before, when negative), skipping weekends
+ * and the given holidays.
+ */
 export function addBusinessDays(from: string, n: number, holidays: readonly string[] = []): string {
   const skip = new Set(holidays);
   let d = parseIso(from);
-  let left = n;
+  let left = Math.abs(n);
+  const step = n < 0 ? -DAY_MS : DAY_MS;
   while (left > 0) {
-    d = new Date(d.getTime() + DAY_MS);
+    d = new Date(d.getTime() + step);
     if (!isWeekend(d) && !skip.has(toIso(d))) left -= 1;
   }
   return toIso(d);
+}
+
+/** Signed count of business days from `a` to `b`. */
+export function businessDaysBetween(
+  a: string,
+  b: string,
+  holidays: readonly string[] = [],
+): number {
+  const skip = new Set(holidays);
+  const sign = b >= a ? 1 : -1;
+  let d = parseIso(a);
+  const end = parseIso(b).getTime();
+  let n = 0;
+  while ((sign > 0 && d.getTime() < end) || (sign < 0 && d.getTime() > end)) {
+    d = new Date(d.getTime() + sign * DAY_MS);
+    if (!isWeekend(d) && !skip.has(toIso(d))) n += sign;
+  }
+  return n;
 }
 
 /** The same day, or the next business day if it lands on a weekend or holiday. */
@@ -315,13 +342,34 @@ export function buildTimeline(options: TimelineOptions): Timeline {
   const holidays = options.holidays ?? [];
   const overrides = options.overrides ?? {};
 
-  const milestones: Milestone[] = SEVEN_DAY_PLAN.map((spec) => {
-    const plannedDate =
-      spec.day === 0 ? options.closeDate : addBusinessDays(options.closeDate, spec.day, holidays);
-    const override = overrides[spec.key];
-    const date = override && ISO.test(override) ? override : plannedDate;
-    return { ...spec, date, plannedDate, moved: date !== plannedDate };
-  });
+  // The cascade: a hand-moved date sets a shift, in business days, that
+  // every later date inherits until another hand-moved date resets it.
+  const cascade = <S extends Omit<MilestoneSpec, "day"> & { day?: number }>(
+    specs: readonly S[],
+    baseDate: (spec: S) => string,
+  ): Milestone[] => {
+    let shift = 0;
+    return specs.map((spec) => {
+      const base = baseDate(spec);
+      const plannedDate = shift === 0 ? base : addBusinessDays(base, shift, holidays);
+      const override = overrides[spec.key];
+      const moved = Boolean(override && ISO.test(override) && override !== plannedDate);
+      const date = moved ? override! : plannedDate;
+      if (moved) shift = businessDaysBetween(base, date, holidays);
+      return {
+        ...spec,
+        day: spec.day ?? 0,
+        date,
+        plannedDate,
+        moved,
+        shifted: !moved && shift !== 0 && date !== base,
+      };
+    });
+  };
+
+  const milestones = cascade(SEVEN_DAY_PLAN, (spec) =>
+    spec.day === 0 ? options.closeDate : addBusinessDays(options.closeDate, spec.day, holidays),
+  );
 
   const liveDate = milestones[milestones.length - 1]!.date;
 
@@ -333,31 +381,29 @@ export function buildTimeline(options: TimelineOptions): Timeline {
   // Phase 2 anchors on the day the form was proven; until then, the earliest
   // it could be is the business day after the form is live. Never before.
   const anchor = provenOn && provenOn > liveDate ? provenOn : liveDate;
-  const startsOn = hasIntegration ? addBusinessDays(anchor, 1, holidays) : null;
-  const endsOn = startsOn ? addWeeks(startsOn, tier.weeks) : null;
+  const plannedStart = hasIntegration ? addBusinessDays(anchor, 1, holidays) : null;
   const spanDays = tier.weeks * 7;
-  const phase2: Milestone[] =
-    startsOn && endsOn
-      ? INTEGRATION_PLAN.map((spec) => {
-          const plannedDate =
-            spec.at === 0
-              ? startsOn
-              : spec.at === 1
-                ? endsOn
-                : onBusinessDay(
-                    toIso(
-                      new Date(
-                        parseIso(startsOn).getTime() + Math.round(spanDays * spec.at) * DAY_MS,
-                      ),
-                    ),
-                    holidays,
-                  );
-          const override = overrides[spec.key];
-          const date = override && ISO.test(override) ? override : plannedDate;
-          const { at: _at, ...rest } = spec;
-          return { ...rest, day: 0, date, plannedDate, moved: date !== plannedDate };
-        })
-      : [];
+  const phase2: Milestone[] = plannedStart
+    ? cascade(INTEGRATION_PLAN, (spec) =>
+        spec.at === 0
+          ? plannedStart
+          : spec.at === 1
+            ? addWeeks(plannedStart, tier.weeks)
+            : onBusinessDay(
+                toIso(
+                  new Date(
+                    parseIso(plannedStart).getTime() + Math.round(spanDays * spec.at) * DAY_MS,
+                  ),
+                ),
+                holidays,
+              ),
+      ).map((m) => {
+        const { at: _at, ...rest } = m as Milestone & { at?: number };
+        return rest as Milestone;
+      })
+    : [];
+  const startsOn = phase2[0]?.date ?? null;
+  const endsOn = phase2[phase2.length - 1]?.date ?? null;
 
   return {
     closeDate: options.closeDate,
