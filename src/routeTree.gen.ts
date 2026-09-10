@@ -33,6 +33,7 @@ import { Route as AdminIndexRouteImport } from './routes/admin.index'
 import { Route as AdminApiKeysRouteImport } from './routes/admin.api-keys'
 import { Route as AdminAuditRouteImport } from './routes/admin.audit'
 import { Route as AdminFlagsRouteImport } from './routes/admin.flags'
+import { Route as AdminIndustryPhotosRouteImport } from './routes/admin.industry-photos'
 import { Route as AdminIntegrationsRouteImport } from './routes/admin.integrations'
 import { Route as AdminLifecycleStagesRouteImport } from './routes/admin.lifecycle-stages'
 import { Route as AdminNavigationRouteImport } from './routes/admin.navigation'
@@ -45,6 +46,7 @@ import { Route as CustomersIndexRouteImport } from './routes/customers.index'
 import { Route as CustomersCustomerIdRouteImport } from './routes/customers.$customerId'
 import { Route as DealsDealIdRouteImport } from './routes/deals.$dealId'
 import { Route as JourneysJourneyIdRouteImport } from './routes/journeys.$journeyId'
+import { Route as OnboardingPlanDealIdRouteImport } from './routes/onboarding-plan.$dealId'
 import { Route as OwnersOwnerRouteImport } from './routes/owners.$owner'
 import { Route as PlanTokenRouteImport } from './routes/plan.$token'
 import { Route as PortalIndexRouteImport } from './routes/portal.index'
@@ -57,6 +59,7 @@ import { Route as TicketsIndexRouteImport } from './routes/tickets.index'
 import { Route as TicketsTicketIdRouteImport } from './routes/tickets.$ticketId'
 import { Route as TicketsRoutingRouteImport } from './routes/tickets.routing'
 import { Route as ViewTokenRouteImport } from './routes/view.$token'
+import { Route as WelcomeTokenRouteImport } from './routes/welcome.$token'
 import { Route as ApiCompletionRecordTokenRouteImport } from './routes/api/completion-record.$token'
 import { Route as ApiCronDispatchRouteImport } from './routes/api/cron/dispatch'
 import { Route as ApiCronJourneysRouteImport } from './routes/api.cron.journeys'
@@ -199,6 +202,11 @@ const AdminFlagsRoute = AdminFlagsRouteImport.update({
   path: '/flags',
   getParentRoute: () => AdminRoute,
 } as any)
+const AdminIndustryPhotosRoute = AdminIndustryPhotosRouteImport.update({
+  id: '/industry-photos',
+  path: '/industry-photos',
+  getParentRoute: () => AdminRoute,
+} as any)
 const AdminIntegrationsRoute = AdminIntegrationsRouteImport.update({
   id: '/integrations',
   path: '/integrations',
@@ -259,6 +267,11 @@ const JourneysJourneyIdRoute = JourneysJourneyIdRouteImport.update({
   path: '/$journeyId',
   getParentRoute: () => JourneysRoute,
 } as any)
+const OnboardingPlanDealIdRoute = OnboardingPlanDealIdRouteImport.update({
+  id: '/onboarding-plan/$dealId',
+  path: '/onboarding-plan/$dealId',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const OwnersOwnerRoute = OwnersOwnerRouteImport.update({
   id: '/owners/$owner',
   path: '/owners/$owner',
@@ -317,6 +330,11 @@ const TicketsRoutingRoute = TicketsRoutingRouteImport.update({
 const ViewTokenRoute = ViewTokenRouteImport.update({
   id: '/view/$token',
   path: '/view/$token',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const WelcomeTokenRoute = WelcomeTokenRouteImport.update({
+  id: '/welcome/$token',
+  path: '/welcome/$token',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiCompletionRecordTokenRoute =
@@ -451,6 +469,7 @@ export interface FileRoutesByFullPath {
   '/admin/api-keys': typeof AdminApiKeysRoute
   '/admin/audit': typeof AdminAuditRoute
   '/admin/flags': typeof AdminFlagsRoute
+  '/admin/industry-photos': typeof AdminIndustryPhotosRoute
   '/admin/integrations': typeof AdminIntegrationsRoute
   '/admin/lifecycle-stages': typeof AdminLifecycleStagesRoute
   '/admin/navigation': typeof AdminNavigationRoute
@@ -462,6 +481,7 @@ export interface FileRoutesByFullPath {
   '/customers/$customerId': typeof CustomersCustomerIdRoute
   '/deals/$dealId': typeof DealsDealIdRoute
   '/journeys/$journeyId': typeof JourneysJourneyIdRoute
+  '/onboarding-plan/$dealId': typeof OnboardingPlanDealIdRoute
   '/owners/$owner': typeof OwnersOwnerRoute
   '/plan/$token': typeof PlanTokenRoute
   '/portal/tickets': typeof PortalTicketsRoute
@@ -470,6 +490,7 @@ export interface FileRoutesByFullPath {
   '/tickets/$ticketId': typeof TicketsTicketIdRoute
   '/tickets/routing': typeof TicketsRoutingRoute
   '/view/$token': typeof ViewTokenRoute
+  '/welcome/$token': typeof WelcomeTokenRoute
   '/admin/': typeof AdminIndexRoute
   '/customers/': typeof CustomersIndexRoute
   '/portal/': typeof PortalIndexRoute
@@ -516,6 +537,7 @@ export interface FileRoutesByTo {
   '/admin/api-keys': typeof AdminApiKeysRoute
   '/admin/audit': typeof AdminAuditRoute
   '/admin/flags': typeof AdminFlagsRoute
+  '/admin/industry-photos': typeof AdminIndustryPhotosRoute
   '/admin/integrations': typeof AdminIntegrationsRoute
   '/admin/lifecycle-stages': typeof AdminLifecycleStagesRoute
   '/admin/navigation': typeof AdminNavigationRoute
@@ -527,6 +549,7 @@ export interface FileRoutesByTo {
   '/customers/$customerId': typeof CustomersCustomerIdRoute
   '/deals/$dealId': typeof DealsDealIdRoute
   '/journeys/$journeyId': typeof JourneysJourneyIdRoute
+  '/onboarding-plan/$dealId': typeof OnboardingPlanDealIdRoute
   '/owners/$owner': typeof OwnersOwnerRoute
   '/plan/$token': typeof PlanTokenRoute
   '/portal/tickets': typeof PortalTicketsRoute
@@ -535,6 +558,7 @@ export interface FileRoutesByTo {
   '/tickets/$ticketId': typeof TicketsTicketIdRoute
   '/tickets/routing': typeof TicketsRoutingRoute
   '/view/$token': typeof ViewTokenRoute
+  '/welcome/$token': typeof WelcomeTokenRoute
   '/admin': typeof AdminIndexRoute
   '/customers': typeof CustomersIndexRoute
   '/portal': typeof PortalIndexRoute
@@ -588,6 +612,7 @@ export interface FileRoutesById {
   '/admin/api-keys': typeof AdminApiKeysRoute
   '/admin/audit': typeof AdminAuditRoute
   '/admin/flags': typeof AdminFlagsRoute
+  '/admin/industry-photos': typeof AdminIndustryPhotosRoute
   '/admin/integrations': typeof AdminIntegrationsRoute
   '/admin/lifecycle-stages': typeof AdminLifecycleStagesRoute
   '/admin/navigation': typeof AdminNavigationRoute
@@ -599,6 +624,7 @@ export interface FileRoutesById {
   '/customers/$customerId': typeof CustomersCustomerIdRoute
   '/deals/$dealId': typeof DealsDealIdRoute
   '/journeys/$journeyId': typeof JourneysJourneyIdRoute
+  '/onboarding-plan/$dealId': typeof OnboardingPlanDealIdRoute
   '/owners/$owner': typeof OwnersOwnerRoute
   '/plan/$token': typeof PlanTokenRoute
   '/portal/tickets': typeof PortalTicketsRoute
@@ -607,6 +633,7 @@ export interface FileRoutesById {
   '/tickets/$ticketId': typeof TicketsTicketIdRoute
   '/tickets/routing': typeof TicketsRoutingRoute
   '/view/$token': typeof ViewTokenRoute
+  '/welcome/$token': typeof WelcomeTokenRoute
   '/admin/': typeof AdminIndexRoute
   '/customers/': typeof CustomersIndexRoute
   '/portal/': typeof PortalIndexRoute
@@ -661,6 +688,7 @@ export interface FileRouteTypes {
     | '/admin/api-keys'
     | '/admin/audit'
     | '/admin/flags'
+    | '/admin/industry-photos'
     | '/admin/integrations'
     | '/admin/lifecycle-stages'
     | '/admin/navigation'
@@ -672,6 +700,7 @@ export interface FileRouteTypes {
     | '/customers/$customerId'
     | '/deals/$dealId'
     | '/journeys/$journeyId'
+    | '/onboarding-plan/$dealId'
     | '/owners/$owner'
     | '/plan/$token'
     | '/portal/tickets'
@@ -680,6 +709,7 @@ export interface FileRouteTypes {
     | '/tickets/$ticketId'
     | '/tickets/routing'
     | '/view/$token'
+    | '/welcome/$token'
     | '/admin/'
     | '/customers/'
     | '/portal/'
@@ -726,6 +756,7 @@ export interface FileRouteTypes {
     | '/admin/api-keys'
     | '/admin/audit'
     | '/admin/flags'
+    | '/admin/industry-photos'
     | '/admin/integrations'
     | '/admin/lifecycle-stages'
     | '/admin/navigation'
@@ -737,6 +768,7 @@ export interface FileRouteTypes {
     | '/customers/$customerId'
     | '/deals/$dealId'
     | '/journeys/$journeyId'
+    | '/onboarding-plan/$dealId'
     | '/owners/$owner'
     | '/plan/$token'
     | '/portal/tickets'
@@ -745,6 +777,7 @@ export interface FileRouteTypes {
     | '/tickets/$ticketId'
     | '/tickets/routing'
     | '/view/$token'
+    | '/welcome/$token'
     | '/admin'
     | '/customers'
     | '/portal'
@@ -797,6 +830,7 @@ export interface FileRouteTypes {
     | '/admin/api-keys'
     | '/admin/audit'
     | '/admin/flags'
+    | '/admin/industry-photos'
     | '/admin/integrations'
     | '/admin/lifecycle-stages'
     | '/admin/navigation'
@@ -808,6 +842,7 @@ export interface FileRouteTypes {
     | '/customers/$customerId'
     | '/deals/$dealId'
     | '/journeys/$journeyId'
+    | '/onboarding-plan/$dealId'
     | '/owners/$owner'
     | '/plan/$token'
     | '/portal/tickets'
@@ -816,6 +851,7 @@ export interface FileRouteTypes {
     | '/tickets/$ticketId'
     | '/tickets/routing'
     | '/view/$token'
+    | '/welcome/$token'
     | '/admin/'
     | '/customers/'
     | '/portal/'
@@ -870,9 +906,11 @@ export interface RootRouteChildren {
   ApiMcpRoute: typeof ApiMcpRoute
   AuthCallbackRoute: typeof AuthCallbackRoute
   DealsDealIdRoute: typeof DealsDealIdRoute
+  OnboardingPlanDealIdRoute: typeof OnboardingPlanDealIdRoute
   OwnersOwnerRoute: typeof OwnersOwnerRoute
   PlanTokenRoute: typeof PlanTokenRoute
   ViewTokenRoute: typeof ViewTokenRoute
+  WelcomeTokenRoute: typeof WelcomeTokenRoute
   ApiCompletionRecordTokenRoute: typeof ApiCompletionRecordTokenRoute
   ApiCronDispatchRoute: typeof ApiCronDispatchRoute
   ApiCronJourneysRoute: typeof ApiCronJourneysRoute
@@ -1063,6 +1101,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminFlagsRouteImport
       parentRoute: typeof AdminRoute
     }
+    '/admin/industry-photos': {
+      id: '/admin/industry-photos'
+      path: '/industry-photos'
+      fullPath: '/admin/industry-photos'
+      preLoaderRoute: typeof AdminIndustryPhotosRouteImport
+      parentRoute: typeof AdminRoute
+    }
     '/admin/integrations': {
       id: '/admin/integrations'
       path: '/integrations'
@@ -1147,6 +1192,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof JourneysJourneyIdRouteImport
       parentRoute: typeof JourneysRoute
     }
+    '/onboarding-plan/$dealId': {
+      id: '/onboarding-plan/$dealId'
+      path: '/onboarding-plan/$dealId'
+      fullPath: '/onboarding-plan/$dealId'
+      preLoaderRoute: typeof OnboardingPlanDealIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/owners/$owner': {
       id: '/owners/$owner'
       path: '/owners/$owner'
@@ -1229,6 +1281,13 @@ declare module '@tanstack/react-router' {
       path: '/view/$token'
       fullPath: '/view/$token'
       preLoaderRoute: typeof ViewTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/welcome/$token': {
+      id: '/welcome/$token'
+      path: '/welcome/$token'
+      fullPath: '/welcome/$token'
+      preLoaderRoute: typeof WelcomeTokenRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/completion-record/$token': {
@@ -1385,6 +1444,7 @@ interface AdminRouteChildren {
   AdminApiKeysRoute: typeof AdminApiKeysRoute
   AdminAuditRoute: typeof AdminAuditRoute
   AdminFlagsRoute: typeof AdminFlagsRoute
+  AdminIndustryPhotosRoute: typeof AdminIndustryPhotosRoute
   AdminIntegrationsRoute: typeof AdminIntegrationsRoute
   AdminLifecycleStagesRoute: typeof AdminLifecycleStagesRoute
   AdminNavigationRoute: typeof AdminNavigationRoute
@@ -1397,6 +1457,7 @@ const AdminRouteChildren: AdminRouteChildren = {
   AdminApiKeysRoute: AdminApiKeysRoute,
   AdminAuditRoute: AdminAuditRoute,
   AdminFlagsRoute: AdminFlagsRoute,
+  AdminIndustryPhotosRoute: AdminIndustryPhotosRoute,
   AdminIntegrationsRoute: AdminIntegrationsRoute,
   AdminLifecycleStagesRoute: AdminLifecycleStagesRoute,
   AdminNavigationRoute: AdminNavigationRoute,
@@ -1539,9 +1600,11 @@ const rootRouteChildren: RootRouteChildren = {
   ApiMcpRoute: ApiMcpRoute,
   AuthCallbackRoute: AuthCallbackRoute,
   DealsDealIdRoute: DealsDealIdRoute,
+  OnboardingPlanDealIdRoute: OnboardingPlanDealIdRoute,
   OwnersOwnerRoute: OwnersOwnerRoute,
   PlanTokenRoute: PlanTokenRoute,
   ViewTokenRoute: ViewTokenRoute,
+  WelcomeTokenRoute: WelcomeTokenRoute,
   ApiCompletionRecordTokenRoute: ApiCompletionRecordTokenRoute,
   ApiCronDispatchRoute: ApiCronDispatchRoute,
   ApiCronJourneysRoute: ApiCronJourneysRoute,

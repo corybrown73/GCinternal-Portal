@@ -13,6 +13,7 @@ const PUBLIC_PREFIXES = [
   "/view",
   "/tam",
   "/plan",
+  "/welcome",
 ];
 
 /**

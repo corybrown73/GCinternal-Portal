@@ -1,7 +1,8 @@
 import { useState } from "react";
+import { Link } from "@tanstack/react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { CalendarDays, Download, RotateCcw, X } from "lucide-react";
+import { CalendarDays, Download, ExternalLink, RotateCcw, X } from "lucide-react";
 
 import { Panel } from "@/components/record";
 import { readIntake, type IntakeAnswers } from "@/lib/intake-answers";
@@ -91,16 +92,27 @@ export function TimelinePanel({
       meta={`Live ${shortDay(timeline.liveDate)} · ${daysToValue(timeline)} days`}
       level="primary"
       action={
-        <button
-          type="button"
-          className="inline-flex items-center gap-1 rounded-sm bg-primary px-2 py-1 text-[11px] font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-          disabled={deckMutation.isPending}
-          onClick={() => deckMutation.mutate()}
-          title="Six slides with these dates, filed on the account"
-        >
-          <Download className="h-3 w-3" />
-          {deckMutation.isPending ? "Building the deck…" : "Generate onboarding deck"}
-        </button>
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            className="inline-flex items-center gap-1 rounded-sm border border-border px-1.5 py-0.5 text-[11px] text-muted-foreground hover:text-foreground disabled:opacity-50"
+            disabled={deckMutation.isPending}
+            onClick={() => deckMutation.mutate()}
+            title="The PowerPoint fallback: six slides with these dates, filed on the account"
+          >
+            <Download className="h-3 w-3" />
+            {deckMutation.isPending ? "Building…" : "PowerPoint"}
+          </button>
+          <Link
+            to="/onboarding-plan/$dealId"
+            params={{ dealId }}
+            className="inline-flex items-center gap-1 rounded-sm bg-primary px-2 py-1 text-[11px] font-medium text-primary-foreground hover:bg-primary/90"
+            title="The page: present it, print it, send it"
+          >
+            <ExternalLink className="h-3 w-3" />
+            Open the welcome page
+          </Link>
+        </div>
       }
     >
       <div className="space-y-3 px-3 py-2.5">

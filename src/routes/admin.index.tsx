@@ -10,6 +10,7 @@ import {
   Upload,
   Users,
   ToggleRight,
+  Image,
 } from "lucide-react";
 
 import { PageBody, PageHeader } from "@/components/page";
@@ -25,6 +26,13 @@ const CARDS = [
     title: "API keys",
     description:
       "Create and revoke scoped keys for Salesforce, Zapier and monitoring integrations calling /api/v1/*.",
+  },
+  {
+    to: "/admin/industry-photos",
+    icon: Image,
+    title: "Industry photos",
+    description:
+      "The photo library behind every customer's welcome page. Two or three real jobsite photos per industry.",
   },
   {
     to: "/admin/navigation",

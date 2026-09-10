@@ -667,3 +667,976 @@
   background-attachment: fixed;
   background-repeat: no-repeat;
 }
+
+/* ==========================================================================
+   The welcome page (src/components/welcome-page.tsx).
+
+   Designed on a 1280×720 stage and zoomed to fit, so the portal preview, the
+   customer's link, present mode and the printed PDF are the same pixels. The
+   look is the reference deck the team presents with: white ground, a soft
+   blue field in one corner, dots, a heavy headline with one run in blue and
+   a short orange rule, icons in white tiles, a navy band, the three-colour
+   stripe at the foot. Everything is scoped under .gc-welcome so none of it
+   leaks into the app.
+   ========================================================================== */
+.gc-welcome {
+  --wp-navy: #072b57;
+  --wp-navy-deep: #041633;
+  --wp-blue: #039de7;
+  --wp-blue-deep: #12509b;
+  --wp-blue-soft: #eef7fd;
+  --wp-blue-line: #d6effb;
+  --wp-orange: #f37021;
+  --wp-green: #1da25c;
+  --wp-ink: #0a1628;
+  --wp-body: #556477;
+  --wp-muted: #6b7a90;
+  --wp-line: #e4e9f1;
+  --wp-font:
+    "Plus Jakarta Sans", "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+    sans-serif;
+  font-family: var(--wp-font);
+  color: var(--wp-ink);
+  background: #f3f5f9;
+  min-height: 100vh;
+}
+
+/* ---- chrome (never printed) */
+.gc-welcome .wp-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 16px;
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--wp-line);
+  flex-wrap: wrap;
+}
+.gc-welcome .wp-toolbar-left,
+.gc-welcome .wp-toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.gc-welcome .wp-toolbar-title {
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--wp-navy);
+}
+.gc-welcome .wp-toolbar-meta {
+  font-size: 12px;
+  color: var(--wp-muted);
+}
+.gc-welcome .wp-tool {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--wp-line);
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--wp-navy);
+  background: #fff;
+  cursor: pointer;
+  text-decoration: none;
+}
+.gc-welcome .wp-tool:hover {
+  border-color: var(--wp-blue);
+}
+.gc-welcome .wp-tool.is-primary {
+  background: var(--wp-blue);
+  border-color: var(--wp-blue);
+  color: #fff;
+}
+.gc-welcome .wp-tool:disabled {
+  opacity: 0.6;
+}
+
+/* ---- scroll mode: one stage per screen, stacked */
+.gc-welcome .wp-scroll {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  padding: 24px;
+  max-width: 1360px;
+  margin: 0 auto;
+}
+.gc-welcome .wp-stage-box {
+  width: 100%;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow:
+    0 1px 2px rgba(7, 43, 87, 0.06),
+    0 12px 32px rgba(7, 43, 87, 0.08);
+  background: #fff;
+}
+.gc-welcome .wp-stage-box.is-both {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0;
+  box-shadow: none;
+  background: transparent;
+}
+.gc-welcome .wp-stage {
+  position: relative;
+  overflow: hidden;
+  background: #fff;
+  flex: none;
+}
+
+/* ---- present mode */
+.gc-welcome .wp-present {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: #041633;
+  cursor: pointer;
+}
+.gc-welcome .wp-present .wp-stage-box.is-both {
+  position: absolute;
+  inset: 0;
+}
+.gc-welcome .wp-present-hud {
+  position: absolute;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  font-size: 13px;
+  cursor: default;
+  opacity: 0.35;
+  transition: opacity 150ms;
+}
+.gc-welcome .wp-present-hud:hover {
+  opacity: 1;
+}
+.gc-welcome .wp-present-hud button {
+  color: #fff;
+  font-size: 20px;
+  line-height: 1;
+  padding: 0 6px;
+  cursor: pointer;
+}
+.gc-welcome .wp-present-hud .wp-hud-x {
+  display: inline-flex;
+  padding-left: 8px;
+  border-left: 1px solid rgba(255, 255, 255, 0.3);
+}
+body.gc-presenting {
+  overflow: hidden;
+}
+
+/* ---- the screen (1280×720) */
+.gc-welcome .wp-screen {
+  position: relative;
+  width: 1280px;
+  height: 720px;
+  overflow: hidden;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+}
+.gc-welcome .wp-blob {
+  position: absolute;
+  right: -140px;
+  top: -180px;
+  width: 560px;
+  height: 560px;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle at 40% 40%,
+    #dff1fc 0%,
+    #eef7fd 55%,
+    rgba(238, 247, 253, 0) 72%
+  );
+  pointer-events: none;
+}
+.gc-welcome .wp-blob.is-cover {
+  right: -260px;
+  top: -120px;
+  width: 900px;
+  height: 900px;
+}
+.gc-welcome .wp-dots {
+  position: absolute;
+  right: 64px;
+  top: 40px;
+  width: 128px;
+  height: 64px;
+  background-image: radial-gradient(circle, #c9e6f7 1.8px, transparent 2.2px);
+  background-size: 16px 16px;
+  pointer-events: none;
+}
+.gc-welcome .wp-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 36px 64px 0;
+  position: relative;
+}
+.gc-welcome .wp-logo {
+  height: 30px;
+  width: auto;
+}
+.gc-welcome .wp-client-logo {
+  height: 36px;
+  width: auto;
+  max-width: 180px;
+  object-fit: contain;
+  margin-right: 200px;
+}
+.gc-welcome .wp-body {
+  position: relative;
+  padding: 24px 64px 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+.gc-welcome .wp-eyebrow {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--wp-blue);
+  margin: 0 0 8px;
+}
+.gc-welcome .wp-title {
+  font-size: 44px;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1.05;
+  color: var(--wp-navy);
+  margin: 0;
+}
+.gc-welcome .wp-title.is-hero {
+  font-size: 58px;
+}
+.gc-welcome .wp-accent {
+  color: var(--wp-blue);
+}
+.gc-welcome .wp-rule {
+  width: 56px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--wp-orange);
+  margin: 12px 0 10px;
+}
+.gc-welcome .wp-lede {
+  font-size: 16px;
+  line-height: 1.5;
+  color: var(--wp-body);
+  margin: 0;
+  max-width: 900px;
+}
+.gc-welcome .wp-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 16px 0 24px;
+  min-height: 0;
+}
+/* The plan rail keeps its legend at the foot rather than centring. */
+.gc-welcome .wp-content:has(.wp-rail) {
+  justify-content: flex-start;
+  padding-top: 20px;
+}
+.gc-welcome .wp-band {
+  position: relative;
+  margin: 0 64px 0;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: var(--wp-navy);
+  color: #fff;
+  border-radius: 12px;
+  padding: 14px 20px;
+}
+.gc-welcome .wp-band p {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+.gc-welcome .wp-band-icon {
+  flex: none;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.12);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #6fd2ff;
+}
+.gc-welcome .wp-foot {
+  display: flex;
+  justify-content: space-between;
+  padding: 12px 64px 14px;
+  font-size: 11px;
+  color: var(--wp-muted);
+}
+.gc-welcome .wp-stripe {
+  display: flex;
+  height: 10px;
+}
+.gc-welcome .wp-stripe i {
+  display: block;
+  height: 100%;
+}
+.gc-welcome .wp-stripe i:nth-child(1) {
+  flex: 3;
+  background: var(--wp-blue);
+}
+.gc-welcome .wp-stripe i:nth-child(2) {
+  flex: 1;
+  background: var(--wp-orange);
+}
+.gc-welcome .wp-stripe i:nth-child(3) {
+  flex: 1;
+  background: var(--wp-green);
+}
+
+/* ---- tiles, owners, ticks, cards */
+.gc-welcome .wp-tile {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 14px;
+  flex: none;
+  width: 48px;
+  height: 48px;
+}
+.gc-welcome .wp-tile.is-sm {
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+}
+.gc-welcome .wp-tile.is-lg {
+  width: 60px;
+  height: 60px;
+  border-radius: 18px;
+}
+.gc-welcome .wp-tile.is-light {
+  background: #fff;
+  color: var(--wp-blue);
+  box-shadow:
+    0 1px 2px rgba(7, 43, 87, 0.08),
+    0 6px 16px rgba(7, 43, 87, 0.1);
+}
+.gc-welcome .wp-tile.is-blue {
+  background: var(--wp-blue);
+  color: #fff;
+}
+.gc-welcome .wp-tile.is-navy {
+  background: var(--wp-blue-deep);
+  color: #fff;
+}
+.gc-welcome .wp-tile-icon {
+  width: 52%;
+  height: 52%;
+}
+.gc-welcome .wp-owner {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 82px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #fff;
+}
+.gc-welcome .wp-owner.is-gocanvas {
+  background: var(--wp-blue-deep);
+}
+.gc-welcome .wp-owner.is-client {
+  background: var(--wp-green);
+}
+.gc-welcome .wp-owner.is-both {
+  background: var(--wp-blue);
+}
+.gc-welcome .wp-card {
+  background: #fff;
+  border: 1px solid var(--wp-blue-line);
+  border-radius: 16px;
+  padding: 20px 22px;
+  box-shadow: 0 1px 2px rgba(7, 43, 87, 0.04);
+  overflow: hidden;
+}
+.gc-welcome .wp-card.is-tint {
+  background: var(--wp-blue-soft);
+}
+.gc-welcome .wp-card-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 12px;
+}
+.gc-welcome .wp-card h3 {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--wp-navy);
+  line-height: 1.15;
+}
+.gc-welcome .wp-card-sub {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: var(--wp-body);
+  line-height: 1.4;
+}
+.gc-welcome .wp-card-body {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.55;
+  color: var(--wp-body);
+}
+.gc-welcome .wp-ticks {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.gc-welcome .wp-tick {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  font-size: 14px;
+  line-height: 1.4;
+  color: var(--wp-body);
+}
+.gc-welcome .wp-tick-dot {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--wp-blue-soft);
+  color: var(--wp-blue);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 1px;
+}
+
+/* ---- cover */
+.gc-welcome .wp-cover-grid {
+  position: relative;
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1.15fr 1fr;
+  gap: 40px;
+  padding: 36px 64px 0;
+  align-items: center;
+  min-height: 0;
+}
+.gc-welcome .wp-cover-name {
+  margin: 0 0 10px;
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--wp-blue-deep);
+  letter-spacing: -0.01em;
+}
+.gc-welcome .wp-pills {
+  display: flex;
+  gap: 10px;
+  margin-top: 22px;
+  flex-wrap: wrap;
+}
+.gc-welcome .wp-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 14px 6px 6px;
+  border-radius: 999px;
+  border: 1px solid var(--wp-blue-line);
+  background: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--wp-navy);
+}
+.gc-welcome .wp-prepared {
+  margin: 22px 0 0;
+  font-size: 12px;
+  color: var(--wp-muted);
+}
+.gc-welcome .wp-cover-art {
+  position: relative;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.gc-welcome .wp-photo {
+  width: 100%;
+  height: 420px;
+  border-radius: 28px;
+  overflow: hidden;
+  box-shadow: 0 24px 48px rgba(7, 43, 87, 0.18);
+}
+.gc-welcome .wp-photo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.gc-welcome .wp-art {
+  position: relative;
+  width: 420px;
+  height: 420px;
+}
+.gc-welcome .wp-art-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 24px 48px rgba(7, 43, 87, 0.12);
+}
+.gc-welcome .wp-art-disc {
+  position: absolute;
+  inset: 60px;
+  border-radius: 50%;
+  background: linear-gradient(160deg, #29b1f0 0%, #039de7 50%, #12509b 100%);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.gc-welcome .wp-art-icon {
+  width: 150px;
+  height: 150px;
+}
+.gc-welcome .wp-art-chip {
+  position: absolute;
+  width: 64px;
+  height: 64px;
+  border-radius: 18px;
+  background: #fff;
+  color: var(--wp-blue);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 8px 20px rgba(7, 43, 87, 0.14);
+}
+.gc-welcome .wp-art-chip.is-a {
+  left: -8px;
+  top: 40px;
+}
+.gc-welcome .wp-art-chip.is-b {
+  right: -12px;
+  top: 150px;
+}
+.gc-welcome .wp-art-chip.is-c {
+  left: 40px;
+  bottom: -4px;
+}
+
+/* ---- plan rail */
+.gc-welcome .wp-rail {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 8px;
+  padding-top: 8px;
+}
+.gc-welcome .wp-rail-line {
+  position: absolute;
+  left: 7%;
+  right: 7%;
+  top: 68px;
+  height: 2px;
+  background: var(--wp-line);
+}
+.gc-welcome .wp-node {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 6px;
+}
+.gc-welcome .wp-node-day {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--wp-muted);
+  margin-bottom: 4px;
+}
+.gc-welcome .wp-node .wp-tile {
+  box-shadow: 0 0 0 6px #fff;
+}
+.gc-welcome .wp-node-label {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--wp-navy);
+  line-height: 1.2;
+  min-height: 34px;
+  margin-top: 4px;
+}
+.gc-welcome .wp-node-date {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--wp-blue);
+}
+.gc-welcome .wp-node-date.is-moved {
+  color: var(--wp-orange);
+}
+.gc-welcome .wp-node-min {
+  font-size: 11px;
+  color: var(--wp-muted);
+}
+.gc-welcome .wp-legend {
+  margin-top: auto;
+  display: flex;
+  gap: 28px;
+  font-size: 12px;
+  color: var(--wp-body);
+  padding-bottom: 16px;
+}
+.gc-welcome .wp-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ---- together */
+.gc-welcome .wp-two {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+.gc-welcome .wp-homework {
+  margin-top: 18px;
+  padding-bottom: 14px;
+}
+.gc-welcome .wp-homework-title {
+  margin: 0 0 10px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--wp-blue-deep);
+}
+.gc-welcome .wp-homework-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+.gc-welcome .wp-check {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-align: left;
+  padding: 10px 12px;
+  border: 1px solid var(--wp-blue-line);
+  border-radius: 12px;
+  background: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--wp-navy);
+  cursor: pointer;
+  font-family: inherit;
+}
+.gc-welcome .wp-check.is-static {
+  cursor: default;
+}
+.gc-welcome .wp-check.is-done {
+  background: #ecf8f1;
+  border-color: #bfe6cf;
+}
+.gc-welcome .wp-check-box {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  border: 2px solid var(--wp-blue-deep);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+}
+.gc-welcome .wp-check.is-done .wp-check-box {
+  background: var(--wp-green);
+  border-color: var(--wp-green);
+}
+.gc-welcome .wp-homework-done {
+  margin: 10px 0 0;
+  font-size: 12px;
+  color: var(--wp-green);
+  font-weight: 700;
+}
+
+/* ---- first form */
+.gc-welcome .wp-form-grid {
+  display: grid;
+  grid-template-columns: 1.05fr 1fr;
+  gap: 36px;
+  align-items: center;
+}
+.gc-welcome .wp-form-card {
+  padding: 0;
+}
+.gc-welcome .wp-form-card .wp-card-head,
+.gc-welcome .wp-form-card .wp-card-body,
+.gc-welcome .wp-form-card .wp-card-source {
+  padding-left: 22px;
+  padding-right: 22px;
+}
+.gc-welcome .wp-form-card .wp-card-head {
+  padding-top: 20px;
+}
+.gc-welcome .wp-form-card .wp-card-source {
+  padding-bottom: 20px;
+}
+.gc-welcome .wp-card-photo {
+  height: 120px;
+  overflow: hidden;
+}
+.gc-welcome .wp-card-photo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.gc-welcome .wp-card-source {
+  margin: 16px 0 0;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--wp-blue);
+}
+.gc-welcome .wp-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 26px;
+  padding-top: 8px;
+}
+.gc-welcome .wp-row {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+}
+.gc-welcome .wp-row-head {
+  margin: 0 0 3px;
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--wp-navy);
+  letter-spacing: -0.01em;
+}
+.gc-welcome .wp-row-body {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.45;
+  color: var(--wp-body);
+}
+
+/* ---- day seven */
+.gc-welcome .wp-seven {
+  display: grid;
+  grid-template-columns: 1.1fr 1fr;
+  gap: 36px;
+  align-items: center;
+}
+.gc-welcome .wp-outcomes {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+.gc-welcome .wp-agenda-list {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.gc-welcome .wp-agenda-list {
+  gap: 14px;
+}
+.gc-welcome .wp-agenda-list li {
+  display: grid;
+  grid-template-columns: 64px 1fr;
+  gap: 12px;
+  font-size: 15px;
+  line-height: 1.4;
+  color: var(--wp-body);
+}
+.gc-welcome .wp-agenda-list b {
+  color: var(--wp-blue);
+  font-weight: 800;
+}
+
+/* ---- next: tiers + bar, or use cases */
+.gc-welcome .wp-tiers {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 12px;
+}
+.gc-welcome .wp-tier {
+  border: 1px solid var(--wp-blue-line);
+  border-radius: 12px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  background: #fff;
+}
+.gc-welcome .wp-tier.is-on {
+  background: var(--wp-blue-deep);
+  border-color: var(--wp-blue-deep);
+  color: #fff;
+}
+.gc-welcome .wp-tier-no {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--wp-muted);
+}
+.gc-welcome .wp-tier.is-on .wp-tier-no {
+  color: #6fd2ff;
+}
+.gc-welcome .wp-tier-name {
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--wp-navy);
+}
+.gc-welcome .wp-tier.is-on .wp-tier-name {
+  color: #fff;
+}
+.gc-welcome .wp-tier-wk {
+  font-size: 12px;
+  color: var(--wp-muted);
+}
+.gc-welcome .wp-tier.is-on .wp-tier-wk {
+  color: #afc1d8;
+}
+.gc-welcome .wp-integ {
+  margin-top: 18px;
+}
+.gc-welcome .wp-bar {
+  margin-top: 16px;
+}
+.gc-welcome .wp-bar-track {
+  position: relative;
+  height: 12px;
+  border-radius: 6px;
+  background: var(--wp-blue);
+}
+.gc-welcome .wp-bar-head {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 26%;
+  border-radius: 6px;
+  background: var(--wp-blue-deep);
+}
+.gc-welcome .wp-bar-mark {
+  position: absolute;
+  left: calc(26% - 9px);
+  top: -3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #fff;
+  border: 3px solid var(--wp-blue-deep);
+}
+.gc-welcome .wp-bar-labels {
+  display: grid;
+  grid-template-columns: 26% 1fr auto;
+  margin-top: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--wp-blue);
+}
+.gc-welcome .wp-bar-labels .is-navy {
+  color: var(--wp-blue-deep);
+}
+.gc-welcome .wp-bar-labels span:nth-child(2) {
+  padding-left: 14px;
+}
+.gc-welcome .wp-three {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
+}
+.gc-welcome .wp-usecase {
+  padding: 24px 26px 28px;
+}
+.gc-welcome .wp-usecase h3 {
+  margin: 18px 0 10px;
+}
+.gc-welcome .wp-usecase-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+.gc-welcome .wp-usecase-no {
+  font-size: 26px;
+  font-weight: 800;
+  color: var(--wp-blue-line);
+  letter-spacing: -0.02em;
+}
+
+/* ---- print: one 13.33 × 7.5 in page per screen, at 1:1 */
+@media print {
+  @page {
+    size: 13.333in 7.5in;
+    margin: 0;
+  }
+  body.gc-print,
+  body.gc-print * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .gc-welcome {
+    background: #fff;
+    min-height: 0;
+  }
+  .gc-welcome .wp-toolbar {
+    display: none;
+  }
+  .gc-welcome .wp-scroll {
+    display: block;
+    padding: 0;
+    max-width: none;
+    margin: 0;
+  }
+  .gc-welcome .wp-stage-box {
+    border-radius: 0;
+    box-shadow: none;
+    width: 13.333in;
+    height: 7.5in;
+    break-after: page;
+    page-break-after: always;
+    overflow: hidden;
+  }
+  .gc-welcome .wp-stage-box:last-child {
+    break-after: auto;
+    page-break-after: auto;
+  }
+  .gc-welcome .wp-stage {
+    zoom: 1 !important;
+  }
+}
