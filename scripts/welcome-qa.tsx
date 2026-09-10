@@ -51,12 +51,14 @@ const base: Omit<WelcomeView, "timeline"> = {
   homeworkDone: { app: "2026-09-10T10:00:00Z" },
   readiness: [],
   team: {
+    leadEmail: "priya.nair@gocanvas.com",
     lead: "Priya Nair",
     accountManager: "Marcus Bell",
     solutionsEngineer: "Priya Nair",
     champion: { name: "Tom Alvarez", role: "Operations Manager" },
   },
   shareUrl: null,
+  qrDataUrl: null,
   sharedAt: "2026-09-10T09:00:00Z",
   openedAt: null,
 };

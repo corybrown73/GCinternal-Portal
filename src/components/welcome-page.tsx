@@ -132,23 +132,27 @@ export function WelcomePage({
   const [present, setPresent] = useState(false);
   const [at, setAt] = useState(0);
   const total = 6;
-  // The customer's link, once minted in this session, as a QR for the room.
-  const [qr, setQr] = useState<{ url: string; dataUrl: string } | null>(null);
+  // The customer's link as a QR for the room: from the record when one has
+  // been issued, so it is there on every load, not only in the session that
+  // minted it. Minting again replaces it.
+  const qr =
+    view.shareUrl && view.qrDataUrl ? { url: view.shareUrl, dataUrl: view.qrDataUrl } : null;
   const [showQr, setShowQr] = useState(true);
   const mintForQr = onCopyLink
     ? async () => {
         const url = await onCopyLink();
-        const { toDataURL } = await import("qrcode");
-        const dataUrl = await toDataURL(url, {
-          margin: 1,
-          width: 512,
-          color: { dark: "#072b57", light: "#ffffff" },
-        });
-        setQr({ url, dataUrl });
         setShowQr(true);
         return url;
       }
     : undefined;
+  // Present mode: a hint the first time, gone after a few seconds.
+  const [hint, setHint] = useState(false);
+  useEffect(() => {
+    if (!present) return;
+    setHint(true);
+    const id = setTimeout(() => setHint(false), 3500);
+    return () => clearTimeout(id);
+  }, [present]);
 
   // Present mode: arrow keys, space, escape. Click advances.
   useEffect(() => {
@@ -203,7 +207,12 @@ export function WelcomePage({
 
       {present ? (
         <div className="wp-present" onClick={() => setAt((i) => Math.min(total - 1, i + 1))}>
-          <Stage fit="both">{screens[at]}</Stage>
+          <Stage key={at} fit="both">
+            {screens[at]}
+          </Stage>
+          {hint ? (
+            <div className="wp-present-hint">← → to move · Esc to leave · click to advance</div>
+          ) : null}
           <div className="wp-present-hud" onClick={(e) => e.stopPropagation()}>
             <button
               type="button"
@@ -305,7 +314,7 @@ function Toolbar({
     if (!onCopyLink) return;
     setCopied("busy");
     try {
-      const url = await onCopyLink();
+      const url = view.shareUrl ?? (await onCopyLink());
       await navigator.clipboard.writeText(url);
       setCopied("done");
     } catch {
@@ -388,8 +397,8 @@ function Toolbar({
                 ? "Link copied"
                 : copied === "failed"
                   ? "Could not copy"
-                  : view.sharedAt
-                    ? "Copy new customer link"
+                  : view.shareUrl
+                    ? "Copy customer link"
                     : "Create customer link"}
           </button>
         ) : null}
@@ -682,13 +691,13 @@ function Cover({ view, qr }: { view: WelcomeView; qr?: { url: string; dataUrl: s
           </p>
           <div className="wp-pills">
             <span className="wp-pill">
-              <Tile name="Wrench" size="sm" tone="blue" /> Build the form
+              <Tile name="Wrench" size="sm" tone="blue" /> Build
             </span>
             <span className="wp-pill">
               <Tile name="Smartphone" size="sm" tone="blue" /> Collect in the field
             </span>
             <span className="wp-pill">
-              <Tile name="Workflow" size="sm" tone="blue" /> Connect your systems
+              <Tile name="Workflow" size="sm" tone="blue" /> Connect
             </span>
           </div>
           {view.lead ? (
@@ -865,6 +874,7 @@ function Plan({ view }: { view: WelcomeView }) {
             </span>
             <Owner owner={m.owner} />
             {m.minutes ? <span className="wp-node-min">{m.minutes} min</span> : null}
+            <span className="wp-node-detail">{m.detail}</span>
           </div>
         ))}
       </div>
@@ -1224,6 +1234,20 @@ function Business({ view, icsBase }: { view: WelcomeView; icsBase: string | null
         </div>
         <div className="wp-card wp-good">
           <p className="wp-good-eyebrow">What good looks like on {shortDay(t.liveDate)}</p>
+          {view.team.lead ? (
+            <p className="wp-good-contact">
+              <Tile name="PhoneCall" size="sm" tone="blue" />
+              <span>
+                <b>{view.team.lead}</b>, your onboarding lead
+                {view.team.leadEmail ? (
+                  <>
+                    {" · "}
+                    <a href={`mailto:${view.team.leadEmail}`}>{view.team.leadEmail}</a>
+                  </>
+                ) : null}
+              </span>
+            </p>
+          ) : null}
           <ul className="wp-ticks">
             <Tick>Your crew submits from the phone, on the job, with photos and a signature.</Tick>
             <Tick>The office sees the work as it happens — no retyping, no Friday pile.</Tick>

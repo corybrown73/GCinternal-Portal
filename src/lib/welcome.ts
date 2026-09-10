@@ -18,6 +18,8 @@ export type WelcomeView = {
   currentProcess: string | null;
   team: {
     lead: string | null;
+    /** How to reach the lead. On the closing screen. */
+    leadEmail: string | null;
     accountManager: string | null;
     solutionsEngineer: string | null;
     champion: { name: string; role: string | null } | null;
@@ -40,6 +42,8 @@ export type WelcomeView = {
   readiness: Array<{ key: string; label: string; hint: string }>;
   /** Present when the viewer is internal and a link has been issued. */
   shareUrl: string | null;
+  /** The link as a QR (PNG data URL), made on the server. Internal only. */
+  qrDataUrl: string | null;
   sharedAt: string | null;
   openedAt: string | null;
 };

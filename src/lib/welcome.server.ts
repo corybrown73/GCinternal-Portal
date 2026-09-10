@@ -50,6 +50,26 @@ async function viewFor(deal: any, opts: { internal: boolean }): Promise<WelcomeV
     if (typeof homework[k] === "string") homeworkDone[k] = homework[k] as string;
   }
 
+  // The lead's email: the owner whose name matches the lead, else the SE,
+  // else the AM. The closing screen says who to write to, not just who.
+  let leadEmail: string | null = null;
+  const ownerIds = [deal.se_owner_id, deal.am_owner_id].filter(Boolean);
+  if (ownerIds.length) {
+    const { data: owners } = await db()
+      .from("portal_profiles")
+      .select("id,full_name,email")
+      .in("id", ownerIds);
+    const rows = (owners ?? []) as Array<{
+      id: string;
+      full_name: string | null;
+      email: string | null;
+    }>;
+    const byName = rows.find((r) => r.full_name && r.full_name === input.lead);
+    const se = rows.find((r) => r.id === deal.se_owner_id);
+    const am = rows.find((r) => r.id === deal.am_owner_id);
+    leadEmail = byName?.email ?? se?.email ?? am?.email ?? null;
+  }
+
   const readiness: WelcomeView["readiness"] = [];
   if (opts.internal) {
     if (!input.industry)
@@ -114,11 +134,14 @@ async function viewFor(deal: any, opts: { internal: boolean }): Promise<WelcomeV
     lead: input.lead,
     fieldTester: input.fieldTester,
     currentProcess: input.currentProcess ?? null,
-    team: input.team ?? {
-      lead: input.lead,
-      accountManager: null,
-      solutionsEngineer: null,
-      champion: null,
+    team: {
+      ...(input.team ?? {
+        lead: input.lead,
+        accountManager: null,
+        solutionsEngineer: null,
+        champion: null,
+      }),
+      leadEmail,
     },
     firstForm: input.firstForm,
     nextUseCases: input.nextUseCases,
@@ -126,17 +149,24 @@ async function viewFor(deal: any, opts: { internal: boolean }): Promise<WelcomeV
     clientLogoUrl,
     homeworkDone,
     readiness,
-    // The URL needs the raw token, which we do not have after issue; the
-    // internal view says a link exists and when, and the issue call is what
-    // hands the URL back (once, to be copied).
-    shareUrl: null,
+    shareUrl: opts.internal ? ((deal.welcome_share_url as string | null) ?? null) : null,
+    qrDataUrl:
+      opts.internal && deal.welcome_share_url
+        ? await (
+            await import("qrcode")
+          ).toDataURL(String(deal.welcome_share_url), {
+            margin: 1,
+            width: 512,
+            color: { dark: "#072b57", light: "#ffffff" },
+          })
+        : null,
     sharedAt: opts.internal ? (deal.welcome_issued_at ?? null) : null,
     openedAt: opts.internal ? (deal.welcome_opened_at ?? null) : null,
   };
 }
 
 const DEAL_COLUMNS =
-  "id,name,logo_path,welcome_token_hash,welcome_issued_at,welcome_opened_at,welcome_homework";
+  "id,name,logo_path,se_owner_id,am_owner_id,welcome_token_hash,welcome_issued_at,welcome_opened_at,welcome_homework,welcome_share_url";
 
 export async function loadWelcome(dealId: string): Promise<WelcomeView | null> {
   const { data: deal } = await db()
@@ -158,12 +188,14 @@ export async function issueWelcomeLink(
   const { randomBytes } = await import("node:crypto");
   const token = `${TOKEN_PREFIX}${randomBytes(32).toString("base64url")}`;
   const issuedAt = new Date().toISOString();
+  const url = shareUrlFor(token);
   const { error } = await db()
     .from("portal_accounts")
     .update({
       welcome_token_hash: hashToken(token),
       welcome_issued_at: issuedAt,
       welcome_opened_at: null,
+      welcome_share_url: url,
     })
     .eq("id", dealId);
   if (error) throw new Error(`Could not issue the link: ${error.message}`);
@@ -175,7 +207,7 @@ export async function issueWelcomeLink(
     entity_id: dealId,
     payload: {},
   });
-  return { url: shareUrlFor(token), issuedAt };
+  return { url, issuedAt };
 }
 
 export async function revokeWelcomeLink(userId: string, dealId: string): Promise<void> {
@@ -183,7 +215,7 @@ export async function revokeWelcomeLink(userId: string, dealId: string): Promise
   await requireSalesEditor(userId);
   const { error } = await db()
     .from("portal_accounts")
-    .update({ welcome_token_hash: null, welcome_issued_at: null })
+    .update({ welcome_token_hash: null, welcome_issued_at: null, welcome_share_url: null })
     .eq("id", dealId);
   if (error) throw new Error(`Could not revoke the link: ${error.message}`);
   await audit({
