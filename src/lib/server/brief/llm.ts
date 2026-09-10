@@ -20,9 +20,6 @@ export async function generateBriefWithLLM(
   const userPrompt = buildBriefUserPrompt(account, reports, notes);
 
   for (let attempt = 0; attempt < 2; attempt++) {
-    // The SDK's zod helper is typed against zod v4; this project pins zod v3
-    // for the hub code, so the format is cast and the output re-validated with
-    // the same schema below — runtime safety is preserved either way.
     const response = await client.messages.parse({
       model: "claude-opus-5",
       max_tokens: 16000,
@@ -33,7 +30,7 @@ export async function generateBriefWithLLM(
       system: BRIEF_SYSTEM_PROMPT,
       messages: [{ role: "user", content: userPrompt }],
 
-      output_config: { format: zodOutputFormat(briefJsonSchema as any) as any },
+      output_config: { format: zodOutputFormat(briefJsonSchema) },
     });
 
     if (response.stop_reason === "refusal") return null;
