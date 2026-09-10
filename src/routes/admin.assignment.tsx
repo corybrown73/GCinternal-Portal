@@ -221,6 +221,19 @@ function AssignmentPage() {
                     }
                   />
                 </label>
+                <label className="flex items-center justify-between gap-2 text-[12px]">
+                  <span>Each extra service (PDF, dashboard, more forms…)</span>
+                  <input
+                    type="number"
+                    min={0}
+                    max={20}
+                    className={cn(input, "w-20")}
+                    value={rules.service_points}
+                    onChange={(e) =>
+                      setRules({ ...rules, service_points: Number(e.target.value) || 0 })
+                    }
+                  />
+                </label>
                 <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                   Integration tier → points
                 </p>

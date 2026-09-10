@@ -26,6 +26,8 @@ export type AssignmentRules = {
   seat_bands: Band[];
   /** Points by integration tier 0–5. */
   integration_points: Record<string, number>;
+  /** Points per service beyond the form, other than integrations (a PDF, a dashboard…). */
+  service_points: number;
 };
 
 export const DEFAULT_ASSIGNMENT_RULES: AssignmentRules = {
@@ -42,6 +44,7 @@ export const DEFAULT_ASSIGNMENT_RULES: AssignmentRules = {
     { min: 250, points: 3 },
   ],
   integration_points: { "0": 0, "1": 0, "2": 1, "3": 2, "4": 4, "5": 6 },
+  service_points: 1,
 };
 
 /** Fill anything missing or malformed from the defaults. Never throws. */
@@ -76,6 +79,10 @@ export function normalizeRules(raw: unknown): AssignmentRules {
       Number.isFinite(r.base_points) && Number(r.base_points) >= 0
         ? Math.round(Number(r.base_points))
         : DEFAULT_ASSIGNMENT_RULES.base_points,
+    service_points:
+      Number.isFinite(r.service_points) && Number(r.service_points) >= 0
+        ? Math.round(Number(r.service_points))
+        : DEFAULT_ASSIGNMENT_RULES.service_points,
     arr_bands: bands(r.arr_bands, DEFAULT_ASSIGNMENT_RULES.arr_bands),
     seat_bands: bands(r.seat_bands, DEFAULT_ASSIGNMENT_RULES.seat_bands),
     integration_points: ip,
@@ -92,7 +99,10 @@ function bandPoints(bands: Band[], value: number | null | undefined): number {
 export type DealForWeight = {
   arr: number | null;
   seats: number | null;
+  /** The highest tier among the integrations bought. */
   integrationTier: number | null;
+  /** Integrations beyond the first, plus every other service (PDF, dashboard…). */
+  extraServices?: number;
 };
 
 export type WeightBreakdown = {
@@ -100,6 +110,7 @@ export type WeightBreakdown = {
   arr: number;
   seats: number;
   integration: number;
+  services: number;
 };
 
 export function dealWeight(
@@ -111,9 +122,11 @@ export function dealWeight(
     arr: bandPoints(rules.arr_bands, deal.arr),
     seats: bandPoints(rules.seat_bands, deal.seats),
     integration: rules.integration_points[String(deal.integrationTier ?? 0)] ?? 0,
+    services: (deal.extraServices ?? 0) * rules.service_points,
   };
   return {
-    weight: breakdown.base + breakdown.arr + breakdown.seats + breakdown.integration,
+    weight:
+      breakdown.base + breakdown.arr + breakdown.seats + breakdown.integration + breakdown.services,
     breakdown,
   };
 }
@@ -124,6 +137,7 @@ export function describeBreakdown(b: WeightBreakdown): string {
   if (b.arr) parts.push(`${b.arr} ARR`);
   if (b.seats) parts.push(`${b.seats} seats`);
   if (b.integration) parts.push(`${b.integration} integration`);
+  if (b.services) parts.push(`${b.services} services`);
   return parts.join(" · ");
 }
 

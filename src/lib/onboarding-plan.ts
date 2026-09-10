@@ -1,4 +1,5 @@
 import type { IntakeAnswers } from "./intake-answers";
+import { type ServiceSpec } from "./onboarding-services";
 import { buildTimeline, type IntegrationTier, type Timeline } from "./onboarding-timeline";
 
 /**
@@ -42,5 +43,6 @@ export function timelineFor(intake: IntakeAnswers, closeDate: string): Timeline 
     completed: t.completed,
     times: t.times,
     timezone: t.timezone,
+    services: t.services as ServiceSpec[],
   });
 }

@@ -90,11 +90,10 @@ export function speakerNotes(view: WelcomeView): {
         say: [
           `Walk it left to right and say the dates out loud. Kickoff ${kickoff ? shortDay(kickoff.date) : ""}, sixty minutes. Homework due ${homework ? shortDay(homework.date) : ""}. Working session ${working ? shortDay(working.date) : ""}, thirty minutes. Field test from ${fieldtest ? shortDay(fieldtest.date) : ""}. Live ${live}.`,
           "Every step has an owner. Blue is on a call together; green is your homework; navy is ours.",
-          ...(integ.milestones.length
-            ? [
-                `Phase 2 — ${integ.target ? `connecting to ${integ.target}` : "the integration"} — is on the page, and it is gated. It starts once the form is tested and dialed in. ${integ.tentative ? `The earliest that could be is ${shortDay(integ.startsOn!)}, and those dates are marked as estimates for that reason.` : `That happened ${shortDay(integ.provenOn!)}, so it starts ${shortDay(integ.startsOn!)}.`}`,
-              ]
-            : []),
+          ...t.phases.map(
+            (ph) =>
+              `${ph.label} — ${ph.services.map((x) => x.name).join(" and ")}${ph.services.length > 1 ? ", worked on at the same time" : ""} — is on the page, and it is gated. ${ph.gate}. ${ph.tentative ? `The earliest that could be is ${shortDay(ph.startsOn!)}; those dates are marked as estimates for that reason.` : `That happened, so it runs ${shortDay(ph.startsOn!)} to ${shortDay(ph.endsOn!)}.`}`,
+          ),
         ],
         why: "Book both calls before you leave this screen. A date that is on the calendar is a date; a date that is on a slide is a hope. If one does not work, move it now in the portal — the page updates in front of them.",
         ifTheyAsk: [
@@ -132,8 +131,8 @@ export function speakerNotes(view: WelcomeView): {
             ? `Today, in your words: "${view.currentProcess}"`
             : "Today: paper on the truck, photos on somebody's phone, the office retyping it all on Friday.",
           `By ${live}: ${form} on the crew's phone. Same day in the office, photos and a signature on every one, no retyping.`,
-          integ.milestones.length
-            ? `Then phase 2: ${integ.target ? `connected to ${integ.target}` : "the integration"}, once the form is dialed in.`
+          t.phases.length
+            ? `Then ${t.phases.map((ph) => `${ph.label.toLowerCase()}: ${ph.services.map((x) => x.name).join(" and ")}`).join("; ")} — once the form is dialed in. Say "you are on phase 1" out loud; the page says it too.`
             : `Then the next forms — ${view.nextUseCases.map((n) => n.name).join(", ") || "the ones you pick"} — built by you, with us on a call if you want us.`,
         ],
         why: "The customer's own words on the 'today' side is what makes this land. If the intake did not capture them, ask now and type it into the portal after the call.",

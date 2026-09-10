@@ -17,10 +17,15 @@ describe("dealWeight", () => {
     expect(dealWeight({ arr: 8_000, seats: 5, integrationTier: 0 }, R).weight).toBe(1);
   });
   it("adds seats, ARR and the integration tier by band", () => {
-    const { weight, breakdown } = dealWeight({ arr: 90_000, seats: 120, integrationTier: 3 }, R);
-    expect(breakdown).toEqual({ base: 1, arr: 2, seats: 2, integration: 2 });
-    expect(weight).toBe(7);
-    expect(describeBreakdown(breakdown)).toBe("1 base · 2 ARR · 2 seats · 2 integration");
+    const { weight, breakdown } = dealWeight(
+      { arr: 90_000, seats: 120, integrationTier: 3, extraServices: 2 },
+      R,
+    );
+    expect(breakdown).toEqual({ base: 1, arr: 2, seats: 2, integration: 2, services: 2 });
+    expect(weight).toBe(9);
+    expect(describeBreakdown(breakdown)).toBe(
+      "1 base · 2 ARR · 2 seats · 2 integration · 2 services",
+    );
   });
   it("treats unknowns as nothing extra", () => {
     expect(dealWeight({ arr: null, seats: null, integrationTier: null }, R).weight).toBe(1);

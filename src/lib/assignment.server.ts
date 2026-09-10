@@ -172,13 +172,18 @@ async function dealFacts(dealId: string) {
     .maybeSingle();
   if (!deal) throw new Error("Deal not found");
   const intake = readIntake(deal.intake);
+  const { normalizeServices } = await import("@/lib/onboarding-services");
+  const services = normalizeServices(intake.timeline.services as any, intake.timeline);
+  const integrations = services.filter((x) => x.kind === "integration");
+  const topTier = integrations.reduce((m, x) => Math.max(m, x.tier ?? 3), 0);
   return {
     deal,
     intake,
     forWeight: {
       arr: deal.arr === null || deal.arr === undefined ? null : Number(deal.arr),
       seats: intake.field_users,
-      integrationTier: intake.timeline.integration_tier,
+      integrationTier: topTier || null,
+      extraServices: Math.max(0, services.length - (integrations.length ? 1 : 0)),
     },
   };
 }

@@ -422,6 +422,27 @@ export const saveIntake = createServerFn({ method: "POST" })
                   .optional(),
                 times: z.record(z.string().max(40), z.string().regex(/^\d{2}:\d{2}$/)).optional(),
                 timezone: z.string().trim().max(64).nullable().optional(),
+                services: z
+                  .array(
+                    z.object({
+                      id: z.string().min(1).max(40),
+                      kind: z.enum([
+                        "integration",
+                        "custom_pdf",
+                        "paid_form",
+                        "analytics",
+                        "data_load",
+                        "training",
+                        "other",
+                      ]),
+                      name: z.string().trim().min(1).max(120),
+                      phase: z.number().int().min(2).max(9),
+                      tier: z.number().int().min(0).max(5).nullable().optional(),
+                      weeks: z.number().min(0.5).max(52).nullable().optional(),
+                    }),
+                  )
+                  .max(20)
+                  .optional(),
               })
               .strict()
               .optional(),

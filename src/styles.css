@@ -2920,3 +2920,71 @@ body.gc-presenting {
   top: 14px;
   bottom: auto;
 }
+
+/* ---- phases: several services, you-are-here */
+.gc-welcome .wp-phase2 {
+  margin-top: 10px;
+  padding: 10px 16px 12px;
+}
+.gc-welcome .wp-phase2.is-now {
+  border-color: var(--wp-blue);
+  box-shadow: 0 0 0 3px rgba(3, 157, 231, 0.12);
+}
+.gc-welcome .wp-phase2.is-done {
+  background: #f2faf5;
+  border-color: #bfe6cf;
+}
+.gc-welcome .wp-phase2.is-done .wp-phase2-tag {
+  background: var(--wp-green);
+}
+.gc-welcome .wp-phase2-head {
+  margin-bottom: 8px;
+}
+.gc-welcome .wp-phase2-steps {
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px 20px;
+}
+.gc-welcome .wp-phase2-steps.is-many {
+  grid-template-columns: repeat(3, 1fr);
+}
+.gc-welcome .wp-phase2-label small {
+  display: block;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--wp-muted);
+  letter-spacing: 0.02em;
+}
+.gc-welcome .wp-after-title.is-later {
+  margin-top: 6px;
+  font-weight: 700;
+  color: var(--wp-body);
+}
+/* two or more phases: a tighter rail, no legend, the phases carry the story */
+.gc-welcome .wp-content:has(.wp-phase2 + .wp-phase2) .wp-legend {
+  display: none;
+}
+.gc-welcome .wp-content:has(.wp-phase2) .wp-rail .wp-tile.is-lg {
+  width: 52px;
+  height: 52px;
+  border-radius: 16px;
+}
+.gc-welcome .wp-content:has(.wp-phase2) .wp-rail-line {
+  top: 62px;
+}
+.gc-welcome .wp-content:has(.wp-phase2) .wp-node {
+  gap: 4px;
+}
+.gc-welcome .wp-content:has(.wp-phase2) .wp-node-label {
+  min-height: 0;
+  font-size: 13px;
+}
+.gc-welcome .wp-content:has(.wp-phase2 + .wp-phase2) .wp-phase2 {
+  margin-top: 8px;
+  padding: 8px 14px 10px;
+}
+.gc-welcome .wp-content:has(.wp-phase2 + .wp-phase2) .wp-phase2-head {
+  margin-bottom: 6px;
+}
+.gc-welcome .wp-content:has(.wp-phase2) {
+  padding-top: 8px;
+}

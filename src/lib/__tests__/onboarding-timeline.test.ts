@@ -280,3 +280,89 @@ describe("done marks", () => {
     expect(t.milestones.find((m) => m.key === "kickoff")!.doneOn).toBeNull();
   });
 });
+
+describe("phases with several services", () => {
+  const services = [
+    {
+      id: "qb",
+      kind: "integration" as const,
+      name: "QuickBooks Online",
+      phase: 2,
+      tier: 3 as const,
+    },
+    { id: "pdf", kind: "custom_pdf" as const, name: "Invoice PDF", phase: 2 },
+    { id: "dash", kind: "analytics" as const, name: "Ops dashboard", phase: 3 },
+  ];
+
+  it("runs services in the same phase at the same time, and the next phase after", () => {
+    const t = buildTimeline({ closeDate: "2026-09-09", services, formProvenOn: "2026-09-18" });
+    expect(t.phases.map((p) => p.phase)).toEqual([2, 3]);
+    const p2 = t.phases[0]!;
+    expect(p2.services.map((s) => s.name)).toEqual(["QuickBooks Online", "Invoice PDF"]);
+    expect(p2.services[0]!.startsOn).toBe(p2.services[1]!.startsOn);
+    expect(p2.services[0]!.startsOn).toBe(p2.startsOn);
+    expect(p2.services[0]!.weeks).toBe(2);
+    expect(p2.services[1]!.weeks).toBe(1);
+    expect(p2.endsOn).toBe(p2.services[0]!.endsOn);
+    expect(p2.tentative).toBe(false);
+    const p3 = t.phases[1]!;
+    expect(p3.startsOn! > p2.endsOn!).toBe(true);
+    expect(p3.tentative).toBe(true);
+    expect(p3.gate).toMatch(/phase 2 is live/);
+  });
+
+  it("is on phase 1 until the form is live, then the lowest phase with work left", () => {
+    const before = buildTimeline({ closeDate: "2026-09-09", services });
+    expect(before.currentPhase).toBe(1);
+    expect(before.phases[0]!.tentative).toBe(true);
+    const during = buildTimeline({
+      closeDate: "2026-09-09",
+      services,
+      completed: { live: "2026-09-18" },
+    });
+    expect(during.currentPhase).toBe(2);
+    const p2done = buildTimeline({
+      closeDate: "2026-09-09",
+      services,
+      completed: { live: "2026-09-18", "qb:live": "2026-10-02", "pdf:live": "2026-09-28" },
+    });
+    expect(p2done.phases[0]!.done).toBe(true);
+    expect(p2done.currentPhase).toBe(3);
+    // Phase 3 now anchors on the day phase 2 actually finished, and is committed.
+    expect(p2done.phases[1]!.tentative).toBe(false);
+    expect(p2done.phases[1]!.startsOn).toBe(addBusinessDays("2026-10-02", 1));
+    expect(p2done.allDone).toBe(false);
+  });
+
+  it("keeps the single-integration view for the parts of the app that use it", () => {
+    const t = buildTimeline({ closeDate: "2026-09-09", services });
+    expect(t.integration.target).toBe("QuickBooks Online");
+    expect(t.integration.tier).toBe(3);
+    expect(t.integration.milestones.map((m) => m.key)).toEqual([
+      "qb:kickoff",
+      "qb:build",
+      "qb:review",
+      "qb:live",
+    ]);
+    expect(t.integration.tentative).toBe(true);
+  });
+
+  it("folds the legacy tier/target knobs into a phase-2 service when no services are set", () => {
+    const t = buildTimeline({
+      closeDate: "2026-09-09",
+      integrationTier: 2,
+      integrationTarget: "Dropbox",
+    });
+    expect(t.phases).toHaveLength(1);
+    expect(t.phases[0]!.services[0]!.name).toBe("Dropbox");
+    expect(t.integration.milestones[0]!.key).toBe("integ_kickoff");
+  });
+
+  it("weights every step with its phase and service", () => {
+    const t = buildTimeline({ closeDate: "2026-09-09", services });
+    expect(t.milestones.every((m) => m.phase === 1)).toBe(true);
+    const qb = t.phases[0]!.services[0]!;
+    expect(qb.milestones.every((m) => m.phase === 2 && m.serviceId === "qb")).toBe(true);
+    expect(t.progress.total).toBe(7 + 4 + 4 + 4);
+  });
+});

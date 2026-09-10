@@ -677,7 +677,10 @@ function Cover({ view, qr }: { view: WelcomeView; qr?: { url: string; dataUrl: s
       <div className="wp-cover-grid">
         <div className="wp-cover-text">
           <p className="wp-eyebrow">
-            Onboarding plan · {view.industry ?? "Your team"} · {daysToValue(t)} days to value
+            Onboarding plan · {view.industry ?? "Your team"} ·{" "}
+            {t.phases.length
+              ? `Phase ${t.currentPhase} of ${t.phases.length + 1}`
+              : `${daysToValue(t)} days to value`}
           </p>
           <h1 className="wp-title is-hero">
             Let&apos;s bring your <span className="wp-accent">workflow to life</span>
@@ -849,7 +852,7 @@ function Plan({ view }: { view: WelcomeView }) {
     <Frame
       page={3}
       eyebrow="Your timeline"
-      title="Seven days to a"
+      title={t.phases.length ? "Phase 1: seven days to a" : "Seven days to a"}
       accent="form in the field"
       lede="Two short working sessions, a little homework, one crew on real jobs. Every day below has an owner."
       band={`Live on ${shortDay(t.liveDate)}. No account should stall waiting on a form — we drive the pace, and you own the form.`}
@@ -878,41 +881,62 @@ function Plan({ view }: { view: WelcomeView }) {
           </div>
         ))}
       </div>
-      {t.integration.milestones.length ? (
-        <div className={cn("wp-phase2", t.integration.tentative && "is-tentative")}>
+      {t.phases.map((ph) => (
+        <div
+          key={ph.phase}
+          className={cn(
+            "wp-phase2",
+            ph.tentative && "is-tentative",
+            ph.done && "is-done",
+            t.currentPhase === ph.phase && !ph.done && "is-now",
+          )}
+        >
           <div className="wp-phase2-head">
-            <span className="wp-phase2-tag">Phase 2</span>
+            <span className="wp-phase2-tag">
+              {ph.label}
+              {t.currentPhase === ph.phase && !ph.done ? " · you are here" : ""}
+            </span>
             <span className="wp-phase2-title">
-              {t.integration.target ? `Connect it to ${t.integration.target}` : "The integration"} ·
-              about {t.integration.weeks} week{t.integration.weeks === 1 ? "" : "s"}
+              {ph.services.map((x) => x.name).join(" + ")}
+              {ph.services.length > 1 ? " — at the same time" : ""}
             </span>
             <span className="wp-phase2-gate">
-              {t.integration.tentative
-                ? `Starts once the form is tested and dialed in — earliest ${shortDay(t.integration.startsOn!)}`
-                : `Form dialed in ${shortDay(t.integration.provenOn!)} · starts ${shortDay(t.integration.startsOn!)}`}
+              {ph.done
+                ? `Done ${shortDay(ph.endsOn!)}`
+                : ph.tentative
+                  ? `${ph.gate} — earliest ${shortDay(ph.startsOn!)}`
+                  : `${shortDay(ph.startsOn!)} → ${shortDay(ph.endsOn!)}`}
             </span>
           </div>
-          <div className="wp-phase2-steps">
-            {t.integration.milestones.map((m, i) => (
-              <div key={m.key} className={cn("wp-phase2-step", m.doneOn && "is-done")}>
+          <div className={cn("wp-phase2-steps", ph.services.length > 2 && "is-many")}>
+            {ph.services.map((svc) => (
+              <div key={svc.id} className={cn("wp-phase2-step", svc.doneOn && "is-done")}>
                 <span className="wp-node-tile is-sm">
-                  <Tile name={m.icon} size="sm" tone={i === 3 ? "navy" : "blue"} />
-                  {m.doneOn ? (
+                  <Tile name={svc.icon} size="sm" tone={svc.doneOn ? "navy" : "blue"} />
+                  {svc.doneOn ? (
                     <span className="wp-done-badge is-sm">
                       <Check className="h-2.5 w-2.5" strokeWidth={3} />
                     </span>
                   ) : null}
                 </span>
-                <span className="wp-phase2-label">{m.label}</span>
+                <span className="wp-phase2-label">
+                  {svc.name}
+                  <small>
+                    {svc.label}
+                    {svc.tier ? ` · tier ${svc.tier}` : ""} · {svc.weeks} wk
+                    {svc.weeks === 1 ? "" : "s"}
+                  </small>
+                </span>
                 <span className="wp-phase2-date">
-                  {t.integration.tentative ? "≈ " : ""}
-                  {shortDay(m.date)}
+                  {svc.doneOn
+                    ? `Live ${shortDay(svc.doneOn)}`
+                    : `${ph.tentative ? "≈ " : ""}${shortDay(svc.startsOn)} → ${shortDay(svc.endsOn)}`}
                 </span>
               </div>
             ))}
           </div>
         </div>
-      ) : null}
+      ))}
       <div className="wp-legend">
         <span>
           <Owner owner="gocanvas" /> we do it, you hear about it
@@ -1039,7 +1063,7 @@ function Together({
 function FirstForm({ view }: { view: WelcomeView }) {
   const at = (key: string) => view.timeline.milestones.find((m) => m.key === key);
   const f = view.firstForm;
-  const integ = view.timeline.integration;
+  const phase2 = view.timeline.phases[0] ?? null;
   const live = shortDay(view.timeline.liveDate);
   const today =
     view.currentProcess ??
@@ -1094,7 +1118,9 @@ function FirstForm({ view }: { view: WelcomeView }) {
         <span className="wp-journey-arrow" />
         <div className="wp-journey-col is-future">
           <span className="wp-journey-tag is-navy">
-            {integ.milestones.length ? "Phase 2" : "Then"}
+            {phase2
+              ? `Phase 2${view.timeline.phases.length > 1 ? ` of ${view.timeline.phases.length + 1}` : ""}`
+              : "Then"}
           </span>
           <div className="wp-journey-art">
             <div className="wp-office">
@@ -1111,15 +1137,23 @@ function FirstForm({ view }: { view: WelcomeView }) {
             </div>
           </div>
           <h3>
-            {integ.milestones.length
-              ? integ.target
-                ? `Connected to ${integ.target}`
-                : "Connected to your systems"
+            {phase2
+              ? phase2.services.map((x) => x.name).join(" + ")
               : "The next forms, built by you"}
           </h3>
           <p>
-            {integ.milestones.length
-              ? `Once the form is tested and dialed in — ${integ.tentative ? `earliest ${shortDay(integ.startsOn!)}` : `from ${shortDay(integ.startsOn!)}`}. Every submission lands where the office already works.`
+            {phase2
+              ? `${phase2.services.length > 1 ? "Worked on at the same time, " : ""}once the form is tested and dialed in — ${phase2.tentative ? `earliest ${shortDay(phase2.startsOn!)}` : `from ${shortDay(phase2.startsOn!)}`}.${
+                  view.timeline.phases.length > 1
+                    ? ` Then ${view.timeline.phases
+                        .slice(1)
+                        .map(
+                          (p) =>
+                            `${p.label.toLowerCase()}: ${p.services.map((x) => x.name).join(" + ")}`,
+                        )
+                        .join("; ")}.`
+                    : ""
+                }`
               : view.nextUseCases.length
                 ? `${view.nextUseCases.map((n) => n.name).join(" · ")}. Same team, same working-session format, whenever you are ready.`
                 : "We pick them together once the first form is in the field."}
@@ -1206,18 +1240,26 @@ function Business({ view, icsBase }: { view: WelcomeView; icsBase: string | null
             </div>
           </div>
           <div className="wp-after">
-            {integ.weeks > 0 && integ.startsOn ? (
+            {t.phases.length ? (
               <>
-                <p className="wp-after-title">
-                  Phase 2: {integ.target ? `connect it to ${integ.target}` : "the integration"} ·
-                  about {integ.weeks} week{integ.weeks === 1 ? "" : "s"}
-                </p>
+                {t.phases.map((ph) => (
+                  <p key={ph.phase} className={cn("wp-after-title", ph.phase > 2 && "is-later")}>
+                    {ph.label}:{" "}
+                    {ph.services
+                      .map((x) => `${x.name} (${x.weeks} wk${x.weeks === 1 ? "" : "s"})`)
+                      .join(" + ")}
+                    {ph.services.length > 1 ? ", at the same time" : ""}
+                    {" · "}
+                    {ph.done
+                      ? `done ${shortDay(ph.endsOn!)}`
+                      : ph.tentative
+                        ? `${ph.gate.toLowerCase()} — earliest ${shortDay(ph.startsOn!)}`
+                        : `${shortDay(ph.startsOn!)} → ${shortDay(ph.endsOn!)}`}
+                  </p>
+                ))}
                 <p className="wp-after-body">
-                  {integ.tentative
-                    ? `Starts once the form is tested and dialed in — earliest ${shortDay(integ.startsOn)}. `
-                    : `Starts ${shortDay(integ.startsOn)}, now the form is proven. `}
-                  It opens with a thirty-minute kickoff to gather the final details: systems,
-                  fields, credentials, who owns the mapping. The form first, always.
+                  Each one opens with a thirty-minute kickoff to gather the final details. The form
+                  first, always — nothing here starts until a crew has run it on real jobs.
                 </p>
               </>
             ) : (

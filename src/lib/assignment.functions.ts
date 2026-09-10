@@ -33,6 +33,7 @@ export const saveAssignmentRules = createServerFn({ method: "POST" })
           .array(z.object({ min: z.number().min(0), points: z.number().int().min(0).max(20) }))
           .max(8),
         integration_points: z.record(z.string().regex(/^[0-5]$/), z.number().int().min(0).max(20)),
+        service_points: z.number().int().min(0).max(20),
       })
       .parse(data),
   )

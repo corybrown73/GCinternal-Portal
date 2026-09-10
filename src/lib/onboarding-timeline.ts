@@ -31,6 +31,14 @@
  * plan reports which date a person moved and which ones followed.
  */
 
+import {
+  normalizeServices,
+  SERVICE_KINDS,
+  serviceWeeks,
+  type ServiceKind,
+  type ServiceSpec,
+} from "./onboarding-services";
+
 export type MilestoneOwner = "gocanvas" | "client" | "both";
 export type MilestoneKind = "call" | "homework" | "build" | "milestone";
 
@@ -239,6 +247,12 @@ export type TimelineOptions = {
   times?: Record<string, string>;
   /** IANA zone the times are in. */
   timezone?: string | null;
+  /**
+   * Everything bought beyond the first form, each assigned to a phase ≥ 2.
+   * See onboarding-services.ts. The legacy integrationTier/Target pair is
+   * folded in when this is empty.
+   */
+  services?: ServiceSpec[];
 };
 
 export type Milestone = MilestoneSpec & {
@@ -254,6 +268,39 @@ export type Milestone = MilestoneSpec & {
   doneOn: string | null;
   /** "HH:MM" local time, for a call with one booked. */
   time: string | null;
+  /** 1 for the form; the service's phase otherwise. */
+  phase: number;
+  /** The service this step belongs to; undefined for the seven-day plan. */
+  serviceId?: string;
+};
+
+export type ServicePlan = {
+  id: string;
+  kind: ServiceKind;
+  label: string;
+  name: string;
+  phase: number;
+  weeks: number;
+  tier: IntegrationTier | null;
+  icon: string;
+  startsOn: string;
+  endsOn: string;
+  /** The day its last step was marked done, when it was. */
+  doneOn: string | null;
+  milestones: Milestone[];
+};
+
+export type Phase = {
+  phase: number;
+  label: string;
+  /** What opens it, in words the customer reads. */
+  gate: string;
+  /** True while its dates are "earliest", not committed. */
+  tentative: boolean;
+  startsOn: string | null;
+  endsOn: string | null;
+  done: boolean;
+  services: ServicePlan[];
 };
 
 export type Timeline = {
@@ -267,6 +314,13 @@ export type Timeline = {
   timezone: string | null;
   /** How many of the plan's steps are marked done. */
   progress: { done: number; total: number };
+  /** Phases 2 and up. Empty when nothing beyond the form was bought. */
+  phases: Phase[];
+  /** 1 while the form is being built; then the lowest phase with work left. */
+  currentPhase: number;
+  /** True when every phase is done. */
+  allDone: boolean;
+  /** The first integration, for the parts of the app that speak of one. */
   integration: {
     tier: IntegrationTier;
     name: string;
@@ -385,6 +439,7 @@ export function buildTimeline(options: TimelineOptions): Timeline {
         shifted: !moved && shift !== 0 && date !== base,
         doneOn: done && ISO.test(done) ? done : null,
         time: time && /^\d{2}:\d{2}$/.test(time) ? time : null,
+        phase: 1,
       };
     });
   };
@@ -396,41 +451,140 @@ export function buildTimeline(options: TimelineOptions): Timeline {
   const liveDate = milestones[milestones.length - 1]!.date;
   const liveDoneOn = milestones[milestones.length - 1]!.doneOn;
 
-  const tierNo = options.integrationTier ?? 0;
-  const tier = INTEGRATION_TIERS.find((t) => t.tier === tierNo) ?? INTEGRATION_TIERS[0];
-  const hasIntegration = tier.weeks > 0;
   // The gate opens when a person says so, or when the form is marked live —
   // whichever is recorded. Marking the form live IS saying it is dialed in.
   const provenOn =
     options.formProvenOn && ISO.test(options.formProvenOn) ? options.formProvenOn : liveDoneOn;
-  // Phase 2 anchors on the day the form was proven; until then, the earliest
-  // it could be is the business day after the form is live. Never before.
-  const anchor = provenOn && provenOn > liveDate ? provenOn : liveDate;
-  const plannedStart = hasIntegration ? addBusinessDays(anchor, 1, holidays) : null;
-  const spanDays = tier.weeks * 7;
-  const phase2: Milestone[] = plannedStart
-    ? cascade(INTEGRATION_PLAN, (spec) =>
-        spec.at === 0
-          ? plannedStart
-          : spec.at === 1
-            ? addWeeks(plannedStart, tier.weeks)
-            : onBusinessDay(
-                toIso(
-                  new Date(
-                    parseIso(plannedStart).getTime() + Math.round(spanDays * spec.at) * DAY_MS,
-                  ),
-                ),
-                holidays,
-              ),
-      ).map((m) => {
-        const { at: _at, ...rest } = m as Milestone & { at?: number };
-        return rest as Milestone;
-      })
-    : [];
-  const startsOn = phase2[0]?.date ?? null;
-  const endsOn = phase2[phase2.length - 1]?.date ?? null;
 
-  const all = [...milestones, ...phase2];
+  // Phases 2 and up: every service in a phase starts together on the phase's
+  // first business day and runs its own steps over its own weeks. Phase 2
+  // anchors on the day the form was proven (never before the live date);
+  // phase N anchors on the day phase N-1 finished — planned until it has.
+  const services = normalizeServices(options.services, {
+    integration_tier: options.integrationTier ?? null,
+    integration_target: options.integrationTarget ?? null,
+  });
+  const phaseNumbers = [...new Set(services.map((x) => x.phase))].sort((a, b) => a - b);
+  const phases: Phase[] = [];
+  let prevEnds: string | null = null; // planned end of the previous phase
+  let prevDoneOn: string | null = null; // actual end, when every service is done
+  let prevDone = true;
+  for (const n of phaseNumbers) {
+    const isFirst = phases.length === 0;
+    // Phase 2 never starts before the form is live, even if a person recorded
+    // the form as proven earlier by mistake. A later phase starts the day its
+    // predecessor actually finished — early or late — else on its planned end.
+    const anchor = isFirst
+      ? provenOn && provenOn > liveDate
+        ? provenOn
+        : liveDate
+      : prevDone && prevDoneOn
+        ? prevDoneOn
+        : (prevEnds ?? liveDate);
+    const phaseStart = addBusinessDays(anchor, 1, holidays);
+    const tentative = isFirst ? !provenOn : !(prevDone && prevDoneOn);
+    const plans: ServicePlan[] = services
+      .filter((x) => x.phase === n)
+      .map((svc) => {
+        const spec = SERVICE_KINDS[svc.kind];
+        const weeks = serviceWeeks(svc);
+        const spanDays = Math.max(1, Math.round(weeks * 7));
+        const legacy = svc.id === "legacy-integration";
+        const keyFor = (step: string) =>
+          legacy ? `integ_${step === "review" ? "test" : step}` : `${svc.id}:${step}`;
+        const stepSpecs = spec.steps.map((st) => ({
+          key: keyFor(st.key),
+          label: st.label,
+          owner: st.owner,
+          kind:
+            st.kind === "call"
+              ? ("call" as const)
+              : st.kind === "build"
+                ? ("build" as const)
+                : ("milestone" as const),
+          ...(st.minutes !== undefined && { minutes: st.minutes }),
+          detail: st.detail,
+          icon: st.icon,
+          at: st.at,
+        }));
+        const ms = cascade(stepSpecs, (st) =>
+          st.at === 0
+            ? phaseStart
+            : st.at === 1
+              ? onBusinessDay(
+                  toIso(new Date(parseIso(phaseStart).getTime() + spanDays * DAY_MS)),
+                  holidays,
+                )
+              : onBusinessDay(
+                  toIso(
+                    new Date(
+                      parseIso(phaseStart).getTime() + Math.round(spanDays * st.at) * DAY_MS,
+                    ),
+                  ),
+                  holidays,
+                ),
+        ).map((m) => {
+          const { at: _at, ...rest } = m as Milestone & { at?: number };
+          return { ...rest, phase: n, serviceId: svc.id } as Milestone;
+        });
+        return {
+          id: svc.id,
+          kind: svc.kind,
+          label: spec.label,
+          name: svc.name,
+          phase: n,
+          weeks,
+          tier: svc.kind === "integration" ? (svc.tier ?? 3) : null,
+          icon: spec.icon,
+          startsOn: ms[0]!.date,
+          endsOn: ms[ms.length - 1]!.date,
+          doneOn: ms[ms.length - 1]!.doneOn,
+          milestones: ms,
+        };
+      });
+    const endsOn = plans.reduce<string | null>(
+      (acc, p) => (!acc || p.endsOn > acc ? p.endsOn : acc),
+      null,
+    );
+    const done = plans.length > 0 && plans.every((p) => p.doneOn);
+    const doneOn = done
+      ? plans.reduce<string | null>(
+          (acc, p) => (!acc || (p.doneOn && p.doneOn > acc) ? p.doneOn : acc),
+          null,
+        )
+      : null;
+    phases.push({
+      phase: n,
+      label: `Phase ${n}`,
+      gate: isFirst
+        ? "Starts once the form is tested and dialed in"
+        : `Starts once phase ${phases[phases.length - 1]!.phase} is live`,
+      tentative,
+      startsOn: phaseStart,
+      endsOn,
+      done,
+      services: plans,
+    });
+    prevEnds = endsOn;
+    prevDoneOn = doneOn;
+    prevDone = done;
+  }
+
+  const currentPhase = !liveDoneOn
+    ? 1
+    : (phases.find((p) => !p.done)?.phase ??
+      (phases.length ? phases[phases.length - 1]!.phase : 1));
+  const allDone = Boolean(liveDoneOn) && phases.every((p) => p.done);
+
+  // The first integration, for the parts of the app that still speak of one.
+  const firstIntegration = phases.flatMap((p) => p.services).find((x) => x.kind === "integration");
+  const tier =
+    INTEGRATION_TIERS.find((t) => t.tier === (firstIntegration?.tier ?? 0)) ?? INTEGRATION_TIERS[0];
+  const integPhase = firstIntegration
+    ? phases.find((p) => p.phase === firstIntegration.phase)
+    : null;
+
+  const all = [...milestones, ...phases.flatMap((p) => p.services.flatMap((x) => x.milestones))];
   return {
     closeDate: options.closeDate,
     milestones,
@@ -438,17 +592,20 @@ export function buildTimeline(options: TimelineOptions): Timeline {
     liveDoneOn,
     timezone: options.timezone ?? null,
     progress: { done: all.filter((m) => m.doneOn).length, total: all.length },
+    phases,
+    currentPhase,
+    allDone,
     integration: {
       tier: tier.tier,
       name: tier.name,
-      weeks: tier.weeks,
+      weeks: firstIntegration?.weeks ?? tier.weeks,
       summary: tier.summary,
-      target: options.integrationTarget ?? null,
-      startsOn,
-      endsOn,
+      target: firstIntegration?.name ?? null,
+      startsOn: firstIntegration?.startsOn ?? null,
+      endsOn: firstIntegration?.endsOn ?? null,
       provenOn,
-      tentative: hasIntegration && !provenOn,
-      milestones: phase2,
+      tentative: Boolean(firstIntegration) && Boolean(integPhase?.tentative),
+      milestones: firstIntegration?.milestones ?? [],
     },
   };
 }

@@ -17,10 +17,18 @@ import { readIntake, type IntakeAnswers } from "@/lib/intake-answers";
 import { buildIcs } from "@/lib/ics";
 import { closeDateFor, timelineFor } from "@/lib/onboarding-plan";
 import {
+  normalizeServices,
+  SERVICE_KIND_LIST,
+  SERVICE_KINDS,
+  type ServiceKind,
+  type ServiceSpec,
+} from "@/lib/onboarding-services";
+import {
   daysToValue,
   daysToValueActual,
   INTEGRATION_TIERS,
   shortDay,
+  type IntegrationTier,
   type Milestone,
 } from "@/lib/onboarding-timeline";
 import { generateOnboardingDeck, saveIntake } from "@/lib/presale.functions";
@@ -64,7 +72,29 @@ export function TimelinePanel({
   const [error, setError] = useState<string | null>(null);
   const [holiday, setHoliday] = useState("");
   const [tester, setTester] = useState(knobs.field_tester ?? "");
-  const [target, setTarget] = useState(knobs.integration_target ?? "");
+  const [newKind, setNewKind] = useState<ServiceKind>("integration");
+  const [newName, setNewName] = useState("");
+  const [newPhase, setNewPhase] = useState(2);
+  // The services as the plan sees them: the stored list, with the legacy
+  // single-integration knobs folded in until somebody edits the list.
+  const services = normalizeServices(knobs.services as ServiceSpec[], knobs);
+  const writeServices = (next: ServiceSpec[]) =>
+    // Editing materialises the list and retires the legacy knobs, so the two
+    // can never disagree.
+    set({ services: next, integration_tier: 0, integration_target: null });
+  const addService = () => {
+    const name = newName.trim();
+    if (!name) return;
+    const id = `${newKind.slice(0, 4)}-${Math.random().toString(36).slice(2, 8)}`;
+    writeServices([
+      ...services,
+      { id, kind: newKind, name, phase: newPhase, ...(newKind === "integration" && { tier: 3 }) },
+    ]);
+    setNewName("");
+  };
+  const updateService = (id: string, patch: Partial<ServiceSpec>) =>
+    writeServices(services.map((x) => (x.id === id ? { ...x, ...patch } : x)));
+  const removeService = (id: string) => writeServices(services.filter((x) => x.id !== id));
   const [deck, setDeck] = useState<{ url: string; fileName: string } | null>(null);
 
   const mutation = useMutation({
@@ -461,65 +491,183 @@ export function TimelinePanel({
           </label>
         </div>
 
-        {/* The integration, after day seven. */}
-        <div className="grid gap-2 rounded-md border border-border bg-muted/20 p-2.5 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-          <label className="space-y-1 text-[11px] text-muted-foreground">
-            Integration complexity
-            <select
-              className={cn(input, "w-full")}
-              value={knobs.integration_tier}
-              disabled={busy}
-              onChange={(e) => set({ integration_tier: Number(e.target.value) })}
-            >
-              {INTEGRATION_TIERS.map((t) => (
-                <option key={t.tier} value={t.tier}>
-                  {t.tier === 0
-                    ? "None"
-                    : `Tier ${t.tier} · ${t.name}${t.weeks ? ` · ${t.weeks} wk${t.weeks === 1 ? "" : "s"}` : ""}`}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="space-y-1 text-[11px] text-muted-foreground">
-            Connecting to
-            <input
-              className={cn(input, "w-full")}
-              value={target}
-              disabled={busy || knobs.integration_tier === 0}
-              placeholder="QuickBooks Online"
-              onChange={(e) => setTarget(e.target.value)}
-              onBlur={() => {
-                if ((target.trim() || null) !== (knobs.integration_target ?? null)) {
-                  set({ integration_target: target.trim() || null });
-                }
-              }}
-            />
-          </label>
-          <p className="text-[11px] text-muted-foreground sm:col-span-2">
-            {timeline.integration.tier > 0
-              ? `${timeline.integration.name}: ${timeline.integration.summary}`
-              : "The form first, always. An integration is phase 2; it never delays the form."}
-          </p>
+        {/* Beyond the form: services from the SOW, by phase. Phase 1 is the
+            form and nothing here moves it. Services in a phase run together;
+            a phase opens when the one before it is done. */}
+        <div className="space-y-2 rounded-md border border-border bg-muted/20 p-2.5">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+              Beyond the form · services from the SOW
+            </p>
+            <a href="#sow" className="text-[11px] text-muted-foreground hover:text-foreground">
+              The SOW is the record — attach it above
+            </a>
+          </div>
 
-          {/* Phase 2, gated. No fixed dates until the form is dialed in. */}
-          {timeline.integration.milestones.length ? (
-            <div className="space-y-2 sm:col-span-2">
-              <div className="flex flex-wrap items-center gap-2 rounded-md border border-border bg-background px-2.5 py-2">
-                <span
-                  className={cn(
-                    "rounded-sm px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider",
-                    timeline.integration.tentative
-                      ? "bg-amber-500/10 text-amber-700 dark:text-amber-400"
-                      : "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400",
-                  )}
+          {services.length ? (
+            <ul className="divide-y divide-border rounded-md border border-border bg-background">
+              {services.map((svc) => (
+                <li
+                  key={svc.id}
+                  className="flex flex-wrap items-center gap-x-2 gap-y-1 px-2.5 py-1.5"
                 >
-                  {timeline.integration.tentative ? "Phase 2 · gated" : "Phase 2 · unlocked"}
-                </span>
-                <span className="text-[12px]">
-                  {timeline.integration.tentative
-                    ? "Starts once the form is tested and dialed in — tick 'Live — first value' above, or set the date here. Dates below are the earliest they could be."
-                    : `Form dialed in ${shortDay(timeline.integration.provenOn!)}. Phase 2 starts ${shortDay(timeline.integration.startsOn!)}.`}
-                </span>
+                  <span className="rounded-sm bg-muted px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-muted-foreground">
+                    {SERVICE_KINDS[svc.kind].label}
+                  </span>
+                  <input
+                    className={cn(input, "min-w-0 flex-1")}
+                    value={svc.name}
+                    disabled={busy}
+                    onChange={(e) => updateService(svc.id, { name: e.target.value })}
+                  />
+                  <label className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                    Phase
+                    <select
+                      className={input}
+                      value={svc.phase}
+                      disabled={busy}
+                      onChange={(e) => updateService(svc.id, { phase: Number(e.target.value) })}
+                    >
+                      {[2, 3, 4].map((n) => (
+                        <option key={n} value={n}>
+                          {n}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  {svc.kind === "integration" ? (
+                    <select
+                      className={input}
+                      value={svc.tier ?? 3}
+                      disabled={busy}
+                      title="Complexity tier — sets the length and the assignment weight"
+                      onChange={(e) =>
+                        updateService(svc.id, { tier: Number(e.target.value) as IntegrationTier })
+                      }
+                    >
+                      {INTEGRATION_TIERS.filter((t) => t.weeks > 0).map((t) => (
+                        <option key={t.tier} value={t.tier}>
+                          Tier {t.tier} · {t.name} · {t.weeks} wk{t.weeks === 1 ? "" : "s"}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <label className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                      <input
+                        type="number"
+                        min={0.5}
+                        step={0.5}
+                        className={cn(input, "w-16")}
+                        value={svc.weeks ?? SERVICE_KINDS[svc.kind].weeks}
+                        disabled={busy}
+                        onChange={(e) =>
+                          updateService(svc.id, { weeks: Number(e.target.value) || null })
+                        }
+                      />
+                      wks
+                    </label>
+                  )}
+                  <button
+                    type="button"
+                    className="text-muted-foreground hover:text-destructive disabled:opacity-50"
+                    aria-label={`Remove ${svc.name}`}
+                    disabled={busy}
+                    onClick={() => removeService(svc.id)}
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-[12px] text-muted-foreground">
+              Nothing beyond the form yet. Tick what the SOW includes — an integration, a custom
+              PDF, more forms — and give each a phase. Phase 2 starts once the form is dialed in.
+            </p>
+          )}
+
+          {editable ? (
+            <div className="flex flex-wrap items-center gap-1.5">
+              <select
+                className={input}
+                value={newKind}
+                onChange={(e) => setNewKind(e.target.value as ServiceKind)}
+              >
+                {SERVICE_KIND_LIST.map((k) => (
+                  <option key={k.kind} value={k.kind}>
+                    {k.label}
+                  </option>
+                ))}
+              </select>
+              <input
+                className={cn(input, "min-w-[160px] flex-1")}
+                placeholder={
+                  newKind === "integration"
+                    ? "QuickBooks Online"
+                    : newKind === "custom_pdf"
+                      ? "Invoice PDF"
+                      : newKind === "paid_form"
+                        ? "Safety Inspection"
+                        : "What the SOW calls it"
+                }
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") addService();
+                }}
+              />
+              <label className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                Phase
+                <select
+                  className={input}
+                  value={newPhase}
+                  onChange={(e) => setNewPhase(Number(e.target.value))}
+                >
+                  {[2, 3, 4].map((n) => (
+                    <option key={n} value={n}>
+                      {n}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <button
+                type="button"
+                className="inline-flex items-center gap-1 rounded-sm border border-border px-2 py-1 text-[11px] hover:bg-muted disabled:opacity-50"
+                disabled={busy || !newName.trim()}
+                onClick={addService}
+              >
+                Add
+              </button>
+            </div>
+          ) : null}
+        </div>
+
+        {/* The phases, gated, with every service's dates. */}
+        {timeline.phases.map((ph) => (
+          <div key={ph.phase} className="space-y-2">
+            <div className="flex flex-wrap items-center gap-2 rounded-md border border-border bg-background px-2.5 py-2">
+              <span
+                className={cn(
+                  "rounded-sm px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider",
+                  ph.done
+                    ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
+                    : ph.tentative
+                      ? "bg-amber-500/10 text-amber-700 dark:text-amber-400"
+                      : "bg-primary/10 text-primary",
+                )}
+              >
+                {ph.label} · {ph.done ? "done" : ph.tentative ? "gated" : "unlocked"}
+                {timeline.currentPhase === ph.phase && !ph.done ? " · now" : ""}
+              </span>
+              <span className="text-[12px]">
+                {ph.services.map((x) => x.name).join(" + ")}
+                {ph.services.length > 1 ? " — at the same time" : ""}
+                {" · "}
+                {ph.tentative
+                  ? `${ph.gate}. Earliest ${shortDay(ph.startsOn!)} → ${shortDay(ph.endsOn!)}.`
+                  : `${shortDay(ph.startsOn!)} → ${shortDay(ph.endsOn!)}.`}
+              </span>
+              {ph.phase === 2 ? (
                 <span className="ml-auto flex items-center gap-1.5">
                   <label className="text-[11px] text-muted-foreground">
                     Form dialed in on
@@ -532,20 +680,38 @@ export function TimelinePanel({
                       onChange={(e) => set({ form_proven_on: e.target.value || null })}
                     />
                   </label>
-                  {!knobs.form_proven_on ? (
+                  {!knobs.form_proven_on && !timeline.liveDoneOn ? (
                     <button
                       type="button"
                       className="inline-flex items-center gap-1 rounded-sm bg-primary px-2 py-1 text-[11px] font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
                       disabled={busy}
-                      onClick={() => set({ form_proven_on: new Date().toISOString().slice(0, 10) })}
+                      onClick={() => set({ form_proven_on: today })}
                     >
                       Dialed in today — start phase 2
                     </button>
                   ) : null}
                 </span>
-              </div>
-              <ol className="divide-y divide-border rounded-md border border-border bg-background">
-                {timeline.integration.milestones.map((m) => (
+              ) : null}
+            </div>
+            {ph.services.map((svc) => (
+              <ol
+                key={svc.id}
+                className="divide-y divide-border rounded-md border border-border bg-background"
+              >
+                <li className="flex items-center gap-2 bg-muted/40 px-2.5 py-1 text-[11px]">
+                  <span className="font-semibold">{svc.name}</span>
+                  <span className="text-muted-foreground">
+                    {svc.label}
+                    {svc.tier ? ` · tier ${svc.tier}` : ""} · {svc.weeks} wk
+                    {svc.weeks === 1 ? "" : "s"}
+                  </span>
+                  {svc.doneOn ? (
+                    <span className="ml-auto text-emerald-700 dark:text-emerald-400">
+                      Live {shortDay(svc.doneOn)}
+                    </span>
+                  ) : null}
+                </li>
+                {svc.milestones.map((m) => (
                   <li
                     key={m.key}
                     className={cn(
@@ -558,19 +724,16 @@ export function TimelinePanel({
                       aria-label={`${m.label} done`}
                       className="h-3.5 w-3.5 accent-emerald-600"
                       checked={Boolean(m.doneOn)}
-                      disabled={busy || timeline.integration.tentative}
+                      disabled={busy || ph.tentative}
                       onChange={(e) => markDone(m, e.target.checked ? today : null)}
                       title={
-                        timeline.integration.tentative
-                          ? "Phase 2 is gated until the form is dialed in"
+                        ph.tentative
+                          ? `${ph.label} is gated`
                           : m.doneOn
                             ? `Done ${shortDay(m.doneOn)}`
                             : "Mark done"
                       }
                     />
-                    <span className="w-12 shrink-0 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-                      Ph. 2
-                    </span>
                     <span className="min-w-0 flex-1">
                       <span className="block text-[12px] font-medium">
                         {m.label}
@@ -581,7 +744,7 @@ export function TimelinePanel({
                         ) : null}
                       </span>
                       <span className="block truncate text-[11px] text-muted-foreground">
-                        {m.detail}
+                        {m.doneOn ? `Done ${shortDay(m.doneOn)}` : m.detail}
                       </span>
                     </span>
                     <OwnerChip owner={m.owner} />
@@ -621,7 +784,7 @@ export function TimelinePanel({
                         className={cn(
                           input,
                           m.moved && "border-primary",
-                          timeline.integration.tentative && "opacity-70",
+                          ph.tentative && "opacity-70",
                         )}
                         value={m.date}
                         disabled={busy}
@@ -642,9 +805,9 @@ export function TimelinePanel({
                   </li>
                 ))}
               </ol>
-            </div>
-          ) : null}
-        </div>
+            ))}
+          </div>
+        ))}
       </div>
     </Panel>
   );

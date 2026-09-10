@@ -98,6 +98,27 @@ export const intakeAnswersSchema = z.object({
       times: z.record(z.string(), z.string().regex(/^\d{2}:\d{2}$/)).default({}),
       /** IANA zone the times are in, e.g. America/Chicago. */
       timezone: z.string().trim().max(64).nullable().default(null),
+      /** Everything bought beyond the first form, each in a phase ≥ 2. */
+      services: z
+        .array(
+          z.object({
+            id: z.string().min(1).max(40),
+            kind: z.enum([
+              "integration",
+              "custom_pdf",
+              "paid_form",
+              "analytics",
+              "data_load",
+              "training",
+              "other",
+            ]),
+            name: z.string().trim().min(1).max(120),
+            phase: z.number().int().min(2).max(9),
+            tier: z.number().int().min(0).max(5).nullable().optional(),
+            weeks: z.number().min(0.5).max(52).nullable().optional(),
+          }),
+        )
+        .default([]),
     })
     .default({}),
   updated_at: z.string().nullable().default(null),
