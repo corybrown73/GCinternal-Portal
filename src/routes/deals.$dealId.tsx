@@ -22,7 +22,6 @@ import {
   addNote,
   addReport,
   createTamRequestForDeal,
-  generateBriefForDeal,
   getBriefDownloadUrl,
   getDeal,
   getDeckPrompt,
@@ -799,7 +798,7 @@ function ReportsPanel({ deal }: { deal: DealData }) {
       ) : null}
 
       {deal.gong_reports.length === 0 && !adding ? (
-        <NoRows label="No reports yet. Paste Gong call notes or an account map to feed brief generation." />
+        <NoRows label="No reports yet. Paste Gong call notes or an account map — they feed the welcome page and the handoff." />
       ) : (
         <ul className="divide-y divide-border">
           {deal.gong_reports.map((r) => (
@@ -853,15 +852,15 @@ function ReportsPanel({ deal }: { deal: DealData }) {
 
 type DiscoveryQuestion = { question: string; why_it_matters: string; category: string };
 
+/**
+ * The brief IS the welcome page now. The seventeen-slide PowerPoint this
+ * panel used to generate is not something anyone presents any more; the
+ * customer-facing page — team, timeline, what's expected, how we get there —
+ * is the document, and it is always current. Old briefs stay listed for
+ * their history and their discovery questions.
+ */
 function BriefsPanel({ deal }: { deal: DealData }) {
-  const queryClient = useQueryClient();
-  const generate = useServerFn(generateBriefForDeal);
   const download = useServerFn(getBriefDownloadUrl);
-
-  const generateMutation = useMutation({
-    mutationFn: () => generate({ data: { dealId: deal.account.id } }),
-    onSettled: () => queryClient.invalidateQueries({ queryKey: ["deal", deal.account.id] }),
-  });
 
   const downloadMutation = useMutation({
     mutationFn: (briefId: string) => download({ data: { briefId } }),
@@ -881,36 +880,34 @@ function BriefsPanel({ deal }: { deal: DealData }) {
 
   return (
     <Panel
-      title="Account brief"
+      title="Customer brief"
       count={deal.briefs.length}
       action={
         <div className="flex items-center gap-1.5">
           <ClaudePromptButton dealId={deal.account.id} />
-          <button
-            type="button"
-            className={buttonClass}
-            disabled={generateMutation.isPending}
-            onClick={() => generateMutation.mutate()}
+          <Link
+            to="/onboarding-plan/$dealId"
+            params={{ dealId: deal.account.id }}
+            className={primaryButtonClass}
+            title="The customer-facing brief: present it, print it, send it"
           >
-            {generateMutation.isPending ? "Generating…" : "Generate brief"}
-          </button>
+            Open the welcome page
+          </Link>
         </div>
       }
     >
-      {generateMutation.isError ? (
-        <p className="border-b border-border px-3 py-2 text-[11px] text-destructive">
-          {(generateMutation.error as Error).message}
-        </p>
-      ) : null}
+      <p className="border-b border-border px-3 py-2 text-[12px] text-muted-foreground">
+        The brief is the welcome page: your team, the timeline with dates, what&apos;s expected, how
+        we get there. It reads from this record, so it is always current — present it on the
+        kickoff, print it to PDF, or send the customer their link.
+      </p>
       {downloadMutation.isError ? (
         <p className="border-b border-border px-3 py-2 text-[11px] text-destructive">
           {(downloadMutation.error as Error).message}
         </p>
       ) : null}
 
-      {deal.briefs.length === 0 ? (
-        <NoRows label="No briefs yet. Add at least one Gong report, then generate one." />
-      ) : (
+      {deal.briefs.length === 0 ? null : (
         <ul className="divide-y divide-border">
           {deal.briefs.map((b) => (
             <li key={b.id} className="flex items-center justify-between gap-2 px-3 py-2">

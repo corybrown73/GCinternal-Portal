@@ -342,6 +342,16 @@ function Customer360Page() {
                   From deal · {impl.deal_name ?? "Untitled deal"}
                 </Link>
               ) : null}
+              {impl.deal_id ? (
+                <Link
+                  to="/onboarding-plan/$dealId"
+                  params={{ dealId: impl.deal_id }}
+                  className="lift inline-flex items-center gap-1 rounded-full border border-primary/40 bg-card px-2 py-0.5 text-[11px] text-primary hover:text-foreground"
+                  title="The customer-facing brief: team, timeline, what's expected"
+                >
+                  Welcome page
+                </Link>
+              ) : null}
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-3">
