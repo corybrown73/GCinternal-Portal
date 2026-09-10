@@ -366,3 +366,53 @@ describe("phases with several services", () => {
     expect(t.progress.total).toBe(7 + 4 + 4 + 4);
   });
 });
+
+describe("services alongside the form (phase 1)", () => {
+  const services = [
+    { id: "haul", kind: "paid_form" as const, name: "Chemical Delivery Ticket", phase: 1 },
+    {
+      id: "qb",
+      kind: "integration" as const,
+      name: "QuickBooks Online",
+      phase: 2,
+      tier: 3 as const,
+    },
+  ];
+
+  it("starts a phase-1 service on the kickoff call and never gates it", () => {
+    const t = buildTimeline({ closeDate: "2026-09-09", services });
+    const kickoff = t.milestones.find((m) => m.key === "kickoff")!;
+    expect(t.alongside.map((s) => s.name)).toEqual(["Chemical Delivery Ticket"]);
+    const haul = t.alongside[0]!;
+    expect(haul.phase).toBe(1);
+    expect(haul.startsOn).toBe(kickoff.date);
+    expect(haul.milestones[0]!.date).toBe(kickoff.date);
+    expect(haul.milestones[0]!.key).toBe("haul:kickoff");
+    // Phase 1 companions are not phases: the gated list starts at 2.
+    expect(t.phases.map((p) => p.phase)).toEqual([2]);
+    expect(t.phases[0]!.tentative).toBe(true);
+  });
+
+  it("carries what we need from the customer, the catalogue's unless overridden", () => {
+    const t = buildTimeline({ closeDate: "2026-09-09", services });
+    expect(t.alongside[0]!.needs).toMatch(/form you use for it today/);
+    const own = buildTimeline({
+      closeDate: "2026-09-09",
+      services: [{ ...services[0]!, needs: "The paper ticket book." }],
+    });
+    expect(own.alongside[0]!.needs).toBe("The paper ticket book.");
+  });
+
+  it("follows a moved kickoff and counts its steps in progress", () => {
+    const t = buildTimeline({
+      closeDate: "2026-09-09",
+      services,
+      overrides: { kickoff: "2026-09-14" },
+      completed: { "haul:kickoff": "2026-09-14" },
+    });
+    expect(t.alongside[0]!.startsOn).toBe("2026-09-14");
+    expect(t.alongside[0]!.milestones[0]!.doneOn).toBe("2026-09-14");
+    expect(t.progress.done).toBe(1);
+    expect(t.progress.total).toBe(7 + 4 + 4);
+  });
+});

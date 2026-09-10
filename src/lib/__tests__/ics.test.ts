@@ -46,7 +46,7 @@ describe("buildIcs", () => {
         date: "2026-09-14",
       },
     ]);
-    expect(ics).toContain("SUMMARY:Working session\; bring the list\\, please");
+    expect(ics).toContain("SUMMARY:Working session\\; bring the list\\, please");
     for (const line of ics.split("\r\n"))
       expect(Buffer.byteLength(line, "utf8")).toBeLessThanOrEqual(75);
   });

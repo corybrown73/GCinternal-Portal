@@ -5,9 +5,17 @@
  * the core — value in seven days — and nothing on the SOW moves it. Every
  * other thing the customer purchased is a SERVICE: an integration, a custom
  * PDF, a paid form build, an analytics dashboard, a data load, a training
- * block. Each service is assigned to a phase (2, 3, …). Services in the
- * same phase run at the same time; a phase opens when the one before it is
- * done — phase 2 when the form is dialed in, phase 3 when phase 2 is live.
+ * block. Each service is assigned to a phase. A service in phase 1 runs
+ * ALONGSIDE the form, from the kickoff call — a second form build, a data
+ * load, a training block can all start on day one. Services in phase 2 and
+ * up wait: they run at the same time as each other, and a phase opens when
+ * the one before it is done — phase 2 when the form is dialed in, phase 3
+ * when phase 2 is live.
+ *
+ * Every kind says what we need from the customer to start it. That line is
+ * what the welcome page shows next to the service and what the notes tell
+ * the presenter to ask for — "for the paid form build we need the form you
+ * have today" — so the ask is made on the first call, not discovered later.
  *
  * THE CATALOGUE below is the kinds a SOW can contain, from the team's own
  * complexity tiering: default length, the four steps each one runs through,
@@ -41,6 +49,14 @@ export type ServiceKindSpec = {
   /** Assignment weight this adds. */
   points: number;
   icon: string;
+  /**
+   * Where it goes unless a person says otherwise: 1 = alongside the form
+   * from kickoff; 2 = after the form is proven. Things built on real
+   * submissions — integrations, PDFs, dashboards — default to 2.
+   */
+  defaultPhase: 1 | 2;
+  /** What we need from the customer to start it, in words they read. */
+  needs: string;
   steps: ServiceStep[];
 };
 
@@ -97,6 +113,8 @@ export const SERVICE_KINDS: Record<ServiceKind, ServiceKindSpec> = {
     weeks: 2,
     points: 0, // the tier carries the points
     icon: "Workflow",
+    defaultPhase: 2,
+    needs: "A login to the other system, and the person on your side who owns the field mapping.",
     steps: fourSteps(
       [
         "Kickoff & final details",
@@ -119,6 +137,8 @@ export const SERVICE_KINDS: Record<ServiceKind, ServiceKindSpec> = {
     weeks: 1,
     points: 1,
     icon: "FileText",
+    defaultPhase: 2,
+    needs: "Your letterhead, and one example of the document you send today.",
     steps: fourSteps(
       [
         "PDF layout call",
@@ -136,6 +156,8 @@ export const SERVICE_KINDS: Record<ServiceKind, ServiceKindSpec> = {
     weeks: 1,
     points: 1,
     icon: "ClipboardCheck",
+    defaultPhase: 1,
+    needs: "The form you use for it today — paper, PDF or spreadsheet — and one filled-in example.",
     steps: fourSteps(
       [
         "Build session",
@@ -153,6 +175,8 @@ export const SERVICE_KINDS: Record<ServiceKind, ServiceKindSpec> = {
     weeks: 1,
     points: 1,
     icon: "Table2",
+    defaultPhase: 2,
+    needs: "The three questions the dashboard must answer, and who looks at it on Monday.",
     steps: fourSteps(
       [
         "What you need to see",
@@ -170,6 +194,8 @@ export const SERVICE_KINDS: Record<ServiceKind, ServiceKindSpec> = {
     weeks: 1,
     points: 1,
     icon: "Cloud",
+    defaultPhase: 1,
+    needs: "The list — customers, sites, assets or prices — as a spreadsheet, however rough.",
     steps: fourSteps(
       [
         "What to load",
@@ -187,6 +213,8 @@ export const SERVICE_KINDS: Record<ServiceKind, ServiceKindSpec> = {
     weeks: 0.5,
     points: 1,
     icon: "Users",
+    defaultPhase: 1,
+    needs: "Who attends: names and roles, and a date that works for the crew leads.",
     steps: [
       {
         key: "kickoff",
@@ -215,6 +243,8 @@ export const SERVICE_KINDS: Record<ServiceKind, ServiceKindSpec> = {
     weeks: 1,
     points: 1,
     icon: "Wrench",
+    defaultPhase: 2,
+    needs: "What done looks like, in a sentence, and who owns it on your side.",
     steps: fourSteps(
       ["Kickoff & details", "What it is, what done looks like, who owns what."],
       ["Built", "Built and checked on our side."],
@@ -232,13 +262,26 @@ export type ServiceSpec = {
   kind: ServiceKind;
   /** "QuickBooks Online", "Invoice PDF", "Safety Inspection form". */
   name: string;
-  /** 2 or later. Phase 1 is the form and is never a service. */
+  /** 1 = alongside the form from kickoff; 2 and up wait for the phase before. */
   phase: number;
   /** Integrations only. */
   tier?: IntegrationTier | null;
   /** Override the catalogue length. */
   weeks?: number | null;
+  /** Override what we need from the customer to start it. */
+  needs?: string | null;
 };
+
+/** What we need from the customer to start this service: theirs if written, else the catalogue's. */
+export function serviceNeeds(s: ServiceSpec): string {
+  const own = s.needs?.trim();
+  return own || SERVICE_KINDS[s.kind].needs;
+}
+
+/** True for the kinds that are built on real submissions and belong after the form. */
+export function belongsAfterForm(kind: ServiceKind): boolean {
+  return SERVICE_KINDS[kind].defaultPhase >= 2;
+}
 
 /** Length of a service, in weeks: the tier's for an integration, else the catalogue's, unless overridden. */
 export function serviceWeeks(s: ServiceSpec): number {
@@ -262,7 +305,7 @@ export function normalizeServices(
   services: ServiceSpec[] | undefined,
   legacy: { integration_tier?: number | null; integration_target?: string | null },
 ): ServiceSpec[] {
-  const list = (services ?? []).filter((s) => s && s.phase >= 2);
+  const list = (services ?? []).filter((s) => s && s.phase >= 1);
   const hasIntegration = list.some((s) => s.kind === "integration");
   if (!hasIntegration && legacy.integration_tier && legacy.integration_tier > 0) {
     const tier = INTEGRATION_TIERS.find((t) => t.tier === legacy.integration_tier);

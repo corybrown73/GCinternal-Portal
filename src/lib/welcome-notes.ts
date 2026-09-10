@@ -90,10 +90,15 @@ export function speakerNotes(view: WelcomeView): {
         say: [
           `Walk it left to right and say the dates out loud. Kickoff ${kickoff ? shortDay(kickoff.date) : ""}, sixty minutes. Homework due ${homework ? shortDay(homework.date) : ""}. Working session ${working ? shortDay(working.date) : ""}, thirty minutes. Field test from ${fieldtest ? shortDay(fieldtest.date) : ""}. Live ${live}.`,
           "Every step has an owner. Blue is on a call together; green is your homework; navy is ours.",
-          ...t.phases.map(
-            (ph) =>
-              `${ph.label} — ${ph.services.map((x) => x.name).join(" and ")}${ph.services.length > 1 ? ", worked on at the same time" : ""} — is on the page, and it is gated. ${ph.gate}. ${ph.tentative ? `The earliest that could be is ${shortDay(ph.startsOn!)}; those dates are marked as estimates for that reason.` : `That happened, so it runs ${shortDay(ph.startsOn!)} to ${shortDay(ph.endsOn!)}.`}`,
+          ...t.alongside.map(
+            (svc) =>
+              `Alongside the form, from the kickoff call: ${svc.name} (${svc.label.toLowerCase()}, ${svc.weeks} wk${svc.weeks === 1 ? "" : "s"}, live ${shortDay(svc.endsOn)}). What we need from you: ${svc.needs.replace(/\.$/, "")}. Ask for it now.`,
           ),
+          ...(t.phases.length
+            ? [
+                "What comes after the form is on the next screen. Do not get pulled into it here — this screen is the seven days.",
+              ]
+            : []),
         ],
         why: "Book both calls before you leave this screen. A date that is on the calendar is a date; a date that is on a slide is a hope. If one does not work, move it now in the portal — the page updates in front of them.",
         ifTheyAsk: [
@@ -107,13 +112,37 @@ export function speakerNotes(view: WelcomeView): {
           },
         ],
       },
+      ...(t.phases.length
+        ? [
+            {
+              screen: 4,
+              title: "After the form — the full picture",
+              say: [
+                `Say "you are on phase 1" out loud, then walk the map: ${t.phases.map((ph) => `${ph.label.toLowerCase()} is ${ph.services.map((x) => x.name).join(" and ")}${ph.services.length > 1 ? ", worked on at the same time" : ""}`).join("; ")}.`,
+                ...t.phases.map(
+                  (ph) =>
+                    `${ph.label}: ${ph.gate.toLowerCase()}. ${ph.tentative ? `The earliest that could be is ${shortDay(ph.startsOn!)}; the dates are marked as estimates for that reason.` : `That happened, so it runs ${shortDay(ph.startsOn!)} to ${shortDay(ph.endsOn!)}.`}`,
+                ),
+                "Each one opens with its own thirty-minute kickoff to gather the final details — the ones we could not know until the form was real.",
+              ],
+              why: "Customers with an integration on the order want to talk about the integration. This screen lets them see it is planned, dated and gated, so the conversation can go back to the form.",
+              ifTheyAsk: [
+                {
+                  q: "Why can't the PDF start now? It's not an integration.",
+                  a: "Because it is built from real submissions — the layout is proven on real data, not on our guess of what a ticket looks like. One week after the form is live, it is right first time.",
+                },
+              ],
+            },
+          ]
+        : []),
       {
-        screen: 4,
+        screen: t.phases.length ? 5 : 4,
         title: "What's expected",
         say: [
           "We build it with you, not for you. A form you built yourself is one you will change yourself — and the second use case shows up on its own.",
           `Three homework items before the working session, due ${homework ? shortDay(homework.date) : ""}: download the app and log in, add one field user who will test on a real job, send us the customer or site list.`,
           "Fifteen minutes. It means the working session starts from a live account instead of a blank one.",
+          ...t.alongside.map((svc) => `And for ${svc.name}: ${svc.needs}`),
         ],
         why: "This screen changes the relationship. The customer who gets a form handed to them comes back with a support ticket. The customer who built it comes back with the next use case. Say it plainly and assign the three items to a named person.",
         ifTheyAsk: [
@@ -124,7 +153,7 @@ export function speakerNotes(view: WelcomeView): {
         ],
       },
       {
-        screen: 5,
+        screen: t.phases.length ? 6 : 5,
         title: "How we get there — now and the future",
         say: [
           view.currentProcess
@@ -144,7 +173,7 @@ export function speakerNotes(view: WelcomeView): {
         ],
       },
       {
-        screen: 6,
+        screen: t.phases.length ? 7 : 6,
         title: "Let's get into business",
         say: [
           `Two calls: kickoff ${kickoff ? shortDay(kickoff.date) : ""}, working session ${working ? shortDay(working.date) : ""}. Then it is yours.`,

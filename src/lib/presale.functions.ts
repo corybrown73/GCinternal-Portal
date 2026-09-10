@@ -436,9 +436,10 @@ export const saveIntake = createServerFn({ method: "POST" })
                         "other",
                       ]),
                       name: z.string().trim().min(1).max(120),
-                      phase: z.number().int().min(2).max(9),
+                      phase: z.number().int().min(1).max(9),
                       tier: z.number().int().min(0).max(5).nullable().optional(),
                       weeks: z.number().min(0.5).max(52).nullable().optional(),
+                      needs: z.string().trim().max(300).nullable().optional(),
                     }),
                   )
                   .max(20)

@@ -42,7 +42,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
-import { daysToValue, shortDay } from "@/lib/onboarding-timeline";
+import { daysToValue, shortDay, type Phase } from "@/lib/onboarding-timeline";
 import { HOMEWORK_KEYS, type HomeworkKey, type WelcomeView } from "@/lib/welcome";
 import { whenLabel } from "@/lib/welcome-events";
 import { GOCANVAS_APP } from "@/lib/app-links";
@@ -131,7 +131,8 @@ export function WelcomePage({
 }) {
   const [present, setPresent] = useState(false);
   const [at, setAt] = useState(0);
-  const total = 6;
+  // Six screens, plus one per phase after the form.
+  const total = 6 + view.timeline.phases.length;
   // The customer's link as a QR for the room: from the record when one has
   // been issued, so it is there on every load, not only in the session that
   // minted it. Minting again replaces it.
@@ -174,15 +175,21 @@ export function WelcomePage({
       window.removeEventListener("keydown", onKey);
       document.body.classList.remove("gc-presenting");
     };
-  }, [present]);
+  }, [present, total]);
 
+  // Page numbers follow the screens, so a plan with two later phases numbers to eight.
+  let n = 0;
+  const next = () => (n += 1);
   const screens = [
     <Cover key="cover" view={view} qr={showQr ? qr : null} />,
-    <Team key="team" view={view} />,
-    <Plan key="plan" view={view} />,
-    <Together key="together" view={view} mode={mode} onTick={onTick} />,
-    <FirstForm key="form" view={view} />,
-    <Business key="business" view={view} icsBase={icsBase ?? null} />,
+    <Team key="team" view={view} page={next() + 1} />,
+    <Plan key="plan" view={view} page={next() + 1} />,
+    ...view.timeline.phases.map((ph) => (
+      <PhaseScreen key={`phase-${ph.phase}`} view={view} phase={ph} page={next() + 1} />
+    )),
+    <Together key="together" view={view} mode={mode} onTick={onTick} page={next() + 1} />,
+    <FirstForm key="form" view={view} page={next() + 1} />,
+    <Business key="business" view={view} icsBase={icsBase ?? null} page={next() + 1} />,
   ];
 
   return (
@@ -754,7 +761,7 @@ function Cover({ view, qr }: { view: WelcomeView; qr?: { url: string; dataUrl: s
   );
 }
 
-function Team({ view }: { view: WelcomeView }) {
+function Team({ view, page }: { view: WelcomeView; page: number }) {
   const t = view.team;
   const people: Array<{
     name: string;
@@ -807,7 +814,7 @@ function Team({ view }: { view: WelcomeView }) {
   });
   return (
     <Frame
-      page={2}
+      page={page}
       eyebrow="Your team"
       title="Two teams,"
       accent="one plan"
@@ -846,11 +853,11 @@ const CUSTOMER_LABEL: Record<string, string> = {
   close: "Welcome aboard",
 };
 
-function Plan({ view }: { view: WelcomeView }) {
+function Plan({ view, page }: { view: WelcomeView; page: number }) {
   const t = view.timeline;
   return (
     <Frame
-      page={3}
+      page={page}
       eyebrow="Your timeline"
       title={t.phases.length ? "Phase 1: seven days to a" : "Seven days to a"}
       accent="form in the field"
@@ -881,37 +888,16 @@ function Plan({ view }: { view: WelcomeView }) {
           </div>
         ))}
       </div>
-      {t.phases.map((ph) => (
-        <div
-          key={ph.phase}
-          className={cn(
-            "wp-phase2",
-            ph.tentative && "is-tentative",
-            ph.done && "is-done",
-            t.currentPhase === ph.phase && !ph.done && "is-now",
-          )}
-        >
-          <div className="wp-phase2-head">
-            <span className="wp-phase2-tag">
-              {ph.label}
-              {t.currentPhase === ph.phase && !ph.done ? " · you are here" : ""}
-            </span>
-            <span className="wp-phase2-title">
-              {ph.services.map((x) => x.name).join(" + ")}
-              {ph.services.length > 1 ? " — at the same time" : ""}
-            </span>
-            <span className="wp-phase2-gate">
-              {ph.done
-                ? `Done ${shortDay(ph.endsOn!)}`
-                : ph.tentative
-                  ? `${ph.gate} — earliest ${shortDay(ph.startsOn!)}`
-                  : `${shortDay(ph.startsOn!)} → ${shortDay(ph.endsOn!)}`}
-            </span>
-          </div>
-          <div className={cn("wp-phase2-steps", ph.services.length > 2 && "is-many")}>
-            {ph.services.map((svc) => (
-              <div key={svc.id} className={cn("wp-phase2-step", svc.doneOn && "is-done")}>
-                <span className="wp-node-tile is-sm">
+      {t.alongside.length ? (
+        <div className="wp-alongside">
+          <p className="wp-alongside-title">
+            Alongside the form, from the kickoff call
+            {t.alongside.length > 1 ? ` · ${t.alongside.length} at the same time` : ""}
+          </p>
+          <div className={cn("wp-alongside-row", t.alongside.length > 2 && "is-many")}>
+            {t.alongside.map((svc) => (
+              <div key={svc.id} className={cn("wp-alongside-card", svc.doneOn && "is-done")}>
+                <span className="wp-node-tile">
                   <Tile name={svc.icon} size="sm" tone={svc.doneOn ? "navy" : "blue"} />
                   {svc.doneOn ? (
                     <span className="wp-done-badge is-sm">
@@ -919,24 +905,37 @@ function Plan({ view }: { view: WelcomeView }) {
                     </span>
                   ) : null}
                 </span>
-                <span className="wp-phase2-label">
-                  {svc.name}
-                  <small>
-                    {svc.label}
-                    {svc.tier ? ` · tier ${svc.tier}` : ""} · {svc.weeks} wk
-                    {svc.weeks === 1 ? "" : "s"}
-                  </small>
-                </span>
-                <span className="wp-phase2-date">
-                  {svc.doneOn
-                    ? `Live ${shortDay(svc.doneOn)}`
-                    : `${ph.tentative ? "≈ " : ""}${shortDay(svc.startsOn)} → ${shortDay(svc.endsOn)}`}
+                <span className="wp-alongside-text">
+                  <b>
+                    {svc.name}
+                    <small>
+                      {" "}
+                      · {svc.label.toLowerCase()} ·{" "}
+                      {svc.doneOn
+                        ? `live ${shortDay(svc.doneOn)}`
+                        : `${shortDay(svc.startsOn)} → ${shortDay(svc.endsOn)}`}
+                    </small>
+                  </b>
+                  <span>
+                    <em>We need from you:</em> {svc.needs}
+                  </span>
                 </span>
               </div>
             ))}
           </div>
         </div>
-      ))}
+      ) : null}
+      {t.phases.length ? (
+        <p className="wp-next-hint">
+          After the form:{" "}
+          {t.phases
+            .map(
+              (ph) => `${ph.label.toLowerCase()} — ${ph.services.map((x) => x.name).join(" + ")}`,
+            )
+            .join("; ")}
+          . Each on its own screen, next.
+        </p>
+      ) : null}
       <div className="wp-legend">
         <span>
           <Owner owner="gocanvas" /> we do it, you hear about it
@@ -958,20 +957,173 @@ const HOMEWORK: Array<{ key: HomeworkKey; text: string }> = [
   { key: "list", text: "Send us the customer or site list to load" },
 ];
 
+/**
+ * One screen per phase after the form. The form's screen stays the form's;
+ * everything on the order that comes after it gets its own page, with the
+ * whole map at the top so the customer can see where they are.
+ */
+function PhaseScreen({ view, phase: ph, page }: { view: WelcomeView; phase: Phase; page: number }) {
+  const t = view.timeline;
+  const map = [
+    {
+      phase: 1,
+      label: "Phase 1",
+      name: [view.firstForm?.name ?? "Your first form", ...t.alongside.map((x) => x.name)].join(
+        " + ",
+      ),
+      when: t.liveDoneOn ? `Live ${shortDay(t.liveDoneOn)}` : `Live ${shortDay(t.liveDate)}`,
+      done: Boolean(t.liveDoneOn),
+      now: t.currentPhase === 1,
+      tentative: false,
+    },
+    ...t.phases.map((x) => ({
+      phase: x.phase,
+      label: x.label,
+      name: x.services.map((y) => y.name).join(" + "),
+      when: x.done
+        ? `Done ${shortDay(x.endsOn!)}`
+        : `${x.tentative ? "Earliest " : ""}${shortDay(x.startsOn!)} → ${shortDay(x.endsOn!)}`,
+      done: x.done,
+      now: t.currentPhase === x.phase && !x.done,
+      tentative: x.tentative,
+    })),
+  ];
+  const names = ph.services.map((x) => x.name).join(" + ");
+  const accent =
+    ph.services.length > 2 || names.length > 44 ? `${ph.services.length} things at once` : names;
+  const lede = ph.done
+    ? `Done ${shortDay(ph.endsOn!)}. ${ph.gate}.`
+    : ph.tentative
+      ? `${ph.gate} — earliest ${shortDay(ph.startsOn!)}. ${ph.services.length > 1 ? "Both worked on at the same time." : "Dates are estimates until then."}`
+      : `${ph.gate}, so it runs ${shortDay(ph.startsOn!)} to ${shortDay(ph.endsOn!)}.${ph.services.length > 1 ? " Both worked on at the same time." : ""}`;
+  const band =
+    ph.phase === 2
+      ? "The form first, always. Field mapping, PDFs and dashboards are built on real submissions, which is why they come second."
+      : `${ph.label} opens with its own thirty-minute kickoff to gather the final details — the ones we cannot know until the form is real.`;
+  const compact = ph.services.length > 2;
+  return (
+    <Frame
+      page={page}
+      eyebrow={`After the form · ${ph.label}`}
+      title={`${ph.label}:`}
+      accent={accent}
+      lede={lede}
+      band={band}
+      bandIcon="Route"
+    >
+      <div className="wp-phasemap">
+        {map.map((p, i) => (
+          <div key={p.phase} className="wp-phasemap-item">
+            <div
+              className={cn(
+                "wp-phasemap-chip",
+                p.done && "is-done",
+                p.now && "is-now",
+                p.tentative && "is-tentative",
+                p.phase === ph.phase && "is-this",
+              )}
+            >
+              <span className="wp-phasemap-no">{p.label}</span>
+              <span className="wp-phasemap-name">{p.name}</span>
+              <span className="wp-phasemap-when">{p.when}</span>
+              {p.now ? <span className="wp-phasemap-here">You are here</span> : null}
+            </div>
+            {i < map.length - 1 ? <span className="wp-phasemap-arrow" /> : null}
+          </div>
+        ))}
+      </div>
+      <div
+        className={cn(
+          "wp-svc-cards",
+          compact && "is-compact",
+          ph.services.length === 2 && "is-two",
+        )}
+      >
+        {ph.services.map((svc) => (
+          <div
+            key={svc.id}
+            className={cn(
+              "wp-card wp-svc-card",
+              ph.tentative && "is-tentative",
+              svc.doneOn && "is-done",
+            )}
+          >
+            <div className="wp-svc-head">
+              <span className="wp-node-tile is-sm">
+                <Tile name={svc.icon} tone={svc.doneOn ? "navy" : "blue"} />
+                {svc.doneOn ? (
+                  <span className="wp-done-badge is-sm">
+                    <Check className="h-2.5 w-2.5" strokeWidth={3} />
+                  </span>
+                ) : null}
+              </span>
+              <span className="wp-svc-text">
+                <b>{svc.name}</b>
+                <small>
+                  {svc.label}
+                  {svc.tier ? ` · tier ${svc.tier}` : ""} · {svc.weeks} wk
+                  {svc.weeks === 1 ? "" : "s"}
+                </small>
+              </span>
+              <span className="wp-svc-when">
+                {svc.doneOn
+                  ? `Live ${shortDay(svc.doneOn)}`
+                  : `${ph.tentative ? "Earliest " : ""}${shortDay(svc.startsOn)} → ${shortDay(svc.endsOn)}`}
+              </span>
+            </div>
+            {compact ? (
+              <p className="wp-svc-steps-line">{svc.milestones.map((m) => m.label).join(" → ")}</p>
+            ) : (
+              <div className="wp-svc-rail">
+                <div className="wp-svc-rail-line" />
+                {svc.milestones.map((m) => (
+                  <div key={m.key} className={cn("wp-svc-step", m.doneOn && "is-done")}>
+                    <span className="wp-node-tile">
+                      <Tile name={m.icon} size="sm" tone={m.doneOn ? "navy" : "light"} />
+                      {m.doneOn ? (
+                        <span className="wp-done-badge is-sm">
+                          <Check className="h-2.5 w-2.5" strokeWidth={3} />
+                        </span>
+                      ) : null}
+                    </span>
+                    <span className="wp-svc-step-label">{m.label}</span>
+                    <span className={cn("wp-svc-step-date", m.doneOn && "is-done")}>
+                      {m.doneOn
+                        ? `Done ${shortDay(m.doneOn)}`
+                        : `${ph.tentative ? "≈ " : ""}${whenLabel(m, t.timezone)}`}
+                    </span>
+                    <span className="wp-svc-step-owner">
+                      <Owner owner={m.owner} />
+                      {m.minutes ? <span className="wp-node-min">{m.minutes} min</span> : null}
+                    </span>
+                    <span className="wp-svc-step-detail">{m.detail}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </Frame>
+  );
+}
+
 function Together({
   view,
   mode,
   onTick,
+  page,
 }: {
   view: WelcomeView;
   mode: WelcomeMode;
+  page: number;
   onTick?: ((key: HomeworkKey, done: boolean) => Promise<void> | void) | undefined;
 }) {
   const due = view.timeline.milestones.find((m) => m.key === "homework");
   const [busy, setBusy] = useState<string | null>(null);
   return (
     <Frame
-      page={4}
+      page={page}
       eyebrow="What's expected"
       title="We build it"
       accent="with you, not for you"
@@ -1037,6 +1189,15 @@ function Together({
             );
           })}
         </div>
+        {view.timeline.alongside.length ? (
+          <ul className="wp-homework-extra">
+            {view.timeline.alongside.map((svc) => (
+              <li key={svc.id}>
+                <b>For {svc.name}:</b> {svc.needs}
+              </li>
+            ))}
+          </ul>
+        ) : null}
         <div className="wp-getapp">
           <SmartphoneIcon className="h-4 w-4" />
           <span>Get the GoCanvas app:</span>
@@ -1060,7 +1221,7 @@ function Together({
   );
 }
 
-function FirstForm({ view }: { view: WelcomeView }) {
+function FirstForm({ view, page }: { view: WelcomeView; page: number }) {
   const at = (key: string) => view.timeline.milestones.find((m) => m.key === key);
   const f = view.firstForm;
   const phase2 = view.timeline.phases[0] ?? null;
@@ -1070,7 +1231,7 @@ function FirstForm({ view }: { view: WelcomeView }) {
     "Paper on the truck, photos on somebody's phone, and the office retyping it all at the end of the week.";
   return (
     <Frame
-      page={5}
+      page={page}
       eyebrow="How we get there"
       title="From today to"
       accent="day seven"
@@ -1186,7 +1347,15 @@ function Row({
   );
 }
 
-function Business({ view, icsBase }: { view: WelcomeView; icsBase: string | null }) {
+function Business({
+  view,
+  icsBase,
+  page,
+}: {
+  view: WelcomeView;
+  icsBase: string | null;
+  page: number;
+}) {
   const t = view.timeline;
   const kickoff = t.milestones.find((m) => m.key === "kickoff");
   const working = t.milestones.find((m) => m.key === "working");
@@ -1194,7 +1363,7 @@ function Business({ view, icsBase }: { view: WelcomeView; icsBase: string | null
   const next = view.nextUseCases.slice(0, 3);
   return (
     <Frame
-      page={6}
+      page={page}
       eyebrow="Let's get into business"
       title="Two calls, then"
       accent="it's yours"

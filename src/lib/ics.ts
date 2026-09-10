@@ -60,7 +60,11 @@ function stampUtc(d: Date): string {
 }
 
 function escapeText(s: string): string {
-  return s.replace(/\\/g, "\\\\").replace(/;/g, "\;").replace(/,/g, "\\,").replace(/\r?\n/g, "\\n");
+  return s
+    .replace(/\\/g, "\\\\")
+    .replace(/;/g, "\\;")
+    .replace(/,/g, "\\,")
+    .replace(/\r?\n/g, "\\n");
 }
 
 /** RFC 5545 line folding: 75 octets, continuation lines start with a space. */

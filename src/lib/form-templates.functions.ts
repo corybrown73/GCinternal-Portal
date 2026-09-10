@@ -55,6 +55,25 @@ export const createFormTemplateFn = createServerFn({ method: "POST" })
     return createFormTemplate(context.profile.id, data);
   });
 
+export const updateFormTemplateImageFn = createServerFn({ method: "POST" })
+  .middleware([requireInternalAuth])
+  .inputValidator((data: unknown) =>
+    z
+      .object({
+        id: z.string().uuid(),
+        image: z.object({
+          fileName: z.string().trim().min(1).max(200),
+          contentType: z.enum(["image/png", "image/jpeg", "image/webp", "image/gif"]),
+          dataBase64: z.string().min(1).max(8_000_000),
+        }),
+      })
+      .parse(data),
+  )
+  .handler(async ({ data, context }) => {
+    const { updateFormTemplateImage } = await import("./form-templates.server");
+    return updateFormTemplateImage(context.profile.id, data);
+  });
+
 export const deleteFormTemplateFn = createServerFn({ method: "POST" })
   .middleware([requireInternalAuth])
   .inputValidator((data: unknown) => z.object({ id: z.string().uuid() }).parse(data))

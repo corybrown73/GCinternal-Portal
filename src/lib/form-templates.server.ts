@@ -156,6 +156,79 @@ export async function createFormTemplate(
   };
 }
 
+/**
+ * Replace (or add) the picture on a card that already exists. The old object
+ * is removed once the row points at the new one, so a failed upload leaves
+ * the card as it was.
+ */
+export async function updateFormTemplateImage(
+  userId: string,
+  args: { id: string; image: { fileName: string; contentType: string; dataBase64: string } },
+): Promise<FormTemplateCard> {
+  const actor = await requireSalesEditor(userId);
+  if (!IMAGE_TYPES.has(args.image.contentType)) {
+    throw new Error("The picture should be a PNG, JPEG, WebP or GIF");
+  }
+  if (args.image.dataBase64.length > IMAGE_MAX_BASE64) {
+    throw new Error("That picture is over 6MB — a screenshot should be far smaller");
+  }
+  const { data: row } = await db()
+    .from("form_templates")
+    .select("id,name,industry,description,tags,image_path,created_at")
+    .eq("id", args.id)
+    .maybeSingle();
+  if (!row) throw new Error("That template is gone");
+
+  const binary = Buffer.from(args.image.dataBase64, "base64");
+  const safe = args.image.fileName.replace(/[^A-Za-z0-9._-]+/g, "-").slice(-120) || "form.png";
+  const imagePath = `form-templates/${crypto.randomUUID()}-${safe}`;
+  const { error: upErr } = await db()
+    .storage.from(BUCKET)
+    .upload(imagePath, binary, { contentType: args.image.contentType, upsert: false });
+  if (upErr) throw new Error(`Could not upload the picture: ${upErr.message}`);
+
+  const { error } = await db()
+    .from("form_templates")
+    .update({ image_path: imagePath })
+    .eq("id", args.id);
+  if (error) {
+    try {
+      await db().storage.from(BUCKET).remove([imagePath]);
+    } catch {
+      /* the row is what matters */
+    }
+    throw new Error(`Could not save the picture: ${error.message}`);
+  }
+  const previous = row["image_path"] as string | null;
+  if (previous && previous !== imagePath) {
+    try {
+      await db().storage.from(BUCKET).remove([previous]);
+    } catch {
+      /* an orphaned image costs pennies */
+    }
+  }
+
+  const { audit } = await import("./server/audit");
+  await audit({
+    actor_type: "user",
+    actor_id: actor.id,
+    action: "form_template.image_replaced",
+    entity_type: "form_template",
+    entity_id: args.id,
+    payload: { name: row["name"], replaced: Boolean(previous) },
+  });
+
+  return {
+    id: String(row["id"]),
+    name: String(row["name"]),
+    industry: String(row["industry"]),
+    description: (row["description"] as string | null) ?? null,
+    tags: (row["tags"] as string[] | null) ?? [],
+    imageUrl: await signedImage(imagePath),
+    createdAt: String(row["created_at"]),
+  };
+}
+
 export async function deleteFormTemplate(userId: string, id: string): Promise<void> {
   const actor = await requireSalesEditor(userId);
   const { data: row } = await db()

@@ -1,8 +1,9 @@
+import { useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { Trash2 } from "lucide-react";
+import { ImagePlus, Trash2 } from "lucide-react";
 
-import { deleteFormTemplateFn } from "@/lib/form-templates.functions";
+import { deleteFormTemplateFn, updateFormTemplateImageFn } from "@/lib/form-templates.functions";
 import type { FormTemplateCard } from "@/lib/form-templates.server";
 import { cn } from "@/lib/utils";
 
@@ -31,6 +32,31 @@ export function TemplateCard({
     mutationFn: () => del({ data: { id: template.id } }),
     onSuccess: () => void qc.invalidateQueries({ queryKey: ["form-templates"] }),
   });
+  // Editors can put a picture on a card that has none, or swap the one it has.
+  const setImage = useServerFn(updateFormTemplateImageFn);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [imageError, setImageError] = useState<string | null>(null);
+  const replace = useMutation({
+    mutationFn: async (file: File) => {
+      const dataBase64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onerror = () => reject(new Error("Could not read that picture."));
+        reader.onload = () => resolve(String(reader.result).split(",")[1] ?? "");
+        reader.readAsDataURL(file);
+      });
+      return setImage({
+        data: {
+          id: template.id,
+          image: { fileName: file.name, contentType: file.type, dataBase64 } as never,
+        },
+      });
+    },
+    onSuccess: () => {
+      setImageError(null);
+      void qc.invalidateQueries({ queryKey: ["form-templates"] });
+    },
+    onError: (e) => setImageError((e as Error).message),
+  });
 
   const body = (
     <>
@@ -58,6 +84,11 @@ export function TemplateCard({
             {template.tags.join(" · ")}
           </p>
         ) : null}
+        {imageError ? (
+          <p role="alert" className="text-[11px] text-destructive">
+            {imageError}
+          </p>
+        ) : null}
       </div>
     </>
   );
@@ -82,6 +113,38 @@ export function TemplateCard({
       ) : (
         body
       )}
+      {editable && !onSelect ? (
+        <>
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/png,image/jpeg,image/webp,image/gif"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) replace.mutate(file);
+              e.target.value = "";
+            }}
+          />
+          <button
+            type="button"
+            title={template.imageUrl ? "Change the picture" : "Add a picture"}
+            disabled={replace.isPending}
+            onClick={() => fileRef.current?.click()}
+            className={cn(
+              "absolute left-1.5 top-1.5 inline-flex items-center gap-1 rounded-sm border border-border bg-background/90 px-1.5 py-1 text-[11px] text-muted-foreground transition-opacity hover:text-foreground",
+              template.imageUrl ? "opacity-0 group-hover:opacity-100" : "opacity-100",
+            )}
+          >
+            <ImagePlus className="h-3.5 w-3.5" />
+            {replace.isPending
+              ? "Uploading…"
+              : template.imageUrl
+                ? "Change picture"
+                : "Add picture"}
+          </button>
+        </>
+      ) : null}
       {editable && !onSelect ? (
         <button
           type="button"

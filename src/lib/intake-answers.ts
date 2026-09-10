@@ -98,7 +98,7 @@ export const intakeAnswersSchema = z.object({
       times: z.record(z.string(), z.string().regex(/^\d{2}:\d{2}$/)).default({}),
       /** IANA zone the times are in, e.g. America/Chicago. */
       timezone: z.string().trim().max(64).nullable().default(null),
-      /** Everything bought beyond the first form, each in a phase ≥ 2. */
+      /** Everything bought beyond the first form: phase 1 runs alongside it, 2 and up wait. */
       services: z
         .array(
           z.object({
@@ -113,9 +113,10 @@ export const intakeAnswersSchema = z.object({
               "other",
             ]),
             name: z.string().trim().min(1).max(120),
-            phase: z.number().int().min(2).max(9),
+            phase: z.number().int().min(1).max(9),
             tier: z.number().int().min(0).max(5).nullable().optional(),
             weeks: z.number().min(0.5).max(52).nullable().optional(),
+            needs: z.string().trim().max(300).nullable().optional(),
           }),
         )
         .default([]),

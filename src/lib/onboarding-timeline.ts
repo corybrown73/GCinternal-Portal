@@ -37,6 +37,7 @@ import {
   serviceWeeks,
   type ServiceKind,
   type ServiceSpec,
+  serviceNeeds,
 } from "./onboarding-services";
 
 export type MilestoneOwner = "gocanvas" | "client" | "both";
@@ -287,6 +288,8 @@ export type ServicePlan = {
   endsOn: string;
   /** The day its last step was marked done, when it was. */
   doneOn: string | null;
+  /** What we need from the customer to start it. */
+  needs: string;
   milestones: Milestone[];
 };
 
@@ -314,6 +317,8 @@ export type Timeline = {
   timezone: string | null;
   /** How many of the plan's steps are marked done. */
   progress: { done: number; total: number };
+  /** Services that run alongside the form, from the kickoff call. */
+  alongside: ServicePlan[];
   /** Phases 2 and up. Empty when nothing beyond the form was bought. */
   phases: Phase[];
   /** 1 while the form is being built; then the lowest phase with work left. */
@@ -464,7 +469,70 @@ export function buildTimeline(options: TimelineOptions): Timeline {
     integration_tier: options.integrationTier ?? null,
     integration_target: options.integrationTarget ?? null,
   });
-  const phaseNumbers = [...new Set(services.map((x) => x.phase))].sort((a, b) => a - b);
+  // One service, planned from a start day: its steps spread over its weeks,
+  // then cascaded so a moved or done step behaves like the form's do.
+  const planService = (svc: ServiceSpec, phaseNo: number, start: string): ServicePlan => {
+    const spec = SERVICE_KINDS[svc.kind];
+    const weeks = serviceWeeks(svc);
+    const spanDays = Math.max(1, Math.round(weeks * 7));
+    const legacy = svc.id === "legacy-integration";
+    const keyFor = (step: string) =>
+      legacy ? `integ_${step === "review" ? "test" : step}` : `${svc.id}:${step}`;
+    const stepSpecs = spec.steps.map((st) => ({
+      key: keyFor(st.key),
+      label: st.label,
+      owner: st.owner,
+      kind:
+        st.kind === "call"
+          ? ("call" as const)
+          : st.kind === "build"
+            ? ("build" as const)
+            : ("milestone" as const),
+      ...(st.minutes !== undefined && { minutes: st.minutes }),
+      detail: st.detail,
+      icon: st.icon,
+      at: st.at,
+    }));
+    const ms = cascade(stepSpecs, (st) =>
+      st.at === 0
+        ? start
+        : st.at === 1
+          ? onBusinessDay(toIso(new Date(parseIso(start).getTime() + spanDays * DAY_MS)), holidays)
+          : onBusinessDay(
+              toIso(new Date(parseIso(start).getTime() + Math.round(spanDays * st.at) * DAY_MS)),
+              holidays,
+            ),
+    ).map((m) => {
+      const { at: _at, ...rest } = m as Milestone & { at?: number };
+      return { ...rest, phase: phaseNo, serviceId: svc.id } as Milestone;
+    });
+    return {
+      id: svc.id,
+      kind: svc.kind,
+      label: spec.label,
+      name: svc.name,
+      phase: phaseNo,
+      weeks,
+      tier: svc.kind === "integration" ? (svc.tier ?? 3) : null,
+      icon: spec.icon,
+      startsOn: ms[0]!.date,
+      endsOn: ms[ms.length - 1]!.date,
+      doneOn: ms[ms.length - 1]!.doneOn,
+      needs: serviceNeeds(svc),
+      milestones: ms,
+    };
+  };
+
+  // Phase 1 services run alongside the form: their first step is on the
+  // kickoff call, so they start the day the form does and never wait.
+  const kickoffDate = milestones.find((m) => m.key === "kickoff")?.date ?? liveDate;
+  const alongside: ServicePlan[] = services
+    .filter((x) => x.phase <= 1)
+    .map((svc) => planService(svc, 1, kickoffDate));
+
+  const phaseNumbers = [...new Set(services.filter((x) => x.phase >= 2).map((x) => x.phase))].sort(
+    (a, b) => a - b,
+  );
   const phases: Phase[] = [];
   let prevEnds: string | null = null; // planned end of the previous phase
   let prevDoneOn: string | null = null; // actual end, when every service is done
@@ -485,63 +553,7 @@ export function buildTimeline(options: TimelineOptions): Timeline {
     const tentative = isFirst ? !provenOn : !(prevDone && prevDoneOn);
     const plans: ServicePlan[] = services
       .filter((x) => x.phase === n)
-      .map((svc) => {
-        const spec = SERVICE_KINDS[svc.kind];
-        const weeks = serviceWeeks(svc);
-        const spanDays = Math.max(1, Math.round(weeks * 7));
-        const legacy = svc.id === "legacy-integration";
-        const keyFor = (step: string) =>
-          legacy ? `integ_${step === "review" ? "test" : step}` : `${svc.id}:${step}`;
-        const stepSpecs = spec.steps.map((st) => ({
-          key: keyFor(st.key),
-          label: st.label,
-          owner: st.owner,
-          kind:
-            st.kind === "call"
-              ? ("call" as const)
-              : st.kind === "build"
-                ? ("build" as const)
-                : ("milestone" as const),
-          ...(st.minutes !== undefined && { minutes: st.minutes }),
-          detail: st.detail,
-          icon: st.icon,
-          at: st.at,
-        }));
-        const ms = cascade(stepSpecs, (st) =>
-          st.at === 0
-            ? phaseStart
-            : st.at === 1
-              ? onBusinessDay(
-                  toIso(new Date(parseIso(phaseStart).getTime() + spanDays * DAY_MS)),
-                  holidays,
-                )
-              : onBusinessDay(
-                  toIso(
-                    new Date(
-                      parseIso(phaseStart).getTime() + Math.round(spanDays * st.at) * DAY_MS,
-                    ),
-                  ),
-                  holidays,
-                ),
-        ).map((m) => {
-          const { at: _at, ...rest } = m as Milestone & { at?: number };
-          return { ...rest, phase: n, serviceId: svc.id } as Milestone;
-        });
-        return {
-          id: svc.id,
-          kind: svc.kind,
-          label: spec.label,
-          name: svc.name,
-          phase: n,
-          weeks,
-          tier: svc.kind === "integration" ? (svc.tier ?? 3) : null,
-          icon: spec.icon,
-          startsOn: ms[0]!.date,
-          endsOn: ms[ms.length - 1]!.date,
-          doneOn: ms[ms.length - 1]!.doneOn,
-          milestones: ms,
-        };
-      });
+      .map((svc) => planService(svc, n, phaseStart));
     const endsOn = plans.reduce<string | null>(
       (acc, p) => (!acc || p.endsOn > acc ? p.endsOn : acc),
       null,
@@ -584,7 +596,11 @@ export function buildTimeline(options: TimelineOptions): Timeline {
     ? phases.find((p) => p.phase === firstIntegration.phase)
     : null;
 
-  const all = [...milestones, ...phases.flatMap((p) => p.services.flatMap((x) => x.milestones))];
+  const all = [
+    ...milestones,
+    ...alongside.flatMap((x) => x.milestones),
+    ...phases.flatMap((p) => p.services.flatMap((x) => x.milestones)),
+  ];
   return {
     closeDate: options.closeDate,
     milestones,
@@ -592,6 +608,7 @@ export function buildTimeline(options: TimelineOptions): Timeline {
     liveDoneOn,
     timezone: options.timezone ?? null,
     progress: { done: all.filter((m) => m.doneOn).length, total: all.length },
+    alongside,
     phases,
     currentPhase,
     allDone,

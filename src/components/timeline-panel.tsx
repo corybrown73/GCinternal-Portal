@@ -17,6 +17,7 @@ import { readIntake, type IntakeAnswers } from "@/lib/intake-answers";
 import { buildIcs } from "@/lib/ics";
 import { closeDateFor, timelineFor } from "@/lib/onboarding-plan";
 import {
+  belongsAfterForm,
   normalizeServices,
   SERVICE_KIND_LIST,
   SERVICE_KINDS,
@@ -30,6 +31,8 @@ import {
   shortDay,
   type IntegrationTier,
   type Milestone,
+  type Phase,
+  type Timeline,
 } from "@/lib/onboarding-timeline";
 import { generateOnboardingDeck, saveIntake } from "@/lib/presale.functions";
 import { isCall, planEvents } from "@/lib/welcome-events";
@@ -74,7 +77,11 @@ export function TimelinePanel({
   const [tester, setTester] = useState(knobs.field_tester ?? "");
   const [newKind, setNewKind] = useState<ServiceKind>("integration");
   const [newName, setNewName] = useState("");
-  const [newPhase, setNewPhase] = useState(2);
+  const [newPhase, setNewPhase] = useState<number>(SERVICE_KINDS.integration.defaultPhase);
+  const pickKind = (k: ServiceKind) => {
+    setNewKind(k);
+    setNewPhase(SERVICE_KINDS[k].defaultPhase);
+  };
   // The services as the plan sees them: the stored list, with the legacy
   // single-integration knobs folded in until somebody edits the list.
   const services = normalizeServices(knobs.services as ServiceSpec[], knobs);
@@ -528,9 +535,9 @@ export function TimelinePanel({
                       disabled={busy}
                       onChange={(e) => updateService(svc.id, { phase: Number(e.target.value) })}
                     >
-                      {[2, 3, 4].map((n) => (
-                        <option key={n} value={n}>
-                          {n}
+                      {PHASE_OPTIONS.map((o) => (
+                        <option key={o.value} value={o.value}>
+                          {o.label}
                         </option>
                       ))}
                     </select>
@@ -576,13 +583,30 @@ export function TimelinePanel({
                   >
                     <X className="h-3.5 w-3.5" />
                   </button>
+                  <label className="flex w-full items-center gap-1.5 text-[11px] text-muted-foreground">
+                    <span className="shrink-0">We need from you</span>
+                    <input
+                      className={cn(input, "min-w-0 flex-1")}
+                      value={svc.needs ?? ""}
+                      placeholder={SERVICE_KINDS[svc.kind].needs}
+                      disabled={busy}
+                      onChange={(e) => updateService(svc.id, { needs: e.target.value || null })}
+                    />
+                  </label>
+                  {svc.phase <= 1 && belongsAfterForm(svc.kind) ? (
+                    <p className="w-full text-[11px] text-amber-700 dark:text-amber-400">
+                      {SERVICE_KINDS[svc.kind].label}s are built on real submissions — phase 2, once
+                      the form is dialed in, is what works. Phase 1 is your call.
+                    </p>
+                  ) : null}
                 </li>
               ))}
             </ul>
           ) : (
             <p className="text-[12px] text-muted-foreground">
               Nothing beyond the form yet. Tick what the SOW includes — an integration, a custom
-              PDF, more forms — and give each a phase. Phase 2 starts once the form is dialed in.
+              PDF, more forms — and give each a phase. Phase 1 runs alongside the form from the
+              kickoff call; phase 2 starts once the form is dialed in.
             </p>
           )}
 
@@ -591,7 +615,7 @@ export function TimelinePanel({
               <select
                 className={input}
                 value={newKind}
-                onChange={(e) => setNewKind(e.target.value as ServiceKind)}
+                onChange={(e) => pickKind(e.target.value as ServiceKind)}
               >
                 {SERVICE_KIND_LIST.map((k) => (
                   <option key={k.kind} value={k.kind}>
@@ -623,9 +647,9 @@ export function TimelinePanel({
                   value={newPhase}
                   onChange={(e) => setNewPhase(Number(e.target.value))}
                 >
-                  {[2, 3, 4].map((n) => (
-                    <option key={n} value={n}>
-                      {n}
+                  {PHASE_OPTIONS.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
                     </option>
                   ))}
                 </select>
@@ -642,8 +666,8 @@ export function TimelinePanel({
           ) : null}
         </div>
 
-        {/* The phases, gated, with every service's dates. */}
-        {timeline.phases.map((ph) => (
+        {/* Phase 1's companions first, then the gated phases, every service's dates. */}
+        {[...alongsidePhase(timeline), ...timeline.phases].map((ph) => (
           <div key={ph.phase} className="space-y-2">
             <div className="flex flex-wrap items-center gap-2 rounded-md border border-border bg-background px-2.5 py-2">
               <span
@@ -656,7 +680,14 @@ export function TimelinePanel({
                       : "bg-primary/10 text-primary",
                 )}
               >
-                {ph.label} · {ph.done ? "done" : ph.tentative ? "gated" : "unlocked"}
+                {ph.label} ·{" "}
+                {ph.done
+                  ? "done"
+                  : ph.tentative
+                    ? "gated"
+                    : ph.phase === 1
+                      ? "with the form"
+                      : "unlocked"}
                 {timeline.currentPhase === ph.phase && !ph.done ? " · now" : ""}
               </span>
               <span className="text-[12px]">
@@ -811,6 +842,37 @@ export function TimelinePanel({
       </div>
     </Panel>
   );
+}
+
+const PHASE_OPTIONS = [
+  { value: 1, label: "1 · with the form" },
+  { value: 2, label: "2 · after the form" },
+  { value: 3, label: "3" },
+  { value: 4, label: "4" },
+];
+
+/**
+ * Phase 1's companions, shaped like a phase so the rows render the same way.
+ * Never gated: they start on the kickoff call.
+ */
+function alongsidePhase(t: Timeline): Phase[] {
+  if (!t.alongside.length) return [];
+  const endsOn = t.alongside.reduce<string | null>(
+    (acc, p) => (!acc || p.endsOn > acc ? p.endsOn : acc),
+    null,
+  );
+  return [
+    {
+      phase: 1,
+      label: "Phase 1 · alongside the form",
+      gate: "Starts on the kickoff call",
+      tentative: false,
+      startsOn: t.alongside[0]!.startsOn,
+      endsOn,
+      done: t.alongside.every((p) => p.doneOn),
+      services: t.alongside,
+    },
+  ];
 }
 
 const OWNER: Record<string, { label: string; className: string }> = {

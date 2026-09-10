@@ -2988,3 +2988,325 @@ body.gc-presenting {
 .gc-welcome .wp-content:has(.wp-phase2) {
   padding-top: 8px;
 }
+
+/* ---- the phases screen */
+.gc-welcome .wp-next-hint {
+  margin: 4px 0 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--wp-blue-deep);
+}
+.gc-welcome .wp-phasemap {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  margin-bottom: 14px;
+}
+.gc-welcome .wp-phasemap-item {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+}
+.gc-welcome .wp-phasemap-chip {
+  flex: 1;
+  min-width: 0;
+  position: relative;
+  border: 1px solid var(--wp-blue-line);
+  border-radius: 12px;
+  padding: 8px 12px;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.gc-welcome .wp-phasemap-chip.is-tentative {
+  border-style: dashed;
+}
+.gc-welcome .wp-phasemap-chip.is-now .wp-phasemap-no,
+.gc-welcome .wp-phasemap-chip.is-now .wp-phasemap-name {
+  padding-right: 104px;
+}
+.gc-welcome .wp-phasemap-chip.is-now {
+  border-color: var(--wp-blue);
+  box-shadow: 0 0 0 3px rgba(3, 157, 231, 0.14);
+}
+.gc-welcome .wp-phasemap-chip.is-done {
+  background: #f2faf5;
+  border-color: #bfe6cf;
+}
+.gc-welcome .wp-phasemap-no {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--wp-blue);
+}
+.gc-welcome .wp-phasemap-chip.is-done .wp-phasemap-no {
+  color: var(--wp-green);
+}
+.gc-welcome .wp-phasemap-name {
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--wp-navy);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.gc-welcome .wp-phasemap-when {
+  font-size: 11px;
+  color: var(--wp-body);
+}
+.gc-welcome .wp-phasemap-here {
+  position: absolute;
+  right: 10px;
+  top: 8px;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #fff;
+  background: var(--wp-orange);
+  border-radius: 999px;
+  padding: 2px 8px;
+}
+.gc-welcome .wp-phasemap-arrow {
+  flex: none;
+  width: 26px;
+  height: 0;
+  border-top: 3px dotted #9dd3f2;
+  position: relative;
+  margin: 0 2px;
+}
+.gc-welcome .wp-phasemap-arrow::after {
+  content: "";
+  position: absolute;
+  right: -2px;
+  top: -6px;
+  border-left: 8px solid var(--wp-blue);
+  border-top: 5px solid transparent;
+  border-bottom: 5px solid transparent;
+}
+.gc-welcome .wp-phasemap-chip.is-this {
+  box-shadow: 0 0 0 2px var(--wp-blue-deep);
+}
+.gc-welcome .wp-svc-cards {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+.gc-welcome .wp-svc-cards.is-compact {
+  grid-template-columns: 1fr 1fr;
+}
+.gc-welcome .wp-svc-card {
+  padding: 12px 18px 14px;
+}
+.gc-welcome .wp-svc-card.is-tentative {
+  border-style: dashed;
+}
+.gc-welcome .wp-svc-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.gc-welcome .wp-svc-text {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.gc-welcome .wp-svc-text b {
+  font-size: 16px;
+  color: var(--wp-navy);
+  letter-spacing: -0.01em;
+}
+.gc-welcome .wp-svc-text small {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--wp-muted);
+}
+.gc-welcome .wp-svc-when {
+  flex: none;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--wp-blue);
+  white-space: nowrap;
+}
+.gc-welcome .wp-svc-card.is-done .wp-svc-when {
+  color: var(--wp-green);
+}
+.gc-welcome .wp-svc-steps-line {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: var(--wp-body);
+  line-height: 1.35;
+}
+.gc-welcome .wp-svc-rail {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin-top: 12px;
+  padding-top: 4px;
+}
+.gc-welcome .wp-svc-rail-line {
+  position: absolute;
+  left: 12%;
+  right: 12%;
+  top: 19px;
+  height: 2px;
+  background: var(--wp-line);
+}
+.gc-welcome .wp-svc-step {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 3px;
+}
+.gc-welcome .wp-svc-step .wp-tile {
+  box-shadow: 0 0 0 5px #fff;
+}
+.gc-welcome .wp-svc-step-label {
+  margin-top: 3px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--wp-navy);
+  line-height: 1.2;
+}
+.gc-welcome .wp-svc-step-date {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--wp-blue);
+}
+.gc-welcome .wp-svc-step-date.is-done {
+  color: var(--wp-green);
+}
+.gc-welcome .wp-svc-step-owner {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.gc-welcome .wp-svc-step-detail {
+  font-size: 10.5px;
+  line-height: 1.3;
+  color: var(--wp-body);
+  max-width: 200px;
+}
+.gc-welcome .wp-svc-cards.is-two .wp-svc-step-detail,
+.gc-welcome .wp-svc-cards.is-compact .wp-svc-step-detail {
+  display: none;
+}
+.gc-welcome .wp-svc-cards.is-two {
+  gap: 10px;
+}
+.gc-welcome .wp-svc-cards.is-two .wp-svc-card {
+  padding: 6px 16px 8px;
+}
+.gc-welcome .wp-content:has(.wp-svc-cards.is-two) .wp-phasemap-chip {
+  padding-top: 6px;
+  padding-bottom: 6px;
+}
+.gc-welcome .wp-content:has(.wp-svc-cards.is-two) .wp-phasemap {
+  margin-bottom: 10px;
+}
+.gc-welcome .wp-svc-cards.is-two .wp-svc-head .wp-tile {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+}
+.gc-welcome .wp-svc-cards.is-two .wp-svc-text b {
+  font-size: 15px;
+}
+.gc-welcome .wp-svc-cards.is-two .wp-svc-rail {
+  margin-top: 6px;
+  gap: 8px;
+}
+.gc-welcome .wp-svc-cards.is-two .wp-svc-step {
+  gap: 2px;
+}
+
+/* Services that run alongside the form, on the phase-1 screen. The rail's
+   per-step blurbs give way to them: the dates stay, the strip takes the room. */
+.gc-welcome .wp-content:has(.wp-alongside) .wp-node-detail {
+  display: none;
+}
+.gc-welcome .wp-content:has(.wp-alongside) .wp-node-label {
+  min-height: 0;
+}
+.gc-welcome .wp-alongside {
+  margin-top: 6px;
+  padding: 10px 14px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--wp-blue-line);
+  background: var(--wp-blue-soft, #eef6fc);
+}
+.gc-welcome .wp-alongside-title {
+  margin: 0 0 8px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--wp-blue-deep);
+}
+.gc-welcome .wp-alongside-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
+  gap: 14px;
+}
+.gc-welcome .wp-alongside-row.is-many {
+  grid-template-columns: repeat(3, 1fr);
+}
+.gc-welcome .wp-alongside-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-width: 0;
+}
+.gc-welcome .wp-alongside-text {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.gc-welcome .wp-alongside-text b {
+  font-size: 14px;
+  color: var(--wp-navy);
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+}
+.gc-welcome .wp-alongside-text b small {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--wp-blue);
+}
+.gc-welcome .wp-alongside-card.is-done .wp-alongside-text b small {
+  color: var(--wp-green);
+}
+.gc-welcome .wp-alongside-text > span {
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--wp-body);
+}
+.gc-welcome .wp-alongside-text em {
+  font-style: normal;
+  font-weight: 700;
+  color: var(--wp-green);
+}
+.gc-welcome .wp-homework-extra {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 24px;
+  font-size: 12.5px;
+  color: var(--wp-body);
+}
+.gc-welcome .wp-homework-extra b {
+  color: var(--wp-navy);
+}
