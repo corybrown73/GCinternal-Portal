@@ -56,9 +56,26 @@ export async function buildOnboardingDeckInput(dealId: string): Promise<Onboardi
   );
 
   let firstForm: OnboardingDeckInput["firstForm"] = null;
-  let next: typeof library = [];
+  let next: Array<{ name: string; description: string | null }> = [];
   const uploaded = intake.uploaded_forms[0];
-  if (uploaded) {
+  const wanted = intake.wanted_forms.map((f) => {
+    const card = f.template_id ? byId.get(f.template_id) : undefined;
+    return {
+      name: f.name,
+      description: card?.description ?? null,
+      source: card ? ("library" as const) : ("typed" as const),
+    };
+  });
+  if (wanted[0]) {
+    // The list the person made on the call, in the order they set: the
+    // first is the first form, the rest are what comes next.
+    firstForm = {
+      name: wanted[0].name,
+      objective: wanted[0].description,
+      source: wanted[0].source,
+    };
+    next = [...wanted.slice(1), ...shelf.filter((t) => !wanted.some((w) => w.name === t.name))];
+  } else if (uploaded) {
     firstForm = { name: displayName(uploaded.name), objective: null, source: "uploaded" };
     next = [...chosen, ...shelf];
   } else if (chosen[0]) {

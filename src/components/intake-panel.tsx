@@ -1,18 +1,24 @@
 import { useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { Check, ExternalLink, Upload } from "lucide-react";
+import { ArrowUp, Check, ExternalLink, ListPlus, Upload, X } from "lucide-react";
 
 import { Panel } from "@/components/record";
 import { TemplateCard } from "@/components/template-card";
 import { suggestFormTemplatesFn } from "@/lib/form-templates.functions";
 import {
+  addWantedForm,
+  chosenFrom,
   COMPANY_SIZES,
   INDUSTRIES,
   intakeStatus,
+  makeFirstWantedForm,
   readIntake,
+  templateIds,
+  toggleWantedTemplate,
   type IntakeAnswers,
 } from "@/lib/intake-answers";
+import { SERVICE_KINDS, type ServiceSpec } from "@/lib/onboarding-services";
 import { getIntakeFormLink, saveIntake, uploadIntakeForm } from "@/lib/presale.functions";
 import { cn } from "@/lib/utils";
 
@@ -89,6 +95,15 @@ export function IntakePanel({
 
         {answers.forms_built === false ? (
           <NoForms answers={answers} editable={editable} busy={mutation.isPending} onSet={set} />
+        ) : null}
+
+        {answers.forms_built !== null ? (
+          <WantedForms
+            answers={answers}
+            editable={editable}
+            busy={mutation.isPending}
+            onSet={set}
+          />
         ) : null}
       </div>
     </Panel>
@@ -246,13 +261,9 @@ function NoForms({
 
   const input =
     "rounded-sm border border-border bg-background px-2 py-1 text-[12px] focus:outline-none focus:ring-1 focus:ring-primary disabled:opacity-60";
-  const chosen = new Set(answers.chosen_templates);
-  const toggle = (id: string) => {
-    const next = new Set(chosen);
-    if (next.has(id)) next.delete(id);
-    else next.add(id);
-    onSet({ chosen_templates: Array.from(next) });
-  };
+  // A picked card is a wanted form. The set here is what the grid outlines.
+  const chosen = new Set(chosenFrom(answers.wanted_forms, answers.chosen_templates));
+  const toggle = (t: { id: string; name: string }) => onSet(toggleWantedTemplate(answers, t));
 
   return (
     <div className="space-y-3">
@@ -326,7 +337,7 @@ function NoForms({
       <div>
         <p className="mb-1.5 text-[12px] text-muted-foreground">
           {answers.industry
-            ? `Starting points for ${answers.industry}. Pick the ones closest to what they do — the build begins from these.`
+            ? `Starting points for ${answers.industry}. Pick every one they want — each lands on the list below, and the first on the list is the first form.`
             : "Pick an industry to see starting points from the form library."}
         </p>
         {suggestions.isLoading ? (
@@ -374,7 +385,7 @@ function CardGrid({
 }: {
   cards: Array<Parameters<typeof TemplateCard>[0]["template"]>;
   chosen: Set<string>;
-  onToggle?: ((id: string) => void) | undefined;
+  onToggle?: ((t: { id: string; name: string }) => void) | undefined;
 }) {
   return (
     <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
@@ -383,9 +394,161 @@ function CardGrid({
           key={t.id}
           template={t}
           selected={chosen.has(t.id)}
-          onSelect={onToggle ? () => onToggle(t.id) : undefined}
+          onSelect={onToggle ? () => onToggle({ id: t.id, name: t.name }) : undefined}
         />
       ))}
+    </div>
+  );
+}
+
+/**
+ * The forms they want built, in order. The first is the seven-day form;
+ * the rest are what comes next — and any of them can be put on the plan as
+ * a form build, so three paid builds show up as three named forms, not
+ * "3 forms".
+ */
+function WantedForms({
+  answers,
+  editable,
+  busy,
+  onSet,
+}: {
+  answers: IntakeAnswers;
+  editable: boolean;
+  busy: boolean;
+  onSet: (patch: Record<string, unknown>) => void;
+}) {
+  const [name, setName] = useState("");
+  const forms = answers.wanted_forms;
+  const services = (answers.timeline.services ?? []) as ServiceSpec[];
+  const disabled = !editable || busy;
+  const input =
+    "rounded-sm border border-border bg-background px-2 py-1 text-[12px] focus:outline-none focus:ring-1 focus:ring-primary disabled:opacity-60";
+  const write = (next: IntakeAnswers["wanted_forms"]) =>
+    onSet({ wanted_forms: next, chosen_templates: templateIds(next) });
+  const add = () => {
+    const patch = addWantedForm(answers, name);
+    if (patch.wanted_forms !== answers.wanted_forms) onSet(patch);
+    setName("");
+  };
+  const inPlan = (formName: string) =>
+    services.find(
+      (x) =>
+        x.kind === "paid_form" && x.name.trim().toLowerCase() === formName.trim().toLowerCase(),
+    );
+  const addToPlan = (formName: string) => {
+    const id = `paid-${Math.random().toString(36).slice(2, 8)}`;
+    onSet({
+      timeline: {
+        ...answers.timeline,
+        services: [...services, { id, kind: "paid_form", name: formName, phase: 1 }],
+        integration_tier: services.length ? 0 : answers.timeline.integration_tier,
+      },
+    });
+  };
+
+  return (
+    <div className="space-y-2 rounded-md border border-border bg-muted/20 p-2.5">
+      <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+        Forms to build · {forms.length || "none yet"}
+      </p>
+      {forms.length ? (
+        <ol className="divide-y divide-border rounded-md border border-border bg-background">
+          {forms.map((f, i) => {
+            const planned = inPlan(f.name);
+            return (
+              <li key={f.id} className="flex flex-wrap items-center gap-x-2 gap-y-1 px-2.5 py-1.5">
+                <span
+                  className={cn(
+                    "w-[92px] shrink-0 rounded-sm px-1.5 py-0.5 text-center text-[10px] font-semibold uppercase tracking-wider",
+                    i === 0 ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground",
+                  )}
+                >
+                  {i === 0 ? "First form" : `Then · ${i + 1}`}
+                </span>
+                <input
+                  className={cn(input, "min-w-0 flex-1")}
+                  value={f.name}
+                  disabled={disabled}
+                  onChange={(e) =>
+                    write(forms.map((x) => (x.id === f.id ? { ...x, name: e.target.value } : x)))
+                  }
+                />
+                <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                  {f.template_id ? "library" : "named on the call"}
+                </span>
+                {i > 0 ? (
+                  <button
+                    type="button"
+                    className="inline-flex items-center gap-1 rounded-sm border border-border px-1.5 py-0.5 text-[11px] hover:bg-muted disabled:opacity-50"
+                    disabled={disabled}
+                    title="Make this the first form"
+                    onClick={() => write(makeFirstWantedForm(forms, f.id))}
+                  >
+                    <ArrowUp className="h-3 w-3" /> First
+                  </button>
+                ) : null}
+                {i > 0 ? (
+                  planned ? (
+                    <span className="text-[11px] text-emerald-700 dark:text-emerald-400">
+                      On the plan · phase {planned.phase}
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      className="inline-flex items-center gap-1 rounded-sm border border-border px-1.5 py-0.5 text-[11px] hover:bg-muted disabled:opacity-50"
+                      disabled={disabled}
+                      title={`Add "${f.name}" to the plan as a ${SERVICE_KINDS.paid_form.label.toLowerCase()}, phase 1`}
+                      onClick={() => addToPlan(f.name)}
+                    >
+                      <ListPlus className="h-3 w-3" /> Add to plan
+                    </button>
+                  )
+                ) : null}
+                <button
+                  type="button"
+                  className="text-muted-foreground hover:text-destructive disabled:opacity-50"
+                  aria-label={`Remove ${f.name}`}
+                  disabled={disabled}
+                  onClick={() => write(forms.filter((x) => x.id !== f.id))}
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </li>
+            );
+          })}
+        </ol>
+      ) : (
+        <p className="text-[12px] text-muted-foreground">
+          Pick cards from the library or type the forms they named — three or four is normal. The
+          first on the list is the one we build in seven days; the rest can go on the plan.
+        </p>
+      )}
+      {editable ? (
+        <div className="flex items-center gap-1.5">
+          <input
+            className={cn(input, "min-w-0 flex-1")}
+            placeholder="A form they named — Chemical Delivery Ticket"
+            value={name}
+            disabled={busy}
+            onChange={(e) => setName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                add();
+              }
+            }}
+          />
+          <button
+            type="button"
+            className="rounded-sm border border-border px-2 py-1 text-[11px] hover:bg-muted disabled:opacity-50"
+            disabled={busy || !name.trim()}
+            onClick={add}
+          >
+            Add
+          </button>
+        </div>
+      ) : null}
     </div>
   );
 }

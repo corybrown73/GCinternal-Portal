@@ -27,7 +27,7 @@ export type WelcomeView = {
   firstForm: {
     name: string;
     objective: string | null;
-    source: "library" | "uploaded" | "tbd";
+    source: "library" | "uploaded" | "typed" | "tbd";
   } | null;
   nextUseCases: Array<{ name: string; objective: string | null }>;
   /** Signed, short-lived. null → the icon composition. */

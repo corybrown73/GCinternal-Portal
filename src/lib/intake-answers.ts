@@ -67,6 +67,21 @@ export const intakeAnswersSchema = z.object({
   /** Templates from the library they pointed at. Ids, so a renamed card still resolves. */
   chosen_templates: z.array(z.string().uuid()).default([]),
   /**
+   * The forms they want built, in priority order: the first is THE first
+   * form — the seven-day one. A library card they picked lands here with its
+   * template id; a form they named on the call lands here typed. Three or
+   * four is normal; we still build one first.
+   */
+  wanted_forms: z
+    .array(
+      z.object({
+        id: z.string().min(1).max(40),
+        name: z.string().trim().min(1).max(160),
+        template_id: z.string().uuid().nullable().default(null),
+      }),
+    )
+    .default([]),
+  /**
    * The seven-day plan's knobs (src/lib/onboarding-timeline.ts). The plan is
    * computed from the close date; only what a person changed is stored, so
    * a moved date survives and everything else follows the rule.
@@ -160,4 +175,61 @@ export function intakeStatus(a: IntakeAnswers): {
   if (!a.industry) return { done: false, next: "What industry are they in?" };
   if (!a.current_process) return { done: false, next: "What is the process today?" };
   return { done: true, next: null };
+}
+
+export type WantedForm = IntakeAnswers["wanted_forms"][number];
+
+/**
+ * Picking a library card puts it on the wanted list (and takes it off again).
+ * Both fields are returned so the older readers of chosen_templates stay in
+ * step with the list.
+ */
+export function toggleWantedTemplate(
+  a: Pick<IntakeAnswers, "wanted_forms" | "chosen_templates">,
+  template: { id: string; name: string },
+): { wanted_forms: WantedForm[]; chosen_templates: string[] } {
+  // A deal from before the list existed may have the card chosen with no
+  // list entry: picking it again un-chooses it, and the list stays empty.
+  if (!a.wanted_forms.length && a.chosen_templates.includes(template.id)) {
+    return {
+      wanted_forms: [],
+      chosen_templates: a.chosen_templates.filter((id) => id !== template.id),
+    };
+  }
+  const has = a.wanted_forms.some((f) => f.template_id === template.id);
+  const wanted_forms = has
+    ? a.wanted_forms.filter((f) => f.template_id !== template.id)
+    : [
+        ...a.wanted_forms,
+        { id: `t-${template.id.slice(0, 8)}`, name: template.name, template_id: template.id },
+      ];
+  return { wanted_forms, chosen_templates: templateIds(wanted_forms) };
+}
+
+/** A form named on the call, no card behind it. */
+export function addWantedForm(
+  a: Pick<IntakeAnswers, "wanted_forms" | "chosen_templates">,
+  name: string,
+): { wanted_forms: WantedForm[]; chosen_templates: string[] } {
+  const clean = name.trim();
+  if (!clean) return { wanted_forms: a.wanted_forms, chosen_templates: a.chosen_templates };
+  const id = `f-${Math.random().toString(36).slice(2, 8)}`;
+  const wanted_forms = [...a.wanted_forms, { id, name: clean, template_id: null }];
+  return { wanted_forms, chosen_templates: templateIds(wanted_forms) };
+}
+
+/** Move one to the front: it becomes the first form. */
+export function makeFirstWantedForm(forms: WantedForm[], id: string): WantedForm[] {
+  const it = forms.find((f) => f.id === id);
+  return it ? [it, ...forms.filter((f) => f.id !== id)] : forms;
+}
+
+/** The card ids on the list — what chosen_templates is written as. */
+export function templateIds(forms: WantedForm[]): string[] {
+  return forms.map((f) => f.template_id).filter((x): x is string => Boolean(x));
+}
+
+/** What the grid outlines: the list's cards, or — with no list yet — what was chosen before it existed. */
+export function chosenFrom(forms: WantedForm[], previous: string[]): string[] {
+  return forms.length ? templateIds(forms) : previous;
 }

@@ -399,6 +399,16 @@ export const saveIntake = createServerFn({ method: "POST" })
             field_users: z.number().int().nonnegative().nullable().optional(),
             current_process: z.string().trim().max(4000).nullable().optional(),
             chosen_templates: z.array(z.string().uuid()).optional(),
+            wanted_forms: z
+              .array(
+                z.object({
+                  id: z.string().min(1).max(40),
+                  name: z.string().trim().min(1).max(160),
+                  template_id: z.string().uuid().nullable().optional(),
+                }),
+              )
+              .max(20)
+              .optional(),
             // The seven-day plan's knobs, saved whole: the panel sends the
             // complete object so a cleared override is a cleared override.
             timeline: z

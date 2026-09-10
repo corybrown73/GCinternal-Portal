@@ -1,11 +1,14 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  addWantedForm,
   EMPTY_INTAKE,
   intakeAnswersSchema,
   intakeStatus,
   INDUSTRIES,
+  makeFirstWantedForm,
   readIntake,
+  toggleWantedTemplate,
 } from "../intake-answers";
 
 /**
@@ -89,5 +92,42 @@ describe("the industry list", () => {
     ]) {
       expect(INDUSTRIES).toContain(seen);
     }
+  });
+});
+
+describe("the forms they want built", () => {
+  const a = readIntake({ forms_built: false });
+  const card = { id: "11111111-1111-4111-8111-111111111111", name: "Daily Site Inspection" };
+
+  it("picking a card adds it to the list and to chosen_templates; picking again removes it", () => {
+    const on = toggleWantedTemplate(a, card);
+    expect(on.wanted_forms.map((f) => f.name)).toEqual(["Daily Site Inspection"]);
+    expect(on.wanted_forms[0]!.template_id).toBe(card.id);
+    expect(on.chosen_templates).toEqual([card.id]);
+    const off = toggleWantedTemplate({ ...a, ...on }, card);
+    expect(off.wanted_forms).toEqual([]);
+    expect(off.chosen_templates).toEqual([]);
+  });
+
+  it("a form named on the call has no card behind it, and the first on the list is the first form", () => {
+    const one = addWantedForm(a, "  Chemical Delivery Ticket ");
+    const two = addWantedForm({ ...a, ...one }, "Job Safety Analysis");
+    expect(two.wanted_forms.map((f) => f.name)).toEqual([
+      "Chemical Delivery Ticket",
+      "Job Safety Analysis",
+    ]);
+    expect(two.wanted_forms.every((f) => f.template_id === null)).toBe(true);
+    const jsaFirst = makeFirstWantedForm(two.wanted_forms, two.wanted_forms[1]!.id);
+    expect(jsaFirst.map((f) => f.name)).toEqual([
+      "Job Safety Analysis",
+      "Chemical Delivery Ticket",
+    ]);
+    expect(addWantedForm(a, "   ").wanted_forms).toBe(a.wanted_forms);
+  });
+
+  it("reads a stored list and rejects a nameless entry", () => {
+    const ok = readIntake({ wanted_forms: [{ id: "f-1", name: "Ticket" }] });
+    expect(ok.wanted_forms).toEqual([{ id: "f-1", name: "Ticket", template_id: null }]);
+    expect(readIntake({ wanted_forms: [{ id: "f-1", name: "" }] })).toEqual(EMPTY_INTAKE);
   });
 });

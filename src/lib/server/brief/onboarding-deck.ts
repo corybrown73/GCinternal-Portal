@@ -55,7 +55,7 @@ export type OnboardingDeckInput = {
   firstForm: {
     name: string;
     objective: string | null;
-    source: "library" | "uploaded" | "tbd";
+    source: "library" | "uploaded" | "typed" | "tbd";
   } | null;
   /** From the library, for their industry, when there is no integration. */
   nextUseCases: Array<{ name: string; objective: string | null }>;
@@ -676,7 +676,9 @@ function slideFirstForm(pptx: Pptx, d: OnboardingDeckInput) {
       ? "Starting point: the form you already run today"
       : d.firstForm?.source === "library"
         ? "Starting point: from the GoCanvas form library"
-        : "Starting point: chosen together on the kickoff call";
+        : d.firstForm?.source === "typed"
+          ? "Starting point: the form you described to us"
+          : "Starting point: chosen together on the kickoff call";
   s.addText(source.toUpperCase(), {
     x: PAD + 0.22,
     y: top + 2.15,
