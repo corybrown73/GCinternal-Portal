@@ -4,6 +4,7 @@
  * then screenshot with Playwright (see scripts/welcome-shots.mjs).
  */
 import { readFileSync, writeFileSync } from "node:fs";
+import QRCode from "qrcode";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
@@ -57,8 +58,11 @@ const base: Omit<WelcomeView, "timeline"> = {
     solutionsEngineer: "Priya Nair",
     champion: { name: "Tom Alvarez", role: "Operations Manager" },
   },
-  shareUrl: null,
-  qrDataUrl: null,
+  shareUrl: "https://www.gcinternalportal.com/welcome/demo-token",
+  qrDataUrl: await QRCode.toDataURL("https://www.gcinternalportal.com/welcome/demo-token", {
+    margin: 1,
+    width: 160,
+  }),
   sharedAt: "2026-09-10T09:00:00Z",
   openedAt: null,
 };

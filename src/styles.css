@@ -2470,21 +2470,21 @@ body.gc-presenting {
 
 /* ---- the QR on the cover, the app links */
 .gc-welcome .wp-qr {
-  position: absolute;
-  left: 64px;
-  bottom: 54px;
-  display: flex;
+  /* In the flow under "Prepared by", so it sits at the foot of the text
+     column wherever that column lands — never floating mid-screen. */
+  margin-top: 16px;
+  display: inline-flex;
   align-items: center;
   gap: 12px;
-  padding: 10px 14px 10px 10px;
+  padding: 8px 14px 8px 8px;
   border-radius: 14px;
   background: #fff;
   border: 1px solid var(--wp-blue-line);
   box-shadow: 0 10px 24px rgba(7, 43, 87, 0.12);
 }
 .gc-welcome .wp-qr img {
-  width: 84px;
-  height: 84px;
+  width: 76px;
+  height: 76px;
   display: block;
   border-radius: 6px;
 }
