@@ -614,8 +614,9 @@ function Cover({ view }: { view: WelcomeView }) {
           <div className="wp-rule" />
           <p className="wp-cover-name">{view.clientName}</p>
           <p className="wp-lede">
-            Closed {shortDay(t.closeDate)}. Kickoff {shortDay(t.milestones[1]?.date ?? t.closeDate)}
-            . Your first form in the field by {shortDay(t.liveDate)} — built with you, not for you.
+            Welcome aboard as of {shortDay(t.closeDate)}. Kickoff{" "}
+            {shortDay(t.milestones[1]?.date ?? t.closeDate)}. Your first form in the field by{" "}
+            {shortDay(t.liveDate)} — built with you, not for you.
           </p>
           <div className="wp-pills">
             <span className="wp-pill">
@@ -742,6 +743,11 @@ function Team({ view }: { view: WelcomeView }) {
   );
 }
 
+/** The plan's internal labels, said the way a customer hears them. */
+const CUSTOMER_LABEL: Record<string, string> = {
+  close: "Welcome aboard",
+};
+
 function Plan({ view }: { view: WelcomeView }) {
   const t = view.timeline;
   return (
@@ -760,7 +766,7 @@ function Plan({ view }: { view: WelcomeView }) {
           <div key={m.key} className={cn("wp-node", m.key === "live" && "is-live")}>
             <span className="wp-node-day">Day {m.day}</span>
             <Tile name={m.icon} size="lg" tone={m.key === "live" ? "navy" : "blue"} />
-            <span className="wp-node-label">{m.label}</span>
+            <span className="wp-node-label">{CUSTOMER_LABEL[m.key] ?? m.label}</span>
             <span className={cn("wp-node-date", m.moved && "is-moved")}>{shortDay(m.date)}</span>
             <Owner owner={m.owner} />
             {m.minutes ? <span className="wp-node-min">{m.minutes} min</span> : null}

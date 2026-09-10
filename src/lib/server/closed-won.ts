@@ -1,3 +1,4 @@
+import { companyNameFrom } from "@/lib/company-name";
 import { z } from "zod";
 
 import { isSfId, sfId18 } from "./sf-id";
@@ -225,8 +226,13 @@ export async function ingestClosedWon(
   input: ClosedWonInput,
   deps: ClosedWonDeps,
 ): Promise<ClosedWonOutcome> {
+  const company = companyNameFrom(input.company) || input.company;
   const summary = [
-    input.opportunity ? `Opportunity: ${input.opportunity}` : null,
+    input.opportunity
+      ? `Opportunity: ${input.opportunity}`
+      : company !== input.company
+        ? `Opportunity: ${input.company}`
+        : null,
     input.close_date ? `Closed: ${input.close_date}` : null,
     input.notes,
   ]
@@ -234,7 +240,7 @@ export async function ingestClosedWon(
     .join("\n");
 
   const { account, created } = await deps.upsertAccount({
-    name: input.company,
+    name: company,
     stage: "closed_won",
     ...(input.salesforce_id && { salesforce_id: input.salesforce_id }),
     ...(input.domain && { domain: input.domain }),

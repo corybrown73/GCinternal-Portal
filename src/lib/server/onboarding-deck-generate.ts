@@ -1,4 +1,5 @@
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import { companyNameFrom } from "@/lib/company-name";
 import { readIntake } from "@/lib/intake-answers";
 import { closeDateFor, timelineFor } from "@/lib/onboarding-plan";
 import { loadPipelineStages } from "@/lib/pipeline-stages.server";
@@ -80,7 +81,7 @@ export async function buildOnboardingDeckInput(dealId: string): Promise<Onboardi
   };
 
   return {
-    clientName: String(deal.name),
+    clientName: companyNameFrom(String(deal.name)) || String(deal.name),
     industry: intake.industry,
     timeline,
     lead,

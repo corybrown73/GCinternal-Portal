@@ -188,6 +188,13 @@ function DealRecord({ deal }: { deal: DealData }) {
               change lands in the activity feed, so the account carries its own
               record of what the number was and when it moved. */}
           <EditableField
+            label="Company name"
+            value={account.name}
+            placeholder="The company, as the customer says it"
+            onSave={set("name")}
+            disabled={!editable}
+          />
+          <EditableField
             label="ARR"
             value={account.arr != null ? String(account.arr) : null}
             format={(v) => (v ? fmtMoney(Number(v)) : "—")}
