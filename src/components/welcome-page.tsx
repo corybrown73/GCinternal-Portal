@@ -708,6 +708,10 @@ function Cover({ view, qr }: { view: WelcomeView; qr?: { url: string; dataUrl: s
           {view.photoUrl ? (
             <div className="wp-photo">
               <img src={view.photoUrl} alt="" />
+              <span className="wp-photo-cap">
+                <Icon name={view.icon} className="h-3.5 w-3.5" />
+                {view.industry ?? "Your industry"}
+              </span>
             </div>
           ) : (
             <div className="wp-art">
@@ -717,7 +721,6 @@ function Cover({ view, qr }: { view: WelcomeView; qr?: { url: string; dataUrl: s
               </div>
             </div>
           )}
-          <PhoneMock view={view} className="is-cover" />
           <span className="wp-art-chip is-a">
             <Icon name="ClipboardCheck" className="h-6 w-6" />
           </span>
@@ -800,15 +803,27 @@ function Team({ view }: { view: WelcomeView }) {
       band="Over fifteen years of onboarding field teams says this is what works, and what gets value fast. Questions go to your onboarding lead by name."
       bandIcon="PhoneCall"
     >
-      <div className={cn("wp-team", people.length > 4 && "is-five")}>
-        {people.map((p) => (
-          <div key={p.name + p.role} className={cn("wp-person", `is-${p.side}`)}>
-            <Tile name={p.icon} size="lg" tone={p.side === "client" ? "navy" : "blue"} />
-            <p className="wp-person-name">{p.name}</p>
-            <p className="wp-person-role">{p.role}</p>
-            <p className="wp-person-does">{p.does}</p>
-          </div>
-        ))}
+      <div className="wp-team">
+        <div className={cn("wp-people", people.length > 4 && "is-five")}>
+          {people.map((p) => (
+            <div key={p.name + p.role} className={cn("wp-person", `is-${p.side}`)}>
+              <Tile name={p.icon} tone={p.side === "client" ? "navy" : "blue"} />
+              <div className="wp-person-text">
+                <p className="wp-person-name">{p.name}</p>
+                <p className="wp-person-role">{p.role}</p>
+                <p className="wp-person-does">{p.does}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+        <div className="wp-team-photo is-phone">
+          <div className="wp-team-art" />
+          <PhoneMock view={view} className="is-team" />
+          <span className="wp-team-photo-cap">
+            <Icon name="Smartphone" className="h-3.5 w-3.5" />
+            {view.firstForm?.name ?? "Your first form"}, on the crew&apos;s phone
+          </span>
+        </div>
       </div>
     </Frame>
   );
