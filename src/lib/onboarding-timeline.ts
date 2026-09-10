@@ -14,9 +14,14 @@
  * support ticket. Every step below is owned by somebody — us, them, or both
  * — and the "both" steps are where the value is.
  *
- * INTEGRATIONS COME AFTER DAY 7, always. The form is the star: field mapping
- * cannot be right until a crew has run the form on real jobs. An integration
- * extends the plan by its complexity tier; it never delays the form.
+ * INTEGRATIONS ARE PHASE 2, always, and PHASE 2 IS GATED. The form is the
+ * star: field mapping cannot be right until a crew has run the form on real
+ * jobs. So an integration has no fixed start until a person records that the
+ * form is dialed in — until then its dates are "earliest", anchored on the
+ * live date. Once the form is proven, phase 2 re-anchors on that day and
+ * opens with its own thirty-minute kickoff where the final details are
+ * gathered: systems, fields, credentials, who owns the mapping. Then it
+ * extends by the tier's weeks. It never delays the form.
  *
  * Pure. Business days only; holidays are a parameter, and every date can be
  * overridden by hand (a weird holiday, a customer who is closed Fridays) —
@@ -164,6 +169,52 @@ export const INTEGRATION_TIERS = [
 
 export type IntegrationTier = (typeof INTEGRATION_TIERS)[number]["tier"];
 
+/**
+ * Phase 2, in order. `at` is the fraction of the tier's span, so a two-week
+ * integration and a six-week one have the same shape at different scales.
+ * The kickoff is always the first business day of the phase.
+ */
+export const INTEGRATION_PLAN: readonly (Omit<MilestoneSpec, "day"> & { at: number })[] = [
+  {
+    key: "integ_kickoff",
+    at: 0,
+    label: "Kickoff & final details",
+    owner: "both",
+    kind: "call",
+    minutes: 30,
+    detail:
+      "Systems, fields, credentials, who owns the mapping — the details we could not know until the form was real.",
+    icon: "Workflow",
+  },
+  {
+    key: "integ_build",
+    at: 0.45,
+    label: "Connection built",
+    owner: "gocanvas",
+    kind: "build",
+    detail: "Built against the form your crew has already run, so the mapping matches the field.",
+    icon: "Wrench",
+  },
+  {
+    key: "integ_test",
+    at: 0.75,
+    label: "You test it end to end",
+    owner: "client",
+    kind: "build",
+    detail: "Real submissions, real records on the other side. You tell us what is off.",
+    icon: "HardHat",
+  },
+  {
+    key: "integ_live",
+    at: 1,
+    label: "Integration live",
+    owner: "both",
+    kind: "milestone",
+    detail: "Every submission lands where the office already works.",
+    icon: "Rocket",
+  },
+];
+
 export type TimelineOptions = {
   /** ISO date, YYYY-MM-DD. The day the deal closed. */
   closeDate: string;
@@ -174,6 +225,11 @@ export type TimelineOptions = {
   integrationTier?: IntegrationTier;
   /** What is being connected, for the deck to name it. */
   integrationTarget?: string | null;
+  /**
+   * ISO date a person recorded the form as dialed in. Null means phase 2 is
+   * not yet unlocked and its dates are the earliest they could be.
+   */
+  formProvenOn?: string | null;
 };
 
 export type Milestone = MilestoneSpec & {
@@ -199,6 +255,12 @@ export type Timeline = {
     /** ISO dates; null when there is no integration. */
     startsOn: string | null;
     endsOn: string | null;
+    /** The gate: null until a person says the form is dialed in. */
+    provenOn: string | null;
+    /** True while the dates are "earliest", not committed. */
+    tentative: boolean;
+    /** Phase 2's own milestones, empty when there is no integration. */
+    milestones: Milestone[];
   };
 };
 
@@ -232,6 +294,14 @@ export function addBusinessDays(from: string, n: number, holidays: readonly stri
   return toIso(d);
 }
 
+/** The same day, or the next business day if it lands on a weekend or holiday. */
+export function onBusinessDay(iso: string, holidays: readonly string[] = []): string {
+  const skip = new Set(holidays);
+  let d = parseIso(iso);
+  while (isWeekend(d) || skip.has(toIso(d))) d = new Date(d.getTime() + DAY_MS);
+  return toIso(d);
+}
+
 export function addWeeks(from: string, weeks: number): string {
   return toIso(new Date(parseIso(from).getTime() + weeks * 7 * DAY_MS));
 }
@@ -258,9 +328,36 @@ export function buildTimeline(options: TimelineOptions): Timeline {
   const tierNo = options.integrationTier ?? 0;
   const tier = INTEGRATION_TIERS.find((t) => t.tier === tierNo) ?? INTEGRATION_TIERS[0];
   const hasIntegration = tier.weeks > 0;
-  // Always after the form is live. The form is the star.
-  const startsOn = hasIntegration ? addBusinessDays(liveDate, 1, holidays) : null;
+  const provenOn =
+    options.formProvenOn && ISO.test(options.formProvenOn) ? options.formProvenOn : null;
+  // Phase 2 anchors on the day the form was proven; until then, the earliest
+  // it could be is the business day after the form is live. Never before.
+  const anchor = provenOn && provenOn > liveDate ? provenOn : liveDate;
+  const startsOn = hasIntegration ? addBusinessDays(anchor, 1, holidays) : null;
   const endsOn = startsOn ? addWeeks(startsOn, tier.weeks) : null;
+  const spanDays = tier.weeks * 7;
+  const phase2: Milestone[] =
+    startsOn && endsOn
+      ? INTEGRATION_PLAN.map((spec) => {
+          const plannedDate =
+            spec.at === 0
+              ? startsOn
+              : spec.at === 1
+                ? endsOn
+                : onBusinessDay(
+                    toIso(
+                      new Date(
+                        parseIso(startsOn).getTime() + Math.round(spanDays * spec.at) * DAY_MS,
+                      ),
+                    ),
+                    holidays,
+                  );
+          const override = overrides[spec.key];
+          const date = override && ISO.test(override) ? override : plannedDate;
+          const { at: _at, ...rest } = spec;
+          return { ...rest, day: 0, date, plannedDate, moved: date !== plannedDate };
+        })
+      : [];
 
   return {
     closeDate: options.closeDate,
@@ -274,6 +371,9 @@ export function buildTimeline(options: TimelineOptions): Timeline {
       target: options.integrationTarget ?? null,
       startsOn,
       endsOn,
+      provenOn,
+      tentative: hasIntegration && !provenOn,
+      milestones: phase2,
     },
   };
 }

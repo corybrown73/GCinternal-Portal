@@ -38,5 +38,6 @@ export function timelineFor(intake: IntakeAnswers, closeDate: string): Timeline 
     holidays: t.holidays,
     integrationTier: t.integration_tier as IntegrationTier,
     integrationTarget: t.integration_target,
+    formProvenOn: t.form_proven_on,
   });
 }

@@ -86,6 +86,7 @@ export async function buildOnboardingDeckInput(dealId: string): Promise<Onboardi
     timeline,
     lead,
     fieldTester: intake.timeline.field_tester,
+    currentProcess: intake.current_process,
     team,
     firstForm,
     nextUseCases: next.slice(0, 3).map((t) => ({ name: t.name, objective: t.description })),

@@ -46,6 +46,7 @@ import { Route as CustomersIndexRouteImport } from './routes/customers.index'
 import { Route as CustomersCustomerIdRouteImport } from './routes/customers.$customerId'
 import { Route as DealsDealIdRouteImport } from './routes/deals.$dealId'
 import { Route as JourneysJourneyIdRouteImport } from './routes/journeys.$journeyId'
+import { Route as OnboardingNotesDealIdRouteImport } from './routes/onboarding-notes.$dealId'
 import { Route as OnboardingPlanDealIdRouteImport } from './routes/onboarding-plan.$dealId'
 import { Route as OwnersOwnerRouteImport } from './routes/owners.$owner'
 import { Route as PlanTokenRouteImport } from './routes/plan.$token'
@@ -267,6 +268,11 @@ const JourneysJourneyIdRoute = JourneysJourneyIdRouteImport.update({
   path: '/$journeyId',
   getParentRoute: () => JourneysRoute,
 } as any)
+const OnboardingNotesDealIdRoute = OnboardingNotesDealIdRouteImport.update({
+  id: '/onboarding-notes/$dealId',
+  path: '/onboarding-notes/$dealId',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const OnboardingPlanDealIdRoute = OnboardingPlanDealIdRouteImport.update({
   id: '/onboarding-plan/$dealId',
   path: '/onboarding-plan/$dealId',
@@ -481,6 +487,7 @@ export interface FileRoutesByFullPath {
   '/customers/$customerId': typeof CustomersCustomerIdRoute
   '/deals/$dealId': typeof DealsDealIdRoute
   '/journeys/$journeyId': typeof JourneysJourneyIdRoute
+  '/onboarding-notes/$dealId': typeof OnboardingNotesDealIdRoute
   '/onboarding-plan/$dealId': typeof OnboardingPlanDealIdRoute
   '/owners/$owner': typeof OwnersOwnerRoute
   '/plan/$token': typeof PlanTokenRoute
@@ -549,6 +556,7 @@ export interface FileRoutesByTo {
   '/customers/$customerId': typeof CustomersCustomerIdRoute
   '/deals/$dealId': typeof DealsDealIdRoute
   '/journeys/$journeyId': typeof JourneysJourneyIdRoute
+  '/onboarding-notes/$dealId': typeof OnboardingNotesDealIdRoute
   '/onboarding-plan/$dealId': typeof OnboardingPlanDealIdRoute
   '/owners/$owner': typeof OwnersOwnerRoute
   '/plan/$token': typeof PlanTokenRoute
@@ -624,6 +632,7 @@ export interface FileRoutesById {
   '/customers/$customerId': typeof CustomersCustomerIdRoute
   '/deals/$dealId': typeof DealsDealIdRoute
   '/journeys/$journeyId': typeof JourneysJourneyIdRoute
+  '/onboarding-notes/$dealId': typeof OnboardingNotesDealIdRoute
   '/onboarding-plan/$dealId': typeof OnboardingPlanDealIdRoute
   '/owners/$owner': typeof OwnersOwnerRoute
   '/plan/$token': typeof PlanTokenRoute
@@ -700,6 +709,7 @@ export interface FileRouteTypes {
     | '/customers/$customerId'
     | '/deals/$dealId'
     | '/journeys/$journeyId'
+    | '/onboarding-notes/$dealId'
     | '/onboarding-plan/$dealId'
     | '/owners/$owner'
     | '/plan/$token'
@@ -768,6 +778,7 @@ export interface FileRouteTypes {
     | '/customers/$customerId'
     | '/deals/$dealId'
     | '/journeys/$journeyId'
+    | '/onboarding-notes/$dealId'
     | '/onboarding-plan/$dealId'
     | '/owners/$owner'
     | '/plan/$token'
@@ -842,6 +853,7 @@ export interface FileRouteTypes {
     | '/customers/$customerId'
     | '/deals/$dealId'
     | '/journeys/$journeyId'
+    | '/onboarding-notes/$dealId'
     | '/onboarding-plan/$dealId'
     | '/owners/$owner'
     | '/plan/$token'
@@ -906,6 +918,7 @@ export interface RootRouteChildren {
   ApiMcpRoute: typeof ApiMcpRoute
   AuthCallbackRoute: typeof AuthCallbackRoute
   DealsDealIdRoute: typeof DealsDealIdRoute
+  OnboardingNotesDealIdRoute: typeof OnboardingNotesDealIdRoute
   OnboardingPlanDealIdRoute: typeof OnboardingPlanDealIdRoute
   OwnersOwnerRoute: typeof OwnersOwnerRoute
   PlanTokenRoute: typeof PlanTokenRoute
@@ -1191,6 +1204,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/journeys/$journeyId'
       preLoaderRoute: typeof JourneysJourneyIdRouteImport
       parentRoute: typeof JourneysRoute
+    }
+    '/onboarding-notes/$dealId': {
+      id: '/onboarding-notes/$dealId'
+      path: '/onboarding-notes/$dealId'
+      fullPath: '/onboarding-notes/$dealId'
+      preLoaderRoute: typeof OnboardingNotesDealIdRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/onboarding-plan/$dealId': {
       id: '/onboarding-plan/$dealId'
@@ -1600,6 +1620,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiMcpRoute: ApiMcpRoute,
   AuthCallbackRoute: AuthCallbackRoute,
   DealsDealIdRoute: DealsDealIdRoute,
+  OnboardingNotesDealIdRoute: OnboardingNotesDealIdRoute,
   OnboardingPlanDealIdRoute: OnboardingPlanDealIdRoute,
   OwnersOwnerRoute: OwnersOwnerRoute,
   PlanTokenRoute: PlanTokenRoute,

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   addBusinessDays,
+  addWeeks,
   buildTimeline,
   daysToValue,
   INTEGRATION_TIERS,
@@ -136,5 +137,65 @@ describe("presentation helpers", () => {
 
   it("formats a date the way a slide reads it", () => {
     expect(shortDay("2026-09-10")).toBe("Thu, Sep 10");
+  });
+});
+
+describe("phase 2 is gated on the form", () => {
+  it("is tentative until somebody says the form is dialed in", () => {
+    const t = buildTimeline({ closeDate: "2026-09-09", integrationTier: 3 });
+    expect(t.integration.tentative).toBe(true);
+    expect(t.integration.provenOn).toBeNull();
+    expect(t.integration.startsOn).toBe(addBusinessDays(t.liveDate, 1));
+  });
+
+  it("re-anchors on the day the form was proven, and is no longer tentative", () => {
+    const t = buildTimeline({
+      closeDate: "2026-09-09",
+      integrationTier: 3,
+      formProvenOn: "2026-09-25",
+    });
+    expect(t.integration.tentative).toBe(false);
+    expect(t.integration.startsOn).toBe(addBusinessDays("2026-09-25", 1));
+    expect(t.integration.endsOn).toBe(addWeeks(t.integration.startsOn!, 2));
+  });
+
+  it("never lets a proven date pull phase 2 before the form is live", () => {
+    const t = buildTimeline({
+      closeDate: "2026-09-09",
+      integrationTier: 2,
+      formProvenOn: "2026-09-01",
+    });
+    expect(t.integration.startsOn! > t.liveDate).toBe(true);
+  });
+
+  it("opens with its own kickoff and ends live, in order, and honours an override", () => {
+    const t = buildTimeline({
+      closeDate: "2026-09-09",
+      integrationTier: 3,
+      formProvenOn: "2026-09-18",
+      overrides: { integ_test: "2026-09-30" },
+    });
+    const keys = t.integration.milestones.map((m) => m.key);
+    expect(keys).toEqual(["integ_kickoff", "integ_build", "integ_test", "integ_live"]);
+    expect(t.integration.milestones[0]!.date).toBe(t.integration.startsOn);
+    expect(t.integration.milestones[0]!.minutes).toBe(30);
+    expect(t.integration.milestones[3]!.date).toBe(t.integration.endsOn);
+    expect(t.integration.milestones[2]!.moved).toBe(true);
+    expect(t.integration.milestones[2]!.date).toBe("2026-09-30");
+  });
+
+  it("has no phase 2 without an integration", () => {
+    expect(buildTimeline({ closeDate: "2026-09-09" }).integration.milestones).toEqual([]);
+  });
+});
+
+describe("phase 2 dates land on business days", () => {
+  it("never puts a milestone on a weekend", () => {
+    const t = buildTimeline({ closeDate: "2026-09-09", integrationTier: 3 });
+    for (const m of t.integration.milestones) {
+      const day = new Date(m.date + "T00:00:00Z").getUTCDay();
+      expect(day).not.toBe(0);
+      expect(day).not.toBe(6);
+    }
   });
 });

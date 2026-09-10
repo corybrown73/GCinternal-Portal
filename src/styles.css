@@ -2136,3 +2136,279 @@ body.gc-presenting {
 .gc-welcome .wp-form-grid .wp-rows {
   gap: 9px;
 }
+
+/* ---- phase 2 on the timeline screen */
+.gc-welcome .wp-phase2 {
+  margin-top: 18px;
+  border: 1px solid var(--wp-blue-line);
+  border-radius: 14px;
+  padding: 12px 18px 14px;
+  background: #fff;
+}
+.gc-welcome .wp-phase2.is-tentative {
+  border-style: dashed;
+  background: #fbfdff;
+}
+.gc-welcome .wp-phase2-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+.gc-welcome .wp-phase2-tag {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #fff;
+  background: var(--wp-blue-deep);
+  border-radius: 999px;
+  padding: 3px 10px;
+}
+.gc-welcome .wp-phase2-title {
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--wp-navy);
+}
+.gc-welcome .wp-phase2-gate {
+  margin-left: auto;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--wp-orange);
+}
+.gc-welcome .wp-phase2:not(.is-tentative) .wp-phase2-gate {
+  color: var(--wp-green);
+}
+.gc-welcome .wp-phase2-steps {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+.gc-welcome .wp-phase2-step {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+}
+.gc-welcome .wp-phase2-label {
+  font-weight: 700;
+  color: var(--wp-navy);
+  line-height: 1.2;
+}
+.gc-welcome .wp-phase2-date {
+  margin-left: auto;
+  font-weight: 700;
+  color: var(--wp-blue);
+  white-space: nowrap;
+}
+.gc-welcome .wp-content:has(.wp-phase2) .wp-legend {
+  margin-top: 12px;
+  padding-bottom: 6px;
+}
+
+/* ---- how we get there: today → day 7 → the future */
+.gc-welcome .wp-journey {
+  display: grid;
+  grid-template-columns: 1fr 28px 1.15fr 28px 1fr;
+  gap: 14px;
+  align-items: stretch;
+}
+.gc-welcome .wp-journey-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 8px;
+  padding: 16px 18px 18px;
+  border-radius: 16px;
+  border: 1px solid var(--wp-blue-line);
+  background: #fff;
+}
+.gc-welcome .wp-journey-col.is-now {
+  background: #f7f8fa;
+  border-color: var(--wp-line);
+}
+.gc-welcome .wp-journey-col.is-then {
+  background: var(--wp-blue-soft);
+}
+.gc-welcome .wp-journey-col h3 {
+  margin: 4px 0 0;
+  font-size: 17px;
+  font-weight: 800;
+  letter-spacing: -0.015em;
+  color: var(--wp-navy);
+  line-height: 1.2;
+}
+.gc-welcome .wp-journey-col p {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--wp-body);
+}
+.gc-welcome .wp-journey-tag {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--wp-muted);
+  background: #fff;
+  border: 1px solid var(--wp-line);
+  border-radius: 999px;
+  padding: 3px 10px;
+}
+.gc-welcome .wp-journey-tag.is-blue {
+  color: #fff;
+  background: var(--wp-blue);
+  border-color: var(--wp-blue);
+}
+.gc-welcome .wp-journey-tag.is-navy {
+  color: #fff;
+  background: var(--wp-blue-deep);
+  border-color: var(--wp-blue-deep);
+}
+.gc-welcome .wp-journey-art {
+  height: 190px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.gc-welcome .wp-journey .wp-phone.is-flow {
+  width: 92px;
+  height: 180px;
+  border-radius: 16px;
+  padding: 5px;
+}
+.gc-welcome .wp-journey .wp-phone.is-flow .wp-phone-screen {
+  border-radius: 12px;
+}
+.gc-welcome .wp-journey .wp-phone.is-flow .wp-phone-top {
+  padding: 7px 6px 4px;
+}
+.gc-welcome .wp-journey .wp-phone.is-flow .wp-phone-top img {
+  height: 7px;
+}
+.gc-welcome .wp-journey .wp-phone.is-flow .wp-phone-top span {
+  display: none;
+}
+.gc-welcome .wp-journey .wp-phone.is-flow .wp-phone-title {
+  font-size: 7px;
+  padding: 5px 6px 4px;
+}
+.gc-welcome .wp-journey .wp-phone.is-flow .wp-phone-fields {
+  gap: 3px;
+  padding: 0 5px;
+}
+.gc-welcome .wp-journey .wp-phone.is-flow .wp-field {
+  padding: 3px 5px;
+  gap: 2px;
+  border-radius: 4px;
+}
+.gc-welcome .wp-journey .wp-phone.is-flow .wp-field-label {
+  font-size: 5px;
+}
+.gc-welcome .wp-journey .wp-phone.is-flow .wp-field-line {
+  height: 3px;
+}
+.gc-welcome .wp-journey .wp-phone.is-flow .wp-field-photo i {
+  width: 12px;
+  height: 9px;
+}
+.gc-welcome .wp-journey .wp-phone.is-flow .wp-field-photo svg,
+.gc-welcome .wp-journey .wp-phone.is-flow .wp-field-select svg,
+.gc-welcome .wp-journey .wp-phone.is-flow .wp-field-sign > svg:last-child {
+  width: 8px;
+  height: 8px;
+}
+.gc-welcome .wp-journey .wp-phone.is-flow .wp-field-sign svg:first-child {
+  width: 44px;
+  height: 10px;
+}
+.gc-welcome .wp-journey .wp-phone.is-flow .wp-phone-submit {
+  margin: auto 5px 5px;
+  padding: 4px;
+  font-size: 7px;
+  border-radius: 5px;
+}
+.gc-welcome .wp-journey .wp-paper {
+  width: 96px;
+  height: 122px;
+}
+.gc-welcome .wp-journey .wp-office {
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 8px;
+}
+.gc-welcome .wp-journey .wp-office-tile {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+}
+.gc-welcome .wp-journey .wp-office-tile.is-pdf {
+  grid-column: span 3;
+  width: 100%;
+  height: 34px;
+}
+.gc-welcome .wp-journey-quote {
+  font-style: italic;
+  color: var(--wp-ink) !important;
+}
+.gc-welcome .wp-journey-pains,
+.gc-welcome .wp-journey-wins {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+}
+.gc-welcome .wp-journey-pains li,
+.gc-welcome .wp-journey-wins li {
+  font-size: 11px;
+  font-weight: 700;
+  border-radius: 999px;
+  padding: 3px 9px;
+}
+.gc-welcome .wp-journey-pains li {
+  color: #b23b2e;
+  background: #fbe9e6;
+}
+.gc-welcome .wp-journey-wins li {
+  color: #146b3f;
+  background: #e3f5ea;
+}
+.gc-welcome .wp-journey-arrow {
+  align-self: center;
+  height: 0;
+  border-top: 3px dotted #9dd3f2;
+  position: relative;
+}
+.gc-welcome .wp-journey-arrow::after {
+  content: "";
+  position: absolute;
+  right: -2px;
+  top: -6px;
+  border-left: 8px solid var(--wp-blue);
+  border-top: 5px solid transparent;
+  border-bottom: 5px solid transparent;
+}
+.gc-welcome .wp-journey-col {
+  padding: 14px 16px 16px;
+  gap: 6px;
+}
+.gc-welcome .wp-journey-art {
+  height: 176px;
+}
+.gc-welcome .wp-journey .wp-phone.is-flow {
+  height: 168px;
+}
+.gc-welcome .wp-journey .wp-phone.is-flow .wp-field.is-sign {
+  display: none;
+}
+.gc-welcome .wp-journey-pains,
+.gc-welcome .wp-journey-wins {
+  margin-top: 2px;
+}
+.gc-welcome .wp-journey-col p {
+  font-size: 12px;
+}

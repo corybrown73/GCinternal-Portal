@@ -58,6 +58,7 @@ async function viewFor(deal: any, opts: { internal: boolean }): Promise<WelcomeV
     timeline: input.timeline,
     lead: input.lead,
     fieldTester: input.fieldTester,
+    currentProcess: input.currentProcess ?? null,
     team: input.team ?? {
       lead: input.lead,
       accountManager: null,

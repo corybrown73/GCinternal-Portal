@@ -22,6 +22,8 @@ const base: Omit<WelcomeView, "timeline"> = {
   icon: "Fuel",
   lead: "Priya Nair",
   fieldTester: "Dale Whitcombe",
+  currentProcess:
+    "Three crews fill in a paper haul ticket on the truck. The office retypes them on Fridays and chases the missing signatures.",
   firstForm: {
     name: "Daily Water Haul Ticket",
     objective:
@@ -92,5 +94,18 @@ page(
   },
   "shared",
   `${out}/integ.html`,
+);
+page(
+  {
+    ...base,
+    timeline: buildTimeline({
+      closeDate: "2026-09-09",
+      integrationTier: 3,
+      integrationTarget: "QuickBooks Online",
+      formProvenOn: "2026-09-22",
+    }),
+  },
+  "shared",
+  `${out}/proven.html`,
 );
 console.log("rendered");

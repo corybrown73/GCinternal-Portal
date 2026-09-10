@@ -107,6 +107,7 @@ export function WelcomePage({
   onCopyLink,
   onDownloadPptx,
   backHref,
+  notesHref,
 }: {
   view: WelcomeView;
   mode: WelcomeMode;
@@ -117,6 +118,8 @@ export function WelcomePage({
   /** Internal: render the PowerPoint fallback and open it. */
   onDownloadPptx?: () => Promise<void>;
   backHref?: string | null;
+  /** Internal: the talk track for this customer. */
+  notesHref?: string | null;
 }) {
   const [present, setPresent] = useState(false);
   const [at, setAt] = useState(0);
@@ -165,6 +168,7 @@ export function WelcomePage({
           onCopyLink={onCopyLink}
           onDownloadPptx={onDownloadPptx}
           backHref={backHref ?? null}
+          notesHref={notesHref ?? null}
         />
       ) : null}
       {mode === "shared" ? <SharedBar view={view} /> : null}
@@ -252,12 +256,14 @@ function Toolbar({
   onCopyLink,
   onDownloadPptx,
   backHref,
+  notesHref,
 }: {
   view: WelcomeView;
   onPresent: () => void;
   onCopyLink?: (() => Promise<string>) | undefined;
   onDownloadPptx?: (() => Promise<void>) | undefined;
   backHref: string | null;
+  notesHref: string | null;
 }) {
   const [copied, setCopied] = useState<"idle" | "busy" | "done" | "failed">("idle");
   const [pptx, setPptx] = useState<"idle" | "busy">("idle");
@@ -292,6 +298,11 @@ function Toolbar({
         ) : null}
       </div>
       <div className="wp-toolbar-right">
+        {notesHref ? (
+          <a href={notesHref} className="wp-tool" target="_blank" rel="noreferrer">
+            <FileText className="h-3.5 w-3.5" /> Speaker notes
+          </a>
+        ) : null}
         <button type="button" className="wp-tool" onClick={onPresent}>
           <Play className="h-3.5 w-3.5" /> Present
         </button>
@@ -726,7 +737,7 @@ function Team({ view }: { view: WelcomeView }) {
       title="Two teams,"
       accent="one plan"
       lede="Small on purpose. Everyone here has a job in the next seven days, and nobody on this page is a ticket queue."
-      band="Questions go to your onboarding lead directly — by name, not through a form."
+      band="Over fifteen years of onboarding field teams says this is what works, and what gets value fast. Questions go to your onboarding lead by name."
       bandIcon="PhoneCall"
     >
       <div className={cn("wp-team", people.length > 4 && "is-five")}>
@@ -773,6 +784,34 @@ function Plan({ view }: { view: WelcomeView }) {
           </div>
         ))}
       </div>
+      {t.integration.milestones.length ? (
+        <div className={cn("wp-phase2", t.integration.tentative && "is-tentative")}>
+          <div className="wp-phase2-head">
+            <span className="wp-phase2-tag">Phase 2</span>
+            <span className="wp-phase2-title">
+              {t.integration.target ? `Connect it to ${t.integration.target}` : "The integration"} ·
+              about {t.integration.weeks} week{t.integration.weeks === 1 ? "" : "s"}
+            </span>
+            <span className="wp-phase2-gate">
+              {t.integration.tentative
+                ? `Starts once the form is tested and dialed in — earliest ${shortDay(t.integration.startsOn!)}`
+                : `Form dialed in ${shortDay(t.integration.provenOn!)} · starts ${shortDay(t.integration.startsOn!)}`}
+            </span>
+          </div>
+          <div className="wp-phase2-steps">
+            {t.integration.milestones.map((m, i) => (
+              <div key={m.key} className="wp-phase2-step">
+                <Tile name={m.icon} size="sm" tone={i === 3 ? "navy" : "blue"} />
+                <span className="wp-phase2-label">{m.label}</span>
+                <span className="wp-phase2-date">
+                  {t.integration.tentative ? "≈ " : ""}
+                  {shortDay(m.date)}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
       <div className="wp-legend">
         <span>
           <Owner owner="gocanvas" /> we do it, you hear about it
@@ -886,24 +925,24 @@ function Together({
 function FirstForm({ view }: { view: WelcomeView }) {
   const at = (key: string) => view.timeline.milestones.find((m) => m.key === key);
   const f = view.firstForm;
-  const source =
-    f?.source === "uploaded"
-      ? "Starting point: the form you already run today"
-      : f?.source === "library"
-        ? "Starting point: from the GoCanvas form library"
-        : "Starting point: chosen together on the kickoff call";
+  const integ = view.timeline.integration;
+  const live = shortDay(view.timeline.liveDate);
+  const today =
+    view.currentProcess ??
+    "Paper on the truck, photos on somebody's phone, and the office retyping it all at the end of the week.";
   return (
     <Frame
       page={5}
       eyebrow="How we get there"
-      title="The star of"
-      accent="the show"
-      band="Proven in the field before anything is connected to it. That is what makes the mapping right later."
+      title="From today to"
+      accent="day seven"
+      band={`Proven in the field before anything is connected to it. That is what makes the mapping right later.`}
       bandIcon="Target"
     >
-      <div className="wp-form-grid">
-        <div className="wp-flow">
-          <div className="wp-flow-step">
+      <div className="wp-journey">
+        <div className="wp-journey-col is-now">
+          <span className="wp-journey-tag">Today</span>
+          <div className="wp-journey-art">
             <div className="wp-paper">
               <FileText className="h-7 w-7" />
               <i />
@@ -911,17 +950,39 @@ function FirstForm({ view }: { view: WelcomeView }) {
               <i />
               <i />
             </div>
-            <span className="wp-flow-cap">The paper ticket today</span>
           </div>
-          <span className="wp-flow-arrow" />
-          <div className="wp-flow-step">
+          <h3>How it runs now</h3>
+          <p className="wp-journey-quote">&ldquo;{today}&rdquo;</p>
+          <ul className="wp-journey-pains">
+            <li>Retyped</li>
+            <li>Late</li>
+            <li>No photos, no signature</li>
+          </ul>
+        </div>
+        <span className="wp-journey-arrow" />
+        <div className="wp-journey-col is-then">
+          <span className="wp-journey-tag is-blue">Day 7 · {live}</span>
+          <div className="wp-journey-art">
             <PhoneMock view={view} className="is-flow" />
-            <span className="wp-flow-cap">
-              On the crew&apos;s phone, {at("kickoff") ? shortDay(at("kickoff")!.date) : "day one"}
-            </span>
           </div>
-          <span className="wp-flow-arrow" />
-          <div className="wp-flow-step">
+          <h3>{f?.name ?? "Your first form"} in the field</h3>
+          <p>
+            Built live {at("kickoff") ? shortDay(at("kickoff")!.date) : "on the kickoff"}, finished
+            by your hands {at("working") ? shortDay(at("working")!.date) : "in the working session"}
+            , proven by {view.fieldTester ?? "your field tester"} on real jobs.
+          </p>
+          <ul className="wp-journey-wins">
+            <li>Same day in the office</li>
+            <li>Photos and a signature on every one</li>
+            <li>Nothing retyped</li>
+          </ul>
+        </div>
+        <span className="wp-journey-arrow" />
+        <div className="wp-journey-col is-future">
+          <span className="wp-journey-tag is-navy">
+            {integ.milestones.length ? "Phase 2" : "Then"}
+          </span>
+          <div className="wp-journey-art">
             <div className="wp-office">
               <span className="wp-office-tile">
                 <Cloud className="h-6 w-6" />
@@ -929,43 +990,26 @@ function FirstForm({ view }: { view: WelcomeView }) {
               <span className="wp-office-tile">
                 <Table2 className="h-6 w-6" />
               </span>
+              <span className="wp-office-tile">
+                <Workflow className="h-6 w-6" />
+              </span>
               <span className="wp-office-tile is-pdf">PDF</span>
             </div>
-            <span className="wp-flow-cap">In the office the same day</span>
           </div>
-        </div>
-        <div className="wp-rows">
-          <div className="wp-card is-tint wp-form-card">
-            <div className="wp-card-head">
-              <Tile name={view.icon} tone="blue" />
-              <h3>{f?.name ?? "To be chosen on the kickoff call"}</h3>
-            </div>
-            <p className="wp-card-body">
-              {f?.objective ??
-                "We pick the starting point together from the form library, in the words your crews already use."}
-            </p>
-            <p className="wp-card-source">{source}</p>
-          </div>
-          <Row
-            icon="PhoneCall"
-            head={`Built live · ${at("kickoff") ? shortDay(at("kickoff")!.date) : "kickoff"}`}
-          >
-            On the kickoff call, from the starting point, with you watching every field go in.
-          </Row>
-          <Row
-            icon="Wrench"
-            head={`Finished together · ${at("working") ? shortDay(at("working")!.date) : "working session"}`}
-          >
-            Thirty minutes. Logic, notifications, and the last changes made by your hands.
-          </Row>
-          <Row
-            icon="HardHat"
-            tone="navy"
-            head={`Proven on real jobs · from ${at("fieldtest") ? shortDay(at("fieldtest")!.date) : "the field test"}`}
-          >
-            {view.fieldTester ?? "Your field tester"} runs it on real work. We watch the submissions
-            and fix what the field says.
-          </Row>
+          <h3>
+            {integ.milestones.length
+              ? integ.target
+                ? `Connected to ${integ.target}`
+                : "Connected to your systems"
+              : "The next forms, built by you"}
+          </h3>
+          <p>
+            {integ.milestones.length
+              ? `Once the form is tested and dialed in — ${integ.tentative ? `earliest ${shortDay(integ.startsOn!)}` : `from ${shortDay(integ.startsOn!)}`}. Every submission lands where the office already works.`
+              : view.nextUseCases.length
+                ? `${view.nextUseCases.map((n) => n.name).join(" · ")}. Same team, same working-session format, whenever you are ready.`
+                : "We pick them together once the first form is in the field."}
+          </p>
         </div>
       </div>
     </Frame>
@@ -1041,13 +1085,15 @@ function Business({ view }: { view: WelcomeView }) {
             {integ.weeks > 0 && integ.startsOn ? (
               <>
                 <p className="wp-after-title">
-                  Then, from {shortDay(integ.startsOn)}:{" "}
-                  {integ.target ? `connect it to ${integ.target}` : "the integration"} · about{" "}
-                  {integ.weeks} week{integ.weeks === 1 ? "" : "s"}
+                  Phase 2: {integ.target ? `connect it to ${integ.target}` : "the integration"} ·
+                  about {integ.weeks} week{integ.weeks === 1 ? "" : "s"}
                 </p>
                 <p className="wp-after-body">
-                  Tier {integ.tier}, {integ.name.toLowerCase()}. The form first, always — field
-                  mapping cannot be right until a crew has used it on a real job.
+                  {integ.tentative
+                    ? `Starts once the form is tested and dialed in — earliest ${shortDay(integ.startsOn)}. `
+                    : `Starts ${shortDay(integ.startsOn)}, now the form is proven. `}
+                  It opens with a thirty-minute kickoff to gather the final details: systems,
+                  fields, credentials, who owns the mapping. The form first, always.
                 </p>
               </>
             ) : (

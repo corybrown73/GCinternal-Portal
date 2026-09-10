@@ -57,6 +57,7 @@ function OnboardingPlanPage() {
       view={query.data}
       mode="internal"
       backHref={`/deals/${dealId}`}
+      notesHref={`/onboarding-notes/${dealId}`}
       onCopyLink={async () => {
         const { url } = await issue({ data: { dealId } });
         void qc.invalidateQueries({ queryKey: ["welcome", dealId] });

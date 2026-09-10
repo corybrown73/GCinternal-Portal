@@ -86,6 +86,12 @@ export const intakeAnswersSchema = z.object({
       integration_target: z.string().trim().max(120).nullable().default(null),
       /** Who at the customer runs the form on real jobs. */
       field_tester: z.string().trim().max(120).nullable().default(null),
+      /** The phase-2 gate: the day a person recorded the form as dialed in. */
+      form_proven_on: z
+        .string()
+        .regex(/^\d{4}-\d{2}-\d{2}$/)
+        .nullable()
+        .default(null),
     })
     .default({}),
   updated_at: z.string().nullable().default(null),

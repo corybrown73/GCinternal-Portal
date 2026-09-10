@@ -43,6 +43,8 @@ export type OnboardingDeckInput = {
   lead: string | null;
   /** Who at the customer runs the form on real jobs. */
   fieldTester: string | null;
+  /** The process today, in the customer's words, from the intake. */
+  currentProcess?: string | null;
   /** Who is on it, both sides. The deck names them on the team slide. */
   team?: {
     lead: string | null;
@@ -869,7 +871,9 @@ function slideNext(pptx: Pptx, d: OnboardingDeckInput) {
     title(s, `Then we connect it${integ.target ? ` to ${integ.target}` : ""}`);
     sub(
       s,
-      `Starts ${shortDay(integ.startsOn)}, the business day after your form is live. About ${integ.weeks} week${integ.weeks === 1 ? "" : "s"}.`,
+      integ.tentative
+        ? `Phase 2. Starts once the form is tested and dialed in — earliest ${shortDay(integ.startsOn)}. About ${integ.weeks} week${integ.weeks === 1 ? "" : "s"}.`
+        : `Phase 2. Starts ${shortDay(integ.startsOn)}, now the form is proven. About ${integ.weeks} week${integ.weeks === 1 ? "" : "s"}.`,
     );
 
     // The tier strip, from the team's own complexity tiering. The chosen one lit.
@@ -1005,7 +1009,7 @@ function slideNext(pptx: Pptx, d: OnboardingDeckInput) {
       bx0 + headW + 0.12,
       bw2 - headW - 2.2,
       "left",
-      `Integration starts · ${shortDay(integ.startsOn)}`,
+      `${integ.tentative ? "Earliest start" : "Kickoff & final details"} · ${shortDay(integ.startsOn)}`,
       BRAND.blue500,
     );
     label(

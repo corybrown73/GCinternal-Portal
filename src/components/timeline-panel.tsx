@@ -299,12 +299,107 @@ export function TimelinePanel({
             />
           </label>
           <p className="text-[11px] text-muted-foreground sm:col-span-2">
-            {timeline.integration.startsOn
-              ? `${timeline.integration.name}: ${timeline.integration.summary} Starts ${shortDay(timeline.integration.startsOn)}, the business day after the form is live; target finish ${shortDay(timeline.integration.endsOn!)}.`
-              : timeline.integration.tier > 0
-                ? `${timeline.integration.name}: ${timeline.integration.summary}`
-                : "The form first, always. An integration extends the plan after day seven; it never delays the form."}
+            {timeline.integration.tier > 0
+              ? `${timeline.integration.name}: ${timeline.integration.summary}`
+              : "The form first, always. An integration is phase 2; it never delays the form."}
           </p>
+
+          {/* Phase 2, gated. No fixed dates until the form is dialed in. */}
+          {timeline.integration.milestones.length ? (
+            <div className="space-y-2 sm:col-span-2">
+              <div className="flex flex-wrap items-center gap-2 rounded-md border border-border bg-background px-2.5 py-2">
+                <span
+                  className={cn(
+                    "rounded-sm px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider",
+                    timeline.integration.tentative
+                      ? "bg-amber-500/10 text-amber-700 dark:text-amber-400"
+                      : "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400",
+                  )}
+                >
+                  {timeline.integration.tentative ? "Phase 2 · gated" : "Phase 2 · unlocked"}
+                </span>
+                <span className="text-[12px]">
+                  {timeline.integration.tentative
+                    ? "Starts once the form is tested and dialed in. Dates below are the earliest they could be."
+                    : `Form dialed in ${shortDay(timeline.integration.provenOn!)}. Phase 2 starts ${shortDay(timeline.integration.startsOn!)}.`}
+                </span>
+                <span className="ml-auto flex items-center gap-1.5">
+                  <label className="text-[11px] text-muted-foreground">
+                    Form dialed in on
+                    <input
+                      type="date"
+                      className={cn(input, "ml-1.5")}
+                      value={knobs.form_proven_on ?? ""}
+                      disabled={busy}
+                      min={timeline.liveDate}
+                      onChange={(e) => set({ form_proven_on: e.target.value || null })}
+                    />
+                  </label>
+                  {!knobs.form_proven_on ? (
+                    <button
+                      type="button"
+                      className="inline-flex items-center gap-1 rounded-sm bg-primary px-2 py-1 text-[11px] font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+                      disabled={busy}
+                      onClick={() => set({ form_proven_on: new Date().toISOString().slice(0, 10) })}
+                    >
+                      Dialed in today — start phase 2
+                    </button>
+                  ) : null}
+                </span>
+              </div>
+              <ol className="divide-y divide-border rounded-md border border-border bg-background">
+                {timeline.integration.milestones.map((m) => (
+                  <li
+                    key={m.key}
+                    className="flex flex-wrap items-center gap-x-3 gap-y-1 px-2.5 py-1.5"
+                  >
+                    <span className="w-12 shrink-0 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+                      Ph. 2
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-[12px] font-medium">
+                        {m.label}
+                        {m.minutes ? (
+                          <span className="ml-1.5 font-normal text-muted-foreground">
+                            {m.minutes} min
+                          </span>
+                        ) : null}
+                      </span>
+                      <span className="block truncate text-[11px] text-muted-foreground">
+                        {m.detail}
+                      </span>
+                    </span>
+                    <OwnerChip owner={m.owner} />
+                    <span className="flex items-center gap-1">
+                      <input
+                        type="date"
+                        aria-label={`${m.label} date`}
+                        className={cn(
+                          input,
+                          m.moved && "border-primary",
+                          timeline.integration.tentative && "opacity-70",
+                        )}
+                        value={m.date}
+                        disabled={busy}
+                        onChange={(e) => moveDate(m, e.target.value)}
+                      />
+                      {m.moved ? (
+                        <button
+                          type="button"
+                          className="text-muted-foreground hover:text-foreground disabled:opacity-50"
+                          title={`Back to the plan's date, ${shortDay(m.plannedDate)}`}
+                          disabled={busy}
+                          onClick={() => moveDate(m, "")}
+                        >
+                          <RotateCcw className="h-3 w-3" />
+                        </button>
+                      ) : null}
+                    </span>
+                  </li>
+                ))}
+              </ol>
+            </div>
+          ) : null}
         </div>
       </div>
     </Panel>

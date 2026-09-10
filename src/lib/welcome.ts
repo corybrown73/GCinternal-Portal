@@ -14,6 +14,8 @@ export type WelcomeView = {
   timeline: Timeline;
   lead: string | null;
   fieldTester: string | null;
+  /** The process today, in their words. Null → a generic "paper and retyping". */
+  currentProcess: string | null;
   team: {
     lead: string | null;
     accountManager: string | null;
