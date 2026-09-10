@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
+import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 
 import { WelcomePage } from "@/components/welcome-page";
@@ -35,7 +36,22 @@ function WelcomeTokenPage() {
   const { token } = Route.useParams();
   const initial = Route.useLoaderData();
   const tick = useServerFn(tickWelcomeHomework);
+  const open = useServerFn(openWelcome);
   const [view, setView] = useState<WelcomeView | null>(initial);
+
+  // Live: the page follows the plan. A date moved in the portal, or a step
+  // ticked done, shows here within ten seconds — while the customer is
+  // looking at it. Polling, not sockets: one small read, no infrastructure.
+  const live = useQuery({
+    queryKey: ["welcome-live", token],
+    queryFn: () => open({ data: { token } }),
+    enabled: Boolean(initial),
+    refetchInterval: 10_000,
+    refetchIntervalInBackground: false,
+  });
+  useEffect(() => {
+    if (live.data) setView(live.data);
+  }, [live.data]);
 
   if (!view) {
     return (

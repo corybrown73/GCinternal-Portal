@@ -71,7 +71,10 @@ export function TimelinePanel({
     mutationFn: (timeline: IntakeAnswers["timeline"]) =>
       save({ data: { dealId, patch: { timeline } } as never }),
     onMutate: () => setError(null),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ["deal", dealId] }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["deal", dealId] });
+      void qc.invalidateQueries({ queryKey: ["welcome", dealId] });
+    },
     onError: (e) => setError((e as Error).message),
   });
   const set = (patch: Partial<IntakeAnswers["timeline"]>) =>
@@ -120,9 +123,12 @@ export function TimelinePanel({
   const welcome = useQuery({
     queryKey: ["welcome", dealId],
     queryFn: () => loadWelcome({ data: { dealId } }),
-    staleTime: 30_000,
+    // Live: the customer's homework ticks and link opens land here within
+    // ten seconds, without anyone refreshing.
+    refetchInterval: 10_000,
   });
   const readiness = welcome.data?.readiness ?? [];
+  const homeworkDone = welcome.data?.homeworkDone ?? {};
 
   const downloadIcs = (only?: string) => {
     const events = planEvents({
@@ -208,6 +214,45 @@ export function TimelinePanel({
           <p className="flex items-center gap-1.5 text-[12px] text-emerald-700 dark:text-emerald-400">
             <Check className="h-3.5 w-3.5" /> The page has everything it needs.
           </p>
+        ) : null}
+
+        {/* What the customer has done on their page. Live. */}
+        {welcome.data ? (
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md border border-border bg-background px-2.5 py-1.5 text-[12px]">
+            <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+              Customer
+            </span>
+            <span className="text-muted-foreground">
+              {welcome.data.sharedAt
+                ? welcome.data.openedAt
+                  ? `Opened their page ${shortDay(welcome.data.openedAt.slice(0, 10))}`
+                  : "Link sent, not opened yet"
+                : "No link sent yet"}
+            </span>
+            {(
+              [
+                ["app", "App installed"],
+                ["user", "Field user added"],
+                ["list", "List sent"],
+              ] as const
+            ).map(([k, label]) => (
+              <span
+                key={k}
+                className={cn(
+                  "inline-flex items-center gap-1 rounded-sm px-1.5 py-0.5 text-[11px]",
+                  homeworkDone[k]
+                    ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
+                    : "bg-muted text-muted-foreground",
+                )}
+                title={
+                  homeworkDone[k] ? `Ticked ${shortDay(homeworkDone[k]!.slice(0, 10))}` : "Not yet"
+                }
+              >
+                {homeworkDone[k] ? <Check className="h-3 w-3" /> : null}
+                {label}
+              </span>
+            ))}
+          </div>
         ) : null}
 
         {/* The close date: where the whole plan starts. */}

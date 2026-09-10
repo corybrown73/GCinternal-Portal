@@ -36,6 +36,9 @@ function OnboardingPlanPage() {
   const query = useQuery({
     queryKey: ["welcome", dealId],
     queryFn: () => load({ data: { dealId } }),
+    // Live while presenting: a homework box ticked on a phone in the room
+    // shows on the big screen within ten seconds.
+    refetchInterval: 10_000,
   });
 
   if (query.isPending) {

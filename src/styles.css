@@ -2467,3 +2467,90 @@ body.gc-presenting {
     display: none;
   }
 }
+
+/* ---- the QR on the cover, the app links */
+.gc-welcome .wp-qr {
+  position: absolute;
+  left: 64px;
+  bottom: 54px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px 10px 10px;
+  border-radius: 14px;
+  background: #fff;
+  border: 1px solid var(--wp-blue-line);
+  box-shadow: 0 10px 24px rgba(7, 43, 87, 0.12);
+}
+.gc-welcome .wp-qr img {
+  width: 84px;
+  height: 84px;
+  display: block;
+  border-radius: 6px;
+}
+.gc-welcome .wp-qr span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 12px;
+  color: var(--wp-body);
+  max-width: 170px;
+  line-height: 1.3;
+}
+.gc-welcome .wp-qr b {
+  font-size: 14px;
+  color: var(--wp-navy);
+  font-weight: 800;
+}
+.gc-welcome .wp-cover-text {
+  position: relative;
+  padding-bottom: 8px;
+}
+.gc-welcome .wp-getapp {
+  margin-top: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--wp-body);
+  flex-wrap: wrap;
+}
+.gc-welcome .wp-getapp svg {
+  color: var(--wp-blue);
+}
+.gc-welcome .wp-store {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: var(--wp-navy);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 800;
+  text-decoration: none;
+  letter-spacing: 0.02em;
+}
+.gc-welcome .wp-store.is-plain {
+  background: #fff;
+  color: var(--wp-blue);
+  border: 1px solid var(--wp-blue-line);
+}
+.gc-welcome .wp-good-cta-links {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+.gc-welcome .wp-good-cta-links a {
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: #fff;
+  color: var(--wp-orange);
+  font-size: 11px;
+  font-weight: 800;
+  text-decoration: none;
+}
+@media print {
+  .gc-welcome .wp-qr {
+    display: none;
+  }
+}

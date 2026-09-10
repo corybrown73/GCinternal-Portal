@@ -5,6 +5,8 @@ import {
   Building2,
   CalendarPlus,
   Camera,
+  QrCode,
+  Smartphone as SmartphoneIcon,
   ChevronRight,
   Cloud,
   FileText,
@@ -43,6 +45,7 @@ import {
 import { daysToValue, shortDay } from "@/lib/onboarding-timeline";
 import { HOMEWORK_KEYS, type HomeworkKey, type WelcomeView } from "@/lib/welcome";
 import { whenLabel } from "@/lib/welcome-events";
+import { GOCANVAS_APP } from "@/lib/app-links";
 import { cn } from "@/lib/utils";
 
 /**
@@ -129,6 +132,23 @@ export function WelcomePage({
   const [present, setPresent] = useState(false);
   const [at, setAt] = useState(0);
   const total = 6;
+  // The customer's link, once minted in this session, as a QR for the room.
+  const [qr, setQr] = useState<{ url: string; dataUrl: string } | null>(null);
+  const [showQr, setShowQr] = useState(true);
+  const mintForQr = onCopyLink
+    ? async () => {
+        const url = await onCopyLink();
+        const { toDataURL } = await import("qrcode");
+        const dataUrl = await toDataURL(url, {
+          margin: 1,
+          width: 512,
+          color: { dark: "#072b57", light: "#ffffff" },
+        });
+        setQr({ url, dataUrl });
+        setShowQr(true);
+        return url;
+      }
+    : undefined;
 
   // Present mode: arrow keys, space, escape. Click advances.
   useEffect(() => {
@@ -153,7 +173,7 @@ export function WelcomePage({
   }, [present]);
 
   const screens = [
-    <Cover key="cover" view={view} />,
+    <Cover key="cover" view={view} qr={showQr ? qr : null} />,
     <Team key="team" view={view} />,
     <Plan key="plan" view={view} />,
     <Together key="together" view={view} mode={mode} onTick={onTick} />,
@@ -170,8 +190,11 @@ export function WelcomePage({
             setAt(0);
             setPresent(true);
           }}
-          onCopyLink={onCopyLink}
+          onCopyLink={mintForQr}
           onDownloadPptx={onDownloadPptx}
+          qrReady={Boolean(qr)}
+          showQr={showQr}
+          onToggleQr={() => setShowQr((v) => !v)}
           backHref={backHref ?? null}
           notesHref={notesHref ?? null}
         />
@@ -262,6 +285,9 @@ function Toolbar({
   onDownloadPptx,
   backHref,
   notesHref,
+  qrReady,
+  showQr,
+  onToggleQr,
 }: {
   view: WelcomeView;
   onPresent: () => void;
@@ -269,6 +295,9 @@ function Toolbar({
   onDownloadPptx?: (() => Promise<void>) | undefined;
   backHref: string | null;
   notesHref: string | null;
+  qrReady: boolean;
+  showQr: boolean;
+  onToggleQr: () => void;
 }) {
   const [copied, setCopied] = useState<"idle" | "busy" | "done" | "failed">("idle");
   const [pptx, setPptx] = useState<"idle" | "busy">("idle");
@@ -303,6 +332,16 @@ function Toolbar({
         ) : null}
       </div>
       <div className="wp-toolbar-right">
+        {qrReady ? (
+          <button
+            type="button"
+            className="wp-tool"
+            onClick={onToggleQr}
+            title="Show or hide the QR code on the cover"
+          >
+            <QrCode className="h-3.5 w-3.5" /> {showQr ? "Hide QR" : "Show QR"}
+          </button>
+        ) : null}
         {notesHref ? (
           <a href={notesHref} className="wp-tool" target="_blank" rel="noreferrer">
             <FileText className="h-3.5 w-3.5" /> Speaker notes
@@ -614,7 +653,7 @@ function PhoneMock({ view, className }: { view: WelcomeView; className?: string 
 
 /* --------------------------------------------------------- the screens */
 
-function Cover({ view }: { view: WelcomeView }) {
+function Cover({ view, qr }: { view: WelcomeView; qr?: { url: string; dataUrl: string } | null }) {
   const t = view.timeline;
   return (
     <section className="wp-screen is-cover">
@@ -654,6 +693,15 @@ function Cover({ view }: { view: WelcomeView }) {
           </div>
           {view.lead ? (
             <p className="wp-prepared">Prepared by {view.lead}, GoCanvas onboarding</p>
+          ) : null}
+          {qr ? (
+            <div className="wp-qr">
+              <img src={qr.dataUrl} alt="" />
+              <span>
+                <b>Scan for your plan</b>
+                Your dates, your homework, on your phone.
+              </span>
+            </div>
           ) : null}
         </div>
         <div className="wp-cover-art">
@@ -940,6 +988,19 @@ function Together({
             );
           })}
         </div>
+        <div className="wp-getapp">
+          <SmartphoneIcon className="h-4 w-4" />
+          <span>Get the GoCanvas app:</span>
+          <a href={GOCANVAS_APP.ios} target="_blank" rel="noreferrer" className="wp-store">
+            App Store
+          </a>
+          <a href={GOCANVAS_APP.android} target="_blank" rel="noreferrer" className="wp-store">
+            Google Play
+          </a>
+          <a href={GOCANVAS_APP.any} target="_blank" rel="noreferrer" className="wp-store is-plain">
+            gocanvas.com/m
+          </a>
+        </div>
         {HOMEWORK_KEYS.every((k) => view.homeworkDone[k]) ? (
           <p className="wp-homework-done">
             All three done — the working session starts from a live account.
@@ -1158,6 +1219,14 @@ function Business({ view, icsBase }: { view: WelcomeView; icsBase: string | null
             <span className="wp-good-cta-text">
               Accept the kickoff invite for {kickoff ? shortDay(kickoff.date) : "day one"} and
               download the app.
+            </span>
+            <span className="wp-good-cta-links">
+              <a href={GOCANVAS_APP.ios} target="_blank" rel="noreferrer">
+                App Store
+              </a>
+              <a href={GOCANVAS_APP.android} target="_blank" rel="noreferrer">
+                Google Play
+              </a>
             </span>
           </div>
         </div>
