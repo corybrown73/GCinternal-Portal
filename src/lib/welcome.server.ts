@@ -162,11 +162,13 @@ async function viewFor(deal: any, opts: { internal: boolean }): Promise<WelcomeV
         : null,
     sharedAt: opts.internal ? (deal.welcome_issued_at ?? null) : null,
     openedAt: opts.internal ? (deal.welcome_opened_at ?? null) : null,
+    hiddenScreens: (await import("./intake-answers")).readIntake(deal.intake)
+      .welcome_hidden_screens,
   };
 }
 
 const DEAL_COLUMNS =
-  "id,name,logo_path,se_owner_id,am_owner_id,welcome_token_hash,welcome_issued_at,welcome_opened_at,welcome_homework,welcome_share_url";
+  "id,name,logo_path,se_owner_id,am_owner_id,welcome_token_hash,welcome_issued_at,welcome_opened_at,welcome_homework,welcome_share_url,intake";
 
 export async function loadWelcome(dealId: string): Promise<WelcomeView | null> {
   const { data: deal } = await db()

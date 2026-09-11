@@ -72,6 +72,8 @@ export const intakeAnswersSchema = z.object({
    * template id; a form they named on the call lands here typed. Three or
    * four is normal; we still build one first.
    */
+  /** Welcome-page screens the presenter has switched off for this customer, by key. */
+  welcome_hidden_screens: z.array(z.string().max(40)).max(20).default([]),
   wanted_forms: z
     .array(
       z.object({

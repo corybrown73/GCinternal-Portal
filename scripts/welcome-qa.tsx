@@ -65,6 +65,7 @@ const base: Omit<WelcomeView, "timeline"> = {
   }),
   sharedAt: "2026-09-10T09:00:00Z",
   openedAt: null,
+  hiddenScreens: [],
 };
 
 const utils = `
@@ -121,6 +122,15 @@ page(
       integrationTier: 3,
       integrationTarget: "QuickBooks Online",
       formProvenOn: "2026-09-22",
+      completed: {
+        close: "2026-09-09",
+        kickoff: "2026-09-10",
+        homework: "2026-09-11",
+        working: "2026-09-14",
+        fieldtest: "2026-09-15",
+        adjust: "2026-09-17",
+        live: "2026-09-18",
+      },
     }),
   },
   "shared",

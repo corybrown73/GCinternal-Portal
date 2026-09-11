@@ -399,6 +399,7 @@ export const saveIntake = createServerFn({ method: "POST" })
             field_users: z.number().int().nonnegative().nullable().optional(),
             current_process: z.string().trim().max(4000).nullable().optional(),
             chosen_templates: z.array(z.string().uuid()).optional(),
+            welcome_hidden_screens: z.array(z.string().max(40)).max(20).optional(),
             wanted_forms: z
               .array(
                 z.object({

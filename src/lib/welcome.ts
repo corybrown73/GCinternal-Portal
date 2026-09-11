@@ -46,6 +46,8 @@ export type WelcomeView = {
   qrDataUrl: string | null;
   sharedAt: string | null;
   openedAt: string | null;
+  /** Screen keys the presenter switched off for this customer. Both modes honour it. */
+  hiddenScreens: string[];
 };
 
 /** The homework items the customer ticks, keyed so a reworded item keeps its tick. */

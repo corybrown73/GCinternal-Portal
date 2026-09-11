@@ -266,8 +266,10 @@ function DealRecord({ deal }: { deal: DealData }) {
         ) : null}
 
         <div className="grid gap-4 xl:grid-cols-2">
+          {/* The Gong brief first: everything below reads from it. Each section
+              folds, and remembers whether you left it open. */}
           <div className="space-y-4">
-            <SowPanel deal={deal} onSave={set} editable={editable} />
+            <ReportsPanel deal={deal} />
             <IntakePanel dealId={deal.account.id} raw={deal.account.intake} editable={editable} />
             <TimelinePanel
               dealId={deal.account.id}
@@ -277,12 +279,12 @@ function DealRecord({ deal }: { deal: DealData }) {
               editable={editable}
               hasSow={Boolean(deal.sow_url)}
             />
-            <ReportsPanel deal={deal} />
+            <SowPanel deal={deal} onSave={set} editable={editable} />
             <NotesPanel deal={deal} />
           </div>
           <div className="space-y-4">
-            <AssignmentPanel dealId={deal.account.id} editable={editable} />
             <BriefsPanel deal={deal} />
+            <AssignmentPanel dealId={deal.account.id} editable={editable} />
             <TamPanel deal={deal} />
             <HistoryPanel deal={deal} />
           </div>
@@ -509,7 +511,13 @@ function SowPanel({
     account.sow_document_url;
 
   return (
-    <Panel title="Statement of work" meta={recorded ? "On the kickoff deck" : "Not recorded"}>
+    <Panel
+      title="Statement of work"
+      meta={recorded ? "On the kickoff deck" : "Not recorded"}
+      collapsible
+      defaultOpen={false}
+      collapseKey="deal:sow"
+    >
       <div className="space-y-2 px-3 py-2.5">
         {!recorded ? (
           <p className="text-[12px] text-muted-foreground">
@@ -715,8 +723,11 @@ function ReportsPanel({ deal }: { deal: DealData }) {
 
   return (
     <Panel
-      title="Notes & Gong reports"
+      title="Gong brief & call notes"
       count={deal.gong_reports.length}
+      collapsible
+      collapseKey="deal:gong"
+      level="primary"
       action={
         <button type="button" className={buttonClass} onClick={() => setAdding((v) => !v)}>
           {adding ? "Close" : "Add report"}
@@ -897,6 +908,8 @@ function BriefsPanel({ deal }: { deal: DealData }) {
     <Panel
       title="Customer brief"
       count={deal.briefs.length}
+      collapsible
+      collapseKey="deal:brief"
       action={
         <div className="flex items-center gap-1.5">
           <button
@@ -939,7 +952,9 @@ function BriefsPanel({ deal }: { deal: DealData }) {
       {synthesis.isSuccess ? (
         <p className="border-b border-border px-3 py-2 text-[11px] text-emerald-700 dark:text-emerald-400">
           {synthesis.data.status === "complete"
-            ? "Synthesised. The welcome page now reads it wherever the intake is blank — today in their words, what comes next, their project owner."
+            ? synthesis.data.filled.length
+              ? `Synthesised, and the intake filled in from it: ${synthesis.data.filled.join(", ")}. Check them above — your answers always win.`
+              : "Synthesised. The intake already had its answers, so nothing was filled in; the welcome page reads the synthesis wherever a field is blank."
             : (synthesis.data.error ?? "The synthesis did not complete.")}
         </p>
       ) : null}
@@ -1050,6 +1065,9 @@ function TamPanel({ deal }: { deal: DealData }) {
     <Panel
       title="TAM request"
       count={deal.tam_requests.length}
+      collapsible
+      defaultOpen={false}
+      collapseKey="deal:tam"
       action={
         hasPending ? (
           <span className="text-[11px] text-muted-foreground">Awaiting a decision</span>
@@ -1173,6 +1191,9 @@ function NotesPanel({ deal }: { deal: DealData }) {
       title="Onboarding plan / sales notes"
       count={deal.notes.length}
       meta="Reviewed notes feed brief generation"
+      collapsible
+      defaultOpen={false}
+      collapseKey="deal:notes"
     >
       <form
         className="space-y-1.5 border-b border-border bg-surface px-3 py-2.5"
@@ -1265,7 +1286,14 @@ function NotesPanel({ deal }: { deal: DealData }) {
 
 function HistoryPanel({ deal }: { deal: DealData }) {
   return (
-    <Panel title="Stage history" count={deal.stage_history.length} level="supporting">
+    <Panel
+      title="Stage history"
+      count={deal.stage_history.length}
+      level="supporting"
+      collapsible
+      defaultOpen={false}
+      collapseKey="deal:history"
+    >
       {deal.stage_history.length === 0 ? (
         <NoRows label="No stage changes recorded." />
       ) : (

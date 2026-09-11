@@ -565,11 +565,54 @@ export async function deleteGongReport(userId: string, reportId: string): Promis
 export async function generateDealBrief(
   userId: string,
   dealId: string,
-): Promise<{ id: string; status: string; error: string | null }> {
+): Promise<{ id: string; status: string; error: string | null; filled: string[] }> {
   await requireInternal(userId);
   const { generateBrief } = await import("./server/brief/generate");
   const brief = await generateBrief(dealId, userId);
-  return { id: brief.id, status: brief.status, error: brief.error };
+
+  // An AI synthesis fills the intake's blanks — the process today, the forms
+  // they named, seats, the systems to connect. A person's answers stand.
+  let filled: string[] = [];
+  if (brief.status === "complete" && brief.generator === "llm" && brief.structured_json) {
+    try {
+      const { readIntake, intakeAnswersSchema } = await import("./intake-answers");
+      const { prefillFromSynthesis } = await import("./intake-prefill");
+      const { data: row } = await db()
+        .from("portal_accounts")
+        .select("intake")
+        .eq("id", dealId)
+        .maybeSingle();
+      const current = readIntake((row as any)?.intake);
+      const result = prefillFromSynthesis(current, brief.structured_json);
+      if (result.filled.length) {
+        const next = intakeAnswersSchema.parse({
+          ...current,
+          ...result.patch,
+          updated_at: new Date().toISOString(),
+        });
+        const { error } = await db()
+          .from("portal_accounts")
+          .update({ intake: next, updated_at: new Date().toISOString() })
+          .eq("id", dealId);
+        if (!error) {
+          filled = result.filled;
+          await audit({
+            actor_type: "user",
+            actor_id: userId,
+            action: "deal.intake_prefilled",
+            entity_type: "account",
+            entity_id: dealId,
+            payload: { brief_id: brief.id, filled },
+          });
+        }
+      }
+    } catch (e) {
+      // The brief is done either way; a prefill that fails is a blank left
+      // blank, not a failed synthesis.
+      console.error("[brief] could not prefill the intake", e);
+    }
+  }
+  return { id: brief.id, status: brief.status, error: brief.error, filled };
 }
 
 export async function briefDownloadUrl(userId: string, briefId: string): Promise<{ url: string }> {

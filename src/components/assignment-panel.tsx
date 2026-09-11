@@ -49,6 +49,8 @@ export function AssignmentPanel({ dealId, editable }: { dealId: string; editable
       title="Implementation owner"
       meta={a ? `${done}/${a.steps.length} first steps` : undefined}
       level="primary"
+      collapsible
+      collapseKey="deal:owner"
       action={
         editable ? (
           <div className="flex items-center gap-1.5">

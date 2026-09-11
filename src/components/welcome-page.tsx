@@ -16,6 +16,8 @@ import {
   ClipboardCheck,
   Copy,
   Download,
+  Eye,
+  EyeOff,
   Factory,
   Flag,
   Fuel,
@@ -114,6 +116,7 @@ export function WelcomePage({
   backHref,
   notesHref,
   icsBase,
+  onToggleScreen,
 }: {
   view: WelcomeView;
   mode: WelcomeMode;
@@ -128,11 +131,11 @@ export function WelcomePage({
   notesHref?: string | null;
   /** Shared: the calendar-file route for this link, e.g. /api/welcome-ics/<token>. */
   icsBase?: string | null;
+  /** Internal: switch a screen off (or on) for this customer. Saved on the deal. */
+  onToggleScreen?: ((key: string, hidden: boolean) => Promise<void> | void) | undefined;
 }) {
   const [present, setPresent] = useState(false);
   const [at, setAt] = useState(0);
-  // Six screens, plus one per phase after the form.
-  const total = 6 + view.timeline.phases.length;
   // The customer's link as a QR for the room: from the record when one has
   // been issued, so it is there on every load, not only in the session that
   // minted it. Minting again replaces it.
@@ -146,6 +149,23 @@ export function WelcomePage({
         return url;
       }
     : undefined;
+  // Every screen the page can show, in order. The presenter can switch any
+  // of them off for this customer; page numbers follow what is shown, so a
+  // plan with two later phases and nothing hidden numbers to nine.
+  const hidden = new Set(view.hiddenScreens);
+  const all = screenList(view);
+  const visible = all.filter((sc) => !hidden.has(sc.key));
+  const total = visible.length;
+  const screens = visible.map((sc, i) =>
+    sc.render({
+      page: i + 1,
+      qr: showQr ? qr : null,
+      mode,
+      onTick,
+      icsBase: icsBase ?? null,
+    }),
+  );
+
   // Present mode: a hint the first time, gone after a few seconds.
   const [hint, setHint] = useState(false);
   useEffect(() => {
@@ -176,21 +196,6 @@ export function WelcomePage({
       document.body.classList.remove("gc-presenting");
     };
   }, [present, total]);
-
-  // Page numbers follow the screens, so a plan with two later phases numbers to eight.
-  let n = 0;
-  const next = () => (n += 1);
-  const screens = [
-    <Cover key="cover" view={view} qr={showQr ? qr : null} />,
-    <Team key="team" view={view} page={next() + 1} />,
-    <Plan key="plan" view={view} page={next() + 1} />,
-    ...view.timeline.phases.map((ph) => (
-      <PhaseScreen key={`phase-${ph.phase}`} view={view} phase={ph} page={next() + 1} />
-    )),
-    <Together key="together" view={view} mode={mode} onTick={onTick} page={next() + 1} />,
-    <FirstForm key="form" view={view} page={next() + 1} />,
-    <Business key="business" view={view} icsBase={icsBase ?? null} page={next() + 1} />,
-  ];
 
   return (
     <div className={cn("gc-welcome", present && "is-present")}>
@@ -249,15 +254,130 @@ export function WelcomePage({
           </div>
         </div>
       ) : (
-        <div className="wp-scroll">
-          {screens.map((s, i) => (
-            <Stage key={i} fit="width">
-              {s}
-            </Stage>
-          ))}
+        <div className="wp-shell">
+          {mode === "internal" ? (
+            <ScreenMenu all={all} hidden={hidden} onToggle={onToggleScreen} />
+          ) : null}
+          <div className="wp-scroll">
+            {visible.map((sc, i) => (
+              <div key={sc.key} id={`wp-screen-${sc.key}`}>
+                <Stage fit="width">{screens[i]}</Stage>
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </div>
+  );
+}
+
+type ScreenArgs = {
+  page: number;
+  qr: { url: string; dataUrl: string } | null;
+  mode: WelcomeMode;
+  onTick: ((key: HomeworkKey, done: boolean) => Promise<void> | void) | undefined;
+  icsBase: string | null;
+};
+type Screen = { key: string; label: string; render: (a: ScreenArgs) => ReactNode };
+
+/** The screens in order, each with the key the presenter switches it by. */
+function screenList(view: WelcomeView): Screen[] {
+  const t = view.timeline;
+  return [
+    { key: "cover", label: "Cover", render: (a) => <Cover key="cover" view={view} qr={a.qr} /> },
+    {
+      key: "team",
+      label: "Your team",
+      render: (a) => <Team key="team" view={view} page={a.page} />,
+    },
+    {
+      key: "overview",
+      label: "At a glance",
+      render: (a) => <Overview key="overview" view={view} page={a.page} />,
+    },
+    {
+      key: "plan",
+      label: t.phases.length || t.alongside.length ? "Phase 1 · the form" : "The seven days",
+      render: (a) => <Plan key="plan" view={view} page={a.page} />,
+    },
+    ...t.phases.map((ph): Screen => ({
+      key: `phase-${ph.phase}`,
+      label: `${ph.label} · ${ph.services.map((x) => x.name).join(" + ")}`,
+      render: (a) => <PhaseScreen key={`phase-${ph.phase}`} view={view} phase={ph} page={a.page} />,
+    })),
+    {
+      key: "together",
+      label: "What's expected",
+      render: (a) => (
+        <Together key="together" view={view} mode={a.mode} onTick={a.onTick} page={a.page} />
+      ),
+    },
+    {
+      key: "form",
+      label: "How we get there",
+      render: (a) => <FirstForm key="form" view={view} page={a.page} />,
+    },
+    {
+      key: "business",
+      label: "Let's get into business",
+      render: (a) => <Business key="business" view={view} icsBase={a.icsBase} page={a.page} />,
+    },
+  ];
+}
+
+/**
+ * The left-hand menu: every screen, on or off for this customer. Off means
+ * off everywhere — the preview, present mode, the PDF and the customer's
+ * link — because the page is one source.
+ */
+function ScreenMenu({
+  all,
+  hidden,
+  onToggle,
+}: {
+  all: Screen[];
+  hidden: Set<string>;
+  onToggle: ((key: string, hidden: boolean) => Promise<void> | void) | undefined;
+}) {
+  const [busy, setBusy] = useState<string | null>(null);
+  let n = 0;
+  return (
+    <aside className="wp-side print:hidden">
+      <p className="wp-side-title">Screens</p>
+      <ol className="wp-side-list">
+        {all.map((sc) => {
+          const off = hidden.has(sc.key);
+          const no = off ? null : ++n;
+          return (
+            <li key={sc.key} className={cn("wp-side-item", off && "is-off")}>
+              <a href={off ? undefined : `#wp-screen-${sc.key}`} className="wp-side-link">
+                <span className="wp-side-no">{no ? String(no).padStart(2, "0") : "—"}</span>
+                <span className="wp-side-label">{sc.label}</span>
+              </a>
+              {onToggle ? (
+                <button
+                  type="button"
+                  className="wp-side-eye"
+                  title={off ? "Show this screen" : "Hide this screen for this customer"}
+                  disabled={busy === sc.key}
+                  onClick={async () => {
+                    setBusy(sc.key);
+                    try {
+                      await onToggle(sc.key, !off);
+                    } finally {
+                      setBusy(null);
+                    }
+                  }}
+                >
+                  {off ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                </button>
+              ) : null}
+            </li>
+          );
+        })}
+      </ol>
+      <p className="wp-side-hint">Hidden screens are hidden for the customer too.</p>
+    </aside>
   );
 }
 
@@ -451,6 +571,7 @@ function Frame({
   bandIcon,
   page,
   dark,
+  done,
 }: {
   children: ReactNode;
   eyebrow: string;
@@ -462,11 +583,18 @@ function Frame({
   bandIcon?: string;
   page: number;
   dark?: boolean;
+  /** This phase is behind us: the screen greys and says so. */
+  done?: boolean;
 }) {
   return (
-    <section className={cn("wp-screen", dark && "is-dark")}>
+    <section className={cn("wp-screen", dark && "is-dark", done && "is-past")}>
       <div className="wp-blob" />
       <div className="wp-dots" />
+      {done ? (
+        <span className="wp-past-chip">
+          <Check className="h-3 w-3" strokeWidth={3} /> Completed
+        </span>
+      ) : null}
       <header className="wp-head">
         <img
           src={
@@ -853,11 +981,130 @@ const CUSTOMER_LABEL: Record<string, string> = {
   close: "Welcome aboard",
 };
 
+/**
+ * The whole project on one screen, without the detail: how many phases,
+ * how long each is, how much of the customer's time it takes, and where
+ * they are. The detail lives on each phase's own screen.
+ */
+function Overview({ view, page }: { view: WelcomeView; page: number }) {
+  const t = view.timeline;
+  const live = t.milestones.find((m) => m.key === "live");
+  const kickoff = t.milestones.find((m) => m.key === "kickoff");
+  const working = t.milestones.find((m) => m.key === "working");
+  const wk = (n: number) => `${n} wk${n === 1 ? "" : "s"}`;
+  const cards = [
+    {
+      key: 1,
+      label: "Phase 1",
+      names: [view.firstForm?.name ?? "Your first form", ...t.alongside.map((x) => x.name)],
+      length: `${live?.day ?? 7} business days`,
+      when: t.liveDoneOn
+        ? `Live ${shortDay(t.liveDoneOn)}`
+        : `${shortDay(t.closeDate)} → ${shortDay(t.liveDate)}`,
+      yourTime: `${kickoff?.minutes ?? 60} + ${working?.minutes ?? 30} min on two calls · 15 min homework`,
+      gate: "Starts the day we begin",
+      done: Boolean(t.liveDoneOn),
+      now: t.currentPhase === 1,
+      tentative: false,
+    },
+    ...t.phases.map((ph) => {
+      const longest = Math.max(...ph.services.map((x) => x.weeks));
+      const calls = ph.services.reduce(
+        (acc, x) =>
+          acc +
+          x.milestones.filter((m) => m.kind === "call").reduce((a, m) => a + (m.minutes ?? 0), 0),
+        0,
+      );
+      return {
+        key: ph.phase,
+        label: ph.label,
+        names: ph.services.map((x) => x.name),
+        length: wk(longest),
+        when: ph.done
+          ? `Done ${shortDay(ph.endsOn!)}`
+          : `${ph.tentative ? "Earliest " : ""}${shortDay(ph.startsOn!)} → ${shortDay(ph.endsOn!)}`,
+        yourTime: `${calls || 30} min on ${ph.services.length > 1 ? "kickoff calls" : "a kickoff call"} · a short review`,
+        gate: ph.gate,
+        done: ph.done,
+        now: t.currentPhase === ph.phase && !ph.done,
+        tentative: ph.tentative,
+      };
+    }),
+  ];
+  const count = cards.length;
+  return (
+    <Frame
+      page={page}
+      eyebrow="At a glance"
+      title={
+        count === 1
+          ? "One phase,"
+          : `${["", "One", "Two", "Three", "Four", "Five"][count] ?? count} phases,`
+      }
+      accent="the form first"
+      lede="The shape of the whole project. Each phase has its own screen with the detail — this is how long, how much of your time, and where we are."
+      band={
+        t.allDone
+          ? "Every phase is live. From here the same team runs the working-session format for whatever you add."
+          : `You are on ${cards.find((c) => c.now)?.label.toLowerCase() ?? "phase 1"}. Nothing after the form starts until a crew has run the form on real jobs.`
+      }
+      bandIcon="Route"
+    >
+      <div className={cn("wp-ov-row", count > 3 && "is-many")}>
+        {cards.map((c) => (
+          <div
+            key={c.key}
+            className={cn(
+              "wp-card wp-ov-card",
+              c.done && "is-done",
+              c.now && "is-now",
+              c.tentative && "is-tentative",
+            )}
+          >
+            <div className="wp-ov-head">
+              <span className="wp-phase2-tag">{c.label}</span>
+              {c.done ? (
+                <span className="wp-ov-status is-done">
+                  <Check className="h-3 w-3" strokeWidth={3} /> Done
+                </span>
+              ) : c.now ? (
+                <span className="wp-ov-status is-now">You are here</span>
+              ) : (
+                <span className="wp-ov-status">Later</span>
+              )}
+            </div>
+            <h3 className="wp-ov-name">{c.names.join(" + ")}</h3>
+            <dl className="wp-ov-facts">
+              <div>
+                <dt>How long</dt>
+                <dd>{c.length}</dd>
+              </div>
+              <div>
+                <dt>When</dt>
+                <dd>{c.when}</dd>
+              </div>
+              <div>
+                <dt>Your time</dt>
+                <dd>{c.yourTime}</dd>
+              </div>
+              <div>
+                <dt>Opens</dt>
+                <dd>{c.gate}</dd>
+              </div>
+            </dl>
+          </div>
+        ))}
+      </div>
+    </Frame>
+  );
+}
+
 function Plan({ view, page }: { view: WelcomeView; page: number }) {
   const t = view.timeline;
   return (
     <Frame
       page={page}
+      done={Boolean(t.liveDoneOn)}
       eyebrow="Your timeline"
       title={t.phases.length ? "Phase 1: seven days to a" : "Seven days to a"}
       accent="form in the field"
@@ -1001,6 +1248,7 @@ function PhaseScreen({ view, phase: ph, page }: { view: WelcomeView; phase: Phas
   return (
     <Frame
       page={page}
+      done={ph.done}
       eyebrow={`After the form · ${ph.label}`}
       title={`${ph.label}:`}
       accent={accent}

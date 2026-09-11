@@ -60,6 +60,8 @@ export function IntakePanel({
       title="Onboarding intake"
       meta={status.done ? "Complete" : (status.next ?? undefined)}
       level="primary"
+      collapsible
+      collapseKey="deal:intake"
     >
       <div className="space-y-3 px-3 py-2.5">
         {error ? (

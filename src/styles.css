@@ -3310,3 +3310,229 @@ body.gc-presenting {
 .gc-welcome .wp-homework-extra b {
   color: var(--wp-navy);
 }
+
+/* ---- the left-hand screen menu (internal view) */
+.gc-welcome .wp-shell {
+  display: flex;
+  align-items: flex-start;
+  gap: 0;
+  max-width: 1600px;
+  margin: 0 auto;
+}
+.gc-welcome .wp-side {
+  position: sticky;
+  top: 56px;
+  flex: none;
+  width: 220px;
+  padding: 20px 14px 20px 20px;
+}
+.gc-welcome .wp-side-title {
+  margin: 0 0 8px 8px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--wp-muted);
+}
+.gc-welcome .wp-side-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.gc-welcome .wp-side-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  border-radius: 8px;
+}
+.gc-welcome .wp-side-item:hover {
+  background: rgba(7, 43, 87, 0.05);
+}
+.gc-welcome .wp-side-link {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--wp-navy);
+  text-decoration: none;
+}
+.gc-welcome .wp-side-no {
+  flex: none;
+  width: 22px;
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  color: var(--wp-blue);
+}
+.gc-welcome .wp-side-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.gc-welcome .wp-side-item.is-off .wp-side-link {
+  color: var(--wp-muted);
+  text-decoration: line-through;
+}
+.gc-welcome .wp-side-item.is-off .wp-side-no {
+  color: var(--wp-muted);
+}
+.gc-welcome .wp-side-eye {
+  flex: none;
+  display: inline-flex;
+  padding: 6px;
+  border: 0;
+  background: transparent;
+  color: var(--wp-muted);
+  border-radius: 6px;
+  cursor: pointer;
+}
+.gc-welcome .wp-side-eye:hover {
+  color: var(--wp-navy);
+  background: rgba(7, 43, 87, 0.06);
+}
+.gc-welcome .wp-side-hint {
+  margin: 10px 8px 0;
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--wp-muted);
+}
+.gc-welcome .wp-shell .wp-scroll {
+  flex: 1;
+  min-width: 0;
+}
+@media (max-width: 900px) {
+  .gc-welcome .wp-side {
+    display: none;
+  }
+}
+
+/* ---- a phase that is behind us */
+.gc-welcome .wp-screen.is-past .wp-body,
+.gc-welcome .wp-screen.is-past .wp-band {
+  filter: grayscale(0.85);
+  opacity: 0.6;
+}
+.gc-welcome .wp-past-chip {
+  position: absolute;
+  top: 40px;
+  right: 64px;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: var(--wp-green);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+/* ---- at a glance */
+.gc-welcome .wp-ov-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
+  gap: 16px;
+}
+.gc-welcome .wp-ov-row.is-many {
+  gap: 12px;
+}
+.gc-welcome .wp-ov-card {
+  padding: 16px 18px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.gc-welcome .wp-ov-card.is-tentative {
+  border-style: dashed;
+}
+.gc-welcome .wp-ov-card.is-now {
+  border-color: var(--wp-blue);
+  box-shadow: 0 0 0 3px rgba(3, 157, 231, 0.14);
+}
+.gc-welcome .wp-ov-card.is-done {
+  background: #f6f8fa;
+  border-color: #dfe5ec;
+}
+.gc-welcome .wp-ov-card.is-done .wp-ov-name,
+.gc-welcome .wp-ov-card.is-done .wp-ov-facts dd {
+  color: var(--wp-muted);
+}
+.gc-welcome .wp-ov-card.is-done .wp-phase2-tag {
+  background: #9aa7b5;
+}
+.gc-welcome .wp-ov-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.gc-welcome .wp-ov-status {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--wp-muted);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.gc-welcome .wp-ov-status.is-now {
+  color: #fff;
+  background: var(--wp-orange);
+  border-radius: 999px;
+  padding: 3px 9px;
+}
+.gc-welcome .wp-ov-status.is-done {
+  color: var(--wp-green);
+}
+.gc-welcome .wp-ov-name {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 1.2;
+  color: var(--wp-navy);
+  letter-spacing: -0.01em;
+  min-height: 44px;
+}
+.gc-welcome .wp-ov-row.is-many .wp-ov-name {
+  font-size: 15px;
+}
+.gc-welcome .wp-ov-facts {
+  margin: 4px 0 0;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+}
+.gc-welcome .wp-ov-facts div {
+  display: grid;
+  grid-template-columns: 78px 1fr;
+  gap: 8px;
+  align-items: baseline;
+}
+.gc-welcome .wp-ov-facts dt {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--wp-muted);
+}
+.gc-welcome .wp-ov-facts dd {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.35;
+  color: var(--wp-body);
+  font-weight: 600;
+}
+.gc-welcome .wp-ov-row.is-many .wp-ov-facts dd {
+  font-size: 12px;
+}

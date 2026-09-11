@@ -226,6 +226,8 @@ export function TimelinePanel({
   return (
     <Panel
       title="Onboarding plan"
+      collapsible
+      collapseKey="deal:plan"
       meta={
         actual !== null
           ? `Live ${shortDay(timeline.liveDoneOn!)} · ${actual} days to value · ${timeline.progress.done}/${timeline.progress.total} done`
