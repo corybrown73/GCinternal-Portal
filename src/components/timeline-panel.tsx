@@ -34,7 +34,7 @@ import {
   type Phase,
   type Timeline,
 } from "@/lib/onboarding-timeline";
-import { generateOnboardingDeck, saveIntake } from "@/lib/presale.functions";
+import { saveIntake } from "@/lib/presale.functions";
 import { mergeProposal, rowWeeks, type SowPlanProposal, type SowPlanRow } from "@/lib/sow-plan";
 import { proposePlanFromSowFn } from "@/lib/sow-plan.functions";
 import { isCall, planEvents } from "@/lib/welcome-events";
@@ -50,7 +50,7 @@ import { cn } from "@/lib/utils";
  * override. Moving a date moves everything after it by the same number of
  * business days, never anything before it; a later date moved by hand sets
  * its own shift from there. Adding a holiday shifts every date after it.
- * The page and the deck print exactly what this panel shows.
+ * The page prints exactly what this panel shows.
  */
 export function TimelinePanel({
   dealId,
@@ -75,7 +75,6 @@ export function TimelinePanel({
 
   const qc = useQueryClient();
   const save = useServerFn(saveIntake);
-  const generate = useServerFn(generateOnboardingDeck);
   const loadWelcome = useServerFn(getWelcome);
   const [error, setError] = useState<string | null>(null);
   const [holiday, setHoliday] = useState("");
@@ -107,7 +106,6 @@ export function TimelinePanel({
   const updateService = (id: string, patch: Partial<ServiceSpec>) =>
     writeServices(services.map((x) => (x.id === id ? { ...x, ...patch } : x)));
   const removeService = (id: string) => writeServices(services.filter((x) => x.id !== id));
-  const [deck, setDeck] = useState<{ url: string; fileName: string } | null>(null);
 
   // Reading the SOW: the model proposes rows, a person edits and ticks them,
   // apply merges them into the list and the dates follow from the rule.
@@ -156,17 +154,6 @@ export function TimelinePanel({
   });
   const set = (patch: Partial<IntakeAnswers["timeline"]>) =>
     mutation.mutate({ ...knobs, ...patch });
-
-  const deckMutation = useMutation({
-    mutationFn: () => generate({ data: { dealId } }),
-    onMutate: () => setError(null),
-    onSuccess: (r) => {
-      setDeck(r);
-      window.open(r.url, "_blank", "noopener");
-      void qc.invalidateQueries({ queryKey: ["deal", dealId] });
-    },
-    onError: (e) => setError((e as Error).message),
-  });
 
   const busy = !editable || mutation.isPending;
   const input =
@@ -236,16 +223,6 @@ export function TimelinePanel({
       level="primary"
       action={
         <div className="flex items-center gap-1.5">
-          <button
-            type="button"
-            className="inline-flex items-center gap-1 rounded-sm border border-border px-1.5 py-0.5 text-[11px] text-muted-foreground hover:text-foreground disabled:opacity-50"
-            disabled={deckMutation.isPending}
-            onClick={() => deckMutation.mutate()}
-            title="The PowerPoint fallback: six slides with these dates, filed on the account"
-          >
-            <Download className="h-3 w-3" />
-            {deckMutation.isPending ? "Building…" : "PowerPoint"}
-          </button>
           <Link
             to="/onboarding-plan/$dealId"
             params={{ dealId }}
@@ -264,16 +241,6 @@ export function TimelinePanel({
             {error}
           </p>
         ) : null}
-        {deck ? (
-          <p className="text-[12px] text-muted-foreground">
-            Deck ready —{" "}
-            <a className="underline" href={deck.url} target="_blank" rel="noopener noreferrer">
-              {deck.fileName}
-            </a>
-            . It is filed under the account&apos;s attachments when the project exists.
-          </p>
-        ) : null}
-
         {/* What the page still needs before it goes to the customer. */}
         {readiness.length ? (
           <div className="rounded-md border border-amber-500/40 bg-amber-500/5 p-2.5">

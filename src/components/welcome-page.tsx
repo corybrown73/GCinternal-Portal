@@ -47,6 +47,8 @@ import {
 import { daysToValue, shortDay, type Phase } from "@/lib/onboarding-timeline";
 import { HOMEWORK_KEYS, type HomeworkKey, type WelcomeView } from "@/lib/welcome";
 import { whenLabel } from "@/lib/welcome-events";
+import { speakerNotes } from "@/lib/welcome-notes";
+import { exportWelcomePptx, pptxFileName } from "@/components/welcome-export";
 import { GOCANVAS_APP } from "@/lib/app-links";
 import { cn } from "@/lib/utils";
 
@@ -112,7 +114,6 @@ export function WelcomePage({
   mode,
   onTick,
   onCopyLink,
-  onDownloadPptx,
   backHref,
   notesHref,
   icsBase,
@@ -124,8 +125,6 @@ export function WelcomePage({
   onTick?: (key: HomeworkKey, done: boolean) => Promise<void> | void;
   /** Internal: issue or copy the customer's link. Resolves to the URL. */
   onCopyLink?: () => Promise<string>;
-  /** Internal: render the PowerPoint fallback and open it. */
-  onDownloadPptx?: () => Promise<void>;
   backHref?: string | null;
   /** Internal: the talk track for this customer. */
   notesHref?: string | null;
@@ -207,7 +206,40 @@ export function WelcomePage({
             setPresent(true);
           }}
           onCopyLink={mintForQr}
-          onDownloadPptx={onDownloadPptx}
+          onExportPptx={async (report) => {
+            // Every visible screen, unzoomed, with the talk track as notes.
+            const notes = speakerNotes(view);
+            const byKey = new Map(notes.sections.map((sec) => [sec.key, sec]));
+            await exportWelcomePptx({
+              screens: visible.map((sc, i) =>
+                sc.render({
+                  page: i + 1,
+                  qr: showQr ? qr : null,
+                  mode: "shared",
+                  onTick: undefined,
+                  icsBase: null,
+                }),
+              ),
+              notes: visible.map((sc) => {
+                const sec =
+                  byKey.get(sc.key) ??
+                  (sc.key.startsWith("phase-")
+                    ? byKey.get(`phase-${view.timeline.phases[0]?.phase}`)
+                    : undefined);
+                if (!sec) return "";
+                return [
+                  ...sec.say,
+                  "",
+                  `Why: ${sec.why}`,
+                  "",
+                  ...sec.ifTheyAsk.map((q) => `If they ask "${q.q}": ${q.a}`),
+                ].join("\n");
+              }),
+              fileName: pptxFileName(view.clientName),
+              title: `${view.clientName} — onboarding plan`,
+              onProgress: report,
+            });
+          }}
           qrReady={Boolean(qr)}
           showQr={showQr}
           onToggleQr={() => setShowQr((v) => !v)}
@@ -418,7 +450,7 @@ function Toolbar({
   view,
   onPresent,
   onCopyLink,
-  onDownloadPptx,
+  onExportPptx,
   backHref,
   notesHref,
   qrReady,
@@ -428,7 +460,8 @@ function Toolbar({
   view: WelcomeView;
   onPresent: () => void;
   onCopyLink?: (() => Promise<string>) | undefined;
-  onDownloadPptx?: (() => Promise<void>) | undefined;
+  /** Every visible screen as a full-bleed slide. Reports progress while it renders. */
+  onExportPptx?: ((report: (done: number, total: number) => void) => Promise<void>) | undefined;
   backHref: string | null;
   notesHref: string | null;
   qrReady: boolean;
@@ -436,7 +469,8 @@ function Toolbar({
   onToggleQr: () => void;
 }) {
   const [copied, setCopied] = useState<"idle" | "busy" | "done" | "failed">("idle");
-  const [pptx, setPptx] = useState<"idle" | "busy">("idle");
+  const [pptx, setPptx] = useState<"idle" | "busy" | "failed">("idle");
+  const [progress, setProgress] = useState<[number, number] | null>(null);
   const copy = async () => {
     if (!onCopyLink) return;
     setCopied("busy");
@@ -489,21 +523,35 @@ function Toolbar({
         <button type="button" className="wp-tool" onClick={() => window.print()}>
           <Printer className="h-3.5 w-3.5" /> PDF
         </button>
-        {onDownloadPptx ? (
+        {onExportPptx ? (
           <button
             type="button"
             className="wp-tool"
             disabled={pptx === "busy"}
+            title="Every screen as a slide, exactly as it looks here — the talk track in the notes"
             onClick={async () => {
               setPptx("busy");
+              setProgress(null);
               try {
-                await onDownloadPptx();
-              } finally {
+                await onExportPptx((done, total) => setProgress([done, total]));
                 setPptx("idle");
+              } catch (e) {
+                console.error("[welcome] pptx export failed", e);
+                setPptx("failed");
+                setTimeout(() => setPptx("idle"), 3000);
+              } finally {
+                setProgress(null);
               }
             }}
           >
-            <Download className="h-3.5 w-3.5" /> {pptx === "busy" ? "Building…" : "PowerPoint"}
+            <Download className="h-3.5 w-3.5" />{" "}
+            {pptx === "busy"
+              ? progress
+                ? `Slide ${progress[0]} of ${progress[1]}…`
+                : "Rendering…"
+              : pptx === "failed"
+                ? "Could not build it"
+                : "PowerPoint"}
           </button>
         ) : null}
         {onCopyLink ? (

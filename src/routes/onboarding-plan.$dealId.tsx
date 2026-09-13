@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 
 import { WelcomePage } from "@/components/welcome-page";
-import { generateOnboardingDeck, saveIntake } from "@/lib/presale.functions";
+import { saveIntake } from "@/lib/presale.functions";
 import { getWelcome, issueWelcomeLinkFn } from "@/lib/welcome.functions";
 
 /**
@@ -31,7 +31,6 @@ function OnboardingPlanPage() {
   const qc = useQueryClient();
   const load = useServerFn(getWelcome);
   const issue = useServerFn(issueWelcomeLinkFn);
-  const deck = useServerFn(generateOnboardingDeck);
   const save = useServerFn(saveIntake);
 
   const query = useQuery({
@@ -66,10 +65,6 @@ function OnboardingPlanPage() {
         const { url } = await issue({ data: { dealId } });
         void qc.invalidateQueries({ queryKey: ["welcome", dealId] });
         return url;
-      }}
-      onDownloadPptx={async () => {
-        const { url } = await deck({ data: { dealId } });
-        window.open(url, "_blank", "noopener");
       }}
       onToggleScreen={async (key, hide) => {
         const current = query.data?.hiddenScreens ?? [];
