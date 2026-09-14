@@ -11,6 +11,7 @@ import {
 import { ChevronDown } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { PANEL_OPEN_EVENT } from "@/lib/panel-open";
 import { humanize, stageLabel } from "@/lib/hub-format";
 import { PACE_CHIP, PACE_LABEL, PACE_TEXT, type Pace } from "@/lib/pace";
 
@@ -327,6 +328,7 @@ export function Panel({
   collapsible = false,
   defaultOpen = true,
   collapseKey,
+  highlight = false,
 }: {
   title: ReactNode;
   count?: number;
@@ -351,6 +353,11 @@ export function Panel({
    * worse than not collapsing at all.
    */
   collapseKey?: string;
+  /**
+   * This is the section a guide is pointing at right now: a ring on the
+   * card, nothing else. Purely visual.
+   */
+  highlight?: boolean;
   /**
    * Visual weight only — no behaviour change.
    * primary: decision-relevant, strongest heading.
@@ -405,6 +412,7 @@ export function Panel({
           : bordered
             ? "section-card overflow-hidden"
             : "border-t-2 border-border pt-2",
+        highlight && "ring-2 ring-primary ring-offset-2 ring-offset-background",
         className,
       )}
     >
@@ -529,6 +537,24 @@ function useCollapseState(
       /* the fold still happens; it just will not be remembered */
     }
   }, [bulk, enabled, key]);
+
+  // A guide elsewhere on the page can ask a folded section to open:
+  // `openPanel(key)` below. The request is honoured and remembered like a
+  // click would be.
+  useEffect(() => {
+    if (!enabled || !key) return;
+    const onOpen = (e: Event) => {
+      if ((e as CustomEvent<string>).detail !== key) return;
+      setOpenState(true);
+      try {
+        window.localStorage.setItem(`panel:${key}`, "1");
+      } catch {
+        /* it opens; it just will not be remembered */
+      }
+    };
+    window.addEventListener(PANEL_OPEN_EVENT, onOpen);
+    return () => window.removeEventListener(PANEL_OPEN_EVENT, onOpen);
+  }, [key, enabled]);
 
   const setOpen = useCallback(
     (next: boolean) => {

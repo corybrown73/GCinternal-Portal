@@ -59,6 +59,7 @@ export function TimelinePanel({
   wonStageKey,
   editable,
   hasSow,
+  highlight,
 }: {
   dealId: string;
   raw: unknown;
@@ -67,6 +68,7 @@ export function TimelinePanel({
   editable: boolean;
   /** True when the deal has a signed SOW attached — the plan can be read from it. */
   hasSow?: boolean | undefined;
+  highlight?: boolean | undefined;
 }) {
   const answers = readIntake(raw);
   const close = closeDateFor({ intake: answers, stageHistory, wonStageKey });
@@ -212,6 +214,8 @@ export function TimelinePanel({
 
   return (
     <Panel
+      id="panel-plan"
+      highlight={Boolean(highlight)}
       title="Onboarding plan"
       collapsible
       collapseKey="deal:plan"
@@ -884,7 +888,7 @@ export function TimelinePanel({
               {ph.phase === 2 ? (
                 <span className="ml-auto flex items-center gap-1.5">
                   <label className="text-[11px] text-muted-foreground">
-                    Form dialed in on
+                    {timeline.path === "existing" ? "Form optimised on" : "Form dialed in on"}
                     <input
                       type="date"
                       className={cn(input, "ml-1.5")}
@@ -901,7 +905,9 @@ export function TimelinePanel({
                       disabled={busy}
                       onClick={() => set({ form_proven_on: today })}
                     >
-                      Dialed in today — start phase 2
+                      {timeline.path === "existing"
+                        ? "Optimised today — start phase 2"
+                        : "Dialed in today — start phase 2"}
                     </button>
                   ) : null}
                 </span>

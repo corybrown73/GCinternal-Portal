@@ -35,6 +35,7 @@ export function timelineFor(intake: IntakeAnswers, closeDate: string): Timeline 
   const t = intake.timeline;
   return buildTimeline({
     closeDate,
+    path: intake.path,
     overrides: t.overrides,
     holidays: t.holidays,
     integrationTier: t.integration_tier as IntegrationTier,

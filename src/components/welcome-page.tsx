@@ -860,20 +860,39 @@ function Cover({ view, qr }: { view: WelcomeView; qr?: { url: string; dataUrl: s
       <div className="wp-cover-grid">
         <div className="wp-cover-text">
           <p className="wp-eyebrow">
-            Onboarding plan · {view.industry ?? "Your team"} ·{" "}
+            {view.path === "existing" ? "Services plan" : "Onboarding plan"} ·{" "}
+            {view.industry ?? "Your team"} ·{" "}
             {t.phases.length
               ? `Phase ${t.currentPhase} of ${t.phases.length + 1}`
               : `${daysToValue(t)} days to value`}
           </p>
           <h1 className="wp-title is-hero">
-            Let&apos;s bring your <span className="wp-accent">workflow to life</span>
+            {view.path === "existing" ? (
+              <>
+                Let&apos;s take your <span className="wp-accent">workflow further</span>
+              </>
+            ) : (
+              <>
+                Let&apos;s bring your <span className="wp-accent">workflow to life</span>
+              </>
+            )}
           </h1>
           <div className="wp-rule" />
           <p className="wp-cover-name">{view.clientName}</p>
           <p className="wp-lede">
-            Welcome aboard as of {shortDay(t.closeDate)}. Kickoff{" "}
-            {shortDay(t.milestones[1]?.date ?? t.closeDate)}. Your first form in the field by{" "}
-            {shortDay(t.liveDate)} — built with you, not for you.
+            {view.path === "existing" ? (
+              <>
+                Welcome back as of {shortDay(t.closeDate)}. Form review{" "}
+                {shortDay(t.milestones[1]?.date ?? t.closeDate)}. Your form ready for the
+                integration by {shortDay(t.liveDate)} — optimised with you, not for you.
+              </>
+            ) : (
+              <>
+                Welcome aboard as of {shortDay(t.closeDate)}. Kickoff{" "}
+                {shortDay(t.milestones[1]?.date ?? t.closeDate)}. Your first form in the field by{" "}
+                {shortDay(t.liveDate)} — built with you, not for you.
+              </>
+            )}
           </p>
           <div className="wp-pills">
             <span className="wp-pill">
@@ -1149,15 +1168,31 @@ function Overview({ view, page }: { view: WelcomeView; page: number }) {
 
 function Plan({ view, page }: { view: WelcomeView; page: number }) {
   const t = view.timeline;
+  const existing = view.path === "existing";
+  const days = t.milestones[t.milestones.length - 1]?.day ?? 7;
   return (
     <Frame
       page={page}
       done={Boolean(t.liveDoneOn)}
       eyebrow="Your timeline"
-      title={t.phases.length ? "Phase 1: seven days to a" : "Seven days to a"}
-      accent="form in the field"
-      lede="Two short working sessions, a little homework, one crew on real jobs. Every day below has an owner."
-      band={`Live on ${shortDay(t.liveDate)}. No account should stall waiting on a form — we drive the pace, and you own the form.`}
+      title={
+        existing
+          ? "Phase 1: your form,"
+          : t.phases.length
+            ? "Phase 1: seven days to a"
+            : "Seven days to a"
+      }
+      accent={existing ? "integration-ready" : "form in the field"}
+      lede={
+        existing
+          ? `A review call, a short optimisation session, a few real jobs through it. ${["", "One", "Two", "Three", "Four", "Five", "Six", "Seven"][days] ?? days} business days, and every day below has an owner.`
+          : "Two short working sessions, a little homework, one crew on real jobs. Every day below has an owner."
+      }
+      band={
+        existing
+          ? `Ready on ${shortDay(t.liveDate)}. An integration reads specific fields — a form optimised for it first is what makes the mapping right, first time.`
+          : `Live on ${shortDay(t.liveDate)}. No account should stall waiting on a form — we drive the pace, and you own the form.`
+      }
       bandIcon="Rocket"
     >
       <div className="wp-rail">
@@ -1414,14 +1449,29 @@ function Together({
 }) {
   const due = view.timeline.milestones.find((m) => m.key === "homework");
   const [busy, setBusy] = useState<string | null>(null);
+  const existing = view.path === "existing";
+  // The homework text comes from the plan's kickoff step, so the two paths
+  // ask for different things under the same three tick boxes.
+  const homeworkText =
+    view.timeline.milestones.find((m) => m.key === "kickoff")?.homework ??
+    HOMEWORK.map((h) => h.text);
+  const homework = HOMEWORK.map((h, i) => ({ key: h.key, text: homeworkText[i] ?? h.text }));
   return (
     <Frame
       page={page}
       eyebrow="What's expected"
-      title="We build it"
+      title={existing ? "We optimise it" : "We build it"}
       accent="with you, not for you"
-      lede="A form you built yourself is one you will change yourself — and the second use case shows up on its own."
-      band="Fifteen minutes of homework means the second session starts from a live account, not a blank one."
+      lede={
+        existing
+          ? "A form you adjusted yourself is one you will keep right — and the integration built on it stays right."
+          : "A form you built yourself is one you will change yourself — and the second use case shows up on its own."
+      }
+      band={
+        existing
+          ? "Fifteen minutes of homework means the optimisation session starts from your real form and your real output."
+          : "Fifteen minutes of homework means the second session starts from a live account, not a blank one."
+      }
       bandIcon="Users"
     >
       <div className="wp-two">
@@ -1431,10 +1481,21 @@ function Together({
             <h3>We bring</h3>
           </div>
           <ul className="wp-ticks">
-            <Tick>A starting point from the form library, in your vocabulary</Tick>
-            <Tick>The build, live on the call, with you watching every field</Tick>
-            <Tick>The logic, routing and notifications the office needs</Tick>
-            <Tick>Someone watching the first submissions come in</Tick>
+            {existing ? (
+              <>
+                <Tick>A field-by-field read of your form against what the integration needs</Tick>
+                <Tick>The changes, made live on the call, with you watching every field</Tick>
+                <Tick>The mapping, named the way the office system names things</Tick>
+                <Tick>Someone watching the first real submissions come through</Tick>
+              </>
+            ) : (
+              <>
+                <Tick>A starting point from the form library, in your vocabulary</Tick>
+                <Tick>The build, live on the call, with you watching every field</Tick>
+                <Tick>The logic, routing and notifications the office needs</Tick>
+                <Tick>Someone watching the first submissions come in</Tick>
+              </>
+            )}
           </ul>
         </div>
         <div className="wp-card">
@@ -1443,19 +1504,31 @@ function Together({
             <h3>You bring</h3>
           </div>
           <ul className="wp-ticks">
-            <Tick>How the job actually runs — the process, not the org chart</Tick>
-            <Tick>One field user willing to try it on real work</Tick>
-            <Tick>The customer or site list, so nothing is typed twice</Tick>
-            <Tick>The last changes, made by you, in the working session</Tick>
+            {existing ? (
+              <>
+                <Tick>The form the integration reads from, as your crews run it today</Tick>
+                <Tick>One example of the output the office needs on the other side</Tick>
+                <Tick>Who owns the field mapping on your side, by name</Tick>
+                <Tick>The last changes, made by you, in the optimisation session</Tick>
+              </>
+            ) : (
+              <>
+                <Tick>How the job actually runs — the process, not the org chart</Tick>
+                <Tick>One field user willing to try it on real work</Tick>
+                <Tick>The customer or site list, so nothing is typed twice</Tick>
+                <Tick>The last changes, made by you, in the working session</Tick>
+              </>
+            )}
           </ul>
         </div>
       </div>
       <div className="wp-homework">
         <p className="wp-homework-title">
-          Your homework before the working session{due ? ` · due ${shortDay(due.date)}` : ""}
+          Your homework before the {existing ? "optimisation" : "working"} session
+          {due ? ` · due ${shortDay(due.date)}` : ""}
         </p>
         <div className="wp-homework-row">
-          {HOMEWORK.map((h) => {
+          {homework.map((h) => {
             const done = Boolean(view.homeworkDone[h.key]);
             const interactive = mode === "shared" && Boolean(onTick);
             return (
@@ -1519,16 +1592,28 @@ function FirstForm({ view, page }: { view: WelcomeView; page: number }) {
   const f = view.firstForm;
   const phase2 = view.timeline.phases[0] ?? null;
   const live = shortDay(view.timeline.liveDate);
+  const existing = view.path === "existing";
+  const lastDay = view.timeline.milestones[view.timeline.milestones.length - 1]?.day ?? 7;
   const today =
     view.currentProcess ??
-    "Paper on the truck, photos on somebody's phone, and the office retyping it all at the end of the week.";
+    (existing
+      ? "The form works in the field, but the office still retypes what it collects into the other system."
+      : "Paper on the truck, photos on somebody's phone, and the office retyping it all at the end of the week.");
   return (
     <Frame
       page={page}
       eyebrow="How we get there"
       title="From today to"
-      accent="day seven"
-      band={`Proven in the field before anything is connected to it. That is what makes the mapping right later.`}
+      accent={
+        existing
+          ? `day ${["", "one", "two", "three", "four", "five", "six", "seven"][lastDay] ?? lastDay}`
+          : "day seven"
+      }
+      band={
+        existing
+          ? `Optimised before anything is connected to it. That is what makes the mapping right, first time.`
+          : `Proven in the field before anything is connected to it. That is what makes the mapping right later.`
+      }
       bandIcon="Target"
     >
       <div className="wp-journey">
@@ -1546,30 +1631,68 @@ function FirstForm({ view, page }: { view: WelcomeView; page: number }) {
           <h3>How it runs now</h3>
           <p className="wp-journey-quote">&ldquo;{today}&rdquo;</p>
           <ul className="wp-journey-pains">
-            <li>Retyped</li>
-            <li>Late</li>
-            <li>No photos, no signature</li>
+            {existing ? (
+              <>
+                <li>Retyped into the office system</li>
+                <li>Fields named two ways</li>
+                <li>Nothing connected</li>
+              </>
+            ) : (
+              <>
+                <li>Retyped</li>
+                <li>Late</li>
+                <li>No photos, no signature</li>
+              </>
+            )}
           </ul>
         </div>
         <span className="wp-journey-arrow" />
         <div className="wp-journey-col is-then">
-          <span className="wp-journey-tag is-blue">Day 7 · {live}</span>
+          <span className="wp-journey-tag is-blue">
+            Day {lastDay} · {live}
+          </span>
           <div className="wp-journey-art">
             <PhoneMock view={view} className="is-flow" />
           </div>
-          <h3>{f?.name ?? "Your first form"} in the field</h3>
+          <h3>
+            {f?.name ?? "Your first form"}
+            {existing ? ", ready for the integration" : " in the field"}
+          </h3>
           <p>
-            Built live {at("kickoff") ? shortDay(at("kickoff")!.date) : "on the kickoff"}, finished
-            by your hands {at("working") ? shortDay(at("working")!.date) : "in the working session"}
-            , proven by {view.fieldTester ?? "your field tester"} on real jobs.
+            {existing ? (
+              <>
+                Reviewed together{" "}
+                {at("kickoff") ? shortDay(at("kickoff")!.date) : "on the review call"}, adjusted by
+                your hands{" "}
+                {at("working") ? shortDay(at("working")!.date) : "in the optimisation session"}, run
+                on real jobs by {view.fieldTester ?? "your crew"}.
+              </>
+            ) : (
+              <>
+                Built live {at("kickoff") ? shortDay(at("kickoff")!.date) : "on the kickoff"},
+                finished by your hands{" "}
+                {at("working") ? shortDay(at("working")!.date) : "in the working session"}, proven
+                by {view.fieldTester ?? "your field tester"} on real jobs.
+              </>
+            )}
             {view.timeline.alongside.length
               ? ` Alongside it: ${view.timeline.alongside.map((x) => x.name).join(" + ")}.`
               : ""}
           </p>
           <ul className="wp-journey-wins">
-            <li>Same day in the office</li>
-            <li>Photos and a signature on every one</li>
-            <li>Nothing retyped</li>
+            {existing ? (
+              <>
+                <li>Every field the integration needs</li>
+                <li>Named the way the office system names them</li>
+                <li>Proven on real submissions</li>
+              </>
+            ) : (
+              <>
+                <li>Same day in the office</li>
+                <li>Photos and a signature on every one</li>
+                <li>Nothing retyped</li>
+              </>
+            )}
           </ul>
         </div>
         <span className="wp-journey-arrow" />
@@ -1645,7 +1768,7 @@ function Business({
       eyebrow="Let's get into business"
       title="Two calls, then"
       accent="it's yours"
-      band={`Live on ${shortDay(t.liveDate)}. If any of the three on the right is not true that day, we are not done — and we say so.`}
+      band={`${view.path === "existing" ? "Ready" : "Live"} on ${shortDay(t.liveDate)}. If any of the three on the right is not true that day, we are not done — and we say so.`}
       bandIcon="Rocket"
     >
       <div className="wp-business">
@@ -1661,10 +1784,11 @@ function Business({
                   </a>
                 ) : null}
               </p>
-              <h3>Kickoff &amp; build session</h3>
+              <h3>{kickoff?.label ?? "Kickoff & build session"}</h3>
               <p>
-                Meet, agree how we work, and build the first form live on the call. You leave with
-                three homework items.
+                {view.path === "existing"
+                  ? "Walk the form the integration reads from, field by field, and decide together what it needs. You leave with three homework items."
+                  : "Meet, agree how we work, and build the first form live on the call. You leave with three homework items."}
               </p>
             </div>
           </div>
@@ -1679,10 +1803,11 @@ function Business({
                   </a>
                 ) : null}
               </p>
-              <h3>Working session</h3>
+              <h3>{working?.label ?? "Working session"}</h3>
               <p>
-                Your hands on the keyboard. Finish the form, add the logic and notifications, hand
-                it to the field tester.
+                {view.path === "existing"
+                  ? "Your hands on the keyboard. The fields the integration needs, named the way the other system names them, then a few real jobs through it."
+                  : "Your hands on the keyboard. Finish the form, add the logic and notifications, hand it to the field tester."}
               </p>
             </div>
           </div>
@@ -1738,8 +1863,8 @@ function Business({
           <div className="wp-good-cta">
             <span className="wp-good-cta-label">Your next step</span>
             <span className="wp-good-cta-text">
-              Accept the kickoff invite for {kickoff ? shortDay(kickoff.date) : "day one"} and
-              download the app.
+              Accept the {view.path === "existing" ? "review call" : "kickoff"} invite for{" "}
+              {kickoff ? shortDay(kickoff.date) : "day one"} and download the app.
             </span>
             <span className="wp-good-cta-links">
               <a href={GOCANVAS_APP.ios} target="_blank" rel="noreferrer">

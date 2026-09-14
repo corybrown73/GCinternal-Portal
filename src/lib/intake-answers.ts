@@ -46,6 +46,12 @@ export const INDUSTRIES = [
 export const COMPANY_SIZES = ["1–10", "11–50", "51–200", "201–1,000", "1,000+"] as const;
 
 export const intakeAnswersSchema = z.object({
+  /**
+   * Which path this is. A new logo builds its first form in seven days; an
+   * existing account adding services reviews the form the integration reads
+   * from. null until somebody says — the plan treats null as a new logo.
+   */
+  path: z.enum(["new_logo", "existing"]).nullable().default(null),
   /** The fork. null until the question has been asked. */
   forms_built: z.boolean().nullable().default(null),
   /** What they uploaded, when forms_built is true. Paths into the private bucket. */

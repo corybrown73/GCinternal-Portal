@@ -58,6 +58,17 @@ export type MilestoneSpec = {
   icon: string;
 };
 
+/**
+ * Two paths, one shape.
+ *
+ * A NEW LOGO builds its first form in seven days. An EXISTING ACCOUNT that
+ * bought services already runs forms — phase 1 there is a review: the form
+ * the integration reads from, optimised for it. Sometimes that means a new
+ * form, sometimes a few fields, sometimes nothing. Same keys, same gates,
+ * same rule for everything after, so every screen and every date follows.
+ */
+export type OnboardingPath = "new_logo" | "existing";
+
 /** The seven-day plan, in order. The keys are the contract the deck renders. */
 export const SEVEN_DAY_PLAN: readonly MilestoneSpec[] = [
   {
@@ -136,6 +147,94 @@ export const SEVEN_DAY_PLAN: readonly MilestoneSpec[] = [
     icon: "Rocket",
   },
 ];
+
+/**
+ * Phase 1 for an existing account adding services: review the form the
+ * integration reads from and make it ready. Same keys as the seven-day plan
+ * so times, invites, homework and every screen keep working; different
+ * words, six business days instead of seven.
+ */
+export const EXISTING_PLAN: readonly MilestoneSpec[] = [
+  {
+    key: "close",
+    day: 0,
+    label: "Welcome aboard",
+    owner: "gocanvas",
+    kind: "milestone",
+    detail: "Welcome email the same day, with the review call invite already in it.",
+    icon: "Flag",
+  },
+  {
+    key: "kickoff",
+    day: 1,
+    label: "Form review for the integration",
+    owner: "both",
+    kind: "call",
+    minutes: 45,
+    detail:
+      "Walk the form the integration reads from, field by field. Decide together: use it as it is, adjust it, or build the one it needs.",
+    homework: [
+      "Tell us which form or forms feed this integration",
+      "Send one example of the output the office needs",
+      "Name who owns the field mapping on your side",
+    ],
+    icon: "PhoneCall",
+  },
+  {
+    key: "homework",
+    day: 2,
+    label: "Your homework",
+    owner: "client",
+    kind: "homework",
+    detail:
+      "The three things above. Fifteen minutes, and the optimisation session starts from the real form and the real output.",
+    icon: "ClipboardCheck",
+  },
+  {
+    key: "working",
+    day: 3,
+    label: "Optimisation session",
+    owner: "both",
+    kind: "call",
+    minutes: 30,
+    detail:
+      "Hands on the keyboard together. The fields the integration needs, named the way the other system names them — you make the changes, we guide.",
+    homework: ["Run the optimised form on a few real jobs"],
+    icon: "Wrench",
+  },
+  {
+    key: "fieldtest",
+    day: 4,
+    label: "Run it on real jobs",
+    owner: "client",
+    kind: "build",
+    detail:
+      "A handful of real submissions through the optimised form, so the mapping is built on real data, not a guess.",
+    icon: "HardHat",
+  },
+  {
+    key: "adjust",
+    day: 5,
+    label: "Last adjustments",
+    owner: "both",
+    kind: "build",
+    detail: "What the real submissions showed. Usually a field or two, rarely more.",
+    icon: "Target",
+  },
+  {
+    key: "live",
+    day: 6,
+    label: "Form ready for the integration",
+    owner: "both",
+    kind: "milestone",
+    detail: "Every field the integration needs is there and proven on real jobs. Phase 2 can open.",
+    icon: "Rocket",
+  },
+];
+
+export function planFor(path: OnboardingPath | null | undefined): readonly MilestoneSpec[] {
+  return path === "existing" ? EXISTING_PLAN : SEVEN_DAY_PLAN;
+}
 
 /**
  * Integration complexity, from the tiering GoCanvas already uses internally.
@@ -230,6 +329,8 @@ export const INTEGRATION_PLAN: readonly (Omit<MilestoneSpec, "day"> & { at: numb
 export type TimelineOptions = {
   /** ISO date, YYYY-MM-DD. The day the deal closed. */
   closeDate: string;
+  /** New logo (the seven-day form) or an existing account adding services (the form review). */
+  path?: OnboardingPath | null;
   /** Milestone key → ISO date, for the ones a person moved. */
   overrides?: Record<string, string>;
   /** ISO dates to skip, on top of weekends. */
@@ -308,6 +409,7 @@ export type Phase = {
 
 export type Timeline = {
   closeDate: string;
+  path: OnboardingPath;
   milestones: Milestone[];
   /** The live date — the last of the seven days, after overrides. */
   liveDate: string;
@@ -449,7 +551,8 @@ export function buildTimeline(options: TimelineOptions): Timeline {
     });
   };
 
-  const milestones = cascade(SEVEN_DAY_PLAN, (spec) =>
+  const path: OnboardingPath = options.path === "existing" ? "existing" : "new_logo";
+  const milestones = cascade(planFor(path), (spec) =>
     spec.day === 0 ? options.closeDate : addBusinessDays(options.closeDate, spec.day, holidays),
   );
 
@@ -569,7 +672,9 @@ export function buildTimeline(options: TimelineOptions): Timeline {
       phase: n,
       label: `Phase ${n}`,
       gate: isFirst
-        ? "Starts once the form is tested and dialed in"
+        ? path === "existing"
+          ? "Starts once your form is optimised for the integration"
+          : "Starts once the form is tested and dialed in"
         : `Starts once phase ${phases[phases.length - 1]!.phase} is live`,
       tentative,
       startsOn: phaseStart,
@@ -603,6 +708,7 @@ export function buildTimeline(options: TimelineOptions): Timeline {
   ];
   return {
     closeDate: options.closeDate,
+    path,
     milestones,
     liveDate,
     liveDoneOn,

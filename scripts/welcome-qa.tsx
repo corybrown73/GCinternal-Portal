@@ -66,6 +66,7 @@ const base: Omit<WelcomeView, "timeline"> = {
   sharedAt: "2026-09-10T09:00:00Z",
   openedAt: null,
   hiddenScreens: [],
+  path: "new_logo",
 };
 
 const utils = `
@@ -135,5 +136,24 @@ page(
   },
   "shared",
   `${out}/proven.html`,
+);
+page(
+  {
+    ...base,
+    path: "existing",
+    firstForm: { name: "Daily Water Haul Ticket", objective: null, source: "uploaded" },
+    currentProcess:
+      "The haul ticket is on GoCanvas already. The office retypes the volumes and rates into QuickBooks every Friday.",
+    timeline: buildTimeline({
+      closeDate: "2026-09-09",
+      path: "existing",
+      services: [
+        { id: "qb", kind: "integration", name: "QuickBooks Online", phase: 2, tier: 3 },
+        { id: "pdf", kind: "custom_pdf", name: "Invoice PDF", phase: 2 },
+      ],
+    }),
+  },
+  "internal",
+  `${out}/existing.html`,
 );
 console.log("rendered");

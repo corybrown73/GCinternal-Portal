@@ -16,6 +16,8 @@ import { CustomerLogo } from "@/components/customer-logo";
 import { Field, NoRows, Panel } from "@/components/record";
 import { EditableField } from "@/components/editable-field";
 import { AssignmentPanel } from "@/components/assignment-panel";
+import { DealGuide } from "@/components/deal-guide";
+import { guideSteps } from "@/lib/deal-guide";
 import { IntakePanel } from "@/components/intake-panel";
 import { TimelinePanel } from "@/components/timeline-panel";
 import { canEditSales, canManage, isSuperAdmin, useProfile } from "@/lib/auth";
@@ -156,6 +158,20 @@ function DealRecord({ deal }: { deal: DealData }) {
   const set = (name: EditableDealField) => (value: string | null) =>
     field.mutateAsync({ field: name, value });
 
+  // What is done and what is next, from the record. Clicking a step opens
+  // its section; the section the guide points at carries a ring.
+  const steps = guideSteps({
+    intake: account.intake,
+    gongReports: deal.gong_reports.length,
+    aiBriefs: deal.briefs.filter((b) => b.status === "complete" && b.generator === "llm").length,
+    hasSow: Boolean(deal.sow_url),
+    shareUrl: ((account as { welcome_share_url?: string | null }).welcome_share_url ?? null) as
+      string | null,
+    stageHistory: deal.stage_history,
+    wonStageKey: wonStage(deal.stages).key,
+  });
+  const nextPanel = steps.find((s) => !s.done)?.panel.id ?? null;
+
   return (
     <>
       <PageHeader
@@ -177,6 +193,7 @@ function DealRecord({ deal }: { deal: DealData }) {
         actions={<StartOnboarding deal={deal} />}
       />
       <PageBody className="space-y-4">
+        <DealGuide steps={steps} />
         <div className="flex flex-wrap items-center gap-x-6 gap-y-2 rounded-md border border-border bg-card px-4 py-3">
           <div className="flex items-center gap-2">
             <StageChip stage={account.stage} stages={deal.stages} />
@@ -269,8 +286,13 @@ function DealRecord({ deal }: { deal: DealData }) {
           {/* The Gong brief first: everything below reads from it. Each section
               folds, and remembers whether you left it open. */}
           <div className="space-y-4">
-            <ReportsPanel deal={deal} />
-            <IntakePanel dealId={deal.account.id} raw={deal.account.intake} editable={editable} />
+            <ReportsPanel deal={deal} highlight={nextPanel === "panel-gong"} />
+            <IntakePanel
+              dealId={deal.account.id}
+              raw={deal.account.intake}
+              editable={editable}
+              highlight={nextPanel === "panel-intake"}
+            />
             <TimelinePanel
               dealId={deal.account.id}
               raw={deal.account.intake}
@@ -278,12 +300,13 @@ function DealRecord({ deal }: { deal: DealData }) {
               wonStageKey={wonStage(deal.stages).key}
               editable={editable}
               hasSow={Boolean(deal.sow_url)}
+              highlight={nextPanel === "panel-plan"}
             />
             <SowPanel deal={deal} onSave={set} editable={editable} />
             <NotesPanel deal={deal} />
           </div>
           <div className="space-y-4">
-            <BriefsPanel deal={deal} />
+            <BriefsPanel deal={deal} highlight={nextPanel === "panel-brief"} />
             <AssignmentPanel dealId={deal.account.id} editable={editable} />
             <TamPanel deal={deal} />
             <HistoryPanel deal={deal} />
@@ -680,7 +703,7 @@ function SowDocument({ deal, editable }: { deal: DealData; editable: boolean }) 
   );
 }
 
-function ReportsPanel({ deal }: { deal: DealData }) {
+function ReportsPanel({ deal, highlight }: { deal: DealData; highlight?: boolean }) {
   const { profile } = useProfile();
   const queryClient = useQueryClient();
   const create = useServerFn(addReport);
@@ -723,6 +746,8 @@ function ReportsPanel({ deal }: { deal: DealData }) {
 
   return (
     <Panel
+      id="panel-gong"
+      highlight={Boolean(highlight)}
       title="Gong brief & call notes"
       count={deal.gong_reports.length}
       collapsible
@@ -874,7 +899,7 @@ type DiscoveryQuestion = { question: string; why_it_matters: string; category: s
  * is the document, and it is always current. Old briefs stay listed for
  * their history and their discovery questions.
  */
-function BriefsPanel({ deal }: { deal: DealData }) {
+function BriefsPanel({ deal, highlight }: { deal: DealData; highlight?: boolean }) {
   const download = useServerFn(getBriefDownloadUrl);
   const synthesize = useServerFn(generateBriefForDeal);
   const queryClient = useQueryClient();
@@ -906,6 +931,8 @@ function BriefsPanel({ deal }: { deal: DealData }) {
 
   return (
     <Panel
+      id="panel-brief"
+      highlight={Boolean(highlight)}
       title="Customer brief"
       count={deal.briefs.length}
       collapsible

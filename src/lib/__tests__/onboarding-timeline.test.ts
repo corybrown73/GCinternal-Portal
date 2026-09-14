@@ -416,3 +416,35 @@ describe("services alongside the form (phase 1)", () => {
     expect(t.progress.total).toBe(7 + 4 + 4);
   });
 });
+
+describe("the existing-account path", () => {
+  it("makes phase 1 a form review with the same keys, six business days, and its own gate", () => {
+    const t = buildTimeline({
+      closeDate: "2026-09-09",
+      path: "existing",
+      services: [{ id: "qb", kind: "integration", name: "QuickBooks Online", phase: 2, tier: 3 }],
+    });
+    expect(t.path).toBe("existing");
+    expect(t.milestones.map((m) => m.key)).toEqual([
+      "close",
+      "kickoff",
+      "homework",
+      "working",
+      "fieldtest",
+      "adjust",
+      "live",
+    ]);
+    expect(t.milestones.find((m) => m.key === "kickoff")!.label).toBe(
+      "Form review for the integration",
+    );
+    expect(t.milestones.find((m) => m.key === "kickoff")!.minutes).toBe(45);
+    expect(t.milestones[t.milestones.length - 1]!.day).toBe(6);
+    expect(t.liveDate).toBe(addBusinessDays("2026-09-09", 6));
+    expect(t.phases[0]!.gate).toBe("Starts once your form is optimised for the integration");
+  });
+
+  it("is the seven-day plan when the path is unset or new_logo", () => {
+    expect(buildTimeline({ closeDate: "2026-09-09" }).path).toBe("new_logo");
+    expect(buildTimeline({ closeDate: "2026-09-09", path: null }).milestones[6]!.day).toBe(7);
+  });
+});

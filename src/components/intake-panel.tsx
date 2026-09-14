@@ -36,10 +36,12 @@ export function IntakePanel({
   dealId,
   raw,
   editable,
+  highlight,
 }: {
   dealId: string;
   raw: unknown;
   editable: boolean;
+  highlight?: boolean | undefined;
 }) {
   const answers = readIntake(raw);
   const status = intakeStatus(answers);
@@ -57,6 +59,8 @@ export function IntakePanel({
 
   return (
     <Panel
+      id="panel-intake"
+      highlight={Boolean(highlight)}
       title="Onboarding intake"
       meta={status.done ? "Complete" : (status.next ?? undefined)}
       level="primary"
@@ -70,10 +74,44 @@ export function IntakePanel({
           </p>
         ) : null}
 
+        {/* The path. Everything downstream — the plan's words, phase 1's
+            shape, the gate — follows it, so it is the first thing asked. */}
+        <div
+          className={cn(
+            "flex flex-wrap items-center gap-2 rounded-md border px-2.5 py-2",
+            answers.path === null ? "border-primary/60 bg-primary/5" : "border-border bg-muted/20",
+          )}
+        >
+          <span className="text-[12px] font-medium">
+            {answers.path === null ? "Start here — which path is this?" : "Path"}
+          </span>
+          <Choice
+            active={answers.path === "new_logo"}
+            disabled={!editable || mutation.isPending}
+            onClick={() => set({ path: "new_logo" })}
+          >
+            New customer — first implementation
+          </Choice>
+          <Choice
+            active={answers.path === "existing"}
+            disabled={!editable || mutation.isPending}
+            onClick={() => set({ path: "existing" })}
+          >
+            Existing account — adding services
+          </Choice>
+          {answers.path === "existing" ? (
+            <span className="text-[11px] text-muted-foreground">
+              Phase 1 becomes a review of the form the integration reads from.
+            </span>
+          ) : null}
+        </div>
+
         {/* The fork. */}
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-[12px] text-muted-foreground">
-            Do they already have forms built?
+            {answers.path === "existing"
+              ? "Do they already have the form this connects to?"
+              : "Do they already have forms built?"}
           </span>
           <Choice
             active={answers.forms_built === true}

@@ -6,6 +6,9 @@ const [dir, name] = process.argv.slice(2);
 const browser = await chromium.launch({ executablePath: "/opt/pw-browsers/chromium" });
 const page = await browser.newPage({ viewport: { width: 1360, height: 900 } });
 await page.goto(`file://${dir}/${name}.html`, { waitUntil: "load" });
+// The static render has no ResizeObserver, so the stage stays at zoom 1;
+// the internal view's left menu would squeeze it. Shoot the stage alone.
+await page.addStyleTag({ content: ".wp-side{display:none}.wp-scroll{max-width:none}" });
 await page.waitForTimeout(800);
 const stages = await page.$$(".wp-stage");
 for (let i = 0; i < stages.length; i += 1) {

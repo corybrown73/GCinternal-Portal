@@ -23,6 +23,16 @@ export function prefillFromSynthesis(
   if (!b || typeof b !== "object") return { patch, filled };
   const synth = synthesisFromBrief(b);
 
+  // The brief's own reading of "already runs GoCanvas, bought more" is the
+  // path. Only when nobody has said yet.
+  if (intake.path === null && b.expansion) {
+    const ex = b.expansion;
+    if (ex.integration_target || ex.form_already_built) {
+      patch.path = "existing";
+      filled.push("the path (existing account)");
+    }
+  }
+
   if (!intake.current_process && synth?.currentProcess) {
     patch.current_process = synth.currentProcess;
     filled.push("the process today");

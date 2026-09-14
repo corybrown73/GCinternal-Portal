@@ -47,6 +47,7 @@ export function speakerNotes(view: WelcomeView): {
   const champion = view.team.champion?.name ?? "your project owner";
   const lead = view.team.lead ?? "your onboarding lead";
   const live = shortDay(t.liveDate);
+  const existing = view.path === "existing";
 
   const hidden = new Set(view.hiddenScreens);
   const sections: Array<Omit<NoteSection, "screen">> = [
@@ -54,8 +55,12 @@ export function speakerNotes(view: WelcomeView): {
       key: "cover",
       title: "Let's bring your workflow to life",
       say: [
-        `Welcome aboard as of ${shortDay(t.closeDate)}. Your first form is in the field by ${live}.`,
-        `That phone on the right is ${form} — yours, not a demo. It is what your crew will be holding on ${live}.`,
+        existing
+          ? `Welcome back as of ${shortDay(t.closeDate)}. Your form is ready for the integration by ${live}, and the integration builds on it from there.`
+          : `Welcome aboard as of ${shortDay(t.closeDate)}. Your first form is in the field by ${live}.`,
+        existing
+          ? `Phase 1 is a review, not a build. Sometimes the form needs nothing, sometimes a few fields, sometimes it is a new form — we find out on the review call, and the plan holds either way.`
+          : `That phone on the right is ${form} — yours, not a demo. It is what your crew will be holding on ${live}.`,
       ],
       why: "Say the live date in the first thirty seconds. Every account that stalled, stalled because nobody named a date on the first call.",
       ifTheyAsk: [
@@ -100,7 +105,7 @@ export function speakerNotes(view: WelcomeView): {
       key: "plan",
       title: "Your timeline",
       say: [
-        `Walk it left to right and say the dates out loud. Kickoff ${kickoff ? shortDay(kickoff.date) : ""}, sixty minutes. Homework due ${homework ? shortDay(homework.date) : ""}. Working session ${working ? shortDay(working.date) : ""}, thirty minutes. Field test from ${fieldtest ? shortDay(fieldtest.date) : ""}. Live ${live}.`,
+        `Walk it left to right and say the dates out loud. ${kickoff?.label ?? "Kickoff"} ${kickoff ? shortDay(kickoff.date) : ""}, ${kickoff?.minutes ?? 60} minutes. Homework due ${homework ? shortDay(homework.date) : ""}. ${working?.label ?? "Working session"} ${working ? shortDay(working.date) : ""}, ${working?.minutes ?? 30} minutes. ${fieldtest?.label ?? "Field test"} from ${fieldtest ? shortDay(fieldtest.date) : ""}. ${existing ? "Ready" : "Live"} ${live}.`,
         "Every step has an owner. Blue is on a call together; green is your homework; navy is ours.",
         ...t.alongside.map(
           (svc) =>
@@ -114,10 +119,15 @@ export function speakerNotes(view: WelcomeView): {
       ],
       why: "Book both calls before you leave this screen. A date that is on the calendar is a date; a date that is on a slide is a hope. If one does not work, move it now in the portal — the page updates in front of them.",
       ifTheyAsk: [
-        {
-          q: "Can we do the integration at the same time as the form?",
-          a: "No, and it is the one thing we hold on. An integration is field mapping, and the mapping cannot be right until a crew has run the form on real jobs. Two weeks of real submissions is what makes it right. Remapping an integration costs more than the two weeks.",
-        },
+        existing
+          ? {
+              q: "The form already works. Why review it?",
+              a: "Because the integration reads specific fields. A field named one way on the form and another way in the office system is the number one reason a mapping fails. One review call now is cheaper than remapping later — and if the form needs nothing, we say so on the call and move on.",
+            }
+          : {
+              q: "Can we do the integration at the same time as the form?",
+              a: "No, and it is the one thing we hold on. An integration is field mapping, and the mapping cannot be right until a crew has run the form on real jobs. Two weeks of real submissions is what makes it right. Remapping an integration costs more than the two weeks.",
+            },
         {
           q: "Can the working session be longer?",
           a: "Thirty minutes with your hands on the keyboard beats two hours watching ours. If we need more, we book a second thirty.",
@@ -152,7 +162,7 @@ export function speakerNotes(view: WelcomeView): {
       title: "What's expected",
       say: [
         "We build it with you, not for you. A form you built yourself is one you will change yourself — and the second use case shows up on its own.",
-        `Three homework items before the working session, due ${homework ? shortDay(homework.date) : ""}: download the app and log in, add one field user who will test on a real job, send us the customer or site list.`,
+        `Three homework items before the ${existing ? "optimisation" : "working"} session, due ${homework ? shortDay(homework.date) : ""}: ${(kickoff?.homework ?? []).map((h) => h.toLowerCase()).join(", ") || "download the app and log in, add one field user who will test on a real job, send us the customer or site list"}.`,
         "Fifteen minutes. It means the working session starts from a live account instead of a blank one.",
         ...t.alongside.map((svc) => `And for ${svc.name}: ${svc.needs}`),
       ],
@@ -188,9 +198,9 @@ export function speakerNotes(view: WelcomeView): {
       key: "business",
       title: "Let's get into business",
       say: [
-        `Two calls: kickoff ${kickoff ? shortDay(kickoff.date) : ""}, working session ${working ? shortDay(working.date) : ""}. Then it is yours.`,
+        `Two calls: ${(kickoff?.label ?? "kickoff").toLowerCase()} ${kickoff ? shortDay(kickoff.date) : ""}, ${(working?.label ?? "working session").toLowerCase()} ${working ? shortDay(working.date) : ""}. Then it is yours.`,
         `What good looks like on ${live}: the crew submits from the phone, the office sees it the same day, and a change the crew asked for was made the same day.`,
-        `Your next step: accept the kickoff invite for ${kickoff ? shortDay(kickoff.date) : "day one"} and download the app.`,
+        `Your next step: accept the ${existing ? "review call" : "kickoff"} invite for ${kickoff ? shortDay(kickoff.date) : "day one"}${existing ? " and send us the form the integration reads from" : " and download the app"}.`,
       ],
       why: "End on the one thing they do next. Not three things. One.",
       ifTheyAsk: [
