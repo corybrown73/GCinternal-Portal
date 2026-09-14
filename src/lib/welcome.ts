@@ -20,6 +20,13 @@ export type WelcomeView = {
     lead: string | null;
     /** How to reach the lead. On the closing screen. */
     leadEmail: string | null;
+    /** The lead's face, title and booking link, from their profile. */
+    leadCard: {
+      title: string | null;
+      bookingUrl: string | null;
+      photoUrl: string | null;
+      bio: string | null;
+    } | null;
     accountManager: string | null;
     solutionsEngineer: string | null;
     champion: { name: string; role: string | null } | null;

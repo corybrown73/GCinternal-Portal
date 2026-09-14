@@ -50,6 +50,7 @@ import { whenLabel } from "@/lib/welcome-events";
 import { speakerNotes } from "@/lib/welcome-notes";
 import { exportWelcomePptx, pptxFileName } from "@/components/welcome-export";
 import { GOCANVAS_APP } from "@/lib/app-links";
+import { firstName } from "@/lib/team-profile";
 import { cn } from "@/lib/utils";
 
 /**
@@ -964,14 +965,22 @@ function Team({ view, page }: { view: WelcomeView; page: number }) {
     does: string;
     icon: string;
     side: "gocanvas" | "client";
+    photoUrl?: string | null;
+    bookingUrl?: string | null;
   }> = [];
   if (t.lead)
     people.push({
       name: t.lead,
-      role: "Onboarding lead, GoCanvas",
-      does: "Runs both calls, builds the first form with you, watches the first submissions.",
+      role: `${t.leadCard?.title ?? "Onboarding lead"}, GoCanvas`,
+      does:
+        t.leadCard?.bio ??
+        (view.path === "existing"
+          ? "Runs both calls, reviews the form with you, watches the first real submissions through."
+          : "Runs both calls, builds the first form with you, watches the first submissions."),
       icon: "Wrench",
       side: "gocanvas",
+      photoUrl: t.leadCard?.photoUrl ?? null,
+      bookingUrl: t.leadCard?.bookingUrl ?? null,
     });
   if (t.accountManager && t.accountManager !== t.lead)
     people.push({
@@ -1021,11 +1030,20 @@ function Team({ view, page }: { view: WelcomeView; page: number }) {
         <div className={cn("wp-people", people.length > 4 && "is-five")}>
           {people.map((p) => (
             <div key={p.name + p.role} className={cn("wp-person", `is-${p.side}`)}>
-              <Tile name={p.icon} tone={p.side === "client" ? "navy" : "blue"} />
+              {p.photoUrl ? (
+                <img src={p.photoUrl} alt="" className="wp-avatar" />
+              ) : (
+                <Tile name={p.icon} tone={p.side === "client" ? "navy" : "blue"} />
+              )}
               <div className="wp-person-text">
                 <p className="wp-person-name">{p.name}</p>
                 <p className="wp-person-role">{p.role}</p>
                 <p className="wp-person-does">{p.does}</p>
+                {p.bookingUrl ? (
+                  <a href={p.bookingUrl} target="_blank" rel="noreferrer" className="wp-book">
+                    <CalendarPlus className="h-3 w-3" /> Book time with {firstName(p.name)}
+                  </a>
+                ) : null}
               </div>
             </div>
           ))}
@@ -1843,13 +1861,26 @@ function Business({
           <p className="wp-good-eyebrow">What good looks like on {shortDay(t.liveDate)}</p>
           {view.team.lead ? (
             <p className="wp-good-contact">
-              <Tile name="PhoneCall" size="sm" tone="blue" />
+              {view.team.leadCard?.photoUrl ? (
+                <img src={view.team.leadCard.photoUrl} alt="" className="wp-avatar is-sm" />
+              ) : (
+                <Tile name="PhoneCall" size="sm" tone="blue" />
+              )}
               <span>
-                <b>{view.team.lead}</b>, your onboarding lead
+                <b>{view.team.lead}</b>, your{" "}
+                {view.team.leadCard?.title?.toLowerCase() ?? "onboarding lead"}
                 {view.team.leadEmail ? (
                   <>
                     {" · "}
                     <a href={`mailto:${view.team.leadEmail}`}>{view.team.leadEmail}</a>
+                  </>
+                ) : null}
+                {view.team.leadCard?.bookingUrl ? (
+                  <>
+                    {" · "}
+                    <a href={view.team.leadCard.bookingUrl} target="_blank" rel="noreferrer">
+                      Book time with {firstName(view.team.lead)}
+                    </a>
                   </>
                 ) : null}
               </span>

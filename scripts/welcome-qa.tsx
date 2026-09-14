@@ -53,6 +53,16 @@ const base: Omit<WelcomeView, "timeline"> = {
   readiness: [],
   team: {
     leadEmail: "priya.nair@gocanvas.com",
+    leadCard: {
+      title: "Implementation Specialist",
+      bookingUrl: "https://calendly.com/priya-gocanvas/30min",
+      bio: null,
+      photoUrl:
+        "data:image/svg+xml;utf8," +
+        encodeURIComponent(
+          '<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96"><rect width="96" height="96" fill="#12509b"/><circle cx="48" cy="38" r="17" fill="#fff"/><path d="M14 92c4-20 18-30 34-30s30 10 34 30z" fill="#fff"/></svg>',
+        ),
+    },
     lead: "Priya Nair",
     accountManager: "Marcus Bell",
     solutionsEngineer: "Priya Nair",

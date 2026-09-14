@@ -70,6 +70,16 @@ async function viewFor(deal: any, opts: { internal: boolean }): Promise<WelcomeV
     leadEmail = byName?.email ?? se?.email ?? am?.email ?? null;
   }
 
+  // The person leading this one: the assignment first, then the plan's lead
+  // by name, then the owners. Their photo and booking link come with them.
+  const { leadCardForDeal } = await import("./team-profile.server");
+  const leadCard = await leadCardForDeal(
+    { id: String(deal.id), se_owner_id: deal.se_owner_id, am_owner_id: deal.am_owner_id },
+    input.lead,
+  );
+  const leadName = leadCard?.name ?? input.lead;
+  if (leadCard?.email) leadEmail = leadCard.email;
+
   const readiness: WelcomeView["readiness"] = [];
   if (opts.internal) {
     if (!input.industry)
@@ -102,11 +112,17 @@ async function viewFor(deal: any, opts: { internal: boolean }): Promise<WelcomeV
         label: "Their field tester",
         hint: "Onboarding plan → field tester. The most important name on the page.",
       });
-    if (!input.lead)
+    if (!leadName)
       readiness.push({
         key: "lead",
         label: "Our onboarding lead",
         hint: "Deal → SE or AM owner, or the project's lead once it exists.",
+      });
+    if (leadName && (!leadCard?.photoUrl || !leadCard?.bookingUrl))
+      readiness.push({
+        key: "leadcard",
+        label: `${leadName}'s photo and booking link`,
+        hint: "Settings → My profile. The team screen shows the face; the closing screen shows the link.",
       });
     if (!photoUrl)
       readiness.push({
@@ -131,7 +147,7 @@ async function viewFor(deal: any, opts: { internal: boolean }): Promise<WelcomeV
     industry: input.industry,
     icon: industryIcon(input.industry),
     timeline: input.timeline,
-    lead: input.lead,
+    lead: leadName,
     fieldTester: input.fieldTester,
     currentProcess: input.currentProcess ?? null,
     team: {
@@ -141,7 +157,16 @@ async function viewFor(deal: any, opts: { internal: boolean }): Promise<WelcomeV
         solutionsEngineer: null,
         champion: null,
       }),
+      lead: leadName,
       leadEmail,
+      leadCard: leadCard
+        ? {
+            title: leadCard.title,
+            bookingUrl: leadCard.bookingUrl,
+            photoUrl: leadCard.photoUrl,
+            bio: leadCard.bio,
+          }
+        : null,
     },
     firstForm: input.firstForm,
     nextUseCases: input.nextUseCases,

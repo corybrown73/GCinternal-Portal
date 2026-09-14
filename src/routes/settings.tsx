@@ -2,6 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { queryOptions, useSuspenseQuery } from "@tanstack/react-query";
 import { PageBody, PageHeader, EmptyState } from "@/components/page";
 import { AppearanceSettings } from "@/components/appearance-settings";
+import { TeamProfilePanel } from "@/components/team-profile-panel";
 import { canManage, useProfile } from "@/lib/auth";
 import { LIFECYCLE_BOUNDARY_LABEL, LIFECYCLE_STAGE_MAP } from "@/lib/lifecycle";
 import { getLifecycleStages } from "@/lib/lifecycle-stages.functions";
@@ -68,6 +69,7 @@ function SettingsPage() {
         description="One record per customer, from the first pre-sale conversation through to handover to Customer Success — including every project they run along the way. Roles shown are descriptive context only; they drive no assignment or permissions."
       />
       <PageBody className="space-y-5">
+        <TeamProfilePanel />
         <AppearanceSettings canManage={canManage(profile?.role)} />
 
         <section className="overflow-hidden rounded-md border border-border bg-card">
