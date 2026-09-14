@@ -738,6 +738,112 @@ export function daysToValue(t: Timeline): number {
   return Math.round((parseIso(t.liveDate).getTime() - parseIso(t.closeDate).getTime()) / DAY_MS);
 }
 
+/**
+ * The day counter: where today sits against the plan.
+ *
+ * SPEED IS THE PRODUCT. Every screen that shows the plan should say what day
+ * it is, in the plan's own units — business days from the day we began —
+ * and how many are left to live. Once the form is live it says how many days
+ * it took against how many were planned, because that number is the one the
+ * team is trying to beat.
+ */
+export type DayCounter = {
+  /** Business days since the close. 0 on the close day; negative before it. */
+  day: number;
+  /** Business days the plan gives phase 1 (the live step's day). */
+  total: number;
+  /** Business days from today to the planned live date; 0 on the day, negative after. */
+  toLive: number;
+  state: "before" | "during" | "live_today" | "past_due" | "live";
+  /** Business days from close to the day it actually went live; null until it has. */
+  actual: number | null;
+  /** What to say, short. */
+  label: string;
+  /** The second line: the live date, or how it landed against plan. */
+  detail: string;
+};
+
+export function dayCounter(
+  t: Timeline,
+  todayIso: string,
+  holidays: readonly string[] = [],
+): DayCounter {
+  const live = t.milestones[t.milestones.length - 1]!;
+  const total = live.day;
+  const day = businessDaysBetween(t.closeDate, todayIso, holidays);
+  const toLive = businessDaysBetween(todayIso, t.liveDate, holidays);
+  const actual = t.liveDoneOn ? businessDaysBetween(t.closeDate, t.liveDoneOn, holidays) : null;
+  const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? "" : "s"}`;
+
+  if (actual !== null) {
+    const diff = actual - total;
+    return {
+      day,
+      total,
+      toLive,
+      state: "live",
+      actual,
+      label: `Live in ${plural(actual, "day")}`,
+      detail:
+        diff === 0
+          ? `On plan — ${plural(total, "day")}`
+          : diff < 0
+            ? `${plural(-diff, "day")} ahead of the ${total}-day plan`
+            : `${plural(diff, "day")} past the ${total}-day plan`,
+    };
+  }
+  if (day < 0) {
+    return {
+      day,
+      total,
+      toLive,
+      state: "before",
+      actual,
+      label: `Begins in ${plural(-day, "day")}`,
+      detail: `Live ${shortDay(t.liveDate)} · ${plural(total, "day")}`,
+    };
+  }
+  if (toLive === 0) {
+    return {
+      day,
+      total,
+      toLive,
+      state: "live_today",
+      actual,
+      label: `Day ${day} of ${total}`,
+      detail: "Live today",
+    };
+  }
+  if (toLive < 0) {
+    return {
+      day,
+      total,
+      toLive,
+      state: "past_due",
+      actual,
+      label: `Day ${day} of ${total}`,
+      detail: `${plural(-toLive, "day")} past the planned live date, ${shortDay(t.liveDate)}`,
+    };
+  }
+  return {
+    day,
+    total,
+    toLive,
+    state: "during",
+    actual,
+    label: `Day ${day} of ${total}`,
+    detail: `Live ${shortDay(t.liveDate)} · in ${plural(toLive, "business day")}`,
+  };
+}
+
+/** Today as YYYY-MM-DD in the browser's zone. */
+export function localIso(d: Date = new Date()): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
 /** Calendar days from close to the day the form actually went live; null until it has. */
 export function daysToValueActual(t: Timeline): number | null {
   if (!t.liveDoneOn) return null;

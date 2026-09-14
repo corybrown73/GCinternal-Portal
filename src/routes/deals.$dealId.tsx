@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import {
   queryOptions,
@@ -18,6 +18,9 @@ import { EditableField } from "@/components/editable-field";
 import { AssignmentPanel } from "@/components/assignment-panel";
 import { DealGuide } from "@/components/deal-guide";
 import { guideSteps } from "@/lib/deal-guide";
+import { readIntake } from "@/lib/intake-answers";
+import { closeDateFor, timelineFor } from "@/lib/onboarding-plan";
+import { dayCounter, localIso } from "@/lib/onboarding-timeline";
 import { IntakePanel } from "@/components/intake-panel";
 import { TimelinePanel } from "@/components/timeline-panel";
 import { canEditSales, canManage, isSuperAdmin, useProfile } from "@/lib/auth";
@@ -172,6 +175,20 @@ function DealRecord({ deal }: { deal: DealData }) {
   });
   const nextPanel = steps.find((s) => !s.done)?.panel.id ?? null;
 
+  // The day counter: where this account sits against its plan, today.
+  const intakeForDay = readIntake(account.intake);
+  const dayTimeline = timelineFor(
+    intakeForDay,
+    closeDateFor({
+      intake: intakeForDay,
+      stageHistory: deal.stage_history,
+      wonStageKey: wonStage(deal.stages).key,
+    }).date,
+  );
+  const [today, setToday] = useState<string | null>(null);
+  useEffect(() => setToday(localIso()), []);
+  const counter = today ? dayCounter(dayTimeline, today) : null;
+
   return (
     <>
       <PageHeader
@@ -201,6 +218,22 @@ function DealRecord({ deal }: { deal: DealData }) {
               {days ?? 0}d in stage
             </span>
           </div>
+          {counter && isAtOrPast(deal.stages, account.stage, wonStage(deal.stages).key) ? (
+            <span
+              className={cn(
+                "inline-flex items-baseline gap-2 rounded-full border px-2.5 py-1 text-[11px]",
+                counter.state === "live"
+                  ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-800 dark:text-emerald-300"
+                  : counter.state === "past_due"
+                    ? "border-amber-500/40 bg-amber-500/10 text-amber-800 dark:text-amber-300"
+                    : "border-primary/30 bg-primary/5 text-foreground",
+              )}
+              title={counter.detail}
+            >
+              <b className="font-semibold">{counter.label}</b>
+              <span className="text-muted-foreground">{counter.detail}</span>
+            </span>
+          ) : null}
           {/* ARR leads, and is editable, because an account that starts at 5k
               and grows to 8k is the fact this pipeline exists to notice. Every
               change lands in the activity feed, so the account carries its own

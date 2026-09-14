@@ -44,7 +44,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
-import { daysToValue, shortDay, type Phase } from "@/lib/onboarding-timeline";
+import { dayCounter, daysToValue, localIso, shortDay, type Phase } from "@/lib/onboarding-timeline";
 import { HOMEWORK_KEYS, type HomeworkKey, type WelcomeView } from "@/lib/welcome";
 import { whenLabel } from "@/lib/welcome-events";
 import { speakerNotes } from "@/lib/welcome-notes";
@@ -447,6 +447,30 @@ function Stage({ children, fit }: { children: ReactNode; fit: "width" | "both" }
 
 /* ---------------------------------------------------------- the chrome */
 
+/** Today, set after mount so the server's date never disagrees with the browser's. */
+function useToday(): string | null {
+  const [today, setToday] = useState<string | null>(null);
+  useEffect(() => {
+    setToday(localIso());
+    const id = setInterval(() => setToday(localIso()), 60_000);
+    return () => clearInterval(id);
+  }, []);
+  return today;
+}
+
+/** The day counter, as a chip: "Day 3 of 7 · Live Fri, Sep 18 · in 4 business days". */
+function DayChip({ view }: { view: WelcomeView }) {
+  const today = useToday();
+  if (!today) return null;
+  const c = dayCounter(view.timeline, today);
+  return (
+    <span className={cn("wp-daychip", `is-${c.state}`)} title={c.detail}>
+      <b>{c.label}</b>
+      <span>{c.detail}</span>
+    </span>
+  );
+}
+
 function Toolbar({
   view,
   onPresent,
@@ -493,6 +517,7 @@ function Toolbar({
           </a>
         ) : null}
         <span className="wp-toolbar-title">{view.clientName}</span>
+        <DayChip view={view} />
         {view.sharedAt ? (
           <span className="wp-toolbar-meta">
             Link sent {shortDay(view.sharedAt.slice(0, 10))}
@@ -589,8 +614,9 @@ function SharedBar({ view, icsBase }: { view: WelcomeView; icsBase: string | nul
     <div className="wp-toolbar is-shared print:hidden">
       <div className="wp-toolbar-left">
         <img src="/branding/gocanvas-wordmark-navy.png" alt="GoCanvas" className="h-5 w-auto" />
+        <DayChip view={view} />
         <span className="wp-toolbar-meta">
-          Your onboarding plan · live {shortDay(view.timeline.liveDate)}
+          {view.path === "existing" ? "Your services plan" : "Your onboarding plan"}
           {p.done ? ` · ${p.done} of ${p.total} steps done` : ""}
         </span>
       </div>
@@ -1187,6 +1213,13 @@ function Overview({ view, page }: { view: WelcomeView; page: number }) {
 function Plan({ view, page }: { view: WelcomeView; page: number }) {
   const t = view.timeline;
   const existing = view.path === "existing";
+  const today = useToday();
+  // The step today sits on: the last one whose date is today or earlier and
+  // is not yet done. Nothing is marked before the close or after live.
+  const todayKey =
+    today && today >= t.closeDate && today <= t.liveDate
+      ? ([...t.milestones].reverse().find((m) => m.date <= today && !m.doneOn)?.key ?? null)
+      : null;
   const days = t.milestones[t.milestones.length - 1]?.day ?? 7;
   return (
     <Frame
@@ -1216,8 +1249,18 @@ function Plan({ view, page }: { view: WelcomeView; page: number }) {
       <div className="wp-rail">
         <div className="wp-rail-line" />
         {t.milestones.map((m) => (
-          <div key={m.key} className={cn("wp-node", m.key === "live" && "is-live")}>
-            <span className="wp-node-day">Day {m.day}</span>
+          <div
+            key={m.key}
+            className={cn(
+              "wp-node",
+              m.key === "live" && "is-live",
+              m.key === todayKey && "is-today",
+            )}
+          >
+            <span className="wp-node-day">
+              {m.key === todayKey ? <i className="wp-today-tag">Today</i> : null}
+              Day {m.day}
+            </span>
             <span className={cn("wp-node-tile", m.doneOn && "is-done")}>
               <Tile name={m.icon} size="lg" tone={m.key === "live" ? "navy" : "blue"} />
               {m.doneOn ? (

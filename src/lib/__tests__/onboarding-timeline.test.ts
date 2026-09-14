@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  dayCounter,
   addBusinessDays,
   addWeeks,
   buildTimeline,
@@ -446,5 +447,40 @@ describe("the existing-account path", () => {
   it("is the seven-day plan when the path is unset or new_logo", () => {
     expect(buildTimeline({ closeDate: "2026-09-09" }).path).toBe("new_logo");
     expect(buildTimeline({ closeDate: "2026-09-09", path: null }).milestones[6]!.day).toBe(7);
+  });
+});
+
+describe("dayCounter", () => {
+  const t = buildTimeline({ closeDate: "2026-09-09" }); // Wed; live Fri Sep 18 (day 7)
+  it("counts business days from the close, and to live", () => {
+    expect(dayCounter(t, "2026-09-09")).toMatchObject({
+      day: 0,
+      total: 7,
+      toLive: 7,
+      state: "during",
+    });
+    const mid = dayCounter(t, "2026-09-14");
+    expect(mid).toMatchObject({ day: 3, toLive: 4, state: "during", label: "Day 3 of 7" });
+    expect(mid.detail).toBe("Live Fri, Sep 18 · in 4 business days");
+    expect(dayCounter(t, "2026-09-18")).toMatchObject({
+      state: "live_today",
+      detail: "Live today",
+    });
+    expect(dayCounter(t, "2026-09-22")).toMatchObject({ state: "past_due", toLive: -2 });
+    expect(dayCounter(t, "2026-09-07")).toMatchObject({
+      state: "before",
+      label: "Begins in 2 days",
+    });
+  });
+  it("says how it landed once the form is live", () => {
+    const early = buildTimeline({ closeDate: "2026-09-09", completed: { live: "2026-09-16" } });
+    expect(dayCounter(early, "2026-09-30")).toMatchObject({
+      state: "live",
+      actual: 5,
+      label: "Live in 5 days",
+      detail: "2 days ahead of the 7-day plan",
+    });
+    const onPlan = buildTimeline({ closeDate: "2026-09-09", completed: { live: "2026-09-18" } });
+    expect(dayCounter(onPlan, "2026-09-30").detail).toBe("On plan — 7 days");
   });
 });

@@ -3575,3 +3575,65 @@ body.gc-presenting {
   font-weight: 700;
   text-decoration: none;
 }
+
+/* ---- the day counter */
+.gc-welcome .wp-daychip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 4px 10px 4px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--wp-blue-line);
+  background: var(--wp-blue-soft);
+  font-size: 11.5px;
+  color: var(--wp-body);
+  white-space: nowrap;
+}
+.gc-welcome .wp-daychip b {
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--wp-navy);
+}
+.gc-welcome .wp-daychip.is-live {
+  background: #eefaf3;
+  border-color: #bfe6cf;
+}
+.gc-welcome .wp-daychip.is-live b,
+.gc-welcome .wp-daychip.is-live_today b {
+  color: var(--wp-green);
+}
+.gc-welcome .wp-daychip.is-past_due {
+  background: #fff4ec;
+  border-color: #f8cfb4;
+}
+.gc-welcome .wp-daychip.is-past_due b {
+  color: var(--wp-orange);
+}
+.gc-welcome .wp-node-day {
+  position: relative;
+}
+.gc-welcome .wp-today-tag {
+  position: absolute;
+  left: 50%;
+  top: -22px;
+  transform: translateX(-50%);
+  font-style: normal;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #fff;
+  background: var(--wp-orange);
+  border-radius: 999px;
+  padding: 2px 8px;
+}
+.gc-welcome .wp-node.is-today .wp-tile {
+  box-shadow:
+    0 0 0 6px #fff,
+    0 0 0 8px var(--wp-orange);
+}
+@media (max-width: 900px) {
+  .gc-welcome .wp-daychip span {
+    display: none;
+  }
+}
