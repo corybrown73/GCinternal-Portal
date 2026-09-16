@@ -30,6 +30,7 @@ import { Route as TechnicalSolutionsRouteImport } from './routes/technical-solut
 import { Route as TemplatesRouteImport } from './routes/templates'
 import { Route as TicketsRouteImport } from './routes/tickets'
 import { Route as AdminIndexRouteImport } from './routes/admin.index'
+import { Route as AdminAnalyticsRouteImport } from './routes/admin.analytics'
 import { Route as AdminApiKeysRouteImport } from './routes/admin.api-keys'
 import { Route as AdminAssignmentRouteImport } from './routes/admin.assignment'
 import { Route as AdminAuditRouteImport } from './routes/admin.audit'
@@ -188,6 +189,11 @@ const TicketsRoute = TicketsRouteImport.update({
 const AdminIndexRoute = AdminIndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminAnalyticsRoute = AdminAnalyticsRouteImport.update({
+  id: '/analytics',
+  path: '/analytics',
   getParentRoute: () => AdminRoute,
 } as any)
 const AdminApiKeysRoute = AdminApiKeysRouteImport.update({
@@ -484,6 +490,7 @@ export interface FileRoutesByFullPath {
   '/technical-solutions': typeof TechnicalSolutionsRouteWithChildren
   '/templates': typeof TemplatesRoute
   '/tickets': typeof TicketsRouteWithChildren
+  '/admin/analytics': typeof AdminAnalyticsRoute
   '/admin/api-keys': typeof AdminApiKeysRoute
   '/admin/assignment': typeof AdminAssignmentRoute
   '/admin/audit': typeof AdminAuditRoute
@@ -555,6 +562,7 @@ export interface FileRoutesByTo {
   '/signals': typeof SignalsRoute
   '/signup': typeof SignupRoute
   '/templates': typeof TemplatesRoute
+  '/admin/analytics': typeof AdminAnalyticsRoute
   '/admin/api-keys': typeof AdminApiKeysRoute
   '/admin/assignment': typeof AdminAssignmentRoute
   '/admin/audit': typeof AdminAuditRoute
@@ -633,6 +641,7 @@ export interface FileRoutesById {
   '/technical-solutions': typeof TechnicalSolutionsRouteWithChildren
   '/templates': typeof TemplatesRoute
   '/tickets': typeof TicketsRouteWithChildren
+  '/admin/analytics': typeof AdminAnalyticsRoute
   '/admin/api-keys': typeof AdminApiKeysRoute
   '/admin/assignment': typeof AdminAssignmentRoute
   '/admin/audit': typeof AdminAuditRoute
@@ -712,6 +721,7 @@ export interface FileRouteTypes {
     | '/technical-solutions'
     | '/templates'
     | '/tickets'
+    | '/admin/analytics'
     | '/admin/api-keys'
     | '/admin/assignment'
     | '/admin/audit'
@@ -783,6 +793,7 @@ export interface FileRouteTypes {
     | '/signals'
     | '/signup'
     | '/templates'
+    | '/admin/analytics'
     | '/admin/api-keys'
     | '/admin/assignment'
     | '/admin/audit'
@@ -860,6 +871,7 @@ export interface FileRouteTypes {
     | '/technical-solutions'
     | '/templates'
     | '/tickets'
+    | '/admin/analytics'
     | '/admin/api-keys'
     | '/admin/assignment'
     | '/admin/audit'
@@ -1116,6 +1128,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/admin/'
       preLoaderRoute: typeof AdminIndexRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/analytics': {
+      id: '/admin/analytics'
+      path: '/analytics'
+      fullPath: '/admin/analytics'
+      preLoaderRoute: typeof AdminAnalyticsRouteImport
       parentRoute: typeof AdminRoute
     }
     '/admin/api-keys': {
@@ -1500,6 +1519,7 @@ declare module '@tanstack/react-router' {
 }
 
 interface AdminRouteChildren {
+  AdminAnalyticsRoute: typeof AdminAnalyticsRoute
   AdminApiKeysRoute: typeof AdminApiKeysRoute
   AdminAssignmentRoute: typeof AdminAssignmentRoute
   AdminAuditRoute: typeof AdminAuditRoute
@@ -1514,6 +1534,7 @@ interface AdminRouteChildren {
 }
 
 const AdminRouteChildren: AdminRouteChildren = {
+  AdminAnalyticsRoute: AdminAnalyticsRoute,
   AdminApiKeysRoute: AdminApiKeysRoute,
   AdminAssignmentRoute: AdminAssignmentRoute,
   AdminAuditRoute: AdminAuditRoute,

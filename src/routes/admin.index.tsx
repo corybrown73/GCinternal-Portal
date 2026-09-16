@@ -12,6 +12,7 @@ import {
   ToggleRight,
   Image,
   UserRoundCheck,
+  BarChart3,
 } from "lucide-react";
 
 import { PageBody, PageHeader } from "@/components/page";
@@ -34,6 +35,13 @@ const CARDS = [
     title: "Assignment",
     description:
       "Who gets the next account. The pool, the weights, and every pick with its reason — closed won to a named person in minutes.",
+  },
+  {
+    to: "/admin/analytics",
+    icon: BarChart3,
+    title: "Delivery analytics",
+    description:
+      "Planned against actual for every closed-won plan: which tools run long, which kinds slip, and the step where the days go.",
   },
   {
     to: "/admin/industry-photos",

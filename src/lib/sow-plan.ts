@@ -8,6 +8,7 @@ import {
   type ServiceSpec,
 } from "./onboarding-services";
 import { INTEGRATION_TIERS, type IntegrationTier } from "./onboarding-timeline";
+import { toolFromName } from "./onboarding-tools";
 
 /**
  * The SOW, read into the plan.
@@ -91,7 +92,9 @@ export function normalizeProposal(p: SowPlanProposal): SowPlanProposal {
 /** A proposal row → the service the plan stores. Ids are fresh; the plan computes the dates. */
 export function rowToService(row: SowPlanRow, id: string): ServiceSpec {
   const spec: ServiceSpec = { id, kind: row.kind, name: row.name, phase: row.phase };
-  if (row.kind === "integration") spec.tier = (row.tier ?? 3) as IntegrationTier;
+  const tool = toolFromName(row.name);
+  if (tool && tool.kind === row.kind) spec.tool = tool.key;
+  if (row.kind === "integration") spec.tier = (row.tier ?? tool?.tier ?? 3) as IntegrationTier;
   else if (row.weeks && row.weeks !== SERVICE_KINDS[row.kind].weeks) spec.weeks = row.weeks;
   if (row.needs) spec.needs = row.needs;
   return spec;

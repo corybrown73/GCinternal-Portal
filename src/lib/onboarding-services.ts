@@ -270,6 +270,8 @@ export type ServiceSpec = {
   weeks?: number | null;
   /** Override what we need from the customer to start it. */
   needs?: string | null;
+  /** A known system or product (see onboarding-tools.ts), when it is one. */
+  tool?: string | null;
 };
 
 /** What we need from the customer to start this service: theirs if written, else the catalogue's. */

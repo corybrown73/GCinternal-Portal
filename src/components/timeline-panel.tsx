@@ -35,6 +35,7 @@ import {
   type Timeline,
 } from "@/lib/onboarding-timeline";
 import { saveIntake } from "@/lib/presale.functions";
+import { toolByKey, toolFromName, toolsForKind } from "@/lib/onboarding-tools";
 import { mergeProposal, rowWeeks, type SowPlanProposal, type SowPlanRow } from "@/lib/sow-plan";
 import { proposePlanFromSowFn } from "@/lib/sow-plan.functions";
 import { isCall, planEvents } from "@/lib/welcome-events";
@@ -84,9 +85,18 @@ export function TimelinePanel({
   const [newKind, setNewKind] = useState<ServiceKind>("integration");
   const [newName, setNewName] = useState("");
   const [newPhase, setNewPhase] = useState<number>(SERVICE_KINDS.integration.defaultPhase);
+  const [newTool, setNewTool] = useState<string>("");
   const pickKind = (k: ServiceKind) => {
     setNewKind(k);
     setNewPhase(SERVICE_KINDS[k].defaultPhase);
+    setNewTool("");
+  };
+  // Picking a known system names the service and sets its usual tier, so
+  // the analytics count every QuickBooks Online project as one thing.
+  const pickTool = (key: string) => {
+    setNewTool(key);
+    const tool = toolByKey(key);
+    if (tool) setNewName(tool.name);
   };
   // The services as the plan sees them: the stored list, with the legacy
   // single-integration knobs folded in until somebody edits the list.
@@ -99,11 +109,20 @@ export function TimelinePanel({
     const name = newName.trim();
     if (!name) return;
     const id = `${newKind.slice(0, 4)}-${Math.random().toString(36).slice(2, 8)}`;
+    const tool = toolByKey(newTool) ?? toolFromName(name);
     writeServices([
       ...services,
-      { id, kind: newKind, name, phase: newPhase, ...(newKind === "integration" && { tier: 3 }) },
+      {
+        id,
+        kind: newKind,
+        name,
+        phase: newPhase,
+        ...(newKind === "integration" && { tier: tool?.tier ?? 3 }),
+        ...(tool && tool.kind === newKind && { tool: tool.key }),
+      },
     ]);
     setNewName("");
+    setNewTool("");
   };
   const updateService = (id: string, patch: Partial<ServiceSpec>) =>
     writeServices(services.map((x) => (x.id === id ? { ...x, ...patch } : x)));
@@ -708,6 +727,28 @@ export function TimelinePanel({
                   <span className="rounded-sm bg-muted px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-muted-foreground">
                     {SERVICE_KINDS[svc.kind].label}
                   </span>
+                  {toolsForKind(svc.kind).length ? (
+                    <select
+                      className={input}
+                      value={svc.tool ?? toolFromName(svc.name)?.key ?? ""}
+                      disabled={busy}
+                      title="Which system this is, for the analytics"
+                      onChange={(e) => {
+                        const tool = toolByKey(e.target.value);
+                        updateService(svc.id, {
+                          tool: tool?.key ?? null,
+                          ...(tool && !svc.name.trim() && { name: tool.name }),
+                        });
+                      }}
+                    >
+                      <option value="">System…</option>
+                      {toolsForKind(svc.kind).map((t) => (
+                        <option key={t.key} value={t.key}>
+                          {t.name}
+                        </option>
+                      ))}
+                    </select>
+                  ) : null}
                   <input
                     className={cn(input, "min-w-0 flex-1")}
                     value={svc.name}
@@ -810,6 +851,22 @@ export function TimelinePanel({
                   </option>
                 ))}
               </select>
+              {toolsForKind(newKind).length ? (
+                <select
+                  className={input}
+                  value={newTool}
+                  onChange={(e) => pickTool(e.target.value)}
+                  title="A known system — one name, one row in the analytics"
+                >
+                  <option value="">Which system?</option>
+                  {toolsForKind(newKind).map((t) => (
+                    <option key={t.key} value={t.key}>
+                      {t.name}
+                    </option>
+                  ))}
+                  <option value="other">Other — type it</option>
+                </select>
+              ) : null}
               <input
                 className={cn(input, "min-w-[160px] flex-1")}
                 placeholder={

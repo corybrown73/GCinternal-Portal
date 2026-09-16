@@ -39,6 +39,7 @@ describe("the SOW read into the plan", () => {
       kind: "integration",
       name: "QuickBooks Online",
       phase: 2,
+      tool: "qbo",
       tier: 3,
     });
     expect(rowToService(jsa, "jsa-1")).toEqual({
