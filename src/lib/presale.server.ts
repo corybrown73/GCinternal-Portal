@@ -565,7 +565,13 @@ export async function deleteGongReport(userId: string, reportId: string): Promis
 export async function generateDealBrief(
   userId: string,
   dealId: string,
-): Promise<{ id: string; status: string; error: string | null; filled: string[] }> {
+): Promise<{
+  id: string;
+  status: string;
+  generator: "llm" | "template" | null;
+  error: string | null;
+  filled: string[];
+}> {
   await requireInternal(userId);
   const { generateBrief } = await import("./server/brief/generate");
   const brief = await generateBrief(dealId, userId);
@@ -612,7 +618,13 @@ export async function generateDealBrief(
       console.error("[brief] could not prefill the intake", e);
     }
   }
-  return { id: brief.id, status: brief.status, error: brief.error, filled };
+  return {
+    id: brief.id,
+    status: brief.status,
+    generator: brief.generator,
+    error: brief.error,
+    filled,
+  };
 }
 
 export async function briefDownloadUrl(userId: string, briefId: string): Promise<{ url: string }> {

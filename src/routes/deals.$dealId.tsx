@@ -996,7 +996,14 @@ function BriefsPanel({ deal, highlight }: { deal: DealData; highlight?: boolean 
           {((synthesis.error ?? downloadMutation.error) as Error).message}
         </p>
       ) : null}
-      {synthesis.isSuccess ? (
+      {synthesis.isSuccess && synthesis.data.generator !== "llm" ? (
+        // The AI did not run — say so, and why. The template brief that was
+        // written instead is still on the list below, marked as such.
+        <p className="border-b border-border px-3 py-2 text-[11px] text-amber-800 dark:text-amber-300">
+          {synthesis.data.error ??
+            "AI synthesis is not set up on this deployment, so a template brief was written instead."}
+        </p>
+      ) : synthesis.isSuccess ? (
         <p className="border-b border-border px-3 py-2 text-[11px] text-emerald-700 dark:text-emerald-400">
           {synthesis.data.status === "complete"
             ? synthesis.data.filled.length

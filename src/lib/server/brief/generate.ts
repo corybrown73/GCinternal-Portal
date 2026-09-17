@@ -311,13 +311,14 @@ export async function generateBrief(accountId: string, createdBy: string): Promi
     let llmError: string | null = null;
 
     const { generateBriefWithLLM, llmAvailable } = await import("./llm");
+    const { describeLlmError } = await import("./llm-error");
     if (llmAvailable()) {
       try {
         json = await generateBriefWithLLM(account, reports, notes ?? []);
         if (json) generator = "llm";
         else llmError = "LLM declined or returned unparseable output; used template";
       } catch (e) {
-        llmError = e instanceof Error ? e.message : "LLM call failed";
+        llmError = describeLlmError(e);
       }
     }
     if (!json) {
