@@ -12,6 +12,12 @@ export type GuideStep = {
   done: boolean;
   /** Which section to open: its collapse key and its element id. */
   panel: { key: string; id: string };
+  /**
+   * What still stands in the way of this step, by name. Only the share step
+   * carries these: the welcome page's own readiness list, so "send the link"
+   * cannot read as done while the page still has blanks.
+   */
+  blockers: string[];
 };
 
 export function guideSteps(input: {
@@ -22,6 +28,8 @@ export function guideSteps(input: {
   shareUrl: string | null;
   stageHistory: Array<{ to_stage: string; occurred_at: string }>;
   wonStageKey: string;
+  /** The welcome page's readiness list, when the caller has it. */
+  readiness?: ReadonlyArray<{ label: string }>;
 }): GuideStep[] {
   const a: IntakeAnswers = readIntake(input.intake);
   const status = intakeStatus(a);
@@ -34,8 +42,9 @@ export function guideSteps(input: {
   const calls = t.milestones.filter((m) => m.key === "kickoff" || m.key === "working");
   const services = a.timeline.services ?? [];
   const hasForm = a.wanted_forms.length > 0 || a.uploaded_forms.length > 0;
+  const blockers = (input.readiness ?? []).map((r) => r.label);
 
-  return [
+  const steps: Array<Omit<GuideStep, "blockers">> = [
     {
       key: "path",
       label: "Pick the path",
@@ -82,8 +91,9 @@ export function guideSteps(input: {
       key: "share",
       label: "Open the welcome page, send the link",
       hint: "Present it on the first call. Copy the customer's link and the QR is on the cover.",
-      done: Boolean(input.shareUrl),
+      done: Boolean(input.shareUrl) && blockers.length === 0,
       panel: { key: "deal:brief", id: "panel-brief" },
     },
   ];
+  return steps.map((s) => ({ ...s, blockers: s.key === "share" ? blockers : [] }));
 }

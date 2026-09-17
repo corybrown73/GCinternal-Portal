@@ -69,6 +69,13 @@ function SettingsPage() {
         description="One record per customer, from the first pre-sale conversation through to handover to Customer Success — including every project they run along the way. Roles shown are descriptive context only; they drive no assignment or permissions."
       />
       <PageBody className="space-y-5">
+        <p className="text-[12px] text-muted-foreground">
+          New here?{" "}
+          <Link to="/how-it-works" className="font-medium text-primary hover:underline">
+            How it works
+          </Link>{" "}
+          — the whole flow, by role, on one page.
+        </p>
         <TeamProfilePanel />
         <AppearanceSettings canManage={canManage(profile?.role)} />
 

@@ -17,6 +17,8 @@ import { Field, NoRows, Panel } from "@/components/record";
 import { EditableField } from "@/components/editable-field";
 import { AssignmentPanel } from "@/components/assignment-panel";
 import { DealGuide } from "@/components/deal-guide";
+import { getSetupStatusFn } from "@/lib/setup-status.functions";
+import { getWelcome } from "@/lib/welcome.functions";
 import { guideSteps } from "@/lib/deal-guide";
 import { readIntake } from "@/lib/intake-answers";
 import { closeDateFor, timelineFor } from "@/lib/onboarding-plan";
@@ -31,7 +33,6 @@ import {
   generateBriefForDeal,
   getBriefDownloadUrl,
   getDeal,
-  getDeckPrompt,
   getHandoffOptions,
   removeNote,
   removeReport,
@@ -162,7 +163,19 @@ function DealRecord({ deal }: { deal: DealData }) {
     field.mutateAsync({ field: name, value });
 
   // What is done and what is next, from the record. Clicking a step opens
-  // its section; the section the guide points at carries a ring.
+  // its section; the section the guide points at carries a ring. The share
+  // step also reads the welcome page's own readiness list, so "send the
+  // link" cannot tick while the page still has blanks.
+  const welcome = useQuery({
+    queryKey: ["welcome", account.id],
+    queryFn: () => getWelcome({ data: { dealId: account.id } }),
+    refetchInterval: 10_000,
+  });
+  const setup = useQuery({
+    queryKey: ["setup-status"],
+    queryFn: () => getSetupStatusFn(),
+    staleTime: 60_000,
+  });
   const steps = guideSteps({
     intake: account.intake,
     gongReports: deal.gong_reports.length,
@@ -172,6 +185,7 @@ function DealRecord({ deal }: { deal: DealData }) {
       string | null,
     stageHistory: deal.stage_history,
     wonStageKey: wonStage(deal.stages).key,
+    readiness: welcome.data?.readiness ?? [],
   });
   const nextPanel = steps.find((s) => !s.done)?.panel.id ?? null;
 
@@ -188,6 +202,7 @@ function DealRecord({ deal }: { deal: DealData }) {
   const [today, setToday] = useState<string | null>(null);
   useEffect(() => setToday(localIso()), []);
   const counter = today ? dayCounter(dayTimeline, today) : null;
+  const onPlan = isAtOrPast(deal.stages, account.stage, wonStage(deal.stages).key);
 
   return (
     <>
@@ -210,15 +225,20 @@ function DealRecord({ deal }: { deal: DealData }) {
         actions={<StartOnboarding deal={deal} />}
       />
       <PageBody className="space-y-4">
-        <DealGuide steps={steps} />
+        <DealGuide steps={steps} setup={setup.data ?? null} manager={canManage(profile?.role)} />
         <div className="flex flex-wrap items-center gap-x-6 gap-y-2 rounded-md border border-border bg-card px-4 py-3">
+          {/* One clock. Before closed-won it is days in stage; after, it is
+              the day counter against the plan. Two numbers side by side is
+              how somebody asks which one they are meant to be watching. */}
           <div className="flex items-center gap-2">
             <StageChip stage={account.stage} stages={deal.stages} />
-            <span className="font-mono text-[11px] text-muted-foreground">
-              {days ?? 0}d in stage
-            </span>
+            {!(counter && onPlan) ? (
+              <span className="font-mono text-[11px] text-muted-foreground">
+                {days ?? 0}d in stage
+              </span>
+            ) : null}
           </div>
-          {counter && isAtOrPast(deal.stages, account.stage, wonStage(deal.stages).key) ? (
+          {counter && onPlan ? (
             <span
               className={cn(
                 "inline-flex items-baseline gap-2 rounded-full border px-2.5 py-1 text-[11px]",
@@ -341,8 +361,20 @@ function DealRecord({ deal }: { deal: DealData }) {
           <div className="space-y-4">
             <BriefsPanel deal={deal} highlight={nextPanel === "panel-brief"} />
             <AssignmentPanel dealId={deal.account.id} editable={editable} />
-            <TamPanel deal={deal} />
-            <HistoryPanel deal={deal} />
+            {/* Pre-sale records that the onboarding flow never needs, folded
+                so the page reads as the seven steps and nothing else. */}
+            <Panel
+              title="More · pre-sale records"
+              meta="TAM requests and the stage history"
+              collapsible
+              defaultOpen={false}
+              collapseKey="deal:more"
+            >
+              <div className="space-y-4 p-3">
+                <TamPanel deal={deal} />
+                <HistoryPanel deal={deal} />
+              </div>
+            </Panel>
           </div>
         </div>
       </PageBody>
@@ -492,50 +524,6 @@ function StartOnboarding({ deal }: { deal: DealData }) {
       </div>
       {error}
     </div>
-  );
-}
-
-/* ---------- the deck prompt, for Claude ---------- */
-
-/**
- * Copies a complete prompt to the clipboard: the calls verbatim, the SOW, the
- * intake, the field contract and the design tokens. Paste it into claude.ai
- * and paste the JSON it returns back here. No API key, no connector — the
- * path that works on any laptop in any room, when the other two do not.
- */
-function ClaudePromptButton({ dealId }: { dealId: string }) {
-  const fetchPrompt = useServerFn(getDeckPrompt);
-  const [state, setState] = useState<"idle" | "busy" | "copied" | "failed">("idle");
-
-  const copy = async () => {
-    setState("busy");
-    try {
-      const { prompt } = await fetchPrompt({ data: { dealId } });
-      await navigator.clipboard.writeText(prompt);
-      setState("copied");
-      setTimeout(() => setState("idle"), 2500);
-    } catch {
-      setState("failed");
-      setTimeout(() => setState("idle"), 2500);
-    }
-  };
-
-  return (
-    <button
-      type="button"
-      className={buttonClass}
-      disabled={state === "busy"}
-      onClick={() => void copy()}
-      title="Copy everything Claude needs to write the deck — paste it into claude.ai"
-    >
-      {state === "busy"
-        ? "Preparing…"
-        : state === "copied"
-          ? "Copied — paste into Claude"
-          : state === "failed"
-            ? "Could not copy"
-            : "Copy prompt for Claude"}
-    </button>
   );
 }
 
@@ -985,7 +973,6 @@ function BriefsPanel({ deal, highlight }: { deal: DealData; highlight?: boolean 
           >
             {synthesis.isPending ? "Synthesising…" : "Synthesise with AI"}
           </button>
-          <ClaudePromptButton dealId={deal.account.id} />
           <Link
             to="/onboarding-plan/$dealId"
             params={{ dealId: deal.account.id }}

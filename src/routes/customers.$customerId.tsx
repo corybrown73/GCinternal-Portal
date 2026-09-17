@@ -6,6 +6,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { ChevronRight, ArrowRight } from "lucide-react";
 
 import { CustomerLogo } from "@/components/customer-logo";
+import { AddServicesButton, OnboardingPulse } from "@/components/onboarding-pulse";
 import { HealthNote } from "@/components/health-note";
 import { PlanPanel } from "@/components/plan-panel";
 import { HandoffPanel } from "@/components/handoff-panel";
@@ -355,6 +356,7 @@ function Customer360Page() {
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-3">
+            <AddServicesButton customerId={customer.id} />
             <StatusChip status={health.level} />
             <HealthNote
               recorded={impl.health_recorded}
@@ -381,6 +383,8 @@ function Customer360Page() {
             date, its own stages and its own pace. Each lane is that project's
             board at a glance and deep-links to it through `?impl=`. With a
             single project this collapses to just that project's rail. */}
+        {impl.deal_id ? <OnboardingPulse dealId={impl.deal_id} /> : null}
+
         <div className="min-w-0 px-6 pt-2.5">
           <ProjectTimelines
             customerId={customerId}

@@ -212,7 +212,6 @@ export function TimelinePanel({
     // ten seconds, without anyone refreshing.
     refetchInterval: 10_000,
   });
-  const readiness = welcome.data?.readiness ?? [];
   const homeworkDone = welcome.data?.homeworkDone ?? {};
 
   const downloadIcs = (only?: string) => {
@@ -264,27 +263,6 @@ export function TimelinePanel({
             {error}
           </p>
         ) : null}
-        {/* What the page still needs before it goes to the customer. */}
-        {readiness.length ? (
-          <div className="rounded-md border border-amber-500/40 bg-amber-500/5 p-2.5">
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-amber-700 dark:text-amber-400">
-              Before this goes to the customer · {readiness.length} to fill in
-            </p>
-            <ul className="mt-1.5 space-y-1">
-              {readiness.map((r) => (
-                <li key={r.key} className="text-[12px]">
-                  <span className="font-medium">{r.label}</span>
-                  <span className="text-muted-foreground"> — {r.hint}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        ) : welcome.data ? (
-          <p className="flex items-center gap-1.5 text-[12px] text-emerald-700 dark:text-emerald-400">
-            <Check className="h-3.5 w-3.5" /> The page has everything it needs.
-          </p>
-        ) : null}
-
         {/* What the customer has done on their page. Live. */}
         {welcome.data ? (
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md border border-border bg-background px-2.5 py-1.5 text-[12px]">

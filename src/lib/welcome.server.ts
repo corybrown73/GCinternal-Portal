@@ -213,6 +213,14 @@ export async function issueWelcomeLink(
 ): Promise<{ url: string; issuedAt: string }> {
   const { requireSalesEditor } = await import("./presale.server");
   await requireSalesEditor(userId);
+  return issueWelcomeLinkAs(userId, dealId);
+}
+
+/** The same, for the system — at assignment, so the link exists before anyone asks for it. */
+export async function issueWelcomeLinkAs(
+  actorId: string | null,
+  dealId: string,
+): Promise<{ url: string; issuedAt: string }> {
   const { randomBytes } = await import("node:crypto");
   const token = `${TOKEN_PREFIX}${randomBytes(32).toString("base64url")}`;
   const issuedAt = new Date().toISOString();
@@ -228,8 +236,8 @@ export async function issueWelcomeLink(
     .eq("id", dealId);
   if (error) throw new Error(`Could not issue the link: ${error.message}`);
   await audit({
-    actor_type: "user",
-    actor_id: userId,
+    actor_type: actorId ? "user" : "system",
+    actor_id: actorId,
     action: "welcome.link_issued",
     entity_type: "account",
     entity_id: dealId,

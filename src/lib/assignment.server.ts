@@ -294,6 +294,24 @@ export async function assignDeal(args: {
     payload: { team_member_id: chosen.teamMemberId, weight, breakdown, source },
   });
 
+  // The customer's link exists from the first minute, so the assignee never
+  // has to remember to mint it and the email can carry it.
+  let shareUrl: string | null = null;
+  try {
+    const { data: row } = await db()
+      .from("portal_accounts")
+      .select("welcome_share_url")
+      .eq("id", args.dealId)
+      .maybeSingle();
+    shareUrl = (row?.welcome_share_url as string | null) ?? null;
+    if (!shareUrl) {
+      const { issueWelcomeLinkAs } = await import("./welcome.server");
+      shareUrl = (await issueWelcomeLinkAs(args.actorProfileId ?? null, args.dealId)).url;
+    }
+  } catch (e) {
+    console.error("[assignment] could not issue the customer link", e);
+  }
+
   let notified = false;
   if (chosen.email) {
     try {
@@ -307,6 +325,7 @@ export async function assignDeal(args: {
         breakdown,
         integrationTier: forWeight.integrationTier,
         seats: forWeight.seats,
+        shareUrl,
       });
       notified = true;
     } catch (e) {
@@ -340,6 +359,7 @@ async function notifyAssignee(a: {
   breakdown: WeightBreakdown;
   integrationTier: number | null;
   seats: number | null;
+  shareUrl: string | null;
 }) {
   const base = appUrl();
   const deal = `${base}/deals/${a.dealId}`;
@@ -364,8 +384,13 @@ async function notifyAssignee(a: {
         <ol style="line-height:1.7">
           <li><b>Grab the Gong recording</b> from the closing call and paste the notes on the deal.<br/><a href="${deal}#reports" style="color:#039de7">Open the deal → Gong reports</a></li>
           <li><b>Upload the SOW</b> so the plan and the page read from what was sold.<br/><a href="${deal}#sow" style="color:#039de7">Open the deal → SOW</a></li>
-          <li><b>Open the welcome page</b> — the brief. Check the readiness line, set the two call times, create the customer link.<br/><a href="${welcome}" style="color:#039de7">Open the welcome page</a></li>
+          <li><b>Open the welcome page</b> — the brief. Follow the "Getting started" strip on the deal: it says what is still blank and what is next.<br/><a href="${welcome}" style="color:#039de7">Open the welcome page</a></li>
         </ol>
+        ${
+          a.shareUrl
+            ? `<p style="margin:12px 0 0;padding:10px 12px;border-radius:8px;background:#eef7fd;color:#072b57;font-size:13px"><b>The customer's link is ready:</b> <a href="${a.shareUrl}" style="color:#12509b">${a.shareUrl}</a><br/><span style="color:#556477">Send it after the kickoff. It shows their dates, their homework and your face.</span></p>`
+            : ""
+        }
         <p style="color:#556477;font-size:13px">Kickoff is the next business day. The form is live within seven.</p>
         <p style="font-size:12px;color:#888">GoCanvas Handoff Hub</p>
       </div>`,
@@ -467,7 +492,7 @@ export async function dealAssignment(dealId: string): Promise<DealAssignment> {
       },
       {
         key: "welcome",
-        label: "Welcome page ready and link created",
+        label: "Welcome page ready — the customer's link is in your email",
         done: Boolean(dealRow?.welcome_issued_at),
       },
     ],

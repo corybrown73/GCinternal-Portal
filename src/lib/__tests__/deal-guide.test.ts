@@ -57,3 +57,22 @@ describe("guideSteps", () => {
     expect(steps.find((s) => s.key === "sow")!.done).toBe(false);
   });
 });
+
+describe("guideSteps · the share step and the page's readiness", () => {
+  it("does not tick the share step while the welcome page still has blanks", () => {
+    const steps = guideSteps({
+      intake: { path: "new_logo" },
+      gongReports: 0,
+      aiBriefs: 0,
+      hasSow: false,
+      shareUrl: "https://example.com/welcome/x",
+      stageHistory: history,
+      wonStageKey: "closed_won",
+      readiness: [{ label: "Industry" }, { label: "Their field tester" }],
+    });
+    const share = steps.find((s) => s.key === "share")!;
+    expect(share.done).toBe(false);
+    expect(share.blockers).toEqual(["Industry", "Their field tester"]);
+    expect(steps.filter((s) => s.key !== "share").every((s) => s.blockers.length === 0)).toBe(true);
+  });
+});
