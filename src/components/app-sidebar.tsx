@@ -41,7 +41,10 @@ export function AppSidebar({
 
   return (
     <aside
-      style={scheme.vars as React.CSSProperties}
+      /* The scheme's variables AND the background that reads them. The
+         variables alone painted nothing: the panel showed the page colour
+         under white text, which is how a dark scheme became unreadable. */
+      style={{ ...(scheme.vars as React.CSSProperties), backgroundColor: "var(--nav-bg)" }}
       /* Narrower below lg. At 228px on an 820px window the nav takes more
          than a quarter of the screen and the content beside it has nowhere to
          go. The links stay full-width and readable; only the hint line under

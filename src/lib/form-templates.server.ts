@@ -200,7 +200,7 @@ export async function updateFormTemplateImage(
     throw new Error(`Could not save the picture: ${error.message}`);
   }
   const previous = row["image_path"] as string | null;
-  if (previous && previous !== imagePath) {
+  if (previous && previous !== imagePath && !isBundledSample(previous)) {
     try {
       await db().storage.from(BUCKET).remove([previous]);
     } catch {
@@ -263,8 +263,18 @@ export async function deleteFormTemplate(userId: string, id: string): Promise<vo
   });
 }
 
+/**
+ * A path that starts with "/" is one of the bundled sample renderings under
+ * public/form-samples — served by the app itself, nothing to sign. Everything
+ * else is a private upload and gets a short-lived URL as before.
+ */
+export function isBundledSample(path: string | null | undefined): boolean {
+  return Boolean(path && path.startsWith("/form-samples/"));
+}
+
 async function signedImage(path: string | null): Promise<string | null> {
   if (!path) return null;
+  if (isBundledSample(path)) return path;
   try {
     const { data } = await db().storage.from(BUCKET).createSignedUrl(path, LINK_TTL_S);
     return (data?.signedUrl as string | undefined) ?? null;
