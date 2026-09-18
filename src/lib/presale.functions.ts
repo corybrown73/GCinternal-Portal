@@ -382,6 +382,28 @@ export const setUserRole = createServerFn({ method: "POST" })
     return setProfileRole(context.userId, context.supabase, data.profileId, data.role);
   });
 
+/**
+ * Passwords, set by an admin. Super-admin only, like roles and invites: a
+ * password is the account.
+ */
+export const setUserPasswordFn = createServerFn({ method: "POST" })
+  .middleware([requireInternalAuth])
+  .inputValidator((data: unknown) =>
+    z.object({ profileId: z.string().uuid(), password: z.string().min(12).max(200) }).parse(data),
+  )
+  .handler(async ({ data, context }) => {
+    const { setUserPassword } = await import("./user-passwords.server");
+    return setUserPassword(context.userId, data.profileId, data.password);
+  });
+
+export const sendPasswordResetFn = createServerFn({ method: "POST" })
+  .middleware([requireInternalAuth])
+  .inputValidator((data: unknown) => z.object({ profileId: z.string().uuid() }).parse(data))
+  .handler(async ({ data, context }) => {
+    const { issuePasswordReset } = await import("./user-passwords.server");
+    return issuePasswordReset(context.userId, data.profileId);
+  });
+
 /* ---------- onboarding intake (0047) ---------- */
 
 export const saveIntake = createServerFn({ method: "POST" })

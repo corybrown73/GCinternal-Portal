@@ -3,6 +3,7 @@ import { queryOptions, useSuspenseQuery } from "@tanstack/react-query";
 import { PageBody, PageHeader, EmptyState } from "@/components/page";
 import { AppearanceSettings } from "@/components/appearance-settings";
 import { TeamProfilePanel } from "@/components/team-profile-panel";
+import { PasswordPanel } from "@/components/password-panel";
 import { canManage, useProfile } from "@/lib/auth";
 import { LIFECYCLE_BOUNDARY_LABEL, LIFECYCLE_STAGE_MAP } from "@/lib/lifecycle";
 import { getLifecycleStages } from "@/lib/lifecycle-stages.functions";
@@ -77,6 +78,7 @@ function SettingsPage() {
           — the whole flow, by role, on one page.
         </p>
         <TeamProfilePanel />
+        <PasswordPanel />
         <AppearanceSettings canManage={canManage(profile?.role)} />
 
         <section className="overflow-hidden rounded-md border border-border bg-card">

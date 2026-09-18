@@ -2,7 +2,7 @@ import { useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { queryOptions, useMutation, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { ChevronLeft, Mail, Plus, X } from "lucide-react";
+import { ChevronLeft, KeyRound, Mail, Plus, X } from "lucide-react";
 
 import { PageBody, PageHeader } from "@/components/page";
 import { NoRows, Panel } from "@/components/record";
@@ -10,6 +10,8 @@ import { ROLE_LABELS, type PortalRole } from "@/lib/auth";
 import {
   getPendingInvites,
   getUsers,
+  sendPasswordResetFn,
+  setUserPasswordFn,
   inviteUser,
   revokeUserInvite,
   setUserRole,
@@ -304,6 +306,7 @@ function UsersPage() {
                   <tr>
                     <th className="px-3 py-1.5 font-medium">User</th>
                     <th className="px-3 py-1.5 font-medium">Role</th>
+                    <th className="px-3 py-1.5 font-medium">Password</th>
                     <th className="px-3 py-1.5 font-medium">Created</th>
                   </tr>
                 </thead>
@@ -346,6 +349,16 @@ function UsersPage() {
                             ) : null}
                           </div>
                         </td>
+                        <td className="px-3 py-1.5">
+                          <PasswordCell
+                            profileId={u.id}
+                            onNotice={(text, link) => {
+                              setError(null);
+                              setNotice({ text, link });
+                            }}
+                            onError={setError}
+                          />
+                        </td>
                         <td className="px-3 py-1.5 font-mono text-[11px] text-muted-foreground">
                           {fmtDate(u.created_at)}
                         </td>
@@ -363,5 +376,99 @@ function UsersPage() {
         </p>
       </PageBody>
     </>
+  );
+}
+
+/**
+ * Set a password on the spot, or send a reset link. The password is typed
+ * once, sent once and never kept here; the reset link comes back for
+ * copying when email is in log mode, so the admin can hand it over.
+ */
+function PasswordCell({
+  profileId,
+  onNotice,
+  onError,
+}: {
+  profileId: string;
+  onNotice: (text: string, link: string | null) => void;
+  onError: (message: string) => void;
+}) {
+  const setPassword = useServerFn(setUserPasswordFn);
+  const sendReset = useServerFn(sendPasswordResetFn);
+  const [open, setOpen] = useState(false);
+  const [value, setValue] = useState("");
+  const set = useMutation({
+    mutationFn: () => setPassword({ data: { profileId, password: value } }),
+    onSuccess: () => {
+      setValue("");
+      setOpen(false);
+      onNotice("Password set. Tell them in person, not by email.", null);
+    },
+    onError: (e) => onError((e as Error).message),
+  });
+  const reset = useMutation({
+    mutationFn: () => sendReset({ data: { profileId } }),
+    onSuccess: (r) =>
+      onNotice(
+        r.emailed
+          ? "Reset link emailed."
+          : "Email is in log mode, so here is the reset link to hand over. It works once.",
+        r.link,
+      ),
+    onError: (e) => onError((e as Error).message),
+  });
+  if (open) {
+    return (
+      <form
+        className="flex items-center gap-1.5"
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (value.length >= 12) set.mutate();
+        }}
+      >
+        <input
+          type="password"
+          autoComplete="new-password"
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          placeholder="At least 12 characters"
+          className="h-6 w-44 rounded-sm border border-border bg-background px-1.5 text-[12px] outline-none focus:ring-1 focus:ring-ring"
+        />
+        <button type="submit" className={buttonClass} disabled={set.isPending || value.length < 12}>
+          {set.isPending ? "Saving…" : "Save"}
+        </button>
+        <button
+          type="button"
+          className={buttonClass}
+          onClick={() => {
+            setOpen(false);
+            setValue("");
+          }}
+        >
+          <X className="h-3 w-3" />
+        </button>
+      </form>
+    );
+  }
+  return (
+    <div className="flex items-center gap-1.5">
+      <button
+        type="button"
+        className={buttonClass}
+        onClick={() => setOpen(true)}
+        title="Type a password for this person and save it"
+      >
+        <KeyRound className="h-3 w-3" /> Set password
+      </button>
+      <button
+        type="button"
+        className={buttonClass}
+        disabled={reset.isPending}
+        onClick={() => reset.mutate()}
+        title="Email them a one-time link to choose their own"
+      >
+        <Mail className="h-3 w-3" /> {reset.isPending ? "Sending…" : "Reset link"}
+      </button>
+    </div>
   );
 }
