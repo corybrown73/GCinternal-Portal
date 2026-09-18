@@ -15,7 +15,7 @@ import { PageBody, PageHeader } from "@/components/page";
 import { CustomerLogo } from "@/components/customer-logo";
 import { Field, NoRows, Panel } from "@/components/record";
 import { EditableField } from "@/components/editable-field";
-import { AssignmentPanel } from "@/components/assignment-panel";
+import { OwnerField } from "@/components/assignment-panel";
 import { DealGuide } from "@/components/deal-guide";
 import { getSetupStatusFn } from "@/lib/setup-status.functions";
 import { getWelcome } from "@/lib/welcome.functions";
@@ -329,54 +329,75 @@ function DealRecord({ deal }: { deal: DealData }) {
             onSave={set("primary_contact_role")}
             disabled={!editable}
           />
+          <OwnerField dealId={account.id} editable={editable} />
           <Field label="Created" value={fmtDate(account.created_at)} />
         </div>
         {field.error ? (
           <p className="text-[12px] text-destructive">{(field.error as Error).message}</p>
         ) : null}
 
+        {/* THE ORDER OF THE PAGE. What we collect up front, folded once it is
+            in; the intake, folded once it is complete; the brief beside them;
+            then the plan across the whole width, because it is the thing
+            everyone works from; and the opportunity's history last, folded,
+            for the day somebody needs it. */}
         <div className="grid gap-4 xl:grid-cols-2">
-          {/* The Gong brief first: everything below reads from it. Each section
-              folds, and remembers whether you left it open. */}
           <div className="space-y-4">
-            <ReportsPanel deal={deal} highlight={nextPanel === "panel-gong"} />
+            <Panel
+              id="panel-gong"
+              highlight={nextPanel === "panel-gong"}
+              title="Notes & documents"
+              meta={`${deal.gong_reports.length} call note${deal.gong_reports.length === 1 ? "" : "s"} · SOW ${deal.sow_url ? "on file" : "missing"} · ${deal.notes.length} sales note${deal.notes.length === 1 ? "" : "s"}`}
+              level="primary"
+              collapsible
+              defaultOpen={!(deal.gong_reports.length > 0 && Boolean(deal.sow_url))}
+              collapseKey="deal:gong"
+            >
+              <div className="space-y-3 p-3">
+                <p className="text-[12px] text-muted-foreground">
+                  Everything we collect up front: the Gong brief and call notes, the signed
+                  statement of work, and any sales notes. The AI synthesis and the welcome page read
+                  from here.
+                </p>
+                <ReportsPanel deal={deal} />
+                <SowPanel deal={deal} onSave={set} editable={editable} />
+                <NotesPanel deal={deal} />
+              </div>
+            </Panel>
             <IntakePanel
               dealId={deal.account.id}
               raw={deal.account.intake}
               editable={editable}
               highlight={nextPanel === "panel-intake"}
             />
-            <TimelinePanel
-              dealId={deal.account.id}
-              raw={deal.account.intake}
-              stageHistory={deal.stage_history}
-              wonStageKey={wonStage(deal.stages).key}
-              editable={editable}
-              hasSow={Boolean(deal.sow_url)}
-              highlight={nextPanel === "panel-plan"}
-            />
-            <SowPanel deal={deal} onSave={set} editable={editable} />
-            <NotesPanel deal={deal} />
           </div>
           <div className="space-y-4">
             <BriefsPanel deal={deal} highlight={nextPanel === "panel-brief"} />
-            <AssignmentPanel dealId={deal.account.id} editable={editable} />
-            {/* Pre-sale records that the onboarding flow never needs, folded
-                so the page reads as the seven steps and nothing else. */}
-            <Panel
-              title="More · pre-sale records"
-              meta="TAM requests and the stage history"
-              collapsible
-              defaultOpen={false}
-              collapseKey="deal:more"
-            >
-              <div className="space-y-4 p-3">
-                <TamPanel deal={deal} />
-                <HistoryPanel deal={deal} />
-              </div>
-            </Panel>
           </div>
         </div>
+
+        <TimelinePanel
+          dealId={deal.account.id}
+          raw={deal.account.intake}
+          stageHistory={deal.stage_history}
+          wonStageKey={wonStage(deal.stages).key}
+          editable={editable}
+          hasSow={Boolean(deal.sow_url)}
+          highlight={nextPanel === "panel-plan"}
+        />
+
+        <Panel
+          title="Opportunity history"
+          meta="Stage history and TAM requests from the pre-sale"
+          collapsible
+          defaultOpen={false}
+          collapseKey="deal:more"
+        >
+          <div className="space-y-4 p-3">
+            <HistoryPanel deal={deal} />
+            <TamPanel deal={deal} />
+          </div>
+        </Panel>
       </PageBody>
     </>
   );
@@ -557,9 +578,9 @@ function SowPanel({
   return (
     <Panel
       title="Statement of work"
-      meta={recorded ? "On the kickoff deck" : "Not recorded"}
+      meta={recorded ? "On file" : "Not recorded"}
       collapsible
-      defaultOpen={false}
+      defaultOpen={!recorded}
       collapseKey="deal:sow"
     >
       <div className="space-y-2 px-3 py-2.5">
@@ -724,7 +745,7 @@ function SowDocument({ deal, editable }: { deal: DealData; editable: boolean }) 
   );
 }
 
-function ReportsPanel({ deal, highlight }: { deal: DealData; highlight?: boolean }) {
+function ReportsPanel({ deal }: { deal: DealData }) {
   const { profile } = useProfile();
   const queryClient = useQueryClient();
   const create = useServerFn(addReport);
@@ -767,13 +788,10 @@ function ReportsPanel({ deal, highlight }: { deal: DealData; highlight?: boolean
 
   return (
     <Panel
-      id="panel-gong"
-      highlight={Boolean(highlight)}
       title="Gong brief & call notes"
       count={deal.gong_reports.length}
       collapsible
-      collapseKey="deal:gong"
-      level="primary"
+      collapseKey="deal:gong-reports"
       action={
         <button type="button" className={buttonClass} onClick={() => setAdding((v) => !v)}>
           {adding ? "Close" : "Add report"}

@@ -158,3 +158,101 @@ export function AssignmentPanel({ dealId, editable }: { dealId: string; editable
     </Panel>
   );
 }
+
+/**
+ * The same owner, as one field in the deal's facts row. Who it is, and — for
+ * someone who may edit — the pick and the Assign button. The first-steps
+ * checklist is not repeated here: the Getting-started strip carries it.
+ */
+export function OwnerField({ dealId, editable }: { dealId: string; editable: boolean }) {
+  const qc = useQueryClient();
+  const load = useServerFn(getDealAssignment);
+  const assign = useServerFn(assignDealFn);
+  const [error, setError] = useState<string | null>(null);
+  const [pick, setPick] = useState<string>("");
+  const [open, setOpen] = useState(false);
+  const q = useQuery({
+    queryKey: ["assignment", dealId],
+    queryFn: () => load({ data: { dealId } }),
+    refetchInterval: 15_000,
+  });
+  const m = useMutation({
+    mutationFn: (teamMemberId: string | null) => assign({ data: { dealId, teamMemberId } }),
+    onMutate: () => setError(null),
+    onSuccess: (r) => {
+      if (!r) setError("Nobody is in the assignment pool. Add people under Admin → Assignment.");
+      setOpen(false);
+      void qc.invalidateQueries({ queryKey: ["assignment", dealId] });
+      void qc.invalidateQueries({ queryKey: ["deal", dealId] });
+    },
+    onError: (e) => setError((e as Error).message),
+  });
+  const a = q.data;
+  return (
+    <div className="space-y-0.5">
+      <span className="block text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
+        Implementation owner
+      </span>
+      {open && editable ? (
+        <span className="flex items-center gap-1.5">
+          <select
+            className="h-6 rounded-sm border border-border bg-background px-1.5 text-[11px]"
+            value={pick}
+            onChange={(e) => setPick(e.target.value)}
+            disabled={m.isPending || !a}
+          >
+            <option value="">{a?.nextUp ? `By rule → ${a.nextUp.name}` : "By rule"}</option>
+            {(a?.pool ?? []).map((p) => (
+              <option key={p.teamMemberId} value={p.teamMemberId}>
+                {p.name}
+                {p.rank ? ` (#${p.rank}, carrying ${p.load})` : ""}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            className="inline-flex items-center gap-1 rounded-sm bg-primary px-2 py-1 text-[11px] font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+            disabled={m.isPending || !a}
+            onClick={() => m.mutate(pick || null)}
+          >
+            <UserRoundCheck className="h-3 w-3" />
+            {m.isPending ? "Assigning…" : "Assign"}
+          </button>
+          <button
+            type="button"
+            className="text-[11px] text-muted-foreground hover:text-foreground"
+            onClick={() => setOpen(false)}
+          >
+            Cancel
+          </button>
+        </span>
+      ) : (
+        <button
+          type="button"
+          disabled={!editable}
+          onClick={() => setOpen(true)}
+          title={
+            a?.last
+              ? `${a.last.source === "auto" ? "By rule" : "By hand"} · ${fmtDateTime(a.last.createdAt)}`
+              : "Assigned by rule when the deal closes; click to pick by hand"
+          }
+          className={cn(
+            "text-left text-[13px] disabled:cursor-default",
+            editable && "rounded-sm hover:bg-muted/60",
+          )}
+        >
+          {!a ? (
+            <span className="text-muted-foreground">…</span>
+          ) : a.owner ? (
+            <span className="font-medium">{a.owner.name}</span>
+          ) : (
+            <span className="text-muted-foreground">
+              Unassigned{a.nextUp ? ` · rule → ${a.nextUp.name}` : ""}
+            </span>
+          )}
+        </button>
+      )}
+      {error ? <p className="text-[11px] text-destructive">{error}</p> : null}
+    </div>
+  );
+}

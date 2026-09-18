@@ -65,6 +65,9 @@ export function IntakePanel({
       meta={status.done ? "Complete" : (status.next ?? undefined)}
       level="primary"
       collapsible
+      // Folded once every answer is in: it is read by the plan and the page,
+      // not by the person, from then on. Opens again the moment it is next.
+      defaultOpen={!status.done}
       collapseKey="deal:intake"
     >
       <div className="space-y-3 px-3 py-2.5">

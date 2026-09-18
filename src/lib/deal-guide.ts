@@ -76,9 +76,11 @@ export function guideSteps(input: {
     {
       key: "sow",
       label: "Upload the SOW, read it into the plan",
-      hint: "The signed PDF is the record. Reading it proposes the services; you tick what is right.",
+      hint: "Upload the signed PDF under Notes & documents, then press “Read the SOW into the plan” on the plan below.",
       done: input.hasSow && (services.length > 0 || (a.timeline.integration_tier ?? 0) > 0),
-      panel: { key: "deal:plan", id: "panel-plan" },
+      panel: input.hasSow
+        ? { key: "deal:plan", id: "panel-plan" }
+        : { key: "deal:gong", id: "panel-gong" },
     },
     {
       key: "times",
