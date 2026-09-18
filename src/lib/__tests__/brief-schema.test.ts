@@ -11,6 +11,7 @@ import { BRIEF_SHAPE_JSON, extractJsonObject, parseBriefText } from "../server/b
 const good = {
   account_name: "Summit",
   one_liner: "Summit runs crews on paper and bought GoCanvas to stop.",
+  account: { industry: "Construction", company_size: "51–200", field_users: 140, website: null },
   current_process: [
     { title: "Daily report", bullets: ["Paper, photographed", "Emailed at night"] },
   ],

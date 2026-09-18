@@ -12,6 +12,8 @@ Rules:
 - one_liner is a single sentence an exec could read: who the client is and what they bought GoCanvas to do.
 - Keep bullets tight (under 20 words each). Aim for 5-12 discovery questions.
 
+The \`account\` object is the four facts the intake asks first. industry: exactly one of Construction, Oil & Gas, Utilities, Energy, Environmental, Facilities, HVAC, Roofing, Mining, Pipeline, Field Service, Plumbing, Mechanical, Manufacturing, Logistics, Property Management — the closest fit for what the company does, or null if the notes do not say. company_size: one of "1–10", "11–50", "51–200", "201–1,000", "1,000+", from a stated headcount, else null. field_users: the number of people who will use it in the field, only if a number is stated (e.g. "140 field techs" → 140), else null. website: the company's domain if stated, else null.
+
 The \`kickoff\` object fills a deck the client themselves will read in the kickoff meeting. It is held to a harder standard than the rest of this brief:
 - Use NULL, or an empty array, whenever the notes do not say. That is the correct answer and it is used often. A blank the presenter fills in is fine; a number or a name on a slide that nobody said is not.
 - Never round, average, extrapolate or infer a figure. "About 300" stays "about 300". If seat count is discussed but not settled, licensed_seats is null.

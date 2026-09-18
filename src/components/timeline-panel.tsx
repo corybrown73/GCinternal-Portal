@@ -156,7 +156,12 @@ export function TimelinePanel({
     );
   const applyProposal = (replace: boolean) => {
     if (!proposal) return;
-    const accepted = proposal.rows.filter((r) => r.accept);
+    // A form the intake already names is not added a second time as an
+    // "additional form build" from the SOW: one list, one name.
+    const wanted = new Set(answers.wanted_forms.map((f) => f.name.trim().toLowerCase()));
+    const accepted = proposal.rows.filter(
+      (r) => r.accept && !(r.kind === "paid_form" && wanted.has(r.name.trim().toLowerCase())),
+    );
     const makeId = (row: SowPlanRow) =>
       `${row.kind.slice(0, 4)}-${Math.random().toString(36).slice(2, 8)}`;
     set({

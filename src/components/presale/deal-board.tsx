@@ -23,7 +23,12 @@ import type { Account } from "@/lib/presale-types";
 import { cn } from "@/lib/utils";
 import { fmtMoney } from "@/lib/hub-format";
 
-export type BoardDeal = Account & { am_owner_name: string | null };
+export type BoardDeal = Account & {
+  am_owner_name: string | null;
+  path?: "new_logo" | "existing" | null;
+  has_notes?: boolean;
+  has_sow?: boolean;
+};
 
 function daysIn(since: string): number {
   return Math.max(0, Math.floor((Date.now() - new Date(since).getTime()) / 86400000));
@@ -54,6 +59,41 @@ function DealCard({
       )}
     >
       <p className="truncate text-[13px] font-medium leading-snug">{deal.name}</p>
+      {/* What kind of deal, and whether it is ready to close: the two things
+          a manager scans the board for and could not see. */}
+      <div className="mt-1 flex flex-wrap items-center gap-1 text-[10px]">
+        {deal.path ? (
+          <span className="rounded-sm border border-border px-1 py-px uppercase tracking-wider text-muted-foreground">
+            {deal.path === "existing" ? "Existing" : "New"}
+          </span>
+        ) : null}
+        {deal.has_notes !== undefined ? (
+          <span
+            title={deal.has_notes ? "Call notes on the deal" : "No call notes yet"}
+            className={cn(
+              "rounded-sm px-1 py-px",
+              deal.has_notes
+                ? "bg-status-ontrack text-status-ontrack-foreground"
+                : "bg-muted text-muted-foreground/70 line-through",
+            )}
+          >
+            Notes
+          </span>
+        ) : null}
+        {deal.has_sow !== undefined ? (
+          <span
+            title={deal.has_sow ? "Signed SOW on file" : "No SOW yet"}
+            className={cn(
+              "rounded-sm px-1 py-px",
+              deal.has_sow
+                ? "bg-status-ontrack text-status-ontrack-foreground"
+                : "bg-muted text-muted-foreground/70 line-through",
+            )}
+          >
+            SOW
+          </span>
+        ) : null}
+      </div>
       <div className="mt-1 flex items-center justify-between font-mono text-[11px] text-muted-foreground">
         <span>{fmtArr(deal.arr)}</span>
         <span

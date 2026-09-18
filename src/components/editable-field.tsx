@@ -110,7 +110,20 @@ export function EditableField({
           {label}
         </dt>
         <dd className="mt-0.5 flex min-w-0 items-center gap-1.5">
-          <span className="truncate text-[13px]">{shown}</span>
+          {disabled ? (
+            <span className="truncate text-[13px]">{shown}</span>
+          ) : (
+            // The value itself is the control: one click and it is an input.
+            // The pencil stays for the eye, and for the keyboard.
+            <button
+              type="button"
+              onClick={open}
+              title={`Edit ${label}`}
+              className="min-w-0 truncate rounded-sm text-left text-[13px] hover:bg-muted/60"
+            >
+              {shown}
+            </button>
+          )}
           {disabled ? null : (
             <button
               type="button"

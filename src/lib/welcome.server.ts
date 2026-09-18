@@ -163,7 +163,9 @@ async function viewFor(deal: any, opts: { internal: boolean }): Promise<WelcomeV
       leadEmail,
       leadCard: leadCard
         ? {
-            title: leadCard.title,
+            // A customer reads this under the lead's name. An internal job
+            // title is a fine default only when somebody has written one.
+            title: leadCard.title ?? "Onboarding lead, GoCanvas",
             bookingUrl: leadCard.bookingUrl,
             photoUrl: leadCard.photoUrl,
             bio: leadCard.bio,

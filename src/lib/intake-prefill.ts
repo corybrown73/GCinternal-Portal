@@ -1,4 +1,4 @@
-import type { IntakeAnswers } from "./intake-answers";
+import { COMPANY_SIZES, INDUSTRIES, type IntakeAnswers } from "./intake-answers";
 import type { ServiceSpec } from "./onboarding-services";
 import type { BriefJson } from "./server/schemas";
 import { synthesisFromBrief } from "./welcome-synthesis";
@@ -50,7 +50,37 @@ export function prefillFromSynthesis(
     );
   }
 
-  if (intake.field_users == null && b.kickoff?.licensed_seats) {
+  // The four facts the intake asks first, when the notes stated them.
+  const acct = b.account;
+  if (acct) {
+    if (
+      !intake.industry &&
+      acct.industry &&
+      (INDUSTRIES as readonly string[]).includes(acct.industry)
+    ) {
+      patch.industry = acct.industry;
+      filled.push("the industry");
+    }
+    if (
+      !intake.company_size &&
+      acct.company_size &&
+      (COMPANY_SIZES as readonly string[]).includes(acct.company_size)
+    ) {
+      patch.company_size = acct.company_size;
+      filled.push("company size");
+    }
+    if (
+      intake.field_users == null &&
+      typeof acct.field_users === "number" &&
+      Number.isInteger(acct.field_users) &&
+      acct.field_users > 0
+    ) {
+      patch.field_users = acct.field_users;
+      filled.push("people in the field");
+    }
+  }
+
+  if (patch.field_users == null && intake.field_users == null && b.kickoff?.licensed_seats) {
     const n = Number(/\d[\d,]*/.exec(b.kickoff.licensed_seats)?.[0]?.replace(/,/g, ""));
     if (Number.isInteger(n) && n > 0) {
       patch.field_users = n;

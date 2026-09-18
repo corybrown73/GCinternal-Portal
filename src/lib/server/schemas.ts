@@ -45,6 +45,17 @@ export type TamRequestCreateInput = z.infer<typeof tamRequestCreateSchema>;
 export const briefJsonSchema = z4.object({
   account_name: z4.string(),
   one_liner: z4.string(),
+  /**
+   * The four facts the intake asks first, read out of the notes so the
+   * person does not retype them. Null when the notes do not say; the
+   * industry is one of the app's own list or null, never a paraphrase.
+   */
+  account: z4.object({
+    industry: z4.string().nullable(),
+    company_size: z4.string().nullable(),
+    field_users: z4.number().int().nullable(),
+    website: z4.string().nullable(),
+  }),
   current_process: z4.array(z4.object({ title: z4.string(), bullets: z4.array(z4.string()) })),
   goals: z4.array(z4.string()),
   what_we_know: z4.array(z4.object({ topic: z4.string(), detail: z4.string() })),

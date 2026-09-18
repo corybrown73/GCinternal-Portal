@@ -116,6 +116,7 @@ export function buildTemplateBrief(account: Account, reports: GongReport[]): Bri
     one_liner:
       account.summary ??
       `${account.name} is adopting GoCanvas — see the attached call notes for context.`,
+    account: { industry: null, company_size: null, field_users: null, website: null },
     current_process: allSections.length
       ? allSections
       : reports.map((r) => ({

@@ -13,6 +13,7 @@ import type { BriefJson } from "../server/schemas";
 const emptyBrief: BriefJson = {
   account_name: "Northwind Fleet",
   one_liner: "",
+  account: { industry: null, company_size: null, field_users: null, website: null },
   current_process: [],
   goals: [],
   what_we_know: [],

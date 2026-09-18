@@ -87,6 +87,11 @@ async function profileNames(): Promise<Map<string, string>> {
 export interface PipelineDeal extends Account {
   am_owner_name: string | null;
   se_owner_name: string | null;
+  /** New customer or existing account, when the intake has said. */
+  path: "new_logo" | "existing" | null;
+  /** The two things Closed Won is gated on. */
+  has_notes: boolean;
+  has_sow: boolean;
 }
 
 /**
@@ -103,12 +108,17 @@ export async function loadPipeline(
   // Loaded alongside the deals rather than after them: the board needs both to
   // render one column per configured stage, and a waterfall here is a second
   // round trip on the busiest internal page.
-  const [{ data: accounts, error }, names, stages] = await Promise.all([
+  const [{ data: accounts, error }, names, stages, { data: noted }] = await Promise.all([
     db().from("portal_accounts").select("*").order("name"),
     profileNames(),
     loadPipelineStages(),
+    db().from("portal_gong_reports").select("account_id"),
   ]);
   if (error) throw new Error(error.message);
+  const withNotes = new Set(
+    ((noted ?? []) as Array<{ account_id: string }>).map((r) => r.account_id),
+  );
+  const { readIntake } = await import("./intake-answers");
   const inScope = (a: Account) =>
     !scope ||
     matchesScope(
@@ -127,6 +137,9 @@ export async function loadPipeline(
     ...a,
     am_owner_name: a.am_owner_id ? (names.get(a.am_owner_id) ?? null) : null,
     se_owner_name: a.se_owner_id ? (names.get(a.se_owner_id) ?? null) : null,
+    path: readIntake(a.intake).path,
+    has_notes: withNotes.has(a.id),
+    has_sow: Boolean(a.sow_document_path),
   }));
   return { deals, stages };
 }
@@ -678,6 +691,40 @@ export async function generateDealBrief(
       // The brief is done either way; a prefill that fails is a blank left
       // blank, not a failed synthesis.
       console.error("[brief] could not prefill the intake", e);
+    }
+
+    // The deal's own header, blanks only: the champion the calls named, and
+    // the website. The same rule as the intake — a person's entry stands.
+    try {
+      const { synthesisFromBrief } = await import("./welcome-synthesis");
+      const synth = synthesisFromBrief(brief.structured_json);
+      const b = brief.structured_json as { account?: { website?: string | null } } | null;
+      const { data: row } = await db()
+        .from("portal_accounts")
+        .select("primary_contact_name,primary_contact_role,domain")
+        .eq("id", dealId)
+        .maybeSingle();
+      const header: Record<string, string> = {};
+      if (row && !row.primary_contact_name && synth?.champion?.name) {
+        header["primary_contact_name"] = synth.champion.name;
+        if (!row.primary_contact_role && synth.champion.role) {
+          header["primary_contact_role"] = synth.champion.role;
+        }
+        filled = [...filled, "the contact"];
+      }
+      const site = b?.account?.website
+        ?.trim()
+        .replace(/^https?:\/\//i, "")
+        .replace(/\/.*$/, "");
+      if (row && !row.domain && site && /^[a-z0-9.-]+\.[a-z]{2,}$/i.test(site)) {
+        header["domain"] = site.toLowerCase();
+        filled = [...filled, "the website"];
+      }
+      if (Object.keys(header).length) {
+        await db().from("portal_accounts").update(header).eq("id", dealId);
+      }
+    } catch (e) {
+      console.error("[brief] could not fill the deal header", e);
     }
   }
   return {

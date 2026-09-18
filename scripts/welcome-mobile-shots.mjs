@@ -11,6 +11,8 @@ const boxes = await p.$$(".wp-stage-box");
 for (let i = 0; i < Math.min(boxes.length, 4); i++) {
   await boxes[i].screenshot({ path: `${dir}/${name}-m${i + 1}.png` });
 }
-const overflow = await p.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+const overflow = await p.evaluate(
+  () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+);
 console.log(`${boxes.length} stages, horizontal overflow ${overflow}px`);
 await b.close();
