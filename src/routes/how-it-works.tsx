@@ -46,7 +46,7 @@ const ROLES: Array<{ key: string; who: string; when: string; steps: Step[] }> = 
       },
       {
         title: "Hand it over",
-        body: "Assignment happens by rule the moment the deal is closed-won. The implementation lead gets an email with the customer's link. Your part is done when the guide strip reads 7/7.",
+        body: "When the deal closes, the implementation team is told there is an account to claim, and whoever takes it becomes the owner (a manager can also assign by hand, or switch to assignment by rule under Admin → Assignment). Your part is done when the guide strip reads 7/7.",
       },
     ],
   },
@@ -56,8 +56,8 @@ const ROLES: Array<{ key: string; who: string; when: string; steps: Step[] }> = 
     when: "Day 1 is the kickoff. Live by day 7 on the new-customer path.",
     steps: [
       {
-        title: "Start from the email, or from My accounts",
-        body: "The assignment email carries the deal and the customer's welcome link. The customers list shows every account you own with its day counter.",
+        title: "Claim the account, then start from the deal",
+        body: "A new closed-won account emails everyone in the pool. Open the deal and press Claim this account; it is yours from then on, and the customers list shows every account you own with its day counter.",
         to: "/customers",
         label: "Customers",
       },

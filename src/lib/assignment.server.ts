@@ -246,6 +246,17 @@ export async function assignDeal(args: {
     chosen = pool.find((p) => (p.email ?? "").toLowerCase() === email);
     source = "manual";
   }
+  if (!chosen && rules.mode === "claim") {
+    // Nobody is picked for them. The pool is told there is an account to
+    // claim, and the deal page offers the claim to whoever opens it.
+    await notifyPoolToClaim(pool, {
+      dealId: args.dealId,
+      dealName: String(deal.name),
+      weight,
+      breakdown,
+    });
+    return null;
+  }
   if (!chosen) {
     const ranked = pool
       .filter((p) => p.inPool && p.active)
@@ -400,12 +411,19 @@ async function notifyAssignee(a: {
 /* ------------------------------------------ what the deal page shows */
 
 export type DealAssignment = {
+  mode: "auto" | "claim";
   owner: { teamMemberId: string; name: string; email: string | null } | null;
   last: AssignmentRow | null;
   weight: number;
   breakdown: WeightBreakdown;
   nextUp: { teamMemberId: string; name: string } | null;
-  pool: Array<{ teamMemberId: string; name: string; rank: number | null; load: number }>;
+  pool: Array<{
+    teamMemberId: string;
+    name: string;
+    email: string | null;
+    rank: number | null;
+    load: number;
+  }>;
   steps: Array<{ key: "gong" | "sow" | "welcome"; label: string; done: boolean }>;
 };
 
@@ -458,8 +476,9 @@ export async function dealAssignment(dealId: string): Promise<DealAssignment> {
       .maybeSingle(),
   ]);
   const l = (ledger ?? [])[0] as any;
-  const next = pool.find((p) => p.rank === 1) ?? null;
+  const next = rules.mode === "claim" ? null : (pool.find((p) => p.rank === 1) ?? null);
   return {
+    mode: rules.mode,
     owner,
     last: l
       ? {
@@ -482,7 +501,13 @@ export async function dealAssignment(dealId: string): Promise<DealAssignment> {
     nextUp: next ? { teamMemberId: next.teamMemberId, name: next.name } : null,
     pool: pool
       .filter((p) => p.inPool && p.active)
-      .map((p) => ({ teamMemberId: p.teamMemberId, name: p.name, rank: p.rank, load: p.load })),
+      .map((p) => ({
+        teamMemberId: p.teamMemberId,
+        name: p.name,
+        email: p.email,
+        rank: p.rank,
+        load: p.load,
+      })),
     steps: [
       { key: "gong", label: "Gong recording on the deal", done: (reports ?? 0) > 0 },
       {
@@ -497,4 +522,78 @@ export async function dealAssignment(dealId: string): Promise<DealAssignment> {
       },
     ],
   };
+}
+
+/* ------------------------------------------------------------- claim */
+
+/**
+ * The caller takes the account. They must be in the pool — matched by the
+ * email on their profile — and the account must have no owner yet.
+ */
+export async function claimDeal(profileId: string, dealId: string) {
+  const { data: profile } = await db()
+    .from("portal_profiles")
+    .select("email")
+    .eq("id", profileId)
+    .maybeSingle();
+  const email = String(profile?.email ?? "").toLowerCase();
+  if (!email) throw new Error("No profile for this sign-in");
+
+  const pool = await loadPool();
+  const me = pool.find((p) => p.inPool && p.active && (p.email ?? "").toLowerCase() === email);
+  if (!me) {
+    throw new Error(
+      "You are not in the assignment pool. A manager adds people under Admin → Assignment.",
+    );
+  }
+  const current = await dealAssignment(dealId);
+  if (current.owner) {
+    throw new Error(`${current.owner.name} already owns this account.`);
+  }
+  return assignDeal({
+    dealId,
+    teamMemberId: me.teamMemberId,
+    actorProfileId: profileId,
+    note: `Claimed by ${me.name}`,
+  });
+}
+
+/**
+ * In claim mode nobody is picked, so the pool has to hear that an account
+ * is waiting. One email to everyone in rotation, with the deal and its
+ * weight; the first to open it and press Claim takes it.
+ */
+async function notifyPoolToClaim(
+  pool: PoolRow[],
+  deal: { dealId: string; dealName: string; weight: number; breakdown: WeightBreakdown },
+): Promise<void> {
+  const to = pool.filter((p) => p.inPool && p.active && p.email).map((p) => p.email as string);
+  if (to.length === 0) return;
+  const url = `${appUrl()}/deals/${deal.dealId}`;
+  for (const email of to) {
+    try {
+      await sendEmail({
+        to: email,
+        subject: `New account to claim: ${deal.dealName}`,
+        html: `
+        <div style="font-family:sans-serif;max-width:560px;color:#0a1628">
+          <h2 style="color:#072b57;margin:0 0 8px">${escapeHtml(deal.dealName)} just closed</h2>
+          <p style="font-size:14px;line-height:1.6">
+            Nobody owns it yet. Weight ${deal.weight} · ${escapeHtml(describeBreakdown(deal.breakdown))}.
+            Open it and press <b>Claim this account</b> if it is yours.
+          </p>
+          <div style="margin:20px 0">
+            <a href="${url}" style="background:#12509b;color:#fff;padding:10px 22px;border-radius:6px;text-decoration:none;font-weight:600">Open the deal</a>
+          </div>
+          <p style="font-size:12px;color:#556477">GoCanvas Handoff Hub</p>
+        </div>`,
+      });
+    } catch (e) {
+      console.error("[assignment] could not notify the pool", e);
+    }
+  }
+}
+
+function escapeHtml(s: string): string {
+  return s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 }

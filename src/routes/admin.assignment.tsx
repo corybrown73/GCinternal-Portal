@@ -177,6 +177,43 @@ function AssignmentPage() {
           )}
         </Panel>
 
+        {/* How an account gets its owner */}
+        {rules ? (
+          <Panel title="How accounts get an owner" level="primary">
+            <div className="flex flex-wrap gap-2 px-3 py-3">
+              {(
+                [
+                  [
+                    "claim",
+                    "Claimed by the team",
+                    "Nobody is picked. Everyone in the pool is told a new account is waiting; the first to open it and press Claim takes it.",
+                  ],
+                  [
+                    "auto",
+                    "Assigned by rule",
+                    "The lightest-loaded person in the pool is picked the moment the deal closes, and emailed.",
+                  ],
+                ] as Array<["claim" | "auto", string, string]>
+              ).map(([mode, label, note]) => (
+                <button
+                  key={mode}
+                  type="button"
+                  disabled={saveM.isPending}
+                  aria-pressed={rules.mode === mode}
+                  onClick={() => saveM.mutate({ ...rules, mode })}
+                  className={cn(
+                    "w-[300px] rounded-md border p-3 text-left",
+                    rules.mode === mode ? "border-ring ring-1 ring-ring" : "border-border",
+                  )}
+                >
+                  <span className="block text-[13px] font-medium">{label}</span>
+                  <span className="mt-1 block text-[12px] text-muted-foreground">{note}</span>
+                </button>
+              ))}
+            </div>
+          </Panel>
+        ) : null}
+
         {/* The rules */}
         {rules ? (
           <Panel

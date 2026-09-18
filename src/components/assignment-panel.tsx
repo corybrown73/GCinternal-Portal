@@ -6,7 +6,8 @@ import { Check, UserRoundCheck } from "lucide-react";
 
 import { Panel } from "@/components/record";
 import { describeBreakdown } from "@/lib/assignment";
-import { assignDealFn, getDealAssignment } from "@/lib/assignment.functions";
+import { assignDealFn, claimDealFn, getDealAssignment } from "@/lib/assignment.functions";
+import { useProfile } from "@/lib/auth";
 import { fmtDateTime } from "@/lib/hub-format";
 import { cn } from "@/lib/utils";
 
@@ -166,8 +167,10 @@ export function AssignmentPanel({ dealId, editable }: { dealId: string; editable
  */
 export function OwnerField({ dealId, editable }: { dealId: string; editable: boolean }) {
   const qc = useQueryClient();
+  const { profile } = useProfile();
   const load = useServerFn(getDealAssignment);
   const assign = useServerFn(assignDealFn);
+  const claim = useServerFn(claimDealFn);
   const [error, setError] = useState<string | null>(null);
   const [pick, setPick] = useState<string>("");
   const [open, setOpen] = useState(false);
@@ -187,12 +190,36 @@ export function OwnerField({ dealId, editable }: { dealId: string; editable: boo
     },
     onError: (e) => setError((e as Error).message),
   });
+  const claimM = useMutation({
+    mutationFn: () => claim({ data: { dealId } }),
+    onMutate: () => setError(null),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["assignment", dealId] });
+      void qc.invalidateQueries({ queryKey: ["deal", dealId] });
+    },
+    onError: (e) => setError((e as Error).message),
+  });
   const a = q.data;
+  const myEmail = (profile?.email ?? "").toLowerCase();
+  const inPool =
+    Boolean(myEmail) && (a?.pool ?? []).some((p) => (p.email ?? "").toLowerCase() === myEmail);
   return (
     <div className="space-y-0.5">
       <span className="block text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
         Implementation owner
       </span>
+      {a && !a.owner && inPool && !open ? (
+        <button
+          type="button"
+          className="inline-flex items-center gap-1 rounded-sm bg-primary px-2 py-1 text-[11px] font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+          disabled={claimM.isPending}
+          onClick={() => claimM.mutate()}
+          title="Take this account. It becomes yours, and the team sees your name here."
+        >
+          <UserRoundCheck className="h-3 w-3" />
+          {claimM.isPending ? "Claiming…" : "Claim this account"}
+        </button>
+      ) : null}
       {open && editable ? (
         <span className="flex items-center gap-1.5">
           <select
@@ -201,7 +228,13 @@ export function OwnerField({ dealId, editable }: { dealId: string; editable: boo
             onChange={(e) => setPick(e.target.value)}
             disabled={m.isPending || !a}
           >
-            <option value="">{a?.nextUp ? `By rule → ${a.nextUp.name}` : "By rule"}</option>
+            <option value="">
+              {a?.mode === "claim"
+                ? "Pick someone…"
+                : a?.nextUp
+                  ? `By rule → ${a.nextUp.name}`
+                  : "By rule"}
+            </option>
             {(a?.pool ?? []).map((p) => (
               <option key={p.teamMemberId} value={p.teamMemberId}>
                 {p.name}
@@ -212,7 +245,7 @@ export function OwnerField({ dealId, editable }: { dealId: string; editable: boo
           <button
             type="button"
             className="inline-flex items-center gap-1 rounded-sm bg-primary px-2 py-1 text-[11px] font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-            disabled={m.isPending || !a}
+            disabled={m.isPending || !a || (a.mode === "claim" && !pick)}
             onClick={() => m.mutate(pick || null)}
           >
             <UserRoundCheck className="h-3 w-3" />
@@ -233,8 +266,10 @@ export function OwnerField({ dealId, editable }: { dealId: string; editable: boo
           onClick={() => setOpen(true)}
           title={
             a?.last
-              ? `${a.last.source === "auto" ? "By rule" : "By hand"} · ${fmtDateTime(a.last.createdAt)}`
-              : "Assigned by rule when the deal closes; click to pick by hand"
+              ? `${a.last.source === "auto" ? "By rule" : "By hand"} · ${fmtDateTime(a.last.createdAt)}${a.last.note ? ` · ${a.last.note}` : ""}`
+              : a?.mode === "claim"
+                ? "Claimed by whoever takes it; click to pick by hand"
+                : "Assigned by rule when the deal closes; click to pick by hand"
           }
           className={cn(
             "text-left text-[13px] disabled:cursor-default",
@@ -247,7 +282,11 @@ export function OwnerField({ dealId, editable }: { dealId: string; editable: boo
             <span className="font-medium">{a.owner.name}</span>
           ) : (
             <span className="text-muted-foreground">
-              Unassigned{a.nextUp ? ` · rule → ${a.nextUp.name}` : ""}
+              {a.mode === "claim"
+                ? inPool
+                  ? "Unassigned"
+                  : "Unassigned · waiting to be claimed"
+                : `Unassigned${a.nextUp ? ` · rule → ${a.nextUp.name}` : ""}`}
             </span>
           )}
         </button>

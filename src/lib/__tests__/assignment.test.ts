@@ -125,3 +125,12 @@ describe("integrationTierFrom", () => {
     expect(integrationTierFrom("")).toBeNull();
   });
 });
+
+describe("assignment mode", () => {
+  it("defaults to auto and reads claim", async () => {
+    const { normalizeRules } = await import("../assignment");
+    expect(normalizeRules({}).mode).toBe("auto");
+    expect(normalizeRules({ mode: "claim" }).mode).toBe("claim");
+    expect(normalizeRules({ mode: "whatever" }).mode).toBe("auto");
+  });
+});

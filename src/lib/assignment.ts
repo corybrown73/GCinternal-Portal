@@ -15,7 +15,15 @@
 
 export type Band = { min: number; points: number };
 
+export type AssignmentMode = "auto" | "claim";
+
 export type AssignmentRules = {
+  /**
+   * How an account gets its owner. "auto": the rule picks the lightest-loaded
+   * person the moment the deal closes. "claim": nobody is picked; the pool
+   * is told a new account is waiting and somebody takes it themselves.
+   */
+  mode: AssignmentMode;
   /** Days of history that count as "carrying". */
   window_days: number;
   /** Every deal is at least this much. */
@@ -31,6 +39,7 @@ export type AssignmentRules = {
 };
 
 export const DEFAULT_ASSIGNMENT_RULES: AssignmentRules = {
+  mode: "auto",
   window_days: 30,
   base_points: 1,
   arr_bands: [
@@ -71,6 +80,7 @@ export function normalizeRules(raw: unknown): AssignmentRules {
     }
   }
   return {
+    mode: r.mode === "claim" ? "claim" : "auto",
     window_days:
       Number.isFinite(r.window_days) && Number(r.window_days) >= 1
         ? Math.round(Number(r.window_days))

@@ -24,6 +24,7 @@ export const saveAssignmentRules = createServerFn({ method: "POST" })
   .inputValidator((data: unknown) =>
     z
       .object({
+        mode: z.enum(["auto", "claim"]).optional(),
         window_days: z.number().int().min(1).max(365),
         base_points: z.number().int().min(0).max(20),
         arr_bands: z
@@ -87,4 +88,16 @@ export const assignDealFn = createServerFn({ method: "POST" })
       teamMemberId: data.teamMemberId ?? null,
       actorProfileId: context.profile.id,
     });
+  });
+
+/**
+ * Take an unowned account yourself. Anyone in the pool may; the deal must
+ * have no owner yet, so a claim can never quietly take a colleague's account.
+ */
+export const claimDealFn = createServerFn({ method: "POST" })
+  .middleware([requireInternalAuth])
+  .inputValidator((data: unknown) => z.object({ dealId: z.string().uuid() }).parse(data))
+  .handler(async ({ data, context }) => {
+    const { claimDeal } = await import("./assignment.server");
+    return claimDeal(context.profile.id, data.dealId);
   });
