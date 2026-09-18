@@ -316,8 +316,21 @@ function UsersPage() {
                     return (
                       <tr key={u.id} className="hover:bg-muted/60">
                         <td className="px-3 py-1.5">
-                          <p className="text-[13px] font-medium">{u.full_name || u.email}</p>
-                          <p className="text-[11px] text-muted-foreground">{u.email}</p>
+                          <p className="flex items-center gap-2 text-[13px] font-medium">
+                            {u.full_name || u.email}
+                            {u.activated ? null : (
+                              <span
+                                className="rounded-sm border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wider text-amber-800 dark:text-amber-300"
+                                title="Invited, but never confirmed the email. Activate them with a password below."
+                              >
+                                not activated
+                              </span>
+                            )}
+                          </p>
+                          <p className="text-[11px] text-muted-foreground">
+                            {u.email}
+                            {u.last_sign_in_at ? ` · signed in ${fmtDate(u.last_sign_in_at)}` : ""}
+                          </p>
                         </td>
                         <td className="px-3 py-1.5">
                           <div className="flex items-center gap-2">
@@ -352,6 +365,7 @@ function UsersPage() {
                         <td className="px-3 py-1.5">
                           <PasswordCell
                             profileId={u.id}
+                            activated={u.activated}
                             onNotice={(text, link) => {
                               setError(null);
                               setNotice({ text, link });
@@ -386,10 +400,12 @@ function UsersPage() {
  */
 function PasswordCell({
   profileId,
+  activated,
   onNotice,
   onError,
 }: {
   profileId: string;
+  activated: boolean;
   onNotice: (text: string, link: string | null) => void;
   onError: (message: string) => void;
 }) {
@@ -402,7 +418,12 @@ function PasswordCell({
     onSuccess: () => {
       setValue("");
       setOpen(false);
-      onNotice("Password set. Tell them in person, not by email.", null);
+      onNotice(
+        activated
+          ? "Password set. Tell them in person, not by email."
+          : "Activated. They can sign in now with the password you set — tell them in person, not by email.",
+        null,
+      );
     },
     onError: (e) => onError((e as Error).message),
   });
@@ -456,9 +477,13 @@ function PasswordCell({
         type="button"
         className={buttonClass}
         onClick={() => setOpen(true)}
-        title="Type a password for this person and save it"
+        title={
+          activated
+            ? "Type a password for this person and save it"
+            : "Confirm their account and give them a password, without the email"
+        }
       >
-        <KeyRound className="h-3 w-3" /> Set password
+        <KeyRound className="h-3 w-3" /> {activated ? "Set password" : "Activate"}
       </button>
       <button
         type="button"

@@ -42,7 +42,13 @@ export async function setUserPassword(
     throw new Error(`Use at least ${MIN_LENGTH} characters`);
   }
   await profileEmail(profileId);
-  const { error } = await db().auth.admin.updateUserById(profileId, { password });
+  // Setting a password by hand IS the activation: the person was invited
+  // while email was off, never got the link, and cannot confirm the address
+  // themselves. The admin vouching for them stands in for the click.
+  const { error } = await db().auth.admin.updateUserById(profileId, {
+    password,
+    email_confirm: true,
+  });
   if (error) throw new Error(`Could not set the password: ${error.message}`);
   await audit({
     actor_type: "user",
@@ -50,7 +56,7 @@ export async function setUserPassword(
     action: "user.password_set",
     entity_type: "profile",
     entity_id: profileId,
-    payload: { by: actor.email },
+    payload: { by: actor.email, activated: true },
   });
   return { ok: true };
 }

@@ -1136,14 +1136,54 @@ export async function revokeApiKeyRecord(userId: string, keyId: string): Promise
 
 /* ---------- admin: users ---------- */
 
-export async function listProfiles(userId: string): Promise<ProfileRow[]> {
+export type ProfileListRow = ProfileRow & {
+  /** The auth account is confirmed: the person can sign in. */
+  activated: boolean;
+  last_sign_in_at: string | null;
+};
+
+/**
+ * Every profile, with whether its sign-in actually works. An invite creates
+ * the profile at once, so "in the list" never meant "can sign in": the
+ * confirmation lives on the auth account, which is read here so an admin
+ * can see who is still locked out and activate them by hand.
+ */
+export async function listProfiles(userId: string): Promise<ProfileListRow[]> {
   await requireSuperAdmin(userId);
   const { data, error } = await db()
     .from("portal_profiles")
     .select("id, email, full_name, role, created_at")
     .order("created_at", { ascending: true });
   if (error) throw new Error(error.message);
-  return (data ?? []) as ProfileRow[];
+  const rows = (data ?? []) as ProfileRow[];
+
+  const auth = new Map<string, { confirmed: boolean; lastSignIn: string | null }>();
+  try {
+    const { data: page } = await db().auth.admin.listUsers({ page: 1, perPage: 1000 });
+    for (const u of (page?.users ?? []) as Array<{
+      id: string;
+      email_confirmed_at?: string | null;
+      confirmed_at?: string | null;
+      last_sign_in_at?: string | null;
+    }>) {
+      auth.set(u.id, {
+        confirmed: Boolean(u.email_confirmed_at ?? u.confirmed_at),
+        lastSignIn: u.last_sign_in_at ?? null,
+      });
+    }
+  } catch (e) {
+    // The list must still render: without the auth read everyone shows as
+    // activated, which is the pre-existing behaviour, not a new failure.
+    console.error("[users] could not read auth accounts", e);
+  }
+  return rows.map((r) => {
+    const a = auth.get(r.id);
+    return {
+      ...r,
+      activated: a ? a.confirmed : true,
+      last_sign_in_at: a?.lastSignIn ?? null,
+    };
+  });
 }
 
 export const ASSIGNABLE_ROLES = [
