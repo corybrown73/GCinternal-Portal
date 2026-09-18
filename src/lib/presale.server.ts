@@ -929,6 +929,10 @@ export async function startOnboardingAs(
     .from("implementations")
     .insert({
       customer_id: customerId,
+      // The deal this project came from (0041). Without it the customer page
+      // has no way back to the plan, the clock or the welcome link — the
+      // backfill covered the old rows; this covers every new one.
+      deal_id: account.id,
       name: account.name,
       current_stage: firstStage,
       stage_entered_at: now,
