@@ -61,10 +61,10 @@ export function guideSteps(input: {
     },
     {
       key: "synth",
-      label: "Synthesise with AI",
-      hint: "Fills the intake's blanks from the calls — the process today, the forms, seats, systems.",
+      label: "Generate the customer brief",
+      hint: "The button at the top right. Reads the calls; fills the intake's blanks — the process today, the forms, seats, systems.",
       done: input.aiBriefs > 0,
-      panel: { key: "deal:brief", id: "panel-brief" },
+      panel: { key: "deal:brief", id: "brief-actions" },
     },
     {
       key: "intake",
@@ -94,7 +94,7 @@ export function guideSteps(input: {
       label: "Open the welcome page, send the link",
       hint: "Present it on the first call. Copy the customer's link and the QR is on the cover.",
       done: Boolean(input.shareUrl) && blockers.length === 0,
-      panel: { key: "deal:brief", id: "panel-brief" },
+      panel: { key: "deal:plan", id: "panel-plan" },
     },
   ];
   return steps.map((s) => ({ ...s, blockers: s.key === "share" ? blockers : [] }));

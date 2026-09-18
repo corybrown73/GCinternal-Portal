@@ -37,8 +37,8 @@ const ROLES: Array<{ key: string; who: string; when: string; steps: Step[] }> = 
         body: "New customer, or an existing account adding services. It is the first question in the intake, and every screen after it follows the answer.",
       },
       {
-        title: "Paste the Gong brief, then synthesise",
-        body: "Call notes or the account map into the Gong section. 'Synthesise with AI' reads them and fills the intake's blanks: the process today, the forms, seats, systems. Check what it filled.",
+        title: "Paste the Gong brief, then generate the customer brief",
+        body: "Call notes or the account map into Notes & documents. The 'Generate customer brief' button at the top right lights up once a note and the path are in; it reads the calls and fills the intake's blanks: the process today, the forms, seats, systems. Check what it filled.",
       },
       {
         title: "Upload the signed SOW and read it into the plan",

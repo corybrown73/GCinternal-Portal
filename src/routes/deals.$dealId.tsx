@@ -201,6 +201,10 @@ function DealRecord({ deal }: { deal: DealData }) {
   );
   const [today, setToday] = useState<string | null>(null);
   useEffect(() => setToday(localIso()), []);
+  const [briefResult, setBriefResult] = useState<{
+    tone: "ok" | "warn" | "error";
+    text: string;
+  } | null>(null);
   const counter = today ? dayCounter(dayTimeline, today) : null;
   const onPlan = isAtOrPast(deal.stages, account.stage, wonStage(deal.stages).key);
 
@@ -222,10 +226,29 @@ function DealRecord({ deal }: { deal: DealData }) {
           </span>
         }
         {...(account.summary ? { description: account.summary } : {})}
-        actions={<StartOnboarding deal={deal} />}
+        actions={
+          <div className="flex flex-wrap items-center gap-2">
+            <BriefActions deal={deal} onResult={setBriefResult} />
+            <StartOnboarding deal={deal} />
+          </div>
+        }
       />
       <PageBody className="space-y-4">
         <DealGuide steps={steps} setup={setup.data ?? null} manager={canManage(profile?.role)} />
+        {briefResult ? (
+          <p
+            className={cn(
+              "rounded-md border px-3 py-2 text-[12px]",
+              briefResult.tone === "ok" &&
+                "border-emerald-500/30 bg-emerald-500/10 text-emerald-800 dark:text-emerald-300",
+              briefResult.tone === "warn" &&
+                "border-amber-500/40 bg-amber-500/10 text-amber-800 dark:text-amber-300",
+              briefResult.tone === "error" && "border-destructive/40 text-destructive",
+            )}
+          >
+            {briefResult.text}
+          </p>
+        ) : null}
         <div className="flex flex-wrap items-center gap-x-6 gap-y-2 rounded-md border border-border bg-card px-4 py-3">
           {/* One clock. Before closed-won it is days in stage; after, it is
               the day counter against the plan. Two numbers side by side is
@@ -364,15 +387,14 @@ function DealRecord({ deal }: { deal: DealData }) {
                 <NotesPanel deal={deal} />
               </div>
             </Panel>
+          </div>
+          <div className="space-y-4">
             <IntakePanel
               dealId={deal.account.id}
               raw={deal.account.intake}
               editable={editable}
               highlight={nextPanel === "panel-intake"}
             />
-          </div>
-          <div className="space-y-4">
-            <BriefsPanel deal={deal} highlight={nextPanel === "panel-brief"} />
           </div>
         </div>
 
@@ -388,18 +410,98 @@ function DealRecord({ deal }: { deal: DealData }) {
 
         <Panel
           title="Opportunity history"
-          meta="Stage history and TAM requests from the pre-sale"
+          meta="Generated briefs, the stage history and TAM requests"
           collapsible
           defaultOpen={false}
           collapseKey="deal:more"
         >
           <div className="space-y-4 p-3">
+            <BriefsPanel deal={deal} />
             <HistoryPanel deal={deal} />
             <TamPanel deal={deal} />
           </div>
         </Panel>
       </PageBody>
     </>
+  );
+}
+
+/* ---------- Generate customer brief: one button, lit when it can do its job ---------- */
+
+/**
+ * The synthesis lives in the header now, next to Start onboarding, instead
+ * of a section of its own. It stays quiet until the deal has what it reads
+ * — a call note and a chosen path — then turns primary. The result lands as
+ * one line under the guide, not a panel.
+ */
+function BriefActions({
+  deal,
+  onResult,
+}: {
+  deal: DealData;
+  onResult: (r: { tone: "ok" | "warn" | "error"; text: string }) => void;
+}) {
+  const synthesize = useServerFn(generateBriefForDeal);
+  const queryClient = useQueryClient();
+  const intake = readIntake(deal.account.intake);
+  const missing: string[] = [];
+  if (deal.gong_reports.length === 0) missing.push("a Gong brief or call note");
+  if (intake.path === null) missing.push("the path");
+  const ready = missing.length === 0;
+
+  const synthesis = useMutation({
+    mutationFn: () => synthesize({ data: { dealId: deal.account.id } }),
+    onSuccess: (r) => {
+      void queryClient.invalidateQueries({ queryKey: ["deal", deal.account.id] });
+      void queryClient.invalidateQueries({ queryKey: ["welcome", deal.account.id] });
+      if (r.generator !== "llm") {
+        onResult({
+          tone: "warn",
+          text:
+            r.error ??
+            "AI synthesis is not set up on this deployment, so a template brief was written instead.",
+        });
+      } else if (r.status !== "complete") {
+        onResult({ tone: "error", text: r.error ?? "The synthesis did not complete." });
+      } else if (r.filled.length) {
+        onResult({
+          tone: "ok",
+          text: `Brief generated, and the intake filled in from it: ${r.filled.join(", ")}. Your answers always win.`,
+        });
+      } else {
+        onResult({
+          tone: "ok",
+          text: "Brief generated. The intake already had its answers; the welcome page reads the brief wherever a field is blank.",
+        });
+      }
+    },
+    onError: (e) => onResult({ tone: "error", text: (e as Error).message }),
+  });
+
+  return (
+    <span id="brief-actions" className="inline-flex items-center gap-2">
+      <button
+        type="button"
+        className={cn(ready ? primaryButtonClass : buttonClass, !ready && "opacity-70")}
+        disabled={synthesis.isPending || !ready}
+        onClick={() => synthesis.mutate()}
+        title={
+          ready
+            ? "Read the call notes and write the customer brief with AI; fills the intake's blanks"
+            : `Needs ${missing.join(" and ")} first`
+        }
+      >
+        {synthesis.isPending ? "Generating…" : "Generate customer brief"}
+      </button>
+      <Link
+        to="/onboarding-plan/$dealId"
+        params={{ dealId: deal.account.id }}
+        className={buttonClass}
+        title="The customer-facing page: present it, print it, send it"
+      >
+        Open the welcome page
+      </Link>
+    </span>
   );
 }
 
@@ -938,20 +1040,8 @@ type DiscoveryQuestion = { question: string; why_it_matters: string; category: s
  * is the document, and it is always current. Old briefs stay listed for
  * their history and their discovery questions.
  */
-function BriefsPanel({ deal, highlight }: { deal: DealData; highlight?: boolean }) {
+function BriefsPanel({ deal }: { deal: DealData }) {
   const download = useServerFn(getBriefDownloadUrl);
-  const synthesize = useServerFn(generateBriefForDeal);
-  const queryClient = useQueryClient();
-  // Reads every Gong report and reviewed note on the deal and writes the
-  // synthesis. The welcome page borrows from it where the intake is blank.
-  const synthesis = useMutation({
-    mutationFn: () => synthesize({ data: { dealId: deal.account.id } }),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ["deal", deal.account.id] });
-      void queryClient.invalidateQueries({ queryKey: ["welcome", deal.account.id] });
-    },
-  });
-
   const downloadMutation = useMutation({
     mutationFn: (briefId: string) => download({ data: { briefId } }),
     onSuccess: ({ url }) => {
@@ -970,67 +1060,18 @@ function BriefsPanel({ deal, highlight }: { deal: DealData; highlight?: boolean 
 
   return (
     <Panel
-      id="panel-brief"
-      highlight={Boolean(highlight)}
-      title="Customer brief"
+      title="Brief history"
       count={deal.briefs.length}
+      meta="Every generated brief, newest first"
       collapsible
+      defaultOpen={false}
       collapseKey="deal:brief"
-      action={
-        <div className="flex items-center gap-1.5">
-          <button
-            type="button"
-            className={buttonClass}
-            disabled={synthesis.isPending || deal.gong_reports.length === 0}
-            onClick={() => synthesis.mutate()}
-            title={
-              deal.gong_reports.length === 0
-                ? "Add a Gong report or call notes first — the synthesis reads those"
-                : "Read every call note on this deal and synthesise the brief with AI"
-            }
-          >
-            {synthesis.isPending ? "Synthesising…" : "Synthesise with AI"}
-          </button>
-          <Link
-            to="/onboarding-plan/$dealId"
-            params={{ dealId: deal.account.id }}
-            className={primaryButtonClass}
-            title="The customer-facing brief: present it, print it, send it"
-          >
-            Open the welcome page
-          </Link>
-        </div>
-      }
     >
-      <p className="border-b border-border px-3 py-2 text-[12px] text-muted-foreground">
-        The brief is the welcome page: your team, the timeline with dates, what&apos;s expected, how
-        we get there. It reads from this record, so it is always current — present it on the
-        kickoff, print it to PDF, or send the customer their link. Synthesise with AI to read the
-        call notes into it: how the job runs today, what comes after the first form, who owns it on
-        their side — wherever the intake has not said.
-      </p>
-      {downloadMutation.isError || synthesis.isError ? (
+      {downloadMutation.isError ? (
         <p className="border-b border-border px-3 py-2 text-[11px] text-destructive">
-          {((synthesis.error ?? downloadMutation.error) as Error).message}
+          {(downloadMutation.error as Error).message}
         </p>
       ) : null}
-      {synthesis.isSuccess && synthesis.data.generator !== "llm" ? (
-        // The AI did not run — say so, and why. The template brief that was
-        // written instead is still on the list below, marked as such.
-        <p className="border-b border-border px-3 py-2 text-[11px] text-amber-800 dark:text-amber-300">
-          {synthesis.data.error ??
-            "AI synthesis is not set up on this deployment, so a template brief was written instead."}
-        </p>
-      ) : synthesis.isSuccess ? (
-        <p className="border-b border-border px-3 py-2 text-[11px] text-emerald-700 dark:text-emerald-400">
-          {synthesis.data.status === "complete"
-            ? synthesis.data.filled.length
-              ? `Synthesised, and the intake filled in from it: ${synthesis.data.filled.join(", ")}. Check them above — your answers always win.`
-              : "Synthesised. The intake already had its answers, so nothing was filled in; the welcome page reads the synthesis wherever a field is blank."
-            : (synthesis.data.error ?? "The synthesis did not complete.")}
-        </p>
-      ) : null}
-
       {deal.briefs.length === 0 ? null : (
         <ul className="divide-y divide-border">
           {deal.briefs.map((b) => (
