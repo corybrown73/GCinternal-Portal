@@ -65,7 +65,7 @@ export const Route = createFileRoute("/admin/users")({
 const selectClass =
   "h-6 rounded-sm border border-border bg-background px-1 text-[12px] text-foreground outline-none focus:ring-1 focus:ring-ring";
 const buttonClass =
-  "inline-flex items-center gap-1 rounded-sm border border-border px-1.5 py-0.5 text-[11px] text-muted-foreground hover:text-foreground";
+  "inline-flex items-center gap-1 whitespace-nowrap rounded-sm border border-border px-1.5 py-0.5 text-[11px] text-muted-foreground hover:text-foreground";
 
 function UsersPage() {
   const { data: users } = useSuspenseQuery(usersQuery);
@@ -159,7 +159,7 @@ function UsersPage() {
           </div>
         }
       />
-      <PageBody className="max-w-3xl space-y-3">
+      <PageBody className="max-w-5xl space-y-3">
         {error ? (
           <p
             role="alert"
@@ -316,7 +316,7 @@ function UsersPage() {
                     return (
                       <tr key={u.id} className="hover:bg-muted/60">
                         <td className="px-3 py-1.5">
-                          <p className="flex items-center gap-2 text-[13px] font-medium">
+                          <p className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[13px] font-medium">
                             {u.full_name || u.email}
                             {u.activated ? null : (
                               <span
@@ -373,7 +373,7 @@ function UsersPage() {
                             onError={setError}
                           />
                         </td>
-                        <td className="px-3 py-1.5 font-mono text-[11px] text-muted-foreground">
+                        <td className="whitespace-nowrap px-3 py-1.5 font-mono text-[11px] text-muted-foreground">
                           {fmtDate(u.created_at)}
                         </td>
                       </tr>
@@ -472,7 +472,7 @@ function PasswordCell({
     );
   }
   return (
-    <div className="flex items-center gap-1.5">
+    <div className="flex flex-nowrap items-center gap-1.5">
       <button
         type="button"
         className={buttonClass}
