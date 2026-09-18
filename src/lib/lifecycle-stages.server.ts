@@ -26,7 +26,7 @@ import type { LifecyclePhase } from "./lifecycle";
 
 const db = () => supabaseAdmin as any;
 
-const COLUMNS = "key, label, intent, phase, color, sort_order, is_builtin";
+const COLUMNS = "key, label, intent, phase, color, sort_order, is_builtin, hidden";
 
 /** Shorter than the flag cache: an admin edit should show on the next page. */
 const CACHE_MS = 15_000;
@@ -178,7 +178,7 @@ async function afterWrite(
  */
 export async function updateLifecycleStage(
   actorId: string,
-  input: { key: string; label: string; intent: string | null; color: string },
+  input: { key: string; label: string; intent: string | null; color: string; hidden?: boolean },
 ): Promise<LifecycleStageAdminView> {
   await requireConfigEnabled();
   const label = input.label.trim();
@@ -190,14 +190,24 @@ export async function updateLifecycleStage(
 
   const { data, error } = await db()
     .from("portal_lifecycle_stages")
-    .update({ label, intent, color })
+    .update({
+      label,
+      intent,
+      color,
+      ...(input.hidden !== undefined ? { hidden: input.hidden } : {}),
+    })
     .eq("key", input.key)
     .select("key")
     .maybeSingle();
   if (error) throw new Error(error.message);
   if (!data) throw new Error(`No stage "${input.key}" is configured.`);
 
-  return afterWrite(actorId, "lifecycle_stage.update", { key: input.key, label, color });
+  return afterWrite(actorId, "lifecycle_stage.update", {
+    key: input.key,
+    label,
+    color,
+    ...(input.hidden !== undefined ? { hidden: input.hidden } : {}),
+  });
 }
 
 const PHASES: readonly LifecyclePhase[] = ["intake", "delivery", "value", "steady-state"];

@@ -27,8 +27,8 @@ export function LifecycleRail({ className }: { className?: string }) {
         {/* Below md there is no width for a readable rail, so the vocabulary is
             stated rather than clipped. */}
         <p className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground md:hidden">
-          Standard journey · {LIFECYCLE_STAGES.length} stages · Handoff → Handover to Customer
-          Success
+          Standard journey · {LIFECYCLE_STAGES.length} stages · {LIFECYCLE_STAGES[0]?.label} →{" "}
+          {LIFECYCLE_STAGES[LIFECYCLE_STAGES.length - 1]?.label}
         </p>
 
         <div className="hidden items-center gap-px overflow-x-auto md:flex">
@@ -64,7 +64,9 @@ export function LifecycleRail({ className }: { className?: string }) {
               </TooltipTrigger>
               <TooltipContent side="bottom" className="max-w-64">
                 <p className="font-medium">{stage.label}</p>
-                <p className="mt-1 text-muted-foreground">{stage.intent}</p>
+                {/* Same ink as the title at 80%: the tooltip is navy, and the
+                    page's muted grey vanished into it. */}
+                <p className="mt-1 text-primary-foreground/80">{stage.intent}</p>
               </TooltipContent>
             </Tooltip>
           ))}

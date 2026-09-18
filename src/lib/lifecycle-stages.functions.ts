@@ -65,7 +65,13 @@ export const saveLifecycleStage = createServerFn({ method: "POST" })
   .middleware([requireInternalAuth])
   .inputValidator((data: unknown) =>
     z
-      .object({ key: stageKey, label: stageLabel, intent: stageIntent, color: stageColor })
+      .object({
+        key: stageKey,
+        label: stageLabel,
+        intent: stageIntent,
+        color: stageColor,
+        hidden: z.boolean().optional(),
+      })
       .parse(data),
   )
   .handler(async ({ data, context }) => {
@@ -76,6 +82,7 @@ export const saveLifecycleStage = createServerFn({ method: "POST" })
       label: data.label,
       intent: data.intent ?? null,
       color: data.color,
+      ...(data.hidden !== undefined ? { hidden: data.hidden } : {}),
     });
   });
 

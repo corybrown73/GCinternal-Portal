@@ -135,3 +135,45 @@ describe("lookups", () => {
     expect(lifecycleOrder(stages, null)).toBe(-1);
   });
 });
+
+describe("applyStageOverrides · hiding and ordering the live journey", () => {
+  it("drops hidden stages from the live list and keeps the map whole", async () => {
+    const { LIFECYCLE_STAGES, LIFECYCLE_STAGE_MAP, applyStageOverrides, resetStageOverrides } =
+      await import("../lifecycle");
+    const before = LIFECYCLE_STAGES.length;
+    applyStageOverrides([
+      { key: "handoff", label: "Pre-Kickoff" },
+      { key: "plan-internal", label: "Kickoff" },
+      { key: "align-external", label: "Align Externally", hidden: true },
+      { key: "build", label: "Learn & Build" },
+      { key: "validate-iterate", label: "Pilot" },
+      { key: "launch", label: "Launch / Go-Live" },
+      { key: "adopt", label: "Adopt", hidden: true },
+      { key: "graduate-to-cs", label: "Implementation Complete" },
+    ]);
+    expect(LIFECYCLE_STAGES.map((s) => s.id)).toEqual([
+      "handoff",
+      "plan-internal",
+      "build",
+      "validate-iterate",
+      "launch",
+      "graduate-to-cs",
+    ]);
+    expect(LIFECYCLE_STAGE_MAP["adopt"]).toBeTruthy();
+    resetStageOverrides();
+    expect(LIFECYCLE_STAGES.length).toBe(before);
+  });
+
+  it("follows the configured order and keeps unmentioned stages", async () => {
+    const { LIFECYCLE_STAGES, applyStageOverrides, resetStageOverrides } =
+      await import("../lifecycle");
+    applyStageOverrides([
+      { key: "build", label: "Build" },
+      { key: "handoff", label: "Handoff" },
+    ]);
+    expect(LIFECYCLE_STAGES[0]!.id).toBe("build");
+    expect(LIFECYCLE_STAGES[1]!.id).toBe("handoff");
+    expect(LIFECYCLE_STAGES.length).toBe(8);
+    resetStageOverrides();
+  });
+});

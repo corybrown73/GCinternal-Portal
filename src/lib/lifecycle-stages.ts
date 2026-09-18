@@ -42,6 +42,11 @@ export interface LifecycleStageConfig {
    * cannot change. 0031 enforces both.
    */
   is_builtin: boolean;
+  /**
+   * Off the rail, out of the journey, never offered as the next stage. The
+   * key stays valid for history and for the gates that name it (0052).
+   */
+  hidden: boolean;
 }
 
 const DEFAULT_COLORS: Record<string, StageColor> = {
@@ -70,6 +75,7 @@ export const BUILTIN_LIFECYCLE_STAGES: readonly LifecycleStageConfig[] = LIFECYC
     color: DEFAULT_COLORS[s.id] ?? "idle",
     sort_order: i + 1,
     is_builtin: true,
+    hidden: false,
   }),
 );
 
@@ -136,6 +142,7 @@ export function readLifecycleStages(rows: unknown): LifecycleStageConfig[] {
       color: isColor(color) ? color : "idle",
       sort_order: typeof raw["sort_order"] === "number" ? raw["sort_order"] : out.length + 1,
       is_builtin: raw["is_builtin"] === true,
+      hidden: raw["hidden"] === true,
     });
   }
   if (out.length === 0) return [...BUILTIN_LIFECYCLE_STAGES];

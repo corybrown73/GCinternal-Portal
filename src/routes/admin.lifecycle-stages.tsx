@@ -78,13 +78,20 @@ function LifecycleStagesPage() {
   };
 
   const saveStage = useMutation({
-    mutationFn: (vars: { key: string; label: string; intent: string; color: StageColor }) =>
+    mutationFn: (vars: {
+      key: string;
+      label: string;
+      intent: string;
+      color: StageColor;
+      hidden?: boolean;
+    }) =>
       save({
         data: {
           key: vars.key,
           label: vars.label,
           ...(vars.intent.trim() ? { intent: vars.intent.trim() } : {}),
           color: vars.color,
+          ...(vars.hidden !== undefined ? { hidden: vars.hidden } : {}),
         },
       }),
     onSuccess: onDone,
@@ -286,6 +293,15 @@ function LifecycleStagesPage() {
                   onSave={(label, intent, color) =>
                     saveStage.mutate({ key: stage.key, label, intent, color })
                   }
+                  onToggleHidden={() =>
+                    saveStage.mutate({
+                      key: stage.key,
+                      label: stage.label,
+                      intent: stage.intent ?? "",
+                      color: stage.color,
+                      hidden: !stage.hidden,
+                    })
+                  }
                   onMove={(delta) => swap(i, delta)}
                   onDelete={() => deleteStage.mutate(stage.key)}
                 />
@@ -313,6 +329,7 @@ function StageRow({
   editable,
   busy,
   onSave,
+  onToggleHidden,
   onMove,
   onDelete,
 }: {
@@ -325,12 +342,14 @@ function StageRow({
     phase: LifecyclePhase;
     color: StageColor;
     is_builtin: boolean;
+    hidden: boolean;
     project_count: number;
     in_history: boolean;
   };
   editable: boolean;
   busy: boolean;
   onSave: (label: string, intent: string, color: StageColor) => void;
+  onToggleHidden: () => void;
   onMove: (delta: number) => void;
   onDelete: () => void;
 }) {
@@ -377,6 +396,14 @@ function StageRow({
           </select>
         ) : null}
         <span className="font-mono text-[10px] text-muted-foreground">{stage.key}</span>
+        {stage.hidden ? (
+          <span
+            title="Not on the rail and never offered as the next stage. History and the gates still know it."
+            className="inline-flex items-center gap-1 rounded-sm border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wider text-amber-800 dark:text-amber-300"
+          >
+            hidden
+          </span>
+        ) : null}
         {stage.is_builtin ? (
           <span
             title="Named directly by the application. Rename it freely; it cannot be deleted."
@@ -395,6 +422,19 @@ function StageRow({
 
         {editable ? (
           <span className="ml-auto flex items-center gap-1">
+            <button
+              type="button"
+              className={buttonClass}
+              disabled={busy}
+              onClick={onToggleHidden}
+              title={
+                stage.hidden
+                  ? "Put this stage back on the rail"
+                  : "Take this stage off the rail. A built-in stage cannot be deleted, but it can be hidden."
+              }
+            >
+              {stage.hidden ? "Show" : "Hide"}
+            </button>
             <button
               type="button"
               className={buttonClass}

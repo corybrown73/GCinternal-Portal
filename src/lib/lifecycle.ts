@@ -177,11 +177,31 @@ export type StageOverride = {
 
 let stageOverrides: Record<string, StageOverride> = {};
 
-/** Replace the configured labels wholesale. Called once per render pass. */
+/** The compiled-in list as written, so the live one can be rebuilt from it. */
+const PRISTINE_STAGES: readonly LifecycleStage[] = [...LIFECYCLE_STAGES];
+
+/**
+ * Replace the configured labels wholesale, and shape the live list to match
+ * the configuration: the configured order, minus hidden stages.
+ *
+ * WHY IN PLACE. Twenty-odd surfaces read LIFECYCLE_STAGES as the journey —
+ * the rail, the next-stage step, the customer's timeline. Rebuilding that one
+ * array is how a stage hidden in the admin screen disappears from all of them
+ * at once; LIFECYCLE_STAGE_MAP is left whole so history and the gates still
+ * resolve the hidden key. Called once per render pass.
+ */
 export function applyStageOverrides(
-  rows: ReadonlyArray<{ key: string; label: string; intent?: string | null; phase?: string }>,
+  rows: ReadonlyArray<{
+    key: string;
+    label: string;
+    intent?: string | null;
+    phase?: string;
+    hidden?: boolean;
+  }>,
 ): void {
   const next: Record<string, StageOverride> = {};
+  const hidden = new Set<string>();
+  const order: string[] = [];
   for (const row of rows ?? []) {
     if (!row?.key || typeof row.label !== "string" || row.label.trim() === "") continue;
     next[row.key] = {
@@ -189,13 +209,29 @@ export function applyStageOverrides(
       intent: row.intent ?? null,
       ...(row.phase ? { phase: row.phase as LifecyclePhase } : {}),
     };
+    order.push(row.key);
+    if (row.hidden) hidden.add(row.key);
   }
   stageOverrides = next;
+
+  const byId = new Map(PRISTINE_STAGES.map((s) => [s.id as string, s]));
+  const live: LifecycleStage[] = [];
+  for (const key of order) {
+    const s = byId.get(key);
+    if (s && !hidden.has(key)) live.push(s);
+  }
+  // Compiled stages the configuration does not mention stay, in their own
+  // order, so a half-configured table never loses a stage.
+  for (const s of PRISTINE_STAGES) {
+    if (!order.includes(s.id) && !hidden.has(s.id) && !live.includes(s)) live.push(s);
+  }
+  LIFECYCLE_STAGES.splice(0, LIFECYCLE_STAGES.length, ...live);
 }
 
 /** Back to the compiled-in list. The test seam, and the flag-off state. */
 export function resetStageOverrides(): void {
   stageOverrides = {};
+  LIFECYCLE_STAGES.splice(0, LIFECYCLE_STAGES.length, ...PRISTINE_STAGES);
 }
 
 /**
