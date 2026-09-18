@@ -14,6 +14,8 @@ import {
   type RailStage,
   type TimelineInput,
 } from "@/lib/project-timeline";
+import { Check } from "lucide-react";
+
 import { cn } from "@/lib/utils";
 
 /**
@@ -39,14 +41,22 @@ const CHIP_BASE =
   "relative shrink-0 whitespace-nowrap px-2 py-1 font-mono text-[11px] tracking-tight " +
   "border-y border-r first-of-type:border-l first-of-type:rounded-l-sm last-of-type:rounded-r-sm";
 
+/**
+ * Three looks that read as a story: done (tinted, with a check), now (filled,
+ * with the days), not yet (plain outline). A person opening an account in
+ * Build should see at a glance that Handoff and Plan Internally are behind
+ * them — before, done and not-yet were the same grey.
+ */
 function stageChipClass(stage: RailStage, dimmed: boolean) {
   switch (stage.state) {
     case "current":
       return dimmed
         ? "border-border bg-muted text-foreground font-medium"
-        : "border-primary bg-primary text-primary-foreground z-10";
+        : "border-primary bg-primary text-primary-foreground z-10 font-medium";
     case "past":
-      return "border-border bg-muted text-muted-foreground";
+      return dimmed
+        ? "border-border bg-muted text-muted-foreground"
+        : "border-primary/30 bg-primary/10 text-foreground";
     case "skipped":
       return "border-border bg-card text-muted-foreground/70 line-through";
     default:
@@ -123,6 +133,9 @@ export function StageRail({
               title={stageTitle(stage)}
               className={cn(CHIP_BASE, stageChipClass(stage, dimmed))}
             >
+              {stage.state === "past" ? (
+                <Check className="mr-1 inline h-3 w-3 align-[-1px]" strokeWidth={3} />
+              ) : null}
               {stage.name}
               {stage.state === "current" && stage.days !== null ? (
                 <span className="ml-1.5 opacity-70">{stage.days}d</span>
