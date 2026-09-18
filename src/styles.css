@@ -3739,3 +3739,165 @@ body.gc-presenting {
     display: none;
   }
 }
+
+/* ==========================================================================
+   The welcome page on a phone.
+
+   The cover says "scan for your plan — on your phone", and the QR led to a
+   1280-pixel stage scaled to a third of its size: a headline declared at
+   58px landing at 15, body copy at 5. Below 720px the shared page stops
+   being a stage and becomes a document: one column, real type sizes, the
+   corner decoration gone, the rail a list. Present mode and print keep the
+   stage exactly as it is.
+   ========================================================================== */
+@media screen and (max-width: 720px) {
+  .gc-welcome:not(.is-present) .wp-stages {
+    padding: 12px;
+    gap: 16px;
+  }
+  .gc-welcome:not(.is-present) .wp-stage,
+  .gc-welcome:not(.is-present) .wp-screen {
+    zoom: 1 !important;
+    width: auto !important;
+    height: auto !important;
+    min-height: 0;
+  }
+  .gc-welcome:not(.is-present) .wp-blob,
+  .gc-welcome:not(.is-present) .wp-dots,
+  .gc-welcome:not(.is-present) .wp-rail-line,
+  .gc-welcome:not(.is-present) .wp-svc-rail-line {
+    display: none;
+  }
+  .gc-welcome:not(.is-present) .wp-head {
+    padding: 16px 20px 0;
+  }
+  .gc-welcome:not(.is-present) .wp-body {
+    padding: 16px 20px 0;
+  }
+  .gc-welcome:not(.is-present) .wp-title {
+    font-size: 28px;
+  }
+  .gc-welcome:not(.is-present) .wp-title.is-hero {
+    font-size: 34px;
+  }
+  .gc-welcome:not(.is-present) .wp-lede {
+    font-size: 15px;
+  }
+  .gc-welcome:not(.is-present) .wp-content {
+    padding: 12px 0 16px;
+    justify-content: flex-start;
+  }
+  .gc-welcome:not(.is-present) .wp-band {
+    margin: 0 20px;
+    padding: 12px 14px;
+  }
+  .gc-welcome:not(.is-present) .wp-band p {
+    font-size: 14px;
+  }
+  .gc-welcome:not(.is-present) .wp-foot {
+    padding: 12px 20px 14px;
+  }
+  .gc-welcome:not(.is-present) .wp-card {
+    padding: 16px;
+  }
+  .gc-welcome:not(.is-present) .wp-card h3 {
+    font-size: 18px;
+  }
+  /* Every side-by-side layout becomes one column. */
+  .gc-welcome:not(.is-present) .wp-cover-grid,
+  .gc-welcome:not(.is-present) .wp-two,
+  .gc-welcome:not(.is-present) .wp-business,
+  .gc-welcome:not(.is-present) .wp-team,
+  .gc-welcome:not(.is-present) .wp-journey,
+  .gc-welcome:not(.is-present) .wp-homework-row,
+  .gc-welcome:not(.is-present) .wp-ov-row,
+  .gc-welcome:not(.is-present) .wp-alongside-row,
+  .gc-welcome:not(.is-present) .wp-svc-rail,
+  .gc-welcome:not(.is-present) .wp-rail {
+    grid-template-columns: 1fr !important;
+    gap: 12px;
+  }
+  .gc-welcome:not(.is-present) .wp-cover-grid {
+    padding: 12px 20px 0;
+  }
+  /* The rail: a list, one step per row, the tile on the left. */
+  .gc-welcome:not(.is-present) .wp-node {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    text-align: left;
+    gap: 6px 12px;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--wp-line);
+  }
+  .gc-welcome:not(.is-present) .wp-node-day {
+    width: 100%;
+    margin: 0;
+  }
+  .gc-welcome:not(.is-present) .wp-node-label {
+    min-height: 0;
+    margin: 0;
+  }
+  /* The cover's art shrinks to fit a phone: the same ring, disc and chips at
+     half size, laid out at that size so nothing spills into the headline. */
+  .gc-welcome:not(.is-present) .wp-cover-art {
+    height: 230px;
+    order: -1;
+  }
+  .gc-welcome:not(.is-present) .wp-art {
+    width: 200px;
+    height: 200px;
+  }
+  .gc-welcome:not(.is-present) .wp-art-disc {
+    inset: 28px;
+  }
+  .gc-welcome:not(.is-present) .wp-art-icon {
+    width: 72px;
+    height: 72px;
+  }
+  .gc-welcome:not(.is-present) .wp-art-chip {
+    width: 40px;
+    height: 40px;
+    border-radius: 12px;
+  }
+  .gc-welcome:not(.is-present) .wp-art-chip svg {
+    width: 20px;
+    height: 20px;
+  }
+  .gc-welcome:not(.is-present) .wp-art-chip.is-a {
+    left: -4px;
+    top: 16px;
+  }
+  .gc-welcome:not(.is-present) .wp-art-chip.is-b {
+    right: -8px;
+    top: 70px;
+  }
+  .gc-welcome:not(.is-present) .wp-art-chip.is-c {
+    left: 20px;
+    bottom: -2px;
+  }
+  /* The rail's legend: one owner per line. */
+  .gc-welcome:not(.is-present) .wp-legend {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .gc-welcome:not(.is-present) .wp-legend > * {
+    flex: 1 1 100%;
+  }
+  .gc-welcome:not(.is-present) .wp-photo {
+    height: 220px;
+  }
+  .gc-welcome:not(.is-present) .wp-team-art {
+    position: static;
+    width: 100%;
+    height: auto;
+    max-width: 100%;
+  }
+  .gc-welcome:not(.is-present) .wp-pills {
+    gap: 8px;
+  }
+  /* The customer's bar and the QR card stack. */
+  .gc-welcome:not(.is-present) .wp-toolbar {
+    padding: 8px 12px;
+  }
+}
