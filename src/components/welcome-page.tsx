@@ -518,13 +518,15 @@ function Toolbar({
         ) : null}
         <span className="wp-toolbar-title">{view.clientName}</span>
         <DayChip view={view} />
-        {view.sharedAt ? (
+        {view.sharedAt || view.openedAt ? (
           <span className="wp-toolbar-meta">
-            Link sent {shortDay(view.sharedAt.slice(0, 10))}
+            {view.sharedAt ? `Link sent ${shortDay(view.sharedAt.slice(0, 10))}` : "Link"}
             {view.openedAt
               ? ` · opened ${shortDay(view.openedAt.slice(0, 10))}`
               : " · not opened yet"}
           </span>
+        ) : view.shareUrl ? (
+          <span className="wp-toolbar-meta">Link ready · not sent yet</span>
         ) : null}
       </div>
       <div className="wp-toolbar-right">

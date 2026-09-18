@@ -72,10 +72,26 @@ export const Route = createFileRoute("/deals/$dealId")({
       },
     ],
   }),
-  loader: ({ context, params }) => {
+  // Awaited, so the route can show a skeleton while the record loads. Before,
+  // Create deal blanked the screen for the whole fetch and people clicked it
+  // twice.
+  loader: async ({ context, params }) => {
     const { dealId } = params as unknown as { dealId: string };
-    void context.queryClient.ensureQueryData(dealQuery(dealId)).catch(() => {});
+    await context.queryClient.ensureQueryData(dealQuery(dealId)).catch(() => {});
   },
+  pendingMs: 120,
+  pendingComponent: () => (
+    <div className="animate-pulse space-y-4 p-6" aria-busy="true" aria-label="Loading the deal">
+      <div className="h-6 w-64 rounded bg-muted" />
+      <div className="h-14 rounded-md bg-muted/70" />
+      <div className="h-16 rounded-md bg-muted/60" />
+      <div className="grid gap-4 xl:grid-cols-2">
+        <div className="h-48 rounded-md bg-muted/50" />
+        <div className="h-48 rounded-md bg-muted/50" />
+      </div>
+      <div className="h-64 rounded-md bg-muted/40" />
+    </div>
+  ),
   errorComponent: ({ error }) => (
     <div role="alert" className="p-6 text-[13px] text-destructive">
       Could not load this deal: {error.message}
@@ -557,7 +573,7 @@ function BriefActions({
             : `Needs ${missing.join(" and ")} first`
         }
       >
-        {synthesis.isPending ? "Generating…" : "Generate customer brief"}
+        {synthesis.isPending ? "Generating… about a minute" : "Generate customer brief"}
       </button>
       <Link
         to="/onboarding-plan/$dealId"
@@ -742,11 +758,14 @@ function SowPanel({
     account.sow_signed_date ||
     account.sow_value != null ||
     account.sow_document_url;
+  // "On file" means the signed document is here. A reference number alone
+  // is a promise, and the Closed Won check reads the document, not the promise.
+  const onFile = Boolean(account.sow_document_url);
 
   return (
     <Panel
       title="Statement of work"
-      meta={recorded ? "On file" : "Not recorded"}
+      meta={onFile ? "On file" : recorded ? "Details only — upload the signed PDF" : "Not recorded"}
       collapsible
       defaultOpen={!recorded}
       collapseKey="deal:sow"
@@ -770,6 +789,7 @@ function SowPanel({
             label="Signed"
             value={account.sow_signed_date ?? null}
             format={(v) => (v ? fmtDate(v) : "—")}
+            type="date"
             placeholder="2026-01-14"
             onSave={onSave("sow_signed_date")}
             disabled={!editable}
@@ -998,7 +1018,7 @@ function ReportsPanel({ deal }: { deal: DealData }) {
           </div>
           <div>
             <div className="flex items-center justify-between">
-              <label className={labelClass}>Markdown *</label>
+              <label className={labelClass}>Call notes *</label>
               <button
                 type="button"
                 className={buttonClass}
@@ -1024,7 +1044,7 @@ function ReportsPanel({ deal }: { deal: DealData }) {
               className={areaClass}
               rows={6}
               value={contentMd}
-              placeholder="Paste the Gong summary or meeting notes as markdown…"
+              placeholder="Paste the Gong recap or your meeting notes here. Plain text is fine."
               onChange={(e) => setContentMd(e.target.value)}
               required
             />

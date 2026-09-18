@@ -139,6 +139,10 @@ export async function createDeal(
     salesforce_id: string | null;
     arr: number | null;
     summary: string | null;
+    path?: "new_logo" | "existing" | null;
+    industry?: string | null;
+    /** Where the deal already is. A deal entered after it closed starts closed. */
+    stage?: AccountStage | null;
   },
 ): Promise<{ account: Account; created: boolean }> {
   await requireSalesEditor(userId);
@@ -150,6 +154,30 @@ export async function createDeal(
     ...(input.summary ? { summary: input.summary } : {}),
   });
   const result = await upsertAccount(parsed, { source: "ui", actorProfileId: userId });
+
+  // The two facts the plan and the page read, captured while they are known.
+  if (input.path || input.industry) {
+    const { readIntake, intakeAnswersSchema } = await import("./intake-answers");
+    const current = readIntake(result.account.intake);
+    const next = intakeAnswersSchema.parse({
+      ...current,
+      ...(input.path && !current.path ? { path: input.path } : {}),
+      ...(input.industry && !current.industry ? { industry: input.industry } : {}),
+      updated_at: new Date().toISOString(),
+    });
+    await db().from("portal_accounts").update({ intake: next }).eq("id", result.account.id);
+  }
+  // A deal entered where it already is. The Closed Won check is for a move
+  // somebody makes; a fact about the past is recorded as one.
+  if (input.stage && input.stage !== result.account.stage && result.created) {
+    await transitionStage(
+      result.account.id,
+      input.stage,
+      { source: "ui", actorProfileId: userId },
+      "Created in this stage",
+    );
+    result.account = { ...result.account, stage: input.stage };
+  }
   return { account: result.account, created: result.created };
 }
 
@@ -1029,6 +1057,57 @@ export async function startOnboardingAs(
     implementationId: impl.id as string,
     actorProfileId: userId,
   });
+
+  // Carry what the deal already settled onto the project, so nobody is asked
+  // to redo it: the owner who claimed it, and the handoff tasks the deal's
+  // record already satisfies — a call note on file, the SOW uploaded, the
+  // champion named, the kickoff booked. Never throws: the project exists.
+  try {
+    const { data: led } = await db()
+      .from("portal_assignments")
+      .select("team_member_id")
+      .eq("deal_id", dealId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (led?.team_member_id) {
+      await db().from("implementations").update({ owner_id: led.team_member_id }).eq("id", impl.id);
+    }
+    const { readIntake } = await import("./intake-answers");
+    const intake = readIntake((account as { intake?: unknown }).intake);
+    const { count: reports } = await db()
+      .from("portal_gong_reports")
+      .select("id", { count: "exact", head: true })
+      .eq("account_id", dealId);
+    const satisfied: string[] = [];
+    if ((reports ?? 0) > 0) satisfied.push("nl.packet_review");
+    if (
+      (account as { sow_document_path?: string | null }).sow_document_path ||
+      account.sow_document_url
+    )
+      satisfied.push("nl.sow_confirm");
+    if (account.primary_contact_name) satisfied.push("nl.name_champion");
+    if (intake.timeline.times?.["kickoff"]) satisfied.push("nl.kickoff_scheduled");
+    if (satisfied.length) {
+      const { data: items } = await db()
+        .from("work_items")
+        .select("id,task_key,status")
+        .eq("implementation_id", impl.id)
+        .in("task_key", satisfied);
+      const { setWorkItemStatus } = await import("./plan.server");
+      for (const it of (items ?? []) as Array<{ id: string; status: string }>) {
+        if (it.status !== "done") {
+          await setWorkItemStatus({
+            workItemId: String(it.id),
+            status: "done",
+            actorProfileId: actor.kind === "user" ? actor.profileId : null,
+          });
+        }
+      }
+    }
+  } catch (e) {
+    console.error("[start onboarding] could not carry the deal's work onto the project", e);
+  }
 
   // (b) link the deal to the customer record (already linked deals keep theirs).
   const alreadyLinked = Boolean(account.customer_id);

@@ -64,17 +64,27 @@ describe("intakeStatus — what to ask next", () => {
     expect(intakeStatus(uploaded).done).toBe(true);
   });
 
-  it("on the no branch, needs the industry and the process today", () => {
+  it("on the no branch, needs the industry, the field count and the process today", () => {
     const no = readIntake({ forms_built: false });
     expect(intakeStatus(no).next).toMatch(/industry/);
     const withIndustry = readIntake({ forms_built: false, industry: "Roofing" });
-    expect(intakeStatus(withIndustry).next).toMatch(/process today/);
+    expect(intakeStatus(withIndustry).next).toMatch(/in the field/);
+    const withCount = readIntake({ forms_built: false, industry: "Roofing", field_users: 40 });
+    expect(intakeStatus(withCount).next).toMatch(/process today/);
     const done = readIntake({
       forms_built: false,
       industry: "Roofing",
+      field_users: 40,
       current_process: "Paper, then rekeyed on Fridays.",
     });
     expect(intakeStatus(done).done).toBe(true);
+    // "Complete" with the field count blank was the lie the audit caught.
+    const noCount = readIntake({
+      forms_built: false,
+      industry: "Roofing",
+      current_process: "Paper.",
+    });
+    expect(intakeStatus(noCount).done).toBe(false);
   });
 });
 

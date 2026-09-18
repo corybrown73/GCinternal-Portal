@@ -21,6 +21,7 @@ import {
 } from "@/lib/pipeline-stages";
 import type { Account } from "@/lib/presale-types";
 import { cn } from "@/lib/utils";
+import { fmtMoney } from "@/lib/hub-format";
 
 export type BoardDeal = Account & { am_owner_name: string | null };
 
@@ -30,7 +31,7 @@ function daysIn(since: string): number {
 
 function fmtArr(arr: number | null): string {
   if (arr == null) return "—";
-  return `$${Number(arr).toLocaleString()}`;
+  return fmtMoney(Number(arr));
 }
 
 function DealCard({
@@ -59,7 +60,7 @@ function DealCard({
           title="Days in stage"
           className={cn(days > 14 && deal.stage !== terminalKey && "text-status-risk-foreground")}
         >
-          {days}d
+          {days}d in stage
         </span>
       </div>
       {deal.am_owner_name ? (
@@ -123,7 +124,7 @@ function ColumnHeading({
           <span className="text-muted-foreground/60">{count}</span>
         </span>
         <span className="font-mono text-[10px] text-muted-foreground/60">
-          {arrTotal > 0 ? `$${arrTotal.toLocaleString()}` : ""}
+          {arrTotal > 0 ? fmtMoney(arrTotal) : ""}
         </span>
       </div>
       {note ? <p className="mt-0.5 text-[10px] text-muted-foreground/60">{note}</p> : null}

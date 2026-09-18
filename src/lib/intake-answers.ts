@@ -37,6 +37,8 @@ export const INDUSTRIES = [
   "Mining",
   "Pipeline",
   "Field Service",
+  "Plumbing",
+  "Mechanical",
   "Manufacturing",
   "Logistics",
   "Property Management",
@@ -186,6 +188,8 @@ export function intakeStatus(a: IntakeAnswers): {
       : { done: false, next: "Upload the forms they have." };
   }
   if (!a.industry) return { done: false, next: "What industry are they in?" };
+  if (a.field_users === null)
+    return { done: false, next: "How many people will use it in the field?" };
   if (!a.current_process) return { done: false, next: "What is the process today?" };
   return { done: true, next: null };
 }

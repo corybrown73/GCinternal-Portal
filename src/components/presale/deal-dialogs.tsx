@@ -11,7 +11,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { INDUSTRIES } from "@/lib/intake-answers";
 import { addDeal, importDeals } from "@/lib/presale.functions";
+import { STAGE_LABELS, STAGES, type AccountStage } from "@/lib/presale-stages";
 
 const inputClass =
   "h-6 w-full rounded-sm border border-border bg-background px-1.5 text-[12px] text-foreground outline-none focus:ring-1 focus:ring-ring";
@@ -33,9 +35,21 @@ type DealDraft = {
   salesforceId: string;
   arr: string;
   summary: string;
+  path: "" | "new_logo" | "existing";
+  industry: string;
+  stage: AccountStage;
 };
 
-const emptyDeal: DealDraft = { name: "", domain: "", salesforceId: "", arr: "", summary: "" };
+const emptyDeal: DealDraft = {
+  name: "",
+  domain: "",
+  salesforceId: "",
+  arr: "",
+  summary: "",
+  path: "",
+  industry: "",
+  stage: "prospect",
+};
 
 export function NewDealDialog() {
   const [open, setOpen] = useState(false);
@@ -60,6 +74,9 @@ export function NewDealDialog() {
           salesforceId: nullable(draft.salesforceId),
           arr,
           summary: nullable(draft.summary),
+          path: draft.path || null,
+          industry: nullable(draft.industry),
+          stage: draft.stage,
         },
       });
     },
@@ -81,8 +98,8 @@ export function NewDealDialog() {
           <DialogHeader>
             <DialogTitle className="text-[14px]">New deal</DialogTitle>
             <DialogDescription className="text-[12px]">
-              Creates a presale account in Prospect. Matching on Salesforce ID or name updates the
-              existing record instead of duplicating it.
+              Creates a presale account. Matching on Salesforce ID or name updates the existing
+              record instead of duplicating it.
             </DialogDescription>
           </DialogHeader>
           <form
@@ -99,7 +116,44 @@ export function NewDealDialog() {
                 value={draft.name}
                 onChange={(e) => set({ name: e.target.value })}
                 required
+                autoFocus
               />
+              {draft.name.trim() === "" ? (
+                <p className="mt-0.5 text-[11px] text-muted-foreground">
+                  The company, as the customer says it. Required.
+                </p>
+              ) : null}
+            </div>
+            {/* What kind of deal, and what they do: the two facts everything
+                downstream reads — the plan's path and the page's industry. */}
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className={labelClass}>Path</label>
+                <select
+                  className={inputClass}
+                  value={draft.path}
+                  onChange={(e) => set({ path: e.target.value as DealDraft["path"] })}
+                >
+                  <option value="">Decide later</option>
+                  <option value="new_logo">New customer — first implementation</option>
+                  <option value="existing">Existing account — adding services</option>
+                </select>
+              </div>
+              <div>
+                <label className={labelClass}>Industry</label>
+                <select
+                  className={inputClass}
+                  value={draft.industry}
+                  onChange={(e) => set({ industry: e.target.value })}
+                >
+                  <option value="">Not sure yet</option>
+                  {INDUSTRIES.map((i) => (
+                    <option key={i} value={i}>
+                      {i}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
             <div className="grid grid-cols-2 gap-2">
               <div>
@@ -120,14 +174,31 @@ export function NewDealDialog() {
                 />
               </div>
             </div>
-            <div>
-              <label className={labelClass}>ARR</label>
-              <input
-                className={inputClass}
-                value={draft.arr}
-                placeholder="120000"
-                onChange={(e) => set({ arr: e.target.value })}
-              />
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className={labelClass}>ARR</label>
+                <input
+                  className={inputClass}
+                  value={draft.arr}
+                  placeholder="120000"
+                  onChange={(e) => set({ arr: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className={labelClass}>Stage</label>
+                <select
+                  className={inputClass}
+                  value={draft.stage}
+                  onChange={(e) => set({ stage: e.target.value as AccountStage })}
+                  title="A deal that already closed can start there; the move is written to the history."
+                >
+                  {STAGES.map((s) => (
+                    <option key={s} value={s}>
+                      {STAGE_LABELS[s]}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
             <div>
               <label className={labelClass}>Summary</label>

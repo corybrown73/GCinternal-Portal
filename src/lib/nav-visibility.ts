@@ -59,7 +59,12 @@ export const NAV_CATALOGUE: readonly NavEntry[] = [
   { to: "/access", label: "Customer access", hint: "Portal invites", audience: "everyone" },
   { to: "/portfolio", label: "Leadership", hint: "Team overview", audience: "managers" },
   { to: "/signals", label: "Signals", hint: "Velocity, dwell & waiting on", audience: "everyone" },
-  { to: "/settings", label: "Settings", hint: "Stages & defaults", audience: "managers" },
+  {
+    to: "/settings",
+    label: "Settings",
+    hint: "Your profile, the look, the stages",
+    audience: "managers",
+  },
   {
     to: "/admin",
     label: "Admin",

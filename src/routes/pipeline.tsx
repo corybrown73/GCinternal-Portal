@@ -11,6 +11,7 @@ import { useScope } from "@/lib/use-scope";
 import { getPipeline, moveDealStage } from "@/lib/presale.functions";
 import { moveWithGate } from "@/lib/stage-move";
 import type { AccountStage } from "@/lib/presale-stages";
+import { fmtMoney } from "@/lib/hub-format";
 
 const pipelineQuery = (scope: string | null) =>
   queryOptions({
@@ -69,7 +70,7 @@ function PipelinePage() {
         actions={
           <div className="flex items-center gap-2">
             <span className="font-mono text-[11px] text-muted-foreground">
-              {data.deals.length} deals · ${arrTotal.toLocaleString()}
+              {data.deals.length} deals · {fmtMoney(arrTotal)}
             </span>
             <ScopeSwitch scope={data.scope} onChange={setScope} />
             {editable ? (

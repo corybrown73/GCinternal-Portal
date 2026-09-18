@@ -45,6 +45,9 @@ export const addDeal = createServerFn({ method: "POST" })
         salesforceId: z.string().trim().nullable(),
         arr: z.number().nonnegative().nullable(),
         summary: z.string().max(10000).nullable(),
+        path: z.enum(["new_logo", "existing"]).nullable().optional(),
+        industry: z.string().trim().max(80).nullable().optional(),
+        stage: z.enum(STAGES).optional(),
       })
       .parse(data),
   )
@@ -56,6 +59,9 @@ export const addDeal = createServerFn({ method: "POST" })
       salesforce_id: data.salesforceId,
       arr: data.arr,
       summary: data.summary,
+      path: data.path ?? null,
+      industry: data.industry ?? null,
+      stage: data.stage ?? null,
     });
   });
 

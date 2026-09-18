@@ -459,6 +459,82 @@ export const FORM_LIBRARY_SEED: Record<string, FormLibraryEntry[]> = {
     },
   ],
 
+  Plumbing: [
+    {
+      name: "Service Call Ticket",
+      description:
+        "Customer, fixture or line, complaint, diagnosis, work performed, parts, time on site and the customer's signature. What the invoice is built from.",
+      tags: ["ticket", "billing", "signature", "parts"],
+    },
+    {
+      name: "Backflow Test Report",
+      description:
+        "Device make, model and serial, test readings on each check valve and relief valve, pass/fail, and the tester's certification. The report the water authority asks for annually.",
+      tags: ["backflow", "compliance", "readings", "annual"],
+    },
+    {
+      name: "Water Heater Installation Checklist",
+      description:
+        "Old unit removed, new unit serials, venting, gas or electrical connections, expansion tank, T&P discharge, pressure test and the homeowner's sign-off with photos.",
+      tags: ["install", "checklist", "photos", "signature"],
+    },
+    {
+      name: "Drain Cleaning Work Order",
+      description:
+        "Line and access point, method and cable footage, what came out, camera findings with photos, and the recommendation. The record behind a repair quote.",
+      tags: ["work order", "photos", "camera", "recommendation"],
+    },
+    {
+      name: "Leak Inspection Report",
+      description:
+        "Where the water is showing, where it is coming from, moisture readings, photos and the fix proposed. Written for the customer and their insurer.",
+      tags: ["inspection", "photos", "readings", "insurance"],
+    },
+    {
+      name: "Rough-In Inspection",
+      description:
+        "Supply and drain runs against the plan by fixture: sizing, slope, venting, supports, test pressure held. Photographed before the walls close.",
+      tags: ["inspection", "new construction", "photos", "pressure test"],
+    },
+  ],
+  Mechanical: [
+    {
+      name: "Boiler Inspection",
+      description:
+        "Combustion readings, safeties, low-water cutoff, relief valve, controls and the condition of the vessel and piping, with photos. The annual record the insurer and the AHJ want.",
+      tags: ["boiler", "inspection", "readings", "compliance"],
+    },
+    {
+      name: "Chiller Maintenance Log",
+      description:
+        "Approach temperatures, pressures, oil and refrigerant levels, amp draws and vibration by circuit, against the last visit. Decline shows up before the failure.",
+      tags: ["chiller", "maintenance", "readings", "trend"],
+    },
+    {
+      name: "Mechanical Room Walkthrough",
+      description:
+        "One lap of the room on a fixed route: leaks, noise, gauges, belts, filters, housekeeping and anything tagged. Photographed and assigned before the day starts.",
+      tags: ["walkthrough", "daily", "photos", "corrective action"],
+    },
+    {
+      name: "Piping Pressure Test",
+      description:
+        "Segment, medium, test pressure, hold time, start and end readings and pass/fail, with a gauge photo and the witness's signature.",
+      tags: ["pressure test", "readings", "photos", "signature"],
+    },
+    {
+      name: "Equipment Start-Up Checklist",
+      description:
+        "Pre-start verification and post-start readings on new equipment — rotation, voltage, amps, flows, safeties — against the manufacturer's spec, signed by the start-up technician.",
+      tags: ["start-up", "commissioning", "readings", "signature"],
+    },
+    {
+      name: "Service Ticket",
+      description:
+        "Customer, equipment, complaint, diagnosis, work performed, parts and time, with the customer's signature. What the invoice and the warranty claim come from.",
+      tags: ["ticket", "billing", "signature", "parts"],
+    },
+  ],
   Manufacturing: [
     {
       name: "Quality Inspection Record",

@@ -1,86 +1,1133 @@
 [
-{"id":"149052d8-69ed-4ac0-a11e-8c4c8f76ef94","name":"Daily Field Report","industry":"Construction","description":"One record per crew per day: work performed, headcount by trade, equipment on site, materials used, weather, delays and visitors. The form the office waits for every evening.","tags":["daily","photos","signature","weather"]},
-{"id":"6b2e285d-796e-4f17-8ad0-581ed17a6818","name":"Equipment Pre-Use Inspection","industry":"Construction","description":"Operator checks a machine before the shift — fluids, brakes, lights, guards, leaks — and tags it out if it fails. One form per machine per day.","tags":["equipment","daily","pre-use","tag-out"]},
-{"id":"fb287cb1-1811-47cd-a7a8-037e8ba2a9e9","name":"Incident / Near-Miss Report","industry":"Construction","description":"What happened, where, who was involved, photos, witnesses and immediate action taken. Filed within the shift, while the details are still true.","tags":["safety","incident","photos","GPS"]},
-{"id":"586beedf-0426-49ef-8eed-cc4367600417","name":"Job Safety Analysis (JSA)","industry":"Construction","description":"Break the day's task into steps, name the hazard in each and the control for it, and get the crew's sign-off before work starts. The record OSHA asks for after an incident.","tags":["safety","pre-task","signature","OSHA"]},
-{"id":"9e30ca0b-9069-4af2-9333-4d5e64df5645","name":"Site Safety Inspection","industry":"Construction","description":"Walk the site against a checklist: PPE, fall protection, housekeeping, electrical, fire, excavation. Photograph anything failed and assign it to somebody.","tags":["safety","inspection","photos","corrective action"]},
-{"id":"2ffac56b-7912-47b6-bc2d-ed6671ab3063","name":"Toolbox Talk Attendance","industry":"Construction","description":"Topic, presenter, duration and every attendee's signature. Proves the safety conversation happened and who was in it.","tags":["safety","attendance","signature"]},
-{"id":"d4ba3eaf-8837-41b8-8459-4c4c39d2b742","name":"Battery Storage Site Inspection","industry":"Energy","description":"Enclosure temperature, state of charge, HVAC, fire suppression, alarms and physical condition of a BESS site. Readings per rack, faults photographed.","tags":["storage","inspection","readings","fire"]},
-{"id":"014b2b75-8a5f-4754-a87d-3e55f1149bf8","name":"Commissioning Checklist","industry":"Energy","description":"Step-by-step verification that a new installation meets the design: tests performed, values recorded, punch-list items and the client's acceptance signature.","tags":["commissioning","acceptance","signature","punch list"]},
-{"id":"9660dfc1-704e-4e8b-af10-fc3e70dbf368","name":"Energy Audit Walkthrough","industry":"Energy","description":"Building or site survey of lighting, HVAC, envelope and equipment with nameplate photos, run hours and observed waste. The input to a savings proposal.","tags":["audit","survey","photos"]},
-{"id":"891dc96b-e0d8-44dc-97de-e7c8a4359340","name":"Lockout / Tagout Record","industry":"Energy","description":"Every energy source isolated, the lock and tag applied, who applied it and when it came off. The document that stands between a technician and a live circuit.","tags":["safety","LOTO","signature"]},
-{"id":"bfeab7dd-0e1a-4c0a-bc25-0a3764908ac9","name":"Solar Array Inspection","industry":"Energy","description":"Panel, string and inverter condition, soiling, shading, connector damage and production readings against expected. One form per array visit.","tags":["solar","inspection","readings","photos"]},
-{"id":"e723988f-c5eb-48fc-89af-cdee621977f2","name":"Wind Turbine Service Checklist","industry":"Energy","description":"Scheduled maintenance by turbine: torque checks, lubrication, brake and pitch systems, blade condition. Sign-off per section and the lock-out record attached.","tags":["wind","maintenance","LOTO","checklist"]},
-{"id":"8d130bd4-0fb6-4b0a-a9e8-eab535870562","name":"Chain of Custody","industry":"Environmental","description":"Each sample from collection to the lab: ID, matrix, time, preservative, and every hand it passes through with a signature. The document that makes a result legally defensible.","tags":["sampling","lab","signature","compliance"]},
-{"id":"02de745f-856b-45a3-ac42-3c09bb34e6c6","name":"Groundwater Sampling Log","industry":"Environmental","description":"Per well: depth to water, purge volume, field parameters until stable, sample time and bottle set. Stabilisation readings recorded in the sequence taken.","tags":["sampling","readings","groundwater"]},
-{"id":"9bfe5854-c6b1-4284-ba92-da1039c48331","name":"Site Assessment Field Log","industry":"Environmental","description":"Phase I/II site walk: observations, staining, drums, vents, wells, neighbouring uses, photos and sketch. Structured so the report writes itself from it.","tags":["assessment","photos","GPS","Phase I"]},
-{"id":"a36d3f05-c25e-4011-b6d9-f3736f14c9cd","name":"Spill Response Report","industry":"Environmental","description":"Material, estimated volume, containment and clean-up actions, disposal and notifications made, with timestamps and photos. Written for the regulator, filled in during the response.","tags":["incident","spill","photos","timestamped"]},
-{"id":"679374e6-a03c-48ba-9440-b71cecde63ea","name":"Stormwater (SWPPP) Inspection","industry":"Environmental","description":"BMP condition, discharge points, sediment controls and corrective actions after each qualifying rain event. Dates and photos the permit requires.","tags":["stormwater","inspection","permit","photos"]},
-{"id":"63488235-7d96-4432-9a63-a5e078334c2d","name":"Waste Manifest Pickup","industry":"Environmental","description":"Containers, waste codes, quantities, generator and transporter signatures at pickup. The field half of the manifest, before the paperwork catches up.","tags":["waste","manifest","signature"]},
-{"id":"9b61a49e-a460-4441-971e-78a2c072e621","name":"Daily Facility Walkthrough","industry":"Facilities","description":"One lap of the building on a fixed route: cleanliness, lighting, restrooms, safety hazards, anything broken. Photographed and assigned before the day starts.","tags":["daily","walkthrough","photos","corrective action"]},
-{"id":"a099f24c-2e6e-4c1e-a3c2-086fa6cab0ce","name":"Fire & Life Safety Inspection","industry":"Facilities","description":"Extinguishers, exit signs, emergency lighting, alarms, sprinkler gauges and doors, each with a date and a tag number. What the fire marshal asks to see.","tags":["safety","inspection","compliance","monthly"]},
-{"id":"b6e6ab98-6f25-4c67-9c3a-c4b9c7ce987a","name":"Move / Setup Request","industry":"Facilities","description":"Room, date, layout, equipment and AV needs, with a sketch or photo of the desired setup. Removes the phone call and the misunderstanding.","tags":["request","setup","photos"]},
-{"id":"3d2fec2a-9aba-4d58-8781-8ac67ee7099c","name":"Preventive Maintenance Checklist","industry":"Facilities","description":"Scheduled tasks per asset — filters, belts, lubrication, readings — with pass/fail and the next due date. The record that turns reactive maintenance into planned.","tags":["PM","asset","schedule","readings"]},
-{"id":"19082f55-4df6-41e2-8b70-9a57e9db5a97","name":"Vendor Service Verification","industry":"Facilities","description":"Confirms a contractor's visit: who came, what they serviced, readings or photos of the work, and a staff signature. Evidence for the invoice.","tags":["vendor","verification","signature"]},
-{"id":"b2ab30c7-ce8b-440c-be78-c06d987fbd2b","name":"Work Order Completion","industry":"Facilities","description":"What was requested, what was done, parts and time used, before-and-after photos, and the requester's sign-off. Closes the loop on every ticket.","tags":["work order","photos","signature","parts"]},
-{"id":"53bbe186-b78d-4304-bd69-4860fff16a58","name":"Customer Satisfaction Survey","industry":"Field Service","description":"Three questions and a signature at the end of the visit, while the technician is still there. The feedback loop that catches a problem before the review does.","tags":["survey","customer","signature"]},
-{"id":"491e1f08-753d-4b19-abed-dd5c93e8e778","name":"Installation Checklist","industry":"Field Service","description":"Every step of an install confirmed in order, with serials, settings, test results and photos of the finished work, and the customer's acceptance at the end.","tags":["install","checklist","photos","signature"]},
-{"id":"fcecb57c-c2d5-434d-ade4-a597dd5656f0","name":"Site Survey / Estimate","industry":"Field Service","description":"Measurements, photos, access notes and options captured on the first visit, structured so the estimate can be produced without a second trip.","tags":["survey","estimate","photos","measurements"]},
-{"id":"b3402d04-9012-4bd5-ba6d-fcf814d84a11","name":"Timesheet","industry":"Field Service","description":"Hours by job, travel and break, submitted daily from the truck and approved by the supervisor. Ends the Friday reconstruction of the week.","tags":["time","payroll","daily","approval"]},
-{"id":"b0e63fe6-72bc-45a9-81e5-62e117ff175e","name":"Vehicle Pre-Trip Inspection","industry":"Field Service","description":"DVIR-style walk-around each morning — lights, tyres, brakes, fluids, load security — with defects flagged to the fleet manager before the truck leaves.","tags":["vehicle","DVIR","daily","fleet"]},
-{"id":"66e39b03-2a77-4ec0-b791-3e5c28b7bb51","name":"Work Order / Service Ticket","industry":"Field Service","description":"The one form every service company runs: customer, asset, problem, work performed, parts, time, photos, and the customer's signature. What the invoice is built from.","tags":["work order","billing","signature","parts"]},
-{"id":"bc8ef3aa-7005-4a12-ba16-71ba88113c9d","name":"Equipment Start-Up Checklist","industry":"HVAC","description":"Pre-start verification and post-start readings on a new install — voltage, phase, charge by superheat and subcooling, airflow, safeties — against the manufacturer's spec.","tags":["start-up","install","readings","commissioning"]},
-{"id":"caa73ff0-be2a-4c53-9fff-cde5b53bdffd","name":"Indoor Air Quality Survey","industry":"HVAC","description":"CO2, humidity, temperature and particulate readings by room, with occupant complaints and observations. The evidence behind a ventilation recommendation.","tags":["IAQ","readings","survey"]},
-{"id":"2ab94d0d-4e9b-49e3-b9e6-878f665f1f51","name":"Preventive Maintenance Checklist","industry":"HVAC","description":"Seasonal tune-up by unit: filters, coils, belts, electrical, drain, then supply/return temperatures, pressures and amp draws recorded so decline shows up early.","tags":["PM","seasonal","readings","checklist"]},
-{"id":"c5b9b2a0-cd79-48e6-aa68-cd09ca68d76c","name":"Quote / Replacement Proposal","industry":"HVAC","description":"Nameplate photos, measurements, options and pricing captured on site, with the customer's acceptance signature. Sells the replacement before leaving the driveway.","tags":["quote","photos","signature","sales"]},
-{"id":"12bdcbbf-f9a6-409b-9768-74cf7179f1b1","name":"Refrigerant Log","industry":"HVAC","description":"Every add and recovery by unit: type, quantity, cylinder, leak check result and technician certification number. The EPA 608 record, kept as it happens.","tags":["refrigerant","EPA","compliance","readings"]},
-{"id":"849bc9aa-a2a1-4416-83b1-1a911d9b774a","name":"Service Call Ticket","industry":"HVAC","description":"Customer, unit, complaint, diagnosis, work performed, parts and refrigerant used, time on site and the customer's signature. What the invoice and the warranty claim come from.","tags":["ticket","billing","signature","parts"]},
-{"id":"898af61b-f2a9-4a3e-83fd-cc4e3cf9343e","name":"Bill of Lading / Pickup","industry":"Logistics","description":"Shipper, consignee, pieces, weight, hazmat declaration and the shipper's signature at pickup. The field copy, before the paperwork catches up.","tags":["BOL","pickup","signature","hazmat"]},
-{"id":"3626a091-00cb-491a-9fa7-99eca1d47fdf","name":"Damage / Exception Report","industry":"Logistics","description":"What was damaged, how it was packed, photos from several angles and who was present. Filed at the moment of discovery, when the claim is still winnable.","tags":["damage","claim","photos"]},
-{"id":"1861c0c2-4d40-4931-9c11-357b7e1b3433","name":"Driver Vehicle Inspection Report (DVIR)","industry":"Logistics","description":"Pre- and post-trip inspection required by the FMCSA: defects found, whether they affect safe operation, and the mechanic's sign-off on the repair.","tags":["DVIR","FMCSA","daily","compliance"]},
-{"id":"ac662c3e-09ac-40bc-a6d7-c9600ec59474","name":"Forklift Pre-Use Inspection","industry":"Logistics","description":"OSHA-required daily check of each truck — forks, mast, hydraulics, horn, brakes, battery or LP — with the unit removed from service on any failure.","tags":["forklift","OSHA","daily","equipment"]},
-{"id":"5eee6920-0957-4018-b7f2-85f911691021","name":"Proof of Delivery","industry":"Logistics","description":"Items delivered, condition, exceptions, photo of the drop and the receiver's signature with time and location. Ends the 'we never got it' conversation.","tags":["delivery","signature","photos","GPS"]},
-{"id":"84ca0b58-6a3f-4072-9064-d4443e0933b9","name":"Yard / Trailer Check","industry":"Logistics","description":"Every trailer in the yard: number, location, loaded or empty, seal, condition. A daily count that replaces walking the yard with a clipboard.","tags":["yard","inventory","trailer"]},
-{"id":"25d7a17f-48ff-49f0-ae81-a460f246b41b","name":"5S / Housekeeping Audit","industry":"Manufacturing","description":"Score each area against the five standards with photos of what was found. Trends by area and week show where the discipline is slipping.","tags":["5S","audit","photos","lean"]},
-{"id":"f141da22-1b60-48e4-afeb-71bbdb84a9bd","name":"Equipment Downtime Report","industry":"Manufacturing","description":"Machine, start and end of the stoppage, cause code, action taken and parts used. Every minute of downtime becomes a reason.","tags":["downtime","maintenance","cause code"]},
-{"id":"8296ea66-a971-4b55-ae63-a59401f3bd1e","name":"Production Line Checklist","industry":"Manufacturing","description":"Start-of-shift verification of the line: settings, materials staged, guards in place, first-piece approved. Signed before the line runs.","tags":["production","shift","checklist","signature"]},
-{"id":"2b7f38c2-be07-455f-a218-2953401038ba","name":"Quality Inspection Record","industry":"Manufacturing","description":"Measurements against tolerance for each characteristic on a sample, pass/fail per part, and disposition of anything out of spec. The record an audit traces back to.","tags":["quality","readings","tolerance","audit"]},
-{"id":"d95eea3d-a1b5-4eda-bd08-969e1cd8f39c","name":"Receiving Inspection","industry":"Manufacturing","description":"Incoming material against the PO: quantities, damage, certifications present, sample checks, and accept/reject with photos. Stops a bad lot at the dock.","tags":["receiving","quality","photos","PO"]},
-{"id":"5bc26640-a719-4321-828d-011f02e15bf0","name":"Safety Observation","industry":"Manufacturing","description":"A behaviour or condition seen on the floor — safe or unsafe — with location, photo and what was said. Volume of observations is the leading indicator.","tags":["safety","observation","photos","leading indicator"]},
-{"id":"f105212a-d644-434f-925d-d4c90c5025f9","name":"Blast Report","industry":"Mining","description":"Pattern, holes, explosives by type and quantity, timing, exclusion zone confirmed, post-blast inspection and misfires. The record the regulator and the explosives inventory both need.","tags":["blasting","compliance","inventory"]},
-{"id":"f8a3b462-d1ef-4a84-a0b9-6dce34f3c69f","name":"Environmental Monitoring Log","industry":"Mining","description":"Dust, noise, water discharge and tailings readings at the permit's monitoring points, on the permit's schedule, with exceedances flagged immediately.","tags":["environmental","readings","permit"]},
-{"id":"a49e617c-0e30-499e-ae34-3ceddd24506e","name":"Haul Road Inspection","industry":"Mining","description":"Grade, width, berms, drainage, surface condition and dust by segment, with photos of anything that needs grading. Roads are where the trucks get hurt.","tags":["inspection","haul road","photos","GPS"]},
-{"id":"2a4bb7b4-f6b9-42a3-b737-a5dd656bc150","name":"Pre-Shift Equipment Inspection","industry":"Mining","description":"Operator's walk-around of a haul truck, loader or dozer before the shift — brakes, steering, fire suppression, lights, tyres — with defects flagged and the unit tagged out if unsafe.","tags":["equipment","pre-shift","MSHA","tag-out"]},
-{"id":"b6fd9b11-2472-4283-98dd-8f65e65840d4","name":"Shift Handover Report","industry":"Mining","description":"Production, downtime, equipment status, hazards and open items passed from one shift to the next, so nothing is learned twice.","tags":["shift","handover","production"]},
-{"id":"a07221c9-245c-46d2-a92a-fcea4e832f7e","name":"Workplace Examination","industry":"Mining","description":"The MSHA-required examination of each working area before work begins: hazards found, corrective action taken, examiner and time. The record inspectors ask for first.","tags":["MSHA","examination","safety","compliance"]},
-{"id":"73557f95-0a52-4adb-9dd9-434d1b6f3838","name":"Field Service Ticket","industry":"Oil & Gas","description":"The billable record of a job: customer, lease, work performed, hours, equipment and consumables, with the company man's signature. What the invoice is built from.","tags":["ticket","billing","signature","hours"]},
-{"id":"728ab7f0-3908-4b95-ae83-9c3999a9c697","name":"Job Safety Analysis (JSA)","industry":"Oil & Gas","description":"Task steps, hazards, controls and crew sign-off before any job on location. Required before hot work, confined space or pressure work begins.","tags":["safety","pre-task","signature"]},
-{"id":"05d67486-1ec2-4818-8560-5623c78bf598","name":"Pressure Test Record","industry":"Oil & Gas","description":"Test pressure, hold time, start and end readings and pass/fail for each segment or component, with a chart photo. The document a regulator asks to see.","tags":["pressure test","compliance","readings","photos"]},
-{"id":"5572c59c-5480-4ed4-8753-fc1fccbdc142","name":"Spill / Release Report","industry":"Oil & Gas","description":"Volume, product, location, cause and containment steps, timestamped and geotagged, with photos. Captures what the agency report will need before anyone has to remember it.","tags":["environmental","incident","GPS","photos"]},
-{"id":"8b018e52-f5c9-474c-b98a-c8dea4d08e33","name":"Tank Gauging & Run Ticket","industry":"Oil & Gas","description":"Opening and closing gauges, temperature, BS&W and gravity for each tank, producing the run ticket that moves oil off the lease.","tags":["production","readings","run ticket"]},
-{"id":"c513de52-11af-414e-87ef-fde604669813","name":"Well Site Inspection","industry":"Oil & Gas","description":"Lease walk against API practice: tanks, separators, gauges, thief hatches, relief valves, berms, signage. Readings and photos per item, with anything out of spec flagged for the pumper.","tags":["inspection","API","photos","readings"]},
-{"id":"b3ab9662-e6af-49f3-acd0-a732a7a75d18","name":"Cathodic Protection Reading","industry":"Pipeline","description":"Pipe-to-soil potentials at each test station, rectifier output and any reading outside the criterion. Structured so the annual survey compiles itself.","tags":["CP","readings","corrosion","compliance"]},
-{"id":"dd3b0ae3-d40a-4ffb-b739-2d843db0506b","name":"Excavation / Dig Report","industry":"Pipeline","description":"Locate ticket, exposure findings, coating condition, wall thickness readings and repair performed, with photos before backfill. The evidence that is gone once the hole is closed.","tags":["dig","integrity","photos","readings"]},
-{"id":"57802a27-aa37-4db8-8b9f-a86d662034d3","name":"Leak Survey","industry":"Pipeline","description":"Route, instrument, readings and any indication found with its classification and location. Filed per survey, feeding the leak-management record.","tags":["leak","survey","readings","GPS"]},
-{"id":"60a07bc3-ecc4-49af-8556-6c27a1d699c4","name":"Pressure Test Record","industry":"Pipeline","description":"Segment, medium, test and hold pressures, duration, temperature correction and chart photo, signed by the test lead. What the regulator asks to see before the line goes into service.","tags":["pressure test","compliance","signature"]},
-{"id":"9687f7d3-a493-45ca-a494-648550cb7da8","name":"Right-of-Way Patrol","industry":"Pipeline","description":"Walk, drive or fly the line and record encroachment, exposed pipe, erosion, dead vegetation and third-party activity, geotagged with photos. The DOT-required patrol, kept as it happens.","tags":["patrol","ROW","GPS","photos","DOT"]},
-{"id":"1f6c2285-343c-419b-add3-994304eb03eb","name":"Valve Inspection & Maintenance","industry":"Pipeline","description":"Operate and inspect each valve on the schedule: turns, leaks, actuator, signage, lock, and whether it fully closed. The record that says the isolation will work when it is needed.","tags":["valve","maintenance","readings"]},
-{"id":"044ef2b4-d0cf-46d9-ad8e-a715fe50a026","name":"Incident Report","industry":"Property Management","description":"Injury, damage, disturbance or police contact on the property: what, where, who, photos, witnesses and action taken. Filed the same day, for the file and the insurer.","tags":["incident","photos","insurance"]},
-{"id":"914b8d35-7ac5-47df-889b-d8f568590d96","name":"Maintenance Request & Completion","industry":"Property Management","description":"Tenant's request, technician's diagnosis, work done, parts, before-and-after photos and time, with the tenant's sign-off. Closes the loop on every ticket.","tags":["work order","photos","signature","tenant"]},
-{"id":"7c46e857-015d-4de1-93e2-3c0a6d85f2c3","name":"Move-In / Move-Out Inspection","industry":"Property Management","description":"Condition of every room and fixture with photos, agreed and signed by both parties. The document the deposit decision rests on.","tags":["inspection","photos","signature","deposit"]},
-{"id":"549c00e9-e1c9-44d9-85a8-5e41176195c0","name":"Property Inspection Walkthrough","industry":"Property Management","description":"Periodic exterior and common-area walk: grounds, lighting, parking, roof and gutters, safety hazards, with photos and items assigned. The routine that catches the small things.","tags":["inspection","walkthrough","photos","corrective action"]},
-{"id":"c9cebdb3-d7f3-499c-8931-6103a49b55b5","name":"Unit Turn Checklist","industry":"Property Management","description":"Every task between one tenant and the next — clean, paint, repairs, keys, appliances tested — checked off in order with photos, so the unit is ready when it is promised.","tags":["turn","checklist","photos","make-ready"]},
-{"id":"9d12eb09-1209-486b-9774-a43ee64ba435","name":"Vendor Work Verification","industry":"Property Management","description":"Confirms a contractor's work on site: what was done, photos, and a staff signature before the invoice is approved.","tags":["vendor","verification","photos","signature"]},
-{"id":"f5fa67c9-9c5f-4378-bf01-d4a233bf6b83","name":"Daily Job Log","industry":"Roofing","description":"Crew, hours, squares installed, materials used, weather, tear-off and disposal, photos of progress. One per job per day, the office's view of the roof.","tags":["daily","photos","materials","weather"]},
-{"id":"618b3ca9-a1ce-4ac3-b04a-2553df40f5ac","name":"Job Completion & Sign-Off","industry":"Roofing","description":"Final walk with the customer: photos of the finished roof, clean-up confirmed, warranty registered, and their signature. Closes the job and starts the warranty.","tags":["completion","signature","photos","warranty"]},
-{"id":"41e1930f-9b55-43cd-90fe-7910fde5d67b","name":"Material Order / Delivery Check","industry":"Roofing","description":"What was ordered against what arrived: quantities, colours, damage, photos of the drop. Catches the short delivery before the crew is standing on the roof waiting.","tags":["materials","delivery","photos"]},
-{"id":"52ecea27-891d-4143-bbb5-6551cae95d6e","name":"Roof Inspection Report","industry":"Roofing","description":"Condition by section — membrane or shingles, flashings, penetrations, drains, edges — with photos, measurements and a sketch. The document a claim, a bid or a maintenance plan is built on.","tags":["inspection","photos","sketch","measurements"]},
-{"id":"2e9dae36-44a6-446a-8cd7-5e93b8f4333e","name":"Roof Work Safety Checklist","industry":"Roofing","description":"Fall protection in place, anchors, guardrails, warning lines, ladders, skylights covered, weather checked. Signed by the foreman before anyone goes up.","tags":["safety","fall protection","signature","pre-task"]},
-{"id":"b39ccaaf-ffd9-44b0-9632-fc378fe862a5","name":"Storm Damage Assessment","industry":"Roofing","description":"Hail and wind evidence by slope — test squares, collateral damage, photos with a scale reference — in the layout adjusters expect.","tags":["insurance","storm","photos","test square"]},
-{"id":"8ba3c08e-5e5d-4f4a-85d0-98e9514a1916","name":"Hydrant Flushing & Valve Exercise","industry":"Utilities","description":"Each hydrant or valve on the programme: flow, pressure, turns, condition and anything that would not open or close. The maintenance record the water quality report depends on.","tags":["water","maintenance","readings","GPS"]},
-{"id":"bc5fc5a6-13f1-484d-9768-7916c695d3a2","name":"Line Patrol Log","industry":"Utilities","description":"Walk or drive a line and record what is seen — vegetation, damaged insulators, leaning structures, encroachment — with a photo and location for each finding.","tags":["patrol","GPS","photos","vegetation"]},
-{"id":"9a47a01a-a6d6-4e96-96ce-1db70f919714","name":"Meter Service Order","industry":"Utilities","description":"Install, exchange, read or disconnect a meter: old and new serials, readings, seal numbers, photos of the meter face and a customer signature where one is required.","tags":["meter","service order","photos","signature"]},
-{"id":"3cb946a0-2032-410f-8342-c7634ff96150","name":"Outage / Trouble Report","industry":"Utilities","description":"Cause, extent, damage found and restoration steps, timestamped as the work happens. Feeds the reliability numbers and the customer's answer to 'what happened'.","tags":["outage","restoration","timestamped"]},
-{"id":"20ebf6c9-c872-431d-b96f-62f5d4d1f72b","name":"Pole Inspection","industry":"Utilities","description":"Condition of each pole on a route: lean, rot, hardware, attachments, clearances, ground line. Geotagged with photos so the next crew finds the same pole.","tags":["inspection","GPS","photos","route"]},
-{"id":"162b0fdc-0576-4cc9-923d-7a261444668f","name":"Substation Inspection","industry":"Utilities","description":"Monthly walk of transformers, breakers, batteries, oil levels, gauges and grounds. Readings recorded per asset and compared against the last visit.","tags":["inspection","readings","monthly","asset"]}
+{
+"id": "149052d8-69ed-4ac0-a11e-8c4c8f76ef94",
+"name": "Daily Field Report",
+"industry": "Construction",
+"description": "One record per crew per day: work performed, headcount by trade, equipment on site, materials used, weather, delays and visitors. The form the office waits for every evening.",
+"tags": [
+"daily",
+"photos",
+"signature",
+"weather"
+]
+},
+{
+"id": "6b2e285d-796e-4f17-8ad0-581ed17a6818",
+"name": "Equipment Pre-Use Inspection",
+"industry": "Construction",
+"description": "Operator checks a machine before the shift — fluids, brakes, lights, guards, leaks — and tags it out if it fails. One form per machine per day.",
+"tags": [
+"equipment",
+"daily",
+"pre-use",
+"tag-out"
+]
+},
+{
+"id": "fb287cb1-1811-47cd-a7a8-037e8ba2a9e9",
+"name": "Incident / Near-Miss Report",
+"industry": "Construction",
+"description": "What happened, where, who was involved, photos, witnesses and immediate action taken. Filed within the shift, while the details are still true.",
+"tags": [
+"safety",
+"incident",
+"photos",
+"GPS"
+]
+},
+{
+"id": "586beedf-0426-49ef-8eed-cc4367600417",
+"name": "Job Safety Analysis (JSA)",
+"industry": "Construction",
+"description": "Break the day's task into steps, name the hazard in each and the control for it, and get the crew's sign-off before work starts. The record OSHA asks for after an incident.",
+"tags": [
+"safety",
+"pre-task",
+"signature",
+"OSHA"
+]
+},
+{
+"id": "9e30ca0b-9069-4af2-9333-4d5e64df5645",
+"name": "Site Safety Inspection",
+"industry": "Construction",
+"description": "Walk the site against a checklist: PPE, fall protection, housekeeping, electrical, fire, excavation. Photograph anything failed and assign it to somebody.",
+"tags": [
+"safety",
+"inspection",
+"photos",
+"corrective action"
+]
+},
+{
+"id": "2ffac56b-7912-47b6-bc2d-ed6671ab3063",
+"name": "Toolbox Talk Attendance",
+"industry": "Construction",
+"description": "Topic, presenter, duration and every attendee's signature. Proves the safety conversation happened and who was in it.",
+"tags": [
+"safety",
+"attendance",
+"signature"
+]
+},
+{
+"id": "d4ba3eaf-8837-41b8-8459-4c4c39d2b742",
+"name": "Battery Storage Site Inspection",
+"industry": "Energy",
+"description": "Enclosure temperature, state of charge, HVAC, fire suppression, alarms and physical condition of a BESS site. Readings per rack, faults photographed.",
+"tags": [
+"storage",
+"inspection",
+"readings",
+"fire"
+]
+},
+{
+"id": "014b2b75-8a5f-4754-a87d-3e55f1149bf8",
+"name": "Commissioning Checklist",
+"industry": "Energy",
+"description": "Step-by-step verification that a new installation meets the design: tests performed, values recorded, punch-list items and the client's acceptance signature.",
+"tags": [
+"commissioning",
+"acceptance",
+"signature",
+"punch list"
+]
+},
+{
+"id": "9660dfc1-704e-4e8b-af10-fc3e70dbf368",
+"name": "Energy Audit Walkthrough",
+"industry": "Energy",
+"description": "Building or site survey of lighting, HVAC, envelope and equipment with nameplate photos, run hours and observed waste. The input to a savings proposal.",
+"tags": [
+"audit",
+"survey",
+"photos"
+]
+},
+{
+"id": "891dc96b-e0d8-44dc-97de-e7c8a4359340",
+"name": "Lockout / Tagout Record",
+"industry": "Energy",
+"description": "Every energy source isolated, the lock and tag applied, who applied it and when it came off. The document that stands between a technician and a live circuit.",
+"tags": [
+"safety",
+"LOTO",
+"signature"
+]
+},
+{
+"id": "bfeab7dd-0e1a-4c0a-bc25-0a3764908ac9",
+"name": "Solar Array Inspection",
+"industry": "Energy",
+"description": "Panel, string and inverter condition, soiling, shading, connector damage and production readings against expected. One form per array visit.",
+"tags": [
+"solar",
+"inspection",
+"readings",
+"photos"
+]
+},
+{
+"id": "e723988f-c5eb-48fc-89af-cdee621977f2",
+"name": "Wind Turbine Service Checklist",
+"industry": "Energy",
+"description": "Scheduled maintenance by turbine: torque checks, lubrication, brake and pitch systems, blade condition. Sign-off per section and the lock-out record attached.",
+"tags": [
+"wind",
+"maintenance",
+"LOTO",
+"checklist"
+]
+},
+{
+"id": "8d130bd4-0fb6-4b0a-a9e8-eab535870562",
+"name": "Chain of Custody",
+"industry": "Environmental",
+"description": "Each sample from collection to the lab: ID, matrix, time, preservative, and every hand it passes through with a signature. The document that makes a result legally defensible.",
+"tags": [
+"sampling",
+"lab",
+"signature",
+"compliance"
+]
+},
+{
+"id": "02de745f-856b-45a3-ac42-3c09bb34e6c6",
+"name": "Groundwater Sampling Log",
+"industry": "Environmental",
+"description": "Per well: depth to water, purge volume, field parameters until stable, sample time and bottle set. Stabilisation readings recorded in the sequence taken.",
+"tags": [
+"sampling",
+"readings",
+"groundwater"
+]
+},
+{
+"id": "9bfe5854-c6b1-4284-ba92-da1039c48331",
+"name": "Site Assessment Field Log",
+"industry": "Environmental",
+"description": "Phase I/II site walk: observations, staining, drums, vents, wells, neighbouring uses, photos and sketch. Structured so the report writes itself from it.",
+"tags": [
+"assessment",
+"photos",
+"GPS",
+"Phase I"
+]
+},
+{
+"id": "a36d3f05-c25e-4011-b6d9-f3736f14c9cd",
+"name": "Spill Response Report",
+"industry": "Environmental",
+"description": "Material, estimated volume, containment and clean-up actions, disposal and notifications made, with timestamps and photos. Written for the regulator, filled in during the response.",
+"tags": [
+"incident",
+"spill",
+"photos",
+"timestamped"
+]
+},
+{
+"id": "679374e6-a03c-48ba-9440-b71cecde63ea",
+"name": "Stormwater (SWPPP) Inspection",
+"industry": "Environmental",
+"description": "BMP condition, discharge points, sediment controls and corrective actions after each qualifying rain event. Dates and photos the permit requires.",
+"tags": [
+"stormwater",
+"inspection",
+"permit",
+"photos"
+]
+},
+{
+"id": "63488235-7d96-4432-9a63-a5e078334c2d",
+"name": "Waste Manifest Pickup",
+"industry": "Environmental",
+"description": "Containers, waste codes, quantities, generator and transporter signatures at pickup. The field half of the manifest, before the paperwork catches up.",
+"tags": [
+"waste",
+"manifest",
+"signature"
+]
+},
+{
+"id": "9b61a49e-a460-4441-971e-78a2c072e621",
+"name": "Daily Facility Walkthrough",
+"industry": "Facilities",
+"description": "One lap of the building on a fixed route: cleanliness, lighting, restrooms, safety hazards, anything broken. Photographed and assigned before the day starts.",
+"tags": [
+"daily",
+"walkthrough",
+"photos",
+"corrective action"
+]
+},
+{
+"id": "a099f24c-2e6e-4c1e-a3c2-086fa6cab0ce",
+"name": "Fire & Life Safety Inspection",
+"industry": "Facilities",
+"description": "Extinguishers, exit signs, emergency lighting, alarms, sprinkler gauges and doors, each with a date and a tag number. What the fire marshal asks to see.",
+"tags": [
+"safety",
+"inspection",
+"compliance",
+"monthly"
+]
+},
+{
+"id": "b6e6ab98-6f25-4c67-9c3a-c4b9c7ce987a",
+"name": "Move / Setup Request",
+"industry": "Facilities",
+"description": "Room, date, layout, equipment and AV needs, with a sketch or photo of the desired setup. Removes the phone call and the misunderstanding.",
+"tags": [
+"request",
+"setup",
+"photos"
+]
+},
+{
+"id": "3d2fec2a-9aba-4d58-8781-8ac67ee7099c",
+"name": "Preventive Maintenance Checklist",
+"industry": "Facilities",
+"description": "Scheduled tasks per asset — filters, belts, lubrication, readings — with pass/fail and the next due date. The record that turns reactive maintenance into planned.",
+"tags": [
+"PM",
+"asset",
+"schedule",
+"readings"
+]
+},
+{
+"id": "19082f55-4df6-41e2-8b70-9a57e9db5a97",
+"name": "Vendor Service Verification",
+"industry": "Facilities",
+"description": "Confirms a contractor's visit: who came, what they serviced, readings or photos of the work, and a staff signature. Evidence for the invoice.",
+"tags": [
+"vendor",
+"verification",
+"signature"
+]
+},
+{
+"id": "b2ab30c7-ce8b-440c-be78-c06d987fbd2b",
+"name": "Work Order Completion",
+"industry": "Facilities",
+"description": "What was requested, what was done, parts and time used, before-and-after photos, and the requester's sign-off. Closes the loop on every ticket.",
+"tags": [
+"work order",
+"photos",
+"signature",
+"parts"
+]
+},
+{
+"id": "53bbe186-b78d-4304-bd69-4860fff16a58",
+"name": "Customer Satisfaction Survey",
+"industry": "Field Service",
+"description": "Three questions and a signature at the end of the visit, while the technician is still there. The feedback loop that catches a problem before the review does.",
+"tags": [
+"survey",
+"customer",
+"signature"
+]
+},
+{
+"id": "491e1f08-753d-4b19-abed-dd5c93e8e778",
+"name": "Installation Checklist",
+"industry": "Field Service",
+"description": "Every step of an install confirmed in order, with serials, settings, test results and photos of the finished work, and the customer's acceptance at the end.",
+"tags": [
+"install",
+"checklist",
+"photos",
+"signature"
+]
+},
+{
+"id": "fcecb57c-c2d5-434d-ade4-a597dd5656f0",
+"name": "Site Survey / Estimate",
+"industry": "Field Service",
+"description": "Measurements, photos, access notes and options captured on the first visit, structured so the estimate can be produced without a second trip.",
+"tags": [
+"survey",
+"estimate",
+"photos",
+"measurements"
+]
+},
+{
+"id": "b3402d04-9012-4bd5-ba6d-fcf814d84a11",
+"name": "Timesheet",
+"industry": "Field Service",
+"description": "Hours by job, travel and break, submitted daily from the truck and approved by the supervisor. Ends the Friday reconstruction of the week.",
+"tags": [
+"time",
+"payroll",
+"daily",
+"approval"
+]
+},
+{
+"id": "b0e63fe6-72bc-45a9-81e5-62e117ff175e",
+"name": "Vehicle Pre-Trip Inspection",
+"industry": "Field Service",
+"description": "DVIR-style walk-around each morning — lights, tyres, brakes, fluids, load security — with defects flagged to the fleet manager before the truck leaves.",
+"tags": [
+"vehicle",
+"DVIR",
+"daily",
+"fleet"
+]
+},
+{
+"id": "66e39b03-2a77-4ec0-b791-3e5c28b7bb51",
+"name": "Work Order / Service Ticket",
+"industry": "Field Service",
+"description": "The one form every service company runs: customer, asset, problem, work performed, parts, time, photos, and the customer's signature. What the invoice is built from.",
+"tags": [
+"work order",
+"billing",
+"signature",
+"parts"
+]
+},
+{
+"id": "bc8ef3aa-7005-4a12-ba16-71ba88113c9d",
+"name": "Equipment Start-Up Checklist",
+"industry": "HVAC",
+"description": "Pre-start verification and post-start readings on a new install — voltage, phase, charge by superheat and subcooling, airflow, safeties — against the manufacturer's spec.",
+"tags": [
+"start-up",
+"install",
+"readings",
+"commissioning"
+]
+},
+{
+"id": "caa73ff0-be2a-4c53-9fff-cde5b53bdffd",
+"name": "Indoor Air Quality Survey",
+"industry": "HVAC",
+"description": "CO2, humidity, temperature and particulate readings by room, with occupant complaints and observations. The evidence behind a ventilation recommendation.",
+"tags": [
+"IAQ",
+"readings",
+"survey"
+]
+},
+{
+"id": "2ab94d0d-4e9b-49e3-b9e6-878f665f1f51",
+"name": "Preventive Maintenance Checklist",
+"industry": "HVAC",
+"description": "Seasonal tune-up by unit: filters, coils, belts, electrical, drain, then supply/return temperatures, pressures and amp draws recorded so decline shows up early.",
+"tags": [
+"PM",
+"seasonal",
+"readings",
+"checklist"
+]
+},
+{
+"id": "c5b9b2a0-cd79-48e6-aa68-cd09ca68d76c",
+"name": "Quote / Replacement Proposal",
+"industry": "HVAC",
+"description": "Nameplate photos, measurements, options and pricing captured on site, with the customer's acceptance signature. Sells the replacement before leaving the driveway.",
+"tags": [
+"quote",
+"photos",
+"signature",
+"sales"
+]
+},
+{
+"id": "12bdcbbf-f9a6-409b-9768-74cf7179f1b1",
+"name": "Refrigerant Log",
+"industry": "HVAC",
+"description": "Every add and recovery by unit: type, quantity, cylinder, leak check result and technician certification number. The EPA 608 record, kept as it happens.",
+"tags": [
+"refrigerant",
+"EPA",
+"compliance",
+"readings"
+]
+},
+{
+"id": "849bc9aa-a2a1-4416-83b1-1a911d9b774a",
+"name": "Service Call Ticket",
+"industry": "HVAC",
+"description": "Customer, unit, complaint, diagnosis, work performed, parts and refrigerant used, time on site and the customer's signature. What the invoice and the warranty claim come from.",
+"tags": [
+"ticket",
+"billing",
+"signature",
+"parts"
+]
+},
+{
+"id": "898af61b-f2a9-4a3e-83fd-cc4e3cf9343e",
+"name": "Bill of Lading / Pickup",
+"industry": "Logistics",
+"description": "Shipper, consignee, pieces, weight, hazmat declaration and the shipper's signature at pickup. The field copy, before the paperwork catches up.",
+"tags": [
+"BOL",
+"pickup",
+"signature",
+"hazmat"
+]
+},
+{
+"id": "3626a091-00cb-491a-9fa7-99eca1d47fdf",
+"name": "Damage / Exception Report",
+"industry": "Logistics",
+"description": "What was damaged, how it was packed, photos from several angles and who was present. Filed at the moment of discovery, when the claim is still winnable.",
+"tags": [
+"damage",
+"claim",
+"photos"
+]
+},
+{
+"id": "1861c0c2-4d40-4931-9c11-357b7e1b3433",
+"name": "Driver Vehicle Inspection Report (DVIR)",
+"industry": "Logistics",
+"description": "Pre- and post-trip inspection required by the FMCSA: defects found, whether they affect safe operation, and the mechanic's sign-off on the repair.",
+"tags": [
+"DVIR",
+"FMCSA",
+"daily",
+"compliance"
+]
+},
+{
+"id": "ac662c3e-09ac-40bc-a6d7-c9600ec59474",
+"name": "Forklift Pre-Use Inspection",
+"industry": "Logistics",
+"description": "OSHA-required daily check of each truck — forks, mast, hydraulics, horn, brakes, battery or LP — with the unit removed from service on any failure.",
+"tags": [
+"forklift",
+"OSHA",
+"daily",
+"equipment"
+]
+},
+{
+"id": "5eee6920-0957-4018-b7f2-85f911691021",
+"name": "Proof of Delivery",
+"industry": "Logistics",
+"description": "Items delivered, condition, exceptions, photo of the drop and the receiver's signature with time and location. Ends the 'we never got it' conversation.",
+"tags": [
+"delivery",
+"signature",
+"photos",
+"GPS"
+]
+},
+{
+"id": "84ca0b58-6a3f-4072-9064-d4443e0933b9",
+"name": "Yard / Trailer Check",
+"industry": "Logistics",
+"description": "Every trailer in the yard: number, location, loaded or empty, seal, condition. A daily count that replaces walking the yard with a clipboard.",
+"tags": [
+"yard",
+"inventory",
+"trailer"
+]
+},
+{
+"id": "25d7a17f-48ff-49f0-ae81-a460f246b41b",
+"name": "5S / Housekeeping Audit",
+"industry": "Manufacturing",
+"description": "Score each area against the five standards with photos of what was found. Trends by area and week show where the discipline is slipping.",
+"tags": [
+"5S",
+"audit",
+"photos",
+"lean"
+]
+},
+{
+"id": "f141da22-1b60-48e4-afeb-71bbdb84a9bd",
+"name": "Equipment Downtime Report",
+"industry": "Manufacturing",
+"description": "Machine, start and end of the stoppage, cause code, action taken and parts used. Every minute of downtime becomes a reason.",
+"tags": [
+"downtime",
+"maintenance",
+"cause code"
+]
+},
+{
+"id": "8296ea66-a971-4b55-ae63-a59401f3bd1e",
+"name": "Production Line Checklist",
+"industry": "Manufacturing",
+"description": "Start-of-shift verification of the line: settings, materials staged, guards in place, first-piece approved. Signed before the line runs.",
+"tags": [
+"production",
+"shift",
+"checklist",
+"signature"
+]
+},
+{
+"id": "2b7f38c2-be07-455f-a218-2953401038ba",
+"name": "Quality Inspection Record",
+"industry": "Manufacturing",
+"description": "Measurements against tolerance for each characteristic on a sample, pass/fail per part, and disposition of anything out of spec. The record an audit traces back to.",
+"tags": [
+"quality",
+"readings",
+"tolerance",
+"audit"
+]
+},
+{
+"id": "d95eea3d-a1b5-4eda-bd08-969e1cd8f39c",
+"name": "Receiving Inspection",
+"industry": "Manufacturing",
+"description": "Incoming material against the PO: quantities, damage, certifications present, sample checks, and accept/reject with photos. Stops a bad lot at the dock.",
+"tags": [
+"receiving",
+"quality",
+"photos",
+"PO"
+]
+},
+{
+"id": "5bc26640-a719-4321-828d-011f02e15bf0",
+"name": "Safety Observation",
+"industry": "Manufacturing",
+"description": "A behaviour or condition seen on the floor — safe or unsafe — with location, photo and what was said. Volume of observations is the leading indicator.",
+"tags": [
+"safety",
+"observation",
+"photos",
+"leading indicator"
+]
+},
+{
+"id": "f105212a-d644-434f-925d-d4c90c5025f9",
+"name": "Blast Report",
+"industry": "Mining",
+"description": "Pattern, holes, explosives by type and quantity, timing, exclusion zone confirmed, post-blast inspection and misfires. The record the regulator and the explosives inventory both need.",
+"tags": [
+"blasting",
+"compliance",
+"inventory"
+]
+},
+{
+"id": "f8a3b462-d1ef-4a84-a0b9-6dce34f3c69f",
+"name": "Environmental Monitoring Log",
+"industry": "Mining",
+"description": "Dust, noise, water discharge and tailings readings at the permit's monitoring points, on the permit's schedule, with exceedances flagged immediately.",
+"tags": [
+"environmental",
+"readings",
+"permit"
+]
+},
+{
+"id": "a49e617c-0e30-499e-ae34-3ceddd24506e",
+"name": "Haul Road Inspection",
+"industry": "Mining",
+"description": "Grade, width, berms, drainage, surface condition and dust by segment, with photos of anything that needs grading. Roads are where the trucks get hurt.",
+"tags": [
+"inspection",
+"haul road",
+"photos",
+"GPS"
+]
+},
+{
+"id": "2a4bb7b4-f6b9-42a3-b737-a5dd656bc150",
+"name": "Pre-Shift Equipment Inspection",
+"industry": "Mining",
+"description": "Operator's walk-around of a haul truck, loader or dozer before the shift — brakes, steering, fire suppression, lights, tyres — with defects flagged and the unit tagged out if unsafe.",
+"tags": [
+"equipment",
+"pre-shift",
+"MSHA",
+"tag-out"
+]
+},
+{
+"id": "b6fd9b11-2472-4283-98dd-8f65e65840d4",
+"name": "Shift Handover Report",
+"industry": "Mining",
+"description": "Production, downtime, equipment status, hazards and open items passed from one shift to the next, so nothing is learned twice.",
+"tags": [
+"shift",
+"handover",
+"production"
+]
+},
+{
+"id": "a07221c9-245c-46d2-a92a-fcea4e832f7e",
+"name": "Workplace Examination",
+"industry": "Mining",
+"description": "The MSHA-required examination of each working area before work begins: hazards found, corrective action taken, examiner and time. The record inspectors ask for first.",
+"tags": [
+"MSHA",
+"examination",
+"safety",
+"compliance"
+]
+},
+{
+"id": "73557f95-0a52-4adb-9dd9-434d1b6f3838",
+"name": "Field Service Ticket",
+"industry": "Oil & Gas",
+"description": "The billable record of a job: customer, lease, work performed, hours, equipment and consumables, with the company man's signature. What the invoice is built from.",
+"tags": [
+"ticket",
+"billing",
+"signature",
+"hours"
+]
+},
+{
+"id": "728ab7f0-3908-4b95-ae83-9c3999a9c697",
+"name": "Job Safety Analysis (JSA)",
+"industry": "Oil & Gas",
+"description": "Task steps, hazards, controls and crew sign-off before any job on location. Required before hot work, confined space or pressure work begins.",
+"tags": [
+"safety",
+"pre-task",
+"signature"
+]
+},
+{
+"id": "05d67486-1ec2-4818-8560-5623c78bf598",
+"name": "Pressure Test Record",
+"industry": "Oil & Gas",
+"description": "Test pressure, hold time, start and end readings and pass/fail for each segment or component, with a chart photo. The document a regulator asks to see.",
+"tags": [
+"pressure test",
+"compliance",
+"readings",
+"photos"
+]
+},
+{
+"id": "5572c59c-5480-4ed4-8753-fc1fccbdc142",
+"name": "Spill / Release Report",
+"industry": "Oil & Gas",
+"description": "Volume, product, location, cause and containment steps, timestamped and geotagged, with photos. Captures what the agency report will need before anyone has to remember it.",
+"tags": [
+"environmental",
+"incident",
+"GPS",
+"photos"
+]
+},
+{
+"id": "8b018e52-f5c9-474c-b98a-c8dea4d08e33",
+"name": "Tank Gauging & Run Ticket",
+"industry": "Oil & Gas",
+"description": "Opening and closing gauges, temperature, BS&W and gravity for each tank, producing the run ticket that moves oil off the lease.",
+"tags": [
+"production",
+"readings",
+"run ticket"
+]
+},
+{
+"id": "c513de52-11af-414e-87ef-fde604669813",
+"name": "Well Site Inspection",
+"industry": "Oil & Gas",
+"description": "Lease walk against API practice: tanks, separators, gauges, thief hatches, relief valves, berms, signage. Readings and photos per item, with anything out of spec flagged for the pumper.",
+"tags": [
+"inspection",
+"API",
+"photos",
+"readings"
+]
+},
+{
+"id": "b3ab9662-e6af-49f3-acd0-a732a7a75d18",
+"name": "Cathodic Protection Reading",
+"industry": "Pipeline",
+"description": "Pipe-to-soil potentials at each test station, rectifier output and any reading outside the criterion. Structured so the annual survey compiles itself.",
+"tags": [
+"CP",
+"readings",
+"corrosion",
+"compliance"
+]
+},
+{
+"id": "dd3b0ae3-d40a-4ffb-b739-2d843db0506b",
+"name": "Excavation / Dig Report",
+"industry": "Pipeline",
+"description": "Locate ticket, exposure findings, coating condition, wall thickness readings and repair performed, with photos before backfill. The evidence that is gone once the hole is closed.",
+"tags": [
+"dig",
+"integrity",
+"photos",
+"readings"
+]
+},
+{
+"id": "57802a27-aa37-4db8-8b9f-a86d662034d3",
+"name": "Leak Survey",
+"industry": "Pipeline",
+"description": "Route, instrument, readings and any indication found with its classification and location. Filed per survey, feeding the leak-management record.",
+"tags": [
+"leak",
+"survey",
+"readings",
+"GPS"
+]
+},
+{
+"id": "60a07bc3-ecc4-49af-8556-6c27a1d699c4",
+"name": "Pressure Test Record",
+"industry": "Pipeline",
+"description": "Segment, medium, test and hold pressures, duration, temperature correction and chart photo, signed by the test lead. What the regulator asks to see before the line goes into service.",
+"tags": [
+"pressure test",
+"compliance",
+"signature"
+]
+},
+{
+"id": "9687f7d3-a493-45ca-a494-648550cb7da8",
+"name": "Right-of-Way Patrol",
+"industry": "Pipeline",
+"description": "Walk, drive or fly the line and record encroachment, exposed pipe, erosion, dead vegetation and third-party activity, geotagged with photos. The DOT-required patrol, kept as it happens.",
+"tags": [
+"patrol",
+"ROW",
+"GPS",
+"photos",
+"DOT"
+]
+},
+{
+"id": "1f6c2285-343c-419b-add3-994304eb03eb",
+"name": "Valve Inspection & Maintenance",
+"industry": "Pipeline",
+"description": "Operate and inspect each valve on the schedule: turns, leaks, actuator, signage, lock, and whether it fully closed. The record that says the isolation will work when it is needed.",
+"tags": [
+"valve",
+"maintenance",
+"readings"
+]
+},
+{
+"id": "044ef2b4-d0cf-46d9-ad8e-a715fe50a026",
+"name": "Incident Report",
+"industry": "Property Management",
+"description": "Injury, damage, disturbance or police contact on the property: what, where, who, photos, witnesses and action taken. Filed the same day, for the file and the insurer.",
+"tags": [
+"incident",
+"photos",
+"insurance"
+]
+},
+{
+"id": "914b8d35-7ac5-47df-889b-d8f568590d96",
+"name": "Maintenance Request & Completion",
+"industry": "Property Management",
+"description": "Tenant's request, technician's diagnosis, work done, parts, before-and-after photos and time, with the tenant's sign-off. Closes the loop on every ticket.",
+"tags": [
+"work order",
+"photos",
+"signature",
+"tenant"
+]
+},
+{
+"id": "7c46e857-015d-4de1-93e2-3c0a6d85f2c3",
+"name": "Move-In / Move-Out Inspection",
+"industry": "Property Management",
+"description": "Condition of every room and fixture with photos, agreed and signed by both parties. The document the deposit decision rests on.",
+"tags": [
+"inspection",
+"photos",
+"signature",
+"deposit"
+]
+},
+{
+"id": "549c00e9-e1c9-44d9-85a8-5e41176195c0",
+"name": "Property Inspection Walkthrough",
+"industry": "Property Management",
+"description": "Periodic exterior and common-area walk: grounds, lighting, parking, roof and gutters, safety hazards, with photos and items assigned. The routine that catches the small things.",
+"tags": [
+"inspection",
+"walkthrough",
+"photos",
+"corrective action"
+]
+},
+{
+"id": "c9cebdb3-d7f3-499c-8931-6103a49b55b5",
+"name": "Unit Turn Checklist",
+"industry": "Property Management",
+"description": "Every task between one tenant and the next — clean, paint, repairs, keys, appliances tested — checked off in order with photos, so the unit is ready when it is promised.",
+"tags": [
+"turn",
+"checklist",
+"photos",
+"make-ready"
+]
+},
+{
+"id": "9d12eb09-1209-486b-9774-a43ee64ba435",
+"name": "Vendor Work Verification",
+"industry": "Property Management",
+"description": "Confirms a contractor's work on site: what was done, photos, and a staff signature before the invoice is approved.",
+"tags": [
+"vendor",
+"verification",
+"photos",
+"signature"
+]
+},
+{
+"id": "f5fa67c9-9c5f-4378-bf01-d4a233bf6b83",
+"name": "Daily Job Log",
+"industry": "Roofing",
+"description": "Crew, hours, squares installed, materials used, weather, tear-off and disposal, photos of progress. One per job per day, the office's view of the roof.",
+"tags": [
+"daily",
+"photos",
+"materials",
+"weather"
+]
+},
+{
+"id": "618b3ca9-a1ce-4ac3-b04a-2553df40f5ac",
+"name": "Job Completion & Sign-Off",
+"industry": "Roofing",
+"description": "Final walk with the customer: photos of the finished roof, clean-up confirmed, warranty registered, and their signature. Closes the job and starts the warranty.",
+"tags": [
+"completion",
+"signature",
+"photos",
+"warranty"
+]
+},
+{
+"id": "41e1930f-9b55-43cd-90fe-7910fde5d67b",
+"name": "Material Order / Delivery Check",
+"industry": "Roofing",
+"description": "What was ordered against what arrived: quantities, colours, damage, photos of the drop. Catches the short delivery before the crew is standing on the roof waiting.",
+"tags": [
+"materials",
+"delivery",
+"photos"
+]
+},
+{
+"id": "52ecea27-891d-4143-bbb5-6551cae95d6e",
+"name": "Roof Inspection Report",
+"industry": "Roofing",
+"description": "Condition by section — membrane or shingles, flashings, penetrations, drains, edges — with photos, measurements and a sketch. The document a claim, a bid or a maintenance plan is built on.",
+"tags": [
+"inspection",
+"photos",
+"sketch",
+"measurements"
+]
+},
+{
+"id": "2e9dae36-44a6-446a-8cd7-5e93b8f4333e",
+"name": "Roof Work Safety Checklist",
+"industry": "Roofing",
+"description": "Fall protection in place, anchors, guardrails, warning lines, ladders, skylights covered, weather checked. Signed by the foreman before anyone goes up.",
+"tags": [
+"safety",
+"fall protection",
+"signature",
+"pre-task"
+]
+},
+{
+"id": "b39ccaaf-ffd9-44b0-9632-fc378fe862a5",
+"name": "Storm Damage Assessment",
+"industry": "Roofing",
+"description": "Hail and wind evidence by slope — test squares, collateral damage, photos with a scale reference — in the layout adjusters expect.",
+"tags": [
+"insurance",
+"storm",
+"photos",
+"test square"
+]
+},
+{
+"id": "8ba3c08e-5e5d-4f4a-85d0-98e9514a1916",
+"name": "Hydrant Flushing & Valve Exercise",
+"industry": "Utilities",
+"description": "Each hydrant or valve on the programme: flow, pressure, turns, condition and anything that would not open or close. The maintenance record the water quality report depends on.",
+"tags": [
+"water",
+"maintenance",
+"readings",
+"GPS"
+]
+},
+{
+"id": "bc5fc5a6-13f1-484d-9768-7916c695d3a2",
+"name": "Line Patrol Log",
+"industry": "Utilities",
+"description": "Walk or drive a line and record what is seen — vegetation, damaged insulators, leaning structures, encroachment — with a photo and location for each finding.",
+"tags": [
+"patrol",
+"GPS",
+"photos",
+"vegetation"
+]
+},
+{
+"id": "9a47a01a-a6d6-4e96-96ce-1db70f919714",
+"name": "Meter Service Order",
+"industry": "Utilities",
+"description": "Install, exchange, read or disconnect a meter: old and new serials, readings, seal numbers, photos of the meter face and a customer signature where one is required.",
+"tags": [
+"meter",
+"service order",
+"photos",
+"signature"
+]
+},
+{
+"id": "3cb946a0-2032-410f-8342-c7634ff96150",
+"name": "Outage / Trouble Report",
+"industry": "Utilities",
+"description": "Cause, extent, damage found and restoration steps, timestamped as the work happens. Feeds the reliability numbers and the customer's answer to 'what happened'.",
+"tags": [
+"outage",
+"restoration",
+"timestamped"
+]
+},
+{
+"id": "20ebf6c9-c872-431d-b96f-62f5d4d1f72b",
+"name": "Pole Inspection",
+"industry": "Utilities",
+"description": "Condition of each pole on a route: lean, rot, hardware, attachments, clearances, ground line. Geotagged with photos so the next crew finds the same pole.",
+"tags": [
+"inspection",
+"GPS",
+"photos",
+"route"
+]
+},
+{
+"id": "162b0fdc-0576-4cc9-923d-7a261444668f",
+"name": "Substation Inspection",
+"industry": "Utilities",
+"description": "Monthly walk of transformers, breakers, batteries, oil levels, gauges and grounds. Readings recorded per asset and compared against the last visit.",
+"tags": [
+"inspection",
+"readings",
+"monthly",
+"asset"
+]
+},
+{
+"id": "194f5b1f-25d5-42e9-a7d4-f41fb8c3a3f2",
+"name": "Service Call Ticket",
+"industry": "Plumbing",
+"description": "Customer, fixture or line, complaint, diagnosis, work performed, parts, time on site and the customer's signature. What the invoice is built from.",
+"tags": [
+"ticket",
+"billing",
+"signature",
+"parts"
+]
+},
+{
+"id": "26fb0fca-9b5d-4f2a-b31c-87e97db4adea",
+"name": "Backflow Test Report",
+"industry": "Plumbing",
+"description": "Device make, model and serial, test readings on each check valve and relief valve, pass/fail, and the tester's certification. The report the water authority asks for annually.",
+"tags": [
+"backflow",
+"compliance",
+"readings",
+"annual"
+]
+},
+{
+"id": "d03f0421-fec8-4e2c-ab81-f54957a5f6f9",
+"name": "Water Heater Installation Checklist",
+"industry": "Plumbing",
+"description": "Old unit removed, new unit serials, venting, gas or electrical connections, expansion tank, T&P discharge, pressure test and the homeowner's sign-off with photos.",
+"tags": [
+"install",
+"checklist",
+"photos",
+"signature"
+]
+},
+{
+"id": "6eed64ab-d134-4b4c-8af6-db0768412b17",
+"name": "Drain Cleaning Work Order",
+"industry": "Plumbing",
+"description": "Line and access point, method and cable footage, what came out, camera findings with photos, and the recommendation. The record behind a repair quote.",
+"tags": [
+"work order",
+"photos",
+"camera",
+"recommendation"
+]
+},
+{
+"id": "220e4f9d-8e46-4315-9add-12af697f6106",
+"name": "Leak Inspection Report",
+"industry": "Plumbing",
+"description": "Where the water is showing, where it is coming from, moisture readings, photos and the fix proposed. Written for the customer and their insurer.",
+"tags": [
+"inspection",
+"photos",
+"readings",
+"insurance"
+]
+},
+{
+"id": "1adf2a57-1e24-48bb-adaf-0df778e21345",
+"name": "Rough-In Inspection",
+"industry": "Plumbing",
+"description": "Supply and drain runs against the plan by fixture: sizing, slope, venting, supports, test pressure held. Photographed before the walls close.",
+"tags": [
+"inspection",
+"new construction",
+"photos",
+"pressure test"
+]
+},
+{
+"id": "e30c9cbf-59a1-4fd9-acf4-3645e6e2d480",
+"name": "Boiler Inspection",
+"industry": "Mechanical",
+"description": "Combustion readings, safeties, low-water cutoff, relief valve, controls and the condition of the vessel and piping, with photos. The annual record the insurer and the AHJ want.",
+"tags": [
+"boiler",
+"inspection",
+"readings",
+"compliance"
+]
+},
+{
+"id": "a88a8fb7-ef2a-463b-bfdb-942771b2be77",
+"name": "Chiller Maintenance Log",
+"industry": "Mechanical",
+"description": "Approach temperatures, pressures, oil and refrigerant levels, amp draws and vibration by circuit, against the last visit. Decline shows up before the failure.",
+"tags": [
+"chiller",
+"maintenance",
+"readings",
+"trend"
+]
+},
+{
+"id": "519f7b1e-591f-4d9d-9633-3cf4af12e4e0",
+"name": "Mechanical Room Walkthrough",
+"industry": "Mechanical",
+"description": "One lap of the room on a fixed route: leaks, noise, gauges, belts, filters, housekeeping and anything tagged. Photographed and assigned before the day starts.",
+"tags": [
+"walkthrough",
+"daily",
+"photos",
+"corrective action"
+]
+},
+{
+"id": "4e5b451e-9a29-459f-91b1-691488ac04c3",
+"name": "Piping Pressure Test",
+"industry": "Mechanical",
+"description": "Segment, medium, test pressure, hold time, start and end readings and pass/fail, with a gauge photo and the witness's signature.",
+"tags": [
+"pressure test",
+"readings",
+"photos",
+"signature"
+]
+},
+{
+"id": "6fbacc49-ff3a-4665-ac80-befbecb88558",
+"name": "Equipment Start-Up Checklist",
+"industry": "Mechanical",
+"description": "Pre-start verification and post-start readings on new equipment — rotation, voltage, amps, flows, safeties — against the manufacturer's spec, signed by the start-up technician.",
+"tags": [
+"start-up",
+"commissioning",
+"readings",
+"signature"
+]
+},
+{
+"id": "2ed18b2a-f750-41d1-a74a-85ee23c54778",
+"name": "Service Ticket",
+"industry": "Mechanical",
+"description": "Customer, equipment, complaint, diagnosis, work performed, parts and time, with the customer's signature. What the invoice and the warranty claim come from.",
+"tags": [
+"ticket",
+"billing",
+"signature",
+"parts"
+]
+}
 ]

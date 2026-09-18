@@ -82,3 +82,15 @@ update form_templates set image_path = '/form-samples/utilities-meter-service-or
 update form_templates set image_path = '/form-samples/utilities-outage-trouble-report.png' where id = '3cb946a0-2032-410f-8342-c7634ff96150' and image_path is null;
 update form_templates set image_path = '/form-samples/utilities-pole-inspection.png' where id = '20ebf6c9-c872-431d-b96f-62f5d4d1f72b' and image_path is null;
 update form_templates set image_path = '/form-samples/utilities-substation-inspection.png' where id = '162b0fdc-0576-4cc9-923d-7a261444668f' and image_path is null;
+update form_templates set image_path = '/form-samples/plumbing-service-call-ticket.png' where id = '194f5b1f-25d5-42e9-a7d4-f41fb8c3a3f2' and image_path is null;
+update form_templates set image_path = '/form-samples/plumbing-backflow-test-report.png' where id = '26fb0fca-9b5d-4f2a-b31c-87e97db4adea' and image_path is null;
+update form_templates set image_path = '/form-samples/plumbing-water-heater-installation-checklist.png' where id = 'd03f0421-fec8-4e2c-ab81-f54957a5f6f9' and image_path is null;
+update form_templates set image_path = '/form-samples/plumbing-drain-cleaning-work-order.png' where id = '6eed64ab-d134-4b4c-8af6-db0768412b17' and image_path is null;
+update form_templates set image_path = '/form-samples/plumbing-leak-inspection-report.png' where id = '220e4f9d-8e46-4315-9add-12af697f6106' and image_path is null;
+update form_templates set image_path = '/form-samples/plumbing-rough-in-inspection.png' where id = '1adf2a57-1e24-48bb-adaf-0df778e21345' and image_path is null;
+update form_templates set image_path = '/form-samples/mechanical-boiler-inspection.png' where id = 'e30c9cbf-59a1-4fd9-acf4-3645e6e2d480' and image_path is null;
+update form_templates set image_path = '/form-samples/mechanical-chiller-maintenance-log.png' where id = 'a88a8fb7-ef2a-463b-bfdb-942771b2be77' and image_path is null;
+update form_templates set image_path = '/form-samples/mechanical-mechanical-room-walkthrough.png' where id = '519f7b1e-591f-4d9d-9633-3cf4af12e4e0' and image_path is null;
+update form_templates set image_path = '/form-samples/mechanical-piping-pressure-test.png' where id = '4e5b451e-9a29-459f-91b1-691488ac04c3' and image_path is null;
+update form_templates set image_path = '/form-samples/mechanical-equipment-start-up-checklist.png' where id = '6fbacc49-ff3a-4665-ac80-befbecb88558' and image_path is null;
+update form_templates set image_path = '/form-samples/mechanical-service-ticket.png' where id = '2ed18b2a-f750-41d1-a74a-85ee23c54778' and image_path is null;

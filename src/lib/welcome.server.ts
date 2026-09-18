@@ -1,4 +1,6 @@
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
+
+import { readIntake } from "./intake-answers";
 import { appUrl } from "@/lib/app-url";
 import { industryIcon } from "@/lib/industry-icons";
 import { HOMEWORK_KEYS, type HomeworkKey, type WelcomeView } from "@/lib/welcome";
@@ -185,7 +187,9 @@ async function viewFor(deal: any, opts: { internal: boolean }): Promise<WelcomeV
             color: { dark: "#072b57", light: "#ffffff" },
           })
         : null,
-    sharedAt: opts.internal ? (deal.welcome_issued_at ?? null) : null,
+    // "Sent" is the copy of the link, or the customer opening it — not the
+    // link merely existing, which happens at assignment.
+    sharedAt: opts.internal ? (readIntake(deal.intake).welcome_shared_at ?? null) : null,
     openedAt: opts.internal ? (deal.welcome_opened_at ?? null) : null,
     hiddenScreens: (await import("./intake-answers")).readIntake(deal.intake)
       .welcome_hidden_screens,

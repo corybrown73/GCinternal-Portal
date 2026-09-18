@@ -439,8 +439,41 @@ export function TimelinePanel({
             {moved
               ? `${moved} date${moved === 1 ? "" : "s"} moved by hand. Everything after a moved date follows it by the same number of business days.`
               : "Tick a step when it happens; the customer's page shows the progress."}
-            {timeline.timezone ? ` Call times are ${timeline.timezone}.` : ""}
           </p>
+          <label className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground">
+            Call times in
+            <select
+              className="h-6 rounded-sm border border-border bg-background px-1 text-[11px] text-foreground"
+              value={timeline.timezone ?? ""}
+              disabled={!editable}
+              onChange={(e) => set({ timezone: e.target.value || null })}
+              title="The customer's zone. The invites and the page say the time in this zone."
+            >
+              <option value="">
+                Browser default ({Intl.DateTimeFormat().resolvedOptions().timeZone})
+              </option>
+              {[
+                "America/New_York",
+                "America/Chicago",
+                "America/Denver",
+                "America/Phoenix",
+                "America/Los_Angeles",
+                "America/Anchorage",
+                "Pacific/Honolulu",
+                "America/Toronto",
+                "America/Vancouver",
+                "Europe/London",
+              ].map((z) => (
+                <option key={z} value={z}>
+                  {z
+                    .replace("America/", "")
+                    .replace("Pacific/", "")
+                    .replace("Europe/", "")
+                    .replace("_", " ")}
+                </option>
+              ))}
+            </select>
+          </label>
           <button
             type="button"
             className="inline-flex items-center gap-1 rounded-sm border border-border px-1.5 py-0.5 text-[11px] text-muted-foreground hover:text-foreground"
@@ -534,7 +567,9 @@ export function TimelinePanel({
                       : "Upload the signed SOW first"
                   }
                 >
-                  {sowRead.isPending ? "Reading the SOW…" : "Read the SOW into the plan"}
+                  {sowRead.isPending
+                    ? "Reading the SOW… about a minute"
+                    : "Read the SOW into the plan"}
                 </button>
               ) : null}
               <a href="#sow" className="text-[11px] text-muted-foreground hover:text-foreground">
@@ -666,7 +701,12 @@ export function TimelinePanel({
               ) : null}
               {proposal.proposal.gaps.length ? (
                 <p className="text-[11px] text-amber-700 dark:text-amber-400">
-                  Ask on the kickoff: {proposal.proposal.gaps.join(" · ")}
+                  <span className="font-semibold">Ask on the kickoff</span>
+                  <ul className="mt-1 list-disc space-y-0.5 pl-4">
+                    {proposal.proposal.gaps.map((g) => (
+                      <li key={g}>{g}</li>
+                    ))}
+                  </ul>
                 </p>
               ) : null}
               <div className="flex flex-wrap items-center gap-1.5">
