@@ -159,7 +159,12 @@ export function TimelinePanel({
     const accepted = proposal.rows.filter((r) => r.accept);
     const makeId = (row: SowPlanRow) =>
       `${row.kind.slice(0, 4)}-${Math.random().toString(36).slice(2, 8)}`;
-    writeServices(mergeProposal(replace ? [] : services, accepted, makeId));
+    set({
+      services: mergeProposal(replace ? [] : services, accepted, makeId),
+      integration_tier: 0,
+      integration_target: null,
+      sow_applied_at: new Date().toISOString(),
+    });
     setProposal(null);
   };
 

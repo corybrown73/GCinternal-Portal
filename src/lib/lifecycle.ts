@@ -216,14 +216,25 @@ export function applyStageOverrides(
 
   const byId = new Map(PRISTINE_STAGES.map((s) => [s.id as string, s]));
   const live: LifecycleStage[] = [];
+  const placed = new Set<string>();
+  // The live entry carries the configured name and description, so every
+  // surface that maps LIFECYCLE_STAGES — the rail, the filters, the chips —
+  // says the same word as the record. One vocabulary.
+  const dressed = (s: LifecycleStage): LifecycleStage => {
+    const o = next[s.id];
+    return o ? { ...s, label: o.label, ...(o.intent ? { intent: o.intent } : {}) } : s;
+  };
   for (const key of order) {
     const s = byId.get(key);
-    if (s && !hidden.has(key)) live.push(s);
+    if (s && !hidden.has(key)) {
+      live.push(dressed(s));
+      placed.add(key);
+    }
   }
   // Compiled stages the configuration does not mention stay, in their own
   // order, so a half-configured table never loses a stage.
   for (const s of PRISTINE_STAGES) {
-    if (!order.includes(s.id) && !hidden.has(s.id) && !live.includes(s)) live.push(s);
+    if (!placed.has(s.id) && !hidden.has(s.id)) live.push(dressed(s));
   }
   LIFECYCLE_STAGES.splice(0, LIFECYCLE_STAGES.length, ...live);
 }

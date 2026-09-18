@@ -476,6 +476,18 @@ export async function dealAssignment(dealId: string): Promise<DealAssignment> {
       .maybeSingle(),
   ]);
   const l = (ledger ?? [])[0] as any;
+  // Before Start onboarding there is no project to carry the owner, so a
+  // claim or a hand-pick lives only in the ledger. Read it from there, or
+  // the person who just claimed sees "Unassigned" and clicks again.
+  if (!owner && l?.team_member_id) {
+    const id = String(l.team_member_id);
+    const m = pool.find((p) => p.teamMemberId === id);
+    owner = {
+      teamMemberId: id,
+      name: m?.name ?? (l.team_members?.name as string | undefined) ?? "Assigned",
+      email: m?.email ?? null,
+    };
+  }
   const next = rules.mode === "claim" ? null : (pool.find((p) => p.rank === 1) ?? null);
   return {
     mode: rules.mode,

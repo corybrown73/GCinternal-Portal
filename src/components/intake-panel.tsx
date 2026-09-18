@@ -46,6 +46,20 @@ export function IntakePanel({
   const answers = readIntake(raw);
   const status = intakeStatus(answers);
   const qc = useQueryClient();
+  // Changing the path rewrites the whole plan and its dates. A stray click
+  // — the gallery loads and everything shifts under the cursor — should not
+  // be able to do that silently.
+  const choosePath = (next: "new_logo" | "existing") => {
+    if (answers.path === next) return;
+    if (
+      answers.path !== null &&
+      !window.confirm(
+        "Switching the path rebuilds the plan: the phases, the go-live date and what the customer's page says. Continue?",
+      )
+    )
+      return;
+    set({ path: next });
+  };
   const save = useServerFn(saveIntake);
   const [error, setError] = useState<string | null>(null);
 
@@ -91,14 +105,14 @@ export function IntakePanel({
           <Choice
             active={answers.path === "new_logo"}
             disabled={!editable || mutation.isPending}
-            onClick={() => set({ path: "new_logo" })}
+            onClick={() => choosePath("new_logo")}
           >
             New customer — first implementation
           </Choice>
           <Choice
             active={answers.path === "existing"}
             disabled={!editable || mutation.isPending}
-            onClick={() => set({ path: "existing" })}
+            onClick={() => choosePath("existing")}
           >
             Existing account — adding services
           </Choice>

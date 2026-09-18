@@ -67,12 +67,14 @@ export const moveDealStage = createServerFn({ method: "POST" })
         dealId: z.string().uuid(),
         toStage: z.enum(STAGES),
         note: z.string().max(2000).optional(),
+        /** The person saw what is missing and moved it anyway. */
+        force: z.boolean().optional(),
       })
       .parse(data),
   )
   .handler(async ({ data, context }) => {
     const { transitionDeal } = await import("./presale.server");
-    return transitionDeal(context.userId, data.dealId, data.toStage, data.note);
+    return transitionDeal(context.userId, data.dealId, data.toStage, data.note, data.force);
   });
 
 export const uploadSow = createServerFn({ method: "POST" })
@@ -423,6 +425,7 @@ export const saveIntake = createServerFn({ method: "POST" })
             path: z.enum(["new_logo", "existing"]).nullable().optional(),
             chosen_templates: z.array(z.string().uuid()).optional(),
             welcome_hidden_screens: z.array(z.string().max(40)).max(20).optional(),
+            welcome_shared_at: z.string().nullable().optional(),
             wanted_forms: z
               .array(
                 z.object({
@@ -456,6 +459,7 @@ export const saveIntake = createServerFn({ method: "POST" })
                   .optional(),
                 times: z.record(z.string().max(40), z.string().regex(/^\d{2}:\d{2}$/)).optional(),
                 timezone: z.string().trim().max(64).nullable().optional(),
+                sow_applied_at: z.string().nullable().optional(),
                 services: z
                   .array(
                     z.object({

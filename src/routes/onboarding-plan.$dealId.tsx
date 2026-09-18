@@ -63,7 +63,13 @@ function OnboardingPlanPage() {
       notesHref={`/onboarding-notes/${dealId}`}
       onCopyLink={async () => {
         const { url } = await issue({ data: { dealId } });
+        // The copy IS the send, as far as this record can know: the guide's
+        // last step ticks on it, or on the customer opening the page.
+        await save({
+          data: { dealId, patch: { welcome_shared_at: new Date().toISOString() } } as never,
+        });
         void qc.invalidateQueries({ queryKey: ["welcome", dealId] });
+        void qc.invalidateQueries({ queryKey: ["deal", dealId] });
         return url;
       }}
       onToggleScreen={async (key, hide) => {

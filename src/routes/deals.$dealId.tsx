@@ -34,6 +34,7 @@ import {
   getBriefDownloadUrl,
   getDeal,
   getHandoffOptions,
+  moveDealStage,
   removeNote,
   removeReport,
   setNoteReviewed,
@@ -50,6 +51,8 @@ import {
 } from "@/lib/pipeline-stages";
 import { daysSince, fmtDate, fmtDateTime, fmtMoney } from "@/lib/hub-format";
 import type { EditableDealField } from "@/lib/presale-fields";
+import { moveWithGate } from "@/lib/stage-move";
+import type { AccountStage } from "@/lib/presale-stages";
 import { cn } from "@/lib/utils";
 
 const dealQuery = (dealId: string) =>
@@ -97,6 +100,63 @@ function StageChip({ stage, stages }: { stage: string; stages: readonly Pipeline
   return (
     <span className="inline-flex items-center rounded-sm border border-border bg-muted px-1.5 py-0.5 font-mono text-[11px] tracking-tight text-foreground">
       {stageLabel(stages, stage)}
+    </span>
+  );
+}
+
+/**
+ * Change the stage from the deal itself. The board's drag was the only way
+ * before, which is a strange place to send somebody who is already on the
+ * deal. Same gate as the board: Closed Won asks when the deal is not ready.
+ */
+function StageControl({
+  dealId,
+  stage,
+  stages,
+  editable,
+}: {
+  dealId: string;
+  stage: string;
+  stages: readonly PipelineStage[];
+  editable: boolean;
+}) {
+  const move = useServerFn(moveDealStage);
+  const queryClient = useQueryClient();
+  const [error, setError] = useState<string | null>(null);
+  const m = useMutation({
+    mutationFn: (toStage: AccountStage) =>
+      moveWithGate((force) =>
+        move({ data: force ? { dealId, toStage, force: true } : { dealId, toStage } }),
+      ),
+    onMutate: () => setError(null),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["deal", dealId] });
+      void queryClient.invalidateQueries({ queryKey: ["pipeline"] });
+    },
+    onError: (e) => {
+      const msg = (e as Error).message;
+      if (msg !== "Left where it was.") setError(msg);
+    },
+  });
+  if (!editable) return <StageChip stage={stage} stages={stages} />;
+  return (
+    <span className="inline-flex flex-col">
+      <select
+        className="h-6 rounded-sm border border-border bg-muted px-1.5 font-mono text-[11px] tracking-tight text-foreground"
+        value={stage}
+        disabled={m.isPending}
+        onChange={(e) => m.mutate(e.target.value as AccountStage)}
+        title="Move this deal to another stage. Every move is written to the stage history."
+      >
+        {stages
+          .filter((s) => s.enterable || s.key === stage)
+          .map((s) => (
+            <option key={s.key} value={s.key}>
+              {s.label}
+            </option>
+          ))}
+      </select>
+      {error ? <span className="mt-0.5 text-[11px] text-destructive">{error}</span> : null}
     </span>
   );
 }
@@ -186,6 +246,7 @@ function DealRecord({ deal }: { deal: DealData }) {
     stageHistory: deal.stage_history,
     wonStageKey: wonStage(deal.stages).key,
     readiness: welcome.data?.readiness ?? [],
+    customerOpened: Boolean(welcome.data?.openedAt),
   });
   const nextPanel = steps.find((s) => !s.done)?.panel.id ?? null;
 
@@ -254,7 +315,12 @@ function DealRecord({ deal }: { deal: DealData }) {
               the day counter against the plan. Two numbers side by side is
               how somebody asks which one they are meant to be watching. */}
           <div className="flex items-center gap-2">
-            <StageChip stage={account.stage} stages={deal.stages} />
+            <StageControl
+              dealId={account.id}
+              stage={account.stage}
+              stages={deal.stages}
+              editable={editable}
+            />
             {!(counter && onPlan) ? (
               <span className="font-mono text-[11px] text-muted-foreground">
                 {days ?? 0}d in stage

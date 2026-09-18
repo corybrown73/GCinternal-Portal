@@ -30,7 +30,7 @@ export async function loadDealPulse(dealId: string, today?: string): Promise<Dea
     await Promise.all([
       db()
         .from("portal_accounts")
-        .select("id,intake,sow_document_path,welcome_share_url")
+        .select("id,intake,sow_document_path,welcome_share_url,welcome_opened_at")
         .eq("id", dealId)
         .maybeSingle(),
       db().from("portal_stage_transitions").select("to_stage,occurred_at").eq("account_id", dealId),
@@ -60,6 +60,7 @@ export async function loadDealPulse(dealId: string, today?: string): Promise<Dea
     shareUrl: (deal.welcome_share_url as string | null) ?? null,
     stageHistory,
     wonStageKey: won,
+    customerOpened: Boolean(deal.welcome_opened_at),
   });
   return {
     dealId,

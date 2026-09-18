@@ -26,12 +26,14 @@ describe("guideSteps", () => {
         path: "existing",
         forms_built: true,
         uploaded_forms: [{ path: "p", name: "Haul.pdf", uploaded_at: "2026-09-09" }],
+        welcome_shared_at: "2026-09-10T15:00:00Z",
         timeline: {
           services: [
             { id: "qb", kind: "integration", name: "QuickBooks Online", phase: 2, tier: 3 },
           ],
           times: { kickoff: "10:00", working: "14:30" },
           timezone: "America/Chicago",
+          sow_applied_at: "2026-09-10T15:00:00Z",
         },
       },
       gongReports: 2,
@@ -44,9 +46,13 @@ describe("guideSteps", () => {
     expect(steps.every((s) => s.done)).toBe(true);
   });
 
-  it("leaves the SOW step open until the services are on the plan", () => {
+  it("leaves the SOW step open until the plan has actually read the SOW", () => {
     const steps = guideSteps({
-      intake: { timeline: { services: [] } },
+      intake: {
+        timeline: {
+          services: [{ id: "x", kind: "paid_form", name: "Timesheet", phase: 1 }],
+        },
+      },
       gongReports: 1,
       aiBriefs: 0,
       hasSow: true,
@@ -72,6 +78,19 @@ describe("guideSteps · the share step and the page's readiness", () => {
     });
     const share = steps.find((s) => s.key === "share")!;
     expect(share.done).toBe(false);
+    // Even with no blanks, a link that exists but was never copied or opened
+    // is not "sent".
+    const quiet = guideSteps({
+      intake: { path: "new_logo" },
+      gongReports: 0,
+      aiBriefs: 0,
+      hasSow: false,
+      shareUrl: "https://example.com/welcome/x",
+      stageHistory: history,
+      wonStageKey: "closed_won",
+      readiness: [],
+    });
+    expect(quiet.find((s) => s.key === "share")!.done).toBe(false);
     expect(share.blockers).toEqual(["Industry", "Their field tester"]);
     expect(steps.filter((s) => s.key !== "share").every((s) => s.blockers.length === 0)).toBe(true);
   });

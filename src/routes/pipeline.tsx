@@ -9,6 +9,7 @@ import { canEditSales, useProfile } from "@/lib/auth";
 import { ScopeSwitch } from "@/components/scope-switch";
 import { useScope } from "@/lib/use-scope";
 import { getPipeline, moveDealStage } from "@/lib/presale.functions";
+import { moveWithGate } from "@/lib/stage-move";
 import type { AccountStage } from "@/lib/presale-stages";
 
 const pipelineQuery = (scope: string | null) =>
@@ -53,7 +54,8 @@ function PipelinePage() {
   const editable = canEditSales(profile?.role);
 
   const moveMutation = useMutation({
-    mutationFn: (vars: { dealId: string; toStage: AccountStage }) => move({ data: vars }),
+    mutationFn: (vars: { dealId: string; toStage: AccountStage }) =>
+      moveWithGate((force) => move({ data: force ? { ...vars, force: true } : vars })),
     onSettled: () => queryClient.invalidateQueries({ queryKey: ["pipeline"] }),
   });
 

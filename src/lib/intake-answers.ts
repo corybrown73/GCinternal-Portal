@@ -80,6 +80,8 @@ export const intakeAnswersSchema = z.object({
    */
   /** Welcome-page screens the presenter has switched off for this customer, by key. */
   welcome_hidden_screens: z.array(z.string().max(40)).max(20).default([]),
+  /** When a person copied the customer's link to send it. Set by that click only. */
+  welcome_shared_at: z.string().nullable().default(null),
   wanted_forms: z
     .array(
       z.object({
@@ -121,6 +123,8 @@ export const intakeAnswersSchema = z.object({
       times: z.record(z.string(), z.string().regex(/^\d{2}:\d{2}$/)).default({}),
       /** IANA zone the times are in, e.g. America/Chicago. */
       timezone: z.string().trim().max(64).nullable().default(null),
+      /** When the SOW was read into the plan. Set by that action only; the guide reads it. */
+      sow_applied_at: z.string().nullable().default(null),
       /** Everything bought beyond the first form: phase 1 runs alongside it, 2 and up wait. */
       services: z
         .array(

@@ -30,6 +30,8 @@ export function guideSteps(input: {
   wonStageKey: string;
   /** The welcome page's readiness list, when the caller has it. */
   readiness?: ReadonlyArray<{ label: string }>;
+  /** The customer has opened their page: as good as sent. */
+  customerOpened?: boolean;
 }): GuideStep[] {
   const a: IntakeAnswers = readIntake(input.intake);
   const status = intakeStatus(a);
@@ -76,8 +78,8 @@ export function guideSteps(input: {
     {
       key: "sow",
       label: "Upload the SOW, read it into the plan",
-      hint: "Upload the signed PDF under Notes & documents, then press “Read the SOW into the plan” on the plan below.",
-      done: input.hasSow && (services.length > 0 || (a.timeline.integration_tier ?? 0) > 0),
+      hint: "Upload the signed PDF under Notes & documents, then press “Read the SOW into the plan” on the plan below. Ticks when the plan has actually read it.",
+      done: input.hasSow && Boolean(a.timeline.sow_applied_at),
       panel: input.hasSow
         ? { key: "deal:plan", id: "panel-plan" }
         : { key: "deal:gong", id: "panel-gong" },
@@ -91,9 +93,10 @@ export function guideSteps(input: {
     },
     {
       key: "share",
-      label: "Open the welcome page, send the link",
-      hint: "Present it on the first call. Copy the customer's link and the QR is on the cover.",
-      done: Boolean(input.shareUrl) && blockers.length === 0,
+      label: "Send the customer their link",
+      hint: "Open the welcome page and copy the customer's link. Ticks when you copy it, or when they open it — never before.",
+      done:
+        blockers.length === 0 && (Boolean(a.welcome_shared_at) || Boolean(input.customerOpened)),
       panel: { key: "deal:plan", id: "panel-plan" },
     },
   ];
