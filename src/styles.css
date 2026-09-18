@@ -539,6 +539,108 @@
 }
 
 /* ---------------------------------------------------------------------------
+ * The GoCanvas interface theme — the whole app in the welcome page's system
+ * ------------------------------------------------------------------------ */
+/*
+ * Switched on per team in Settings → Appearance, or per person from the same
+ * screen; `theme-gocanvas` lands on <html> (src/lib/use-theme.ts). Classic
+ * is the absence of this class, so the look the tool was built with is
+ * untouched: nothing here runs unless somebody asked for it.
+ *
+ * The values are the design system's (GoCanvas Page Style): navy for the
+ * headline and the nav, blue-deep as the primary because white text on the
+ * bright blue does not pass at 11px, blue for the ring and the accent, the
+ * soft blue for tints, the same greys for body and muted text.
+ */
+.theme-gocanvas {
+  --font-sans:
+    "Plus Jakarta Sans", "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+    sans-serif;
+  --r-sm: 8px;
+  --r-md: 12px;
+  --r-lg: 16px;
+
+  --background: #f3f5f9;
+  --foreground: #0a1628;
+  --surface: #e6eef8;
+  --card: #ffffff;
+  --card-foreground: #0a1628;
+  --popover: #ffffff;
+  --popover-foreground: #0a1628;
+  --primary: #12509b;
+  --primary-foreground: #ffffff;
+  --secondary: #eef7fd;
+  --secondary-foreground: #072b57;
+  --muted: #e6eef8;
+  --muted-foreground: #556477;
+  --accent: #eef7fd;
+  --accent-foreground: #072b57;
+  --border: #cfdcec;
+  --input: #b3c5da;
+  --ring: #039de7;
+
+  --status-ontrack: #e3f5ea;
+  --status-ontrack-foreground: #15703f;
+  --status-risk: #fdebdd;
+  --status-risk-foreground: #a8480f;
+  --status-idle: #e6eef8;
+  --status-idle-foreground: #556477;
+
+  --chart-1: #12509b;
+  --chart-2: #039de7;
+  --chart-3: #1da25c;
+  --chart-4: #f37021;
+  --chart-5: #072b57;
+
+  --sidebar: #072b57;
+  --sidebar-foreground: #ffffff;
+  --sidebar-primary: #039de7;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #12509b;
+  --sidebar-accent-foreground: #ffffff;
+  --sidebar-border: rgba(255, 255, 255, 0.14);
+  --sidebar-ring: #039de7;
+
+  --glass-solid: #eef7fd;
+}
+/* Headlines carry the page style's weight and tracking. */
+.theme-gocanvas h1,
+.theme-gocanvas h2 {
+  letter-spacing: -0.02em;
+  color: #072b57;
+}
+.theme-gocanvas.dark h1,
+.theme-gocanvas.dark h2 {
+  color: var(--foreground);
+}
+/* The soft blue field top-right, as on every stage of the welcome page. */
+.theme-gocanvas body {
+  background-image: radial-gradient(
+    70rem 35rem at 100% -5%,
+    rgba(3, 157, 231, 0.1),
+    transparent 60%
+  );
+}
+/* Dark mode keeps its greys; only the accents turn brand. */
+.theme-gocanvas.dark {
+  --primary: #039de7;
+  --primary-foreground: #041633;
+  --ring: #039de7;
+  --sidebar: #041633;
+  --sidebar-primary: #039de7;
+  --sidebar-accent: #12509b;
+  --chart-1: #039de7;
+  --chart-2: #6fd2ff;
+}
+.theme-gocanvas.dark body {
+  background-image: radial-gradient(
+    70rem 35rem at 100% -5%,
+    rgba(3, 157, 231, 0.12),
+    transparent 60%
+  );
+}
+
+/* ---------------------------------------------------------------------------
  * GoCanvas brand — the OUTWARD-FACING surfaces only
  * ------------------------------------------------------------------------ */
 /*

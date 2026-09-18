@@ -4,8 +4,10 @@ import { useServerFn } from "@tanstack/react-start";
 import { Check, ImagePlus } from "lucide-react";
 
 import { saveBranding, uploadOrgLogo } from "@/lib/org-branding.functions";
-import { NAV_SCHEMES, schemeFor } from "@/lib/org-branding";
+import { INTERFACE_THEMES, NAV_SCHEMES, schemeFor, type InterfaceTheme } from "@/lib/org-branding";
+import type { ThemeChoice } from "@/lib/interface-theme";
 import { useOrgBranding } from "@/lib/use-branding";
+import { useThemeChoice } from "@/lib/use-theme";
 import { cn } from "@/lib/utils";
 
 /**
@@ -21,6 +23,42 @@ import { cn } from "@/lib/utils";
  */
 
 const ACCEPT = "image/png,image/jpeg,image/webp,image/gif";
+
+/** What each theme looks like, in miniature: the real values, not a guess. */
+const THEME_SWATCH: Record<
+  InterfaceTheme,
+  {
+    bg: string;
+    nav: string;
+    card: string;
+    line: string;
+    ink: string;
+    primary: string;
+    accent: string;
+    font: string;
+  }
+> = {
+  classic: {
+    bg: "oklch(0.945 0.004 250)",
+    nav: "oklch(0.925 0.005 250)",
+    card: "#ffffff",
+    line: "oklch(0.8 0.008 250)",
+    ink: "oklch(0.2 0.014 250)",
+    primary: "oklch(0.3 0.02 250)",
+    accent: "oklch(0.6 0.08 200)",
+    font: '"IBM Plex Sans", system-ui, sans-serif',
+  },
+  gocanvas: {
+    bg: "#f3f5f9",
+    nav: "#072b57",
+    card: "#ffffff",
+    line: "#d6effb",
+    ink: "#072b57",
+    primary: "#039de7",
+    accent: "#f37021",
+    font: '"Plus Jakarta Sans", system-ui, sans-serif',
+  },
+};
 const MAX_BYTES = 1_000_000;
 
 export function AppearanceSettings({ canManage }: { canManage: boolean }) {
@@ -42,6 +80,13 @@ export function AppearanceSettings({ canManage }: { canManage: boolean }) {
     onSuccess: refresh,
     onError: (e: unknown) => setError(e instanceof Error ? e.message : "Could not save."),
   });
+
+  const themeMutation = useMutation({
+    mutationFn: (theme: InterfaceTheme) => save({ data: { theme } }),
+    onSuccess: refresh,
+    onError: (e: unknown) => setError(e instanceof Error ? e.message : "Could not save."),
+  });
+  const [choice, setChoice] = useThemeChoice();
 
   const nameMutation = useMutation({
     mutationFn: (app_name: string) => save({ data: { app_name } }),
@@ -86,7 +131,11 @@ export function AppearanceSettings({ canManage }: { canManage: boolean }) {
     logoMutation.mutate(file);
   };
 
-  const busy = schemeMutation.isPending || nameMutation.isPending || logoMutation.isPending;
+  const busy =
+    schemeMutation.isPending ||
+    nameMutation.isPending ||
+    logoMutation.isPending ||
+    themeMutation.isPending;
   const current = schemeFor(branding.nav_scheme);
   const nameValue = name ?? branding.app_name;
 
@@ -167,6 +216,106 @@ export function AppearanceSettings({ canManage }: { canManage: boolean }) {
               ) : null}
             </span>
           </label>
+        </div>
+
+        {/* The interface theme: the team's default, then this person's own
+            choice. Classic is the look the tool was built with and stays the
+            default; nobody's screen changes unless they, or their admin, ask. */}
+        <div className="space-y-1.5">
+          <span className="text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
+            Interface theme · team default
+          </span>
+          <div className="flex flex-wrap gap-2">
+            {INTERFACE_THEMES.map((t) => {
+              const active = t.key === branding.theme;
+              const swatch = THEME_SWATCH[t.key];
+              return (
+                <button
+                  key={t.key}
+                  type="button"
+                  disabled={!canManage || busy}
+                  onClick={() => themeMutation.mutate(t.key)}
+                  aria-pressed={active}
+                  title={t.note}
+                  className={cn(
+                    "w-[200px] overflow-hidden rounded-sm border text-left disabled:cursor-default",
+                    active ? "border-ring ring-1 ring-ring" : "border-border",
+                  )}
+                >
+                  <span
+                    className="flex h-12 items-center gap-1.5 px-2"
+                    style={{ backgroundColor: swatch.bg, fontFamily: swatch.font }}
+                  >
+                    <span
+                      className="h-8 w-5 rounded-[3px]"
+                      style={{ backgroundColor: swatch.nav }}
+                    />
+                    <span
+                      className="flex h-8 flex-1 flex-col justify-center gap-1 rounded-[3px] border px-1.5"
+                      style={{ backgroundColor: swatch.card, borderColor: swatch.line }}
+                    >
+                      <span
+                        className="h-1.5 w-12 rounded-full"
+                        style={{ backgroundColor: swatch.ink }}
+                      />
+                      <span className="flex gap-1">
+                        <span
+                          className="h-1.5 w-6 rounded-full"
+                          style={{ backgroundColor: swatch.primary }}
+                        />
+                        <span
+                          className="h-1.5 w-3 rounded-full"
+                          style={{ backgroundColor: swatch.accent }}
+                        />
+                      </span>
+                    </span>
+                  </span>
+                  <span className="flex items-center justify-between px-2 py-1 text-[11px]">
+                    <span className="font-medium">{t.name}</span>
+                    {active ? <Check className="h-3 w-3" aria-hidden /> : null}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+          <p className="text-[11px] text-muted-foreground">
+            {canManage
+              ? "Applies to everyone who has not chosen for themselves below."
+              : "The team default. Pick your own below if you prefer the other look."}
+          </p>
+        </div>
+
+        <div className="space-y-1.5">
+          <span className="text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
+            For you, on this browser
+          </span>
+          <div className="flex flex-wrap gap-1.5">
+            {(
+              [
+                ["team", "Follow the team default"],
+                ["classic", "Classic"],
+                ["gocanvas", "GoCanvas"],
+              ] as Array<[ThemeChoice, string]>
+            ).map(([key, label]) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => setChoice(key)}
+                aria-pressed={choice === key}
+                className={cn(
+                  "rounded-full border px-2.5 py-1 text-[11px]",
+                  choice === key
+                    ? "border-primary bg-primary text-primary-foreground"
+                    : "border-border text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <p className="text-[11px] text-muted-foreground">
+            Your choice stays on this browser and beats the team default. Nobody else sees it.
+          </p>
         </div>
 
         {/* Swatches preview the real variables, so what you pick is what lands. */}

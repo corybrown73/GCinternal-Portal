@@ -16,6 +16,7 @@ import appCss from "../styles.css?url";
 import { reportClientError } from "../lib/error-reporting";
 import { AppSidebar } from "@/components/app-sidebar";
 import { useOrgBranding } from "@/lib/use-branding";
+import { useApplyTheme } from "@/lib/use-theme";
 import { useNavVisibility } from "@/lib/use-nav-visibility";
 import { LifecycleRail } from "@/components/lifecycle-rail";
 import { AuthGate } from "@/components/auth-gate";
@@ -199,6 +200,7 @@ function RootComponent() {
 
   return (
     <QueryClientProvider client={queryClient}>
+      {isPublicRoute(pathname) ? null : <ThemeApplier />}
       <AuthGate
         renderShell={({ chrome }) =>
           chrome ? (
@@ -214,6 +216,12 @@ function RootComponent() {
       </AuthGate>
     </QueryClientProvider>
   );
+}
+
+/** Renders nothing; keeps <html>'s theme class and font in step with the choice. */
+function ThemeApplier() {
+  useApplyTheme();
+  return null;
 }
 
 function ShellWithSidebar({ showGlobalRail }: { showGlobalRail: boolean }) {

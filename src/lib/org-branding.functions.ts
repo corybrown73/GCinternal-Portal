@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireInternalAuth } from "@/integrations/supabase/internal-middleware";
-import { NAV_SCHEMES } from "./org-branding";
+import { INTERFACE_THEMES, NAV_SCHEMES, themeFor } from "./org-branding";
 
 /**
  * Branding is deployment-wide, so writing it is manage-gated: one person's
@@ -37,6 +37,7 @@ export const saveBranding = createServerFn({ method: "POST" })
         // written and then resolved to "default" forever afterwards, leaving
         // someone convinced they picked a colour that never applied.
         nav_scheme: z.enum(NAV_SCHEMES.map((s) => s.key) as [string, ...string[]]).optional(),
+        theme: z.enum(INTERFACE_THEMES.map((t) => t.key) as [string, ...string[]]).optional(),
       })
       .parse(data),
   )
@@ -44,7 +45,11 @@ export const saveBranding = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     assertCanManage(context.profile);
     const { saveOrgBranding } = await import("./org-branding.server");
-    return saveOrgBranding(data);
+    const { theme, ...rest } = data;
+    return saveOrgBranding({
+      ...rest,
+      ...(theme !== undefined ? { theme: themeFor(theme) } : {}),
+    });
   });
 
 export const uploadOrgLogo = createServerFn({ method: "POST" })

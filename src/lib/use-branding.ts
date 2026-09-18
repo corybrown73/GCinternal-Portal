@@ -1,12 +1,18 @@
 import { useQuery } from "@tanstack/react-query";
 
 import { getOrgBranding } from "./org-branding.functions";
-import { DEFAULT_BRANDING, DEFAULT_SCHEME_KEY, type OrgBrandingView } from "./org-branding";
+import {
+  DEFAULT_BRANDING,
+  DEFAULT_SCHEME_KEY,
+  DEFAULT_THEME,
+  type OrgBrandingView,
+} from "./org-branding";
 
 const FALLBACK: OrgBrandingView = {
   app_name: DEFAULT_BRANDING.app_name,
   nav_scheme: DEFAULT_SCHEME_KEY,
   logo_url: null,
+  theme: DEFAULT_THEME,
 };
 
 /**

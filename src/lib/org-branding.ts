@@ -121,18 +121,71 @@ export function schemeFor(key: string | null | undefined): NavScheme {
   );
 }
 
+/**
+ * The interface theme: the whole app's palette and type, not just the nav.
+ *
+ * WHY TWO AND NOT A PICKER. "Classic" is the look the tool was built with —
+ * quiet greys, IBM Plex Sans, information over impression — and the people
+ * who chose it still like it. "GoCanvas" is the welcome page's design
+ * system (navy, the blue, the orange, Plus Jakarta Sans) carried into the
+ * app, so the tool feels like the brand when a team wants it to. An admin
+ * sets the team default; anybody can keep the other one for themselves.
+ */
+export type InterfaceTheme = "classic" | "gocanvas";
+
+export const INTERFACE_THEMES: Array<{ key: InterfaceTheme; name: string; note: string }> = [
+  {
+    key: "classic",
+    name: "Classic",
+    note: "The look today: quiet greys, IBM Plex Sans, tight rows.",
+  },
+  {
+    key: "gocanvas",
+    name: "GoCanvas",
+    note: "The welcome page's design system: navy, blue, orange, Plus Jakarta Sans.",
+  },
+];
+
+export const DEFAULT_THEME: InterfaceTheme = "classic";
+
+export function themeFor(key: unknown): InterfaceTheme {
+  return INTERFACE_THEMES.some((t) => t.key === key) ? (key as InterfaceTheme) : DEFAULT_THEME;
+}
+
+/**
+ * The nav under the GoCanvas theme: navy, the same as the welcome page's
+ * band, whatever nav colour the deployment picked for Classic. A brand
+ * theme with a terracotta sidebar is not the brand.
+ */
+export const GOCANVAS_NAV: NavScheme = {
+  key: "gocanvas",
+  name: "GoCanvas navy",
+  note: "Set by the GoCanvas theme.",
+  dark: true,
+  vars: {
+    "--nav-bg": "#072b57",
+    "--nav-fg": "#ffffff",
+    "--nav-muted": "#a9c4e4",
+    "--nav-active": "#12509b",
+    "--nav-border": "rgba(255, 255, 255, 0.14)",
+  },
+};
+
 export type OrgBranding = {
   /** Replaces "GoCanvas Handoff Hub" in the sidebar. */
   app_name: string;
   nav_scheme: string;
   /** Storage path in the attachments bucket, or null. Never a URL. */
   logo_path: string | null;
+  /** The team's default interface theme. */
+  theme: InterfaceTheme;
 };
 
 export const DEFAULT_BRANDING: OrgBranding = {
   app_name: "GoCanvas Handoff Hub",
   nav_scheme: DEFAULT_SCHEME_KEY,
   logo_path: null,
+  theme: DEFAULT_THEME,
 };
 
 /** What the browser needs: the same thing, with the path already signed. */

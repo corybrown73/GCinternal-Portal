@@ -1,7 +1,13 @@
 import { Link } from "@tanstack/react-router";
 import { canManage, isSuperAdmin, ROLE_LABELS, signOut, type PortalProfile } from "@/lib/auth";
 import { NO_HIDDEN, visibleNav, type NavVisibility } from "@/lib/nav-visibility";
-import { DEFAULT_BRANDING, schemeFor, type OrgBrandingView } from "@/lib/org-branding";
+import {
+  DEFAULT_BRANDING,
+  GOCANVAS_NAV,
+  schemeFor,
+  type OrgBrandingView,
+} from "@/lib/org-branding";
+import { useInterfaceTheme } from "@/lib/use-theme";
 import { cn } from "@/lib/utils";
 
 /**
@@ -20,7 +26,8 @@ export function AppSidebar({
   visibility?: NavVisibility | null;
 }) {
   const role = profile?.role;
-  const scheme = schemeFor(branding?.nav_scheme);
+  const theme = useInterfaceTheme();
+  const scheme = theme === "gocanvas" ? GOCANVAS_NAV : schemeFor(branding?.nav_scheme);
   const appName = branding?.app_name ?? DEFAULT_BRANDING.app_name;
 
   // One catalogue, narrowed by role and then by what has been switched off.

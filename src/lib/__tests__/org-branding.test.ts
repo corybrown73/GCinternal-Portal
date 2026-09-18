@@ -60,3 +60,14 @@ describe("schemeFor", () => {
     }
   });
 });
+
+describe("interface theme", () => {
+  it("falls back to Classic for anything it does not know", async () => {
+    const { themeFor, DEFAULT_THEME, GOCANVAS_NAV } = await import("../org-branding");
+    expect(DEFAULT_THEME).toBe("classic");
+    expect(themeFor("gocanvas")).toBe("gocanvas");
+    expect(themeFor("neon")).toBe("classic");
+    expect(themeFor(undefined)).toBe("classic");
+    for (const v of REQUIRED_VARS) expect(GOCANVAS_NAV.vars[v]).toBeTruthy();
+  });
+});

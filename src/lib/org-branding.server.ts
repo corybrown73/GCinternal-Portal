@@ -4,6 +4,7 @@ import {
   type OrgBranding,
   type OrgBrandingView,
   schemeFor,
+  themeFor,
 } from "./org-branding";
 
 const db = () => supabaseAdmin as any;
@@ -54,7 +55,12 @@ export async function loadOrgBranding(): Promise<OrgBrandingView> {
     }
   }
 
-  return { app_name: merged.app_name, nav_scheme: scheme.key, logo_url: logoUrl };
+  return {
+    app_name: merged.app_name,
+    nav_scheme: scheme.key,
+    logo_url: logoUrl,
+    theme: themeFor(merged.theme),
+  };
 }
 
 /**
