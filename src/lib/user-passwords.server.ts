@@ -88,7 +88,7 @@ export async function issuePasswordReset(
   let emailed = false;
   let reason: string | null = null;
   try {
-    const { delivered } = await sendEmail({
+    const { delivered, reason: notSent } = await sendEmail({
       to: email,
       subject: "Set a new password for the GoCanvas Handoff Hub",
       html: `
@@ -104,7 +104,7 @@ export async function issuePasswordReset(
       </div>`,
     });
     emailed = delivered;
-    if (!delivered) reason = "this deployment has no email provider configured (EMAIL_MODE=log)";
+    if (!delivered) reason = notSent;
   } catch (e) {
     console.error("[passwords] could not email the reset link", e);
     reason = e instanceof Error ? e.message : "the email did not send";

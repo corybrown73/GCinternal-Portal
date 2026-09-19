@@ -242,7 +242,7 @@ async function deliver(
 
   const inviterName = inviter.full_name?.trim() || inviter.email;
   try {
-    const { delivered } = await sendEmail({
+    const { delivered, reason } = await sendEmail({
       to: email,
       subject: `${inviterName} added you to the GoCanvas Handoff Hub`,
       html: `
@@ -266,11 +266,7 @@ async function deliver(
     // server log, not sent. Reported honestly rather than as a success.
     return delivered
       ? { emailed: true, link: null, reason: null }
-      : {
-          emailed: false,
-          link: actionLink,
-          reason: "this deployment has no email provider configured (EMAIL_MODE=log)",
-        };
+      : { emailed: false, link: actionLink, reason };
   } catch (e) {
     return {
       emailed: false,

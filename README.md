@@ -35,7 +35,7 @@ Then optionally run `supabase/seed_demo.sql` for walkthrough data.
 Authentication → Providers → Email: **Confirm email ON**, min password length 12, leaked-password protection ON. URL Configuration: Site URL = your deployed URL; add `https://<app>/auth/callback` to redirect URLs.
 
 ### 3. Deploy (Vercel)
-Import the repo (framework: Other; build `npm run build`; the nitro `vercel` preset emits `.vercel/output`). Set env vars from `.env.example` — minimum: the four Supabase vars, `SUPABASE_SERVICE_ROLE_KEY`, `TAM_TOKEN_SECRET`, `CRON_SECRET`, `APP_URL`. Optional: `ANTHROPIC_API_KEY` (AI briefs), `RESEND_API_KEY` + `EMAIL_MODE=send` (real email; otherwise emails print to the function log). `vercel.json` schedules the SLA cron (hourly) and sequence cron (every 30 min).
+Import the repo (framework: Other; build `npm run build`; the nitro `vercel` preset emits `.vercel/output`). Set env vars from `.env.example` — minimum: the four Supabase vars, `SUPABASE_SERVICE_ROLE_KEY`, `TAM_TOKEN_SECRET`, `CRON_SECRET`, `APP_URL`. Optional: `ANTHROPIC_API_KEY` (AI briefs), `RESEND_API_KEY` + `EMAIL_FROM` (real email; otherwise emails print to the function log — do not also set `EMAIL_MODE=log`, it overrides the key). `vercel.json` schedules the SLA cron (hourly) and sequence cron (every 30 min).
 
 ### 4. First run
 Sign up with your `@gocanvas.com` email → verify → you are super admin #1. Designate #2 in **Admin → Users**.
