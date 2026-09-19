@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,17 +15,22 @@ function ForgotPasswordPage() {
   const [sent, setSent] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [recoverySession, setRecoverySession] = useState(false);
+  // Whose password the form will set. Shown on the form, because the account
+  // a reset link signs in is the LINK's, and in a browser where somebody else
+  // was already signed in that is not obvious until it is too late.
+  const [recoveryFor, setRecoveryFor] = useState<string | null>(null);
 
-  // When the reset link lands back here with a recovery session, show the
-  // set-new-password form instead.
-  useState(() => {
+  // The reset link lands on /auth/callback, which signs the link's account in
+  // and comes here with ?recovery=1. Only then is this the set-password form.
+  useEffect(() => {
+    const arrivedByLink =
+      window.location.search.includes("recovery=1") ||
+      window.location.hash.includes("type=recovery");
+    if (!arrivedByLink) return;
     supabase.auth.getSession().then(({ data }) => {
-      if (data.session && window.location.hash.includes("type=recovery")) {
-        setRecoverySession(true);
-      }
+      if (data.session) setRecoveryFor(data.session.user.email ?? "this account");
     });
-  });
+  }, []);
 
   async function requestReset(e: React.FormEvent) {
     e.preventDefault();
@@ -54,7 +59,7 @@ function ForgotPasswordPage() {
     window.location.href = "/";
   }
 
-  const showSetForm = recoverySession || window.location.search.includes("next=/forgot-password");
+  const showSetForm = recoveryFor !== null;
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
@@ -68,6 +73,21 @@ function ForgotPasswordPage() {
         <div className="rounded-md border border-border bg-card p-5">
           {showSetForm ? (
             <form onSubmit={setPassword} className="flex flex-col gap-3">
+              <p className="text-[12px] text-muted-foreground">
+                Setting a new password for <b className="text-foreground">{recoveryFor}</b>. Not
+                you?{" "}
+                <button
+                  type="button"
+                  className="underline underline-offset-2"
+                  onClick={async () => {
+                    await supabase.auth.signOut();
+                    window.location.href = "/login";
+                  }}
+                >
+                  Sign out
+                </button>
+                .
+              </p>
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="new-password">
                   New password{" "}
