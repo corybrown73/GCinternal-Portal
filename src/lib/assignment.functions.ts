@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
-import { requireInternalAuth } from "@/integrations/supabase/internal-middleware";
+import { requireInternalAuth, requireManager } from "@/integrations/supabase/internal-middleware";
 import { canManage, type PortalRole } from "@/lib/auth";
 
 function assertCanManage(profile: { role: string }): void {
@@ -72,7 +72,7 @@ export const getDealAssignment = createServerFn({ method: "GET" })
 
 /** Assign by rule (no member) or by hand (a member). */
 export const assignDealFn = createServerFn({ method: "POST" })
-  .middleware([requireInternalAuth])
+  .middleware([requireManager])
   .inputValidator((data: unknown) =>
     z
       .object({

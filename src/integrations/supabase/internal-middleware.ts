@@ -17,3 +17,30 @@ export const requireInternalAuth = createMiddleware({ type: "function" })
     const profile = await requireInternal(context.userId);
     return next({ context: { profile } });
   });
+
+/**
+ * Deal writes. Today every internal role may edit a deal, so this is the
+ * same gate as requireInternalAuth with the rule named — when the rule
+ * changes in canEditDeal, every write picks it up. The point is that the
+ * server holds the rule, not only the buttons.
+ */
+export const requireDealEditor = createMiddleware({ type: "function" })
+  .middleware([requireInternalAuth])
+  .server(async ({ next, context }) => {
+    const { canEditDeal } = await import("@/lib/auth");
+    if (!canEditDeal(context.profile.role as import("@/lib/auth").PortalRole)) {
+      throw new Error("Forbidden: your role can read deals but not change them");
+    }
+    return next();
+  });
+
+/** Manager-only writes: assigning somebody else, bulk import, forcing past a gate. */
+export const requireManager = createMiddleware({ type: "function" })
+  .middleware([requireInternalAuth])
+  .server(async ({ next, context }) => {
+    const { canManage } = await import("@/lib/auth");
+    if (!canManage(context.profile.role as import("@/lib/auth").PortalRole)) {
+      throw new Error("Forbidden: only a manager or admin can do that");
+    }
+    return next();
+  });

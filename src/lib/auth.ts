@@ -65,6 +65,18 @@ export function canEditSales(role: PortalRole | undefined): boolean {
 export function canEditTechnical(role: PortalRole | undefined): boolean {
   return canManage(role) || role === "tam_se" || role === "se" || role === "implementation";
 }
+/**
+ * Who may change a deal: its record, intake, SOW, plan and welcome page.
+ *
+ * Every GoCanvas role. The page used to open only for sales, AM and
+ * managers, which locked the implementation lead out of the very plan they
+ * had just claimed. The deal is where onboarding is planned, so the people
+ * who run onboarding edit it. Only a customer login is read-only here, and
+ * it never reaches an internal page in the first place.
+ */
+export function canEditDeal(role: PortalRole | undefined): boolean {
+  return isInternal(role);
+}
 
 /** Live Supabase session; undefined while loading, null when signed out. */
 export function useSession(): Session | null | undefined {

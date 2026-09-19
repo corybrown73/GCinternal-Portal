@@ -25,7 +25,7 @@ import { closeDateFor, timelineFor } from "@/lib/onboarding-plan";
 import { dayCounter, localIso } from "@/lib/onboarding-timeline";
 import { IntakePanel } from "@/components/intake-panel";
 import { TimelinePanel } from "@/components/timeline-panel";
-import { canEditSales, canManage, isSuperAdmin, useProfile } from "@/lib/auth";
+import { canEditDeal, canManage, isSuperAdmin, useProfile } from "@/lib/auth";
 import {
   addNote,
   addReport,
@@ -221,7 +221,7 @@ function DealRecord({ deal }: { deal: DealData }) {
   const { account } = deal;
   const days = daysSince(account.stage_entered_at);
   const { profile } = useProfile();
-  const editable = canEditSales(profile?.role) || canManage(profile?.role);
+  const editable = canEditDeal(profile?.role);
 
   const queryClient = useQueryClient();
   const save = useServerFn(setDealField);
@@ -637,7 +637,7 @@ function StartOnboarding({ deal }: { deal: DealData }) {
     },
   });
 
-  const allowed = canEditSales(profile?.role) || canManage(profile?.role);
+  const allowed = canEditDeal(profile?.role);
   // The Closed Won gate reads the stage MARKED as won, not the literal — the
   // same list startOnboarding checks server-side.
   const pipeline = deal.stages ?? BUILTIN_PIPELINE_STAGES;

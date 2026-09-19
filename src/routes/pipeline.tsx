@@ -5,7 +5,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { PageBody, PageHeader } from "@/components/page";
 import { DealBoard } from "@/components/presale/deal-board";
 import { CsvImportDialog, NewDealDialog } from "@/components/presale/deal-dialogs";
-import { canEditSales, useProfile } from "@/lib/auth";
+import { canEditDeal, useProfile } from "@/lib/auth";
 import { ScopeSwitch } from "@/components/scope-switch";
 import { useScope } from "@/lib/use-scope";
 import { getPipeline, moveDealStage } from "@/lib/presale.functions";
@@ -52,7 +52,7 @@ function PipelinePage() {
   const { profile } = useProfile();
   const queryClient = useQueryClient();
   const move = useServerFn(moveDealStage);
-  const editable = canEditSales(profile?.role);
+  const editable = canEditDeal(profile?.role);
 
   const moveMutation = useMutation({
     mutationFn: (vars: { dealId: string; toStage: AccountStage }) =>

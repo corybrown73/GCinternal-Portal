@@ -3,10 +3,27 @@ import { z } from "zod";
 
 import { EDITABLE_DEAL_FIELDS, type EditableDealField } from "./presale-fields";
 
-import { requireInternalAuth } from "@/integrations/supabase/internal-middleware";
+import {
+  requireDealEditor,
+  requireInternalAuth,
+  requireManager,
+} from "@/integrations/supabase/internal-middleware";
 import { STAGES } from "./presale-stages";
 
 /* ---------- pipeline ---------- */
+
+/** Home: the deals that have not started onboarding, in the page's scope. */
+export const getDealInbox = createServerFn({ method: "GET" })
+  .middleware([requireInternalAuth])
+  .inputValidator((data: unknown) =>
+    z.object({ scope: z.string().optional() }).optional().parse(data),
+  )
+  .handler(async ({ data, context }) => {
+    const { loadDealInbox } = await import("./presale.server");
+    const { resolveScope } = await import("./ownership.server");
+    const resolved = await resolveScope(context.profile.id, data?.scope ?? null);
+    return loadDealInbox(resolved);
+  });
 
 export const getPipeline = createServerFn({ method: "GET" })
   .middleware([requireInternalAuth])
@@ -36,7 +53,7 @@ export const getPipeline = createServerFn({ method: "GET" })
   });
 
 export const addDeal = createServerFn({ method: "POST" })
-  .middleware([requireInternalAuth])
+  .middleware([requireDealEditor])
   .inputValidator((data: unknown) =>
     z
       .object({
@@ -66,7 +83,7 @@ export const addDeal = createServerFn({ method: "POST" })
   });
 
 export const moveDealStage = createServerFn({ method: "POST" })
-  .middleware([requireInternalAuth])
+  .middleware([requireDealEditor])
   .inputValidator((data: unknown) =>
     z
       .object({
@@ -80,11 +97,21 @@ export const moveDealStage = createServerFn({ method: "POST" })
   )
   .handler(async ({ data, context }) => {
     const { transitionDeal } = await import("./presale.server");
+    if (data.force) {
+      // Moving past what the gate found missing is a manager's call, and the
+      // server says so even when a button somewhere forgot to.
+      const { canManage } = await import("@/lib/auth");
+      if (!canManage(context.profile.role as import("@/lib/auth").PortalRole)) {
+        throw new Error(
+          "Only a manager or admin can move a deal past what the gate found missing.",
+        );
+      }
+    }
     return transitionDeal(context.userId, data.dealId, data.toStage, data.note, data.force);
   });
 
 export const uploadSow = createServerFn({ method: "POST" })
-  .middleware([requireInternalAuth])
+  .middleware([requireDealEditor])
   .inputValidator((data: unknown) =>
     z
       .object({
@@ -113,7 +140,7 @@ export const getSowLink = createServerFn({ method: "POST" })
   });
 
 export const setDealField = createServerFn({ method: "POST" })
-  .middleware([requireInternalAuth])
+  .middleware([requireDealEditor])
   .inputValidator((data: unknown) =>
     z
       .object({
@@ -134,7 +161,7 @@ export const setDealField = createServerFn({ method: "POST" })
   });
 
 export const importDeals = createServerFn({ method: "POST" })
-  .middleware([requireInternalAuth])
+  .middleware([requireManager])
   .inputValidator((data: unknown) =>
     z
       .object({
@@ -161,7 +188,7 @@ export const getDeal = createServerFn({ method: "GET" })
   });
 
 export const addReport = createServerFn({ method: "POST" })
-  .middleware([requireInternalAuth])
+  .middleware([requireDealEditor])
   .inputValidator((data: unknown) =>
     z
       .object({
@@ -178,7 +205,7 @@ export const addReport = createServerFn({ method: "POST" })
   });
 
 export const removeReport = createServerFn({ method: "POST" })
-  .middleware([requireInternalAuth])
+  .middleware([requireDealEditor])
   .inputValidator((data: unknown) => z.object({ reportId: z.string().uuid() }).parse(data))
   .handler(async ({ data, context }) => {
     const { deleteGongReport } = await import("./presale.server");
@@ -186,7 +213,7 @@ export const removeReport = createServerFn({ method: "POST" })
   });
 
 export const generateBriefForDeal = createServerFn({ method: "POST" })
-  .middleware([requireInternalAuth])
+  .middleware([requireDealEditor])
   .inputValidator((data: unknown) => z.object({ dealId: z.string().uuid() }).parse(data))
   .handler(async ({ data, context }) => {
     const { generateDealBrief } = await import("./presale.server");
@@ -202,7 +229,7 @@ export const getBriefDownloadUrl = createServerFn({ method: "POST" })
   });
 
 export const createTamRequestForDeal = createServerFn({ method: "POST" })
-  .middleware([requireInternalAuth])
+  .middleware([requireDealEditor])
   .inputValidator((data: unknown) =>
     z
       .object({
@@ -218,7 +245,7 @@ export const createTamRequestForDeal = createServerFn({ method: "POST" })
   });
 
 export const addNote = createServerFn({ method: "POST" })
-  .middleware([requireInternalAuth])
+  .middleware([requireDealEditor])
   .inputValidator((data: unknown) =>
     z
       .object({
@@ -233,7 +260,7 @@ export const addNote = createServerFn({ method: "POST" })
   });
 
 export const setNoteReviewed = createServerFn({ method: "POST" })
-  .middleware([requireInternalAuth])
+  .middleware([requireDealEditor])
   .inputValidator((data: unknown) =>
     z.object({ noteId: z.string().uuid(), reviewed: z.boolean() }).parse(data),
   )
@@ -243,7 +270,7 @@ export const setNoteReviewed = createServerFn({ method: "POST" })
   });
 
 export const removeNote = createServerFn({ method: "POST" })
-  .middleware([requireInternalAuth])
+  .middleware([requireDealEditor])
   .inputValidator((data: unknown) => z.object({ noteId: z.string().uuid() }).parse(data))
   .handler(async ({ data, context }) => {
     const { deleteDealNote } = await import("./presale.server");
@@ -259,7 +286,7 @@ export const getHandoffOptions = createServerFn({ method: "GET" })
   });
 
 export const startOnboardingForDeal = createServerFn({ method: "POST" })
-  .middleware([requireInternalAuth])
+  .middleware([requireDealEditor])
   .inputValidator((data: unknown) =>
     z
       .object({
@@ -415,7 +442,7 @@ export const sendPasswordResetFn = createServerFn({ method: "POST" })
 /* ---------- onboarding intake (0047) ---------- */
 
 export const saveIntake = createServerFn({ method: "POST" })
-  .middleware([requireInternalAuth])
+  .middleware([requireDealEditor])
   .inputValidator((data: unknown) =>
     z
       .object({
@@ -503,7 +530,7 @@ export const saveIntake = createServerFn({ method: "POST" })
   });
 
 export const uploadIntakeForm = createServerFn({ method: "POST" })
-  .middleware([requireInternalAuth])
+  .middleware([requireDealEditor])
   .inputValidator((data: unknown) =>
     z
       .object({

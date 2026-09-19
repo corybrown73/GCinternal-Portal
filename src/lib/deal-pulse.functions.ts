@@ -1,7 +1,10 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
-import { requireInternalAuth } from "@/integrations/supabase/internal-middleware";
+import {
+  requireDealEditor,
+  requireInternalAuth,
+} from "@/integrations/supabase/internal-middleware";
 
 export const getDealPulseFn = createServerFn({ method: "GET" })
   .middleware([requireInternalAuth])
@@ -17,7 +20,7 @@ export const getDealPulseFn = createServerFn({ method: "GET" })
  * assigns it by rule — the same as a closed-won row arriving from Zapier.
  */
 export const startServicesDealFn = createServerFn({ method: "POST" })
-  .middleware([requireInternalAuth])
+  .middleware([requireDealEditor])
   .inputValidator((data: unknown) => z.object({ customerId: z.string().uuid() }).parse(data))
   .handler(async ({ data, context }) => {
     const { startServicesDeal } = await import("./deal-pulse.server");

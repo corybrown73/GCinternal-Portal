@@ -1,7 +1,10 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
-import { requireInternalAuth } from "@/integrations/supabase/internal-middleware";
+import {
+  requireDealEditor,
+  requireInternalAuth,
+} from "@/integrations/supabase/internal-middleware";
 
 const KIND = z.enum(["sow", "board", "deck", "doc", "sheet", "recording", "other"]);
 
@@ -14,7 +17,7 @@ export const getAccountFiles = createServerFn({ method: "GET" })
   });
 
 export const addAttachmentLink = createServerFn({ method: "POST" })
-  .middleware([requireInternalAuth])
+  .middleware([requireDealEditor])
   .inputValidator((data: unknown) =>
     z
       .object({
@@ -39,7 +42,7 @@ export const addAttachmentLink = createServerFn({ method: "POST" })
   });
 
 export const uploadAttachment = createServerFn({ method: "POST" })
-  .middleware([requireInternalAuth])
+  .middleware([requireDealEditor])
   .inputValidator((data: unknown) =>
     z
       .object({
@@ -68,7 +71,7 @@ export const openAttachment = createServerFn({ method: "POST" })
   });
 
 export const deleteAttachment = createServerFn({ method: "POST" })
-  .middleware([requireInternalAuth])
+  .middleware([requireDealEditor])
   .inputValidator((data: unknown) => z.object({ id: z.string().uuid() }).parse(data))
   .handler(async ({ data }) => {
     const { removeAccountFile } = await import("./attachments.server");

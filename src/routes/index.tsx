@@ -8,6 +8,8 @@ import { ScopeSwitch } from "@/components/scope-switch";
 import { AddCommitment, type TeamOption } from "@/components/delivery-write";
 import { useScope } from "@/lib/use-scope";
 import { getHome, getTeamOptions } from "@/lib/hub.functions";
+import { getDealInbox } from "@/lib/presale.functions";
+import type { DealInboxRow } from "@/lib/presale.server";
 import { fmtDate, fmtMoney } from "@/lib/hub-format";
 import { NEXT_ACTION_UNKNOWN, deriveHealth, launchStateConflict } from "@/lib/customer360-derive";
 
@@ -26,6 +28,12 @@ const homeQuery = (scope: string | null) =>
   queryOptions({
     queryKey: ["home", scope],
     queryFn: () => getHome({ data: scope ? { scope } : {} }),
+  });
+
+const dealInboxQuery = (scope: string | null) =>
+  queryOptions({
+    queryKey: ["deal-inbox", scope],
+    queryFn: () => getDealInbox({ data: scope ? { scope } : {} }),
   });
 
 export const Route = createFileRoute("/")({
@@ -51,6 +59,7 @@ export const Route = createFileRoute("/")({
   loaderDeps: ({ search }: { search: { scope?: string } }) => ({ scope: search.scope ?? null }),
   loader: ({ context, deps }) => {
     context.queryClient.ensureQueryData(homeQuery(deps.scope));
+    void context.queryClient.prefetchQuery(dealInboxQuery(deps.scope));
   },
   errorComponent: ({ error }) => (
     <div role="alert" className="p-6 text-[13px] text-destructive">
@@ -246,6 +255,83 @@ const SECTIONS: Array<{
   },
 ];
 
+/**
+ * A deal that has not started onboarding. Before this panel, Today listed
+ * implementations only: a deal waiting to be claimed, or claimed and waiting
+ * for its brief, appeared nowhere on the page the team opens first.
+ */
+function DealInboxPanel({ scope }: { scope: string | null }) {
+  const q = useQuery(dealInboxQuery(scope));
+  const rows = q.data ?? [];
+  const urgent = rows.some((r) => r.unclaimed || r.mine);
+  return (
+    <Panel
+      level={urgent ? "primary" : "default"}
+      title={
+        <span className="flex items-center gap-2">
+          <span
+            className={cn("h-2 w-2 rounded-full", urgent ? "bg-primary" : "bg-muted-foreground/40")}
+          />
+          Deals before kickoff
+        </span>
+      }
+      count={rows.length}
+      meta="Closed or closing deals that have not started onboarding. Each one names its next step."
+    >
+      {q.isPending ? (
+        <NoRows label="Loading deals…" />
+      ) : rows.length === 0 ? (
+        <NoRows label="No deals waiting. A new deal appears here until onboarding starts." />
+      ) : (
+        <ul className="divide-y divide-border">
+          {rows.map((r) => (
+            <DealInboxRowView key={r.id} row={r} />
+          ))}
+        </ul>
+      )}
+    </Panel>
+  );
+}
+
+function DealInboxRowView({ row }: { row: DealInboxRow }) {
+  const days = Math.max(
+    0,
+    Math.floor((Date.now() - new Date(row.stage_entered_at).getTime()) / 86400000),
+  );
+  return (
+    <li className="flex flex-wrap items-center gap-x-4 gap-y-1 px-3 py-2">
+      <Link
+        to="/deals/$dealId"
+        params={{ dealId: row.id }}
+        className="min-w-0 flex-1 truncate text-[13px] font-medium hover:underline"
+      >
+        {row.name}
+      </Link>
+      <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+        {row.stage_label} · {days}d
+      </span>
+      {row.path ? (
+        <span className="rounded-sm border border-border px-1 py-px text-[10px] uppercase tracking-wider text-muted-foreground">
+          {row.path === "existing" ? "Existing" : "New"}
+        </span>
+      ) : null}
+      <span
+        className={cn(
+          "text-[12px]",
+          row.unclaimed
+            ? "font-medium text-amber-800 dark:text-amber-300"
+            : "text-muted-foreground",
+        )}
+      >
+        {row.unclaimed ? "Unclaimed" : row.mine ? "Yours" : row.owner_name}
+      </span>
+      <span className="flex items-center gap-1 text-[12px] text-muted-foreground">
+        <ArrowRight className="h-3 w-3" /> {row.next_step}
+      </span>
+    </li>
+  );
+}
+
 function HomePage() {
   const { param, setScope } = useScope();
   const { data } = useSuspenseQuery(homeQuery(param));
@@ -263,10 +349,11 @@ function HomePage() {
     <>
       <PageHeader
         title="Today"
-        description="What needs my attention — every implementation sorted by what's driving it, not by task due dates."
+        description="What needs my attention — deals waiting before kickoff, then every implementation sorted by what's driving it, not by task due dates."
         actions={<ScopeSwitch scope={data.scope} onChange={setScope} />}
       />
       <PageBody className="space-y-4">
+        <DealInboxPanel scope={param} />
         {SECTIONS.map((section) => {
           const rows = queue[section.bucket];
           return (

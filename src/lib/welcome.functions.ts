@@ -1,7 +1,10 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
-import { requireInternalAuth } from "@/integrations/supabase/internal-middleware";
+import {
+  requireDealEditor,
+  requireInternalAuth,
+} from "@/integrations/supabase/internal-middleware";
 import { HOMEWORK_KEYS } from "@/lib/welcome";
 
 /* ---------- internal ---------- */
@@ -15,7 +18,7 @@ export const getWelcome = createServerFn({ method: "GET" })
   });
 
 export const issueWelcomeLinkFn = createServerFn({ method: "POST" })
-  .middleware([requireInternalAuth])
+  .middleware([requireDealEditor])
   .inputValidator((data: unknown) => z.object({ dealId: z.string().uuid() }).parse(data))
   .handler(async ({ data, context }) => {
     const { issueWelcomeLink } = await import("./welcome.server");
@@ -23,7 +26,7 @@ export const issueWelcomeLinkFn = createServerFn({ method: "POST" })
   });
 
 export const revokeWelcomeLinkFn = createServerFn({ method: "POST" })
-  .middleware([requireInternalAuth])
+  .middleware([requireDealEditor])
   .inputValidator((data: unknown) => z.object({ dealId: z.string().uuid() }).parse(data))
   .handler(async ({ data, context }) => {
     const { revokeWelcomeLink } = await import("./welcome.server");

@@ -2,7 +2,13 @@ import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { resolveAccountId, transitionStage, upsertAccount } from "./server/accounts";
 import { accountUpsertSchema } from "./server/schemas";
 import { isStage, type AccountStage } from "./presale-stages";
-import { stageAfterWon, stageOrder, wonStage, type PipelineStage } from "./pipeline-stages";
+import {
+  stageAfterWon,
+  stageOrder,
+  terminalStage,
+  wonStage,
+  type PipelineStage,
+} from "./pipeline-stages";
 import { loadPipelineStages } from "./pipeline-stages.server";
 import { isFlagOn } from "./app-config.server";
 import { handoffConflictMessage, resolveHandoffCustomer } from "./presale-handoff";
@@ -1700,4 +1706,120 @@ export async function intakeFormLink(dealId: string, path: string): Promise<{ ur
     .createSignedUrl(path, 60 * 60);
   if (error || !data?.signedUrl) throw new Error("Could not open that file");
   return { url: data.signedUrl as string };
+}
+
+/* ---------- the deals waiting before kickoff ---------- */
+
+export type DealInboxRow = {
+  id: string;
+  name: string;
+  stage: AccountStage;
+  stage_label: string;
+  stage_entered_at: string;
+  path: "new_logo" | "existing" | null;
+  /** The implementation owner from the claim ledger, when somebody has claimed it. */
+  owner_name: string | null;
+  /** The viewer is that owner. */
+  mine: boolean;
+  /** Nobody has claimed it yet. */
+  unclaimed: boolean;
+  /** The next step of the deal page's own guide, so Home says the same thing the deal does. */
+  next_step: string | null;
+};
+
+/**
+ * Deals that have not started onboarding yet: everything Home did not show.
+ *
+ * "Today" listed implementations only, so a deal waiting to be claimed, or
+ * claimed and waiting for its brief, appeared nowhere on the page the team
+ * opens first. Scope follows the page's scope control: "mine" is what I own
+ * plus what nobody owns yet, "person" is theirs, "all" is everything.
+ */
+export async function loadDealInbox(scope: ResolvedScope | null): Promise<DealInboxRow[]> {
+  const { deals, stages } = await loadPipeline(null);
+  const done = terminalStage(stages).key;
+  const open = deals.filter((d) => d.stage !== done);
+  if (open.length === 0) return [];
+  const ids = open.map((d) => d.id);
+
+  const [{ data: impls }, { data: ledger }, { data: briefs }] = await Promise.all([
+    db().from("implementations").select("deal_id").in("deal_id", ids),
+    db()
+      .from("portal_assignments")
+      .select("deal_id, team_member_id, created_at, team_members(name)")
+      .in("deal_id", ids)
+      .order("created_at", { ascending: false }),
+    db()
+      .from("portal_briefs")
+      .select("account_id")
+      .eq("status", "complete")
+      .eq("generator", "llm")
+      .in("account_id", ids),
+  ]);
+  const started = new Set(
+    ((impls ?? []) as Array<{ deal_id: string | null }>).map((r) => r.deal_id),
+  );
+  const briefed = new Set(
+    ((briefs ?? []) as Array<{ account_id: string }>).map((r) => r.account_id),
+  );
+  // Latest ledger row per deal wins; a null team member is an unassignment.
+  const owner = new Map<string, { id: string | null; name: string | null }>();
+  for (const row of (ledger ?? []) as Array<{
+    deal_id: string | null;
+    team_member_id: string | null;
+    team_members: { name: string } | { name: string }[] | null;
+  }>) {
+    if (!row.deal_id || owner.has(row.deal_id)) continue;
+    const tm = Array.isArray(row.team_members) ? row.team_members[0] : row.team_members;
+    owner.set(row.deal_id, {
+      id: row.team_member_id ? String(row.team_member_id) : null,
+      name: tm?.name ?? null,
+    });
+  }
+
+  const { guideSteps } = await import("./deal-guide");
+  const labels = new Map(stages.map((s) => [s.key, s.label]));
+  const won = wonStage(stages).key;
+  const me = scope?.viewer.teamMemberId ?? null;
+  const person = scope?.person?.teamMemberId ?? null;
+
+  return open
+    .filter((d) => !started.has(d.id))
+    .map((d): DealInboxRow => {
+      const o = owner.get(d.id);
+      const ownerId = o?.id ?? null;
+      const next =
+        guideSteps({
+          intake: d.intake,
+          gongReports: d.has_notes ? 1 : 0,
+          aiBriefs: briefed.has(d.id) ? 1 : 0,
+          hasSow: d.has_sow,
+          shareUrl: (d as { welcome_share_url?: string | null }).welcome_share_url ?? null,
+          stageHistory: [],
+          wonStageKey: won,
+        }).find((s) => !s.done)?.label ?? "Start onboarding";
+      return {
+        id: d.id,
+        name: d.name,
+        stage: d.stage,
+        stage_label: labels.get(d.stage) ?? d.stage,
+        stage_entered_at: d.stage_entered_at,
+        path: d.path,
+        owner_name: ownerId ? (o?.name ?? null) : null,
+        mine: Boolean(me) && ownerId === me,
+        unclaimed: !ownerId,
+        next_step: next,
+      };
+    })
+    .filter((row) => {
+      const mode = scope?.scope.mode ?? "all";
+      if (mode === "all") return true;
+      if (mode === "person") return person !== null && owner.get(row.id)?.id === person;
+      return row.mine || row.unclaimed;
+    })
+    .sort(
+      (a, b) =>
+        Number(b.unclaimed) - Number(a.unclaimed) ||
+        a.stage_entered_at.localeCompare(b.stage_entered_at),
+    );
 }
