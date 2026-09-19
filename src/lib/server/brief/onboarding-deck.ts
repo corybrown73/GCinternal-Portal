@@ -51,6 +51,8 @@ export type OnboardingDeckInput = {
     accountManager: string | null;
     solutionsEngineer: string | null;
     champion: { name: string; role: string | null } | null;
+    /** Other customer-side people the notes named: the controller, the approver. */
+    others?: Array<{ name: string; role: string | null }>;
   };
   firstForm: {
     name: string;
@@ -278,7 +280,7 @@ function slideCover(pptx: Pptx, d: OnboardingDeckInput) {
   s.background = { color: BRAND.navy900 };
   const t = d.timeline;
 
-  eyebrow(s, `Your first ${daysToValue(t)} days with GoCanvas`, 1.35, BRAND.blue300);
+  eyebrow(s, `Your first ${daysToValue(t)} business days with GoCanvas`, 1.35, BRAND.blue300);
 
   const headline = "Let's bring your workflow to life";
   s.addText(headline, {

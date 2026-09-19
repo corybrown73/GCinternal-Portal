@@ -17,7 +17,7 @@ export type GuideStep = {
    * carries these: the welcome page's own readiness list, so "send the link"
    * cannot read as done while the page still has blanks.
    */
-  blockers: string[];
+  blockers: Array<{ key: string; label: string }>;
 };
 
 export function guideSteps(input: {
@@ -29,7 +29,7 @@ export function guideSteps(input: {
   stageHistory: Array<{ to_stage: string; occurred_at: string }>;
   wonStageKey: string;
   /** The welcome page's readiness list, when the caller has it. */
-  readiness?: ReadonlyArray<{ label: string }>;
+  readiness?: ReadonlyArray<{ key: string; label: string }>;
   /** The customer has opened their page: as good as sent. */
   customerOpened?: boolean;
 }): GuideStep[] {
@@ -44,7 +44,7 @@ export function guideSteps(input: {
   const calls = t.milestones.filter((m) => m.key === "kickoff" || m.key === "working");
   const services = a.timeline.services ?? [];
   const hasForm = a.wanted_forms.length > 0 || a.uploaded_forms.length > 0;
-  const blockers = (input.readiness ?? []).map((r) => r.label);
+  const blockers = (input.readiness ?? []).map((r) => ({ key: r.key, label: r.label }));
 
   const steps: Array<Omit<GuideStep, "blockers">> = [
     {

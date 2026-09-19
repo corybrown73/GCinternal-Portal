@@ -6,6 +6,7 @@ import {
   addWeeks,
   buildTimeline,
   daysToValue,
+  dayLabel,
   daysToValueActual,
   INTEGRATION_TIERS,
   SEVEN_DAY_PLAN,
@@ -131,10 +132,11 @@ describe("integrations", () => {
 });
 
 describe("presentation helpers", () => {
-  it("counts calendar days to value", () => {
+  it("counts business days to value, the plan's own unit", () => {
     const t = buildTimeline({ closeDate: "2026-09-09" });
-    // Seven business days from a Wednesday spans two weekends.
-    expect(daysToValue(t)).toBe(9);
+    // Seven business days from a Wednesday spans two weekends; the count
+    // still reads seven, the same number as "Day 7" and "seven business days".
+    expect(daysToValue(t)).toBe(7);
   });
 
   it("formats a date the way a slide reads it", () => {
@@ -272,7 +274,7 @@ describe("done marks", () => {
     expect(t.integration.tentative).toBe(false);
     expect(t.integration.provenOn).toBe("2026-09-17");
     expect(t.integration.startsOn! > "2026-09-17").toBe(true);
-    expect(daysToValueActual(t)).toBe(8);
+    expect(daysToValueActual(t)).toBe(6);
     expect(daysToValueActual(buildTimeline({ closeDate: "2026-09-09" }))).toBeNull();
   });
 
@@ -482,5 +484,51 @@ describe("dayCounter", () => {
     });
     const onPlan = buildTimeline({ closeDate: "2026-09-09", completed: { live: "2026-09-18" } });
     expect(dayCounter(onPlan, "2026-09-30").detail).toBe("On plan — 7 days");
+  });
+});
+
+describe("service steps read like a plan", () => {
+  it("never puts two sequential steps on the same day", () => {
+    // Close on a Monday, so a one-week phase-2 service spans a weekend and the
+    // old calendar fractions rounded "built" and "you review it" onto the
+    // same Monday.
+    for (const closeDate of [
+      "2026-09-14",
+      "2026-09-15",
+      "2026-09-16",
+      "2026-09-17",
+      "2026-09-18",
+    ]) {
+      const t = buildTimeline({
+        closeDate,
+        services: [{ id: "dash", kind: "analytics", name: "Analytics dashboard", phase: 2 }],
+      });
+      const dates = t.phases[0]!.services[0]!.milestones.map((m) => m.date);
+      for (let i = 1; i < dates.length; i++) {
+        expect(dates[i]! > dates[i - 1]!).toBe(true);
+      }
+    }
+  });
+
+  it("takes a call's length from the SOW's own words", () => {
+    const t = buildTimeline({
+      closeDate: "2026-09-09",
+      services: [
+        {
+          id: "train",
+          kind: "training",
+          name: "Field user training session (30-minute, recorded)",
+          phase: 1,
+        },
+      ],
+    });
+    const session = t.alongside[0]!.milestones.find((m) => m.kind === "call")!;
+    expect(session.minutes).toBe(30);
+  });
+
+  it("names both days of a step that spans two", () => {
+    const t = buildTimeline({ closeDate: "2026-09-09" });
+    expect(dayLabel(t.milestones.find((m) => m.key === "fieldtest")!)).toBe("Day 4–5");
+    expect(dayLabel(t.milestones.find((m) => m.key === "adjust")!)).toBe("Day 6");
   });
 });

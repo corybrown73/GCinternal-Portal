@@ -21,6 +21,34 @@ import { cn } from "@/lib/utils";
  * photo. Each one names the page that fixes it.
  */
 
+/**
+ * Where each blank on the welcome page gets filled. The readiness keys come
+ * from `welcome.server.ts`; a key this does not know scrolls to the plan,
+ * which is where most of them live.
+ */
+function blockerTarget(key: string): {
+  panel?: { key: string; id: string };
+  id?: string;
+  to?: string;
+} {
+  switch (key) {
+    case "industry":
+    case "form":
+    case "process":
+      return { panel: { key: "deal:intake", id: "panel-intake" } };
+    case "champion":
+      return { id: "deal-contact" };
+    case "lead":
+      return { id: "deal-owner" };
+    case "leadcard":
+      return { to: "/settings" };
+    case "photo":
+      return { to: "/admin/industry-photos" };
+    default:
+      return { panel: { key: "deal:plan", id: "panel-plan" } };
+  }
+}
+
 export function DealGuide({
   steps,
   setup,
@@ -97,9 +125,35 @@ export function DealGuide({
         })}
       </ol>
       {next && next.blockers.length ? (
-        <p className="mt-2 text-[12px] text-amber-800 dark:text-amber-300">
-          <span className="font-semibold">Before the link goes out, the page still needs:</span>{" "}
-          {next.blockers.join(" · ")}
+        <p className="mt-2 flex flex-wrap items-baseline gap-x-2 gap-y-1 text-[12px] text-amber-800 dark:text-amber-300">
+          <span className="font-semibold">Before the link goes out, the page still needs:</span>
+          {next.blockers.map((b) => {
+            const target = blockerTarget(b.key);
+            const cls =
+              "font-medium underline decoration-amber-800/40 underline-offset-2 hover:decoration-current";
+            if (target.to)
+              return (
+                <Link key={b.key} to={target.to} className={cls}>
+                  {b.label}
+                </Link>
+              );
+            return (
+              <button
+                key={b.key}
+                type="button"
+                className={cls}
+                onClick={() => {
+                  if (target.panel) openPanel(target.panel.key, target.panel.id);
+                  else if (target.id)
+                    document
+                      .getElementById(target.id)
+                      ?.scrollIntoView({ behavior: "smooth", block: "center" });
+                }}
+              >
+                {b.label}
+              </button>
+            );
+          })}
         </p>
       ) : null}
       {warnings.length ? (

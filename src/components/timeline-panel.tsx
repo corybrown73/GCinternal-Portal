@@ -26,6 +26,7 @@ import {
 } from "@/lib/onboarding-services";
 import {
   daysToValue,
+  dayLabel,
   daysToValueActual,
   INTEGRATION_TIERS,
   shortDay,
@@ -239,6 +240,9 @@ export function TimelinePanel({
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   };
   const actual = daysToValueActual(timeline);
+  const planEnd = timeline.phases.length
+    ? (timeline.phases[timeline.phases.length - 1]?.endsOn ?? null)
+    : null;
 
   return (
     <Panel
@@ -248,9 +252,11 @@ export function TimelinePanel({
       collapsible
       collapseKey="deal:plan"
       meta={
-        actual !== null
-          ? `Live ${shortDay(timeline.liveDoneOn!)} · ${actual} days to value · ${timeline.progress.done}/${timeline.progress.total} done`
-          : `Live ${shortDay(timeline.liveDate)} · ${daysToValue(timeline)} days planned · ${timeline.progress.done}/${timeline.progress.total} done`
+        (actual !== null
+          ? `${timeline.phases.length ? "Form live" : "Live"} ${shortDay(timeline.liveDoneOn!)} · ${actual} business days to value`
+          : `${timeline.phases.length ? "Form live" : "Live"} ${shortDay(timeline.liveDate)} · ${daysToValue(timeline)} business days planned`) +
+        (planEnd ? ` · all phases by ${shortDay(planEnd)}` : "") +
+        ` · ${timeline.progress.done}/${timeline.progress.total} done`
       }
       level="primary"
       action={
@@ -354,8 +360,8 @@ export function TimelinePanel({
                 onChange={(e) => markDone(m, e.target.checked ? today : null)}
                 title={m.doneOn ? `Done ${shortDay(m.doneOn)}` : "Mark done"}
               />
-              <span className="w-12 shrink-0 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-                Day {m.day}
+              <span className="w-14 shrink-0 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+                {dayLabel(m)}
               </span>
               <span className="min-w-0 flex-1">
                 <span className="block text-[12px] font-medium">

@@ -44,7 +44,14 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
-import { dayCounter, daysToValue, localIso, shortDay, type Phase } from "@/lib/onboarding-timeline";
+import {
+  dayCounter,
+  daysToValue,
+  dayLabel,
+  localIso,
+  shortDay,
+  type Phase,
+} from "@/lib/onboarding-timeline";
 import { HOMEWORK_KEYS, type HomeworkKey, type WelcomeView } from "@/lib/welcome";
 import { whenLabel } from "@/lib/welcome-events";
 import { speakerNotes } from "@/lib/welcome-notes";
@@ -893,7 +900,7 @@ function Cover({ view, qr }: { view: WelcomeView; qr?: { url: string; dataUrl: s
             {view.industry ?? "Your team"} ·{" "}
             {t.phases.length
               ? `Phase ${t.currentPhase} of ${t.phases.length + 1}`
-              : `${daysToValue(t)} days to value`}
+              : `${daysToValue(t)} business days to value`}
           </p>
           <h1 className="wp-title is-hero">
             {view.path === "existing" ? (
@@ -1037,6 +1044,16 @@ function Team({ view, page }: { view: WelcomeView; page: number }) {
     icon: "Flag",
     side: "client",
   });
+  for (const o of t.others ?? []) {
+    if (people.some((p) => p.name === o.name)) continue;
+    people.push({
+      name: o.name,
+      role: o.role ? `${o.role}, ${view.clientName}` : view.clientName,
+      does: "Named in the plan. Signs off on the parts that touch their work.",
+      icon: "Users",
+      side: "client",
+    });
+  }
   people.push({
     name: view.fieldTester ?? "Your field tester",
     role: `Field tester, ${view.clientName}`,
@@ -1261,7 +1278,7 @@ function Plan({ view, page }: { view: WelcomeView; page: number }) {
           >
             <span className="wp-node-day">
               {m.key === todayKey ? <i className="wp-today-tag">Today</i> : null}
-              Day {m.day}
+              {dayLabel(m)}
             </span>
             <span className={cn("wp-node-tile", m.doneOn && "is-done")}>
               <Tile name={m.icon} size="lg" tone={m.key === "live" ? "navy" : "blue"} />
@@ -1821,6 +1838,8 @@ function Business({
   page: number;
 }) {
   const t = view.timeline;
+  // The whole plan's last day, when there is more than the form.
+  const planEnd = t.phases.length ? (t.phases[t.phases.length - 1]?.endsOn ?? null) : null;
   const kickoff = t.milestones.find((m) => m.key === "kickoff");
   const working = t.milestones.find((m) => m.key === "working");
   const integ = t.integration;
@@ -1831,7 +1850,11 @@ function Business({
       eyebrow="Let's get into business"
       title="Two calls, then"
       accent="it's yours"
-      band={`${view.path === "existing" ? "Ready" : "Live"} on ${shortDay(t.liveDate)}. If any of the three on the right is not true that day, we are not done — and we say so.`}
+      band={
+        planEnd
+          ? `${view.path === "existing" ? "Form ready" : "First form live"} on ${shortDay(t.liveDate)}; everything in your plan live by ${shortDay(planEnd)}. If any of the three on the right is not true that day, we are not done — and we say so.`
+          : `${view.path === "existing" ? "Ready" : "Live"} on ${shortDay(t.liveDate)}. If any of the three on the right is not true that day, we are not done — and we say so.`
+      }
       bandIcon="Rocket"
     >
       <div className="wp-business">

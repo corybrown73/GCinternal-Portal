@@ -17,6 +17,8 @@ export type WelcomeSynthesis = {
   nextUseCases: Array<{ name: string; objective: string | null }>;
   /** The customer-side owner, when the notes named one. */
   champion: { name: string; role: string | null } | null;
+  /** The other customer-side people the notes named, champion excluded. */
+  stakeholders: Array<{ name: string; role: string | null }>;
   /** What "good" looks like, in their words. */
   day90: string | null;
 };
@@ -42,17 +44,26 @@ export function synthesisFromBrief(raw: unknown): WelcomeSynthesis | null {
     .filter((s) => s.name)
     .slice(0, 3);
 
-  const stakeholder = (b.stakeholders ?? []).find(
-    (s) => s.name && !OUR_SIDE.test(`${s.role} ${s.notes}`) && CUSTOMER_ROLE.test(s.role ?? ""),
+  const customerSide = (b.stakeholders ?? []).filter(
+    (s) => s.name && !OUR_SIDE.test(`${s.role} ${s.notes}`),
   );
+  const stakeholder =
+    customerSide.find((s) => CUSTOMER_ROLE.test(s.role ?? "")) ?? customerSide[0] ?? null;
   const champion = stakeholder
     ? { name: clean(stakeholder.name), role: stakeholder.role ? clean(stakeholder.role) : null }
     : null;
+  // The controller who approves the invoices, the IT lead who owns the
+  // integration: the deck dropped them and named only the champion, and the
+  // person phase 2 cannot happen without was missing from their own plan.
+  const stakeholders = customerSide
+    .filter((s) => s !== stakeholder)
+    .map((s) => ({ name: clean(s.name), role: s.role ? clean(s.role) : null }))
+    .filter((s) => s.name);
 
   const day90 = b.kickoff?.day_90_definition ? clean(b.kickoff.day_90_definition) : null;
 
   if (!currentProcess && !nextUseCases.length && !champion && !day90) return null;
-  return { currentProcess, nextUseCases, champion, day90 };
+  return { currentProcess, nextUseCases, champion, stakeholders, day90 };
 }
 
 function clean(s: string | null | undefined): string {

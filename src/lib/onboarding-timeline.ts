@@ -47,6 +47,8 @@ export type MilestoneSpec = {
   key: string;
   /** Business days after close. Day 0 is the close itself. */
   day: number;
+  /** The last day of a step that spans more than one, so no day goes missing. */
+  throughDay?: number;
   label: string;
   owner: MilestoneOwner;
   kind: MilestoneKind;
@@ -121,6 +123,7 @@ export const SEVEN_DAY_PLAN: readonly MilestoneSpec[] = [
   {
     key: "fieldtest",
     day: 4,
+    throughDay: 5,
     label: "Field test",
     owner: "client",
     kind: "build",
@@ -581,6 +584,9 @@ export function buildTimeline(options: TimelineOptions): Timeline {
     const legacy = svc.id === "legacy-integration";
     const keyFor = (step: string) =>
       legacy ? `integ_${step === "review" ? "test" : step}` : `${svc.id}:${step}`;
+    // The SOW's own words win over the catalogue: "training session
+    // (30-minute, recorded)" is a 30-minute call, whatever the catalogue says.
+    const namedMinutes = svc.name.match(/(\d{2,3})\s*-?\s*min/i);
     const stepSpecs = spec.steps.map((st) => ({
       key: keyFor(st.key),
       label: st.label,
@@ -591,21 +597,37 @@ export function buildTimeline(options: TimelineOptions): Timeline {
           : st.kind === "build"
             ? ("build" as const)
             : ("milestone" as const),
-      ...(st.minutes !== undefined && { minutes: st.minutes }),
+      ...(st.minutes !== undefined && {
+        minutes: st.kind === "call" && namedMinutes ? Number(namedMinutes[1]) : st.minutes,
+      }),
       detail: st.detail,
       icon: st.icon,
       at: st.at,
     }));
-    const ms = cascade(stepSpecs, (st) =>
-      st.at === 0
-        ? start
-        : st.at === 1
-          ? onBusinessDay(toIso(new Date(parseIso(start).getTime() + spanDays * DAY_MS)), holidays)
-          : onBusinessDay(
-              toIso(new Date(parseIso(start).getTime() + Math.round(spanDays * st.at) * DAY_MS)),
-              holidays,
-            ),
-    ).map((m) => {
+    // Steps are spaced in business days across the span, so two of them
+    // cannot round onto the same date the way calendar fractions did: "built"
+    // and "you review it" on the same Monday is not a plan anybody believes.
+    // The last step is the service's end and does not move for this.
+    const end = onBusinessDay(
+      toIso(new Date(parseIso(start).getTime() + spanDays * DAY_MS)),
+      holidays,
+    );
+    const span = businessDaysBetween(start, end, holidays);
+    let lastBase: string | null = null;
+    const ms = cascade(stepSpecs, (st) => {
+      let base =
+        st.at === 0
+          ? start
+          : st.at === 1
+            ? end
+            : addBusinessDays(start, Math.round(span * st.at), holidays);
+      if (st.at > 0 && st.at < 1 && lastBase !== null && base <= lastBase) {
+        const bumped = addBusinessDays(lastBase, 1, holidays);
+        if (bumped < end) base = bumped;
+      }
+      lastBase = base;
+      return base;
+    }).map((m) => {
       const { at: _at, ...rest } = m as Milestone & { at?: number };
       return { ...rest, phase: phaseNo, serviceId: svc.id } as Milestone;
     });
@@ -735,7 +757,12 @@ export function buildTimeline(options: TimelineOptions): Timeline {
 
 /** Calendar days from close to live, for the "N days" headline. */
 export function daysToValue(t: Timeline): number {
-  return Math.round((parseIso(t.liveDate).getTime() - parseIso(t.closeDate).getTime()) / DAY_MS);
+  return businessDaysBetween(t.closeDate, t.liveDate);
+}
+
+/** "Day 4", or "Day 4–5" for a step that spans more than one. */
+export function dayLabel(m: Pick<MilestoneSpec, "day" | "throughDay">): string {
+  return m.throughDay && m.throughDay > m.day ? `Day ${m.day}–${m.throughDay}` : `Day ${m.day}`;
 }
 
 /**
@@ -847,7 +874,7 @@ export function localIso(d: Date = new Date()): string {
 /** Calendar days from close to the day the form actually went live; null until it has. */
 export function daysToValueActual(t: Timeline): number | null {
   if (!t.liveDoneOn) return null;
-  return Math.round((parseIso(t.liveDoneOn).getTime() - parseIso(t.closeDate).getTime()) / DAY_MS);
+  return businessDaysBetween(t.closeDate, t.liveDoneOn);
 }
 
 /** "Tue 10 Sep" — short enough for a slide, unambiguous enough for a plan. */

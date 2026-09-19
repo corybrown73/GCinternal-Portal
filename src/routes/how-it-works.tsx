@@ -3,6 +3,7 @@ import { ArrowRight } from "lucide-react";
 
 import { PageBody, PageHeader } from "@/components/page";
 import { Panel } from "@/components/record";
+import { LIFECYCLE_STAGES } from "@/lib/lifecycle";
 
 /**
  * The whole flow on one page, by role.
@@ -139,6 +140,27 @@ function HowItWorksPage() {
         description="One record per customer, from the closed-won deal to live in the field. Two paths: a new customer on the 7-day plan, or an existing account adding services. Here is where each role comes in."
       />
       <PageBody className="space-y-4">
+        {/* The stage vocabulary used to sit as a bar over every page, highlighting
+            nothing. A customer record draws its own stages; the words themselves
+            belong here, where somebody looks them up. */}
+        <Panel
+          title="The standard journey"
+          meta={`${LIFECYCLE_STAGES.length} stages · Closed / Won is the trigger, not a stage`}
+        >
+          <ol className="grid gap-x-6 divide-y divide-border md:grid-cols-2 md:divide-y-0">
+            {LIFECYCLE_STAGES.map((stage, i) => (
+              <li key={stage.id} className="flex gap-3 px-3 py-2.5">
+                <span className="mt-0.5 font-mono text-[10px] font-bold text-muted-foreground">
+                  {String(i + 1).padStart(2, "0")}
+                </span>
+                <div className="min-w-0">
+                  <p className="text-[13px] font-medium">{stage.label}</p>
+                  <p className="mt-0.5 text-[12px] text-muted-foreground">{stage.intent}</p>
+                </div>
+              </li>
+            ))}
+          </ol>
+        </Panel>
         <div className="grid gap-4 xl:grid-cols-2">
           {ROLES.map((r) => (
             <Panel key={r.key} title={r.who} meta={r.when}>

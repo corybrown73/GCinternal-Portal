@@ -18,7 +18,6 @@ import { AppSidebar } from "@/components/app-sidebar";
 import { useOrgBranding } from "@/lib/use-branding";
 import { useApplyTheme } from "@/lib/use-theme";
 import { useNavVisibility } from "@/lib/use-nav-visibility";
-import { LifecycleRail } from "@/components/lifecycle-rail";
 import { AuthGate } from "@/components/auth-gate";
 import { useProfile } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
@@ -193,10 +192,7 @@ function RootShell({ children }: { children: ReactNode }) {
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
-  // The Customer 360 record renders its own lifecycle rail scoped to that
-  // implementation, so the global context rail would be a duplicate there.
   const pathname = useRouterState({ select: (s) => s.location.pathname });
-  const showGlobalRail = !/^\/customers\/[^/]+/.test(pathname);
 
   return (
     <QueryClientProvider client={queryClient}>
@@ -204,7 +200,7 @@ function RootComponent() {
       <AuthGate
         renderShell={({ chrome }) =>
           chrome ? (
-            <ShellWithSidebar showGlobalRail={showGlobalRail} />
+            <ShellWithSidebar />
           ) : (
             <main className="min-h-screen bg-background text-foreground">
               <Outlet />
@@ -224,7 +220,7 @@ function ThemeApplier() {
   return null;
 }
 
-function ShellWithSidebar({ showGlobalRail }: { showGlobalRail: boolean }) {
+function ShellWithSidebar() {
   const { profile } = useProfile();
   const branding = useOrgBranding();
   const visibility = useNavVisibility();
@@ -232,7 +228,6 @@ function ShellWithSidebar({ showGlobalRail }: { showGlobalRail: boolean }) {
     <div className="flex min-h-screen w-full bg-background text-foreground">
       <AppSidebar profile={profile ?? null} branding={branding} visibility={visibility} />
       <div className="flex min-w-0 flex-1 flex-col">
-        {showGlobalRail ? <LifecycleRail /> : null}
         <main className="min-w-0 flex-1">
           {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
           <Outlet />

@@ -5,6 +5,7 @@ export function PageHeader({
   title,
   description,
   actions,
+  sticky = true,
 }: {
   /**
    * ReactNode, not string: a record page puts the customer's logo beside their
@@ -14,6 +15,8 @@ export function PageHeader({
   title: ReactNode;
   description?: string;
   actions?: ReactNode;
+  /** Off for a long record page, where the header only costs height. */
+  sticky?: boolean;
 }) {
   return (
     // A floating overlay layer, so it is glass: it sticks to the top of the
@@ -27,7 +30,12 @@ export function PageHeader({
     // afford contrast that varies with the content underneath.
     // flex-wrap, so a header with a long title and two buttons stacks rather
     // than pushing the actions off the right edge on a narrow window.
-    <div className="glass sticky top-0 z-30 flex flex-wrap items-start justify-between gap-x-6 gap-y-2 rounded-none border-x-0 border-t-0 px-4 py-4 sm:px-6">
+    <div
+      className={cn(
+        "glass flex flex-wrap items-start justify-between gap-x-6 gap-y-2 rounded-none border-x-0 border-t-0 px-4 py-4 sm:px-6",
+        sticky && "sticky top-0 z-30",
+      )}
+    >
       <div className="min-w-0">
         <h1 className="text-[15px] font-semibold tracking-tight">{title}</h1>
         {description ? (

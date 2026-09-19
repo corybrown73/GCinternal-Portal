@@ -303,6 +303,9 @@ function DealRecord({ deal }: { deal: DealData }) {
           </span>
         }
         {...(account.summary ? { description: account.summary } : {})}
+        // The deal page is long and dense; a header that re-states the summary
+        // over every scroll clipped the record beneath it.
+        sticky={false}
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <BriefActions deal={deal} onResult={setBriefResult} />
@@ -413,13 +416,15 @@ function DealRecord({ deal }: { deal: DealData }) {
           {/* The champion, and the two facts that make them reachable.
               Carried into customer_contacts when this deal becomes a project,
               which is the point at which one contact becomes many. */}
-          <EditableField
-            label="Contact"
-            value={account.primary_contact_name ?? null}
-            placeholder="Who to call at the customer"
-            onSave={set("primary_contact_name")}
-            disabled={!editable}
-          />
+          <span id="deal-contact" className="contents">
+            <EditableField
+              label="Contact"
+              value={account.primary_contact_name ?? null}
+              placeholder="Who to call at the customer"
+              onSave={set("primary_contact_name")}
+              disabled={!editable}
+            />
+          </span>
           <EditableField
             label="Contact email"
             value={account.primary_contact_email ?? null}
@@ -434,7 +439,9 @@ function DealRecord({ deal }: { deal: DealData }) {
             onSave={set("primary_contact_role")}
             disabled={!editable}
           />
-          <OwnerField dealId={account.id} editable={editable} />
+          <span id="deal-owner" className="contents">
+            <OwnerField dealId={account.id} editable={editable} />
+          </span>
           <Field label="Created" value={fmtDate(account.created_at)} />
         </div>
         {field.error ? (

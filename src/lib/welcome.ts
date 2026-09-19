@@ -30,6 +30,8 @@ export type WelcomeView = {
     accountManager: string | null;
     solutionsEngineer: string | null;
     champion: { name: string; role: string | null } | null;
+    /** Other customer-side people the notes named. On the team screen after the champion. */
+    others?: Array<{ name: string; role: string | null }>;
   };
   firstForm: {
     name: string;

@@ -109,6 +109,15 @@ export async function buildOnboardingDeckInput(dealId: string): Promise<Onboardi
     champion: context?.deal.primaryContact.name
       ? { name: context.deal.primaryContact.name, role: context.deal.primaryContact.role }
       : (synth?.champion ?? null),
+    // Two more at most: the team screen is small on purpose.
+    others: (synth?.stakeholders ?? [])
+      .filter(
+        (s) =>
+          s.name !== context?.deal.primaryContact.name &&
+          s.name !== intake.timeline.field_tester &&
+          s.name !== synth?.champion?.name,
+      )
+      .slice(0, 2),
   };
   const nextUseCases = next.length
     ? next.slice(0, 3).map((t) => ({ name: t.name, objective: t.description }))

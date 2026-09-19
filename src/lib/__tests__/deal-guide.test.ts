@@ -74,7 +74,10 @@ describe("guideSteps · the share step and the page's readiness", () => {
       shareUrl: "https://example.com/welcome/x",
       stageHistory: history,
       wonStageKey: "closed_won",
-      readiness: [{ label: "Industry" }, { label: "Their field tester" }],
+      readiness: [
+        { key: "industry", label: "Industry" },
+        { key: "tester", label: "Their field tester" },
+      ],
     });
     const share = steps.find((s) => s.key === "share")!;
     expect(share.done).toBe(false);
@@ -91,7 +94,7 @@ describe("guideSteps · the share step and the page's readiness", () => {
       readiness: [],
     });
     expect(quiet.find((s) => s.key === "share")!.done).toBe(false);
-    expect(share.blockers).toEqual(["Industry", "Their field tester"]);
+    expect(share.blockers.map((b) => b.label)).toEqual(["Industry", "Their field tester"]);
     expect(steps.filter((s) => s.key !== "share").every((s) => s.blockers.length === 0)).toBe(true);
   });
 });
