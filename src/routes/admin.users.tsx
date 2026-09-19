@@ -433,7 +433,7 @@ function PasswordCell({
       onNotice(
         r.emailed
           ? "Reset link emailed."
-          : "Email is in log mode, so here is the reset link to hand over. It works once.",
+          : `The email did not send (${r.reason ?? "unknown reason"}). Here is the reset link to hand over instead. It works once.`,
         r.link,
       ),
     onError: (e) => onError((e as Error).message),

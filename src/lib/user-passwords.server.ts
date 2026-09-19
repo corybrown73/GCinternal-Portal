@@ -68,7 +68,7 @@ export async function setUserPassword(
 export async function issuePasswordReset(
   actorId: string,
   profileId: string,
-): Promise<{ emailed: boolean; link: string | null }> {
+): Promise<{ emailed: boolean; link: string | null; reason: string | null }> {
   const actor = await requireSuperAdmin(actorId);
   const { email, name } = await profileEmail(profileId);
   const redirectTo = `${appUrl()}/auth/callback?next=/forgot-password`;
@@ -82,7 +82,11 @@ export async function issuePasswordReset(
     throw new Error(`Could not issue a reset link: ${error?.message ?? "no link returned"}`);
   }
 
+  // Two different things end with no email, and the admin needs to know
+  // which: a deployment with no provider (the link is the plan), or a
+  // provider that refused (the link is the workaround and something is wrong).
   let emailed = false;
+  let reason: string | null = null;
   try {
     const { delivered } = await sendEmail({
       to: email,
@@ -100,8 +104,10 @@ export async function issuePasswordReset(
       </div>`,
     });
     emailed = delivered;
+    if (!delivered) reason = "this deployment has no email provider configured (EMAIL_MODE=log)";
   } catch (e) {
     console.error("[passwords] could not email the reset link", e);
+    reason = e instanceof Error ? e.message : "the email did not send";
   }
 
   await audit({
@@ -110,9 +116,9 @@ export async function issuePasswordReset(
     action: "user.password_reset_issued",
     entity_type: "profile",
     entity_id: profileId,
-    payload: { emailed },
+    payload: { emailed, ...(reason && { reason }) },
   });
-  return { emailed, link: emailed ? null : link };
+  return { emailed, link: emailed ? null : link, reason };
 }
 
 function escapeHtml(s: string): string {
