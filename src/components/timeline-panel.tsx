@@ -44,6 +44,7 @@ import { proposePlanFromSowFn } from "@/lib/sow-plan.functions";
 import { isCall, planEvents } from "@/lib/welcome-events";
 import { getWelcome } from "@/lib/welcome.functions";
 import { cn } from "@/lib/utils";
+import { Working } from "@/components/working";
 
 /**
  * The seven-day plan, as dates a person can move.
@@ -141,7 +142,7 @@ export function TimelinePanel({
   const [proposal, setProposal] = useState<{
     sowName: string | null;
     proposal: SowPlanProposal;
-    rows: Array<SowPlanRow & { accept: boolean }>;
+    rows: Array<SowPlanRow & { accept: boolean; edited?: boolean }>;
   } | null>(null);
   const sowRead = useMutation({
     mutationFn: () => readSow({ data: { dealId } }),
@@ -157,7 +158,7 @@ export function TimelinePanel({
       }),
     onError: (e) => setError((e as Error).message),
   });
-  const editRow = (i: number, patch: Partial<SowPlanRow & { accept: boolean }>) =>
+  const editRow = (i: number, patch: Partial<SowPlanRow & { accept: boolean; edited: boolean }>) =>
     setProposal((p) =>
       p ? { ...p, rows: p.rows.map((r, j) => (j === i ? { ...r, ...patch } : r)) } : p,
     );
@@ -419,11 +420,13 @@ export function TimelinePanel({
                     : "Upload the signed SOW first"
                 }
               >
-                {sowRead.isPending
-                  ? "Reading the SOW… about a minute"
-                  : services.length
-                    ? "Re-read the SOW"
-                    : "Read the SOW into the plan"}
+                {sowRead.isPending ? (
+                  <Working label="Reading the SOW…" estimateSeconds={60} />
+                ) : services.length ? (
+                  "Re-read the SOW"
+                ) : (
+                  "Read the SOW into the plan"
+                )}
               </button>
             ) : null
           }
@@ -492,7 +495,9 @@ export function TimelinePanel({
                             <select
                               className={input}
                               value={row.tier ?? 3}
-                              onChange={(e) => editRow(i, { tier: Number(e.target.value) })}
+                              onChange={(e) =>
+                                editRow(i, { tier: Number(e.target.value), edited: true })
+                              }
                             >
                               {INTEGRATION_TIERS.filter((t) => t.weeks > 0).map((t) => (
                                 <option key={t.tier} value={t.tier}>
@@ -509,7 +514,10 @@ export function TimelinePanel({
                                 className={cn(input, "w-16")}
                                 value={row.weeks ?? rowWeeks(row)}
                                 onChange={(e) =>
-                                  editRow(i, { weeks: Number(e.target.value) || null })
+                                  editRow(i, {
+                                    weeks: Number(e.target.value) || null,
+                                    edited: true,
+                                  })
                                 }
                               />
                               wks
@@ -518,15 +526,21 @@ export function TimelinePanel({
                           <span
                             className={cn(
                               "rounded-sm px-1.5 py-0.5 text-[10px] uppercase tracking-wider",
-                              row.confidence === "stated"
-                                ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
-                                : row.confidence === "implied"
-                                  ? "bg-sky-500/10 text-sky-700 dark:text-sky-400"
-                                  : "bg-amber-500/10 text-amber-700 dark:text-amber-400",
+                              row.edited
+                                ? "bg-muted text-muted-foreground"
+                                : row.confidence === "stated"
+                                  ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
+                                  : row.confidence === "implied"
+                                    ? "bg-sky-500/10 text-sky-700 dark:text-sky-400"
+                                    : "bg-amber-500/10 text-amber-700 dark:text-amber-400",
                             )}
-                            title={row.evidence ?? undefined}
+                            title={
+                              row.edited
+                                ? `You changed this from what the SOW ${row.confidence}. ${row.evidence ?? ""}`.trim()
+                                : (row.evidence ?? undefined)
+                            }
                           >
-                            {row.confidence}
+                            {row.edited ? "edited" : row.confidence}
                           </span>
                           {row.evidence ? (
                             <span className="w-full truncate text-[11px] italic text-muted-foreground">

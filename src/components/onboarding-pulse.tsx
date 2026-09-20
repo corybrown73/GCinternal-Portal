@@ -115,7 +115,17 @@ export function AddServicesButton({ customerId }: { customerId: string }) {
   const m = useMutation({
     mutationFn: () => start({ data: { customerId } }),
     onSuccess: (r) => {
-      void navigate({ to: "/deals/$dealId", params: { dealId: r.dealId } });
+      // Straight to the services plan on this customer's page — the
+      // Pre-kickoff tab of the implementation the deal just made — rather
+      // than the deal URL, which only redirected back here.
+      void navigate({
+        to: "/customers/$customerId",
+        params: { customerId },
+        search: {
+          tab: "prekickoff",
+          ...(r.implementationId ? { impl: r.implementationId } : {}),
+        },
+      });
     },
   });
   if (!(canEditSales(profile?.role) || canManage(profile?.role))) return null;

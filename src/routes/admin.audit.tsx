@@ -6,6 +6,7 @@ import { PageBody, PageHeader } from "@/components/page";
 import { Field, NoRows, Panel } from "@/components/record";
 import { getAuditHealth } from "@/lib/hygiene.functions";
 import { fmtDateTime } from "@/lib/hub-format";
+import { When } from "@/components/when";
 
 const healthQuery = queryOptions({
   queryKey: ["admin", "audit-health"],
@@ -64,7 +65,7 @@ function AuditHealthPage() {
             <div className="border-t border-border px-3 py-2">
               <p className="text-[12px] text-destructive">
                 Last failure: {data.lastFailureAction} — {data.lastFailureError}
-                {data.lastFailureAt ? ` (${fmtDateTime(data.lastFailureAt)})` : ""}
+                {data.lastFailureAt ? ` ($<When value={data.lastFailureAt} />)` : ""}
               </p>
             </div>
           ) : null}
@@ -107,7 +108,7 @@ function AuditHealthPage() {
                   <div className="min-w-0">
                     <p className="text-[12px] font-medium">{o.action}</p>
                     <p className="font-mono text-[11px] text-muted-foreground">
-                      {o.entity_id ?? "—"} · {fmtDateTime(o.created_at)}
+                      {o.entity_id ?? "—"} · <When value={o.created_at} />
                     </p>
                   </div>
                 </li>

@@ -196,6 +196,11 @@ export const addReport = createServerFn({ method: "POST" })
         title: z.string().trim().min(1, "Title is required"),
         reportType: z.enum(["call_notes", "account_map"]),
         contentMd: z.string().trim().min(1, "Paste or upload some content first"),
+        callDate: z
+          .string()
+          .regex(/^\d{4}-\d{2}-\d{2}$/)
+          .nullable()
+          .optional(),
       })
       .parse(data),
   )

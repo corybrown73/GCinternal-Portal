@@ -11,7 +11,7 @@ import {
   setTicketAssignee,
   setTicketStatus,
 } from "@/lib/tickets.functions";
-import { fmtDateTime, humanize } from "@/lib/hub-format";
+import { humanize } from "@/lib/hub-format";
 import { cn } from "@/lib/utils";
 import {
   BreachBadge,
@@ -24,6 +24,7 @@ import {
   primaryButtonClass,
   selectClass,
 } from "@/components/tickets/ticket-ui";
+import { When } from "@/components/when";
 
 export const Route = createFileRoute("/tickets/$ticketId")({
   head: () => ({
@@ -109,7 +110,7 @@ function TicketDetailPage() {
               </span>
             </div>
             <p className="mt-1 text-[11px] text-muted-foreground">
-              {ticket.submitter_email ?? "Unknown submitter"} · {fmtDateTime(ticket.created_at)}
+              {ticket.submitter_email ?? "Unknown submitter"} · <When value={ticket.created_at} />
             </p>
             <p className="mt-2 whitespace-pre-wrap text-[13px]">{ticket.body}</p>
           </div>
@@ -134,7 +135,7 @@ function TicketDetailPage() {
                       </span>
                     ) : null}
                     <span className="text-[11px] text-muted-foreground">
-                      {fmtDateTime(c.created_at)}
+                      <When value={c.created_at} />
                     </span>
                   </span>
                 </div>
@@ -217,15 +218,21 @@ function TicketDetailPage() {
               </MetaField>
               <MetaField label="SLA">
                 <div className="space-y-1 text-[11px] text-muted-foreground">
-                  <p>First response due {fmtDateTime(ticket.sla_due_at)}</p>
+                  <p>
+                    First response due <When value={ticket.sla_due_at} />
+                  </p>
                   <p>
                     {ticket.first_response_at
-                      ? `First response ${fmtDateTime(ticket.first_response_at)}`
+                      ? `First response $<When value={ticket.first_response_at} />`
                       : ticket.sla_breached
                         ? "Breached — no first response inside the window"
                         : "No first response yet"}
                   </p>
-                  {ticket.resolved_at ? <p>Resolved {fmtDateTime(ticket.resolved_at)}</p> : null}
+                  {ticket.resolved_at ? (
+                    <p>
+                      Resolved <When value={ticket.resolved_at} />
+                    </p>
+                  ) : null}
                 </div>
               </MetaField>
             </dl>

@@ -6,9 +6,10 @@ import { addJournalEntry, uploadAttachment } from "@/lib/hub.functions";
 import { fileToBase64, MAX_ATTACHMENT_BYTES } from "@/lib/attachment-client";
 import { splitLinks } from "@/lib/journal-input";
 import { OpenAttachment } from "@/components/sow-write";
-import { fmtDateTime, stageLabel } from "@/lib/hub-format";
+import { stageLabel } from "@/lib/hub-format";
 import type { JournalEntry } from "@/lib/hub-types";
 import { OwnerPicker, type TeamOption } from "@/components/owner-picker";
+import { When } from "@/components/when";
 
 const inputClass =
   "w-full rounded-sm border border-border bg-background px-1.5 py-1 text-[12px] text-foreground outline-none focus:ring-1 focus:ring-ring";
@@ -178,7 +179,9 @@ export function JournalPanel({
                 <span className="rounded-sm border border-border px-1 text-foreground">
                   {stageLabel(entry.stage)}
                 </span>
-                <span>{fmtDateTime(entry.created_at)}</span>
+                <span>
+                  <When value={entry.created_at} />
+                </span>
                 <span>{entry.author_name ?? "Author not recorded"}</span>
               </div>
               <p className="mt-1 whitespace-pre-wrap text-[12px] text-foreground">{entry.note}</p>

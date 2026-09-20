@@ -124,6 +124,7 @@ export function WelcomePage({
   mode,
   onTick,
   onCopyLink,
+  onMarkSent,
   backHref,
   notesHref,
   icsBase,
@@ -135,6 +136,8 @@ export function WelcomePage({
   onTick?: (key: HomeworkKey, done: boolean) => Promise<void> | void;
   /** Internal: issue or copy the customer's link. Resolves to the URL. */
   onCopyLink?: () => Promise<string>;
+  /** Internal: the link went to the customer, by whatever channel. */
+  onMarkSent?: () => Promise<void> | void;
   backHref?: string | null;
   /** Internal: the talk track for this customer. */
   notesHref?: string | null;
@@ -216,6 +219,7 @@ export function WelcomePage({
             setPresent(true);
           }}
           onCopyLink={mintForQr}
+          onMarkSent={onMarkSent}
           onExportPptx={async (report) => {
             // Every visible screen, unzoomed, with the talk track as notes.
             const notes = speakerNotes(view);
@@ -484,6 +488,7 @@ function Toolbar({
   view,
   onPresent,
   onCopyLink,
+  onMarkSent,
   onExportPptx,
   backHref,
   notesHref,
@@ -494,6 +499,7 @@ function Toolbar({
   view: WelcomeView;
   onPresent: () => void;
   onCopyLink?: (() => Promise<string>) | undefined;
+  onMarkSent?: (() => Promise<void> | void) | undefined;
   /** Every visible screen as a full-bleed slide. Reports progress while it renders. */
   onExportPptx?: ((report: (done: number, total: number) => void) => Promise<void>) | undefined;
   backHref: string | null;
@@ -505,15 +511,26 @@ function Toolbar({
   const [copied, setCopied] = useState<"idle" | "busy" | "done" | "failed">("idle");
   const [pptx, setPptx] = useState<"idle" | "busy" | "failed">("idle");
   const [progress, setProgress] = useState<[number, number] | null>(null);
+  const [sent, setSent] = useState<"idle" | "busy">("idle");
   const copy = async () => {
     if (!onCopyLink) return;
     setCopied("busy");
+    let url: string | null = null;
     try {
-      const url = view.shareUrl ?? (await onCopyLink());
+      url = view.shareUrl ?? (await onCopyLink());
+    } catch {
+      setCopied("failed");
+      setTimeout(() => setCopied("idle"), 2500);
+      return;
+    }
+    try {
       await navigator.clipboard.writeText(url);
       setCopied("done");
     } catch {
-      setCopied("failed");
+      // The link exists even when the clipboard refused (a minted link is a
+      // slow await, and some browsers drop the permission by then). The
+      // next click copies it without minting again.
+      setCopied(view.shareUrl ? "failed" : "done");
     }
     setTimeout(() => setCopied("idle"), 2500);
   };
@@ -536,6 +553,24 @@ function Toolbar({
           </span>
         ) : view.shareUrl ? (
           <span className="wp-toolbar-meta">Link ready · not sent yet</span>
+        ) : null}
+        {onMarkSent && view.shareUrl && !view.sharedAt && !view.openedAt ? (
+          <button
+            type="button"
+            className="wp-tool"
+            disabled={sent === "busy"}
+            title="You sent the customer their link — by email, text, however. The checklist ticks on this, not on copying."
+            onClick={async () => {
+              setSent("busy");
+              try {
+                await onMarkSent();
+              } finally {
+                setSent("idle");
+              }
+            }}
+          >
+            <Check className="h-3.5 w-3.5" /> {sent === "busy" ? "Saving…" : "Mark as sent"}
+          </button>
         ) : null}
       </div>
       <div className="wp-toolbar-right">

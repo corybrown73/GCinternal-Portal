@@ -5,7 +5,7 @@ import { queryOptions, useSuspenseQuery } from "@tanstack/react-query";
 import { PageBody, PageHeader } from "@/components/page";
 import { NoRows, Panel } from "@/components/record";
 import { getSignals } from "@/lib/signals.functions";
-import { fmtDate, fmtDateTime, humanize, stageLabel } from "@/lib/hub-format";
+import { fmtDate, humanize, stageLabel } from "@/lib/hub-format";
 import { WAITING_ON_LABEL } from "@/lib/customer360-derive";
 import { EXCLUSION_LABEL } from "@/lib/signals/stage-history";
 import {
@@ -14,6 +14,7 @@ import {
   SIGNAL_ALERT_LABEL,
 } from "@/lib/signals/alert-rules";
 import { cn } from "@/lib/utils";
+import { When } from "@/components/when";
 
 const signalsQuery = queryOptions({
   queryKey: ["signals"],
@@ -121,7 +122,9 @@ function SignalsPage() {
                 ? `available — ${data.engagement.reason}`
                 : `not available — ${data.engagement.reason}. That is an absent source, not evidence that nobody is engaged.`}
             </p>
-            <p>Generated {fmtDateTime(data.generated_at)}.</p>
+            <p>
+              Generated <When value={data.generated_at} />.
+            </p>
           </div>
         </Panel>
 

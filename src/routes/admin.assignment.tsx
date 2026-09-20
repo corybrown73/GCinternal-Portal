@@ -13,6 +13,7 @@ import {
 } from "@/lib/assignment.functions";
 import { fmtDateTime } from "@/lib/hub-format";
 import { cn } from "@/lib/utils";
+import { When } from "@/components/when";
 
 /**
  * Who gets the account, and why.
@@ -330,7 +331,7 @@ function AssignmentPage() {
                   className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-1.5 text-[12px]"
                 >
                   <span className="font-mono text-[10px] text-muted-foreground">
-                    {fmtDateTime(a.createdAt)}
+                    <When value={a.createdAt} />
                   </span>
                   <Link
                     to="/deals/$dealId"

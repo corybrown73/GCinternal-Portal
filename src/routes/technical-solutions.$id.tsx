@@ -16,7 +16,7 @@ import {
 } from "@/components/record";
 import { getTechnicalSolution } from "@/lib/hub.functions";
 import type { TechnicalSolutionDetail } from "@/lib/hub-types";
-import { fmtDate, fmtDateTime, humanize } from "@/lib/hub-format";
+import { fmtDate, humanize } from "@/lib/hub-format";
 import { technicalSolutionNextAction, waitingOnForSolution } from "@/lib/customer360-derive";
 import {
   AddNoteAction,
@@ -28,6 +28,7 @@ import { AddFieldMapping, FieldMappingRow } from "@/components/field-mapping-wri
 import { SolutionDecisionLinks } from "@/components/trace-link-write";
 import { OpenAttachment } from "@/components/sow-write";
 import { splitLinks } from "@/lib/journal-input";
+import { When } from "@/components/when";
 
 const solutionQuery = (id: string) =>
   queryOptions({
@@ -301,7 +302,7 @@ function SolutionDetail() {
                         {humanize(n.note_type)}
                       </span>
                       <span className="text-[11px] text-muted-foreground">
-                        {n.author_name ?? "Author not recorded"} · {fmtDateTime(n.created_at)}
+                        {n.author_name ?? "Author not recorded"} · <When value={n.created_at} />
                       </span>
                     </div>
                     <p className="mt-1 whitespace-pre-wrap text-[12px] leading-relaxed">
@@ -347,7 +348,7 @@ function SolutionDetail() {
                 {record.ownership_history.map((h) => (
                   <li key={h.id} className="px-3 py-2 text-[12px]">
                     <span className="font-mono text-[11px] text-muted-foreground">
-                      {fmtDateTime(h.changed_at)}
+                      <When value={h.changed_at} />
                     </span>{" "}
                     · {dash(h.old_value)} → {dash(h.new_value)}
                     {h.changed_by_name ? ` · by ${h.changed_by_name}` : ""}

@@ -77,6 +77,8 @@ export interface GongReport {
   content_md: string;
   uploaded_by: string | null;
   created_at: string;
+  /** When the call happened; created_at is only when the notes were pasted. */
+  call_date?: string | null;
 }
 
 export interface Brief {

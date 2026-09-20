@@ -12,6 +12,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { INDUSTRIES } from "@/lib/intake-answers";
+import { cn } from "@/lib/utils";
 import { addDeal, importDeals } from "@/lib/presale.functions";
 import { STAGE_LABELS, STAGES, type AccountStage } from "@/lib/presale-stages";
 
@@ -54,6 +55,7 @@ const emptyDeal: DealDraft = {
 export function NewDealDialog() {
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState<DealDraft>(emptyDeal);
+  const [touched, setTouched] = useState(false);
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const create = useServerFn(addDeal);
@@ -84,6 +86,7 @@ export function NewDealDialog() {
       queryClient.invalidateQueries({ queryKey: ["pipeline"] });
       setOpen(false);
       setDraft(emptyDeal);
+      setTouched(false);
       navigate({ to: "/deals/$dealId", params: { dealId: result.account.id } });
     },
   });
@@ -106,30 +109,50 @@ export function NewDealDialog() {
             className="space-y-2.5"
             onSubmit={(e) => {
               e.preventDefault();
+              setTouched(true);
+              if (draft.name.trim() === "") return;
               if (!mutation.isPending) mutation.mutate();
             }}
           >
             <div>
-              <label className={labelClass}>Name *</label>
+              <label className={labelClass} htmlFor="new-deal-name">
+                Name *
+              </label>
               <input
+                id="new-deal-name"
+                name="name"
                 className={inputClass}
                 value={draft.name}
                 onChange={(e) => set({ name: e.target.value })}
-                required
+                onBlur={() => setTouched(true)}
+                aria-invalid={touched && draft.name.trim() === "" ? true : undefined}
+                aria-describedby="new-deal-name-hint"
                 autoFocus
               />
-              {draft.name.trim() === "" ? (
-                <p className="mt-0.5 text-[11px] text-muted-foreground">
-                  The company, as the customer says it. Required.
-                </p>
-              ) : null}
+              <p
+                id="new-deal-name-hint"
+                className={cn(
+                  "mt-0.5 text-[11px]",
+                  touched && draft.name.trim() === ""
+                    ? "text-destructive"
+                    : "text-muted-foreground",
+                )}
+              >
+                {touched && draft.name.trim() === ""
+                  ? "The deal needs the company's name."
+                  : "The company, as the customer says it. Required."}
+              </p>
             </div>
             {/* What kind of deal, and what they do: the two facts everything
                 downstream reads — the plan's path and the page's industry. */}
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <label className={labelClass}>Path</label>
+                <label className={labelClass} htmlFor="new-deal-path">
+                  Path
+                </label>
                 <select
+                  id="new-deal-path"
+                  name="path"
                   className={inputClass}
                   value={draft.path}
                   onChange={(e) => set({ path: e.target.value as DealDraft["path"] })}
@@ -140,8 +163,12 @@ export function NewDealDialog() {
                 </select>
               </div>
               <div>
-                <label className={labelClass}>Industry</label>
+                <label className={labelClass} htmlFor="new-deal-industry">
+                  Industry
+                </label>
                 <select
+                  id="new-deal-industry"
+                  name="industry"
                   className={inputClass}
                   value={draft.industry}
                   onChange={(e) => set({ industry: e.target.value })}
@@ -157,8 +184,12 @@ export function NewDealDialog() {
             </div>
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <label className={labelClass}>Domain</label>
+                <label className={labelClass} htmlFor="new-deal-domain">
+                  Domain
+                </label>
                 <input
+                  id="new-deal-domain"
+                  name="domain"
                   className={inputClass}
                   value={draft.domain}
                   placeholder="acme.com"
@@ -166,8 +197,12 @@ export function NewDealDialog() {
                 />
               </div>
               <div>
-                <label className={labelClass}>Salesforce ID</label>
+                <label className={labelClass} htmlFor="new-deal-sfid">
+                  Salesforce ID
+                </label>
                 <input
+                  id="new-deal-sfid"
+                  name="sfid"
                   className={inputClass}
                   value={draft.salesforceId}
                   onChange={(e) => set({ salesforceId: e.target.value })}
@@ -176,8 +211,12 @@ export function NewDealDialog() {
             </div>
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <label className={labelClass}>ARR</label>
+                <label className={labelClass} htmlFor="new-deal-arr">
+                  ARR
+                </label>
                 <input
+                  id="new-deal-arr"
+                  name="arr"
                   className={inputClass}
                   value={draft.arr}
                   placeholder="120000"
@@ -185,8 +224,12 @@ export function NewDealDialog() {
                 />
               </div>
               <div>
-                <label className={labelClass}>Stage</label>
+                <label className={labelClass} htmlFor="new-deal-stage">
+                  Stage
+                </label>
                 <select
+                  id="new-deal-stage"
+                  name="stage"
                   className={inputClass}
                   value={draft.stage}
                   onChange={(e) => set({ stage: e.target.value as AccountStage })}
@@ -201,8 +244,12 @@ export function NewDealDialog() {
               </div>
             </div>
             <div>
-              <label className={labelClass}>Summary</label>
+              <label className={labelClass} htmlFor="new-deal-summary">
+                Summary
+              </label>
               <textarea
+                id="new-deal-summary"
+                name="summary"
                 className={areaClass}
                 rows={3}
                 value={draft.summary}

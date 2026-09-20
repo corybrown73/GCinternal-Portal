@@ -5,8 +5,9 @@ import { useServerFn } from "@tanstack/react-start";
 import { PageBody, PageHeader } from "@/components/page";
 import { NoRows } from "@/components/record";
 import { ackAlert, getAlerts } from "@/lib/tickets.functions";
-import { fmtDateTime, humanize } from "@/lib/hub-format";
+import { humanize } from "@/lib/hub-format";
 import { cn } from "@/lib/utils";
+import { When } from "@/components/when";
 
 export const Route = createFileRoute("/alerts")({
   head: () => ({
@@ -132,7 +133,7 @@ function AlertList({
                   <p className="mt-0.5 text-[12px] text-muted-foreground">{a.detail}</p>
                 ) : null}
                 <p className="mt-0.5 text-[11px] text-muted-foreground/70">
-                  {fmtDateTime(a.created_at)}
+                  <When value={a.created_at} />
                   {a.customer_id ? (
                     <>
                       {" · "}
@@ -147,7 +148,7 @@ function AlertList({
                     </>
                   ) : null}
                   {a.source !== "system" ? ` · via ${a.source}` : null}
-                  {a.acknowledged_at ? ` · acknowledged ${fmtDateTime(a.acknowledged_at)}` : null}
+                  {a.acknowledged_at ? ` · acknowledged $<When value={a.acknowledged_at} />` : null}
                 </p>
               </div>
               {action ? action(a.id) : null}

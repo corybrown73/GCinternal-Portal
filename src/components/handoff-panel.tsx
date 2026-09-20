@@ -16,6 +16,7 @@ import type { HandoffEvent, HandoffPacket, HandoffStatus } from "@/lib/handoff.s
 import type { HandoffCompleteness, HandoffItem } from "@/lib/handoff-completeness";
 import { fmtDateTime } from "@/lib/hub-format";
 import { cn } from "@/lib/utils";
+import { When } from "@/components/when";
 
 /**
  * The sales → delivery handoff gate.
@@ -787,10 +788,10 @@ export function HandoffPanel({
         <span className="ml-auto text-[11px] text-muted-foreground">
           {status === "draft" ? "Not submitted yet." : null}
           {status === "submitted"
-            ? `Submitted by ${submittedBy} · ${fmtDateTime(packet?.submitted_at)}`
+            ? `Submitted by ${submittedBy} · $<When value={packet?.submitted_at} />`
             : null}
           {status === "accepted" || status === "returned"
-            ? `${STATUS_LABEL[status]} by ${decidedBy} · ${fmtDateTime(packet?.decided_at)}`
+            ? `${STATUS_LABEL[status]} by ${decidedBy} · $<When value={packet?.decided_at} />`
             : null}
         </span>
       </div>
@@ -890,7 +891,7 @@ export function HandoffPanel({
                     by {e.actor_name ?? "someone"}
                   </span>
                   <span className="ml-auto font-mono text-[11px] text-muted-foreground">
-                    {fmtDateTime(e.created_at)}
+                    <When value={e.created_at} />
                   </span>
                 </div>
                 {e.missing_keys.length ? (

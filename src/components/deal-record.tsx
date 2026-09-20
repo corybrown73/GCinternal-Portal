@@ -56,7 +56,9 @@ import {
   wonStage,
   type PipelineStage,
 } from "@/lib/pipeline-stages";
-import { daysSince, fmtDate, fmtDateTime, fmtMoney } from "@/lib/hub-format";
+import { daysSince, fmtDate, fmtMoney } from "@/lib/hub-format";
+import { When } from "@/components/when";
+import { Working } from "@/components/working";
 import type { EditableDealField } from "@/lib/presale-fields";
 import { moveWithGate } from "@/lib/stage-move";
 import type { AccountStage } from "@/lib/presale-stages";
@@ -416,7 +418,7 @@ export function DealRecord({ deal, embedded = false }: { deal: DealData; embedde
             value={account.am_owner_id ?? null}
             display={deal.am_owner_name ?? "Unassigned"}
             type="select"
-            options={deal.owner_options ?? []}
+            options={deal.am_owner_options ?? deal.owner_options ?? []}
             onSave={set("am_owner_id")}
             disabled={!editable}
           />
@@ -425,7 +427,7 @@ export function DealRecord({ deal, embedded = false }: { deal: DealData; embedde
             value={account.se_owner_id ?? null}
             display={deal.se_owner_name ?? "Unassigned"}
             type="select"
-            options={deal.owner_options ?? []}
+            options={deal.se_owner_options ?? deal.owner_options ?? []}
             onSave={set("se_owner_id")}
             disabled={!editable}
           />
@@ -444,6 +446,7 @@ export function DealRecord({ deal, embedded = false }: { deal: DealData; embedde
           <EditableField
             label="Contact email"
             value={account.primary_contact_email ?? null}
+            type="email"
             placeholder="name@company.com"
             onSave={set("primary_contact_email")}
             disabled={!editable}
@@ -596,7 +599,11 @@ function BriefActions({
             : `Needs ${missing.join(" and ")} first`
         }
       >
-        {synthesis.isPending ? "Generating… about a minute" : "Generate customer brief"}
+        {synthesis.isPending ? (
+          <Working label="Generating the brief…" estimateSeconds={60} />
+        ) : (
+          "Generate customer brief"
+        )}
       </button>
       <Link
         to="/onboarding-plan/$dealId"
@@ -765,7 +772,9 @@ function SowPanel({
     account.sow_document_url;
   // "On file" means the signed document is here. A reference number alone
   // is a promise, and the Closed Won check reads the document, not the promise.
-  const onFile = Boolean(account.sow_document_url);
+  // The upload lands in storage as a path, signed onto the record as sow_url;
+  // the old external-link column is the other way a document can be here.
+  const onFile = Boolean(deal.sow_url || account.sow_document_url);
 
   return (
     <Panel
@@ -949,6 +958,7 @@ function ReportsPanel({ deal }: { deal: DealData }) {
   const [title, setTitle] = useState("");
   const [reportType, setReportType] = useState<"call_notes" | "account_map">("call_notes");
   const [contentMd, setContentMd] = useState("");
+  const [callDate, setCallDate] = useState("");
   const [expanded, setExpanded] = useState<string | null>(null);
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ["deal", deal.account.id] });
@@ -961,6 +971,7 @@ function ReportsPanel({ deal }: { deal: DealData }) {
           title: title.trim(),
           reportType,
           contentMd: contentMd.trim(),
+          callDate: callDate || null,
         },
       }),
     onSuccess: () => {
@@ -968,6 +979,7 @@ function ReportsPanel({ deal }: { deal: DealData }) {
       setAdding(false);
       setTitle("");
       setContentMd("");
+      setCallDate("");
     },
   });
 
@@ -999,10 +1011,13 @@ function ReportsPanel({ deal }: { deal: DealData }) {
             if (!addMutation.isPending) addMutation.mutate();
           }}
         >
-          <div className="grid grid-cols-[1fr_10rem] gap-2">
+          <div className="grid grid-cols-[1fr_9rem_9rem] gap-2">
             <div>
-              <label className={labelClass}>Title *</label>
+              <label className={labelClass} htmlFor="gong-title">
+                Title *
+              </label>
               <input
+                id="gong-title"
                 className={inputClass}
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
@@ -1010,8 +1025,11 @@ function ReportsPanel({ deal }: { deal: DealData }) {
               />
             </div>
             <div>
-              <label className={labelClass}>Type</label>
+              <label className={labelClass} htmlFor="gong-type">
+                Type
+              </label>
               <select
+                id="gong-type"
                 className={inputClass}
                 value={reportType}
                 onChange={(e) => setReportType(e.target.value as "call_notes" | "account_map")}
@@ -1019,6 +1037,19 @@ function ReportsPanel({ deal }: { deal: DealData }) {
                 <option value="call_notes">Call notes</option>
                 <option value="account_map">Account map</option>
               </select>
+            </div>
+            <div>
+              <label className={labelClass} htmlFor="gong-call-date">
+                Call date
+              </label>
+              <input
+                id="gong-call-date"
+                type="date"
+                className={inputClass}
+                value={callDate}
+                onChange={(e) => setCallDate(e.target.value)}
+                title="The day the call happened. Leave empty if it was today."
+              />
             </div>
           </div>
           <div>
@@ -1094,7 +1125,12 @@ function ReportsPanel({ deal }: { deal: DealData }) {
                 </button>
                 <div className="flex shrink-0 items-center gap-2 text-[11px] text-muted-foreground">
                   <span>{r.uploaded_by_name ?? "—"}</span>
-                  <span className="font-mono">{fmtDate(r.created_at)}</span>
+                  <span
+                    className="font-mono"
+                    title={r.call_date ? `Added ${fmtDate(r.created_at)}` : "The day it was added"}
+                  >
+                    {r.call_date ? `Call ${fmtDate(r.call_date)}` : fmtDate(r.created_at)}
+                  </span>
                   {canDelete(r.uploaded_by) ? (
                     <button
                       type="button"
@@ -1202,7 +1238,9 @@ function BriefsPanel({ deal }: { deal: DealData }) {
               </div>
               <div className="flex shrink-0 items-center gap-2 text-[11px] text-muted-foreground">
                 <span>{b.created_by_name ?? "—"}</span>
-                <span className="font-mono">{fmtDateTime(b.created_at)}</span>
+                <span className="font-mono">
+                  <When value={b.created_at} />
+                </span>
                 {b.status === "complete" && b.pptx_storage_path ? (
                   <button
                     type="button"
@@ -1438,7 +1476,9 @@ function NotesPanel({ deal }: { deal: DealData }) {
               <div className="flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
                 <span>
                   {n.author_name ?? "—"} ·{" "}
-                  <span className="font-mono">{fmtDateTime(n.created_at)}</span>
+                  <span className="font-mono">
+                    <When value={n.created_at} />
+                  </span>
                 </span>
                 <span className="flex items-center gap-2">
                   <button
@@ -1521,7 +1561,7 @@ function HistoryPanel({ deal }: { deal: DealData }) {
                 </p>
               </div>
               <span className="shrink-0 font-mono text-[11px] text-muted-foreground">
-                {fmtDateTime(t.occurred_at)}
+                <When value={t.occurred_at} />
               </span>
             </li>
           ))}

@@ -41,8 +41,18 @@ function isOverdue(due: string | null | undefined) {
 }
 
 async function loadTeam() {
-  const { data } = await db().from("team_members").select("id,name,role");
+  // Both directories. Stage moves and audit rows made from the app carry a
+  // login's profile id, not a team_members id; with only team_members here,
+  // every one of those read "Who —" on the activity feed while the person
+  // was signed in and looking at it.
+  const [{ data }, { data: profiles }] = await Promise.all([
+    db().from("team_members").select("id,name,role"),
+    db().from("portal_profiles").select("id,full_name,email,role"),
+  ]);
   const map = new Map<string, { name: string; role: string }>();
+  for (const p of profiles ?? []) {
+    map.set(p.id, { name: p.full_name || p.email, role: String(p.role ?? "") });
+  }
   for (const m of data ?? []) map.set(m.id, { name: m.name, role: m.role });
   return map;
 }

@@ -16,8 +16,9 @@ import {
   setPlanLinkPasscode,
   sharePlanSnapshot,
 } from "@/lib/external-share.functions";
-import { fmtDate, fmtDateTime, humanize } from "@/lib/hub-format";
+import { fmtDate, humanize } from "@/lib/hub-format";
 import { cn } from "@/lib/utils";
+import { When } from "@/components/when";
 
 /**
  * Issue, revoke, rotate and watch the customer-facing links for one
@@ -309,7 +310,7 @@ export function ExternalSharePanel({ implementationId }: { implementationId: str
                 </div>
                 <p className="mt-0.5 font-mono text-[11px] text-muted-foreground">
                   expires {fmtDate(g.expires_at)} · opened {g.open_count}×
-                  {g.last_opened_at ? ` · last ${fmtDateTime(g.last_opened_at)}` : ""}
+                  {g.last_opened_at ? ` · last $<When value={g.last_opened_at} />` : ""}
                   {g.created_by_name ? ` · issued by ${g.created_by_name}` : ""}
                 </p>
               </li>
@@ -326,7 +327,7 @@ export function ExternalSharePanel({ implementationId }: { implementationId: str
               <ul className="mt-1 space-y-0.5">
                 {(panel.data?.events ?? []).slice(0, 12).map((e) => (
                   <li key={e.id} className="font-mono text-[11px] text-muted-foreground">
-                    {fmtDateTime(e.at)} · {humanize(e.event)}
+                    <When value={e.at} /> · {humanize(e.event)}
                     {e.who ? ` · ${e.who}` : ""}
                     {e.detail ? ` · ${e.detail}` : ""}
                   </li>
@@ -426,7 +427,7 @@ function UpdatesTab({
             <span className="text-[12px]">
               Week of {s.week_start}
               <span className="ml-2 font-mono text-[11px] text-muted-foreground">
-                {fmtDateTime(s.generated_at)}
+                <When value={s.generated_at} />
                 {s.generated_by_name ? ` · ${s.generated_by_name}` : " · scheduled"}
                 {s.superseded ? " · superseded" : ""}
               </span>

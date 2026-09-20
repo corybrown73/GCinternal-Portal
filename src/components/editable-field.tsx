@@ -25,6 +25,14 @@ import { cn } from "@/lib/utils";
 
 export type EditableFieldOption = { value: string; label: string };
 
+/** One address, shaped like one. Nothing more: the mail server has the last word. */
+export function validateEmail(next: string | null): string | null {
+  if (next === null) return null;
+  return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(next)
+    ? null
+    : "That does not look like an email address";
+}
+
 export function EditableField({
   label,
   value,
@@ -36,6 +44,7 @@ export function EditableField({
   format,
   disabled,
   className,
+  validate,
 }: {
   label: string;
   /** The raw value the editor starts from. Null renders as an em dash. */
@@ -43,8 +52,10 @@ export function EditableField({
   /** What to show when not editing. Defaults to the formatted raw value. */
   display?: ReactNode;
   onSave: (next: string | null) => Promise<unknown>;
-  type?: "text" | "number" | "date" | "select";
+  type?: "text" | "number" | "date" | "select" | "email";
   options?: readonly EditableFieldOption[];
+  /** A reason the value cannot be saved, or null. Emails have one built in. */
+  validate?: (next: string | null) => string | null;
   placeholder?: string;
   /** Presentation only — never applied to what is sent. */
   format?: (v: string | null) => ReactNode;
@@ -63,7 +74,12 @@ export function EditableField({
   }, [value, editing]);
 
   useEffect(() => {
-    if (editing) inputRef.current?.focus();
+    if (!editing) return;
+    const el = inputRef.current;
+    el?.focus();
+    // The whole value selected, so typing replaces it. Without this a
+    // correction appended to the old text and saved as both.
+    if (el && "select" in el && typeof el.select === "function") el.select();
   }, [editing]);
 
   function open() {
@@ -85,6 +101,11 @@ export function EditableField({
     // Saving an unchanged value would write a feed row saying nothing changed.
     if (next === (value ?? null)) {
       setEditing(false);
+      return;
+    }
+    const problem = (validate ?? (type === "email" ? validateEmail : () => null))(next);
+    if (problem) {
+      setError(problem);
       return;
     }
     setSaving(true);

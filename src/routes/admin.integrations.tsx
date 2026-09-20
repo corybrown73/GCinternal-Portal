@@ -6,7 +6,7 @@ import { ChevronLeft, Copy } from "lucide-react";
 
 import { PageBody, PageHeader } from "@/components/page";
 import { NoRows, Panel, TableScroll } from "@/components/record";
-import { fmtDateTime, stageLabel } from "@/lib/hub-format";
+import { stageLabel } from "@/lib/hub-format";
 import { cn } from "@/lib/utils";
 import {
   addWebhookEndpoint,
@@ -24,6 +24,7 @@ import {
   toggleWebhookEndpoint,
   upsertFieldMap,
 } from "@/lib/sf-integration.functions";
+import { When } from "@/components/when";
 
 /**
  * /admin/integrations — the operator's window onto the Salesforce integration.
@@ -216,7 +217,7 @@ function StatusTab() {
                       {stageLabel(row.current_stage)}
                     </td>
                     <td className={cn(cellClass, "text-muted-foreground")}>
-                      {fmtDateTime(row.created_at)}
+                      <When value={row.created_at} />
                     </td>
                   </tr>
                 ))}
@@ -302,7 +303,7 @@ function SyncLogTab() {
                 <Fragment key={row.id}>
                   <tr>
                     <td className={cn(cellClass, "text-muted-foreground")}>
-                      {fmtDateTime(row.created_at)}
+                      <When value={row.created_at} />
                     </td>
                     <td className={cellClass}>{row.kind}</td>
                     <td className={cn(cellClass, "font-mono text-[11px]")}>
@@ -791,7 +792,7 @@ function WebhooksTab() {
                 {deliveries.map((d) => (
                   <tr key={d.id}>
                     <td className={cn(cellClass, "text-muted-foreground")}>
-                      {fmtDateTime(d.created_at)}
+                      <When value={d.created_at} />
                     </td>
                     <td className={cellClass}>{d.status}</td>
                     <td className={cn(cellClass, "tabular-nums text-muted-foreground")}>

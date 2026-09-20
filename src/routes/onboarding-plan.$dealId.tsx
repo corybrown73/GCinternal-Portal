@@ -62,15 +62,19 @@ function OnboardingPlanPage() {
       backHref={`/deals/${dealId}`}
       notesHref={`/onboarding-notes/${dealId}`}
       onCopyLink={async () => {
+        // Minting a link is not sending it. The record says "sent" only when
+        // the person says so below, or when the customer opens the page.
         const { url } = await issue({ data: { dealId } });
-        // The copy IS the send, as far as this record can know: the guide's
-        // last step ticks on it, or on the customer opening the page.
+        void qc.invalidateQueries({ queryKey: ["welcome", dealId] });
+        void qc.invalidateQueries({ queryKey: ["deal", dealId] });
+        return url;
+      }}
+      onMarkSent={async () => {
         await save({
           data: { dealId, patch: { welcome_shared_at: new Date().toISOString() } } as never,
         });
         void qc.invalidateQueries({ queryKey: ["welcome", dealId] });
         void qc.invalidateQueries({ queryKey: ["deal", dealId] });
-        return url;
       }}
       onToggleScreen={async (key, hide) => {
         const current = query.data?.hiddenScreens ?? [];

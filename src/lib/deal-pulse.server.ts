@@ -7,6 +7,7 @@ import { closeDateFor, timelineFor } from "./onboarding-plan";
 import { dayCounter, type DayCounter } from "./onboarding-timeline";
 import { loadPipelineStages } from "./pipeline-stages.server";
 import { terminalStage, wonStage } from "./pipeline-stages";
+import { loadWelcome } from "./welcome.server";
 
 const db = () => supabaseAdmin as any;
 
@@ -29,26 +30,36 @@ export type DealPulse = {
 
 export async function loadDealPulse(dealId: string, today?: string): Promise<DealPulse | null> {
   const asOf = today ?? new Date().toISOString().slice(0, 10);
-  const [{ data: deal }, { data: history }, stages, { count: reports }, { count: briefs }] =
-    await Promise.all([
-      db()
-        .from("portal_accounts")
-        .select("id,intake,sow_document_path,welcome_share_url,welcome_opened_at")
-        .eq("id", dealId)
-        .maybeSingle(),
-      db().from("portal_stage_transitions").select("to_stage,occurred_at").eq("account_id", dealId),
-      loadPipelineStages(),
-      db()
-        .from("portal_gong_reports")
-        .select("id", { count: "exact", head: true })
-        .eq("account_id", dealId),
-      db()
-        .from("portal_briefs")
-        .select("id", { count: "exact", head: true })
-        .eq("account_id", dealId)
-        .eq("status", "complete")
-        .eq("generator", "llm"),
-    ]);
+  const [
+    { data: deal },
+    { data: history },
+    stages,
+    { count: reports },
+    { count: briefs },
+    welcome,
+  ] = await Promise.all([
+    db()
+      .from("portal_accounts")
+      .select("id,intake,sow_document_path,welcome_share_url,welcome_opened_at")
+      .eq("id", dealId)
+      .maybeSingle(),
+    db().from("portal_stage_transitions").select("to_stage,occurred_at").eq("account_id", dealId),
+    loadPipelineStages(),
+    db()
+      .from("portal_gong_reports")
+      .select("id", { count: "exact", head: true })
+      .eq("account_id", dealId),
+    db()
+      .from("portal_briefs")
+      .select("id", { count: "exact", head: true })
+      .eq("account_id", dealId)
+      .eq("status", "complete")
+      .eq("generator", "llm"),
+    // The same readiness list the deal page's checklist reads. Without it
+    // the last step ("send the link") ticked here and not there, and the
+    // two counters on one screen disagreed.
+    loadWelcome(dealId).catch(() => null),
+  ]);
   if (!deal) return null;
   const won = wonStage(stages).key;
   const intake = readIntake(deal.intake);
@@ -63,6 +74,7 @@ export async function loadDealPulse(dealId: string, today?: string): Promise<Dea
     shareUrl: (deal.welcome_share_url as string | null) ?? null,
     stageHistory,
     wonStageKey: won,
+    readiness: welcome?.readiness ?? [],
     customerOpened: Boolean(deal.welcome_opened_at),
   });
   return {
@@ -80,7 +92,7 @@ export async function loadDealPulse(dealId: string, today?: string): Promise<Dea
 export async function startServicesDeal(
   userId: string,
   customerId: string,
-): Promise<{ dealId: string; created: boolean }> {
+): Promise<{ dealId: string; created: boolean; implementationId: string | null }> {
   const { requireSalesEditor } = await import("./presale.server");
   await requireSalesEditor(userId);
   const { data: customer } = await db()
@@ -103,7 +115,15 @@ export async function startServicesDeal(
     .limit(1)
     .maybeSingle();
   if (open && open.stage !== terminal && readIntake(open.intake).path === "existing") {
-    return { dealId: String(open.id), created: false };
+    const { data: impl } = await db()
+      .from("implementations")
+      .select("id")
+      .eq("deal_id", open.id)
+      .is("superseded_by_implementation_id", null)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    return { dealId: String(open.id), created: false, implementationId: impl?.id ?? null };
   }
 
   const name = `${String(customer.name)} — services`;
@@ -134,9 +154,13 @@ export async function startServicesDeal(
   // Closing is the start: the services deal gets its implementation on this
   // customer's page now, the way a closed deal does, so it never sits in
   // Closed Won as a phantom nobody claims.
+  let implementationId: string | null = null;
   try {
     const { startOnboardingAs } = await import("./presale.server");
-    await startOnboardingAs({ kind: "user", profileId: userId }, dealId, { customerId });
+    const started = await startOnboardingAs({ kind: "user", profileId: userId }, dealId, {
+      customerId,
+    });
+    implementationId = started.implementationId || null;
   } catch (e) {
     console.error("[services] could not start the implementation for the services deal", e);
   }
@@ -157,5 +181,5 @@ export async function startServicesDeal(
   } catch (e) {
     console.error("[services deal] could not assign", e);
   }
-  return { dealId, created: true };
+  return { dealId, created: true, implementationId };
 }

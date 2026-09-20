@@ -4,8 +4,9 @@ import { CalendarDays, LifeBuoy, Sparkles } from "lucide-react";
 
 import { portalHomeQuery } from "@/components/portal/portal-queries";
 import { ProgressBar, StageTracker } from "@/components/portal/stage-tracker";
-import { fmtDate, fmtDateTime, stageLabel } from "@/lib/hub-format";
+import { fmtDate, stageLabel } from "@/lib/hub-format";
 import { cn } from "@/lib/utils";
+import { When } from "@/components/when";
 
 export const Route = createFileRoute("/portal/")({
   loader: ({ context }) => {
@@ -149,7 +150,7 @@ function PortalHomePage() {
                     ) : null}
                   </div>
                   <span className="shrink-0 font-mono text-[10px] text-muted-foreground">
-                    {fmtDateTime(item.at)}
+                    <When value={item.at} />
                   </span>
                 </li>
               ))

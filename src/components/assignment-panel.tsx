@@ -10,6 +10,7 @@ import { assignDealFn, claimDealFn, getDealAssignment } from "@/lib/assignment.f
 import { useProfile } from "@/lib/auth";
 import { fmtDateTime } from "@/lib/hub-format";
 import { cn } from "@/lib/utils";
+import { When } from "@/components/when";
 
 /**
  * Who has eyes on this account, and the three things they do first.
@@ -100,7 +101,8 @@ export function AssignmentPanel({ dealId, editable }: { dealId: string; editable
             </p>
             {a.last ? (
               <p className="text-[11px] text-muted-foreground">
-                {a.last.source === "auto" ? "By rule" : "By hand"} · {fmtDateTime(a.last.createdAt)}
+                {a.last.source === "auto" ? "By rule" : "By hand"} ·{" "}
+                <When value={a.last.createdAt} />
                 {a.last.note ? ` · ${a.last.note}` : ""}
               </p>
             ) : null}
@@ -211,7 +213,7 @@ export function OwnerField({ dealId, editable }: { dealId: string; editable: boo
       {a && !a.owner && inPool && !open ? (
         <button
           type="button"
-          className="inline-flex items-center gap-1 rounded-sm bg-primary px-2 py-1 text-[11px] font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+          className="mr-2 inline-flex items-center gap-1 rounded-sm bg-primary px-2 py-1 text-[11px] font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
           disabled={claimM.isPending}
           onClick={() => claimM.mutate()}
           title="Take this account. It becomes yours, and the team sees your name here."
@@ -266,7 +268,7 @@ export function OwnerField({ dealId, editable }: { dealId: string; editable: boo
           onClick={() => setOpen(true)}
           title={
             a?.last
-              ? `${a.last.source === "auto" ? "By rule" : "By hand"} · ${fmtDateTime(a.last.createdAt)}${a.last.note ? ` · ${a.last.note}` : ""}`
+              ? `${a.last.source === "auto" ? "By rule" : "By hand"} · $<When value={a.last.createdAt} />${a.last.note ? ` · ${a.last.note}` : ""}`
               : a?.mode === "claim"
                 ? "Claimed by whoever takes it; click to pick by hand"
                 : "Assigned by rule when the deal closes; click to pick by hand"

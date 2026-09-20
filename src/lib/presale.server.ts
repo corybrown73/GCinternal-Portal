@@ -88,6 +88,37 @@ async function profileNames(): Promise<Map<string, string>> {
   return map;
 }
 
+/** Every login with its role, for the pickers that must not offer everyone. */
+async function profileDirectory(): Promise<
+  Array<{ id: string; name: string; role: import("./auth").PortalRole }>
+> {
+  const { data } = await db().from("portal_profiles").select("id, email, full_name, role");
+  return (data ?? []).map((p: any) => ({
+    id: String(p.id),
+    name: (p.full_name || p.email) as string,
+    role: p.role as import("./auth").PortalRole,
+  }));
+}
+
+/**
+ * Who an owner field may name. The AM owner is a seller or a manager; the SE
+ * owner is technical or a manager. One unfiltered list let an SE be set as
+ * the AM and offered customer logins as owners.
+ */
+export function ownerOptionsByRole(
+  people: ReadonlyArray<{ id: string; name: string; role: import("./auth").PortalRole }>,
+): { am: Array<{ value: string; label: string }>; se: Array<{ value: string; label: string }> } {
+  const managers = new Set(["admin", "super_admin", "manager"]);
+  const sellers = new Set(["sales", "am"]);
+  const technical = new Set(["tam_se", "se", "implementation", "onboarding"]);
+  const pick = (roles: Set<string>) =>
+    people
+      .filter((p) => managers.has(p.role) || roles.has(p.role))
+      .map((p) => ({ value: p.id, label: p.name }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+  return { am: pick(sellers), se: pick(technical) };
+}
+
 /* ---------- pipeline board ---------- */
 
 export interface PipelineDeal extends Account {
@@ -422,6 +453,9 @@ export interface DealDetail {
   /** Who an owner field can be set to, resolved once here rather than by a
    *  second round trip when somebody opens the AM owner dropdown. */
   owner_options: Array<{ value: string; label: string }>;
+  /** The same, narrowed to who may hold each role. */
+  am_owner_options: Array<{ value: string; label: string }>;
+  se_owner_options: Array<{ value: string; label: string }>;
   /** Short-lived signed link to the customer's logo, or null if none is set. */
   logo_url: string | null;
   /** Short-lived signed link to the uploaded SOW, or null if none was uploaded. */
@@ -440,7 +474,7 @@ export async function loadDeal(dealId: string): Promise<DealDetail | null> {
     .maybeSingle();
   if (!account) return null;
 
-  const [names, gong, briefs, tam, notes, history, stages] = await Promise.all([
+  const [names, gong, briefs, tam, notes, history, stages, people] = await Promise.all([
     profileNames(),
     db()
       .from("portal_gong_reports")
@@ -468,9 +502,11 @@ export async function loadDeal(dealId: string): Promise<DealDetail | null> {
       .eq("account_id", dealId)
       .order("occurred_at", { ascending: false }),
     loadPipelineStages(),
+    profileDirectory(),
   ]);
 
   const named = (id: string | null | undefined) => (id ? (names.get(id) ?? null) : null);
+  const byRole = ownerOptionsByRole(people);
 
   // Guarded on logo_path: signing a null path throws, and most deals have no
   // logo. A logo that cannot be signed is a plainer page, never a failed load.
@@ -531,6 +567,8 @@ export async function loadDeal(dealId: string): Promise<DealDetail | null> {
     owner_options: [...names.entries()]
       .map(([value, label]) => ({ value, label }))
       .sort((a, b) => a.label.localeCompare(b.label)),
+    am_owner_options: byRole.am,
+    se_owner_options: byRole.se,
     gong_reports: ((gong.data ?? []) as GongReport[]).map((r) => ({
       ...r,
       uploaded_by_name: named(r.uploaded_by),
@@ -688,16 +726,21 @@ export async function addGongReport(
     title: string;
     reportType: "call_notes" | "account_map";
     contentMd: string;
+    /** The day the call happened, when it is not the day it was pasted. */
+    callDate?: string | null | undefined;
   },
 ): Promise<{ ok: true }> {
   await requireInternal(userId);
-  const { error } = await db().from("portal_gong_reports").insert({
-    account_id: input.dealId,
-    report_type: input.reportType,
-    title: input.title,
-    content_md: input.contentMd,
-    uploaded_by: userId,
-  });
+  const { error } = await db()
+    .from("portal_gong_reports")
+    .insert({
+      account_id: input.dealId,
+      report_type: input.reportType,
+      title: input.title,
+      content_md: input.contentMd,
+      uploaded_by: userId,
+      call_date: input.callDate ?? null,
+    });
   if (error) throw new Error(`Could not save the report: ${error.message}`);
   return { ok: true };
 }

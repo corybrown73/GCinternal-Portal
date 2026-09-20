@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { ArrowUp, Check, ExternalLink, ListPlus, Upload, X } from "lucide-react";
@@ -63,8 +63,17 @@ export function IntakePanel({
   const save = useServerFn(saveIntake);
   const [error, setError] = useState<string | null>(null);
 
+  // One save at a time. Two answers given quickly — a number, then a blur
+  // into the next field — used to go up as two overlapping requests, each
+  // reading the record and writing it back whole: the second silently undid
+  // the first. Chaining them keeps every answer.
+  const chain = useRef<Promise<unknown>>(Promise.resolve());
   const mutation = useMutation({
-    mutationFn: (patch: Record<string, unknown>) => save({ data: { dealId, patch } as never }),
+    mutationFn: (patch: Record<string, unknown>) => {
+      const next = chain.current.then(() => save({ data: { dealId, patch } as never }));
+      chain.current = next.catch(() => undefined);
+      return next;
+    },
     onMutate: () => setError(null),
     onSuccess: () => void qc.invalidateQueries({ queryKey: ["deal", dealId] }),
     onError: (e) => setError((e as Error).message),
@@ -309,6 +318,18 @@ function NoForms({
 }) {
   const [process, setProcess] = useState(answers.current_process ?? "");
   const [users, setUsers] = useState(answers.field_users?.toString() ?? "");
+  const processRef = useRef<HTMLTextAreaElement>(null);
+  const usersRef = useRef<HTMLInputElement>(null);
+  // The record changed under this panel — the brief filled the process in,
+  // another tab saved — and the field must show it. Only while not being
+  // typed in: a refetch must never take the cursor's text away.
+  useEffect(() => {
+    if (document.activeElement !== processRef.current) setProcess(answers.current_process ?? "");
+  }, [answers.current_process]);
+  useEffect(() => {
+    if (document.activeElement !== usersRef.current)
+      setUsers(answers.field_users?.toString() ?? "");
+  }, [answers.field_users]);
 
   const suggestions = useQuery({
     queryKey: ["form-templates", "suggest", answers.industry],
@@ -360,14 +381,19 @@ function NoForms({
         <label className="space-y-1 text-[11px] text-muted-foreground">
           People in the field
           <input
+            ref={usersRef}
             type="number"
             min={0}
             className={cn(input, "w-full")}
             value={users}
-            disabled={!editable || busy}
+            disabled={!editable}
             onChange={(e) => setUsers(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") e.currentTarget.blur();
+            }}
             onBlur={() => {
               const n = users.trim() === "" ? null : Number(users);
+              if (n === (answers.field_users ?? null)) return;
               if (n === null || (Number.isInteger(n) && n >= 0)) onSet({ field_users: n });
             }}
             placeholder="24"
@@ -376,10 +402,11 @@ function NoForms({
         <label className="space-y-1 text-[11px] text-muted-foreground sm:col-span-3">
           The process today — paper, spreadsheet, whiteboard? In their words.
           <textarea
+            ref={processRef}
             rows={2}
             className={cn(input, "w-full")}
             value={process}
-            disabled={!editable || busy}
+            disabled={!editable}
             onChange={(e) => setProcess(e.target.value)}
             onBlur={() => {
               if ((process.trim() || null) !== (answers.current_process ?? null)) {

@@ -124,6 +124,7 @@ import {
   READINESS_STATE_LABEL,
 } from "@/lib/graduation-readiness";
 import { cn } from "@/lib/utils";
+import { When } from "@/components/when";
 
 const TABS = [
   "prekickoff",
@@ -329,10 +330,14 @@ function Customer360Page() {
             </div>
             <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] text-muted-foreground">
               <span>
-                {[customer.industry, impl.tier, customer.segment].filter(Boolean).join(" · ") ||
-                  "—"}
-                {" · Owner "}
-                {impl.owner_name ?? "Unassigned"}
+                {[
+                  customer.industry,
+                  impl.tier,
+                  customer.segment,
+                  `Owner ${impl.owner_name ?? "Unassigned"}`,
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
               </span>
               {/* Provenance, one click away and always in the same place.
                   Everything a deal knows — the goal, the named contact, who
@@ -1393,7 +1398,7 @@ function AccountRail({ record, customerId }: { record: Customer360; customerId: 
                   </div>
                   <Meta
                     items={[
-                      ["When", fmtDateTime(e.at)],
+                      ["When", <When key="when" value={e.at} />],
                       ["Who", dash(e.actor)],
                       ...(e.kind === "Stage"
                         ? []
@@ -1918,8 +1923,8 @@ function JourneyTab({ record, customerId }: { record: Customer360; customerId: s
               <li key={h.id} className="flex flex-wrap items-baseline gap-x-3 text-[12px]">
                 <span className="font-medium">{stageLabel(h.stage)}</span>
                 <span className="text-[11px] text-muted-foreground">
-                  {fmtDateTime(h.entered_at)}
-                  {h.exited_at ? ` → ${fmtDateTime(h.exited_at)}` : ""}
+                  <When value={h.entered_at} />
+                  {h.exited_at ? ` → $<When value={h.exited_at} />` : ""}
                 </span>
               </li>
             ))}
@@ -1973,8 +1978,17 @@ function JourneyTab({ record, customerId }: { record: Customer360; customerId: s
                   <p className="mt-0.5 text-[11px] text-muted-foreground">{stage.intent}</p>
                   <Meta
                     items={[
-                      ["Entered", h ? fmtDateTime(h.entered_at) : "—"],
-                      ["Exited", h?.exited_at ? fmtDateTime(h.exited_at) : h ? "in stage" : "—"],
+                      ["Entered", <When key="entered" value={h?.entered_at} />],
+                      [
+                        "Exited",
+                        h?.exited_at ? (
+                          <When key="exited" value={h.exited_at} />
+                        ) : h ? (
+                          "in stage"
+                        ) : (
+                          "—"
+                        ),
+                      ],
                       ["Duration", days == null ? "—" : `${days}d`],
                       ["By", dash(h?.entered_by_name)],
                     ]}
@@ -2572,7 +2586,7 @@ function EvidenceTab({ record, customerId }: { record: Customer360; customerId: 
                   <Meta
                     items={[
                       ["Added by", dash(e.uploaded_by_name)],
-                      ["Added", fmtDateTime(e.created_at)],
+                      ["Added", <When key="added" value={e.created_at} />],
                     ]}
                   />
                 </Row>
@@ -2744,7 +2758,7 @@ function HistoryTab({ record }: { record: Customer360 }) {
               {entries.map((e) => (
                 <tr key={e.key}>
                   <td className="whitespace-nowrap px-3 py-1.5 font-mono text-[11px]">
-                    {fmtDateTime(e.at)}
+                    <When value={e.at} />
                   </td>
                   <td className="px-3 py-1.5">{dash(e.actor)}</td>
                   <td className="px-3 py-1.5">{e.entity}</td>

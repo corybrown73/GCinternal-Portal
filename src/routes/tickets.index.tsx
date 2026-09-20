@@ -8,7 +8,7 @@ import { NoRows, TableScroll } from "@/components/record";
 import { addTicket, getTickets } from "@/lib/tickets.functions";
 import { getHome } from "@/lib/hub.functions";
 import { useProfile } from "@/lib/auth";
-import { fmtDateTime, humanize } from "@/lib/hub-format";
+import { humanize } from "@/lib/hub-format";
 import { cn } from "@/lib/utils";
 import {
   BreachBadge,
@@ -22,6 +22,7 @@ import {
   primaryButtonClass,
   selectClass,
 } from "@/components/tickets/ticket-ui";
+import { When } from "@/components/when";
 
 type QueueSearch = {
   category?: string | undefined;
@@ -223,7 +224,7 @@ function QueueSection({
                       {t.subject}
                     </Link>
                     <span className="text-[11px] text-muted-foreground">
-                      {fmtDateTime(t.created_at)} · {t.submitter_email ?? "unknown"}
+                      <When value={t.created_at} /> · {t.submitter_email ?? "unknown"}
                     </span>
                   </td>
                   <td className="px-3 py-1.5 text-[12px]">{t.customer_name ?? "—"}</td>

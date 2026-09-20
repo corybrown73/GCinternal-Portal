@@ -1,5 +1,7 @@
 import { useMemo } from "react";
 
+import { humanize } from "@/lib/hub-format";
+
 export type TeamOption = { id: string; name: string; role: string };
 
 const inputClass =
@@ -35,10 +37,10 @@ export function OwnerPicker({
   return (
     <>
       <label className="block space-y-0.5">
-        <span className={labelClass}>Team</span>
+        <span className={labelClass}>Role</span>
         <select
           className={inputClass}
-          aria-label="Owning team"
+          aria-label="Owning role"
           value={group}
           disabled={disabled}
           onChange={(e) => onChange({ group: e.target.value, ownerId: "" })}
@@ -46,7 +48,7 @@ export function OwnerPicker({
           <option value="">Not chosen</option>
           {groups.map((g) => (
             <option key={g} value={g}>
-              {g}
+              {humanize(g)}
             </option>
           ))}
         </select>
@@ -60,7 +62,7 @@ export function OwnerPicker({
           disabled={disabled || group === ""}
           onChange={(e) => onChange({ group, ownerId: e.target.value })}
         >
-          <option value="">{group === "" ? "Choose a team first" : "Unassigned"}</option>
+          <option value="">{group === "" ? "Choose a role first" : "Unassigned"}</option>
           {people.map((p) => (
             <option key={p.id} value={p.id}>
               {p.name}

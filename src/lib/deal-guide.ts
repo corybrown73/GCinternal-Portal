@@ -71,7 +71,13 @@ export function guideSteps(input: {
     {
       key: "intake",
       label: "Finish the intake",
-      hint: "Industry, the process today, and the forms to build — the first one first.",
+      // Names the one answer still missing, so "never completes" cannot
+      // happen with every visible field filled in.
+      hint: !status.done
+        ? `Still missing: ${status.next ?? "an answer"}`
+        : !hasForm
+          ? "Still missing: the first form to build — pick a library card or name theirs."
+          : "Industry, the process today, and the forms to build — the first one first.",
       done: status.done && hasForm,
       panel: { key: "deal:intake", id: "panel-intake" },
     },
@@ -94,7 +100,7 @@ export function guideSteps(input: {
     {
       key: "share",
       label: "Send the customer their link",
-      hint: "Open the welcome page and copy the customer's link. Ticks when you copy it, or when they open it — never before.",
+      hint: "Open the welcome page, copy the customer's link and send it. Ticks when you mark it sent, or when they open it — never before.",
       done:
         blockers.length === 0 && (Boolean(a.welcome_shared_at) || Boolean(input.customerOpened)),
       panel: { key: "deal:plan", id: "panel-plan" },

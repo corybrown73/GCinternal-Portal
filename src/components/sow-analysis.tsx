@@ -28,6 +28,7 @@ import { fmtDate } from "@/lib/hub-format";
 import { downloadSowAnalysisPdf } from "@/lib/sow-pdf";
 import type { TeamOption } from "@/components/owner-picker";
 import { OwnerPicker } from "@/components/owner-picker";
+import { Working } from "@/components/working";
 
 const buttonClass =
   "inline-flex items-center gap-1 rounded-sm border border-border px-1.5 py-0.5 text-[11px] text-muted-foreground hover:text-foreground";
@@ -380,8 +381,8 @@ export function SowAnalysisPanel({
 
         {run.isPending ? (
           <p className="rounded-sm border border-border bg-accent px-2 py-1.5 text-[12px] text-foreground">
-            Reading the document and drafting a journey — a long SOW can take a minute or two. The
-            button stays greyed out until it finishes.
+            <Working label="Reading the document and drafting a journey…" estimateSeconds={90} /> A
+            long SOW can take a minute or two. The button stays greyed out until it finishes.
           </p>
         ) : null}
       </div>

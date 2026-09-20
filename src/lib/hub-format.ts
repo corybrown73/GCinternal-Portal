@@ -106,19 +106,41 @@ export function fmtDate(value: string | null | undefined): string {
  * mislabelled string. Naming the zone makes every existing timestamp correct
  * now, and stays correct afterwards.
  */
-export function fmtDateTime(value: string | null | undefined): string {
+export function fmtDateTime(value: string | null | undefined, zone?: string | null): string {
   if (!value) return "—";
   // A date-only value has no time of day. Printing "00:00" for it invents one,
   // and an invented midnight is indistinguishable from a real one.
   if (isDateOnly(value)) return fmtDate(value);
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return "—";
-  const time = d.toLocaleTimeString("en-GB", {
-    hour: "2-digit",
-    minute: "2-digit",
-    timeZone: "UTC",
-  });
-  return `${fmtDate(value)} ${time} UTC`;
+  if (!zone || zone === "UTC") {
+    const time = d.toLocaleTimeString("en-GB", {
+      hour: "2-digit",
+      minute: "2-digit",
+      timeZone: "UTC",
+    });
+    return `${fmtDate(value)} ${time} UTC`;
+  }
+  // The reader's zone, once a component knows it (see <When>): the day is
+  // taken in that zone too, so "23:30" on the 12th does not print under the
+  // 13th's date.
+  try {
+    const day = d.toLocaleDateString("en-GB", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+      timeZone: zone,
+    });
+    const time = d.toLocaleTimeString("en-GB", {
+      hour: "2-digit",
+      minute: "2-digit",
+      timeZone: zone,
+      timeZoneName: "short",
+    });
+    return `${day} ${time}`;
+  } catch {
+    return fmtDateTime(value, "UTC");
+  }
 }
 
 export function fmtMoney(value: number | null | undefined): string {

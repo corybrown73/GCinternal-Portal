@@ -14,6 +14,7 @@ import { segmentBody, type MentionParticipant } from "@/lib/mentions";
 import type { ConversationView, Message, Participant } from "@/lib/conversation";
 import { fmtDateTime } from "@/lib/hub-format";
 import { cn } from "@/lib/utils";
+import { When } from "@/components/when";
 
 /**
  * The project conversation, internal side.
@@ -340,7 +341,7 @@ function MessageRow({ message, participants }: { message: Message; participants:
           </span>
         ) : null}
         <span className="ml-auto font-mono text-[10px] text-muted-foreground">
-          {fmtDateTime(message.created_at)}
+          <When value={message.created_at} />
         </span>
       </p>
       {message.withdrawn ? (

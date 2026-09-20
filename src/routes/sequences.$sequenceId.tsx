@@ -14,10 +14,11 @@ import {
   toggleSequenceActive,
 } from "@/lib/sequences.functions";
 import { canManage, useProfile } from "@/lib/auth";
-import { fmtDateTime, humanize } from "@/lib/hub-format";
+import { humanize } from "@/lib/hub-format";
 import { cn } from "@/lib/utils";
 // Type-only imports — erased at build time.
 import type { SequenceDetail } from "@/lib/sequences.server";
+import { When } from "@/components/when";
 
 const detailQuery = (sequenceId: string) =>
   queryOptions({
@@ -570,7 +571,7 @@ function EnrollmentsPanel({
                   </span>
                 </td>
                 <td className="px-3 py-1.5 font-mono text-[11px] text-muted-foreground">
-                  {fmtDateTime(e.last_sent_at)}
+                  <When value={e.last_sent_at} />
                 </td>
                 <td className="px-3 py-1.5">
                   <div className="flex max-w-64 flex-wrap gap-1">
@@ -584,7 +585,7 @@ function EnrollmentsPanel({
                             "rounded-sm px-1 py-0.5 font-mono text-[9px] uppercase tracking-wider",
                             EVENT_TONE[ev.event] ?? "bg-surface text-muted-foreground",
                           )}
-                          title={`${ev.event} · ${ev.step_id ? (stepTitle.get(ev.step_id) ?? "") : ""} · ${fmtDateTime(ev.created_at)}`}
+                          title={`${ev.event} · ${ev.step_id ? (stepTitle.get(ev.step_id) ?? "") : ""} · $<When value={ev.created_at} />`}
                         >
                           {ev.event}
                         </span>

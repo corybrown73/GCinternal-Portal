@@ -102,7 +102,11 @@ export function FromSalesPanel({ implementationId }: { implementationId: string 
                 {/* The generator is load-bearing: a template-only brief looks
                     identical to a synthesised one, and the deal page already
                     says so rather than letting the reader assume. */}
-                {ctx.brief.generator ? ` · ${humanize(ctx.brief.generator)}` : ""}
+                {ctx.brief.generator === "llm"
+                  ? " · AI synthesis"
+                  : ctx.brief.generator
+                    ? " · Template only — no AI synthesis"
+                    : ""}
               </p>
             </div>
           ) : null}

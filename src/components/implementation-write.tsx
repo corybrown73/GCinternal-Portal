@@ -379,10 +379,10 @@ export function NewImplementation({ customers }: { customers: CustomerOption[] }
                     </select>
                   </label>
                   {selected?.hasImplementation ? (
-                    <p className="md:col-span-2 text-[11px] text-status-risk-foreground">
-                      This customer already has an implementation on record — Customer 360 shows
-                      only the most recent implementation per customer, so creating a new one will
-                      replace what&apos;s shown there.
+                    <p className="md:col-span-2 text-[11px] text-muted-foreground">
+                      This customer already has an implementation. A second one sits beside it on
+                      the customer&apos;s page, with its own stages and dates; earlier ones show as
+                      tiles once they finish.
                     </p>
                   ) : null}
                 </div>

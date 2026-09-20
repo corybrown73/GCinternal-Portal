@@ -6,10 +6,11 @@ import { ChevronDown, ChevronRight, Clock } from "lucide-react";
 
 import { portalTicketsQuery } from "@/components/portal/portal-queries";
 import { replyTicket, submitTicket } from "@/lib/portal.functions";
-import { fmtDateTime, humanize } from "@/lib/hub-format";
+import { humanize } from "@/lib/hub-format";
 import { cn } from "@/lib/utils";
 // Type-only import: erased at build time, never pulls server code client-side.
 import type { PortalTicket as Ticket } from "@/lib/portal.server";
+import { When } from "@/components/when";
 
 export const Route = createFileRoute("/portal/tickets")({
   loader: ({ context }) => {
@@ -229,7 +230,7 @@ function TicketRow({
           <p className="truncate text-[13px] font-medium">{ticket.subject}</p>
           <p className="text-[11px] text-muted-foreground">
             {humanize(ticket.category)} · {humanize(ticket.priority)} ·{" "}
-            {fmtDateTime(ticket.created_at)}
+            <When value={ticket.created_at} />
           </p>
         </div>
         <span
@@ -258,7 +259,9 @@ function TicketRow({
                 >
                   <p className="mb-1 flex items-center justify-between font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
                     <span>{c.author_is_team ? "GoCanvas team" : c.author_name}</span>
-                    <span>{fmtDateTime(c.created_at)}</span>
+                    <span>
+                      <When value={c.created_at} />
+                    </span>
                   </p>
                   <p className="whitespace-pre-wrap text-[13px]">{c.body}</p>
                 </li>
