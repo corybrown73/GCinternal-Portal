@@ -109,7 +109,9 @@ export async function buildOnboardingDeckInput(dealId: string): Promise<Onboardi
     champion: context?.deal.primaryContact.name
       ? { name: context.deal.primaryContact.name, role: context.deal.primaryContact.role }
       : (synth?.champion ?? null),
-    // Two more at most: the team screen is small on purpose.
+    // Two more at most: the team screen is small on purpose. What each one
+    // does comes from the call notes when the brief recorded it, so two
+    // people never share a byte-identical line on a slide read to them.
     others: (synth?.stakeholders ?? [])
       .filter(
         (s) =>
@@ -117,7 +119,8 @@ export async function buildOnboardingDeckInput(dealId: string): Promise<Onboardi
           s.name !== intake.timeline.field_tester &&
           s.name !== synth?.champion?.name,
       )
-      .slice(0, 2),
+      .slice(0, 2)
+      .map((s) => ({ name: s.name, role: s.role, does: blurbFromNotes(s.notes) })),
   };
   const nextUseCases = next.length
     ? next.slice(0, 3).map((t) => ({ name: t.name, objective: t.description }))
@@ -130,6 +133,11 @@ export async function buildOnboardingDeckInput(dealId: string): Promise<Onboardi
     lead,
     fieldTester: intake.timeline.field_tester,
     currentProcess: intake.current_process ?? synth?.currentProcess ?? null,
+    currentProcessSource: intake.current_process
+      ? (intake.current_process_source ?? "person")
+      : synth?.currentProcess
+        ? "ai"
+        : null,
     team,
     firstForm,
     nextUseCases,
@@ -237,4 +245,16 @@ export async function generateOnboardingDeck(
     throw new Error(`The deck was stored but could not be linked: ${signError?.message ?? ""}`);
   }
   return { url: signed.signedUrl, fileName, liveDate: input.timeline.liveDate };
+}
+
+/**
+ * The first sentence of what the notes said about a person, short enough for
+ * a team card. Null when the notes said nothing usable, so the card falls
+ * back to a line chosen by their role.
+ */
+function blurbFromNotes(notes: string | null | undefined): string | null {
+  if (!notes) return null;
+  const first = notes.split(/(?<=[.!?])\s+/)[0]?.trim() ?? "";
+  if (first.length < 12 || first.length > 140) return null;
+  return /[.!?]$/.test(first) ? first : `${first}.`;
 }

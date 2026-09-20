@@ -35,6 +35,8 @@ export function prefillFromSynthesis(
 
   if (!intake.current_process && synth?.currentProcess) {
     patch.current_process = synth.currentProcess;
+    // Marked as the model's paraphrase until a person confirms or retypes it.
+    patch.current_process_source = "ai";
     filled.push("the process today");
   }
 

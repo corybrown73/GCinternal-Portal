@@ -18,7 +18,7 @@ export type WelcomeSynthesis = {
   /** The customer-side owner, when the notes named one. */
   champion: { name: string; role: string | null } | null;
   /** The other customer-side people the notes named, champion excluded. */
-  stakeholders: Array<{ name: string; role: string | null }>;
+  stakeholders: Array<{ name: string; role: string | null; notes: string | null }>;
   /** What "good" looks like, in their words. */
   day90: string | null;
 };
@@ -57,7 +57,11 @@ export function synthesisFromBrief(raw: unknown): WelcomeSynthesis | null {
   // person phase 2 cannot happen without was missing from their own plan.
   const stakeholders = customerSide
     .filter((s) => s !== stakeholder)
-    .map((s) => ({ name: clean(s.name), role: s.role ? clean(s.role) : null }))
+    .map((s) => ({
+      name: clean(s.name),
+      role: s.role ? clean(s.role) : null,
+      notes: s.notes ? clean(s.notes) || null : null,
+    }))
     .filter((s) => s.name);
 
   const day90 = b.kickoff?.day_90_definition ? clean(b.kickoff.day_90_definition) : null;

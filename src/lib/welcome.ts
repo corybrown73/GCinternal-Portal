@@ -16,6 +16,8 @@ export type WelcomeView = {
   fieldTester: string | null;
   /** The process today, in their words. Null → a generic "paper and retyping". */
   currentProcess: string | null;
+  /** "person" when a person wrote or confirmed it; "ai" when it is the brief's paraphrase. */
+  currentProcessSource: "ai" | "person" | null;
   team: {
     lead: string | null;
     /** How to reach the lead. On the closing screen. */
@@ -31,7 +33,7 @@ export type WelcomeView = {
     solutionsEngineer: string | null;
     champion: { name: string; role: string | null } | null;
     /** Other customer-side people the notes named. On the team screen after the champion. */
-    others?: Array<{ name: string; role: string | null }>;
+    others?: Array<{ name: string; role: string | null; does?: string | null }>;
   };
   firstForm: {
     name: string;

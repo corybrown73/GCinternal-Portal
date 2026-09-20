@@ -1,6 +1,11 @@
 import type { IntakeAnswers } from "./intake-answers";
 import { type ServiceSpec } from "./onboarding-services";
-import { buildTimeline, type IntegrationTier, type Timeline } from "./onboarding-timeline";
+import {
+  buildTimeline,
+  onBusinessDay,
+  type IntegrationTier,
+  type Timeline,
+} from "./onboarding-timeline";
 
 /**
  * The plan for one deal: the intake's timeline knobs applied to the day the
@@ -27,8 +32,14 @@ export function closeDateFor(args: {
     .filter((t) => t.to_stage === args.wonStageKey)
     .map((t) => t.occurred_at)
     .sort()[0];
-  if (won) return { date: won.slice(0, 10), source: "stage" };
-  return { date: args.today ?? new Date().toISOString().slice(0, 10), source: "today" };
+  // A deal that closed on a Sunday starts its plan on the Monday: day 0 is a
+  // working day the customer can be welcomed on, not the weekend the CRM
+  // happened to record. A date a person set on the intake is taken as given.
+  if (won) return { date: onBusinessDay(won.slice(0, 10)), source: "stage" };
+  return {
+    date: onBusinessDay(args.today ?? new Date().toISOString().slice(0, 10)),
+    source: "today",
+  };
 }
 
 /**

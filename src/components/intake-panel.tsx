@@ -410,11 +410,30 @@ function NoForms({
             onChange={(e) => setProcess(e.target.value)}
             onBlur={() => {
               if ((process.trim() || null) !== (answers.current_process ?? null)) {
-                onSet({ current_process: process.trim() || null });
+                onSet({
+                  current_process: process.trim() || null,
+                  current_process_source: process.trim() ? "person" : null,
+                });
               }
             }}
             placeholder="Three crews fill in a paper ticket; the office retypes them on Fridays."
           />
+          {answers.current_process && answers.current_process_source === "ai" ? (
+            <span className="mt-1 flex flex-wrap items-center gap-2 text-[11px]">
+              <span className="rounded-sm bg-amber-500/10 px-1.5 py-0.5 text-amber-700 dark:text-amber-400">
+                Written by the brief from the call notes — not yet their words
+              </span>
+              <button
+                type="button"
+                className="rounded-sm border border-border px-1.5 py-0.5 hover:bg-muted disabled:opacity-60"
+                disabled={!editable || busy}
+                onClick={() => onSet({ current_process_source: "person" })}
+                title="The deck quotes this line to the customer. Confirm it is how they put it, or retype it above."
+              >
+                These are their words
+              </button>
+            </span>
+          ) : null}
         </label>
       </div>
 

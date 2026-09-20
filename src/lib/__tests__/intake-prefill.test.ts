@@ -22,6 +22,8 @@ describe("prefillFromSynthesis", () => {
   it("fills every blank the synthesis can speak to", () => {
     const { patch, filled } = prefillFromSynthesis(readIntake({ forms_built: false }), brief);
     expect(patch.current_process).toBe("Paper tickets on the truck.");
+    // The brief's paraphrase, marked as such: the deck quotes only a person's words.
+    expect(patch.current_process_source).toBe("ai");
     expect(patch.wanted_forms?.map((f) => f.name)).toEqual([
       "Daily Water Haul Ticket",
       "Chemical Delivery Ticket",

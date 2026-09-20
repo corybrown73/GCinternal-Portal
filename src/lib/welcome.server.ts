@@ -106,6 +106,12 @@ async function viewFor(deal: any, opts: { internal: boolean }): Promise<WelcomeV
         label: "The process today, in their words",
         hint: "Onboarding intake → the process today. It is the 'now' on screen five.",
       });
+    else if (input.currentProcessSource === "ai")
+      readiness.push({
+        key: "process_words",
+        label: "The process today — confirm it is their words",
+        hint: "Onboarding intake → the brief wrote this line from the call notes. Retype it as they said it, or press “These are their words”. Until then the page shows it without quotation marks.",
+      });
     if (!input.team?.champion)
       readiness.push({
         key: "champion",
@@ -156,6 +162,7 @@ async function viewFor(deal: any, opts: { internal: boolean }): Promise<WelcomeV
     lead: leadName,
     fieldTester: input.fieldTester,
     currentProcess: input.currentProcess ?? null,
+    currentProcessSource: input.currentProcessSource ?? null,
     team: {
       ...(input.team ?? {
         lead: input.lead,

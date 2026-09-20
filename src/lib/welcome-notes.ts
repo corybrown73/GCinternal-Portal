@@ -46,6 +46,10 @@ export function speakerNotes(view: WelcomeView): {
   const tester = view.fieldTester ?? "your field tester";
   const champion = view.team.champion?.name ?? "your project owner";
   const lead = view.team.lead ?? "your onboarding lead";
+  // A fallback that opens a sentence is capitalised like one; a name is left alone.
+  const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+  // "Download the GoCanvas app" mid-sentence: the first letter drops, the brand does not.
+  const lower1 = (s: string) => s.charAt(0).toLowerCase() + s.slice(1);
   const live = shortDay(t.liveDate);
   const existing = view.path === "existing";
 
@@ -74,8 +78,8 @@ export function speakerNotes(view: WelcomeView): {
       key: "team",
       title: "Your team",
       say: [
-        `${lead} runs both calls and builds with you. ${champion} owns the plan on your side and makes the last changes to the form in the working session.`,
-        `${tester} is the most important name on this page: one crew, real jobs, from ${fieldtest ? shortDay(fieldtest.date) : "the field test"}. What they say is what we fix.`,
+        `${cap(lead)} runs both calls and builds with you. ${cap(champion)} owns the plan on your side and makes the last changes to the form in the working session.`,
+        `${cap(tester)} is the most important name on this page: one crew, real jobs, from ${fieldtest ? shortDay(fieldtest.date) : "the field test"}. What they say is what we fix.`,
         "Questions go to a person, by name. There is no ticket queue between you and us in the first seven days.",
       ],
       why: "Two names on the customer side, agreed on the first call, is the difference between a plan and a wish. Get the field tester named before leaving this screen.",
@@ -105,7 +109,7 @@ export function speakerNotes(view: WelcomeView): {
       key: "plan",
       title: "Your timeline",
       say: [
-        `Walk it left to right and say the dates out loud. ${kickoff?.label ?? "Kickoff"} ${kickoff ? shortDay(kickoff.date) : ""}, ${kickoff?.minutes ?? 60} minutes. Homework due ${homework ? shortDay(homework.date) : ""}. ${working?.label ?? "Working session"} ${working ? shortDay(working.date) : ""}, ${working?.minutes ?? 30} minutes. ${fieldtest?.label ?? "Field test"} from ${fieldtest ? shortDay(fieldtest.date) : ""}. ${existing ? "Ready" : "Live"} ${live}.`,
+        `Walk it left to right and say the dates out loud. ${kickoff?.label ?? "Kickoff"} ${kickoff ? shortDay(kickoff.date) : ""}, ${kickoff?.minutes ?? 60} minutes. Homework due ${homework ? shortDay(homework.date) : ""}. ${working?.label ?? "Working session"} ${working ? shortDay(working.date) : ""}, ${working?.minutes ?? 30} minutes. ${fieldtest?.label ?? "Field test"} from ${fieldtest ? shortDay(fieldtest.date) : ""}. ${existing ? "Ready" : "Live"} ${live}.${phaseOneCalls(t) ? ` The services alongside add ${phaseOneCalls(t)} more call${phaseOneCalls(t) === 1 ? "" : "s"} in phase 1, so the total on the phase card is the number to say — not sixty plus thirty.` : ""}`,
         "Every step has an owner. Blue is on a call together; green is your homework; navy is ours.",
         ...t.alongside.map(
           (svc) =>
@@ -162,7 +166,7 @@ export function speakerNotes(view: WelcomeView): {
       title: "What's expected",
       say: [
         "We build it with you, not for you. A form you built yourself is one you will change yourself — and the second use case shows up on its own.",
-        `Three homework items before the ${existing ? "optimisation" : "working"} session, due ${homework ? shortDay(homework.date) : ""}: ${(kickoff?.homework ?? []).map((h) => h.toLowerCase()).join(", ") || "download the app and log in, add one field user who will test on a real job, send us the customer or site list"}.`,
+        `Three homework items before the ${existing ? "optimisation" : "working"} session, due ${homework ? shortDay(homework.date) : ""}: ${(kickoff?.homework ?? []).map(lower1).join(", ") || "download the app and log in, add one field user who will test on a real job, send us the customer or site list"}.`,
         "Fifteen minutes. It means the working session starts from a live account instead of a blank one.",
         ...t.alongside.map((svc) => `And for ${svc.name}: ${svc.needs}`),
       ],
@@ -179,7 +183,9 @@ export function speakerNotes(view: WelcomeView): {
       title: "How we get there — now and the future",
       say: [
         view.currentProcess
-          ? `Today, in your words: "${view.currentProcess}"`
+          ? view.currentProcessSource === "person"
+            ? `Today, in your words: "${view.currentProcess}"`
+            : `Today, as we heard it on the calls — check it with them before you read it as theirs: ${view.currentProcess}`
           : "Today: paper on the truck, photos on somebody's phone, the office retyping it all on Friday.",
         `By ${live}: ${form} on the crew's phone. Same day in the office, photos and a signature on every one, no retyping.`,
         t.phases.length
@@ -206,7 +212,7 @@ export function speakerNotes(view: WelcomeView): {
       ifTheyAsk: [
         {
           q: "Who do we call if something breaks?",
-          a: `${lead}, directly, by name. After the live date the same team runs the working-session format for every form you add.`,
+          a: `${cap(lead)}, directly, by name. After the live date the same team runs the working-session format for every form you add.`,
         },
       ],
     },
@@ -238,4 +244,12 @@ export function speakerNotes(view: WelcomeView): {
       `Book both calls before you hang up. Confirm the field tester's name. Then start the clock.`,
     ],
   };
+}
+
+/** Calls the phase-1 services add on top of the form's two. */
+function phaseOneCalls(t: WelcomeView["timeline"]): number {
+  return t.alongside.reduce(
+    (n, svc) => n + svc.milestones.filter((m) => m.kind === "call").length,
+    0,
+  );
 }

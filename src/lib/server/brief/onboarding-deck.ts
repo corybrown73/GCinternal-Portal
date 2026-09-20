@@ -45,6 +45,8 @@ export type OnboardingDeckInput = {
   fieldTester: string | null;
   /** The process today, in the customer's words, from the intake. */
   currentProcess?: string | null;
+  /** Who wrote currentProcess: a person, or the brief's synthesis. */
+  currentProcessSource?: "ai" | "person" | null;
   /** Who is on it, both sides. The deck names them on the team slide. */
   team?: {
     lead: string | null;
@@ -52,7 +54,7 @@ export type OnboardingDeckInput = {
     solutionsEngineer: string | null;
     champion: { name: string; role: string | null } | null;
     /** Other customer-side people the notes named: the controller, the approver. */
-    others?: Array<{ name: string; role: string | null }>;
+    others?: Array<{ name: string; role: string | null; does?: string | null }>;
   };
   firstForm: {
     name: string;

@@ -26,6 +26,27 @@ describe("closeDateFor", () => {
     expect(r).toEqual({ date: "2026-09-14", source: "intake" });
   });
 
+  it("moves a weekend close onto the next business day — day 0 is a working day", () => {
+    // 2026-09-20 is a Sunday.
+    const sunday = [{ to_stage: "closed_won", occurred_at: "2026-09-20T15:30:00Z" }];
+    expect(
+      closeDateFor({ intake: readIntake(null), stageHistory: sunday, wonStageKey: "closed_won" }),
+    ).toEqual({ date: "2026-09-21", source: "stage" });
+    expect(
+      closeDateFor({
+        intake: readIntake(null),
+        stageHistory: [],
+        wonStageKey: "closed_won",
+        today: "2026-09-19",
+      }),
+    ).toEqual({ date: "2026-09-21", source: "today" });
+    // A date a person set is taken as given, weekend or not.
+    const intake = readIntake({ timeline: { close_date: "2026-09-20" } });
+    expect(closeDateFor({ intake, stageHistory: [], wonStageKey: "closed_won" }).date).toBe(
+      "2026-09-20",
+    );
+  });
+
   it("takes the first of several won transitions, not the latest re-delivery", () => {
     const twice = [...history, { to_stage: "closed_won", occurred_at: "2026-09-20T15:30:00Z" }];
     expect(

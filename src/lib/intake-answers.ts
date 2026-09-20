@@ -72,6 +72,12 @@ export const intakeAnswersSchema = z.object({
   field_users: z.number().int().nonnegative().nullable().default(null),
   /** The process today, in their words. Feeds the deck's "before". */
   current_process: z.string().trim().max(4000).nullable().default(null),
+  /**
+   * Who wrote it: the brief's synthesis ("ai") or a person ("person"). The
+   * deck quotes it only when a person wrote or confirmed it — an AI
+   * paraphrase in quotation marks was read to a customer as their own words.
+   */
+  current_process_source: z.enum(["ai", "person"]).nullable().default(null),
   /** Templates from the library they pointed at. Ids, so a renamed card still resolves. */
   chosen_templates: z.array(z.string().uuid()).default([]),
   /**
