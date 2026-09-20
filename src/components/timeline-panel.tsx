@@ -177,6 +177,9 @@ export function TimelinePanel({
       integration_tier: 0,
       integration_target: null,
       sow_applied_at: new Date().toISOString(),
+      // The dates and exclusions the SOW names, for the watch-outs to read
+      // against the plan. Before this they were shown once and dropped.
+      sow_notes: proposal.proposal.notes.map((n) => n.slice(0, 300)).slice(0, 20),
     });
     setProposal(null);
   };

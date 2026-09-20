@@ -133,6 +133,8 @@ export const intakeAnswersSchema = z.object({
       timezone: z.string().trim().max(64).nullable().default(null),
       /** When the SOW was read into the plan. Set by that action only; the guide reads it. */
       sow_applied_at: z.string().nullable().default(null),
+      /** What the SOW says that the plan cannot hold — named dates, exclusions — kept for the watch-outs. */
+      sow_notes: z.array(z.string().max(300)).max(20).default([]),
       /** Everything bought beyond the first form: phase 1 runs alongside it, 2 and up wait. */
       services: z
         .array(

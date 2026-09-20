@@ -18,6 +18,8 @@ import { Field, NoRows, Panel } from "@/components/record";
 import { EditableField } from "@/components/editable-field";
 import { OwnerField } from "@/components/assignment-panel";
 import { DealGuide } from "@/components/deal-guide";
+import { WatchOutsPanel } from "@/components/watch-outs-panel";
+import { watchOutsFor } from "@/lib/watch-outs";
 import { DeliverablesStrip } from "@/components/deliverables-strip";
 import { deliverablePhases } from "@/lib/deliverables";
 import { useToolMarks } from "@/lib/use-tool-marks";
@@ -242,6 +244,15 @@ export function DealRecord({ deal, embedded = false }: { deal: DealData; embedde
   // SOW bought, checked off as the plan marks them live.
   const deliverables = deliverablePhases(intakeForDay, dayTimeline);
   const toolMarks = useToolMarks();
+  // What the calls and the SOW say, against the plan's dates. The latest
+  // real brief is the source; a template fallback has nothing read from calls.
+  const latestBrief =
+    deal.briefs.find((b) => b.status === "complete" && b.generator === "llm") ?? null;
+  const watchOuts = watchOutsFor({
+    brief: latestBrief?.structured_json ?? null,
+    intake: intakeForDay,
+    timeline: dayTimeline,
+  });
   // From the strip at the top: open the stage on the plan, or tick the
   // item's last step done today without scrolling anywhere.
   const saveIntakeFn = useServerFn(saveIntake);
@@ -505,6 +516,8 @@ export function DealRecord({ deal, embedded = false }: { deal: DealData; embedde
             />
           </div>
         </div>
+
+        <WatchOutsPanel rows={watchOuts} hasBrief={Boolean(latestBrief)} />
 
         <TimelinePanel
           dealId={deal.account.id}

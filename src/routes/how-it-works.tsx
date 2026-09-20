@@ -93,7 +93,7 @@ const ROLES: Array<{ key: string; who: string; when: string; steps: Step[] }> = 
     steps: [
       {
         title: "Open the customer, press 'Add services'",
-        body: "That starts the existing-account path from their record: the closed-won deal, the link back to the customer, the assignment. It lands you on the deal.",
+        body: "That starts the existing-account path from their record: the closed-won deal, its implementation on the same customer page, the assignment. It lands you on the Pre-kickoff tab of that implementation.",
         to: "/customers",
         label: "Customers",
       },

@@ -499,6 +499,7 @@ export const saveIntake = createServerFn({ method: "POST" })
                 times: z.record(z.string().max(40), z.string().regex(/^\d{2}:\d{2}$/)).optional(),
                 timezone: z.string().trim().max(64).nullable().optional(),
                 sow_applied_at: z.string().nullable().optional(),
+                sow_notes: z.array(z.string().max(300)).max(20).optional(),
                 services: z
                   .array(
                     z.object({
