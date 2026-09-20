@@ -1167,6 +1167,7 @@ export async function startOnboardingAs(
 
   const firstStage = LIFECYCLE_STAGES[0]!.id;
   const now = new Date().toISOString();
+  const { readIntake: readIntakeFor } = await import("./intake-answers");
   const { data: impl, error: implError } = await db()
     .from("implementations")
     .insert({
@@ -1175,7 +1176,7 @@ export async function startOnboardingAs(
       // has no way back to the plan, the clock or the welcome link — the
       // backfill covered the old rows; this covers every new one.
       deal_id: account.id,
-      name: account.name,
+      name: implementationNameFor(readIntakeFor(account.intake), String(account.name)),
       current_stage: firstStage,
       stage_entered_at: now,
       status: "on_track",
@@ -2066,4 +2067,28 @@ async function carryDealFacts(
   } catch (e) {
     console.error("[handoff] could not carry the deal's facts onto the record", e);
   }
+}
+
+/**
+ * A project's name, from what it is: the customer's name is already the
+ * page's heading, and a second project called the same thing left the list
+ * ambiguous by the third. The first form names a new logo's onboarding; the
+ * bought services name an existing account's; the customer's name is the
+ * last resort.
+ */
+export function implementationNameFor(
+  intake: import("./intake-answers").IntakeAnswers,
+  accountName: string,
+): string {
+  const firstForm = intake.wanted_forms[0]?.name?.trim() || intake.uploaded_forms[0]?.name?.trim();
+  const services = (intake.timeline.services ?? []).map((s) => s.name.trim()).filter(Boolean);
+  if (intake.path === "existing" && services.length) {
+    return services.length === 1 ? services[0]! : `${services[0]} + ${services.length - 1} more`;
+  }
+  if (firstForm) {
+    return services.length ? `${firstForm} + ${services.length} more` : `${firstForm} — first form`;
+  }
+  if (services.length)
+    return services.length === 1 ? services[0]! : `${services[0]} + ${services.length - 1} more`;
+  return `${accountName} onboarding`;
 }

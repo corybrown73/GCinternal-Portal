@@ -161,7 +161,7 @@ function CustomersPage() {
     <>
       <PageHeader
         title="Customers"
-        description="One row per customer implementation, grouped by the stage it is in."
+        description="One row per customer implementation. Longest in its current stage first; click a heading to sort another way."
         actions={
           <div className="flex items-center gap-2">
             <span className="font-mono text-[11px] text-muted-foreground">

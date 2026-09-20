@@ -1,5 +1,5 @@
 import type { IcsEvent } from "./ics";
-import { shortDay, type Milestone, type Timeline } from "./onboarding-timeline";
+import { addBusinessDays, shortDay, type Milestone, type Timeline } from "./onboarding-timeline";
 
 /**
  * The plan as calendar events. Calls with a booked time are timed events;
@@ -22,6 +22,10 @@ function fmtTime(time: string): string {
 
 /** "Thu, Sep 10 · 10:00 AM CT" when a time is booked, else the date. */
 export function whenLabel(m: Milestone, timezone: string | null): string {
+  // A step that runs for several days ("Day 4–5") shows where it ends too.
+  if (!m.time && m.throughDay && m.throughDay > m.day) {
+    return `${shortDay(m.date)} → ${shortDay(addBusinessDays(m.date, m.throughDay - m.day))}`;
+  }
   if (!m.time) return shortDay(m.date);
   const zone = timezone
     ? (new Intl.DateTimeFormat("en-US", { timeZone: timezone, timeZoneName: "short" })

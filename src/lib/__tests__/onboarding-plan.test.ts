@@ -84,3 +84,43 @@ describe("timelineFor", () => {
     expect(t.integration.weeks).toBe(1);
   });
 });
+
+describe("implementationNameFor", () => {
+  it("names the project by what it is, not by the customer", async () => {
+    const { implementationNameFor } = await import("../presale.server");
+    expect(
+      implementationNameFor(
+        readIntake({
+          path: "new_logo",
+          wanted_forms: [{ id: "f", name: "Storm Damage Assessment" }],
+        }),
+        "Northbridge",
+      ),
+    ).toBe("Storm Damage Assessment — first form");
+    expect(
+      implementationNameFor(
+        readIntake({
+          path: "new_logo",
+          wanted_forms: [{ id: "f", name: "Daily Timesheet" }],
+          timeline: { services: [{ id: "a", kind: "custom_pdf", name: "Invoice PDF", phase: 2 }] },
+        }),
+        "Northbridge",
+      ),
+    ).toBe("Daily Timesheet + 1 more");
+    expect(
+      implementationNameFor(
+        readIntake({
+          path: "existing",
+          timeline: {
+            services: [
+              { id: "a", kind: "integration", name: "Kronos", phase: 2, tier: 3 },
+              { id: "b", kind: "training", name: "Admin training", phase: 1 },
+            ],
+          },
+        }),
+        "Northbridge",
+      ),
+    ).toBe("Kronos + 1 more");
+    expect(implementationNameFor(readIntake(null), "Northbridge")).toBe("Northbridge onboarding");
+  });
+});

@@ -326,7 +326,10 @@ export function DealBoard({
 
   return (
     <DndContext sensors={sensors} onDragStart={onDragStart} onDragEnd={onDragEnd}>
-      <div className="flex gap-3 overflow-x-auto pb-4">
+      {/* w-full + min-w-0 so the strip scrolls from its own left edge: inside
+          a flex parent it could size to its content, and the first column's
+          left half was scrolled off where nothing could bring it back. */}
+      <div className="flex w-full min-w-0 items-start gap-3 overflow-x-auto pb-4">
         {stages.map((stage) => (
           <Column
             key={stage.key}
