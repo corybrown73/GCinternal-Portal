@@ -6,6 +6,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { ChevronRight, ArrowRight } from "lucide-react";
 
 import { CustomerLogo } from "@/components/customer-logo";
+import { PastImplementations } from "@/components/past-implementations";
 import { DealRecord } from "@/components/deal-record";
 import { dealQuery } from "@/lib/deal-query";
 import { useQuery } from "@tanstack/react-query";
@@ -400,6 +401,9 @@ function Customer360Page() {
             implementations={record.implementations}
           />
         </div>
+        {/* The projects that came before this one: how they went, in one
+            tile each, so the next one starts with the last in view. */}
+        <PastImplementations customerId={customerId} activeImplementationId={impl.id} />
 
         {/* THE ATTENTION BAND, RE-CUT.
             It used to be a tall muted block holding two label-above-value
