@@ -92,6 +92,8 @@ async function profileNames(): Promise<Map<string, string>> {
 
 export interface PipelineDeal extends Account {
   am_owner_name: string | null;
+  /** The customer page this deal lives on once it has closed. */
+  customer_id: string | null;
   se_owner_name: string | null;
   /** New customer or existing account, when the intake has said. */
   path: "new_logo" | "existing" | null;
@@ -139,14 +141,17 @@ export async function loadPipeline(
       scope.person ?? null,
     );
 
-  const deals = ((accounts ?? []) as Account[]).filter(inScope).map((a) => ({
-    ...a,
-    am_owner_name: a.am_owner_id ? (names.get(a.am_owner_id) ?? null) : null,
-    se_owner_name: a.se_owner_id ? (names.get(a.se_owner_id) ?? null) : null,
-    path: readIntake(a.intake).path,
-    has_notes: withNotes.has(a.id),
-    has_sow: Boolean(a.sow_document_path),
-  }));
+  const deals = ((accounts ?? []) as Array<Account & { customer_id?: string | null }>)
+    .filter(inScope)
+    .map((a) => ({
+      ...a,
+      customer_id: a.customer_id ?? null,
+      am_owner_name: a.am_owner_id ? (names.get(a.am_owner_id) ?? null) : null,
+      se_owner_name: a.se_owner_id ? (names.get(a.se_owner_id) ?? null) : null,
+      path: readIntake(a.intake).path,
+      has_notes: withNotes.has(a.id),
+      has_sow: Boolean(a.sow_document_path),
+    }));
   return { deals, stages };
 }
 
@@ -242,7 +247,38 @@ export async function transitionDeal(
       ? `${note} (moved despite the Closed Won check)`
       : "Moved despite the Closed Won check";
   // Via supabaseAdmin the RPC has no auth.uid(), so the passed actor is kept.
-  return transitionStage(dealId, toStage, { source: "ui", actorProfileId: userId }, note);
+  const result = await transitionStage(
+    dealId,
+    toStage,
+    { source: "ui", actorProfileId: userId },
+    note,
+  );
+  // Closing the deal creates the customer's page and the implementation on
+  // it. Nobody clicks "start onboarding" — the close is the start. A deal
+  // whose customer is ambiguous (a name match with no identity match) is
+  // left for a person to resolve on the deal, and the audit log says so.
+  if (result.changed && toStage === wonStage(pipeline).key) {
+    const { data: row } = await db()
+      .from("portal_accounts")
+      .select("customer_id")
+      .eq("id", dealId)
+      .maybeSingle();
+    if (!row?.customer_id) {
+      try {
+        await startOnboardingAs({ kind: "user", profileId: userId }, dealId, {});
+      } catch (e) {
+        await audit({
+          actor_type: "user",
+          actor_id: userId,
+          action: "onboarding.autostart_deferred",
+          entity_type: "account",
+          entity_id: dealId,
+          payload: { reason: e instanceof Error ? e.message : String(e) },
+        });
+      }
+    }
+  }
+  return result;
 }
 
 /* ---------- CSV import (ported from the old Next.js internal import route) ---------- */

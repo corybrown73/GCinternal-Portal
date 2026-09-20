@@ -18,7 +18,16 @@ import { cn } from "@/lib/utils";
  * record. One strip: where it is on its clock, the next thing to do, and
  * the two links — the deal and the customer's page.
  */
-export function OnboardingPulse({ dealId }: { dealId: string }) {
+export function OnboardingPulse({
+  dealId,
+  customerId,
+  implId,
+}: {
+  dealId: string;
+  /** When set, "next" opens the Pre-kickoff tab of this page instead of the deal route. */
+  customerId?: string;
+  implId?: string;
+}) {
   const pulse = useQuery({
     queryKey: ["deal-pulse", dealId],
     queryFn: () => getDealPulseFn({ data: { dealId } }),
@@ -50,14 +59,26 @@ export function OnboardingPulse({ dealId }: { dealId: string }) {
         {p.done}/{p.total} set up
       </span>
       {p.next ? (
-        <Link
-          to="/deals/$dealId"
-          params={{ dealId }}
-          className="inline-flex items-center gap-1 font-medium text-primary hover:underline"
-          title={p.next.hint}
-        >
-          Next: {p.next.label} <ArrowRight className="h-3 w-3" />
-        </Link>
+        customerId ? (
+          <Link
+            to="/customers/$customerId"
+            params={{ customerId }}
+            search={{ tab: "prekickoff", ...(implId ? { impl: implId } : {}) }}
+            className="inline-flex items-center gap-1 font-medium text-primary hover:underline"
+            title={p.next.hint}
+          >
+            Next: {p.next.label} <ArrowRight className="h-3 w-3" />
+          </Link>
+        ) : (
+          <Link
+            to="/deals/$dealId"
+            params={{ dealId }}
+            className="inline-flex items-center gap-1 font-medium text-primary hover:underline"
+            title={p.next.hint}
+          >
+            Next: {p.next.label} <ArrowRight className="h-3 w-3" />
+          </Link>
+        )
       ) : (
         <span className="text-emerald-700 dark:text-emerald-400">Plan complete and shared.</span>
       )}

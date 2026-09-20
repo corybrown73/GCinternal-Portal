@@ -6,6 +6,9 @@ import { useServerFn } from "@tanstack/react-start";
 import { ChevronRight, ArrowRight } from "lucide-react";
 
 import { CustomerLogo } from "@/components/customer-logo";
+import { DealRecord } from "@/components/deal-record";
+import { dealQuery } from "@/lib/deal-query";
+import { useQuery } from "@tanstack/react-query";
 import { AddServicesButton, OnboardingPulse } from "@/components/onboarding-pulse";
 import { HealthNote } from "@/components/health-note";
 import { PlanPanel } from "@/components/plan-panel";
@@ -122,6 +125,7 @@ import {
 import { cn } from "@/lib/utils";
 
 const TABS = [
+  "prekickoff",
   "overview",
   "journey",
   "solution",
@@ -134,7 +138,8 @@ const TABS = [
 export type TabId = (typeof TABS)[number];
 
 const TAB_LABEL: Record<TabId, string> = {
-  overview: "Overview",
+  prekickoff: "Pre-kickoff",
+  overview: "Implementation",
   journey: "Journey",
   solution: "Solution",
   requirements: "Requirements",
@@ -383,7 +388,9 @@ function Customer360Page() {
             date, its own stages and its own pace. Each lane is that project's
             board at a glance and deep-links to it through `?impl=`. With a
             single project this collapses to just that project's rail. */}
-        {impl.deal_id ? <OnboardingPulse dealId={impl.deal_id} /> : null}
+        {impl.deal_id ? (
+          <OnboardingPulse dealId={impl.deal_id} customerId={customerId} implId={impl.id} />
+        ) : null}
 
         <div className="min-w-0 px-6 pt-2.5">
           <ProjectTimelines
@@ -429,12 +436,29 @@ function Customer360Page() {
         </nav>
       </header>
 
+      {tab === "prekickoff" ? (
+        <div className="px-6 py-4">
+          {impl.deal_id ? (
+            <PrekickoffTab dealId={impl.deal_id} />
+          ) : (
+            <p className="text-[13px] text-muted-foreground">
+              This implementation was not started from a deal, so there is no pre-kickoff record for
+              it.
+            </p>
+          )}
+        </div>
+      ) : null}
       <CollapsibleSections scope={`customer:${tab}`}>
         {/* Content and rail, side by side on a wide screen and stacked below
             `lg`. `items-start` is what lets the rail stick: a stretched grid
             item is already as tall as the row, so `position: sticky` inside it
             has nothing to travel through. */}
-        <div className="grid items-start gap-4 px-6 py-4 lg:grid-cols-[minmax(0,1fr)_320px]">
+        <div
+          className={cn(
+            "grid items-start gap-4 px-6 py-4 lg:grid-cols-[minmax(0,1fr)_320px]",
+            tab === "prekickoff" && "hidden",
+          )}
+        >
           <div className="min-w-0 space-y-3">
             <SectionControls />
             {tab === "overview" ? <OverviewTab record={record} customerId={customerId} /> : null}
@@ -453,6 +477,26 @@ function Customer360Page() {
       </CollapsibleSections>
     </div>
   );
+}
+
+/**
+ * The deal, inside the customer's page. The brief, the intake, what we are
+ * building and the welcome deck are the first tab of the account, not a
+ * separate screen somebody has to find their way back from.
+ */
+function PrekickoffTab({ dealId }: { dealId: string }) {
+  const q = useQuery(dealQuery(dealId));
+  if (q.isPending) {
+    return <p className="text-[13px] text-muted-foreground">Loading the pre-kickoff record…</p>;
+  }
+  if (!q.data) {
+    return (
+      <p className="text-[13px] text-muted-foreground">
+        The deal behind this implementation is gone.
+      </p>
+    );
+  }
+  return <DealRecord deal={q.data} embedded />;
 }
 
 /**

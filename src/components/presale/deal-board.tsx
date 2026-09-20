@@ -29,6 +29,8 @@ import { useToolMarks } from "@/lib/use-tool-marks";
 
 export type BoardDeal = Account & {
   am_owner_name: string | null;
+  /** Set once the deal has closed and has a customer page; the card opens that page. */
+  customer_id?: string | null;
   path?: "new_logo" | "existing" | null;
   has_notes?: boolean;
   has_sow?: boolean;
@@ -134,17 +136,31 @@ function DraggableCard({
   });
   return (
     <div ref={setNodeRef} {...listeners} {...attributes} className={isDragging ? "opacity-30" : ""}>
-      <Link
-        to="/deals/$dealId"
-        params={{ dealId: deal.id }}
-        onClick={(e) => {
-          if (isDragging) e.preventDefault();
-        }}
-        className="block"
-        draggable={false}
-      >
-        <DealCard deal={deal} terminalKey={terminalKey} />
-      </Link>
+      {deal.customer_id ? (
+        <Link
+          to="/customers/$customerId"
+          params={{ customerId: deal.customer_id }}
+          onClick={(e) => {
+            if (isDragging) e.preventDefault();
+          }}
+          className="block"
+          draggable={false}
+        >
+          <DealCard deal={deal} terminalKey={terminalKey} />
+        </Link>
+      ) : (
+        <Link
+          to="/deals/$dealId"
+          params={{ dealId: deal.id }}
+          onClick={(e) => {
+            if (isDragging) e.preventDefault();
+          }}
+          className="block"
+          draggable={false}
+        >
+          <DealCard deal={deal} terminalKey={terminalKey} />
+        </Link>
+      )}
     </div>
   );
 }
