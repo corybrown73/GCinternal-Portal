@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { markForService, markForTool } from "../brand-marks";
-import { deliverablesFor, marksForIntake } from "../deliverables";
+import { deliverablePhases, deliverablesFor, marksForIntake } from "../deliverables";
 import { readIntake } from "../intake-answers";
 import { buildTimeline } from "../onboarding-timeline";
 import type { ServiceSpec } from "../onboarding-services";
@@ -38,7 +38,8 @@ describe("marks", () => {
     // A system we do not know still gets a mark: the kind's.
     expect(markForService({ kind: "integration", name: "Mystery ERP" }).title).toBe("Integration");
     expect(markForService({ kind: "custom_pdf", name: "Invoice PDF" })).toMatchObject({
-      text: "PDF",
+      kind: "icon",
+      icon: "FileText",
     });
   });
 });
@@ -74,6 +75,20 @@ describe("deliverables", () => {
     expect(d[0]!.state).toBe("done");
     expect(d[0]!.sublabel).toBe("Live Sep 18");
     expect(d.find((x) => x.label === "QuickBooks Online")!.state).toBe("active");
+  });
+
+  it("groups the build into phases, the form first, later forms after it", () => {
+    const t = buildTimeline({
+      closeDate: "2026-09-09",
+      services: intake.timeline.services as ServiceSpec[],
+    });
+    const phases = deliverablePhases(intake, t);
+    expect(phases.map((p) => [p.phase, p.label, p.state, p.items.map((d) => d.label)])).toEqual([
+      [1, "Phase 1", "active", ["Service Ticket", "Crew training"]],
+      [2, "Phase 2", "upcoming", ["Safety Inspection", "QuickBooks Online", "Invoice PDF"]],
+    ]);
+    expect(phases[1]!.gate).toMatch(/form/i);
+    expect(phases[0]!.when).toBe("Sep 9 → Sep 18");
   });
 
   it("gives a card the marks alone, deduped", () => {

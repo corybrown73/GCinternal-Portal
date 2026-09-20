@@ -18,7 +18,7 @@ import { EditableField } from "@/components/editable-field";
 import { OwnerField } from "@/components/assignment-panel";
 import { DealGuide } from "@/components/deal-guide";
 import { DeliverablesStrip } from "@/components/deliverables-strip";
-import { deliverablesFor } from "@/lib/deliverables";
+import { deliverablePhases } from "@/lib/deliverables";
 import { useToolMarks } from "@/lib/use-tool-marks";
 import { getSetupStatusFn } from "@/lib/setup-status.functions";
 import { getWelcome } from "@/lib/welcome.functions";
@@ -281,7 +281,7 @@ function DealRecord({ deal }: { deal: DealData }) {
   );
   // What we are building, as tiles: the first form, then every service the
   // SOW bought, checked off as the plan marks them live.
-  const deliverables = deliverablesFor(intakeForDay, dayTimeline);
+  const deliverables = deliverablePhases(intakeForDay, dayTimeline);
   const toolMarks = useToolMarks();
   const [today, setToday] = useState<string | null>(null);
   useEffect(() => setToday(localIso()), []);
@@ -341,7 +341,7 @@ function DealRecord({ deal }: { deal: DealData }) {
             <p className="mb-2.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
               What we&apos;re building
             </p>
-            <DeliverablesStrip items={deliverables} overrides={toolMarks} />
+            <DeliverablesStrip phases={deliverables} overrides={toolMarks} />
           </div>
         ) : null}
         <div className="flex flex-wrap items-center gap-x-6 gap-y-2 rounded-md border border-border bg-card px-4 py-3">

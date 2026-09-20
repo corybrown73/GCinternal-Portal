@@ -116,3 +116,65 @@ export function marksForIntake(intake: IntakeAnswers): BrandMark[] {
     return true;
   });
 }
+
+/** One phase of the build: its state, its dates, and what is in it. */
+export type DeliverablePhase = {
+  phase: number;
+  label: string;
+  state: DeliverableState;
+  /** "Sep 9 → Sep 18", "Live Sep 18", "Earliest Sep 21 → Oct 5". For a tooltip; the plan has the detail. */
+  when: string;
+  /** What opens it, for a phase that has not opened. */
+  gate: string | null;
+  items: Deliverable[];
+};
+
+/**
+ * The build as phases, left to right: the form first, then what waits on
+ * it. Each item inside is a mark and a name; the dates live on the plan
+ * below, where somebody reading for the full picture scrolls anyway.
+ */
+export function deliverablePhases(intake: IntakeAnswers, t: Timeline): DeliverablePhase[] {
+  const items = deliverablesFor(intake, t);
+  const byPhase = new Map<number, Deliverable[]>();
+  for (const d of items) byPhase.set(d.phase, [...(byPhase.get(d.phase) ?? []), d]);
+  const existing = intake.path === "existing";
+
+  const out: DeliverablePhase[] = [];
+  out.push({
+    phase: 1,
+    label: "Phase 1",
+    state: t.liveDoneOn ? "done" : t.currentPhase === 1 ? "active" : "upcoming",
+    when: t.liveDoneOn
+      ? `${existing ? "Ready" : "Live"} ${shortDay(t.liveDoneOn)}`
+      : `${shortDay(t.closeDate)} → ${shortDay(t.liveDate)}`,
+    gate: null,
+    items: byPhase.get(1) ?? [],
+  });
+  const known = new Set([1, ...t.phases.map((p) => p.phase)]);
+  for (const ph of t.phases) {
+    out.push({
+      phase: ph.phase,
+      label: ph.label.replace(/\s*·.*$/, ""),
+      state: ph.done ? "done" : t.currentPhase === ph.phase ? "active" : "upcoming",
+      when: ph.done
+        ? `Live ${shortDay(ph.endsOn!)}`
+        : `${ph.tentative ? "Earliest " : ""}${shortDay(ph.startsOn!)} → ${shortDay(ph.endsOn!)}`,
+      gate: ph.tentative ? ph.gate : null,
+      items: byPhase.get(ph.phase) ?? [],
+    });
+  }
+  // Later forms with no service phase of their own: after the first form.
+  for (const [phase, list] of byPhase) {
+    if (known.has(phase)) continue;
+    out.push({
+      phase,
+      label: `Phase ${phase}`,
+      state: "upcoming",
+      when: "After the first form",
+      gate: null,
+      items: list,
+    });
+  }
+  return out.sort((a, b) => a.phase - b.phase);
+}

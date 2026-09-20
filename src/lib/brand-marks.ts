@@ -68,7 +68,7 @@ const TOOL_MARKS: Record<string, BrandMark> = {
 export const KIND_MARKS: Record<ServiceKind | "form", BrandMark> = {
   form: icon("Form", "ClipboardList", "#12509b"),
   paid_form: icon("Form build", "ClipboardList", "#12509b"),
-  custom_pdf: mono("Custom PDF", "PDF", "#B42318"),
+  custom_pdf: icon("Custom PDF", "FileText", "#556477"),
   integration: icon("Integration", "Plug", "#12509b"),
   analytics: icon("Analytics dashboard", "BarChart3", "#0F766E"),
   data_load: icon("Data load", "Database", "#0F766E"),

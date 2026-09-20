@@ -63,7 +63,7 @@ export function OnboardingPulse({ dealId }: { dealId: string }) {
       )}
       {p.deliverables.length ? (
         <DeliverablesStrip
-          items={p.deliverables}
+          phases={p.deliverables}
           size="sm"
           className="basis-full pt-1"
           overrides={toolMarks}

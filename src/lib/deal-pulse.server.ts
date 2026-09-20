@@ -1,7 +1,7 @@
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 
 import { guideSteps, type GuideStep } from "./deal-guide";
-import { deliverablesFor, type Deliverable } from "./deliverables";
+import { deliverablePhases, type DeliverablePhase } from "./deliverables";
 import { readIntake } from "./intake-answers";
 import { closeDateFor, timelineFor } from "./onboarding-plan";
 import { dayCounter, type DayCounter } from "./onboarding-timeline";
@@ -23,8 +23,8 @@ export type DealPulse = {
   done: number;
   total: number;
   shareUrl: string | null;
-  /** The things being built, with a state each, for the tile strip. */
-  deliverables: Deliverable[];
+  /** The build as phases, for the tile strip. */
+  deliverables: DeliverablePhase[];
 };
 
 export async function loadDealPulse(dealId: string, today?: string): Promise<DealPulse | null> {
@@ -73,7 +73,7 @@ export async function loadDealPulse(dealId: string, today?: string): Promise<Dea
     done: steps.filter((s) => s.done).length,
     total: steps.length,
     shareUrl: (deal.welcome_share_url as string | null) ?? null,
-    deliverables: deliverablesFor(intake, timeline),
+    deliverables: deliverablePhases(intake, timeline),
   };
 }
 
