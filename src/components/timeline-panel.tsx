@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -17,7 +17,7 @@ import {
 import { Panel } from "@/components/record";
 import { readIntake, type IntakeAnswers } from "@/lib/intake-answers";
 import { buildIcs } from "@/lib/ics";
-import { closeDateFor, timelineFor } from "@/lib/onboarding-plan";
+import { closeDateFor, extraFormServices, isIntakeForm, timelineFor } from "@/lib/onboarding-plan";
 import {
   belongsAfterForm,
   normalizeServices,
@@ -104,6 +104,10 @@ export function TimelinePanel({
   // The services as the plan sees them: the stored list, with the legacy
   // single-integration knobs folded in until somebody edits the list.
   const services = normalizeServices(knobs.services as ServiceSpec[], knobs);
+  // The intake's extra forms, as the plan sees them: phase-2 builds that are
+  // edited on the intake, not here.
+  const intakeForms = extraFormServices(answers);
+  const shown = [...services, ...intakeForms];
   const writeServices = (next: ServiceSpec[]) =>
     // Editing materialises the list and retires the legacy knobs, so the two
     // can never disagree.
@@ -335,6 +339,7 @@ export function TimelinePanel({
             once it is live. The section a person opens the page for is the
             one that is open; everything finished has folded to its result. */}
         <PlanSection
+          id="plan-phase-1"
           key={`p1-${Boolean(timeline.liveDoneOn)}-${timeline.currentPhase}`}
           chip={timeline.liveDoneOn ? "done" : timeline.currentPhase === 1 ? "now" : "later"}
           title={`Phase 1 · ${formName}`}
@@ -379,20 +384,20 @@ export function TimelinePanel({
             a list; a line once there is one. */}
         <PlanSection
           key={`scope-${services.length === 0}-${proposal !== null}`}
-          chip={services.length ? null : hasSow ? "next" : "later"}
+          chip={shown.length ? null : hasSow ? "next" : "later"}
           title="Beyond the form"
           summary={
             proposal
               ? "Reviewing what the SOW says"
-              : services.length
-                ? `${services.length} service${services.length === 1 ? "" : "s"} · ${services
+              : shown.length
+                ? `${shown.length} service${shown.length === 1 ? "" : "s"} · ${shown
                     .map((s) => s.name)
                     .join(" + ")}`
                 : hasSow
                   ? "Read the SOW into the plan"
                   : "Nothing yet — attach the SOW, or add what it includes by hand"
           }
-          defaultOpen={services.length === 0 || proposal !== null}
+          defaultOpen={shown.length === 0 || proposal !== null}
           right={
             editable && !proposal ? (
               <button
@@ -592,120 +597,139 @@ export function TimelinePanel({
                 </div>
               ) : null}
 
-              {services.length ? (
+              {shown.length ? (
                 <ul className="divide-y divide-border rounded-md border border-border bg-background">
-                  {services.map((svc) => (
-                    <li
-                      key={svc.id}
-                      className="flex flex-wrap items-center gap-x-2 gap-y-1 px-2.5 py-1.5"
-                    >
-                      <span className="rounded-sm bg-muted px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-muted-foreground">
-                        {SERVICE_KINDS[svc.kind].label}
-                      </span>
-                      {toolsForKind(svc.kind).length ? (
-                        <select
-                          className={input}
-                          value={svc.tool ?? toolFromName(svc.name)?.key ?? ""}
-                          disabled={busy}
-                          title="Which system this is, for the analytics"
-                          onChange={(e) => {
-                            const tool = toolByKey(e.target.value);
-                            updateService(svc.id, {
-                              tool: tool?.key ?? null,
-                              ...(tool && !svc.name.trim() && { name: tool.name }),
-                            });
-                          }}
-                        >
-                          <option value="">System…</option>
-                          {toolsForKind(svc.kind).map((t) => (
-                            <option key={t.key} value={t.key}>
-                              {t.name}
-                            </option>
-                          ))}
-                        </select>
-                      ) : null}
-                      <input
-                        className={cn(input, "min-w-0 flex-1")}
-                        value={svc.name}
-                        disabled={busy}
-                        onChange={(e) => updateService(svc.id, { name: e.target.value })}
-                      />
-                      <label className="flex items-center gap-1 text-[11px] text-muted-foreground">
-                        Phase
-                        <select
-                          className={input}
-                          value={svc.phase}
-                          disabled={busy}
-                          onChange={(e) => updateService(svc.id, { phase: Number(e.target.value) })}
-                        >
-                          {PHASE_OPTIONS.map((o) => (
-                            <option key={o.value} value={o.value}>
-                              {o.label}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                      {svc.kind === "integration" ? (
-                        <select
-                          className={input}
-                          value={svc.tier ?? 3}
-                          disabled={busy}
-                          title="Complexity tier — sets the length and the assignment weight"
-                          onChange={(e) =>
-                            updateService(svc.id, {
-                              tier: Number(e.target.value) as IntegrationTier,
-                            })
-                          }
-                        >
-                          {INTEGRATION_TIERS.filter((t) => t.weeks > 0).map((t) => (
-                            <option key={t.tier} value={t.tier}>
-                              Tier {t.tier} · {t.name} · {t.weeks} wk{t.weeks === 1 ? "" : "s"}
-                            </option>
-                          ))}
-                        </select>
-                      ) : (
-                        <label className="flex items-center gap-1 text-[11px] text-muted-foreground">
-                          <input
-                            type="number"
-                            min={0.5}
-                            step={0.5}
-                            className={cn(input, "w-16")}
-                            value={svc.weeks ?? SERVICE_KINDS[svc.kind].weeks}
-                            disabled={busy}
-                            onChange={(e) =>
-                              updateService(svc.id, { weeks: Number(e.target.value) || null })
-                            }
-                          />
-                          wks
-                        </label>
-                      )}
-                      <button
-                        type="button"
-                        className="text-muted-foreground hover:text-destructive disabled:opacity-50"
-                        aria-label={`Remove ${svc.name}`}
-                        disabled={busy}
-                        onClick={() => removeService(svc.id)}
+                  {shown.map((svc) =>
+                    isIntakeForm(svc.id) ? (
+                      <li
+                        key={svc.id}
+                        className="flex flex-wrap items-center gap-x-2 gap-y-1 px-2.5 py-1.5 text-[12px]"
                       >
-                        <X className="h-3.5 w-3.5" />
-                      </button>
-                      <label className="flex w-full items-center gap-1.5 text-[11px] text-muted-foreground">
-                        <span className="shrink-0">We need from you</span>
+                        <span className="rounded-sm bg-muted px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-muted-foreground">
+                          Form build
+                        </span>
+                        <span className="min-w-0 flex-1 truncate">{svc.name}</span>
+                        <span className="text-[11px] text-muted-foreground">
+                          Phase 2 · from the intake&apos;s form list
+                        </span>
+                      </li>
+                    ) : (
+                      <li
+                        key={svc.id}
+                        className="flex flex-wrap items-center gap-x-2 gap-y-1 px-2.5 py-1.5"
+                      >
+                        <span className="rounded-sm bg-muted px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-muted-foreground">
+                          {SERVICE_KINDS[svc.kind].label}
+                        </span>
+                        {toolsForKind(svc.kind).length ? (
+                          <select
+                            className={input}
+                            value={svc.tool ?? toolFromName(svc.name)?.key ?? ""}
+                            disabled={busy}
+                            title="Which system this is, for the analytics"
+                            onChange={(e) => {
+                              const tool = toolByKey(e.target.value);
+                              updateService(svc.id, {
+                                tool: tool?.key ?? null,
+                                ...(tool && !svc.name.trim() && { name: tool.name }),
+                              });
+                            }}
+                          >
+                            <option value="">System…</option>
+                            {toolsForKind(svc.kind).map((t) => (
+                              <option key={t.key} value={t.key}>
+                                {t.name}
+                              </option>
+                            ))}
+                          </select>
+                        ) : null}
                         <input
                           className={cn(input, "min-w-0 flex-1")}
-                          value={svc.needs ?? ""}
-                          placeholder={SERVICE_KINDS[svc.kind].needs}
+                          value={svc.name}
                           disabled={busy}
-                          onChange={(e) => updateService(svc.id, { needs: e.target.value || null })}
+                          onChange={(e) => updateService(svc.id, { name: e.target.value })}
                         />
-                      </label>
-                      {svc.phase <= 1 && belongsAfterForm(svc.kind) ? (
-                        <p className="w-full text-[11px] text-amber-700 dark:text-amber-400">
-                          {SERVICE_KINDS[svc.kind].label}s are built on real submissions — phase 2,
-                          once the form is dialed in, is what works. Phase 1 is your call.
-                        </p>
-                      ) : null}
-                    </li>
-                  ))}
+                        <label className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                          Phase
+                          <select
+                            className={input}
+                            value={svc.phase}
+                            disabled={busy}
+                            onChange={(e) =>
+                              updateService(svc.id, { phase: Number(e.target.value) })
+                            }
+                          >
+                            {PHASE_OPTIONS.map((o) => (
+                              <option key={o.value} value={o.value}>
+                                {o.label}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        {svc.kind === "integration" ? (
+                          <select
+                            className={input}
+                            value={svc.tier ?? 3}
+                            disabled={busy}
+                            title="Complexity tier — sets the length and the assignment weight"
+                            onChange={(e) =>
+                              updateService(svc.id, {
+                                tier: Number(e.target.value) as IntegrationTier,
+                              })
+                            }
+                          >
+                            {INTEGRATION_TIERS.filter((t) => t.weeks > 0).map((t) => (
+                              <option key={t.tier} value={t.tier}>
+                                Tier {t.tier} · {t.name} · {t.weeks} wk{t.weeks === 1 ? "" : "s"}
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          <label className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                            <input
+                              type="number"
+                              min={0.5}
+                              step={0.5}
+                              className={cn(input, "w-16")}
+                              value={svc.weeks ?? SERVICE_KINDS[svc.kind].weeks}
+                              disabled={busy}
+                              onChange={(e) =>
+                                updateService(svc.id, { weeks: Number(e.target.value) || null })
+                              }
+                            />
+                            wks
+                          </label>
+                        )}
+                        <button
+                          type="button"
+                          className="text-muted-foreground hover:text-destructive disabled:opacity-50"
+                          aria-label={`Remove ${svc.name}`}
+                          disabled={busy}
+                          onClick={() => removeService(svc.id)}
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                        <label className="flex w-full items-center gap-1.5 text-[11px] text-muted-foreground">
+                          <span className="shrink-0">We need from you</span>
+                          <input
+                            className={cn(input, "min-w-0 flex-1")}
+                            value={svc.needs ?? ""}
+                            placeholder={SERVICE_KINDS[svc.kind].needs}
+                            disabled={busy}
+                            onChange={(e) =>
+                              updateService(svc.id, { needs: e.target.value || null })
+                            }
+                          />
+                        </label>
+                        {svc.phase <= 1 && belongsAfterForm(svc.kind) ? (
+                          <p className="w-full text-[11px] text-amber-700 dark:text-amber-400">
+                            {SERVICE_KINDS[svc.kind].label}s are built on real submissions — phase
+                            2, once the form is dialed in, is what works. Phase 1 is your call.
+                          </p>
+                        ) : null}
+                      </li>
+                    ),
+                  )}
                 </ul>
               ) : !proposal ? (
                 <p className="text-[12px] text-muted-foreground">
@@ -796,6 +820,7 @@ export function TimelinePanel({
           const names = ph.services.map((x) => x.name).join(" + ");
           return (
             <PlanSection
+              id={ph.phase === 1 ? "plan-phase-1-services" : `plan-phase-${ph.phase}`}
               key={`ph-${ph.phase}-${ph.done}-${now}`}
               chip={ph.done ? "done" : now ? "now" : ph.tentative ? "gated" : "later"}
               title={`${ph.label.replace(" · alongside the form", "")} · ${names}`}
@@ -1017,7 +1042,18 @@ const CHIP: Record<NonNullable<Chip>, { label: string; className: string }> = {
  * current stage is open, and its date and time inputs appear only when
  * somebody asks to adjust them.
  */
+export const PLAN_SECTION_OPEN_EVENT = "gc:plan-section-open";
+
+/** Ask a plan stage to open and scroll into view — the strip at the top does this. */
+export function openPlanSection(id: string): void {
+  window.dispatchEvent(new CustomEvent(PLAN_SECTION_OPEN_EVENT, { detail: id }));
+  requestAnimationFrame(() => {
+    document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  });
+}
+
 function PlanSection({
+  id,
   chip,
   title,
   summary,
@@ -1026,6 +1062,7 @@ function PlanSection({
   adjustable = false,
   children,
 }: {
+  id?: string;
   chip: Chip;
   title: string;
   summary: string;
@@ -1038,8 +1075,17 @@ function PlanSection({
   const [open, setOpen] = useState(defaultOpen);
   const [adjust, setAdjust] = useState(false);
   const c = chip ? CHIP[chip] : null;
+  useEffect(() => {
+    if (!id) return;
+    const onOpen = (e: Event) => {
+      if ((e as CustomEvent<string>).detail === id) setOpen(true);
+    };
+    window.addEventListener(PLAN_SECTION_OPEN_EVENT, onOpen);
+    return () => window.removeEventListener(PLAN_SECTION_OPEN_EVENT, onOpen);
+  }, [id]);
   return (
     <section
+      id={id}
       className={cn(
         "rounded-md border bg-background",
         chip === "now" ? "border-primary/40" : "border-border",

@@ -1,5 +1,7 @@
 import { ArrowRight, Check } from "lucide-react";
 
+import type { Deliverable } from "@/lib/deliverables";
+
 import { BrandMarkTile } from "@/components/brand-mark";
 import type { BrandMark } from "@/lib/brand-marks";
 import type { DeliverablePhase } from "@/lib/deliverables";
@@ -23,12 +25,18 @@ export function DeliverablesStrip({
   size = "md",
   className,
   overrides = {},
+  onOpen,
+  onComplete,
 }: {
   phases: DeliverablePhase[];
   size?: "sm" | "md";
   className?: string;
   /** Uploaded logos, tool key → URL (useToolMarks). */
   overrides?: Record<string, string>;
+  /** Clicking an item: go to its stage on the plan. */
+  onOpen?: (d: Deliverable) => void;
+  /** The check that appears on hover: mark the item's last step done today. */
+  onComplete?: (d: Deliverable) => void;
 }) {
   const shown = phases.filter((p) => p.items.length > 0);
   if (shown.length === 0) return null;
@@ -67,28 +75,45 @@ export function DeliverablesStrip({
               </div>
               <ul className={cn("mt-1.5 space-y-1", compact && "mt-1 space-y-0.5")}>
                 {p.items.map((d) => (
-                  <li key={d.id} className="flex items-center gap-2">
-                    <BrandMarkTile
-                      mark={d.mark}
-                      size={compact ? "xs" : "sm"}
-                      override={d.mark.tool ? (overrides[d.mark.tool] ?? null) : null}
-                    />
-                    <span
-                      className={cn(
-                        "min-w-0 truncate",
-                        compact ? "text-[11.5px]" : "text-[12.5px]",
-                        d.state === "done" ? "text-muted-foreground" : "font-medium",
-                      )}
-                      title={d.sublabel}
+                  <li key={d.id} className="group flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => onOpen?.(d)}
+                      disabled={!onOpen}
+                      title={onOpen ? `${d.sublabel} · open on the plan` : d.sublabel}
+                      className="flex min-w-0 items-center gap-2 text-left enabled:hover:underline disabled:cursor-default"
                     >
-                      {d.label}
-                    </span>
+                      <BrandMarkTile
+                        mark={d.mark}
+                        size={compact ? "xs" : "sm"}
+                        override={d.mark.tool ? (overrides[d.mark.tool] ?? null) : null}
+                      />
+                      <span
+                        className={cn(
+                          "min-w-0 truncate",
+                          compact ? "text-[11.5px]" : "text-[12.5px]",
+                          d.state === "done" ? "text-muted-foreground" : "font-medium",
+                        )}
+                      >
+                        {d.label}
+                      </span>
+                    </button>
                     {d.state === "done" ? (
                       <Check
                         className="h-3.5 w-3.5 shrink-0 text-emerald-600"
                         strokeWidth={3}
                         aria-label="Live"
                       />
+                    ) : onComplete && p.state !== "upcoming" ? (
+                      <button
+                        type="button"
+                        onClick={() => onComplete(d)}
+                        title="Mark this live today"
+                        aria-label={`Mark ${d.label} live`}
+                        className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-border text-transparent hover:border-emerald-600 hover:text-emerald-600 group-hover:text-muted-foreground/60"
+                      >
+                        <Check className="h-2.5 w-2.5" strokeWidth={3} />
+                      </button>
                     ) : null}
                   </li>
                 ))}

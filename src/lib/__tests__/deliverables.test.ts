@@ -4,6 +4,7 @@ import { markForService, markForTool } from "../brand-marks";
 import { deliverablePhases, deliverablesFor, marksForIntake } from "../deliverables";
 import { readIntake } from "../intake-answers";
 import { buildTimeline } from "../onboarding-timeline";
+import { timelineFor } from "../onboarding-plan";
 import type { ServiceSpec } from "../onboarding-services";
 
 const intake = readIntake({
@@ -45,24 +46,25 @@ describe("marks", () => {
 });
 
 describe("deliverables", () => {
-  it("lists the first form, the later forms and every service, with a state each", () => {
-    const t = buildTimeline({
-      closeDate: "2026-09-09",
-      services: intake.timeline.services as ServiceSpec[],
-    });
+  it("lists the first form, every service and the intake's later forms, with a state each", () => {
+    const t = timelineFor(intake, "2026-09-09");
     const d = deliverablesFor(intake, t);
     expect(d.map((x) => x.label)).toEqual([
       "Service Ticket",
-      "Safety Inspection",
       "Crew training",
       "QuickBooks Online",
       "Invoice PDF",
+      "Safety Inspection",
     ]);
     expect(d[0]!.state).toBe("active"); // phase 1 is where we are
-    expect(d[2]!.state).toBe("active"); // alongside the form
-    expect(d[3]!.state).toBe("upcoming"); // phase 2 waits for the form
-    expect(d[3]!.mark.title).toBe("QuickBooks Online");
-    expect(d[4]!.sublabel).toMatch(/^Phase 2/);
+    expect(d[1]!.state).toBe("active"); // alongside the form
+    expect(d[2]!.state).toBe("upcoming"); // phase 2 waits for the form
+    expect(d[2]!.mark.title).toBe("QuickBooks Online");
+    expect(d[3]!.sublabel).toMatch(/^Phase 2/);
+    // The intake's second form is a phase-2 form build with real steps, not a name.
+    expect(d[4]!.kind).toBe("paid_form");
+    expect(d[4]!.done_key).toBe("form:f2:live");
+    expect(t.phases[0]!.services.map((s) => s.name)).toContain("Safety Inspection");
   });
 
   it("checks the form off once it is live and moves the ring to phase 2", () => {
@@ -78,14 +80,10 @@ describe("deliverables", () => {
   });
 
   it("groups the build into phases, the form first, later forms after it", () => {
-    const t = buildTimeline({
-      closeDate: "2026-09-09",
-      services: intake.timeline.services as ServiceSpec[],
-    });
-    const phases = deliverablePhases(intake, t);
+    const phases = deliverablePhases(intake, timelineFor(intake, "2026-09-09"));
     expect(phases.map((p) => [p.phase, p.label, p.state, p.items.map((d) => d.label)])).toEqual([
       [1, "Phase 1", "active", ["Service Ticket", "Crew training"]],
-      [2, "Phase 2", "upcoming", ["Safety Inspection", "QuickBooks Online", "Invoice PDF"]],
+      [2, "Phase 2", "upcoming", ["QuickBooks Online", "Invoice PDF", "Safety Inspection"]],
     ]);
     expect(phases[1]!.gate).toMatch(/form/i);
     expect(phases[0]!.when).toBe("Sep 9 → Sep 18");

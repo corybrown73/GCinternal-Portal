@@ -23,6 +23,8 @@ export type Deliverable = {
   phase: number;
   state: DeliverableState;
   mark: BrandMark;
+  /** The plan step that marks this done — the form's "live", a service's last step. */
+  done_key: string;
 };
 
 function shortDay(iso: string): string {
@@ -51,19 +53,8 @@ export function deliverablesFor(intake: IntakeAnswers, t: Timeline): Deliverable
     phase: 1,
     state: t.liveDoneOn ? "done" : t.currentPhase === 1 ? "active" : "upcoming",
     mark: KIND_MARKS.form,
+    done_key: "live",
   });
-
-  for (const f of intake.wanted_forms.slice(1)) {
-    out.push({
-      id: `form:${f.name}`,
-      kind: "form",
-      label: f.name,
-      sublabel: "After the first form",
-      phase: 2,
-      state: "upcoming",
-      mark: KIND_MARKS.form,
-    });
-  }
 
   const services = [
     ...t.alongside.map((s) => ({ s, phase: 1 })),
@@ -87,6 +78,7 @@ export function deliverablesFor(intake: IntakeAnswers, t: Timeline): Deliverable
       phase,
       state,
       mark: markForService({ kind: s.kind, name: s.name, tool: toolKeyOf(s) }),
+      done_key: s.milestones[s.milestones.length - 1]?.key ?? `${s.id}:live`,
     });
   }
   return out;

@@ -28,7 +28,9 @@ import { readIntake } from "@/lib/intake-answers";
 import { closeDateFor, timelineFor } from "@/lib/onboarding-plan";
 import { dayCounter, localIso } from "@/lib/onboarding-timeline";
 import { IntakePanel } from "@/components/intake-panel";
-import { TimelinePanel } from "@/components/timeline-panel";
+import { TimelinePanel, openPlanSection } from "@/components/timeline-panel";
+import { openPanel } from "@/lib/panel-open";
+import type { Deliverable } from "@/lib/deliverables";
 import { canEditDeal, canManage, isSuperAdmin, useProfile } from "@/lib/auth";
 import {
   addNote,
@@ -41,6 +43,7 @@ import {
   moveDealStage,
   removeNote,
   removeReport,
+  saveIntake,
   setNoteReviewed,
   setDealField,
   startOnboardingForDeal,
@@ -237,6 +240,38 @@ export function DealRecord({ deal, embedded = false }: { deal: DealData; embedde
   // SOW bought, checked off as the plan marks them live.
   const deliverables = deliverablePhases(intakeForDay, dayTimeline);
   const toolMarks = useToolMarks();
+  // From the strip at the top: open the stage on the plan, or tick the
+  // item's last step done today without scrolling anywhere.
+  const saveIntakeFn = useServerFn(saveIntake);
+  const tick = useMutation({
+    mutationFn: (doneKey: string) =>
+      saveIntakeFn({
+        data: {
+          dealId: account.id,
+          patch: {
+            timeline: {
+              ...intakeForDay.timeline,
+              completed: { ...intakeForDay.timeline.completed, [doneKey]: localIso() },
+            },
+          },
+        } as never,
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["deal", account.id] });
+      void queryClient.invalidateQueries({ queryKey: ["welcome", account.id] });
+      void queryClient.invalidateQueries({ queryKey: ["deal-pulse", account.id] });
+    },
+  });
+  const openStage = (d: Deliverable) => {
+    openPanel("deal:plan", "panel-plan");
+    const id =
+      d.kind === "form"
+        ? "plan-phase-1"
+        : d.phase === 1
+          ? "plan-phase-1-services"
+          : `plan-phase-${d.phase}`;
+    setTimeout(() => openPlanSection(id), 50);
+  };
   const [today, setToday] = useState<string | null>(null);
   useEffect(() => setToday(localIso()), []);
   const [briefResult, setBriefResult] = useState<{
@@ -302,7 +337,12 @@ export function DealRecord({ deal, embedded = false }: { deal: DealData; embedde
             <p className="mb-2.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
               What we&apos;re building
             </p>
-            <DeliverablesStrip phases={deliverables} overrides={toolMarks} />
+            <DeliverablesStrip
+              phases={deliverables}
+              overrides={toolMarks}
+              onOpen={openStage}
+              {...(editable ? { onComplete: (d: Deliverable) => tick.mutate(d.done_key) } : {})}
+            />
           </div>
         ) : null}
         <div className="flex flex-wrap items-center gap-x-6 gap-y-2 rounded-md border border-border bg-card px-4 py-3">
