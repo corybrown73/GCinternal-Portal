@@ -25,6 +25,7 @@ import { fmtMoney } from "@/lib/hub-format";
 import { readIntake } from "@/lib/intake-answers";
 import { marksForIntake } from "@/lib/deliverables";
 import { MarkRow } from "@/components/deliverables-strip";
+import { useToolMarks } from "@/lib/use-tool-marks";
 
 export type BoardDeal = Account & {
   am_owner_name: string | null;
@@ -55,6 +56,7 @@ function DealCard({
 }) {
   const days = daysIn(deal.stage_entered_at);
   const marks = marksForIntake(readIntake(deal.intake));
+  const toolMarks = useToolMarks();
   return (
     <div
       className={cn(
@@ -100,7 +102,7 @@ function DealCard({
       </div>
       {/* What they bought, as marks: the QuickBooks tile says more than
           "integration" and takes less room. */}
-      {marks.length ? <MarkRow marks={marks} className="mt-1.5" /> : null}
+      {marks.length ? <MarkRow marks={marks} className="mt-1.5" overrides={toolMarks} /> : null}
       <div className="mt-1 flex items-center justify-between font-mono text-[11px] text-muted-foreground">
         <span>{fmtArr(deal.arr)}</span>
         <span

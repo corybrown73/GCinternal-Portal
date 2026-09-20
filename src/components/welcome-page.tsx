@@ -1212,7 +1212,12 @@ function Overview({ view, page }: { view: WelcomeView; page: number }) {
             </div>
             <div className="wp-ov-marks">
               {c.marks.map((m, i) => (
-                <BrandMarkTile key={`${m.title}-${i}`} mark={m} size="md" />
+                <BrandMarkTile
+                  key={`${m.title}-${i}`}
+                  mark={m}
+                  size="md"
+                  override={m.tool ? (view.toolMarks?.[m.tool] ?? null) : null}
+                />
               ))}
             </div>
             <h3 className="wp-ov-name">{c.names.join(" + ")}</h3>

@@ -36,7 +36,11 @@ async function viewFor(deal: any, opts: { internal: boolean }): Promise<WelcomeV
   const { buildOnboardingDeckInput } = await import("./server/onboarding-deck-generate");
   const input = await buildOnboardingDeckInput(deal.id);
   const { photoForIndustry } = await import("./industry-photos.server");
-  const photoUrl = await photoForIndustry(input.industry, String(deal.id));
+  const { toolMarkUrls } = await import("./tool-marks.server");
+  const [photoUrl, toolMarks] = await Promise.all([
+    photoForIndustry(input.industry, String(deal.id)),
+    toolMarkUrls(),
+  ]);
 
   let clientLogoUrl: string | null = null;
   if (deal.logo_path) {
@@ -175,6 +179,7 @@ async function viewFor(deal: any, opts: { internal: boolean }): Promise<WelcomeV
     firstForm: input.firstForm,
     nextUseCases: input.nextUseCases,
     photoUrl,
+    toolMarks,
     clientLogoUrl,
     homeworkDone,
     readiness,

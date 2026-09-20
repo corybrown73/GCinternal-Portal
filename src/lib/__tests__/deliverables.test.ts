@@ -24,6 +24,10 @@ const intake = readIntake({
 describe("marks", () => {
   it("finds a brand by tool key or by the words a person typed", () => {
     expect(markForTool("qbo")?.kind).toBe("svg");
+    // The tool key rides along, so an uploaded logo can replace the mark.
+    expect(markForTool("qbo")?.tool).toBe("qbo");
+    expect(markForService({ kind: "integration", name: "Salesforce" }).tool).toBe("salesforce");
+    expect(markForService({ kind: "training", name: "Crew training" }).tool).toBeUndefined();
     expect(markForService({ kind: "integration", name: "QBO invoice sync" }).title).toBe(
       "QuickBooks Online",
     );

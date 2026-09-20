@@ -61,12 +61,15 @@ export function BrandMarkTile({
   state,
   className,
   title,
+  override,
 }: {
   mark: BrandMark;
   size?: keyof typeof SIZE;
   state?: "done" | "active" | "upcoming" | undefined;
   className?: string;
   title?: string;
+  /** An uploaded logo's URL. Replaces the built-in mark when present. */
+  override?: string | null | undefined;
 }) {
   const s = SIZE[size];
   const label = title ?? mark.title;
@@ -77,14 +80,16 @@ export function BrandMarkTile({
       className={cn(
         "relative inline-flex shrink-0 items-center justify-center border transition-opacity",
         s.box,
-        mark.kind === "mono" ? "border-transparent" : "border-border bg-white",
+        mark.kind === "mono" && !override ? "border-transparent" : "border-border bg-white",
         state === "upcoming" && "opacity-50 grayscale",
         state === "active" && "ring-2 ring-primary/40 ring-offset-1 ring-offset-background",
         className,
       )}
-      style={mark.kind === "mono" ? { backgroundColor: mark.hex } : undefined}
+      style={mark.kind === "mono" && !override ? { backgroundColor: mark.hex } : undefined}
     >
-      {mark.kind === "svg" ? (
+      {override ? (
+        <img src={override} alt="" className="h-[72%] w-[72%] object-contain" />
+      ) : mark.kind === "svg" ? (
         <svg viewBox="0 0 24 24" className={s.glyph} aria-hidden="true">
           <path d={mark.path} fill={mark.hex} />
         </svg>

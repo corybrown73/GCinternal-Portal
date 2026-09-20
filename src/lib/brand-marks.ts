@@ -17,10 +17,14 @@ import { toolByKey, toolFromName } from "./onboarding-tools";
  *          logo would be a smudge anyway.
  *  - icon: a lucide icon name for a kind of work — form, PDF, dashboard.
  */
-export type BrandMark =
+export type BrandMark = (
   | { kind: "svg"; title: string; hex: string; path: string }
   | { kind: "mono"; title: string; hex: string; text: string; dark?: boolean }
-  | { kind: "icon"; title: string; hex: string; icon: string };
+  | { kind: "icon"; title: string; hex: string; icon: string }
+) & {
+  /** The tool key (onboarding-tools.ts) when this is a system's mark, so an uploaded logo can replace it. */
+  tool?: string;
+};
 
 const svg = (slug: string, title?: string): BrandMark => {
   const p = BRAND_PATHS[slug]!;
@@ -74,7 +78,8 @@ export const KIND_MARKS: Record<ServiceKind | "form", BrandMark> = {
 
 export function markForTool(toolKey: string | null | undefined): BrandMark | null {
   const t = toolByKey(toolKey);
-  return t ? (TOOL_MARKS[t.key] ?? null) : null;
+  const m = t ? TOOL_MARKS[t.key] : undefined;
+  return t && m ? { ...m, tool: t.key } : null;
 }
 
 /** The mark for a service: its tool's brand when one is named or recognisable, else its kind. */
@@ -84,11 +89,11 @@ export function markForService(svc: {
   tool?: string | null;
 }): BrandMark {
   const tool = toolByKey(svc.tool) ?? toolFromName(svc.name);
-  if (tool && TOOL_MARKS[tool.key]) return TOOL_MARKS[tool.key]!;
+  if (tool && TOOL_MARKS[tool.key]) return { ...TOOL_MARKS[tool.key]!, tool: tool.key };
   return KIND_MARKS[svc.kind];
 }
 
 /** Every mark the library knows, for an admin page or a legend. */
 export function allToolMarks(): Array<{ key: string; mark: BrandMark }> {
-  return Object.entries(TOOL_MARKS).map(([key, mark]) => ({ key, mark }));
+  return Object.entries(TOOL_MARKS).map(([key, mark]) => ({ key, mark: { ...mark, tool: key } }));
 }

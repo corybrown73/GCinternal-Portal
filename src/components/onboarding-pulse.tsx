@@ -5,6 +5,7 @@ import { ArrowRight, PlusCircle } from "lucide-react";
 
 import { canEditSales, canManage, useProfile } from "@/lib/auth";
 import { DeliverablesStrip } from "@/components/deliverables-strip";
+import { useToolMarks } from "@/lib/use-tool-marks";
 import { getDealPulseFn, startServicesDealFn } from "@/lib/deal-pulse.functions";
 import { cn } from "@/lib/utils";
 
@@ -23,6 +24,7 @@ export function OnboardingPulse({ dealId }: { dealId: string }) {
     queryFn: () => getDealPulseFn({ data: { dealId } }),
     refetchInterval: 30_000,
   });
+  const toolMarks = useToolMarks();
   const p = pulse.data;
   if (!p) return null;
   const tone =
@@ -60,7 +62,12 @@ export function OnboardingPulse({ dealId }: { dealId: string }) {
         <span className="text-emerald-700 dark:text-emerald-400">Plan complete and shared.</span>
       )}
       {p.deliverables.length ? (
-        <DeliverablesStrip items={p.deliverables} size="sm" className="basis-full pt-1" />
+        <DeliverablesStrip
+          items={p.deliverables}
+          size="sm"
+          className="basis-full pt-1"
+          overrides={toolMarks}
+        />
       ) : null}
       <span className="ml-auto flex items-center gap-2">
         <Link

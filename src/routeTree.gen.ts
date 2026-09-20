@@ -37,6 +37,7 @@ import { Route as AdminAssignmentRouteImport } from './routes/admin.assignment'
 import { Route as AdminAuditRouteImport } from './routes/admin.audit'
 import { Route as AdminFlagsRouteImport } from './routes/admin.flags'
 import { Route as AdminIndustryPhotosRouteImport } from './routes/admin.industry-photos'
+import { Route as AdminIntegrationMarksRouteImport } from './routes/admin.integration-marks'
 import { Route as AdminIntegrationsRouteImport } from './routes/admin.integrations'
 import { Route as AdminLifecycleStagesRouteImport } from './routes/admin.lifecycle-stages'
 import { Route as AdminNavigationRouteImport } from './routes/admin.navigation'
@@ -226,6 +227,11 @@ const AdminFlagsRoute = AdminFlagsRouteImport.update({
 const AdminIndustryPhotosRoute = AdminIndustryPhotosRouteImport.update({
   id: '/industry-photos',
   path: '/industry-photos',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminIntegrationMarksRoute = AdminIntegrationMarksRouteImport.update({
+  id: '/integration-marks',
+  path: '/integration-marks',
   getParentRoute: () => AdminRoute,
 } as any)
 const AdminIntegrationsRoute = AdminIntegrationsRouteImport.update({
@@ -509,6 +515,7 @@ export interface FileRoutesByFullPath {
   '/admin/audit': typeof AdminAuditRoute
   '/admin/flags': typeof AdminFlagsRoute
   '/admin/industry-photos': typeof AdminIndustryPhotosRoute
+  '/admin/integration-marks': typeof AdminIntegrationMarksRoute
   '/admin/integrations': typeof AdminIntegrationsRoute
   '/admin/lifecycle-stages': typeof AdminLifecycleStagesRoute
   '/admin/navigation': typeof AdminNavigationRoute
@@ -583,6 +590,7 @@ export interface FileRoutesByTo {
   '/admin/audit': typeof AdminAuditRoute
   '/admin/flags': typeof AdminFlagsRoute
   '/admin/industry-photos': typeof AdminIndustryPhotosRoute
+  '/admin/integration-marks': typeof AdminIntegrationMarksRoute
   '/admin/integrations': typeof AdminIntegrationsRoute
   '/admin/lifecycle-stages': typeof AdminLifecycleStagesRoute
   '/admin/navigation': typeof AdminNavigationRoute
@@ -664,6 +672,7 @@ export interface FileRoutesById {
   '/admin/audit': typeof AdminAuditRoute
   '/admin/flags': typeof AdminFlagsRoute
   '/admin/industry-photos': typeof AdminIndustryPhotosRoute
+  '/admin/integration-marks': typeof AdminIntegrationMarksRoute
   '/admin/integrations': typeof AdminIntegrationsRoute
   '/admin/lifecycle-stages': typeof AdminLifecycleStagesRoute
   '/admin/navigation': typeof AdminNavigationRoute
@@ -746,6 +755,7 @@ export interface FileRouteTypes {
     | '/admin/audit'
     | '/admin/flags'
     | '/admin/industry-photos'
+    | '/admin/integration-marks'
     | '/admin/integrations'
     | '/admin/lifecycle-stages'
     | '/admin/navigation'
@@ -820,6 +830,7 @@ export interface FileRouteTypes {
     | '/admin/audit'
     | '/admin/flags'
     | '/admin/industry-photos'
+    | '/admin/integration-marks'
     | '/admin/integrations'
     | '/admin/lifecycle-stages'
     | '/admin/navigation'
@@ -900,6 +911,7 @@ export interface FileRouteTypes {
     | '/admin/audit'
     | '/admin/flags'
     | '/admin/industry-photos'
+    | '/admin/integration-marks'
     | '/admin/integrations'
     | '/admin/lifecycle-stages'
     | '/admin/navigation'
@@ -1203,6 +1215,13 @@ declare module '@tanstack/react-router' {
       path: '/industry-photos'
       fullPath: '/admin/industry-photos'
       preLoaderRoute: typeof AdminIndustryPhotosRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/integration-marks': {
+      id: '/admin/integration-marks'
+      path: '/integration-marks'
+      fullPath: '/admin/integration-marks'
+      preLoaderRoute: typeof AdminIntegrationMarksRouteImport
       parentRoute: typeof AdminRoute
     }
     '/admin/integrations': {
@@ -1565,6 +1584,7 @@ interface AdminRouteChildren {
   AdminAuditRoute: typeof AdminAuditRoute
   AdminFlagsRoute: typeof AdminFlagsRoute
   AdminIndustryPhotosRoute: typeof AdminIndustryPhotosRoute
+  AdminIntegrationMarksRoute: typeof AdminIntegrationMarksRoute
   AdminIntegrationsRoute: typeof AdminIntegrationsRoute
   AdminLifecycleStagesRoute: typeof AdminLifecycleStagesRoute
   AdminNavigationRoute: typeof AdminNavigationRoute
@@ -1580,6 +1600,7 @@ const AdminRouteChildren: AdminRouteChildren = {
   AdminAuditRoute: AdminAuditRoute,
   AdminFlagsRoute: AdminFlagsRoute,
   AdminIndustryPhotosRoute: AdminIndustryPhotosRoute,
+  AdminIntegrationMarksRoute: AdminIntegrationMarksRoute,
   AdminIntegrationsRoute: AdminIntegrationsRoute,
   AdminLifecycleStagesRoute: AdminLifecycleStagesRoute,
   AdminNavigationRoute: AdminNavigationRoute,

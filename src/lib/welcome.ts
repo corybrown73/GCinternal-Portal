@@ -41,6 +41,8 @@ export type WelcomeView = {
   nextUseCases: Array<{ name: string; objective: string | null }>;
   /** Signed, short-lived. null → the icon composition. */
   photoUrl: string | null;
+  /** Uploaded logos, tool key → signed URL, for the marks on the phase cards. */
+  toolMarks?: Record<string, string>;
   clientLogoUrl: string | null;
   /** Homework key → ISO timestamp when the customer ticked it. */
   homeworkDone: Record<string, string>;

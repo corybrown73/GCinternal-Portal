@@ -15,17 +15,25 @@ export function DeliverablesStrip({
   items,
   size = "md",
   className,
+  overrides = {},
 }: {
   items: Deliverable[];
   size?: "sm" | "md";
   className?: string;
+  /** Uploaded logos, tool key → URL (useToolMarks). */
+  overrides?: Record<string, string>;
 }) {
   if (items.length === 0) return null;
   return (
     <ol className={cn("flex flex-wrap gap-x-5 gap-y-3", className)}>
       {items.map((d) => (
         <li key={d.id} className="flex min-w-0 items-center gap-2.5">
-          <BrandMarkTile mark={d.mark} size={size} state={d.state} />
+          <BrandMarkTile
+            mark={d.mark}
+            size={size}
+            state={d.state}
+            override={d.mark.tool ? (overrides[d.mark.tool] ?? null) : null}
+          />
           <div className="min-w-0">
             <p
               className={cn(
@@ -51,11 +59,13 @@ export function MarkRow({
   max = 6,
   size = "xs",
   className,
+  overrides = {},
 }: {
   marks: BrandMark[];
   max?: number;
   size?: "xs" | "sm";
   className?: string;
+  overrides?: Record<string, string>;
 }) {
   if (marks.length === 0) return null;
   const shown = marks.slice(0, max);
@@ -63,7 +73,12 @@ export function MarkRow({
   return (
     <span className={cn("inline-flex items-center gap-1", className)}>
       {shown.map((m, i) => (
-        <BrandMarkTile key={`${m.title}-${i}`} mark={m} size={size} />
+        <BrandMarkTile
+          key={`${m.title}-${i}`}
+          mark={m}
+          size={size}
+          override={m.tool ? (overrides[m.tool] ?? null) : null}
+        />
       ))}
       {more > 0 ? <span className="text-[10px] text-muted-foreground">+{more}</span> : null}
     </span>

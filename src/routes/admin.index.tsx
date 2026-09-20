@@ -51,6 +51,13 @@ const CARDS = [
       "The photo library behind every customer's welcome page. Two or three real jobsite photos per industry.",
   },
   {
+    to: "/admin/integration-marks",
+    icon: Plug,
+    title: "Integration logos",
+    description:
+      "The mark for each system we connect to. Upload the real logo once and it replaces the built-in mark on every deal, customer and welcome page.",
+  },
+  {
     to: "/admin/navigation",
     icon: PanelLeft,
     title: "Navigation",

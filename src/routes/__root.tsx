@@ -101,6 +101,10 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
   );
 }
 
+/** When the configured stage labels were last applied in this tab. */
+let stagesLoadedAt = 0;
+const STAGES_TTL_MS = 5 * 60_000;
+
 export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
   head: () => ({
     meta: [
@@ -154,10 +158,15 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     // that trains people to ignore the log. Those pages render the compiled-in
     // labels, which is correct: nothing there shows a configurable stage name.
     if (isPublicRoute(location.pathname)) return null;
+    // Once per five minutes, not once per navigation. This loader blocks every
+    // page change, and the stage names change roughly never; asking on each
+    // click cost a full server round trip before anything could paint.
+    if (Date.now() - stagesLoadedAt < STAGES_TTL_MS) return null;
     try {
       const { getLifecycleStages } = await import("@/lib/lifecycle-stages.functions");
       const stages = await getLifecycleStages();
       applyStageOverrides(stages as never);
+      stagesLoadedAt = Date.now();
     } catch (e) {
       // An unauthenticated caller is not a fault worth logging: a signed-out
       // visitor, or anyone on a mistyped URL, reaches this line every time,
