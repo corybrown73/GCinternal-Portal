@@ -1762,20 +1762,7 @@ export async function loadDealInbox(scope: ResolvedScope | null): Promise<DealIn
   const briefed = new Set(
     ((briefs ?? []) as Array<{ account_id: string }>).map((r) => r.account_id),
   );
-  // Latest ledger row per deal wins; a null team member is an unassignment.
-  const owner = new Map<string, { id: string | null; name: string | null }>();
-  for (const row of (ledger ?? []) as Array<{
-    deal_id: string | null;
-    team_member_id: string | null;
-    team_members: { name: string } | { name: string }[] | null;
-  }>) {
-    if (!row.deal_id || owner.has(row.deal_id)) continue;
-    const tm = Array.isArray(row.team_members) ? row.team_members[0] : row.team_members;
-    owner.set(row.deal_id, {
-      id: row.team_member_id ? String(row.team_member_id) : null,
-      name: tm?.name ?? null,
-    });
-  }
+  const owner = ownersFromLedger(ledger);
 
   const { guideSteps } = await import("./deal-guide");
   const labels = new Map(stages.map((s) => [s.key, s.label]));
@@ -1822,4 +1809,39 @@ export async function loadDealInbox(scope: ResolvedScope | null): Promise<DealIn
         Number(b.unclaimed) - Number(a.unclaimed) ||
         a.stage_entered_at.localeCompare(b.stage_entered_at),
     );
+}
+
+type LedgerRow = {
+  deal_id: string | null;
+  team_member_id: string | null;
+  team_members: { name: string } | { name: string }[] | null;
+};
+
+/** Latest ledger row per deal wins; a null team member is an unassignment. */
+function ownersFromLedger(
+  ledger: unknown,
+): Map<string, { id: string | null; name: string | null }> {
+  const owner = new Map<string, { id: string | null; name: string | null }>();
+  for (const row of (ledger ?? []) as LedgerRow[]) {
+    if (!row.deal_id || owner.has(row.deal_id)) continue;
+    const tm = Array.isArray(row.team_members) ? row.team_members[0] : row.team_members;
+    owner.set(row.deal_id, {
+      id: row.team_member_id ? String(row.team_member_id) : null,
+      name: tm?.name ?? null,
+    });
+  }
+  return owner;
+}
+
+/** Who owns each deal today, from the claim ledger. Deals with no row are absent. */
+export async function dealOwners(
+  dealIds: string[],
+): Promise<Map<string, { id: string | null; name: string | null }>> {
+  if (dealIds.length === 0) return new Map();
+  const { data } = await db()
+    .from("portal_assignments")
+    .select("deal_id, team_member_id, created_at, team_members(name)")
+    .in("deal_id", dealIds)
+    .order("created_at", { ascending: false });
+  return ownersFromLedger(data);
 }
