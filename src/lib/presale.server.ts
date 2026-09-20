@@ -693,6 +693,13 @@ export async function generateDealBrief(
   const { generateBrief } = await import("./server/brief/generate");
   const brief = await generateBrief(dealId, userId);
 
+  // A brief on file is the first fact the journey reads: the account moves
+  // from Handoff to Kickoff on its own.
+  if (brief.status === "complete") {
+    const { syncJourneyStage } = await import("./journey-sync.server");
+    await syncJourneyStage(dealId, userId);
+  }
+
   // An AI synthesis fills the intake's blanks — the process today, the forms
   // they named, seats, the systems to connect. A person's answers stand.
   let filled: string[] = [];
@@ -1632,6 +1639,11 @@ export async function saveDealIntake(
     payload: { fields: Object.keys(patch) },
   });
 
+  // A ticked step is a fact the journey reads: the stage follows the plan.
+  {
+    const { syncJourneyStage } = await import("./journey-sync.server");
+    await syncJourneyStage(dealId, userId);
+  }
   return next;
 }
 
