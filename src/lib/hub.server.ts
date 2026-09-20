@@ -542,6 +542,17 @@ export async function loadCustomer360(
   const child = (table: string, order: string, asc = true) =>
     db().from(table).select("*").eq("implementation_id", impl.id).order(order, { ascending: asc });
 
+  // The signed SOW arrives from the deal as a storage path, not a URL. A
+  // record that only read the URL column showed "Nothing attached" over a
+  // contract that was right there.
+  let sowSignedUrl: string | null = null;
+  if (impl.sow_document_path) {
+    const { data: signed } = await db()
+      .storage.from("attachments")
+      .createSignedUrl(impl.sow_document_path, 60 * 60);
+    sowSignedUrl = signed?.signedUrl ?? null;
+  }
+
   const [
     requirements,
     successCriteria,
@@ -556,12 +567,15 @@ export async function loadCustomer360(
     evidence,
     approvals,
     stageHistory,
+    // IN THE ORDER THE ARRAY BELOW RUNS THEM. These were read out of order:
+    // the completion-records slot held the stage instances, so a new project
+    // showed eight phantom "completion records" and "no plan applied" at once.
+    completionRes,
     adoptionAreaRes,
     graduationRes,
     handoffRes,
     journalRes,
     stageInstanceRes,
-    completionRes,
   ] = await Promise.all([
     child("requirements", "created_at"),
     child("success_criteria", "created_at"),
@@ -885,7 +899,7 @@ export async function loadCustomer360(
       sales_owner: impl.sales_owner,
       tier: impl.tier,
       sow_reference: impl.sow_reference,
-      sow_document_url: impl.sow_document_url ?? null,
+      sow_document_url: impl.sow_document_url ?? sowSignedUrl,
       sow_document_name: impl.sow_document_name ?? null,
       sow_value: impl.sow_value,
       sow_signed_date: impl.sow_signed_date,

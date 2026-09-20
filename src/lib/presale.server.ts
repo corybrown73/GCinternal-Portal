@@ -94,6 +94,8 @@ export interface PipelineDeal extends Account {
   am_owner_name: string | null;
   /** The customer page this deal lives on once it has closed. */
   customer_id: string | null;
+  /** The implementation on that page this deal became. */
+  implementation_id: string | null;
   se_owner_name: string | null;
   /** New customer or existing account, when the intake has said. */
   path: "new_logo" | "existing" | null;
@@ -116,12 +118,23 @@ export async function loadPipeline(
   // Loaded alongside the deals rather than after them: the board needs both to
   // render one column per configured stage, and a waterfall here is a second
   // round trip on the busiest internal page.
-  const [{ data: accounts, error }, names, stages, { data: noted }] = await Promise.all([
-    db().from("portal_accounts").select("*").order("name"),
-    profileNames(),
-    loadPipelineStages(),
-    db().from("portal_gong_reports").select("account_id"),
-  ]);
+  const [{ data: accounts, error }, names, stages, { data: noted }, { data: impls }] =
+    await Promise.all([
+      db().from("portal_accounts").select("*").order("name"),
+      profileNames(),
+      loadPipelineStages(),
+      db().from("portal_gong_reports").select("account_id"),
+      db()
+        .from("implementations")
+        .select("id,deal_id,created_at")
+        .is("superseded_by_implementation_id", null)
+        .not("deal_id", "is", null)
+        .order("created_at", { ascending: false }),
+    ]);
+  const implByDeal = new Map<string, string>();
+  for (const i of (impls ?? []) as Array<{ id: string; deal_id: string }>) {
+    if (!implByDeal.has(i.deal_id)) implByDeal.set(i.deal_id, String(i.id));
+  }
   if (error) throw new Error(error.message);
   const withNotes = new Set(
     ((noted ?? []) as Array<{ account_id: string }>).map((r) => r.account_id),
@@ -146,6 +159,7 @@ export async function loadPipeline(
     .map((a) => ({
       ...a,
       customer_id: a.customer_id ?? null,
+      implementation_id: implByDeal.get(a.id) ?? null,
       am_owner_name: a.am_owner_id ? (names.get(a.am_owner_id) ?? null) : null,
       se_owner_name: a.se_owner_id ? (names.get(a.se_owner_id) ?? null) : null,
       path: readIntake(a.intake).path,
@@ -412,6 +426,10 @@ export interface DealDetail {
   logo_url: string | null;
   /** Short-lived signed link to the uploaded SOW, or null if none was uploaded. */
   sow_url: string | null;
+  /** The implementation this deal became, so links land on it and not on "latest". */
+  implementation_id: string | null;
+  /** Why onboarding did not start by itself at Closed Won, when it did not. */
+  onboarding_deferred: string | null;
 }
 
 export async function loadDeal(dealId: string): Promise<DealDetail | null> {
@@ -480,10 +498,33 @@ export async function loadDeal(dealId: string): Promise<DealDetail | null> {
     }
   }
 
+  const [{ data: implRow }, { data: deferredRow }] = await Promise.all([
+    db()
+      .from("implementations")
+      .select("id")
+      .eq("deal_id", dealId)
+      .is("superseded_by_implementation_id", null)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    account.customer_id
+      ? Promise.resolve({ data: null })
+      : db()
+          .from("portal_audit_log")
+          .select("payload,created_at")
+          .eq("action", "onboarding.autostart_deferred")
+          .eq("entity_id", dealId)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle(),
+  ]);
+
   return {
     account: account as DealDetail["account"],
     logo_url: logoUrl,
     sow_url: sowUrl,
+    implementation_id: implRow?.id ? String(implRow.id) : null,
+    onboarding_deferred: (deferredRow?.payload as { reason?: string } | null)?.reason ?? null,
     am_owner_name: named(account.am_owner_id),
     se_owner_name: named(account.se_owner_id),
     // Sorted by the name a person will look for, not by id.
@@ -1171,6 +1212,12 @@ export async function startOnboardingAs(
     }
     const { readIntake } = await import("./intake-answers");
     const intake = readIntake((account as { intake?: unknown }).intake);
+
+    // The facts the deal already holds, onto the record that will be read
+    // for the next twelve weeks: the seller, the target launch from the plan,
+    // the integration tier, the goal the brief captured, and the named
+    // contact as the first customer contact. None of this is re-asked.
+    await carryDealFacts(dealId, impl.id as string, customerId, account, intake);
     const { count: reports } = await db()
       .from("portal_gong_reports")
       .select("id", { count: "exact", head: true })
@@ -1892,4 +1939,88 @@ export async function dealOwners(
     .in("deal_id", dealIds)
     .order("created_at", { ascending: false });
   return ownersFromLedger(data);
+}
+
+/**
+ * What the deal settled, written onto the implementation and the customer at
+ * handoff. Blanks only: a value somebody already typed on the record stands.
+ * Never throws.
+ */
+async function carryDealFacts(
+  dealId: string,
+  implementationId: string,
+  customerId: string,
+  account: Account & { customer_id?: string | null },
+  intake: import("./intake-answers").IntakeAnswers,
+): Promise<void> {
+  try {
+    const { closeDateFor, timelineFor } = await import("./onboarding-plan");
+    const [{ data: transitions }, stages, { data: brief }, { data: am }] = await Promise.all([
+      db().from("portal_stage_transitions").select("to_stage,occurred_at").eq("account_id", dealId),
+      loadPipelineStages(),
+      db()
+        .from("portal_briefs")
+        .select("structured_json")
+        .eq("account_id", dealId)
+        .eq("status", "complete")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+      account.am_owner_id
+        ? db()
+            .from("portal_profiles")
+            .select("full_name,email")
+            .eq("id", account.am_owner_id)
+            .maybeSingle()
+        : Promise.resolve({ data: null }),
+    ]);
+    const close = closeDateFor({
+      intake,
+      stageHistory: (transitions ?? []) as Array<{ to_stage: string; occurred_at: string }>,
+      wonStageKey: wonStage(stages).key,
+    }).date;
+    const t = timelineFor(intake, close);
+    const integrationTier = Math.max(
+      intake.timeline.integration_tier ?? 0,
+      ...((intake.timeline.services ?? []) as Array<{ kind: string; tier?: number | null }>)
+        .filter((x) => x.kind === "integration")
+        .map((x) => x.tier ?? 0),
+    );
+    const goal =
+      (brief?.structured_json as { kickoff?: { day_90_definition?: string | null } } | null)
+        ?.kickoff?.day_90_definition ?? null;
+
+    const patch: Record<string, unknown> = {};
+    if (am?.full_name || am?.email) patch["sales_owner"] = am.full_name || am.email;
+    patch["target_launch_date"] = t.phases.length
+      ? (t.phases[t.phases.length - 1]?.endsOn ?? t.liveDate)
+      : t.liveDate;
+    if (integrationTier > 0) patch["tier"] = `Tier ${integrationTier}`;
+    if (goal) patch["customer_goals"] = goal;
+    if (Object.keys(patch).length) {
+      await db().from("implementations").update(patch).eq("id", implementationId);
+    }
+
+    if (account.primary_contact_name) {
+      const { data: existing } = await db()
+        .from("customer_contacts")
+        .select("id")
+        .eq("customer_id", customerId)
+        .ilike("name", account.primary_contact_name.trim())
+        .limit(1)
+        .maybeSingle();
+      if (!existing) {
+        await db()
+          .from("customer_contacts")
+          .insert({
+            customer_id: customerId,
+            name: account.primary_contact_name.trim(),
+            role: account.primary_contact_role?.trim() || "Champion",
+            email: account.primary_contact_email?.trim() || null,
+          });
+      }
+    }
+  } catch (e) {
+    console.error("[handoff] could not carry the deal's facts onto the record", e);
+  }
 }

@@ -266,7 +266,7 @@ export function NewImplementation({ customers }: { customers: CustomerOption[] }
       </button>
 
       <Dialog open={open} onOpenChange={(v) => (mutation.isPending ? null : setOpen(v))}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-[14px]">New implementation</DialogTitle>
             <DialogDescription className="text-[11px]">

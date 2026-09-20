@@ -59,7 +59,10 @@ function DealPage() {
       <Navigate
         to="/customers/$customerId"
         params={{ customerId: data.account.customer_id }}
-        search={{ tab: "prekickoff" }}
+        search={{
+          tab: "prekickoff",
+          ...(data.implementation_id ? { impl: data.implementation_id } : {}),
+        }}
         replace
       />
     );

@@ -31,6 +31,7 @@ export type BoardDeal = Account & {
   am_owner_name: string | null;
   /** Set once the deal has closed and has a customer page; the card opens that page. */
   customer_id?: string | null;
+  implementation_id?: string | null;
   path?: "new_logo" | "existing" | null;
   has_notes?: boolean;
   has_sow?: boolean;
@@ -140,6 +141,7 @@ function DraggableCard({
         <Link
           to="/customers/$customerId"
           params={{ customerId: deal.customer_id }}
+          search={deal.implementation_id ? { impl: deal.implementation_id } : {}}
           onClick={(e) => {
             if (isDragging) e.preventDefault();
           }}

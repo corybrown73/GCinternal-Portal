@@ -131,6 +131,16 @@ export async function startServicesDeal(
     note: "Services deal started from the customer record",
   });
 
+  // Closing is the start: the services deal gets its implementation on this
+  // customer's page now, the way a closed deal does, so it never sits in
+  // Closed Won as a phantom nobody claims.
+  try {
+    const { startOnboardingAs } = await import("./presale.server");
+    await startOnboardingAs({ kind: "user", profileId: userId }, dealId, { customerId });
+  } catch (e) {
+    console.error("[services] could not start the implementation for the services deal", e);
+  }
+
   const { audit } = await import("./server/audit");
   await audit({
     actor_type: "user",

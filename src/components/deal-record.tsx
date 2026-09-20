@@ -662,6 +662,14 @@ function StartOnboarding({ deal }: { deal: DealData }) {
   const error = mutation.isError ? (
     <p className="text-[11px] text-destructive">{(mutation.error as Error).message}</p>
   ) : null;
+  // Closed Won tried to start onboarding and could not — usually a customer
+  // with the same name already exists. Say so, next to the picker that
+  // resolves it, instead of leaving a closed deal that quietly has no page.
+  const deferred = deal.onboarding_deferred ? (
+    <p className="max-w-sm text-right text-[11px] text-amber-800 dark:text-amber-300">
+      Onboarding did not start on its own: {deal.onboarding_deferred} Pick the account below.
+    </p>
+  ) : null;
 
   // A linked deal is already on its customer's page; the implementation is a tab there.
   if (deal.account.customer_id) return null;
@@ -679,6 +687,7 @@ function StartOnboarding({ deal }: { deal: DealData }) {
         >
           {mutation.isPending ? "Starting…" : "Start onboarding"} <ArrowRight className="h-3 w-3" />
         </button>
+        {deferred}
         {error}
       </div>
     );
@@ -722,6 +731,7 @@ function StartOnboarding({ deal }: { deal: DealData }) {
           {mutation.isPending ? "Starting…" : "Start onboarding"} <ArrowRight className="h-3 w-3" />
         </button>
       </div>
+      {deferred}
       {error}
     </div>
   );
