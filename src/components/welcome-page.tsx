@@ -59,6 +59,8 @@ import { exportWelcomePptx, pptxFileName } from "@/components/welcome-export";
 import { GOCANVAS_APP } from "@/lib/app-links";
 import { firstName } from "@/lib/team-profile";
 import { cn } from "@/lib/utils";
+import { BrandMarkTile } from "@/components/brand-mark";
+import { KIND_MARKS, markForService, type BrandMark } from "@/lib/brand-marks";
 
 /**
  * The welcome page: six screens, one source.
@@ -1127,6 +1129,10 @@ function Overview({ view, page }: { view: WelcomeView; page: number }) {
       key: 1,
       label: "Phase 1",
       names: [view.firstForm?.name ?? "Your first form", ...t.alongside.map((x) => x.name)],
+      marks: [
+        KIND_MARKS.form,
+        ...t.alongside.map((x) => markForService({ kind: x.kind, name: x.name })),
+      ] as BrandMark[],
       length: `${live?.day ?? 7} business days`,
       when: t.liveDoneOn
         ? `Live ${shortDay(t.liveDoneOn)}`
@@ -1149,6 +1155,7 @@ function Overview({ view, page }: { view: WelcomeView; page: number }) {
         key: ph.phase,
         label: ph.label,
         names: ph.services.map((x) => x.name),
+        marks: ph.services.map((x) => markForService({ kind: x.kind, name: x.name })),
         length: wk(longest),
         when: ph.done
           ? `Done ${shortDay(ph.endsOn!)}`
@@ -1202,6 +1209,11 @@ function Overview({ view, page }: { view: WelcomeView; page: number }) {
               ) : (
                 <span className="wp-ov-status">Later</span>
               )}
+            </div>
+            <div className="wp-ov-marks">
+              {c.marks.map((m, i) => (
+                <BrandMarkTile key={`${m.title}-${i}`} mark={m} size="md" />
+              ))}
             </div>
             <h3 className="wp-ov-name">{c.names.join(" + ")}</h3>
             <dl className="wp-ov-facts">

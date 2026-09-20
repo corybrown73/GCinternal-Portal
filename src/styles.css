@@ -3572,6 +3572,15 @@ body.gc-presenting {
 .gc-welcome .wp-ov-card.is-done .wp-phase2-tag {
   background: #9aa7b5;
 }
+.gc-welcome .wp-ov-marks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.gc-welcome .wp-ov-card.is-done .wp-ov-marks {
+  filter: grayscale(1);
+  opacity: 0.6;
+}
 .gc-welcome .wp-ov-head {
   display: flex;
   align-items: center;

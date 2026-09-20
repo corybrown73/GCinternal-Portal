@@ -4,6 +4,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { ArrowRight, PlusCircle } from "lucide-react";
 
 import { canEditSales, canManage, useProfile } from "@/lib/auth";
+import { DeliverablesStrip } from "@/components/deliverables-strip";
 import { getDealPulseFn, startServicesDealFn } from "@/lib/deal-pulse.functions";
 import { cn } from "@/lib/utils";
 
@@ -58,6 +59,9 @@ export function OnboardingPulse({ dealId }: { dealId: string }) {
       ) : (
         <span className="text-emerald-700 dark:text-emerald-400">Plan complete and shared.</span>
       )}
+      {p.deliverables.length ? (
+        <DeliverablesStrip items={p.deliverables} size="sm" className="basis-full pt-1" />
+      ) : null}
       <span className="ml-auto flex items-center gap-2">
         <Link
           to="/onboarding-plan/$dealId"

@@ -4,6 +4,8 @@ import { ArrowRight } from "lucide-react";
 import { PageBody, PageHeader } from "@/components/page";
 import { Panel } from "@/components/record";
 import { LIFECYCLE_STAGES } from "@/lib/lifecycle";
+import { BrandMarkTile } from "@/components/brand-mark";
+import { KIND_MARKS, allToolMarks } from "@/lib/brand-marks";
 
 /**
  * The whole flow on one page, by role.
@@ -160,6 +162,22 @@ function HowItWorksPage() {
               </li>
             ))}
           </ol>
+        </Panel>
+        <Panel
+          title="The marks"
+          meta="What the tiles on a deal, a customer and the welcome page mean"
+        >
+          <div className="grid gap-x-6 gap-y-2 px-3 py-2.5 sm:grid-cols-2 lg:grid-cols-3">
+            {[
+              ...Object.entries(KIND_MARKS).map(([key, mark]) => ({ key, mark })),
+              ...allToolMarks(),
+            ].map(({ key, mark }) => (
+              <div key={key} className="flex items-center gap-2.5">
+                <BrandMarkTile mark={mark} size="sm" />
+                <span className="text-[12.5px]">{mark.title}</span>
+              </div>
+            ))}
+          </div>
         </Panel>
         <div className="grid gap-4 xl:grid-cols-2">
           {ROLES.map((r) => (

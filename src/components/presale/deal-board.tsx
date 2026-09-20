@@ -22,6 +22,9 @@ import {
 import type { Account } from "@/lib/presale-types";
 import { cn } from "@/lib/utils";
 import { fmtMoney } from "@/lib/hub-format";
+import { readIntake } from "@/lib/intake-answers";
+import { marksForIntake } from "@/lib/deliverables";
+import { MarkRow } from "@/components/deliverables-strip";
 
 export type BoardDeal = Account & {
   am_owner_name: string | null;
@@ -51,6 +54,7 @@ function DealCard({
   overlay?: boolean;
 }) {
   const days = daysIn(deal.stage_entered_at);
+  const marks = marksForIntake(readIntake(deal.intake));
   return (
     <div
       className={cn(
@@ -94,6 +98,9 @@ function DealCard({
           </span>
         ) : null}
       </div>
+      {/* What they bought, as marks: the QuickBooks tile says more than
+          "integration" and takes less room. */}
+      {marks.length ? <MarkRow marks={marks} className="mt-1.5" /> : null}
       <div className="mt-1 flex items-center justify-between font-mono text-[11px] text-muted-foreground">
         <span>{fmtArr(deal.arr)}</span>
         <span
