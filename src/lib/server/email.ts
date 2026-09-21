@@ -44,19 +44,20 @@ async function internalDirectory(): Promise<Map<string, { manager: boolean }> | 
       db.from("team_members").select("email, role"),
       db.from("portal_profiles").select("email, role"),
     ]);
+    // The team directory decides. A specialist given manager rights in the
+    // app for the pilot is still, on the team, a specialist: her inbox holds
+    // assignments, not every broadcast. Only someone with no team row at all
+    // is judged by their login's role.
     const byEmail = new Map<string, { manager: boolean }>();
-    const add = (email: unknown, role: unknown) => {
-      if (typeof email !== "string" || !email) return;
-      const key = email.trim().toLowerCase();
-      const manager = MANAGER_ROLES.has(String(role ?? "").toLowerCase());
-      const prev = byEmail.get(key);
-      byEmail.set(key, { manager: (prev?.manager ?? false) || manager });
-    };
+    const isManager = (role: unknown) => MANAGER_ROLES.has(String(role ?? "").toLowerCase());
     for (const p of profiles ?? []) {
-      if (p.role === "customer") continue;
-      add(p.email, p.role);
+      if (p.role === "customer" || typeof p.email !== "string" || !p.email) continue;
+      byEmail.set(p.email.trim().toLowerCase(), { manager: isManager(p.role) });
     }
-    for (const m of members ?? []) add(m.email, m.role);
+    for (const m of members ?? []) {
+      if (typeof m.email !== "string" || !m.email) continue;
+      byEmail.set(m.email.trim().toLowerCase(), { manager: isManager(m.role) });
+    }
     directoryCache = { at: Date.now(), byEmail };
     return byEmail;
   } catch (e) {
