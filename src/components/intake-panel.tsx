@@ -6,11 +6,14 @@ import { ArrowUp, Check, ExternalLink, ListPlus, Upload, X } from "lucide-react"
 import { Panel } from "@/components/record";
 import { TemplateCard } from "@/components/template-card";
 import { suggestFormTemplatesFn } from "@/lib/form-templates.functions";
+import type { DealData } from "@/lib/deal-query";
 import {
   addWantedForm,
   chosenFrom,
   COMPANY_SIZES,
+  flowAnswered,
   INDUSTRIES,
+  intakeStatus,
   isTrainingOnly,
   makeFirstWantedForm,
   readIntake,
@@ -20,7 +23,14 @@ import {
 } from "@/lib/intake-answers";
 import { SERVICE_KINDS, type ServiceSpec } from "@/lib/onboarding-services";
 import { PATH_LABEL } from "@/lib/onboarding-timeline";
-import { getIntakeFormLink, saveIntake, uploadIntakeForm } from "@/lib/presale.functions";
+import {
+  addReport,
+  getIntakeFormLink,
+  saveIntake,
+  uploadContract,
+  uploadIntakeForm,
+  uploadSow,
+} from "@/lib/presale.functions";
 import { cn } from "@/lib/utils";
 
 /**
@@ -34,19 +44,18 @@ import { cn } from "@/lib/utils";
  * person typing is on a call.
  */
 export function IntakePanel({
-  dealId,
-  raw,
+  deal,
   editable,
   highlight,
 }: {
-  dealId: string;
-  raw: unknown;
+  deal: DealData;
   editable: boolean;
   highlight?: boolean | undefined;
 }) {
-  const answers = readIntake(raw);
+  const dealId = deal.account.id;
+  const answers = readIntake(deal.account.intake);
   const qc = useQueryClient();
-  // Changing the path rewrites the whole plan and its dates. A stray click
+  // Changing the flow rewrites the whole plan and its dates. A stray click
   // — the gallery loads and everything shifts under the cursor — should not
   // be able to do that silently.
   const choosePath = (next: "new_logo" | "existing" | "dm_conversion" | "field_fusion") => {
@@ -54,7 +63,7 @@ export function IntakePanel({
     if (
       answers.path !== null &&
       !window.confirm(
-        "Switching the path rebuilds the plan: the phases, the go-live date and what the customer's page says. Continue?",
+        "Switching the flow rebuilds the plan: the phases, the go-live date and what the customer's page says. Continue?",
       )
     )
       return;
@@ -80,38 +89,61 @@ export function IntakePanel({
   });
   const set = (patch: Record<string, unknown>) => mutation.mutate(patch);
 
-  // ONE QUESTION AT A TIME. Which kind of account; do they have forms; who
-  // they are. The open step is the first unanswered one; answered steps
-  // fold to their answer with "Change". Build it fills step 3 from the
-  // calls, so on a normal account a person answers two questions.
-  const step1Done = answers.path !== null;
-  // Training only — Field Fusion, or the person said so — has no form to ask
-  // about: the forms step folds to that answer and the plan is the training
-  // journey.
-  const training = isTrainingOnly(answers);
-  const step2Done = training
-    ? true
-    : answers.forms_built === true
-      ? answers.uploaded_forms.length > 0
-      : answers.forms_built === false
-        ? answers.wanted_forms.length > 0
+  // THREE STEPS, IN THE ORDER THE WORK HAPPENS. Notes in first — the brief
+  // writes itself from them and fills the facts. Then the facts, confirmed.
+  // Then the flow, and the one question the flow itself asks. The open step
+  // is the first unfinished one; finished steps fold to their answer.
+  const hasNotes = deal.gong_reports.length > 0;
+  const hasBrief = deal.briefs.some((b) => b.status === "complete" && b.generator === "llm");
+  const hasSowFile = Boolean(deal.sow_url);
+  const paperDone =
+    answers.has_sow === true
+      ? hasSowFile
+      : answers.has_sow === false
+        ? Boolean(answers.contract)
         : false;
-  const step3Done = Boolean(answers.industry) && Boolean(answers.current_process);
+  const step1Done = hasNotes && paperDone;
+  const status = intakeStatus(answers);
+  const step2Done = answers.solutions_involved !== null && status.done;
+  const step3Done = answers.path !== null && flowAnswered(answers);
   const current = !step1Done ? 1 : !step2Done ? 2 : !step3Done ? 3 : 0;
   const [opened, setOpened] = useState<number | null>(null);
   const openStep = opened ?? current;
   const busy = mutation.isPending;
+  const training = isTrainingOnly(answers);
+
+  const flowAnswer = (): string | null => {
+    if (answers.path === null) return null;
+    const head = PATH_LABEL[answers.path];
+    if (answers.path === "field_fusion") return `${head} — Liesl's gate at the close`;
+    if (answers.path === "existing") {
+      const e = answers.existing;
+      if (e.form_final === true) return `${head} — form is final, review then integrate`;
+      if (e.form_final === false && e.builder === "us") return `${head} — we build the form`;
+      if (e.form_final === false && e.builder === "customer")
+        return e.customer_build_by
+          ? `${head} — they build it by ${e.customer_build_by}`
+          : `${head} — they build it (date still blank)`;
+      return `${head} — is the form final?`;
+    }
+    if (training) return `${head} — training only`;
+    if (answers.forms_built === true)
+      return `${head} — ${answers.uploaded_forms.length ? `${answers.uploaded_forms.length} uploaded` : "nothing uploaded yet"}`;
+    if (answers.forms_built === false)
+      return `${head} — ${answers.wanted_forms.length ? `first form: ${answers.wanted_forms[0]!.name}` : "no first form named yet"}`;
+    return `${head} — do they have forms?`;
+  };
 
   return (
     <Panel
       id="panel-intake"
       highlight={Boolean(highlight)}
-      title="Three questions"
+      title="Three steps"
       meta={
         current === 0
-          ? "Answered"
+          ? "Done"
           : `${[step1Done, step2Done, step3Done].filter(Boolean).length} of 3 · next: ${
-              current === 1 ? "which kind of account" : current === 2 ? "their forms" : "about them"
+              current === 1 ? "notes in" : current === 2 ? "confirm the facts" : "pick the flow"
             }`
       }
       level="primary"
@@ -128,176 +160,544 @@ export function IntakePanel({
 
         <Step
           n={1}
-          question="New account, or an existing one adding services?"
-          answer={answers.path ? PATH_LABEL[answers.path] : null}
+          question="Notes in. Paste the Gong transcript; then the SOW or the contract."
+          hint="The brief writes itself from the notes and fills step 2. The paper travels with the deal — seats, term, what was bought."
+          answer={
+            step1Done
+              ? `${deal.gong_reports.length} call note${deal.gong_reports.length === 1 ? "" : "s"} · ${hasBrief ? "brief written" : "brief pending"} · ${answers.has_sow ? "SOW on file" : "contract on file, no SOW"}`
+              : null
+          }
           open={openStep === 1}
           onOpen={() => setOpened(1)}
         >
-          <div className="flex flex-wrap items-center gap-2">
-            <Choice
-              active={answers.path === "new_logo"}
-              disabled={!editable || busy}
-              onClick={() => {
-                choosePath("new_logo");
-                setOpened(null);
-              }}
-            >
-              New customer — first implementation
-            </Choice>
-            <Choice
-              active={answers.path === "existing"}
-              disabled={!editable || busy}
-              onClick={() => {
-                choosePath("existing");
-                setOpened(null);
-              }}
-            >
-              Existing account — adding services
-            </Choice>
-            <Choice
-              active={answers.path === "dm_conversion"}
-              disabled={!editable || busy}
-              onClick={() => {
-                choosePath("dm_conversion");
-                setOpened(null);
-              }}
-            >
-              Device Magic → GoCanvas conversion
-            </Choice>
-            <Choice
-              active={answers.path === "field_fusion"}
-              disabled={!editable || busy}
-              onClick={() => {
-                choosePath("field_fusion");
-                setOpened(null);
-              }}
-            >
-              Field Fusion — training journey
-            </Choice>
+          <NotesIn deal={deal} editable={editable} />
+          <div className="mt-3 border-t border-border pt-2.5">
+            <p className="mb-1.5 text-[12px] font-medium">Is there a SOW?</p>
+            <div className="flex flex-wrap items-center gap-2">
+              <Choice
+                active={answers.has_sow === true}
+                disabled={!editable || busy}
+                onClick={() => set({ has_sow: true })}
+              >
+                Yes — upload the SOW
+              </Choice>
+              <Choice
+                active={answers.has_sow === false}
+                disabled={!editable || busy}
+                onClick={() => set({ has_sow: false })}
+              >
+                No — upload the contract
+              </Choice>
+            </div>
+            {answers.has_sow === true ? (
+              <div className="mt-2">
+                <PdfUpload
+                  dealId={dealId}
+                  kind="sow"
+                  editable={editable}
+                  onFile={hasSowFile ? "The signed SOW is on file." : null}
+                  path={null}
+                />
+                <p className="mt-1 text-[11px] text-muted-foreground">
+                  Integrations and services come from here, never from the notes: press “Read the
+                  SOW into the plan” on the plan once it is up.
+                </p>
+              </div>
+            ) : answers.has_sow === false ? (
+              <div className="mt-2">
+                <PdfUpload
+                  dealId={dealId}
+                  kind="contract"
+                  editable={editable}
+                  onFile={answers.contract ? `${answers.contract.name} is on file.` : null}
+                  path={answers.contract?.path ?? null}
+                />
+                <p className="mt-1 text-[11px] text-muted-foreground">
+                  No SOW means nothing bought beyond the core. The contract says how many seats and
+                  for how long, so implementation is not guessing.
+                </p>
+              </div>
+            ) : null}
           </div>
-          <p className="mt-1.5 text-[11px] text-muted-foreground">
-            Everything after this follows the answer: the plan's shape, the deck's words, the gate
-            before phase 2.
-            {answers.path === "existing"
-              ? " On an existing account, phase 1 is a review of the form the integration reads from."
-              : answers.path === "dm_conversion"
-                ? " On a conversion, the first form is their most-used Device Magic form, rebuilt in GoCanvas and run alongside it until it is proven."
-                : answers.path === "field_fusion"
-                  ? " Field Fusion ships with its forms built. Liesl confirms it is working, then hands the account to implementation for GoCanvas training — three thirty-minute calls over two weeks — not a kickoff."
-                  : ""}
-          </p>
         </Step>
 
         <Step
           n={2}
-          question={
-            answers.path === "existing"
-              ? "Do they already have the form this connects to?"
-              : "Do they already have forms built?"
+          question="Confirm the facts. The brief filled them from the calls; check them."
+          hint={
+            hasBrief ? undefined : "The brief has not run yet — the notes fill these once it has."
           }
           answer={
-            training
-              ? answers.path === "field_fusion"
-                ? "GoCanvas training — the forms are already built"
-                : "Training only — no form to build"
-              : answers.forms_built === true
-                ? answers.uploaded_forms.length
-                  ? `Yes — ${answers.uploaded_forms.length} uploaded`
-                  : "Yes — nothing uploaded yet"
-                : answers.forms_built === false
-                  ? answers.wanted_forms.length
-                    ? `No — first form: ${answers.wanted_forms[0]!.name}`
-                    : "No — no first form named yet"
-                  : null
-          }
-          open={openStep === 2}
-          locked={!step1Done}
-          onOpen={() => setOpened(2)}
-        >
-          {answers.path === "field_fusion" ? (
-            <p className="text-[12px] text-muted-foreground">
-              Field Fusion is set up before the handoff and its forms are already built. Phase 1 is
-              GoCanvas training: three thirty-minute calls over two weeks, real jobs in between.
-            </p>
-          ) : (
-            <div className="flex flex-wrap items-center gap-2">
-              <Choice
-                active={!training && answers.forms_built === true}
-                disabled={!editable || busy}
-                onClick={() => set({ forms_built: true, training_only: false })}
-              >
-                Yes — upload them
-              </Choice>
-              <Choice
-                active={!training && answers.forms_built === false}
-                disabled={!editable || busy}
-                onClick={() => set({ forms_built: false, training_only: false })}
-              >
-                No — starting fresh
-              </Choice>
-              <Choice
-                active={training}
-                disabled={!editable || busy}
-                onClick={() => {
-                  if (
-                    !training &&
-                    (answers.wanted_forms.length > 0 || answers.uploaded_forms.length > 0) &&
-                    !window.confirm(
-                      "Training only rebuilds phase 1 as two weeks of training — no first form. The forms already named stay on the record. Continue?",
-                    )
-                  )
-                    return;
-                  set({ training_only: true });
-                  setOpened(null);
-                }}
-              >
-                No form — they just need training
-              </Choice>
-            </div>
-          )}
-          {training && answers.path !== "field_fusion" ? (
-            <p className="mt-1.5 text-[11px] text-muted-foreground">
-              Phase 1 becomes GoCanvas training: three thirty-minute calls over two weeks, real jobs
-              in between, live at the end. Anything the SOW bought still follows in phase 2.
-            </p>
-          ) : null}
-          {!training && answers.forms_built === true ? (
-            <div className="mt-2">
-              <HaveForms dealId={dealId} answers={answers} editable={editable} />
-            </div>
-          ) : null}
-          {!training && answers.forms_built !== null ? (
-            <div className="mt-2">
-              <WantedForms answers={answers} editable={editable} busy={busy} onSet={set} />
-            </div>
-          ) : null}
-        </Step>
-
-        <Step
-          n={3}
-          question="Who are they? Industry, size, people in the field, the process today."
-          hint="Build it fills these from the calls. Check them; change what is wrong."
-          answer={
-            step3Done
+            step2Done
               ? [
+                  answers.solutions_involved
+                    ? "Integrations or solutions involved"
+                    : "No integrations",
                   answers.industry,
                   answers.company_size,
                   answers.field_users ? `${answers.field_users} in the field` : null,
                 ]
                   .filter(Boolean)
                   .join(" · ")
-              : answers.industry
-                ? `${answers.industry} — the process today is still blank`
-                : null
+              : null
           }
+          open={openStep === 2}
+          locked={!step1Done}
+          onOpen={() => setOpened(2)}
+        >
+          <p className="mb-1.5 text-[12px] font-medium">
+            Were integrations or solutions part of the sale?
+          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <Choice
+              active={answers.solutions_involved === true}
+              disabled={!editable || busy}
+              onClick={() => set({ solutions_involved: true })}
+            >
+              Yes
+            </Choice>
+            <Choice
+              active={answers.solutions_involved === false}
+              disabled={!editable || busy}
+              onClick={() => set({ solutions_involved: false })}
+            >
+              No — just the core
+            </Choice>
+          </div>
+          <p className="mt-1 text-[11px] text-muted-foreground">
+            {answers.solutions_involved === true
+              ? answers.has_sow === false
+                ? "Yes, but no SOW: the plan cannot hold a service it has no paper for. Add the SOW under step 1, or go back to No."
+                : "The plan reads which ones from the SOW — the notes only say that there were some."
+              : answers.solutions_involved === false
+                ? "Phase 1 is the whole plan: the form, the conversion, or the training."
+                : "The notes usually say. The SOW says which."}
+          </p>
+          <div className="mt-3 border-t border-border pt-2.5">
+            <p className="mb-1 text-[12px] font-medium">
+              Who are they? Industry, size, people in the field, the process today.
+            </p>
+            <NoForms answers={answers} editable={editable} busy={busy} onSet={set} />
+          </div>
+        </Step>
+
+        <Step
+          n={3}
+          question="Pick the onboarding flow."
+          hint="The plan's shape, the deck's words and the gate before phase 2 all follow it."
+          answer={step3Done ? flowAnswer() : null}
           open={openStep === 3}
           locked={!step2Done}
           onOpen={() => setOpened(3)}
         >
-          <NoForms answers={answers} editable={editable} busy={busy} onSet={set} />
+          <div className="flex flex-wrap items-center gap-2">
+            {(["new_logo", "existing", "dm_conversion", "field_fusion"] as const).map((p) => (
+              <Choice
+                key={p}
+                active={answers.path === p}
+                disabled={!editable || busy}
+                onClick={() => choosePath(p)}
+              >
+                {PATH_LABEL[p]}
+              </Choice>
+            ))}
+          </div>
+          {answers.path_suggested && answers.path !== answers.path_suggested ? (
+            <p className="mt-1.5 text-[11px] text-amber-700 dark:text-amber-400">
+              The notes suggest {PATH_LABEL[answers.path_suggested]} —{" "}
+              <button
+                type="button"
+                className="underline"
+                disabled={!editable || busy}
+                onClick={() => choosePath(answers.path_suggested!)}
+              >
+                use it
+              </button>
+              ?
+            </p>
+          ) : null}
+          <p className="mt-1.5 text-[11px] text-muted-foreground">
+            {answers.path === "new_logo"
+              ? "First form built with them, live in two weeks — their hands on the keyboard, we guide. Up to three forms in phase 1."
+              : answers.path === "dm_conversion"
+                ? "Their most-used Device Magic form, rebuilt in GoCanvas with them and run alongside it until it is proven. Two weeks."
+                : answers.path === "existing"
+                  ? "The Account Manager's questions decide phase 1: a review, our build, or their build with a freeze before the integration."
+                  : answers.path === "field_fusion"
+                    ? "Forms already built. Liesl confirms the form is connected and the client is trained, then hands to TIS for GoCanvas training: three 30-minute sessions over two weeks."
+                    : ""}
+          </p>
+
+          {answers.path === "new_logo" || answers.path === "dm_conversion" ? (
+            <div className="mt-3 border-t border-border pt-2.5">
+              <p className="mb-1.5 text-[12px] font-medium">Do they already have forms built?</p>
+              <div className="flex flex-wrap items-center gap-2">
+                <Choice
+                  active={!training && answers.forms_built === true}
+                  disabled={!editable || busy}
+                  onClick={() => set({ forms_built: true, training_only: false })}
+                >
+                  Yes — upload them
+                </Choice>
+                <Choice
+                  active={!training && answers.forms_built === false}
+                  disabled={!editable || busy}
+                  onClick={() => set({ forms_built: false, training_only: false })}
+                >
+                  No — we build the first one together
+                </Choice>
+                <Choice
+                  active={training}
+                  disabled={!editable || busy}
+                  onClick={() => {
+                    if (
+                      !training &&
+                      (answers.wanted_forms.length > 0 || answers.uploaded_forms.length > 0) &&
+                      !window.confirm(
+                        "Training only rebuilds phase 1 as two weeks of training — no first form. The forms already named stay on the record. Continue?",
+                      )
+                    )
+                      return;
+                    set({ training_only: true });
+                  }}
+                >
+                  No form — they just need training
+                </Choice>
+              </div>
+              {training ? (
+                <p className="mt-1.5 text-[11px] text-muted-foreground">
+                  Phase 1 becomes GoCanvas training: three 30-minute sessions over two weeks.
+                  Anything the SOW bought still follows in phase 2.
+                </p>
+              ) : null}
+              {!training && answers.forms_built === true ? (
+                <div className="mt-2">
+                  <HaveForms dealId={dealId} answers={answers} editable={editable} />
+                </div>
+              ) : null}
+              {!training && answers.forms_built !== null ? (
+                <div className="mt-2">
+                  <WantedForms answers={answers} editable={editable} busy={busy} onSet={set} />
+                  <p className="mt-1 text-[11px] text-muted-foreground">
+                    Up to three forms in phase 1: the first is built live on the kickoff call, the
+                    next two alongside it. A fourth waits for phase 2.
+                  </p>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+
+          {answers.path === "existing" ? (
+            <ExistingQuestions answers={answers} editable={editable} busy={busy} onSet={set} />
+          ) : null}
+
+          {answers.path === "field_fusion" ? (
+            <p className="mt-3 border-t border-border pt-2.5 text-[12px] text-muted-foreground">
+              Nothing more to answer here. At the close the deal moves to Field Fusion setup and
+              Liesl gets it; her gate — form connected, client trained, a note — sits at the top of
+              this page until she presses Hand to implementation.
+            </p>
+          ) : null}
         </Step>
       </div>
     </Panel>
+  );
+}
+
+/**
+ * The Account Manager's questions on an existing account. Is the form
+ * final? If not, who builds it? A customer build has a date; the
+ * integration waits behind the freeze.
+ */
+function ExistingQuestions({
+  answers,
+  editable,
+  busy,
+  onSet,
+}: {
+  answers: IntakeAnswers;
+  editable: boolean;
+  busy: boolean;
+  onSet: (patch: Record<string, unknown>) => void;
+}) {
+  const e = answers.existing;
+  const [by, setBy] = useState(e.customer_build_by ?? "");
+  useEffect(() => setBy(e.customer_build_by ?? ""), [e.customer_build_by]);
+  return (
+    <div className="mt-3 border-t border-border pt-2.5">
+      <p className="mb-1.5 text-[12px] font-medium">Is the form finalized and complete?</p>
+      <div className="flex flex-wrap items-center gap-2">
+        <Choice
+          active={e.form_final === true}
+          disabled={!editable || busy}
+          onClick={() => onSet({ existing: { form_final: true }, training_only: false })}
+        >
+          Yes — it is final
+        </Choice>
+        <Choice
+          active={e.form_final === false}
+          disabled={!editable || busy}
+          onClick={() => onSet({ existing: { form_final: false }, training_only: false })}
+        >
+          No — it still needs building
+        </Choice>
+      </div>
+      {e.form_final === true ? (
+        <p className="mt-1.5 text-[11px] text-muted-foreground">
+          Phase 1 is a 45-minute review of the form with the integration in mind — a finished form
+          usually needs a field or two for a mapping — then the integration starts.
+        </p>
+      ) : null}
+      {e.form_final === false ? (
+        <div className="mt-2.5">
+          <p className="mb-1.5 text-[12px] font-medium">Who builds it?</p>
+          <div className="flex flex-wrap items-center gap-2">
+            <Choice
+              active={e.builder === "us"}
+              disabled={!editable || busy}
+              onClick={() => onSet({ existing: { builder: "us" } })}
+            >
+              We build it, with them
+            </Choice>
+            <Choice
+              active={e.builder === "customer"}
+              disabled={!editable || busy}
+              onClick={() => onSet({ existing: { builder: "customer" } })}
+            >
+              The customer builds it
+            </Choice>
+          </div>
+          {e.builder === "us" ? (
+            <p className="mt-1.5 text-[11px] text-muted-foreground">
+              Phase 1 is the two-week build, their hands on the keyboard. The integration starts
+              once the form is proven on real jobs.
+            </p>
+          ) : null}
+          {e.builder === "customer" ? (
+            <div className="mt-2">
+              <label className="block text-[11px] text-muted-foreground" htmlFor="existing-by">
+                They build it by
+              </label>
+              <input
+                id="existing-by"
+                type="date"
+                className="mt-0.5 h-7 rounded-sm border border-border bg-background px-1.5 text-[12px]"
+                value={by}
+                disabled={!editable || busy}
+                onChange={(ev) => setBy(ev.target.value)}
+                onBlur={() => {
+                  if (by !== (e.customer_build_by ?? ""))
+                    onSet({ existing: { customer_build_by: by || null } });
+                }}
+              />
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                The kickoff splits the work out loud — you build the form, we build the integration.
+                A check-in on day 5, a freeze on day 9, and the integration starts the day it is
+                frozen. If the date slips, the plan says so.
+              </p>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/** Step 1's paste box: the transcript goes in, the brief follows on its own. */
+function NotesIn({ deal, editable }: { deal: DealData; editable: boolean }) {
+  const qc = useQueryClient();
+  const create = useServerFn(addReport);
+  const [content, setContent] = useState("");
+  const [title, setTitle] = useState("");
+  const [callDate, setCallDate] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const add = useMutation({
+    mutationFn: () =>
+      create({
+        data: {
+          dealId: deal.account.id,
+          title: title.trim() || `Call notes${callDate ? ` — ${callDate}` : ""}`,
+          reportType: "call_notes",
+          contentMd: content.trim(),
+          callDate: callDate || null,
+        },
+      }),
+    onMutate: () => setError(null),
+    onSuccess: () => {
+      setContent("");
+      setTitle("");
+      setCallDate("");
+      void qc.invalidateQueries({ queryKey: ["deal", deal.account.id] });
+      void qc.invalidateQueries({ queryKey: ["welcome", deal.account.id] });
+    },
+    onError: (e) => setError((e as Error).message),
+  });
+  return (
+    <div>
+      {deal.gong_reports.length ? (
+        <ul className="mb-2 space-y-0.5 text-[12px]">
+          {deal.gong_reports.map((r) => (
+            <li key={r.id} className="flex items-center gap-1.5">
+              <Check className="h-3 w-3 text-status-ontrack-foreground" strokeWidth={3} />
+              <span className="truncate">{r.title}</span>
+              {r.call_date ? <span className="text-muted-foreground">· {r.call_date}</span> : null}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {editable ? (
+        <div className="space-y-1.5">
+          <textarea
+            className="min-h-[88px] w-full rounded-sm border border-border bg-background px-2 py-1.5 text-[12px]"
+            placeholder={
+              deal.gong_reports.length
+                ? "Another call? Paste it here."
+                : "Paste the Gong transcript or the call notes here."
+            }
+            value={content}
+            disabled={add.isPending}
+            onChange={(e) => setContent(e.target.value)}
+          />
+          <div className="flex flex-wrap items-center gap-1.5">
+            <input
+              className="h-7 w-44 rounded-sm border border-border bg-background px-1.5 text-[12px]"
+              placeholder="Title (optional)"
+              value={title}
+              disabled={add.isPending}
+              onChange={(e) => setTitle(e.target.value)}
+            />
+            <input
+              type="date"
+              className="h-7 rounded-sm border border-border bg-background px-1.5 text-[12px]"
+              value={callDate}
+              disabled={add.isPending}
+              onChange={(e) => setCallDate(e.target.value)}
+              title="The day of the call, when it is not today"
+            />
+            <button
+              type="button"
+              className="inline-flex h-7 items-center gap-1 rounded-sm bg-primary px-2.5 text-[12px] font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+              disabled={add.isPending || !content.trim()}
+              onClick={() => add.mutate()}
+            >
+              {add.isPending ? "Reading the calls, writing the brief…" : "Add the notes"}
+            </button>
+          </div>
+        </div>
+      ) : null}
+      {error ? (
+        <p role="alert" className="mt-1 text-[11px] text-destructive">
+          {error}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+/** A PDF onto the deal: the SOW onto the record, or the contract onto the intake. */
+function PdfUpload({
+  dealId,
+  kind,
+  editable,
+  onFile,
+  path,
+}: {
+  dealId: string;
+  kind: "sow" | "contract";
+  editable: boolean;
+  /** What to say when a file is already there; null when there is none. */
+  onFile: string | null;
+  /** The contract's path, for the open link. */
+  path: string | null;
+}) {
+  const qc = useQueryClient();
+  const sow = useServerFn(uploadSow);
+  const contract = useServerFn(uploadContract);
+  const link = useServerFn(getIntakeFormLink);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [error, setError] = useState<string | null>(null);
+  const upload = useMutation({
+    mutationFn: async (file: File) => {
+      if (file.type !== "application/pdf") throw new Error("A PDF, please.");
+      const dataBase64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onerror = () => reject(new Error("Could not read that file."));
+        reader.onload = () => resolve(String(reader.result).split(",")[1] ?? "");
+        reader.readAsDataURL(file);
+      });
+      const data = {
+        dealId,
+        fileName: file.name,
+        contentType: "application/pdf" as const,
+        dataBase64,
+      };
+      return kind === "sow" ? sow({ data }) : contract({ data });
+    },
+    onMutate: () => setError(null),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ["deal", dealId] }),
+    onError: (e) => setError((e as Error).message),
+  });
+  return (
+    <div className="flex flex-wrap items-center gap-2 text-[12px]">
+      {onFile ? (
+        <span className="inline-flex items-center gap-1 text-status-ontrack-foreground">
+          <Check className="h-3 w-3" strokeWidth={3} /> {onFile}
+        </span>
+      ) : (
+        <span className="text-muted-foreground">
+          {kind === "sow" ? "No SOW on file yet." : "No contract on file yet."}
+        </span>
+      )}
+      {path ? (
+        <button
+          type="button"
+          className="inline-flex items-center gap-1 underline"
+          onClick={async () => {
+            try {
+              const { url } = await link({ data: { dealId, path } });
+              window.open(url, "_blank", "noopener");
+            } catch (e) {
+              setError((e as Error).message);
+            }
+          }}
+        >
+          <ExternalLink className="h-3 w-3" /> Open
+        </button>
+      ) : null}
+      {editable ? (
+        <>
+          <input
+            ref={inputRef}
+            type="file"
+            accept="application/pdf"
+            className="hidden"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) upload.mutate(f);
+              e.target.value = "";
+            }}
+          />
+          <button
+            type="button"
+            className="inline-flex h-6 items-center gap-1 rounded-sm border border-border px-2 text-[11px] hover:bg-muted disabled:opacity-50"
+            disabled={upload.isPending}
+            onClick={() => inputRef.current?.click()}
+          >
+            <Upload className="h-3 w-3" />
+            {upload.isPending
+              ? "Uploading…"
+              : onFile
+                ? "Replace"
+                : `Upload the ${kind === "sow" ? "SOW" : "contract"}`}
+          </button>
+        </>
+      ) : null}
+      {error ? (
+        <span role="alert" className="text-destructive">
+          {error}
+        </span>
+      ) : null}
+    </div>
   );
 }
 
@@ -314,7 +714,7 @@ function Step({
 }: {
   n: number;
   question: string;
-  hint?: string;
+  hint?: string | undefined;
   answer: string | null;
   open: boolean;
   locked?: boolean;

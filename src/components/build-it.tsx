@@ -6,7 +6,7 @@ import { ArrowRight, Check, Sparkles } from "lucide-react";
 
 import { Working } from "@/components/working";
 import { dealQuery, type DealData } from "@/lib/deal-query";
-import { isTrainingOnly, readIntake } from "@/lib/intake-answers";
+import { flowAnswered, intakeStatus, readIntake } from "@/lib/intake-answers";
 import { generateBriefForDeal, saveIntake } from "@/lib/presale.functions";
 import { proposePlanFromSowFn } from "@/lib/sow-plan.functions";
 import { mergeProposal, type SowPlanRow } from "@/lib/sow-plan";
@@ -41,11 +41,7 @@ export function BuildIt({ deal, className }: { deal: DealData; className?: strin
 
   const intake = readIntake(deal.account.intake);
   const hasNotes = deal.gong_reports.length > 0;
-  const questionsAnswered =
-    intake.path !== null &&
-    (intake.forms_built === true
-      ? intake.uploaded_forms.length > 0
-      : intake.forms_built === false && intake.wanted_forms.length > 0);
+  const questionsAnswered = intakeStatus(intake).done && flowAnswered(intake);
   const built =
     deal.briefs.some((b) => b.status === "complete" && b.generator === "llm") &&
     Boolean((deal.account as { welcome_share_url?: string | null }).welcome_share_url);
@@ -252,17 +248,13 @@ export function ThreeClicks({ deal }: { deal: DealData }) {
     (deal.account as { welcome_share_url?: string | null }).welcome_share_url,
   );
   const intake = readIntake(deal.account.intake);
-  const questions =
-    intake.path !== null &&
-    (isTrainingOnly(intake) ||
-      (intake.forms_built === true
-        ? intake.uploaded_forms.length > 0
-        : intake.forms_built === false && intake.wanted_forms.length > 0));
+  const facts = intake.solutions_involved !== null && intakeStatus(intake).done;
+  const flow = intake.path !== null && flowAnswered(intake);
   const items = [
-    { n: 1, label: "Notes in", done: hasNotes },
-    { n: 2, label: "Three questions", done: questions },
-    { n: 3, label: "Build it", done: hasBrief && hasLink },
-    { n: 4, label: "Open the deck", done: false },
+    { n: 1, label: "Notes in", done: hasNotes && hasBrief },
+    { n: 2, label: "Confirm the facts", done: facts },
+    { n: 3, label: "Pick the flow", done: flow },
+    { n: 4, label: "Open the deck", done: hasLink },
   ];
   return (
     <ol className="flex flex-wrap items-center gap-1 text-[12px]">

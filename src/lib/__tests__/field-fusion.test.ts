@@ -36,7 +36,10 @@ describe("the training plan — no form to build", () => {
     expect(calls.map((m) => m.minutes)).toEqual([30, 30, 30]);
     expect(calls.map((m) => m.day)).toEqual([1, 5, 10]);
     const kickoff = TRAINING_PLAN.find((m) => m.key === "kickoff")!;
-    expect(kickoff.label).toMatch(/training call/i);
+    expect(kickoff.label).toMatch(/^Session 1/);
+    expect(kickoff.label).toMatch(/build a form/i);
+    expect(TRAINING_PLAN.find((m) => m.key === "working")!.label).toMatch(/reference data/i);
+    expect(TRAINING_PLAN.find((m) => m.key === "adjust")!.label).toMatch(/where the data goes/i);
     expect(kickoff.homework).toHaveLength(3);
     const live = TRAINING_PLAN[TRAINING_PLAN.length - 1]!;
     expect(live.label).toMatch(/crew/i);
@@ -46,7 +49,7 @@ describe("the training plan — no form to build", () => {
   it("flows through the timeline and flags it as training", () => {
     const t = buildTimeline({ closeDate: "2026-09-21", path: "field_fusion" });
     expect(t.training).toBe(true);
-    expect(t.milestones[1]!.label).toMatch(/^Training call 1/);
+    expect(t.milestones[1]!.label).toMatch(/^Session 1/);
     // Ten business days from a Monday close: the Monday two weeks on.
     expect(t.liveDate).toBe("2026-10-05");
     const t2 = buildTimeline({ closeDate: "2026-09-21", path: "new_logo", trainingOnly: true });
@@ -79,13 +82,15 @@ describe("the intake, training only", () => {
     expect(isTrainingOnly(EMPTY_INTAKE)).toBe(false);
     expect(isTrainingOnly(readIntake({ path: "field_fusion" }))).toBe(true);
     expect(isTrainingOnly(readIntake({ training_only: true }))).toBe(true);
-    const s = intakeStatus(readIntake({ path: "field_fusion" }));
+    expect(intakeStatus(readIntake({ path: "field_fusion" })).next).toMatch(/integrations/);
+    const s = intakeStatus(readIntake({ path: "field_fusion", solutions_involved: false }));
     expect(s.done).toBe(false);
     expect(s.next).toMatch(/industry/);
     const done = intakeStatus(
       readIntake({
         path: "new_logo",
         training_only: true,
+        solutions_involved: false,
         industry: "Roofing",
         field_users: 12,
         current_process: "Paper",
@@ -100,7 +105,7 @@ describe("the intake, training only", () => {
     expect(fieldFusionReady(a)).toBe(false);
     const b = readIntake({
       path: "field_fusion",
-      field_fusion: { ffiq_confirmed: true, account_ready: true, notes: "Train Ray first" },
+      field_fusion: { form_connected: true, client_trained: true, notes: "Train Ray first" },
     });
     expect(fieldFusionReady(b)).toBe(true);
     expect(b.field_fusion.notes).toBe("Train Ray first");
@@ -116,7 +121,7 @@ describe("reading Field Fusion out of the calls", () => {
     expect(mentionsFieldFusion("A fusion of paper and spreadsheets in the field.")).toBe(false);
   });
 
-  it("sets the path from the notes, and wins over a Device Magic mention", () => {
+  it("suggests the flow from the notes, and wins over a Device Magic mention", () => {
     const brief = {
       account_name: "Acme",
       one_liner: "",
@@ -134,7 +139,8 @@ describe("reading Field Fusion out of the calls", () => {
       brief as never,
       "Moving off Device Magic; they bought Field Fusion and Liesl is setting up FFIQ.",
     );
-    expect(patch.path).toBe("field_fusion");
+    expect(patch.path).toBeUndefined();
+    expect(patch.path_suggested).toBe("field_fusion");
     expect(filled.join(" ")).toMatch(/Field Fusion/);
   });
 });

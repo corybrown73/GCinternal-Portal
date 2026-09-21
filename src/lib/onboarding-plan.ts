@@ -1,4 +1,4 @@
-import type { IntakeAnswers } from "./intake-answers";
+import { existingBuildFor, type IntakeAnswers } from "./intake-answers";
 import { type ServiceSpec } from "./onboarding-services";
 import {
   buildTimeline,
@@ -61,10 +61,18 @@ export function extraFormServices(intake: IntakeAnswers): ServiceSpec[] {
   const named = new Set(
     stored.filter((s) => s.kind === "paid_form").map((s) => s.name.trim().toLowerCase()),
   );
+  // Phase 1 holds up to three forms: the first is THE first form, the next
+  // two run alongside it from the kickoff. A fourth and beyond wait for
+  // phase 2 — two weeks is two weeks.
   return intake.wanted_forms
     .slice(1)
     .filter((f) => !named.has(f.name.trim().toLowerCase()))
-    .map((f) => ({ id: `form:${f.id}`, kind: "paid_form" as const, name: f.name, phase: 2 }));
+    .map((f, i) => ({
+      id: `form:${f.id}`,
+      kind: "paid_form" as const,
+      name: f.name,
+      phase: i < 2 ? 1 : 2,
+    }));
 }
 
 /** True for a service the intake's form list produced, not one somebody added to the plan. */
@@ -78,11 +86,13 @@ export function timelineFor(intake: IntakeAnswers, closeDate: string): Timeline 
     closeDate,
     path: intake.path,
     trainingOnly: intake.training_only,
+    existingBuild: existingBuildFor(intake),
     overrides: t.overrides,
     holidays: t.holidays,
     integrationTier: t.integration_tier as IntegrationTier,
     integrationTarget: t.integration_target,
-    formProvenOn: t.form_proven_on,
+    // A customer build is proven the day they freeze it.
+    formProvenOn: t.form_proven_on ?? intake.existing.form_frozen_on,
     completed: t.completed,
     times: t.times,
     timezone: t.timezone,

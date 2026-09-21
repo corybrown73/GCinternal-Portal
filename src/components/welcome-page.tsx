@@ -369,7 +369,7 @@ function screenList(view: WelcomeView): Screen[] {
           : "The two weeks"
         : t.phases.length || t.alongside.length
           ? "Phase 1 · the form"
-          : "The seven days",
+          : "The two weeks",
       render: (a) => <Plan key="plan" view={view} page={a.page} />,
     },
     ...t.phases.map((ph): Screen => ({
@@ -1239,7 +1239,7 @@ function Team({ view, page }: { view: WelcomeView; page: number }) {
       eyebrow="Your team"
       title="Two teams,"
       accent="one plan"
-      lede={`Small on purpose. Everyone here has a job in the next ${view.timeline.training ? "two weeks" : "seven days"}.`}
+      lede="Small on purpose. Everyone here has a job in the next two weeks."
       band="Over fifteen years of onboarding field teams says this is what works, and what gets value fast. Questions go to your onboarding lead by name."
       bandIcon="PhoneCall"
     >
@@ -1448,20 +1448,32 @@ function Plan({ view, page }: { view: WelcomeView; page: number }) {
             ? "Phase 1: two weeks to a"
             : "Two weeks to a"
           : existing
-            ? "Phase 1: your form,"
+            ? t.existingBuild === "customer"
+              ? "Phase 1: your build,"
+              : "Phase 1: your form,"
             : t.phases.length
-              ? "Phase 1: seven days to a"
-              : "Seven days to a"
+              ? "Phase 1: two weeks to a"
+              : "Two weeks to a"
       }
       accent={
-        t.training ? "crew that runs it" : existing ? "integration-ready" : "form in the field"
+        t.training
+          ? "crew that runs it"
+          : existing
+            ? t.existingBuild === "customer"
+              ? "frozen and integration-ready"
+              : "integration-ready"
+            : "form in the field"
       }
       lede={
         t.training
           ? "Three thirty-minute calls, a little homework, a week of real jobs in between. Every step below has an owner."
           : existing
-            ? `A review call, a short optimisation session, a few real jobs through it. ${["", "One", "Two", "Three", "Four", "Five", "Six", "Seven"][days] ?? days} business days, and every day below has an owner.`
-            : "Two short working sessions, a little homework, one crew on real jobs. Every day below has an owner."
+            ? t.existingBuild === "customer"
+              ? "A kickoff that splits the work, your build with a date, a check-in, real jobs through it, and a freeze. Two weeks, and every step below has an owner."
+              : t.existingBuild === "us"
+                ? "Two build calls with you driving, a little homework, one crew on real jobs. Every step below has an owner."
+                : `A review call, a short optimisation session, a few real jobs through it. ${["", "One", "Two", "Three", "Four", "Five", "Six", "Seven"][days] ?? days} business days, and every day below has an owner.`
+            : "Two build calls with you driving, a little homework, one crew on real jobs. The build is the training. Every step below has an owner."
       }
       band={
         t.training
@@ -1928,11 +1940,7 @@ function FirstForm({ view, page }: { view: WelcomeView; page: number }) {
       page={page}
       eyebrow="How we get there"
       title="From today to"
-      accent={
-        existing || view.timeline.training
-          ? `day ${["", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"][lastDay] ?? lastDay}`
-          : "day seven"
-      }
+      accent={`day ${["", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"][lastDay] ?? lastDay}`}
       band={
         existing
           ? `Optimised before anything is connected to it. That is what makes the mapping right, first time.`
@@ -2148,10 +2156,12 @@ function Business({
               <p>
                 <T k="business.call1.body">
                   {t.training
-                    ? "Your account, your phones, your forms. Open a job, fill it in, submit it, and watch it arrive — on a real job, together. You leave with three homework items."
-                    : view.path === "existing"
-                      ? "Walk the form the integration reads from, field by field, and decide together what it needs. You leave with three homework items."
-                      : "Meet, agree how we work, and build the first form live on the call. You leave with three homework items."}
+                    ? "How to find your way around the admin portal, and how to build a form — you build one with us on the call, start to finish. You leave with three homework items."
+                    : t.existingBuild === "customer"
+                      ? "You build the form, we build the integration. Agree the split out loud: which form, by when, and the fields the integration needs from it. You leave with three homework items."
+                      : t.existingBuild === "review"
+                        ? "Walk the form the integration reads from, field by field, and decide together what it needs. You leave with three homework items."
+                        : "Meet, agree how we work, and build the first form live on the call — your hands on the keyboard, we guide. You leave with three homework items."}
                 </T>
               </p>
             </div>
@@ -2173,10 +2183,12 @@ function Business({
               <p>
                 <T k="business.call2.body">
                   {t.training
-                    ? "Your first real submissions in front of us. What went well, what slowed anyone down, and the next things to learn — photos, dispatch, whatever your forms use."
-                    : view.path === "existing"
-                      ? "Your hands on the keyboard. The fields the integration needs, named the way the other system names them, then a few real jobs through it."
-                      : "Your hands on the keyboard. Finish the form, add the logic and notifications, hand it to the field tester."}
+                    ? "Load your client or parts list as reference data, add the advanced calculations your jobs need, and build the PDF the office receives."
+                    : t.existingBuild === "customer"
+                      ? "A check-in on your build. The fields the integration needs are there, or we say which are missing — while there is still time."
+                      : t.existingBuild === "review"
+                        ? "Your hands on the keyboard. The fields the integration needs, named the way the other system names them, then a few real jobs through it."
+                        : "Your hands on the keyboard. Finish the form, add the logic and notifications, hand it to the field tester."}
                 </T>
               </p>
             </div>
@@ -2198,8 +2210,8 @@ function Business({
                 </h3>
                 <p>
                   <T k="business.call3.body">
-                    Reports and exports for the office, the questions from the week, and who trains
-                    the next hire — so it stays yours.
+                    Submissions, reports and exports: where the data lands, how the office works
+                    from it, and what to connect it to next.
                   </T>
                 </p>
               </div>

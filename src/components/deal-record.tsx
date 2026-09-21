@@ -296,12 +296,7 @@ export function DealRecord({ deal, embedded = false }: { deal: DealData; embedde
           <div className="min-w-0 flex-1 space-y-3">
             <FieldFusionGate deal={deal} editable={editable} />
             <ThreeClicks deal={deal} />
-            <IntakePanel
-              dealId={deal.account.id}
-              raw={deal.account.intake}
-              editable={editable}
-              highlight={nextPanel === "panel-intake"}
-            />
+            <IntakePanel deal={deal} editable={editable} highlight={nextPanel === "panel-intake"} />
             <BuildIt deal={deal} />
           </div>
           <div className="flex flex-wrap items-center justify-end gap-2">
@@ -342,12 +337,7 @@ export function DealRecord({ deal, embedded = false }: { deal: DealData; embedde
           <div className="space-y-3">
             <FieldFusionGate deal={deal} editable={editable} />
             <ThreeClicks deal={deal} />
-            <IntakePanel
-              dealId={deal.account.id}
-              raw={deal.account.intake}
-              editable={editable}
-              highlight={nextPanel === "panel-intake"}
-            />
+            <IntakePanel deal={deal} editable={editable} highlight={nextPanel === "panel-intake"} />
             <div className="rounded-md border border-border bg-card px-3 py-2.5">
               <BuildIt deal={deal} />
             </div>

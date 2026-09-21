@@ -1,4 +1,4 @@
-import { intakeStatus, isTrainingOnly, readIntake, type IntakeAnswers } from "./intake-answers";
+import { flowAnswered, intakeStatus, readIntake, type IntakeAnswers } from "./intake-answers";
 import { closeDateFor, timelineFor } from "./onboarding-plan";
 
 /**
@@ -46,53 +46,73 @@ export function guideSteps(input: {
   const t = timelineFor(a, close.date);
   const calls = t.milestones.filter((m) => m.kind === "call");
   const services = a.timeline.services ?? [];
-  // Training only has no form to name: the intake is done when the facts are.
-  const hasForm = isTrainingOnly(a) || a.wanted_forms.length > 0 || a.uploaded_forms.length > 0;
+  // The flow's own question: forms named, the Account Manager's answers, or nothing to ask.
+  const hasForm = flowAnswered(a);
   const blockers = (input.readiness ?? []).map((r) => ({ key: r.key, label: r.label }));
 
   const steps: Array<Omit<GuideStep, "blockers">> = [
     {
-      key: "path",
-      label: "Pick the path",
-      hint: "New customer, existing account, conversion, or Field Fusion. Everything below follows it.",
-      done: a.path !== null,
+      key: "gong",
+      label: "Notes in",
+      hint: "Paste the Gong transcript or the call notes. The brief writes itself from them and fills the facts below.",
+      done: input.gongReports > 0,
       panel: { key: "deal:intake", id: "panel-intake" },
     },
     {
-      key: "gong",
-      label: "Paste the Gong brief",
-      hint: "Call notes or the account map. The AI reads these; so does the welcome page.",
-      done: input.gongReports > 0,
-      panel: { key: "deal:gong", id: "panel-gong" },
-    },
-    {
       key: "synth",
-      label: "Generate the customer brief",
-      hint: "The button at the top right. Reads the calls; fills the intake's blanks — the process today, the forms, seats, systems.",
+      label: "The brief is written",
+      hint: "Automatic once the notes are in. If it did not run, press Build it — it says why.",
       done: input.aiBriefs > 0,
       panel: { key: "deal:brief", id: "brief-actions" },
     },
     {
+      key: "paper",
+      label: "SOW or contract on file",
+      hint:
+        a.has_sow === null
+          ? "Say whether there is a SOW. Upload it, or the contract — seats and term travel with the deal."
+          : a.has_sow
+            ? "Upload the signed SOW under step 1."
+            : "No SOW: upload the contract under step 1 so the seat count is on the record.",
+      done: a.has_sow === true ? input.hasSow : a.has_sow === false ? Boolean(a.contract) : false,
+      panel: { key: "deal:intake", id: "panel-intake" },
+    },
+    {
       key: "intake",
-      label: "Finish the intake",
+      label: "Confirm the facts",
       // Names the one answer still missing, so "never completes" cannot
       // happen with every visible field filled in.
       hint: !status.done
         ? `Still missing: ${status.next ?? "an answer"}`
-        : !hasForm
-          ? "Still missing: the first form to build — pick a library card or name theirs."
-          : "Industry, the process today, and the forms to build — the first one first.",
-      done: status.done && hasForm,
+        : "Integrations involved, industry, field users, the process today — pre-filled from the notes, confirmed by you.",
+      done: status.done,
+      panel: { key: "deal:intake", id: "panel-intake" },
+    },
+    {
+      key: "path",
+      label: "Pick the flow",
+      hint:
+        a.path === null
+          ? "New logo, existing account, Device Magic conversion, or Field Fusion. The plan and the deck follow it."
+          : !hasForm
+            ? a.path === "existing"
+              ? "Still missing: the Account Manager's answers — is the form final, and who builds it."
+              : "Still missing: the first form to build — pick a library card or name theirs."
+            : "The flow's own question is answered.",
+      done: a.path !== null && hasForm,
       panel: { key: "deal:intake", id: "panel-intake" },
     },
     {
       key: "sow",
-      label: "Upload the SOW, read it into the plan",
-      hint: "Upload the signed PDF under Notes & documents, then press “Read the SOW into the plan” on the plan below. Ticks when the plan has actually read it.",
-      done: input.hasSow && Boolean(a.timeline.sow_applied_at),
+      label: a.has_sow === false ? "No SOW to read" : "Read the SOW into the plan",
+      hint:
+        a.has_sow === false
+          ? "Nothing bought beyond the core: the plan stands on the flow alone."
+          : "Press “Read the SOW into the plan” on the plan below. Ticks when the plan has actually read it — integrations come from here, never from the notes.",
+      done: a.has_sow === false || (input.hasSow && Boolean(a.timeline.sow_applied_at)),
       panel: input.hasSow
         ? { key: "deal:plan", id: "panel-plan" }
-        : { key: "deal:gong", id: "panel-gong" },
+        : { key: "deal:intake", id: "panel-intake" },
     },
     {
       key: "times",

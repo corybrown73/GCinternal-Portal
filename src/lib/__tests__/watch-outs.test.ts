@@ -66,7 +66,7 @@ describe("watchOutsFor", () => {
     expect(
       titles.some((t) =>
         t.startsWith(
-          "conflict: The calls name Sat, Nov 7; the plan has everything live Thu, Nov 12",
+          "conflict: The calls name Sat, Nov 7; the plan has everything live Tue, Nov 17",
         ),
       ),
     ).toBe(true);
@@ -81,7 +81,7 @@ describe("watchOutsFor", () => {
   it("names the absent person and the phase it lands in", () => {
     expect(
       titles.some((t) =>
-        /check: Ray Okonkwo is out Mon, Oct 5 – Fri, Oct 16, during Phase 2/i.test(t),
+        /check: Ray Okonkwo is out Mon, Oct 5 – Fri, Oct 16, during phase 1/i.test(t),
       ),
     ).toBe(true);
   });
@@ -102,7 +102,7 @@ describe("watchOutsFor", () => {
   it("reads the SOW's named dates against the plan, met or missed", () => {
     const sda = rows.find((r) => r.source === "sow" && r.title.includes("Oct 9"));
     expect(sda?.severity).toBe("ok");
-    expect(sda?.title).toContain("Storm Damage Assessment live Wed, Sep 30");
+    expect(sda?.title).toContain("Storm Damage Assessment live Mon, Oct 5");
     const kronos = rows.find((r) => r.source === "sow" && r.title.includes("Nov 13"));
     expect(kronos?.severity).toBe("ok");
   });

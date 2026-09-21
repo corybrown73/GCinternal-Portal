@@ -52,19 +52,22 @@ describe("deliverables", () => {
     expect(d.map((x) => x.label)).toEqual([
       "Service Ticket",
       "Crew training",
+      "Safety Inspection",
       "QuickBooks Online",
       "Invoice PDF",
-      "Safety Inspection",
     ]);
     expect(d[0]!.state).toBe("active"); // phase 1 is where we are
     expect(d[1]!.state).toBe("active"); // alongside the form
-    expect(d[2]!.state).toBe("upcoming"); // phase 2 waits for the form
-    expect(d[2]!.mark.title).toBe("QuickBooks Online");
-    expect(d[3]!.sublabel).toMatch(/^Phase 2/);
-    // The intake's second form is a phase-2 form build with real steps, not a name.
-    expect(d[4]!.kind).toBe("paid_form");
-    expect(d[4]!.done_key).toBe("form:f2:live");
-    expect(t.phases[0]!.services.map((s) => s.name)).toContain("Safety Inspection");
+    // The intake's second form is a phase-1 form build with real steps, not a name:
+    // up to three forms run in the two weeks.
+    expect(d[2]!.state).toBe("active");
+    expect(d[2]!.kind).toBe("paid_form");
+    expect(d[2]!.done_key).toBe("form:f2:live");
+    expect(d[2]!.sublabel).toMatch(/^Phase 1/);
+    expect(d[3]!.state).toBe("upcoming"); // phase 2 waits for the form
+    expect(d[3]!.mark.title).toBe("QuickBooks Online");
+    expect(d[4]!.sublabel).toMatch(/^Phase 2/);
+    expect(t.alongside.map((s) => s.name)).toContain("Safety Inspection");
   });
 
   it("checks the form off once it is live and moves the ring to phase 2", () => {
@@ -82,11 +85,11 @@ describe("deliverables", () => {
   it("groups the build into phases, the form first, later forms after it", () => {
     const phases = deliverablePhases(intake, timelineFor(intake, "2026-09-09"));
     expect(phases.map((p) => [p.phase, p.label, p.state, p.items.map((d) => d.label)])).toEqual([
-      [1, "Phase 1", "active", ["Service Ticket", "Crew training"]],
-      [2, "Phase 2", "upcoming", ["QuickBooks Online", "Invoice PDF", "Safety Inspection"]],
+      [1, "Phase 1", "active", ["Service Ticket", "Crew training", "Safety Inspection"]],
+      [2, "Phase 2", "upcoming", ["QuickBooks Online", "Invoice PDF"]],
     ]);
     expect(phases[1]!.gate).toMatch(/form/i);
-    expect(phases[0]!.when).toBe("Sep 9 → Sep 18");
+    expect(phases[0]!.when).toBe("Sep 9 → Sep 23");
   });
 
   it("gives a card the marks alone, deduped", () => {

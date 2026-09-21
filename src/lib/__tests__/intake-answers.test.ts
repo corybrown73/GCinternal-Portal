@@ -47,17 +47,22 @@ describe("the schema", () => {
 });
 
 describe("intakeStatus — what to ask next", () => {
-  it("starts with the fork", () => {
+  it("starts with the sale — were integrations or solutions involved — then the fork", () => {
     expect(intakeStatus(EMPTY_INTAKE)).toEqual({
+      done: false,
+      next: "Were integrations or solutions involved?",
+    });
+    expect(intakeStatus(readIntake({ solutions_involved: false }))).toEqual({
       done: false,
       next: "Do they already have forms built?",
     });
   });
 
   it("on the yes branch, is done once something is uploaded", () => {
-    const yes = readIntake({ forms_built: true });
+    const yes = readIntake({ solutions_involved: false, forms_built: true });
     expect(intakeStatus(yes).next).toMatch(/Upload/);
     const uploaded = readIntake({
+      solutions_involved: false,
       forms_built: true,
       uploaded_forms: [{ path: "deals/x/forms/a.pdf", name: "a.pdf", uploaded_at: "2026-09-09" }],
     });
@@ -65,13 +70,23 @@ describe("intakeStatus — what to ask next", () => {
   });
 
   it("on the no branch, needs the industry, the field count and the process today", () => {
-    const no = readIntake({ forms_built: false });
+    const no = readIntake({ solutions_involved: false, forms_built: false });
     expect(intakeStatus(no).next).toMatch(/industry/);
-    const withIndustry = readIntake({ forms_built: false, industry: "Roofing" });
+    const withIndustry = readIntake({
+      solutions_involved: false,
+      forms_built: false,
+      industry: "Roofing",
+    });
     expect(intakeStatus(withIndustry).next).toMatch(/in the field/);
-    const withCount = readIntake({ forms_built: false, industry: "Roofing", field_users: 40 });
+    const withCount = readIntake({
+      solutions_involved: false,
+      forms_built: false,
+      industry: "Roofing",
+      field_users: 40,
+    });
     expect(intakeStatus(withCount).next).toMatch(/process today/);
     const done = readIntake({
+      solutions_involved: false,
       forms_built: false,
       industry: "Roofing",
       field_users: 40,

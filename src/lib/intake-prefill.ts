@@ -30,23 +30,37 @@ export function prefillFromSynthesis(
   // Field Fusion is a product, not a form build: the calls name it (or its
   // FFIQ setup) long before anything else does. Checked first, because a
   // Field Fusion customer may also mention the tool they are leaving.
+  // The notes SUGGEST the flow; a person picks it. The suggestion sits
+  // beside the choice on the deal until then.
   const said = `${notes ?? ""}\n${JSON.stringify(b)}`;
-  if (intake.path === null && mentionsFieldFusion(said)) {
-    patch.path = "field_fusion";
-    filled.push("the path (Field Fusion — training journey)");
-  } else if (intake.path === null && mentionsDeviceMagic(said)) {
-    patch.path = "dm_conversion";
-    filled.push("the path (Device Magic conversion)");
+  if (intake.path === null && intake.path_suggested === null) {
+    const ex = b.expansion;
+    const suggested = mentionsFieldFusion(said)
+      ? "field_fusion"
+      : mentionsDeviceMagic(said)
+        ? "dm_conversion"
+        : ex && (ex.integration_target || ex.form_already_built)
+          ? "existing"
+          : null;
+    if (suggested) {
+      patch.path_suggested = suggested;
+      filled.push(
+        `a suggested flow (${
+          suggested === "field_fusion"
+            ? "Field Fusion"
+            : suggested === "dm_conversion"
+              ? "Device Magic conversion"
+              : "existing account"
+        })`,
+      );
+    }
   }
 
-  // The brief's own reading of "already runs GoCanvas, bought more" is the
-  // path. Only when nobody has said yet.
-  if (intake.path === null && !patch.path && b.expansion) {
-    const ex = b.expansion;
-    if (ex.integration_target || ex.form_already_built) {
-      patch.path = "existing";
-      filled.push("the path (existing account)");
-    }
+  // Were integrations or solutions part of the sale? The calls say so; the
+  // SOW says which. Only the yes/no is read here, and only when unasked.
+  if (intake.solutions_involved === null && b.expansion?.integration_target) {
+    patch.solutions_involved = true;
+    filled.push("integrations involved (yes)");
   }
 
   if (!intake.current_process && synth?.currentProcess) {

@@ -66,8 +66,9 @@ describe("Device Magic conversions", () => {
       brief,
       "Ops runs everything in Device Magic today.",
     );
-    expect(patch.path).toBe("dm_conversion");
-    expect(filled).toContain("the path (Device Magic conversion)");
+    expect(patch.path).toBeUndefined();
+    expect(patch.path_suggested).toBe("dm_conversion");
+    expect(filled).toContain("a suggested flow (Device Magic conversion)");
   });
 
   it("leaves a path a person chose alone", () => {
@@ -77,5 +78,6 @@ describe("Device Magic conversions", () => {
       "Ops runs everything in Device Magic today.",
     );
     expect(patch.path).toBeUndefined();
+    expect(patch.path_suggested).toBeUndefined();
   });
 });

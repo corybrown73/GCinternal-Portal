@@ -21,7 +21,7 @@ export const FIELD_FUSION_TEMPLATE_KEY = "field-fusion";
 export const FIELD_FUSION_OWNER_EMAIL_DEFAULT = "liesl.prinsloo@gocanvas.com";
 
 export type FieldFusionCheck = {
-  key: "ffiq_confirmed" | "account_ready";
+  key: "form_connected" | "client_trained";
   label: string;
   done: boolean;
 };
@@ -30,11 +30,11 @@ export type FieldFusionCheck = {
 export function fieldFusionChecklist(intake: IntakeAnswers): FieldFusionCheck[] {
   const ff = intake.field_fusion;
   return [
-    { key: "ffiq_confirmed", label: "FFIQ is set up and working", done: ff.ffiq_confirmed },
+    { key: "form_connected", label: "The form is connected", done: ff.form_connected },
     {
-      key: "account_ready",
-      label: "The account is set up for the customer",
-      done: ff.account_ready,
+      key: "client_trained",
+      label: "The client is trained on Field Fusion",
+      done: ff.client_trained,
     },
   ];
 }

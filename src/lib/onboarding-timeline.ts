@@ -99,8 +99,14 @@ export function isTrainingPlan(
   return path === "field_fusion" || trainingOnly === true;
 }
 
-/** The seven-day plan, in order. The keys are the contract the deck renders. */
-export const SEVEN_DAY_PLAN: readonly MilestoneSpec[] = [
+/**
+ * Phase 1 for a new logo: the initial form build, together, in two weeks.
+ * The keys are the contract the deck renders. The first form is built live
+ * on the kickoff call with the customer driving — the build is the training
+ * — one crew runs it on real jobs, and it is live by business day ten. Up to
+ * two more forms run alongside it in phase 1 (see onboarding-plan.ts).
+ */
+export const NEW_LOGO_PLAN: readonly MilestoneSpec[] = [
   {
     key: "close",
     day: 0,
@@ -113,12 +119,12 @@ export const SEVEN_DAY_PLAN: readonly MilestoneSpec[] = [
   {
     key: "kickoff",
     day: 1,
-    label: "Kickoff & build session",
+    label: "Kickoff & build call — you drive, we guide",
     owner: "both",
     kind: "call",
     minutes: 60,
     detail:
-      "Meet the team, agree how we'll work, and build the first form live on the call — from the starting point we chose together.",
+      "Meet the team, agree how we'll work, and build the first form live on the call — your hands on the keyboard, from the starting point we chose together. The build is the training.",
     homework: [
       "Download the GoCanvas app and log in",
       "Add one field user who will test on a real job",
@@ -133,25 +139,25 @@ export const SEVEN_DAY_PLAN: readonly MilestoneSpec[] = [
     owner: "client",
     kind: "homework",
     detail:
-      "The three things above. Fifteen minutes, and the second session starts from a live account instead of a blank one.",
+      "The three things above. Fifteen minutes, and the second build call starts from a live account instead of a blank one.",
     icon: "ClipboardCheck",
   },
   {
     key: "working",
-    day: 3,
-    label: "Working session",
+    day: 5,
+    label: "Build call 2 — finish it together",
     owner: "both",
     kind: "call",
     minutes: 30,
     detail:
       "Thirty minutes, hands on the keyboard together. Finish the form, add the logic and the notifications, and you make the last changes — not us.",
-    homework: ["Hand the form to your field tester", "Run it on real jobs for two days"],
+    homework: ["Hand the form to your field tester", "Run it on real jobs for a few days"],
     icon: "Wrench",
   },
   {
     key: "fieldtest",
-    day: 4,
-    throughDay: 5,
+    day: 6,
+    throughDay: 8,
     label: "Field test",
     owner: "client",
     kind: "build",
@@ -161,7 +167,7 @@ export const SEVEN_DAY_PLAN: readonly MilestoneSpec[] = [
   },
   {
     key: "adjust",
-    day: 6,
+    day: 9,
     label: "Adjust from the field",
     owner: "both",
     kind: "build",
@@ -170,14 +176,18 @@ export const SEVEN_DAY_PLAN: readonly MilestoneSpec[] = [
   },
   {
     key: "live",
-    day: 7,
+    day: 10,
     label: "Live — first value",
     owner: "both",
     kind: "milestone",
-    detail: "The form is in the field and the office is seeing the work as it happens. Day seven.",
+    detail:
+      "The form is in the field and the office is seeing the work as it happens. Two weeks from the close.",
     icon: "Rocket",
   },
 ];
+
+/** The old name, kept for the callers that still say it. Same plan. */
+export const SEVEN_DAY_PLAN = NEW_LOGO_PLAN;
 
 /**
  * Phase 1 for an existing account adding services: review the form the
@@ -264,8 +274,93 @@ export const EXISTING_PLAN: readonly MilestoneSpec[] = [
 ];
 
 /**
+ * An existing account where the CUSTOMER builds the form and we build the
+ * integration. The kickoff splits the work out loud, their build has a date,
+ * a check-in keeps it honest, and the integration starts the day the form is
+ * frozen. Same keys, same gates: "live" here means "frozen".
+ */
+export const CUSTOMER_BUILD_PLAN: readonly MilestoneSpec[] = [
+  {
+    key: "close",
+    day: 0,
+    label: "Welcome aboard",
+    owner: "gocanvas",
+    kind: "milestone",
+    detail: "Welcome email the same day, with the kickoff invite already in it.",
+    icon: "Flag",
+  },
+  {
+    key: "kickoff",
+    day: 1,
+    label: "Kickoff — you build the form, we build the integration",
+    owner: "both",
+    kind: "call",
+    minutes: 60,
+    detail:
+      "Agree the split out loud: which form you are building, by when, and what the integration needs from it — the fields, named the way the other system names them.",
+    homework: [
+      "Name who builds the form on your side, and the date it will be done",
+      "Send one example of the output the office needs",
+      "Name who owns the field mapping on your side",
+    ],
+    icon: "PhoneCall",
+  },
+  {
+    key: "homework",
+    day: 2,
+    label: "Your homework",
+    owner: "client",
+    kind: "homework",
+    detail: "The three things above. Fifteen minutes, and your build has a name and a date.",
+    icon: "ClipboardCheck",
+  },
+  {
+    key: "working",
+    day: 5,
+    label: "Check-in on your build",
+    owner: "both",
+    kind: "call",
+    minutes: 30,
+    detail:
+      "Thirty minutes on your form as it stands. The fields the integration needs are there, or we say which are missing — while there is still time.",
+    homework: ["Finish the form", "Run it on a few real jobs before it is frozen"],
+    icon: "Wrench",
+  },
+  {
+    key: "fieldtest",
+    day: 6,
+    throughDay: 8,
+    label: "Your build, on real jobs",
+    owner: "client",
+    kind: "build",
+    detail:
+      "A handful of real submissions through your form, so the mapping is built on real data.",
+    icon: "HardHat",
+  },
+  {
+    key: "adjust",
+    day: 9,
+    label: "Freeze the form together",
+    owner: "both",
+    kind: "build",
+    detail:
+      "The last field changes. After this the form does not move while the integration is built.",
+    icon: "Target",
+  },
+  {
+    key: "live",
+    day: 10,
+    label: "Form frozen — the integration starts",
+    owner: "both",
+    kind: "milestone",
+    detail: "Every field the integration needs is there and proven on real jobs. Phase 2 opens.",
+    icon: "Rocket",
+  },
+];
+
+/**
  * A Device Magic customer moving to GoCanvas. Same keys and days as the
- * seven-day plan, so every screen keeps working; the words are about the
+ * new-logo plan, so every screen keeps working; the words are about the
  * forms they already run and the day the first one moves over. The crew
  * runs the GoCanvas form alongside Device Magic on real jobs, and Device
  * Magic retires for that form on the live day.
@@ -308,7 +403,7 @@ export const DM_CONVERSION_PLAN: readonly MilestoneSpec[] = [
   },
   {
     key: "working",
-    day: 3,
+    day: 5,
     label: "Working session",
     owner: "both",
     kind: "call",
@@ -317,14 +412,14 @@ export const DM_CONVERSION_PLAN: readonly MilestoneSpec[] = [
       "Thirty minutes, hands on the keyboard together. Finish the form, match the output the office expects, and you make the last changes — not us.",
     homework: [
       "Hand the GoCanvas form to your field tester",
-      "Run it alongside Device Magic on real jobs for two days",
+      "Run it alongside Device Magic on real jobs for a few days",
     ],
     icon: "Wrench",
   },
   {
     key: "fieldtest",
-    day: 4,
-    throughDay: 5,
+    day: 6,
+    throughDay: 8,
     label: "Field test, alongside Device Magic",
     owner: "client",
     kind: "build",
@@ -334,7 +429,7 @@ export const DM_CONVERSION_PLAN: readonly MilestoneSpec[] = [
   },
   {
     key: "adjust",
-    day: 6,
+    day: 9,
     label: "Last adjustments",
     owner: "both",
     kind: "build",
@@ -343,7 +438,7 @@ export const DM_CONVERSION_PLAN: readonly MilestoneSpec[] = [
   },
   {
     key: "live",
-    day: 7,
+    day: 10,
     label: "First form live — Device Magic retires for it",
     owner: "both",
     kind: "milestone",
@@ -367,22 +462,22 @@ export const TRAINING_PLAN: readonly MilestoneSpec[] = [
     label: "Welcome aboard",
     owner: "gocanvas",
     kind: "milestone",
-    detail: "Welcome email the same day, with the first training call invite already in it.",
+    detail: "Welcome email the same day, with the first session's invite already in it.",
     icon: "Flag",
   },
   {
     key: "kickoff",
     day: 1,
-    label: "Training call 1 — the basics",
+    label: "Session 1 — the admin portal, and build a form",
     owner: "both",
     kind: "call",
     minutes: 30,
     detail:
-      "Your account, your phones, your forms. Open a job, fill it in, submit it, and watch it arrive in the office — on a real job, together.",
+      "How to find your way around the admin portal, and how to build a form — you build one with us on the call, start to finish.",
     homework: [
+      "Build one form yourself, for a job you actually do",
       "Send us the name and email of everyone who needs a login",
-      "Pick one person in the field to run the first real jobs",
-      "Run two or three real jobs before the next call",
+      "Send us a client list or parts list you use today, as a spreadsheet",
     ],
     icon: "PhoneCall",
   },
@@ -393,21 +488,21 @@ export const TRAINING_PLAN: readonly MilestoneSpec[] = [
     owner: "client",
     kind: "homework",
     detail:
-      "The three things above. Fifteen minutes to send the list; the real jobs are the job you were doing anyway.",
+      "The three things above. The form you build is what session 2 starts from; the list is what it loads.",
     icon: "ClipboardCheck",
   },
   {
     key: "working",
     day: 5,
-    label: "Training call 2 — real jobs, questions answered",
+    label: "Session 2 — reference data, calculations, and a PDF",
     owner: "both",
     kind: "call",
     minutes: 30,
     detail:
-      "Your first real submissions in front of us. What went well, what slowed anyone down, and the next things to learn — photos, dispatch, reference data, whatever your forms use.",
+      "Load your client or parts list as reference data, add the advanced calculations your jobs need, and build the PDF the office receives.",
     homework: [
-      "Everyone trained runs it on their jobs for a week",
-      "Write down what slows anyone down",
+      "Run the form on real jobs for a week",
+      "Write down what the office wants to see from the data",
     ],
     icon: "Wrench",
   },
@@ -419,42 +514,59 @@ export const TRAINING_PLAN: readonly MilestoneSpec[] = [
     owner: "client",
     kind: "build",
     detail:
-      "The crew runs it on real jobs without us on the call. What slows them down is what the last call covers.",
+      "The crew runs it on real jobs without us on the call. What slows them down is what session 3 covers first.",
     icon: "HardHat",
   },
   {
     key: "adjust",
     day: 10,
-    label: "Training call 3 — the office side, and what's next",
+    label: "Session 3 — where the data goes, and what you can do with it",
     owner: "both",
     kind: "call",
     minutes: 30,
     detail:
-      "Reports and exports for the office, the questions from the week, and who trains the next hire — so it stays yours.",
+      "Submissions, reports and exports: where the data lands, how the office works from it, and what to connect it to next.",
     icon: "Target",
   },
   {
     key: "live",
     day: 10,
-    label: "Your crew is live",
+    label: "Novice to expert — your crew is live",
     owner: "both",
     kind: "milestone",
     detail:
-      "Everyone trained runs it on every job. Anyone who joins later gets the same walkthrough from your own team.",
+      "You have built a form, loaded your data, and know where it goes. Anyone who joins later gets the same walkthrough from your own team.",
     icon: "Rocket",
   },
 ];
 
+/**
+ * How an existing account's phase 1 runs: a REVIEW of a form that is final,
+ * a build by US (the new-logo build), or a build by the CUSTOMER with a
+ * frozen-form gate. The Account Manager's two questions decide it.
+ */
+export type ExistingBuild = "review" | "us" | "customer";
+
 export function planFor(
   path: OnboardingPath | null | undefined,
-  trainingOnly?: boolean | null,
+  opts:
+    | {
+        trainingOnly?: boolean | null | undefined;
+        existingBuild?: ExistingBuild | null | undefined;
+      }
+    | boolean
+    | null = null,
 ): readonly MilestoneSpec[] {
-  if (isTrainingPlan(path, trainingOnly)) return TRAINING_PLAN;
-  return path === "existing"
-    ? EXISTING_PLAN
-    : path === "dm_conversion"
-      ? DM_CONVERSION_PLAN
-      : SEVEN_DAY_PLAN;
+  const o = typeof opts === "object" && opts !== null ? opts : { trainingOnly: opts };
+  if (isTrainingPlan(path, o.trainingOnly)) return TRAINING_PLAN;
+  if (path === "existing") {
+    return o.existingBuild === "us"
+      ? NEW_LOGO_PLAN
+      : o.existingBuild === "customer"
+        ? CUSTOMER_BUILD_PLAN
+        : EXISTING_PLAN;
+  }
+  return path === "dm_conversion" ? DM_CONVERSION_PLAN : NEW_LOGO_PLAN;
 }
 
 /**
@@ -554,6 +666,8 @@ export type TimelineOptions = {
   path?: OnboardingPath | null;
   /** No form to build on this account: phase 1 is the training plan whatever the path. */
   trainingOnly?: boolean | null;
+  /** On an existing account: review the form, we build it, or the customer builds it. */
+  existingBuild?: ExistingBuild | null;
   /** Milestone key → ISO date, for the ones a person moved. */
   overrides?: Record<string, string>;
   /** ISO dates to skip, on top of weekends. */
@@ -635,6 +749,8 @@ export type Timeline = {
   path: OnboardingPath;
   /** Phase 1 is training, not a form build — the words on every screen follow it. */
   training: boolean;
+  /** On an existing account, who builds the form in phase 1. Null elsewhere. */
+  existingBuild: ExistingBuild | null;
   milestones: Milestone[];
   /** The live date — the last of the seven days, after overrides. */
   liveDate: string;
@@ -778,8 +894,12 @@ export function buildTimeline(options: TimelineOptions): Timeline {
 
   const path: OnboardingPath = options.path ?? "new_logo";
   const training = isTrainingPlan(path, options.trainingOnly);
-  const milestones = cascade(planFor(path, options.trainingOnly), (spec) =>
-    spec.day === 0 ? options.closeDate : addBusinessDays(options.closeDate, spec.day, holidays),
+  const existingBuild: ExistingBuild | null =
+    path === "existing" && !training ? (options.existingBuild ?? "review") : null;
+  const milestones = cascade(
+    planFor(path, { trainingOnly: options.trainingOnly, existingBuild }),
+    (spec) =>
+      spec.day === 0 ? options.closeDate : addBusinessDays(options.closeDate, spec.day, holidays),
   );
 
   const liveDate = milestones[milestones.length - 1]!.date;
@@ -955,6 +1075,7 @@ export function buildTimeline(options: TimelineOptions): Timeline {
     closeDate: options.closeDate,
     path,
     training,
+    existingBuild,
     milestones,
     liveDate,
     liveDoneOn,

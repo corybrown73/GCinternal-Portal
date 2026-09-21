@@ -5,6 +5,7 @@ import { accountUpsertSchema } from "./server/schemas";
 import { isStage, type AccountStage } from "./presale-stages";
 import {
   findStage,
+  isAtOrPast,
   stageAfterWon,
   stageOrder,
   terminalStage,
@@ -829,7 +830,62 @@ export async function addGongReport(
       call_date: input.callDate ?? null,
     });
   if (error) throw new Error(`Could not save the report: ${error.message}`);
+  // The notes are the first step, and the brief follows them on its own:
+  // nobody presses a button to have the calls read. A failure here is
+  // reported on the deal, not raised — the notes are already saved.
+  try {
+    await generateDealBrief(userId, input.dealId);
+  } catch (e) {
+    console.error("[reports] could not write the brief from the new notes", e);
+  }
   return { ok: true };
+}
+
+/**
+ * The signed contract, beside or instead of a SOW: a three-seat deal has no
+ * SOW, but its contract says how many seats and for how long. PDF only,
+ * same bucket and same rule as the forms.
+ */
+export async function uploadDealContract(
+  userId: string,
+  args: { dealId: string; fileName: string; dataBase64: string },
+): Promise<import("./intake-answers").IntakeAnswers> {
+  await requireSalesEditor(userId);
+  if (args.dataBase64.length > SOW_MAX_BASE64) throw new Error("That file is over 25MB");
+  const { readIntake, intakeAnswersSchema } = await import("./intake-answers");
+  const { data: before } = await db()
+    .from("portal_accounts")
+    .select("intake")
+    .eq("id", args.dealId)
+    .maybeSingle();
+  if (!before) throw new Error("Deal not found");
+  const binary = Buffer.from(args.dataBase64, "base64");
+  const safe = args.fileName.replace(/[^A-Za-z0-9._-]+/g, "-").slice(-120) || "contract.pdf";
+  const path = `deals/${args.dealId}/contract/${crypto.randomUUID()}-${safe}`;
+  const { error: upErr } = await db()
+    .storage.from("attachments")
+    .upload(path, binary, { contentType: "application/pdf", upsert: false });
+  if (upErr) throw new Error(`Could not upload the contract: ${upErr.message}`);
+  const current = readIntake((before as any).intake);
+  const next = intakeAnswersSchema.parse({
+    ...current,
+    contract: { path, name: args.fileName, uploaded_at: new Date().toISOString() },
+    updated_at: new Date().toISOString(),
+  });
+  const { error } = await db()
+    .from("portal_accounts")
+    .update({ intake: next, updated_at: new Date().toISOString() })
+    .eq("id", args.dealId);
+  if (error) throw new Error(`Could not record the contract: ${error.message}`);
+  await audit({
+    actor_type: "user",
+    actor_id: userId,
+    action: "deal.contract_uploaded",
+    entity_type: "account",
+    entity_id: args.dealId,
+    payload: { name: args.fileName },
+  });
+  return next;
 }
 
 export async function deleteGongReport(userId: string, reportId: string): Promise<{ ok: true }> {
@@ -1835,16 +1891,12 @@ export async function saveDealIntake(
   const current = readIntake((before as any).intake);
   // The Field Fusion block is patched one tick at a time; a tick must not
   // wipe the other tick, the note, or the handoff stamp.
-  const merged =
-    patch["field_fusion"] && typeof patch["field_fusion"] === "object"
-      ? {
-          ...patch,
-          field_fusion: {
-            ...current.field_fusion,
-            ...(patch["field_fusion"] as Record<string, unknown>),
-          },
-        }
-      : patch;
+  const merged: Record<string, unknown> = { ...patch };
+  for (const block of ["field_fusion", "existing"] as const) {
+    if (patch[block] && typeof patch[block] === "object") {
+      merged[block] = { ...current[block], ...(patch[block] as Record<string, unknown>) };
+    }
+  }
   const next = intakeAnswersSchema.parse({
     ...current,
     ...merged,
@@ -1870,6 +1922,30 @@ export async function saveDealIntake(
   {
     const { syncJourneyStage } = await import("./journey-sync.server");
     await syncJourneyStage(dealId, userId);
+  }
+
+  // The flow was set to Field Fusion on a deal that has already closed —
+  // a Salesforce close, or a person who picked the flow late. The setup
+  // gate runs now, the way it would have at the close.
+  if (
+    next.path === "field_fusion" &&
+    current.path !== "field_fusion" &&
+    !next.field_fusion.handed_off_at
+  ) {
+    const { data: row } = await db()
+      .from("portal_accounts")
+      .select("stage")
+      .eq("id", dealId)
+      .maybeSingle();
+    const stages = await loadPipelineStages();
+    if (
+      row &&
+      row.stage !== FIELD_FUSION_STAGE &&
+      isAtOrPast(stages, row.stage, wonStage(stages).key)
+    ) {
+      const { startFieldFusionSetup } = await import("./field-fusion.server");
+      await startFieldFusionSetup(dealId, userId);
+    }
   }
   return next;
 }
@@ -1975,7 +2051,8 @@ export async function uploadDealIntakeForm(
 export async function intakeFormLink(dealId: string, path: string): Promise<{ url: string }> {
   // The path must belong to this deal: a signed link for any path a caller
   // names would turn this into a read of the whole bucket.
-  if (!path.startsWith(`deals/${dealId}/forms/`)) throw new Error("That file is not on this deal");
+  if (!path.startsWith(`deals/${dealId}/forms/`) && !path.startsWith(`deals/${dealId}/contract/`))
+    throw new Error("That file is not on this deal");
   const { data, error } = await db()
     .storage.from("attachments")
     .createSignedUrl(path, 60 * 60);

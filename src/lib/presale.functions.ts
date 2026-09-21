@@ -469,10 +469,28 @@ export const saveIntake = createServerFn({ method: "POST" })
               .nullable()
               .optional(),
             training_only: z.boolean().optional(),
+            solutions_involved: z.boolean().nullable().optional(),
+            has_sow: z.boolean().nullable().optional(),
+            existing: z
+              .object({
+                form_final: z.boolean().nullable().optional(),
+                builder: z.enum(["us", "customer"]).nullable().optional(),
+                customer_build_by: z
+                  .string()
+                  .regex(/^\d{4}-\d{2}-\d{2}$/)
+                  .nullable()
+                  .optional(),
+                form_frozen_on: z
+                  .string()
+                  .regex(/^\d{4}-\d{2}-\d{2}$/)
+                  .nullable()
+                  .optional(),
+              })
+              .optional(),
             field_fusion: z
               .object({
-                ffiq_confirmed: z.boolean().optional(),
-                account_ready: z.boolean().optional(),
+                form_connected: z.boolean().optional(),
+                client_trained: z.boolean().optional(),
                 notes: z.string().trim().max(4000).optional(),
               })
               .optional(),
@@ -567,6 +585,28 @@ export const uploadIntakeForm = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const { uploadDealIntakeForm } = await import("./presale.server");
     return uploadDealIntakeForm(context.profile.id, data);
+  });
+
+/** The signed contract, PDF only, onto the intake. Beside or instead of a SOW. */
+export const uploadContract = createServerFn({ method: "POST" })
+  .middleware([requireDealEditor])
+  .inputValidator((data: unknown) =>
+    z
+      .object({
+        dealId: z.string().uuid(),
+        fileName: z.string().trim().min(1).max(200),
+        contentType: z.literal("application/pdf"),
+        dataBase64: z.string().min(1).max(34_000_000),
+      })
+      .parse(data),
+  )
+  .handler(async ({ data, context }) => {
+    const { uploadDealContract } = await import("./presale.server");
+    return uploadDealContract(context.profile.id, {
+      dealId: data.dealId,
+      fileName: data.fileName,
+      dataBase64: data.dataBase64,
+    });
   });
 
 export const getIntakeFormLink = createServerFn({ method: "POST" })

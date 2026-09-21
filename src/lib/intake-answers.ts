@@ -54,6 +54,45 @@ export const intakeAnswersSchema = z.object({
    * from. null until somebody says — the plan treats null as a new logo.
    */
   path: z.enum(["new_logo", "existing", "dm_conversion", "field_fusion"]).nullable().default(null),
+  /** What the notes suggest the path is. A person confirms; the plan never reads this. */
+  path_suggested: z
+    .enum(["new_logo", "existing", "dm_conversion", "field_fusion"])
+    .nullable()
+    .default(null),
+  /**
+   * The first fact after the notes: were integrations or solutions part of
+   * the sale? Yes means the SOW is read into the plan; the notes never add
+   * a service on their own. null until asked.
+   */
+  solutions_involved: z.boolean().nullable().default(null),
+  /** Is there a SOW? A small deal has a contract and no SOW; either way the paper travels. */
+  has_sow: z.boolean().nullable().default(null),
+  /** The signed contract, when there is no SOW (or beside it): seats, term, price. */
+  contract: z
+    .object({ path: z.string().min(1), name: z.string().min(1), uploaded_at: z.string() })
+    .nullable()
+    .default(null),
+  /**
+   * The Account Manager's questions on an existing account. Is the form
+   * final? If not, are we building it or is the customer? A customer build
+   * has a date and a freeze; the integration waits behind the freeze.
+   */
+  existing: z
+    .object({
+      form_final: z.boolean().nullable().default(null),
+      builder: z.enum(["us", "customer"]).nullable().default(null),
+      customer_build_by: z
+        .string()
+        .regex(/^\d{4}-\d{2}-\d{2}$/)
+        .nullable()
+        .default(null),
+      form_frozen_on: z
+        .string()
+        .regex(/^\d{4}-\d{2}-\d{2}$/)
+        .nullable()
+        .default(null),
+    })
+    .default({}),
   /**
    * No form to build: the crew just needs training. Phase 1 becomes the
    * training plan and the forms question is skipped. A Field Fusion account
@@ -67,8 +106,8 @@ export const intakeAnswersSchema = z.object({
    */
   field_fusion: z
     .object({
-      ffiq_confirmed: z.boolean().default(false),
-      account_ready: z.boolean().default(false),
+      form_connected: z.boolean().default(false),
+      client_trained: z.boolean().default(false),
       notes: z.string().trim().max(4000).default(""),
       handed_off_at: z.string().nullable().default(null),
     })
@@ -195,6 +234,42 @@ export function isTrainingOnly(a: Pick<IntakeAnswers, "path" | "training_only">)
   return a.path === "field_fusion" || a.training_only === true;
 }
 
+/**
+ * The flow is picked AND its own question is answered: a new logo or a
+ * conversion has named or uploaded its forms (or is training only); an
+ * existing account has the Account Manager's answers; Field Fusion has
+ * nothing to ask here — the gate lives on the deal after the close.
+ */
+export function flowAnswered(a: IntakeAnswers): boolean {
+  if (a.path === null) return false;
+  if (a.path === "field_fusion") return true;
+  if (a.path === "existing") {
+    const e = a.existing;
+    if (e.form_final === true) return true;
+    if (e.form_final === false && e.builder === "us") return true;
+    if (e.form_final === false && e.builder === "customer") return Boolean(e.customer_build_by);
+    return false;
+  }
+  if (a.training_only) return true;
+  return a.forms_built === true
+    ? a.uploaded_forms.length > 0
+    : a.forms_built === false && a.wanted_forms.length > 0;
+}
+
+/**
+ * How an existing account's phase 1 runs, from the Account Manager's
+ * answers. Unanswered reads as a review — the lightest plan — until it is.
+ */
+export function existingBuildFor(
+  a: Pick<IntakeAnswers, "path" | "existing">,
+): "review" | "us" | "customer" | null {
+  if (a.path !== "existing") return null;
+  if (a.existing.form_final === true) return "review";
+  if (a.existing.form_final === false && a.existing.builder === "customer") return "customer";
+  if (a.existing.form_final === false && a.existing.builder === "us") return "us";
+  return "review";
+}
+
 export const EMPTY_INTAKE: IntakeAnswers = intakeAnswersSchema.parse({});
 
 /** Whatever is in the column, as a well-formed object. Never throws. */
@@ -219,12 +294,15 @@ export function intakeStatus(a: IntakeAnswers): {
   done: boolean;
   next: string | null;
 } {
-  // Training only: there is no form to ask about, so the questions are
-  // who they are and what the crew does today.
+  if (a.solutions_involved === null)
+    return { done: false, next: "Were integrations or solutions involved?" };
+  // The forms question belongs to the flow: an existing account answers the
+  // Account Manager's questions instead, and training has no form to ask about.
   const training = isTrainingOnly(a);
-  if (!training && a.forms_built === null)
+  const asksForms = !training && a.path !== "existing";
+  if (asksForms && a.forms_built === null)
     return { done: false, next: "Do they already have forms built?" };
-  if (!training && a.forms_built) {
+  if (asksForms && a.forms_built) {
     return a.uploaded_forms.length > 0
       ? { done: true, next: null }
       : { done: false, next: "Upload the forms they have." };

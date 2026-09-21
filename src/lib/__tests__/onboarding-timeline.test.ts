@@ -30,7 +30,7 @@ describe("business days", () => {
   });
 });
 
-describe("the seven-day plan", () => {
+describe("the new-logo plan — two weeks", () => {
   // 2026-09-09 is a Wednesday.
   const t = buildTimeline({ closeDate: "2026-09-09" });
 
@@ -40,9 +40,9 @@ describe("the seven-day plan", () => {
     expect(kickoff.minutes).toBe(60);
   });
 
-  it("is live within seven business days, and the last step is the live one", () => {
+  it("is live within ten business days — two weeks — and the last step is the live one", () => {
     expect(t.milestones[t.milestones.length - 1]!.key).toBe("live");
-    expect(t.liveDate).toBe(addBusinessDays("2026-09-09", 7));
+    expect(t.liveDate).toBe(addBusinessDays("2026-09-09", 10));
   });
 
   it("has two calls with homework between them, and the second is thirty minutes", () => {
@@ -74,12 +74,12 @@ describe("moving a date by hand", () => {
   it("wins over the plan and is reported as moved", () => {
     const t = buildTimeline({
       closeDate: "2026-09-09",
-      overrides: { working: "2026-09-16" },
+      overrides: { working: "2026-09-18" },
     });
     const working = t.milestones.find((m) => m.key === "working")!;
-    expect(working.date).toBe("2026-09-16");
+    expect(working.date).toBe("2026-09-18");
     expect(working.moved).toBe(true);
-    expect(working.plannedDate).toBe("2026-09-14");
+    expect(working.plannedDate).toBe("2026-09-16");
     // Everything else is untouched.
     expect(t.milestones.filter((m) => m.moved)).toHaveLength(1);
   });
@@ -134,9 +134,9 @@ describe("integrations", () => {
 describe("presentation helpers", () => {
   it("counts business days to value, the plan's own unit", () => {
     const t = buildTimeline({ closeDate: "2026-09-09" });
-    // Seven business days from a Wednesday spans two weekends; the count
-    // still reads seven, the same number as "Day 7" and "seven business days".
-    expect(daysToValue(t)).toBe(7);
+    // Ten business days from a Wednesday spans two weekends; the count
+    // still reads ten, the same number as "Day 10" and "two weeks".
+    expect(daysToValue(t)).toBe(10);
   });
 
   it("formats a date the way a slide reads it", () => {
@@ -212,9 +212,9 @@ describe("moving a date moves everything after it", () => {
     expect(by("kickoff").moved).toBe(true);
     expect(by("homework").date).toBe("2026-09-15");
     expect(by("homework").shifted).toBe(true);
-    expect(by("working").date).toBe("2026-09-16");
-    expect(by("live").date).toBe("2026-09-22");
-    expect(t.liveDate).toBe("2026-09-22");
+    expect(by("working").date).toBe("2026-09-18");
+    expect(by("live").date).toBe("2026-09-25");
+    expect(t.liveDate).toBe("2026-09-25");
     // Nothing before it moved.
     expect(by("close").date).toBe("2026-09-09");
     expect(by("close").shifted).toBe(false);
@@ -226,10 +226,10 @@ describe("moving a date moves everything after it", () => {
       overrides: { kickoff: "2026-09-14", working: "2026-09-15" },
     });
     const by = (k: string) => t.milestones.find((m) => m.key === k)!;
-    // Working was planned Wed Sep 16 after the kickoff shift; a person pulled it to Tue.
+    // Working was planned Fri Sep 18 after the kickoff shift; a person pulled it to Tue.
     expect(by("working").moved).toBe(true);
-    expect(by("working").plannedDate).toBe("2026-09-16");
-    // Field test follows the working session's shift (+1 from its base of Sep 15 → Sep 16).
+    expect(by("working").plannedDate).toBe("2026-09-18");
+    // Field test follows the working session's shift (−1 from its base of Sep 17 → Sep 16).
     expect(by("fieldtest").date).toBe("2026-09-16");
   });
 
@@ -446,29 +446,29 @@ describe("the existing-account path", () => {
     expect(t.phases[0]!.gate).toBe("Starts once your form is optimised for the integration");
   });
 
-  it("is the seven-day plan when the path is unset or new_logo", () => {
+  it("is the new-logo plan when the path is unset or new_logo", () => {
     expect(buildTimeline({ closeDate: "2026-09-09" }).path).toBe("new_logo");
-    expect(buildTimeline({ closeDate: "2026-09-09", path: null }).milestones[6]!.day).toBe(7);
+    expect(buildTimeline({ closeDate: "2026-09-09", path: null }).milestones[6]!.day).toBe(10);
   });
 });
 
 describe("dayCounter", () => {
-  const t = buildTimeline({ closeDate: "2026-09-09" }); // Wed; live Fri Sep 18 (day 7)
+  const t = buildTimeline({ closeDate: "2026-09-09" }); // Wed; live Wed Sep 23 (day 10)
   it("counts business days from the close, and to live", () => {
     expect(dayCounter(t, "2026-09-09")).toMatchObject({
       day: 0,
-      total: 7,
-      toLive: 7,
+      total: 10,
+      toLive: 10,
       state: "during",
     });
     const mid = dayCounter(t, "2026-09-14");
-    expect(mid).toMatchObject({ day: 3, toLive: 4, state: "during", label: "Day 3 of 7" });
-    expect(mid.detail).toBe("Live Fri, Sep 18 · in 4 business days");
-    expect(dayCounter(t, "2026-09-18")).toMatchObject({
+    expect(mid).toMatchObject({ day: 3, toLive: 7, state: "during", label: "Day 3 of 10" });
+    expect(mid.detail).toBe("Live Wed, Sep 23 · in 7 business days");
+    expect(dayCounter(t, "2026-09-23")).toMatchObject({
       state: "live_today",
       detail: "Live today",
     });
-    expect(dayCounter(t, "2026-09-22")).toMatchObject({ state: "past_due", toLive: -2 });
+    expect(dayCounter(t, "2026-09-25")).toMatchObject({ state: "past_due", toLive: -2 });
     expect(dayCounter(t, "2026-09-07")).toMatchObject({
       state: "before",
       label: "Begins in 2 days",
@@ -480,10 +480,10 @@ describe("dayCounter", () => {
       state: "live",
       actual: 5,
       label: "Live in 5 days",
-      detail: "2 days ahead of the 7-day plan",
+      detail: "5 days ahead of the 10-day plan",
     });
-    const onPlan = buildTimeline({ closeDate: "2026-09-09", completed: { live: "2026-09-18" } });
-    expect(dayCounter(onPlan, "2026-09-30").detail).toBe("On plan — 7 days");
+    const onPlan = buildTimeline({ closeDate: "2026-09-09", completed: { live: "2026-09-23" } });
+    expect(dayCounter(onPlan, "2026-09-30").detail).toBe("On plan — 10 days");
   });
 });
 
@@ -528,7 +528,7 @@ describe("service steps read like a plan", () => {
 
   it("names both days of a step that spans two", () => {
     const t = buildTimeline({ closeDate: "2026-09-09" });
-    expect(dayLabel(t.milestones.find((m) => m.key === "fieldtest")!)).toBe("Day 4–5");
-    expect(dayLabel(t.milestones.find((m) => m.key === "adjust")!)).toBe("Day 6");
+    expect(dayLabel(t.milestones.find((m) => m.key === "fieldtest")!)).toBe("Day 6–8");
+    expect(dayLabel(t.milestones.find((m) => m.key === "adjust")!)).toBe("Day 9");
   });
 });

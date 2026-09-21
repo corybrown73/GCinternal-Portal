@@ -5,7 +5,7 @@ import { guideSteps } from "../deal-guide";
 const history = [{ to_stage: "closed_won", occurred_at: "2026-09-09T15:00:00Z" }];
 
 describe("guideSteps", () => {
-  it("starts at the path and points at one next thing", () => {
+  it("starts with the notes and points at one next thing", () => {
     const steps = guideSteps({
       intake: null,
       gongReports: 0,
@@ -15,8 +15,26 @@ describe("guideSteps", () => {
       stageHistory: history,
       wonStageKey: "closed_won",
     });
-    expect(steps.map((s) => s.done)).toEqual([false, false, false, false, false, false, false]);
-    expect(steps[0]!.key).toBe("path");
+    expect(steps.map((s) => s.done)).toEqual([
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+    ]);
+    expect(steps.map((s) => s.key)).toEqual([
+      "gong",
+      "synth",
+      "paper",
+      "intake",
+      "path",
+      "sow",
+      "times",
+      "share",
+    ]);
     expect(steps[0]!.panel.id).toBe("panel-intake");
   });
 
@@ -24,6 +42,12 @@ describe("guideSteps", () => {
     const steps = guideSteps({
       intake: {
         path: "existing",
+        solutions_involved: true,
+        has_sow: true,
+        industry: "Roofing",
+        field_users: 12,
+        current_process: "Paper tickets",
+        existing: { form_final: true },
         forms_built: true,
         uploaded_forms: [{ path: "p", name: "Haul.pdf", uploaded_at: "2026-09-09" }],
         welcome_shared_at: "2026-09-10T15:00:00Z",
