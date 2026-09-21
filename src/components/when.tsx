@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-import { fmtDateTime } from "@/lib/hub-format";
+import { fmtDateTime, setReaderZone } from "@/lib/hub-format";
 
 /**
  * An instant, in the reader's own zone.
@@ -36,15 +36,14 @@ let knownZone: string | null = null;
 export function useReaderZone(): string | null {
   const [zone, setZone] = useState<string | null>(knownZone);
   useEffect(() => {
-    if (knownZone) {
-      setZone(knownZone);
-      return;
+    if (!knownZone) {
+      try {
+        knownZone = Intl.DateTimeFormat().resolvedOptions().timeZone || null;
+      } catch {
+        knownZone = null;
+      }
     }
-    try {
-      knownZone = Intl.DateTimeFormat().resolvedOptions().timeZone || null;
-    } catch {
-      knownZone = null;
-    }
+    setReaderZone(knownZone);
     setZone(knownZone);
   }, []);
   return zone;

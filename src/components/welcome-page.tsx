@@ -1851,7 +1851,9 @@ function FirstForm({ view, page }: { view: WelcomeView; page: number }) {
               <span className="wp-office-tile">
                 <Workflow className="h-6 w-6" />
               </span>
-              <span className="wp-office-tile is-pdf">PDF</span>
+              <span className="wp-office-tile is-pdf" title="A PDF from every submission">
+                <FileText className="h-6 w-6" />
+              </span>
             </div>
           </div>
           <h3>{phase2 ? "Connected to the office" : "The next forms, built by you"}</h3>

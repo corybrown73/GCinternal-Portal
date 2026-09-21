@@ -18,6 +18,8 @@ import { AppSidebar } from "@/components/app-sidebar";
 import { useOrgBranding } from "@/lib/use-branding";
 import { useApplyTheme } from "@/lib/use-theme";
 import { useNavVisibility } from "@/lib/use-nav-visibility";
+import type { NavVisibility } from "@/lib/nav-visibility";
+import { useReaderZone } from "@/components/when";
 import { AuthGate } from "@/components/auth-gate";
 import { useProfile } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
@@ -104,6 +106,8 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
 /** When the configured stage labels were last applied in this tab. */
 let stagesLoadedAt = 0;
 const STAGES_TTL_MS = 5 * 60_000;
+/** The nav visibility, fetched with the page so the sidebar never pops in. */
+let navCache: { at: number; value: NavVisibility } | null = null;
 
 export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
   head: () => ({
@@ -158,10 +162,23 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     // that trains people to ignore the log. Those pages render the compiled-in
     // labels, which is correct: nothing there shows a configurable stage name.
     if (isPublicRoute(location.pathname)) return null;
+    // The sidebar's sections, on the same terms as the stage labels below:
+    // fetched with the page, cached five minutes. Fetched after the page
+    // painted, the sidebar showed two items and then seven — a glitch on
+    // every load.
+    if (!navCache || Date.now() - navCache.at > STAGES_TTL_MS) {
+      try {
+        const { getNavVisibility } = await import("@/lib/nav-visibility.functions");
+        navCache = { at: Date.now(), value: await getNavVisibility() };
+      } catch {
+        navCache = null;
+      }
+    }
+    const nav = navCache?.value ?? null;
     // Once per five minutes, not once per navigation. This loader blocks every
     // page change, and the stage names change roughly never; asking on each
     // click cost a full server round trip before anything could paint.
-    if (Date.now() - stagesLoadedAt < STAGES_TTL_MS) return null;
+    if (Date.now() - stagesLoadedAt < STAGES_TTL_MS) return { nav };
     try {
       const { getLifecycleStages } = await import("@/lib/lifecycle-stages.functions");
       const stages = await getLifecycleStages();
@@ -177,7 +194,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         console.error("[lifecycle] could not load configured stage labels", e);
       }
     }
-    return null;
+    return { nav };
   },
   shellComponent: RootShell,
   component: RootComponent,
@@ -232,7 +249,11 @@ function ThemeApplier() {
 function ShellWithSidebar() {
   const { profile } = useProfile();
   const branding = useOrgBranding();
-  const visibility = useNavVisibility();
+  const loaded = Route.useLoaderData() as { nav: NavVisibility | null } | null;
+  const visibility = useNavVisibility(loaded?.nav ?? null);
+  // Learn the reader's zone as early as anything renders, so every date
+  // formatted after hydration is theirs.
+  useReaderZone();
   return (
     <div className="flex min-h-screen w-full bg-background text-foreground">
       <AppSidebar profile={profile ?? null} branding={branding} visibility={visibility} />

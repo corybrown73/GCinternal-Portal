@@ -333,6 +333,7 @@ function Customer360Page() {
             <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] text-muted-foreground">
               <span>
                 {[
+                  impl.name && impl.name !== customer.name ? impl.name : null,
                   customer.industry,
                   impl.tier,
                   customer.segment,

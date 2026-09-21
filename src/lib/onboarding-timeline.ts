@@ -863,6 +863,27 @@ export function dayCounter(
   };
 }
 
+/** The team's zone when nothing else says: the plan's dates are read from the US east coast. */
+export const TEAM_ZONE = "America/New_York";
+
+/**
+ * Today as YYYY-MM-DD in a named zone. On the server "today" was UTC's day,
+ * which after 8 pm Eastern is tomorrow: a deal created on Sunday evening
+ * read "Created 21 Sept" and its plan began a day late.
+ */
+export function todayIn(zone: string | null | undefined, d: Date = new Date()): string {
+  try {
+    return new Intl.DateTimeFormat("en-CA", {
+      timeZone: zone || TEAM_ZONE,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(d);
+  } catch {
+    return localIso(d);
+  }
+}
+
 /** Today as YYYY-MM-DD in the browser's zone. */
 export function localIso(d: Date = new Date()): string {
   const y = d.getFullYear();

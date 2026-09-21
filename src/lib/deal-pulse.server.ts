@@ -4,7 +4,7 @@ import { guideSteps, type GuideStep } from "./deal-guide";
 import { deliverablePhases, type DeliverablePhase } from "./deliverables";
 import { readIntake } from "./intake-answers";
 import { closeDateFor, timelineFor } from "./onboarding-plan";
-import { dayCounter, type DayCounter } from "./onboarding-timeline";
+import { dayCounter, todayIn, type DayCounter } from "./onboarding-timeline";
 import { loadPipelineStages } from "./pipeline-stages.server";
 import { terminalStage, wonStage } from "./pipeline-stages";
 import { loadWelcome } from "./welcome.server";
@@ -29,7 +29,7 @@ export type DealPulse = {
 };
 
 export async function loadDealPulse(dealId: string, today?: string): Promise<DealPulse | null> {
-  const asOf = today ?? new Date().toISOString().slice(0, 10);
+  const asOf = today ?? todayIn(null);
   const [
     { data: deal },
     { data: history },
@@ -76,6 +76,7 @@ export async function loadDealPulse(dealId: string, today?: string): Promise<Dea
     wonStageKey: won,
     readiness: welcome?.readiness ?? [],
     customerOpened: Boolean(deal.welcome_opened_at),
+    today: asOf,
   });
   return {
     dealId,

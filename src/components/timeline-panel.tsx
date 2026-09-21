@@ -36,6 +36,7 @@ import {
   type Milestone,
   type Phase,
   type Timeline,
+  localIso,
 } from "@/lib/onboarding-timeline";
 import { saveIntake } from "@/lib/presale.functions";
 import { toolByKey, toolFromName, toolsForKind } from "@/lib/onboarding-tools";
@@ -76,7 +77,7 @@ export function TimelinePanel({
   highlight?: boolean | undefined;
 }) {
   const answers = readIntake(raw);
-  const close = closeDateFor({ intake: answers, stageHistory, wonStageKey });
+  const close = closeDateFor({ intake: answers, stageHistory, wonStageKey, today: localIso() });
   const timeline = timelineFor(answers, close.date);
   const knobs = answers.timeline;
 

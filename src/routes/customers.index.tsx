@@ -255,7 +255,9 @@ function CustomersPage() {
                     >
                       {r.customer_name}
                       <span className="ml-2 text-[11px] font-normal text-muted-foreground">
-                        {r.industry ?? "—"} · {r.segment ?? "—"}
+                        {r.name && r.name !== r.customer_name
+                          ? r.name
+                          : [r.industry, r.segment].filter(Boolean).join(" · ") || "—"}
                       </span>
                     </Link>
                   </td>

@@ -27,7 +27,8 @@ export type WatchOut = {
   detail: string;
   /** The sentence it was read from. */
   quote: string;
-  source: "calls" | "sow";
+  /** calls — the pasted notes, verbatim; brief — the AI's reading of them; sow — the SOW reader's notes. */
+  source: "calls" | "brief" | "sow";
 };
 
 const MONTHS: Record<string, number> = {
@@ -72,6 +73,8 @@ const TOLD = /\b(told|quoted|promised|said|expects?|expectation|understood|think
 
 export function watchOutsFor(args: {
   brief: unknown;
+  /** The pasted call notes and account maps, verbatim. Read first: a quote is a real sentence. */
+  notes?: string[];
   intake: IntakeAnswers;
   timeline: Timeline;
 }): WatchOut[] {
@@ -82,19 +85,25 @@ export function watchOutsFor(args: {
   const fieldTest = t.milestones.find((m) => m.key === "fieldtest")?.date ?? null;
   const names = (b?.stakeholders ?? []).map((s) => s.name).filter(Boolean);
 
-  const callSentences = sentencesFrom([
-    ...(b?.risks_open_items ?? []),
-    ...(b?.process_gaps ?? []),
-    ...(b?.what_we_know ?? []).map((w) => `${w.topic}: ${w.detail}`),
-    ...(b?.stakeholders ?? []).map((s) => (s.notes ? `${s.name}: ${s.notes}` : "")),
-    ...(b?.discovery_questions ?? []).map((q) => q.why_it_matters),
-  ]);
+  // The notes as pasted come first, so a row quotes what was actually said.
+  // The brief's own sentences follow for anything only its reading caught;
+  // a row already found from the notes wins the dedupe.
+  const callSentences: Array<{ s: string; source: "calls" | "brief" }> = [
+    ...sentencesFrom(args.notes ?? []).map((s) => ({ s, source: "calls" as const })),
+    ...sentencesFrom([
+      ...(b?.risks_open_items ?? []),
+      ...(b?.process_gaps ?? []),
+      ...(b?.what_we_know ?? []).map((w) => `${w.topic}: ${w.detail}`),
+      ...(b?.stakeholders ?? []).map((s) => (s.notes ? `${s.name}: ${s.notes}` : "")),
+      ...(b?.discovery_questions ?? []).map((q) => q.why_it_matters),
+    ]).map((s) => ({ s, source: "brief" as const })),
+  ];
   // The SOW reader lists dates with semicolons between them; a call note's
   // semicolon joins two halves of one thought ("iPads not procured; 2–3 weeks").
   const sowSentences = sentencesFrom(args.intake.timeline.sow_notes ?? [], true);
   const firstForm = args.intake.wanted_forms[0]?.name ?? null;
 
-  for (const [i, s] of callSentences.entries()) {
+  for (const [i, { s, source }] of callSentences.entries()) {
     const dates = datesIn(s, t.closeDate);
     if (dates.length && DEADLINE.test(s) && !ABSENCE.test(s)) {
       const deadline = dates[0]!;
@@ -105,7 +114,17 @@ export function watchOutsFor(args: {
           title: `The calls name ${shortDay(deadline.iso)}; the plan has everything live ${shortDay(fullLive)}`,
           detail: `${daysBetween(deadline.iso, fullLive)} days after what they said. Move the work, or say so on the kickoff.`,
           quote: s,
-          source: "calls",
+          source,
+        });
+      } else {
+        out.push({
+          key: `deadline-ok-${deadline.iso}`,
+          severity: "ok",
+          title: `The calls name ${shortDay(deadline.iso)}: the plan has everything live ${shortDay(fullLive)}, ${daysBetween(fullLive, deadline.iso)} days ahead`,
+          detail:
+            "Met, as planned today. If a phase slips past this date, it is the date they said out loud.",
+          quote: s,
+          source,
         });
       }
     }
@@ -121,7 +140,7 @@ export function watchOutsFor(args: {
           title: `${who} is out ${shortDay(from)}${to !== from ? ` – ${shortDay(to)}` : ""}, during ${hit}`,
           detail: "Their steps in that window need a stand-in, or the phase moves.",
           quote: s,
-          source: "calls",
+          source,
         });
       }
     }
@@ -135,7 +154,7 @@ export function watchOutsFor(args: {
           title: `Devices ${weeks.max} week${weeks.max === 1 ? "" : "s"} out; the field test is ${shortDay(fieldTest)}`,
           detail: `${daysBetween(t.closeDate, fieldTest)} days after close. The crew tests on something — say what, or move the test.`,
           quote: s,
-          source: "calls",
+          source,
         });
       }
     } else if (!weeks && DEVICES.test(s) && NOT_YET.test(s) && fieldTest) {
@@ -145,7 +164,7 @@ export function watchOutsFor(args: {
         title: `Devices not in hand; the field test is ${shortDay(fieldTest)}`,
         detail: "Confirm what the crew tests on before the working session.",
         quote: s,
-        source: "calls",
+        source,
       });
     }
     if (weeks && TOLD.test(s) && !DEVICES.test(s)) {
@@ -157,16 +176,33 @@ export function watchOutsFor(args: {
           title: `${svc.name}: they were told ${weeksLabel(weeks)}; the plan has ${svc.weeks}`,
           detail: `Live ${shortDay(svc.endsOn)} on the plan. Reset the expectation on the kickoff, before the deck does it for you.`,
           quote: s,
-          source: "calls",
+          source,
         });
+      } else if (!svc) {
+        const kind = kindMentioned(s);
+        if (kind) {
+          out.push({
+            key: `told-none-${kind}`,
+            severity: "check",
+            title: `They were told ${weeksLabel(weeks)} for ${kind}; nothing on the plan for it yet`,
+            detail:
+              "When it lands on the plan, its weeks are what the customer will hold against that promise.",
+            quote: s,
+            source,
+          });
+        }
       }
     }
   }
 
-  // Things the SOW leaves out that the calls kept raising.
+  // Things the brief recorded as out of scope that the calls kept raising.
+  // The brief's reading, not the SOW's: labelled as such.
   const outOfScope = b?.kickoff?.out_of_scope ?? null;
   if (outOfScope) {
-    const asked = callSentences.join(" ").toLowerCase();
+    const asked = callSentences
+      .map((x) => x.s)
+      .join(" ")
+      .toLowerCase();
     const items = outOfScope
       .split(/[,;]|\band\b|\bor\b|\//i)
       .map((x) => x.replace(/\(.*?\)/g, "").trim())
@@ -178,10 +214,11 @@ export function watchOutsFor(args: {
         out.push({
           key: `scope-${stem.replace(/\W+/g, "-")}`,
           severity: "check",
-          title: `Asked about on the calls, out of scope in the SOW: ${item}`,
-          detail: "Say so on the kickoff, in those words. It is not on the deck otherwise.",
+          title: `Raised on the calls, listed as out of scope: ${item}`,
+          detail:
+            "The brief's reading of the calls. Say so on the kickoff, in those words; it is not on the deck otherwise.",
           quote: outOfScope,
-          source: "sow",
+          source: "brief",
         });
       }
     }
@@ -321,6 +358,15 @@ const KIND_WORDS: Record<string, RegExp> = {
 };
 
 type Named = { name: string; kind: string; weeks: number; endsOn: string };
+
+/** The kind of thing a sentence is about, in words, when the plan has nothing of the kind. */
+function kindMentioned(s: string): string | null {
+  if (KIND_WORDS["custom_pdf"]!.test(s)) return "the custom PDF";
+  if (KIND_WORDS["integration"]!.test(s)) return "the integration";
+  if (KIND_WORDS["training"]!.test(s)) return "training";
+  if (KIND_WORDS["reference_data"]!.test(s)) return "the reference data";
+  return null;
+}
 
 /**
  * The plan's item the sentence is about: a service by name or acronym ("SDA"

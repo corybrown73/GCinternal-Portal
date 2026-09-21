@@ -1810,7 +1810,7 @@ export async function loadSalesContext(implementationId: string) {
       .limit(5),
     db()
       .from("portal_gong_reports")
-      .select("id,title,report_type,content_md,created_at")
+      .select("id,title,report_type,content_md,created_at,call_date")
       .eq("account_id", dealId)
       .order("created_at", { ascending: false })
       .limit(5),
@@ -1845,6 +1845,7 @@ export async function loadSalesContext(implementationId: string) {
       report_type: (r.report_type as string | null) ?? null,
       excerpt: clip(r.content_md, 320),
       created_at: r.created_at as string,
+      call_date: (r.call_date as string | null) ?? null,
     })),
     brief: briefRes.data
       ? {

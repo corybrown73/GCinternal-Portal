@@ -428,9 +428,9 @@ function NoForms({
                 className="rounded-sm border border-border px-1.5 py-0.5 hover:bg-muted disabled:opacity-60"
                 disabled={!editable || busy}
                 onClick={() => onSet({ current_process_source: "person" })}
-                title="The deck quotes this line to the customer. Confirm it is how they put it, or retype it above."
+                title="The deck will put this line in quotation marks as the customer's own words. Only confirm if it is; otherwise retype it above as they said it."
               >
-                These are their words
+                Confirm: this is how they said it
               </button>
             </span>
           ) : null}

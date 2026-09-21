@@ -1,4 +1,5 @@
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import { TERM_LABELS } from "./terms";
 import { resolveAccountId, transitionStage, upsertAccount } from "./server/accounts";
 import { accountUpsertSchema } from "./server/schemas";
 import { isStage, type AccountStage } from "./presale-stages";
@@ -92,12 +93,41 @@ async function profileNames(): Promise<Map<string, string>> {
 async function profileDirectory(): Promise<
   Array<{ id: string; name: string; role: import("./auth").PortalRole }>
 > {
-  const { data } = await db().from("portal_profiles").select("id, email, full_name, role");
-  return (data ?? []).map((p: any) => ({
-    id: String(p.id),
-    name: (p.full_name || p.email) as string,
-    role: p.role as import("./auth").PortalRole,
-  }));
+  const [{ data }, confirmed] = await Promise.all([
+    db().from("portal_profiles").select("id, email, full_name, role"),
+    confirmedAuthIds(),
+  ]);
+  return (
+    (data ?? [])
+      // An invited login that has never been activated cannot own anything yet.
+      .filter((p: any) => !confirmed || confirmed.has(String(p.id)))
+      .map((p: any) => ({
+        id: String(p.id),
+        name: (p.full_name || p.email) as string,
+        role: p.role as import("./auth").PortalRole,
+      }))
+  );
+}
+
+let confirmedCache: { at: number; ids: Set<string> } | null = null;
+/** Auth accounts that are confirmed, cached five minutes; null if auth cannot be read. */
+async function confirmedAuthIds(): Promise<Set<string> | null> {
+  if (confirmedCache && Date.now() - confirmedCache.at < 5 * 60_000) return confirmedCache.ids;
+  try {
+    const { data: page } = await db().auth.admin.listUsers({ page: 1, perPage: 1000 });
+    const ids = new Set<string>();
+    for (const u of (page?.users ?? []) as Array<{
+      id: string;
+      email_confirmed_at?: string | null;
+      confirmed_at?: string | null;
+    }>) {
+      if (u.email_confirmed_at ?? u.confirmed_at) ids.add(u.id);
+    }
+    confirmedCache = { at: Date.now(), ids };
+    return ids;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -105,6 +135,12 @@ async function profileDirectory(): Promise<
  * owner is technical or a manager. One unfiltered list let an SE be set as
  * the AM and offered customer logins as owners.
  */
+/** A role as a word on screen; the same mapping auth.ts's ROLE_LABELS uses, without its browser imports. */
+function roleWord(role: string): string {
+  const key = role === "am" ? "sales" : role === "se" ? "tam_se" : role;
+  return (TERM_LABELS as Record<string, string>)[key] ?? role.replace(/_/g, " ");
+}
+
 export function ownerOptionsByRole(
   people: ReadonlyArray<{ id: string; name: string; role: import("./auth").PortalRole }>,
 ): { am: Array<{ value: string; label: string }>; se: Array<{ value: string; label: string }> } {
@@ -114,7 +150,7 @@ export function ownerOptionsByRole(
   const pick = (roles: Set<string>) =>
     people
       .filter((p) => managers.has(p.role) || roles.has(p.role))
-      .map((p) => ({ value: p.id, label: p.name }))
+      .map((p) => ({ value: p.id, label: `${p.name} · ${roleWord(p.role)}` }))
       .sort((a, b) => a.label.localeCompare(b.label));
   return { am: pick(sellers), se: pick(technical) };
 }
@@ -310,7 +346,30 @@ export async function transitionDeal(
       .maybeSingle();
     if (!row?.customer_id) {
       try {
-        await startOnboardingAs({ kind: "user", profileId: userId }, dealId, {});
+        const first = await startOnboardingAs({ kind: "user", profileId: userId }, dealId, {});
+        if (first.outcome === "needs_account_choice") {
+          // No Salesforce match. A customer with the same name is a person's
+          // call; nothing by that name means a new account, now.
+          const { data: acct } = await db()
+            .from("portal_accounts")
+            .select("name")
+            .eq("id", dealId)
+            .maybeSingle();
+          const { data: sameName } = await db()
+            .from("customers")
+            .select("id,name")
+            .ilike("name", String(acct?.name ?? "").trim())
+            .limit(1)
+            .maybeSingle();
+          if (sameName) {
+            throw new Error(
+              `A customer named “${sameName.name}” already exists. Pick it, or create a new account.`,
+            );
+          }
+          await startOnboardingAs({ kind: "user", profileId: userId }, dealId, {
+            createNewCustomer: true,
+          });
+        }
       } catch (e) {
         await audit({
           actor_type: "user",
@@ -1202,13 +1261,17 @@ export async function startOnboardingAs(
 
   // Mirror the hub's origination pattern: the first row of the append-only
   // stage history opens with the implementation itself.
-  const { error: historyError } = await db().from("implementation_stage_history").insert({
-    implementation_id: impl.id,
-    stage: firstStage,
-    entered_at: now,
-    entered_by: null,
-    exited_at: null,
-  });
+  // entered_by is a team_members id; the login's profile carries the link.
+  const { teamMemberIdForProfile } = await import("./activity.server");
+  const { error: historyError } = await db()
+    .from("implementation_stage_history")
+    .insert({
+      implementation_id: impl.id,
+      stage: firstStage,
+      entered_at: now,
+      entered_by: await teamMemberIdForProfile(userId),
+      exited_at: null,
+    });
   if (historyError) {
     throw new Error(
       `Implementation created, but its stage history row failed: ${historyError.message}`,
@@ -1261,7 +1324,7 @@ export async function startOnboardingAs(
     // for the next twelve weeks: the seller, the target launch from the plan,
     // the integration tier, the goal the brief captured, and the named
     // contact as the first customer contact. None of this is re-asked.
-    await carryDealFacts(dealId, impl.id as string, customerId, account, intake);
+    await carryDealFacts(dealId, impl.id as string, customerId, account, intake, userId);
     const { count: reports } = await db()
       .from("portal_gong_reports")
       .select("id", { count: "exact", head: true })
@@ -1658,6 +1721,18 @@ export async function updateDealField(
     .eq("id", dealId);
   if (error) throw new Error(error.message);
 
+  // The implementation's "sales owner" is the deal's AM: a change here
+  // follows through, else the customer page shows whoever it was at handoff.
+  if (field === "am_owner_id") {
+    const { data: am } = next
+      ? await db().from("portal_profiles").select("full_name,email").eq("id", next).maybeSingle()
+      : { data: null };
+    await db()
+      .from("implementations")
+      .update({ sales_owner: am ? am.full_name || am.email : null, sales_owner_id: next })
+      .eq("deal_id", dealId);
+  }
+
   // After the write, never before: a feed row for a save that then failed is a
   // lie about history.
   const { recordActivity } = await import("./activity.server");
@@ -1996,6 +2071,7 @@ async function carryDealFacts(
   customerId: string,
   account: Account & { customer_id?: string | null },
   intake: import("./intake-answers").IntakeAnswers,
+  actorProfileId: string | null = null,
 ): Promise<void> {
   try {
     const { closeDateFor, timelineFor } = await import("./onboarding-plan");
@@ -2010,11 +2086,11 @@ async function carryDealFacts(
         .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle(),
-      account.am_owner_id
+      account.am_owner_id || account.se_owner_id || actorProfileId
         ? db()
             .from("portal_profiles")
             .select("full_name,email")
-            .eq("id", account.am_owner_id)
+            .eq("id", account.am_owner_id ?? account.se_owner_id ?? actorProfileId)
             .maybeSingle()
         : Promise.resolve({ data: null }),
     ]);

@@ -1,3 +1,5 @@
+import { getRequest } from "@tanstack/react-start/server";
+
 /**
  * The public base URL, in one place.
  *
@@ -32,6 +34,12 @@ export function appUrl(): string {
   const configured = process.env["APP_URL"];
   if (configured) return configured.replace(/\/+$/, "");
 
+  // Inside a request, the host the person is using is the right origin: a
+  // link minted on gcinternalportal.com should not point at the deployment's
+  // vercel.app alias because the variable was never set.
+  const fromRequest = requestOrigin();
+  if (fromRequest) return fromRequest;
+
   if (!warned && process.env["NODE_ENV"] === "production") {
     warned = true;
     console.error(
@@ -40,6 +48,22 @@ export function appUrl(): string {
     );
   }
   return DEV_FALLBACK;
+}
+
+function requestOrigin(): string | null {
+  try {
+    // Guarded: this module is also imported where no request exists (a cron
+    // route, a test), and getRequest throws outside one.
+    const req = getRequest() as Request | undefined;
+    const h = req?.headers;
+    if (!h) return null;
+    const host = h.get("x-forwarded-host") ?? h.get("host");
+    if (!host) return null;
+    const proto = h.get("x-forwarded-proto") ?? (host.startsWith("localhost") ? "http" : "https");
+    return `${proto}://${host.split(",")[0]!.trim()}`;
+  } catch {
+    return null;
+  }
 }
 
 /** Test seam: the once-per-process warning is state. */

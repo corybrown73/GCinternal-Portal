@@ -227,6 +227,7 @@ export function DealRecord({ deal, embedded = false }: { deal: DealData; embedde
     wonStageKey: wonStage(deal.stages).key,
     readiness: welcome.data?.readiness ?? [],
     customerOpened: Boolean(welcome.data?.openedAt),
+    today: localIso(),
   });
   const nextPanel = steps.find((s) => !s.done)?.panel.id ?? null;
 
@@ -238,6 +239,7 @@ export function DealRecord({ deal, embedded = false }: { deal: DealData; embedde
       intake: intakeForDay,
       stageHistory: deal.stage_history,
       wonStageKey: wonStage(deal.stages).key,
+      today: localIso(),
     }).date,
   );
   // What we are building, as tiles: the first form, then every service the
@@ -250,6 +252,7 @@ export function DealRecord({ deal, embedded = false }: { deal: DealData; embedde
     deal.briefs.find((b) => b.status === "complete" && b.generator === "llm") ?? null;
   const watchOuts = watchOutsFor({
     brief: latestBrief?.structured_json ?? null,
+    notes: deal.gong_reports.map((r) => r.content_md),
     intake: intakeForDay,
     timeline: dayTimeline,
   });
@@ -517,7 +520,10 @@ export function DealRecord({ deal, embedded = false }: { deal: DealData; embedde
           </div>
         </div>
 
-        <WatchOutsPanel rows={watchOuts} hasBrief={Boolean(latestBrief)} />
+        <WatchOutsPanel
+          rows={watchOuts}
+          hasBrief={Boolean(latestBrief) || deal.gong_reports.length > 0}
+        />
 
         <TimelinePanel
           dealId={deal.account.id}

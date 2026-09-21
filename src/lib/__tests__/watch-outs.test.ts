@@ -49,8 +49,17 @@ describe("datesIn", () => {
   });
 });
 
+const notes = [
+  `Call recap 17 Sept.
+Ray: "Storm season starts the first week of November, no later — that is the deadline."
+Priya said the iPads are not procured yet; 2–3 weeks lead time from the vendor.
+Ray Okonkwo is out Oct 5–16 and nobody else owns the damage-category rubric.
+The AE told them the custom PDF is about two weeks.
+They asked about Okta SSO twice.`,
+];
+
 describe("watchOutsFor", () => {
-  const rows = watchOutsFor({ brief, intake, timeline });
+  const rows = watchOutsFor({ brief, notes, intake, timeline });
   const titles = rows.map((r) => `${r.severity}: ${r.title}`);
 
   it("flags a deadline from the calls that the plan runs past", () => {
@@ -85,9 +94,7 @@ describe("watchOutsFor", () => {
 
   it("surfaces an exclusion the calls kept raising", () => {
     expect(
-      titles.some(
-        (t) => t === "check: Asked about on the calls, out of scope in the SOW: Okta SSO",
-      ),
+      titles.some((t) => t === "check: Raised on the calls, listed as out of scope: Okta SSO"),
     ).toBe(true);
     expect(titles.some((t) => t.includes("JSA form"))).toBe(false);
   });
@@ -105,6 +112,47 @@ describe("watchOutsFor", () => {
     const first = (s: string) => order.indexOf(s as never);
     expect(first("conflict")).toBeLessThan(first("check"));
     expect(first("check")).toBeLessThan(first("ok"));
+  });
+
+  it("quotes the pasted notes, not the brief's paraphrase, when both say it", () => {
+    const lead = rows.find((r) => r.title.startsWith("Devices 3 weeks out"));
+    expect(lead?.source).toBe("calls");
+    expect(lead?.quote).toBe(
+      "Priya said the iPads are not procured yet; 2–3 weeks lead time from the vendor.",
+    );
+  });
+
+  it("labels what only the brief recorded as the brief's", () => {
+    const scope = rows.find((r) => r.title.includes("Okta SSO"));
+    expect(scope?.source).toBe("brief");
+    expect(scope?.title).toBe("Raised on the calls, listed as out of scope: Okta SSO");
+  });
+
+  it("says when a deadline from the calls is met, with the margin", () => {
+    const shortPlan = timelineFor(
+      readIntake({ path: "new_logo", wanted_forms: [{ id: "f1", name: "SDA" }] }),
+      "2026-09-21",
+    );
+    const ok = watchOutsFor({ brief: null, notes, intake: readIntake(null), timeline: shortPlan });
+    const met = ok.find((r) => r.title.startsWith("The calls name Sat, Nov 7:"));
+    expect(met?.severity).toBe("ok");
+  });
+
+  it("notes a promised duration with nothing on the plan to hold it against", () => {
+    const shortPlan = timelineFor(readIntake({ path: "new_logo" }), "2026-09-21");
+    const rows2 = watchOutsFor({
+      brief: null,
+      notes,
+      intake: readIntake(null),
+      timeline: shortPlan,
+    });
+    expect(
+      rows2.some(
+        (r) =>
+          r.severity === "check" &&
+          r.title === "They were told 2 weeks for the custom PDF; nothing on the plan for it yet",
+      ),
+    ).toBe(true);
   });
 
   it("is empty with nothing to read", () => {

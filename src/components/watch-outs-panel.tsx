@@ -22,7 +22,7 @@ export function WatchOutsPanel({
   const conflicts = rows.filter((r) => r.severity === "conflict").length;
   const checks = rows.filter((r) => r.severity === "check").length;
   const meta = !hasBrief
-    ? "Generate the brief first"
+    ? "Paste the call notes first"
     : rows.length === 0
       ? "Nothing crossed — the calls, the SOW and the plan agree"
       : [
@@ -44,10 +44,10 @@ export function WatchOutsPanel({
     >
       {!hasBrief ? (
         <p className="px-3 py-2.5 text-[12px] text-muted-foreground">
-          Once the customer brief is generated, this reads what was said on the calls and what the
-          SOW names against the plan&apos;s dates: a deadline the plan runs past, a person out
-          during their phase, devices that will not be there for the field test, a duration the
-          customer was told that the plan does not keep.
+          Once call notes are pasted, this reads what was said on the calls, what the brief made of
+          them, and what the SOW names against the plan&apos;s dates: a deadline the plan runs past,
+          a person out during their phase, devices that will not be there for the field test, a
+          duration the customer was told that the plan does not keep.
         </p>
       ) : rows.length === 0 ? (
         <p className="px-3 py-2.5 text-[12px] text-muted-foreground">
@@ -72,7 +72,7 @@ export function WatchOutsPanel({
                   title={r.quote}
                 >
                   <span className="font-mono not-italic text-[10px] uppercase tracking-wider">
-                    {r.source === "sow" ? "SOW" : "Calls"}
+                    {r.source === "sow" ? "SOW" : r.source === "brief" ? "Brief" : "Calls"}
                   </span>{" "}
                   “{r.quote}”
                 </p>

@@ -40,10 +40,10 @@ describe("closeDateFor", () => {
         today: "2026-09-19",
       }),
     ).toEqual({ date: "2026-09-21", source: "today" });
-    // A date a person set is taken as given, weekend or not.
+    // A date a person set on a weekend plans from the Monday too.
     const intake = readIntake({ timeline: { close_date: "2026-09-20" } });
     expect(closeDateFor({ intake, stageHistory: [], wonStageKey: "closed_won" }).date).toBe(
-      "2026-09-20",
+      "2026-09-21",
     );
   });
 

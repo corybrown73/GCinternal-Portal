@@ -30,6 +30,8 @@ export function guideSteps(input: {
   wonStageKey: string;
   /** The welcome page's readiness list, when the caller has it. */
   readiness?: ReadonlyArray<{ key: string; label: string }>;
+  /** YYYY-MM-DD in the reader's zone; the server passes the team's day. */
+  today?: string;
   /** The customer has opened their page: as good as sent. */
   customerOpened?: boolean;
 }): GuideStep[] {
@@ -39,6 +41,7 @@ export function guideSteps(input: {
     intake: a,
     stageHistory: input.stageHistory,
     wonStageKey: input.wonStageKey,
+    ...(input.today ? { today: input.today } : {}),
   });
   const t = timelineFor(a, close.date);
   const calls = t.milestones.filter((m) => m.key === "kickoff" || m.key === "working");

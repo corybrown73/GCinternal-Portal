@@ -53,6 +53,10 @@ export async function syncJourneyStage(
     if (steps.length === 0) return { implementationId: impl.id, from, to: from, steps: [] };
 
     const { advanceStage } = await import("./hub.server");
+    const { teamMemberIdForProfile } = await import("./activity.server");
+    // The move is automatic, but a person's action caused it: their name is
+    // the one the activity feed shows, not a dash.
+    const enteredBy = await teamMemberIdForProfile(actorProfileId);
     const why = `Automatic — ${journeyReason(signals)}`;
     const taken: string[] = [];
     for (const toStage of steps) {
@@ -60,7 +64,7 @@ export async function syncJourneyStage(
         await advanceStage({
           implementationId: impl.id,
           toStage,
-          enteredBy: null,
+          enteredBy,
           notes: why,
           override: { reason: why },
           actorProfileId,

@@ -81,8 +81,11 @@ export function FromSalesPanel({ implementationId }: { implementationId: string 
             <div key={r.id} className="px-3 py-2">
               <p className="flex items-baseline gap-2 text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
                 <span>{r.report_type ? humanize(r.report_type) : "Call report"}</span>
-                <span className="font-mono normal-case tracking-normal">
-                  {fmtDate(r.created_at)}
+                <span
+                  className="font-mono normal-case tracking-normal"
+                  title={r.call_date ? `Added ${fmtDate(r.created_at)}` : undefined}
+                >
+                  {r.call_date ? `Call ${fmtDate(r.call_date)}` : fmtDate(r.created_at)}
                 </span>
               </p>
               <p className="mt-0.5 text-[12px] font-medium">{r.title}</p>

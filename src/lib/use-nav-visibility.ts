@@ -14,12 +14,15 @@ const CORE_ONLY: NavVisibility = { hidden: hideableKeys() };
  * error, everything: a config read failing is not a reason to hide the app.
  * The admin screen invalidates the key when it saves.
  */
-export function useNavVisibility(): NavVisibility {
+export function useNavVisibility(initial: NavVisibility | null = null): NavVisibility {
   const query = useQuery({
     queryKey: ["nav-visibility"],
     queryFn: () => getNavVisibility(),
     staleTime: 5 * 60_000,
     retry: false,
+    // The root loader fetched it with the page: the first paint is the
+    // right list, and the admin screen's invalidation still refetches.
+    ...(initial ? { initialData: initial } : {}),
   });
   if (query.data) return query.data;
   return query.isError ? NO_HIDDEN : CORE_ONLY;

@@ -79,12 +79,36 @@ export function fmtDate(value: string | null | undefined): string {
   if (!value) return "—";
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return "—";
-  return d.toLocaleDateString("en-GB", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-    timeZone: "UTC",
-  });
+  // A date column has no zone and is printed as written. An instant (a
+  // created_at) has one: printed in UTC it read as tomorrow after 8 pm
+  // Eastern, so once the browser has said what zone it is in, that wins.
+  const zone = isDateOnly(value) ? "UTC" : (readerZone ?? "UTC");
+  try {
+    return d.toLocaleDateString("en-GB", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+      timeZone: zone,
+    });
+  } catch {
+    return d.toLocaleDateString("en-GB", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+      timeZone: "UTC",
+    });
+  }
+}
+
+let readerZone: string | null = null;
+
+/**
+ * The browser's zone, set once after hydration (see components/when.tsx).
+ * Null on the server and during the first client paint, so server HTML and
+ * the hydrating render agree; everything rendered after that is local.
+ */
+export function setReaderZone(zone: string | null): void {
+  readerZone = zone;
 }
 
 /**

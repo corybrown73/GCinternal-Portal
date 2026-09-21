@@ -3,6 +3,7 @@ import { type ServiceSpec } from "./onboarding-services";
 import {
   buildTimeline,
   onBusinessDay,
+  todayIn,
   type IntegrationTier,
   type Timeline,
 } from "./onboarding-timeline";
@@ -25,8 +26,12 @@ export function closeDateFor(args: {
   wonStageKey: string;
   today?: string;
 }): { date: string; source: "intake" | "stage" | "today" } {
+  // Day 0 is a working day, whichever source names it: a Saturday close set
+  // by hand still plans from the Monday, because nobody is welcomed aboard
+  // on a Saturday and every date below it is counted in business days.
+  const holidays = args.intake.timeline.holidays ?? [];
   if (args.intake.timeline.close_date) {
-    return { date: args.intake.timeline.close_date, source: "intake" };
+    return { date: onBusinessDay(args.intake.timeline.close_date, holidays), source: "intake" };
   }
   const won = args.stageHistory
     .filter((t) => t.to_stage === args.wonStageKey)
@@ -35,9 +40,9 @@ export function closeDateFor(args: {
   // A deal that closed on a Sunday starts its plan on the Monday: day 0 is a
   // working day the customer can be welcomed on, not the weekend the CRM
   // happened to record. A date a person set on the intake is taken as given.
-  if (won) return { date: onBusinessDay(won.slice(0, 10)), source: "stage" };
+  if (won) return { date: onBusinessDay(won.slice(0, 10), holidays), source: "stage" };
   return {
-    date: onBusinessDay(args.today ?? new Date().toISOString().slice(0, 10)),
+    date: onBusinessDay(args.today ?? todayIn(args.intake.timeline.timezone), holidays),
     source: "today",
   };
 }
