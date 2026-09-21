@@ -217,6 +217,7 @@ async function viewFor(
       title: p.title,
       url: p.url,
       why: p.why,
+      when: p.when ?? null,
     })),
     helpOpened: opts.internal
       ? await (await import("./server/help/articles.server")).helpOpensFor(String(deal.id))

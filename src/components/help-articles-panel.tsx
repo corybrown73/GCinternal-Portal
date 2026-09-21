@@ -156,6 +156,11 @@ export function HelpPicksPanel({ deal, editable }: { deal: DealData; editable: b
                   {p.title} <ExternalLink className="inline h-3 w-3 text-muted-foreground" />
                 </a>
                 {p.why ? <p className="text-muted-foreground">{p.why}</p> : null}
+                {p.feature || p.when ? (
+                  <p className="text-[11px] text-muted-foreground">
+                    {[p.feature, p.when].filter(Boolean).join(" · ")}
+                  </p>
+                ) : null}
                 <p className="mt-0.5 text-[11px]">
                   {opened[p.article_id] ? (
                     <span className="text-status-ontrack-foreground">

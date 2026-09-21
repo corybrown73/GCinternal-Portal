@@ -1781,6 +1781,7 @@ function HelpScreen({ view, page }: { view: WelcomeView; page: number }) {
           >
             <Tile name="BookOpen" size="lg" tone="blue" />
             <div>
+              {p.when ? <span className="wp-help-when">{p.when}</span> : null}
               <h3>{p.title}</h3>
               <p>
                 <T k={`help.${p.article_id}.why`}>

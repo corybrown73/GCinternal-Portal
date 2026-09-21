@@ -1,7 +1,18 @@
 import Anthropic from "@anthropic-ai/sdk";
 
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
-import { rankArticles, type HelpArticle, type HelpPick } from "@/lib/help-articles";
+import type { HelpArticle, HelpPick } from "@/lib/help-articles";
+import {
+  briefWords,
+  buildHelpQuery,
+  describeQuery,
+  enforcePickRules,
+  fallbackPicks,
+  retrieveCandidates,
+  type Candidate,
+  type HelpQuery,
+} from "@/lib/help-query";
+import type { IntakeAnswers } from "@/lib/intake-answers";
 
 import { audit } from "../audit";
 import { KB_INDEX, type SeedArticle } from "./kb-index";
@@ -147,97 +158,82 @@ export async function helpArticleStatus(): Promise<{ count: number; syncedAt: st
 
 /* ------------------------------------------------------------ the picks */
 
-/** What the calls said, flattened, for the ranker and the model. */
-export function briefText(brief: unknown, notesText: string): string {
-  const b = (brief ?? {}) as Record<string, unknown>;
-  const parts: string[] = [notesText];
-  const push = (v: unknown) => {
-    if (typeof v === "string") parts.push(v);
-    else if (Array.isArray(v)) v.forEach(push);
-    else if (v && typeof v === "object") Object.values(v as Record<string, unknown>).forEach(push);
-  };
-  for (const k of [
-    "goals",
-    "what_we_know",
-    "current_process",
-    "process_gaps",
-    "kickoff",
-    "one_liner",
-  ])
-    push(b[k]);
-  return parts.join("\n");
-}
+const PICK_SYSTEM = `You choose GoCanvas help-centre articles for a customer who has just bought GoCanvas. You are given the QUERY the onboarding tool built from the deal (the flow, what phase 1 is, the integrations the SOW allows, and each feature with the sentence from the calls that named it), the CANDIDATE articles retrieved for each feature, and what the calls said.
 
-const PICK_SYSTEM = `You choose GoCanvas help-centre articles for a customer who has just bought GoCanvas, from the transcript of their sales calls and a list of candidate articles.
+Rules, in order:
+1. Pick only from the candidates, by article_id. At most one article per feature. Three to five picks.
+2. A feature the calls named (it has a quote) beats one the plan added. Within a feature, choose the article that teaches exactly what the quote describes: "upload a Google Sheet" beats "reference data overview" when the customer said Google Sheet.
+3. Never pick an integration article unless the query lists that system as allowed. Never pick release notes, webinars or legacy-builder pages.
+4. Prefer the article a person would read before the session that covers the feature: a how-to over a concept page, a setup page over a troubleshooting page.
+5. Write "why" for each pick in one sentence addressed to the customer, quoting their own words where the quote gives them ("You said the parts list lives in a Google Sheet"). Under 30 words. Never invent a quote.
 
-Pick 3 to 5 articles the customer said, or clearly implied, would make the difference for them: a feature they asked about, a problem they described that the article solves, a thing they will do in their first two weeks. Skip release notes, webinars and anything about the legacy builder. Prefer one article per feature.
-
-For each pick, write "why" as one sentence in the customer's own words where the transcript gives them (quote a phrase if there is one), addressed to the customer: "You said ...", "You asked about ...". Under 30 words.
-
-Reply with exactly one JSON object and nothing else: {"picks":[{"article_id":"...","why":"..."}]}. Use only article_id values from the candidate list.`;
+Reply with exactly one JSON object and nothing else: {"picks":[{"article_id":"...","why":"..."}]}`;
 
 /**
- * Three to five articles for this customer. The ranker narrows the library
- * to candidates that share words with the calls; the model chooses among
- * them and says why in the customer's words. With no model, or on a
- * failure, the top-ranked candidates stand with a plain "why".
+ * Three to five articles for this customer, from a query built out of what
+ * the tool already knows. The query names the features with their evidence
+ * and the rules (the flow, the SOW's integrations); retrieval narrows the
+ * library to a few candidates per feature under those rules; the model
+ * chooses and writes why; the rules are enforced again on what it returns.
+ * With no model, the best candidate per feature stands.
  */
 export async function pickHelpArticles(args: {
+  intake: IntakeAnswers;
   brief: unknown;
   notesText: string;
   articles?: HelpArticle[];
-}): Promise<HelpPick[]> {
+}): Promise<{ picks: HelpPick[]; query: HelpQuery }> {
   const articles = args.articles ?? (await loadHelpArticles());
-  const text = briefText(args.brief, args.notesText);
-  const candidates = rankArticles(text, articles, 40);
-  if (candidates.length === 0) return [];
-  const fallback = (): HelpPick[] =>
-    candidates.slice(0, 4).map((a) => ({
-      article_id: a.article_id,
-      title: a.title,
-      url: a.url,
-      why: `${a.category}: something the calls touched on.`,
-      source: "ai" as const,
-    }));
-  if (!process.env["ANTHROPIC_API_KEY"]) return fallback();
+  const query = buildHelpQuery({
+    intake: args.intake,
+    brief: args.brief,
+    notesText: args.notesText,
+  });
+  const candidates = retrieveCandidates(query, articles);
+  if (candidates.length === 0) return { picks: [], query };
+  if (!process.env["ANTHROPIC_API_KEY"]) return { picks: fallbackPicks(query, candidates), query };
   try {
     const client = new Anthropic();
-    const list = candidates.map((a) => `- ${a.article_id} · ${a.title} (${a.category})`).join("\n");
+    const byFeature = new Map<string, Candidate[]>();
+    for (const c of candidates) byFeature.set(c.feature, [...(byFeature.get(c.feature) ?? []), c]);
+    const list = [...byFeature.entries()]
+      .map(
+        ([feature, cs]) =>
+          `${feature}:\n${cs.map((c) => `  - ${c.article_id} · ${c.title} (${c.category})`).join("\n")}`,
+      )
+      .join("\n");
+    const said = `${args.notesText}\n\n${briefWords(args.brief)}`.slice(0, 30000);
     const response = await client.messages.create({
-      model: "claude-sonnet-5",
-      max_tokens: 1200,
+      model: "claude-opus-5",
+      max_tokens: 4000,
+      thinking: { type: "adaptive" },
       system: PICK_SYSTEM,
       messages: [
         {
           role: "user",
-          content: `CANDIDATE ARTICLES\n${list}\n\nWHAT THE CALLS SAID\n${text.slice(0, 24000)}`,
+          content: `QUERY\n${describeQuery(query)}\n\nCANDIDATES\n${list}\n\nWHAT THE CALLS SAID\n${said}`,
         },
       ],
     });
+    if (response.stop_reason === "refusal")
+      return { picks: fallbackPicks(query, candidates), query };
     const raw = response.content
       .filter((b): b is Anthropic.TextBlock => b.type === "text")
       .map((b) => b.text)
       .join("\n");
     const json = raw.slice(raw.indexOf("{"), raw.lastIndexOf("}") + 1);
     const parsed = JSON.parse(json) as { picks?: Array<{ article_id?: unknown; why?: unknown }> };
-    const byId = new Map(candidates.map((a) => [a.article_id, a]));
-    const picks: HelpPick[] = [];
-    for (const p of parsed.picks ?? []) {
-      const a = typeof p.article_id === "string" ? byId.get(p.article_id) : undefined;
-      if (!a || picks.some((x) => x.article_id === a.article_id)) continue;
-      picks.push({
-        article_id: a.article_id,
-        title: a.title,
-        url: a.url,
-        why: typeof p.why === "string" && p.why.trim() ? p.why.trim().slice(0, 240) : "",
-        source: "ai",
-      });
-      if (picks.length === 5) break;
-    }
-    return picks.length >= 2 ? picks : fallback();
+    const chosen = (parsed.picks ?? [])
+      .filter((p) => typeof p.article_id === "string")
+      .map((p) => ({
+        article_id: String(p.article_id),
+        why: typeof p.why === "string" ? p.why : undefined,
+      }));
+    const picks = enforcePickRules(chosen, query, candidates);
+    return { picks: picks.length >= 2 ? picks : fallbackPicks(query, candidates), query };
   } catch (e) {
-    console.error("[help] the picker fell back to the ranked list", e);
-    return fallback();
+    console.error("[help] the picker fell back to the ranked candidates", e);
+    return { picks: fallbackPicks(query, candidates), query };
   }
 }
 

@@ -443,7 +443,11 @@ async function pickHelpForDeal(
   const notesText = ((notes ?? []) as Array<{ content_md: string }>)
     .map((r) => r.content_md)
     .join("\n\n");
-  const picked = await pickHelpArticles({ brief, notesText });
+  const { picks: picked, query } = await pickHelpArticles({
+    intake: current,
+    brief,
+    notesText,
+  });
   const kept = current.help_picks.filter((p) => p.source === "person");
   const merged = [
     ...kept,
@@ -465,7 +469,13 @@ async function pickHelpForDeal(
     action: "deal.help_articles_picked",
     entity_type: "account",
     entity_id: dealId,
-    payload: { picked: picked.length, kept: kept.length },
+    payload: {
+      picked: picked.length,
+      kept: kept.length,
+      features: query.features.map((f) => `${f.feature} (${f.reason})`),
+      excluded: query.excluded,
+      allowed_integrations: query.allowedIntegrations,
+    },
   });
   return picked.length;
 }

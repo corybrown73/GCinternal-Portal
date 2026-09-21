@@ -167,6 +167,11 @@ export const intakeAnswersSchema = z.object({
         url: z.string().url().max(500),
         why: z.string().trim().max(240).default(""),
         source: z.enum(["ai", "person"]).default("ai"),
+        feature: z.string().trim().max(60).nullable().optional(),
+        when: z
+          .enum(["before session 1", "after session 1", "after session 2", "phase 2"])
+          .nullable()
+          .optional(),
       }),
     )
     .max(8)

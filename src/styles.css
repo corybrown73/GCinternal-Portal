@@ -2173,6 +2173,15 @@ body.gc-presenting {
 .gc-welcome .wp-help-card:hover {
   border-color: var(--wp-blue, #039de7);
 }
+.gc-welcome .wp-help-when {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--wp-blue, #039de7);
+  margin-bottom: 2px;
+}
 .gc-welcome .wp-help-card h3 {
   margin: 2px 0 4px;
   font-size: 17px;
