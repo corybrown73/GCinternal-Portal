@@ -6,6 +6,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { ChevronRight, ArrowRight } from "lucide-react";
 
 import { DeleteCustomerButton } from "@/components/delete-customer-button";
+import { PlanFromDeal } from "@/components/plan-section";
 
 import { CustomerLogo } from "@/components/customer-logo";
 import { PastImplementations } from "@/components/past-implementations";
@@ -128,9 +129,10 @@ import {
 import { cn } from "@/lib/utils";
 import { When } from "@/components/when";
 
-const TABS = [
-  "prekickoff",
-  "overview",
+const TABS = ["overview", "prekickoff", "details"] as const;
+export type TabId = (typeof TABS)[number];
+/** The tabs this page used to have. An old link lands on Details, where that content now lives. */
+const LEGACY_TAB_IDS = [
   "journey",
   "solution",
   "requirements",
@@ -139,18 +141,20 @@ const TABS = [
   "evidence",
   "history",
 ] as const;
-export type TabId = (typeof TABS)[number];
+export type LegacyTabId = (typeof LEGACY_TAB_IDS)[number];
+const LEGACY_TABS = new Set<string>(LEGACY_TAB_IDS);
+/** Any tab a link may still name; the page itself only ever shows a TabId. */
+export type AnyTabId = TabId | LegacyTabId;
+function resolveTab(raw: string | undefined): TabId {
+  if (!raw) return "overview";
+  if (TABS.includes(raw as TabId)) return raw as TabId;
+  return LEGACY_TABS.has(raw) ? "details" : "overview";
+}
 
 const TAB_LABEL: Record<TabId, string> = {
-  prekickoff: "Pre-kickoff",
-  overview: "Implementation",
-  journey: "Journey",
-  solution: "Solution",
-  requirements: "Requirements",
-  decisions: "Decisions",
-  risks: "Risks & Issues",
-  evidence: "Evidence",
-  history: "History",
+  overview: "Overview",
+  prekickoff: "Deck",
+  details: "Details",
 };
 
 // A customer can have several implementations running at once. `implementationId`
@@ -163,10 +167,10 @@ const customerQuery = (customerId: string, implementationId?: string | null) =>
   });
 
 export const Route = createFileRoute("/customers/$customerId")({
-  validateSearch: (search: Record<string, unknown>): { tab?: TabId; impl?: string } => {
-    const raw = String(search["tab"] ?? "overview") as TabId;
+  validateSearch: (search: Record<string, unknown>): { tab?: AnyTabId; impl?: string } => {
+    const raw = String(search["tab"] ?? "overview");
     const impl = typeof search["impl"] === "string" ? (search["impl"] as string) : undefined;
-    return { tab: TABS.includes(raw) ? raw : "overview", ...(impl ? { impl } : {}) };
+    return { tab: resolveTab(raw), ...(impl ? { impl } : {}) };
   },
   head: () => ({
     meta: [
@@ -281,7 +285,8 @@ function TraceChain({ trace }: { trace: TraceStep[] }) {
 
 function Customer360Page() {
   const { customerId } = Route.useParams();
-  const { tab = "overview", impl: selectedImplId } = Route.useSearch();
+  const { tab: rawTab, impl: selectedImplId } = Route.useSearch();
+  const tab = resolveTab(rawTab);
   const { data } = useSuspenseQuery(customerQuery(customerId, selectedImplId ?? null));
   const record = data as Customer360;
   const { customer, implementation: impl } = record;
@@ -479,17 +484,9 @@ function Customer360Page() {
           <div className="min-w-0 space-y-3">
             <SectionControls />
             {tab === "overview" ? <OverviewTab record={record} customerId={customerId} /> : null}
-            {tab === "journey" ? <JourneyTab record={record} customerId={customerId} /> : null}
-            {tab === "solution" ? <SolutionTab record={record} customerId={customerId} /> : null}
-            {tab === "requirements" ? (
-              <RequirementsTab record={record} customerId={customerId} />
-            ) : null}
-            {tab === "decisions" ? <DecisionsTab record={record} customerId={customerId} /> : null}
-            {tab === "risks" ? <RisksTab record={record} customerId={customerId} /> : null}
-            {tab === "evidence" ? <EvidenceTab record={record} customerId={customerId} /> : null}
-            {tab === "history" ? <HistoryTab record={record} /> : null}
+            {tab === "details" ? <DetailsTab record={record} customerId={customerId} /> : null}
           </div>
-          <AccountRail record={record} customerId={customerId} />
+          <AccountRail record={record} customerId={customerId} full={tab === "details"} />
         </div>
       </CollapsibleSections>
     </div>
@@ -663,7 +660,106 @@ function projectInput(
 
 /* ---------------- 1. OVERVIEW ---------------- */
 
+/**
+ * THE OVERVIEW: three things. Where the project is and what moves it on;
+ * the plan, with its watch-outs; and how many items are open. Everything
+ * descriptive — goals, success criteria, the SOW, the handover — is one tab
+ * over, under Details, folded.
+ */
 function OverviewTab({ record, customerId }: { record: Customer360; customerId: string }) {
+  const impl = record.implementation!;
+  const open = openItems(record);
+  const openCount =
+    open.commitments.length + open.risks.length + open.issues.length + open.escalations.length;
+  return (
+    <div className="space-y-4">
+      <StageGatesSection customerId={customerId} implementationId={impl.id} />
+      {impl.deal_id ? (
+        <PlanFromDeal dealId={impl.deal_id} />
+      ) : (
+        <p className="rounded-md border border-border bg-card px-3 py-2 text-[12px] text-muted-foreground">
+          This project was not started from a deal, so it has no seven-day plan. Its stages are
+          above; the rest is under Details.
+        </p>
+      )}
+      <Link
+        to="/customers/$customerId"
+        params={{ customerId }}
+        search={{ tab: "details", impl: impl.id }}
+        className="block rounded-md border border-border bg-card px-3 py-2 text-[12px] hover:bg-muted/60"
+      >
+        <span className="font-medium">
+          {openCount === 0 ? "Nothing open" : `${openCount} open item${openCount === 1 ? "" : "s"}`}
+        </span>
+        <span className="text-muted-foreground">
+          {" "}
+          · {open.commitments.length} commitments · {open.risks.length} risks · {open.issues.length}{" "}
+          issues · {open.escalations.length} escalations · everything else under Details →
+        </span>
+      </Link>
+    </div>
+  );
+}
+
+/** Everything the page used to spread over eight tabs, in one place, folded. */
+function DetailsTab({ record, customerId }: { record: Customer360; customerId: string }) {
+  const sections: Array<{ key: string; title: string; body: ReactNode }> = [
+    {
+      key: "account",
+      title: "Account",
+      body: <AccountDetails record={record} customerId={customerId} />,
+    },
+    {
+      key: "journey",
+      title: "Journey",
+      body: <JourneyTab record={record} customerId={customerId} />,
+    },
+    {
+      key: "solution",
+      title: "Solution",
+      body: <SolutionTab record={record} customerId={customerId} />,
+    },
+    {
+      key: "requirements",
+      title: "Requirements",
+      body: <RequirementsTab record={record} customerId={customerId} />,
+    },
+    {
+      key: "decisions",
+      title: "Decisions",
+      body: <DecisionsTab record={record} customerId={customerId} />,
+    },
+    {
+      key: "risks",
+      title: "Risks & issues",
+      body: <RisksTab record={record} customerId={customerId} />,
+    },
+    {
+      key: "evidence",
+      title: "Evidence",
+      body: <EvidenceTab record={record} customerId={customerId} />,
+    },
+    { key: "history", title: "History", body: <HistoryTab record={record} /> },
+  ];
+  return (
+    <div className="space-y-3">
+      {sections.map((s) => (
+        <Panel
+          key={s.key}
+          title={s.title}
+          level="supporting"
+          collapsible
+          defaultOpen={false}
+          collapseKey={`customer:details:${s.key}`}
+        >
+          <div className="p-3">{s.body}</div>
+        </Panel>
+      ))}
+    </div>
+  );
+}
+
+function AccountDetails({ record, customerId }: { record: Customer360; customerId: string }) {
   const impl = record.implementation!;
   const open = openItems(record);
   // Read from this project's own stages. `progress()` counts against the
@@ -1126,7 +1222,16 @@ function OverviewTab({ record, customerId }: { record: Customer360; customerId: 
  * than duplicated; two copies of one fact on one screen is how they start
  * disagreeing.
  */
-function AccountRail({ record, customerId }: { record: Customer360; customerId: string }) {
+function AccountRail({
+  record,
+  customerId,
+  full = false,
+}: {
+  record: Customer360;
+  customerId: string;
+  /** Details shows the whole rail; Overview and Deck show the glance and the people. */
+  full?: boolean;
+}) {
   const impl = record.implementation!;
   const timeline = buildProjectTimeline(projectInput(record, impl));
   const health = deriveHealth(record, impl);
@@ -1219,111 +1324,115 @@ function AccountRail({ record, customerId }: { record: Customer360; customerId: 
         {/* The counts only, linking to where the detail is. The full lists live
           on Overview and on Risks & Issues; repeating them here would make the
           rail a second copy of two panels rather than a way back to them. */}
-        <Panel
-          title="Open"
-          level="supporting"
-          meta={`${
-            open.commitments.length +
-            open.risks.length +
-            open.issues.length +
-            open.escalations.length
-          } open`}
-        >
-          <ul className="divide-y divide-border">
-            {(
-              [
-                ["Commitments", open.commitments.length, "journey"],
-                ["Risks", open.risks.length, "risks"],
-                ["Issues", open.issues.length, "risks"],
-                ["Escalations", open.escalations.length, "risks"],
-              ] as Array<[string, number, TabId]>
-            ).map(([label, count, tab]) => (
-              <li key={label}>
-                <Link
-                  to="/customers/$customerId"
-                  params={{ customerId }}
-                  search={{ tab }}
-                  className="flex items-center justify-between px-3 py-1.5 text-[12px] hover:bg-muted/60"
-                >
-                  <span className={count ? "text-foreground" : "text-muted-foreground"}>
-                    {label}
-                  </span>
-                  <span
-                    className={cn(
-                      "font-mono text-[12px]",
-                      count ? "font-medium text-foreground" : "text-muted-foreground",
-                    )}
-                  >
-                    {count}
-                  </span>
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </Panel>
+        {full ? (
+          <>
+            <Panel
+              title="Open"
+              level="supporting"
+              meta={`${
+                open.commitments.length +
+                open.risks.length +
+                open.issues.length +
+                open.escalations.length
+              } open`}
+            >
+              <ul className="divide-y divide-border">
+                {(
+                  [
+                    ["Commitments", open.commitments.length, "journey"],
+                    ["Risks", open.risks.length, "risks"],
+                    ["Issues", open.issues.length, "risks"],
+                    ["Escalations", open.escalations.length, "risks"],
+                  ] as Array<[string, number, AnyTabId]>
+                ).map(([label, count, tab]) => (
+                  <li key={label}>
+                    <Link
+                      to="/customers/$customerId"
+                      params={{ customerId }}
+                      search={{ tab }}
+                      className="flex items-center justify-between px-3 py-1.5 text-[12px] hover:bg-muted/60"
+                    >
+                      <span className={count ? "text-foreground" : "text-muted-foreground"}>
+                        {label}
+                      </span>
+                      <span
+                        className={cn(
+                          "font-mono text-[12px]",
+                          count ? "font-medium text-foreground" : "text-muted-foreground",
+                        )}
+                      >
+                        {count}
+                      </span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </Panel>
 
-        {/* Every SOW, board and deck for this account in one list — including
+            {/* Every SOW, board and deck for this account in one list — including
           the ones still living in the SOW and discovery-board fields, which
           are read alongside so nothing that exists today disappears. */}
-        <Suspense
-          fallback={
-            <Panel title="Attachments" level="supporting">
-              <NoRows label="Loading…" />
-            </Panel>
-          }
-        >
-          <AttachmentsPanel implementationId={impl.id} />
-        </Suspense>
+            <Suspense
+              fallback={
+                <Panel title="Attachments" level="supporting">
+                  <NoRows label="Loading…" />
+                </Panel>
+              }
+            >
+              <AttachmentsPanel implementationId={impl.id} />
+            </Suspense>
 
-        {/* What was finished, frozen. Its own panel rather than a row in
+            {/* What was finished, frozen. Its own panel rather than a row in
           Attachments: these are not documents somebody uploaded, they are the
           account's record of completed work, and they answer a different
           question — "what did we actually deliver?" */}
-        <Panel
-          title="Completion records"
-          count={record.completion_records.length}
-          level="supporting"
-          meta="Frozen at completion"
-        >
-          {record.completion_records.length ? (
-            <ul className="divide-y divide-border">
-              {record.completion_records.map((c) => (
-                <Row key={c.id}>
-                  <div className="flex flex-wrap items-baseline gap-2">
-                    {c.url ? (
-                      <a
-                        href={c.url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-[13px] font-medium hover:underline"
-                      >
-                        {c.title}
-                      </a>
-                    ) : (
-                      <span className="text-[13px] font-medium">{c.title}</span>
-                    )}
-                    <span className="text-[11px] text-muted-foreground">
-                      {c.subject_type === "solution" ? "Solution" : "Project"}
-                      {c.version > 1 ? ` · reissued, v${c.version}` : ""}
-                    </span>
-                  </div>
-                  <Meta
-                    items={[
-                      ["Recorded", fmtDate(c.created_at)],
-                      ["Document", c.url ? "PDF" : "The attachment row was removed"],
-                    ]}
-                  />
-                </Row>
-              ))}
-            </ul>
-          ) : (
-            <div className="px-3 py-2.5 text-[12px] text-muted-foreground">
-              One is written when a solution is marked validated, or when this project moves to
-              Handover to CS. It freezes what was done at that moment and is filed against the
-              Salesforce account.
-            </div>
-          )}
-        </Panel>
+            <Panel
+              title="Completion records"
+              count={record.completion_records.length}
+              level="supporting"
+              meta="Frozen at completion"
+            >
+              {record.completion_records.length ? (
+                <ul className="divide-y divide-border">
+                  {record.completion_records.map((c) => (
+                    <Row key={c.id}>
+                      <div className="flex flex-wrap items-baseline gap-2">
+                        {c.url ? (
+                          <a
+                            href={c.url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-[13px] font-medium hover:underline"
+                          >
+                            {c.title}
+                          </a>
+                        ) : (
+                          <span className="text-[13px] font-medium">{c.title}</span>
+                        )}
+                        <span className="text-[11px] text-muted-foreground">
+                          {c.subject_type === "solution" ? "Solution" : "Project"}
+                          {c.version > 1 ? ` · reissued, v${c.version}` : ""}
+                        </span>
+                      </div>
+                      <Meta
+                        items={[
+                          ["Recorded", fmtDate(c.created_at)],
+                          ["Document", c.url ? "PDF" : "The attachment row was removed"],
+                        ]}
+                      />
+                    </Row>
+                  ))}
+                </ul>
+              ) : (
+                <div className="px-3 py-2.5 text-[12px] text-muted-foreground">
+                  One is written when a solution is marked validated, or when this project moves to
+                  Handover to CS. It freezes what was done at that moment and is filed against the
+                  Salesforce account.
+                </div>
+              )}
+            </Panel>
+          </>
+        ) : null}
         <Panel title="Key people" level="supporting">
           {/* Editable in place. These were read-only, so the only way to change
             who owns a project was to open the full edit form — which sends
@@ -1391,45 +1500,49 @@ function AccountRail({ record, customerId }: { record: Customer360; customerId: 
           </div>
         </Panel>
 
-        <Panel title="Recent activity" meta="Meaningful events only" level="supporting">
-          {events.length ? (
-            <ul className="divide-y divide-border">
-              {events.map((e) => (
-                <Row key={e.key}>
-                  <div className="flex flex-wrap items-baseline gap-2">
-                    <span className="w-16 shrink-0 text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
-                      {e.kind}
-                    </span>
-                    <span className="text-[12px]">
-                      {e.kind === "Stage" ? stageLabel(e.detail) : e.title}
-                    </span>
-                  </div>
-                  <Meta
-                    items={[
-                      ["When", <When key="when" value={e.at} />],
-                      ["Who", dash(e.actor)],
-                      ...(e.kind === "Stage"
-                        ? []
-                        : ([["State", humanize(e.detail)]] as Array<[string, ReactNode]>)),
-                    ]}
-                  />
-                </Row>
-              ))}
-            </ul>
-          ) : (
-            <NoRows label="No recent events" />
-          )}
-          <div className="border-t border-border px-3 py-2">
-            <Link
-              to="/customers/$customerId"
-              params={{ customerId }}
-              search={{ tab: "history" }}
-              className="text-[11px] underline"
-            >
-              Full change history →
-            </Link>
-          </div>
-        </Panel>
+        {full ? (
+          <>
+            <Panel title="Recent activity" meta="Meaningful events only" level="supporting">
+              {events.length ? (
+                <ul className="divide-y divide-border">
+                  {events.map((e) => (
+                    <Row key={e.key}>
+                      <div className="flex flex-wrap items-baseline gap-2">
+                        <span className="w-16 shrink-0 text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
+                          {e.kind}
+                        </span>
+                        <span className="text-[12px]">
+                          {e.kind === "Stage" ? stageLabel(e.detail) : e.title}
+                        </span>
+                      </div>
+                      <Meta
+                        items={[
+                          ["When", <When key="when" value={e.at} />],
+                          ["Who", dash(e.actor)],
+                          ...(e.kind === "Stage"
+                            ? []
+                            : ([["State", humanize(e.detail)]] as Array<[string, ReactNode]>)),
+                        ]}
+                      />
+                    </Row>
+                  ))}
+                </ul>
+              ) : (
+                <NoRows label="No recent events" />
+              )}
+              <div className="border-t border-border px-3 py-2">
+                <Link
+                  to="/customers/$customerId"
+                  params={{ customerId }}
+                  search={{ tab: "history" }}
+                  className="text-[11px] underline"
+                >
+                  Full change history →
+                </Link>
+              </div>
+            </Panel>
+          </>
+        ) : null}
       </aside>
     </CollapsibleSections>
   );
@@ -2459,7 +2572,7 @@ function RisksTab({ record, customerId }: { record: Customer360; customerId: str
 
 /* ---------------- 7. EVIDENCE ---------------- */
 
-const EVIDENCE_TAB: Record<string, TabId> = {
+const EVIDENCE_TAB: Record<string, AnyTabId> = {
   requirement: "requirements",
   requirements: "requirements",
   decision: "decisions",
