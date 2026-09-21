@@ -89,6 +89,7 @@ export async function issuePasswordReset(
   let reason: string | null = null;
   try {
     const { delivered, reason: notSent } = await sendEmail({
+      kind: "account",
       to: email,
       subject: "Set a new password for the GoCanvas Handoff Hub",
       html: `

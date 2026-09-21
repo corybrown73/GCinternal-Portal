@@ -243,6 +243,7 @@ async function deliver(
   const inviterName = inviter.full_name?.trim() || inviter.email;
   try {
     const { delivered, reason } = await sendEmail({
+      kind: "account",
       to: email,
       subject: `${inviterName} added you to the GoCanvas Handoff Hub`,
       html: `

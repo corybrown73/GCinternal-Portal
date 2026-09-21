@@ -46,7 +46,6 @@ export interface ProfileRow {
 
 const SUPER_ROLES = ["admin", "super_admin"];
 const MANAGE_ROLES = [...SUPER_ROLES, "manager"];
-const SALES_EDIT_ROLES = [...MANAGE_ROLES, "sales", "am"];
 
 async function profileOf(userId: string): Promise<ProfileRow> {
   const { data, error } = await db()
@@ -66,12 +65,15 @@ export async function requireInternal(userId: string): Promise<ProfileRow> {
   return profile;
 }
 
+/**
+ * Who may write to a deal: every GoCanvas login. The page opened to every
+ * internal role a while ago (canEditDeal), but this guard behind the server
+ * functions still said sales only, so an implementation specialist could see
+ * the SOW row and be told "Your role cannot edit presale records" when she
+ * pressed Upload. One rule, on both sides.
+ */
 export async function requireSalesEditor(userId: string): Promise<ProfileRow> {
-  const profile = await profileOf(userId);
-  if (!SALES_EDIT_ROLES.includes(profile.role)) {
-    throw new Error("Your role cannot edit presale records");
-  }
-  return profile;
+  return requireInternal(userId);
 }
 
 export async function requireSuperAdmin(userId: string): Promise<ProfileRow> {

@@ -384,6 +384,7 @@ async function notifyAssignee(a: {
     .join(" · ");
   const first = a.assigneeName.split(" ")[0] ?? a.assigneeName;
   await sendEmail({
+    kind: "assignment",
     to: a.to,
     subject: `New account: ${a.dealName} — three things to do first`,
     html: `

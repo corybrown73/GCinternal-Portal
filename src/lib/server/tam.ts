@@ -100,6 +100,7 @@ async function sendApprovalEmails(request: TamRequest, account: Account) {
 export async function notifyRequesterOfDecision(request: TamRequest, accountName: string) {
   const approved = request.status === "approved";
   await sendEmail({
+    kind: "requested",
     to: request.requester_email,
     subject: `TAM request ${approved ? "approved" : "declined"} — ${accountName}`,
     html: `

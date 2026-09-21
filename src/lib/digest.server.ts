@@ -271,6 +271,9 @@ export async function sendDigestTo(
   let reason: string | null = null;
   try {
     const r = await sendEmail({
+      // Asked for from Settings, it is theirs; the Monday run is a notification
+      // and follows the rule about who gets those.
+      kind: opts.force ? "requested" : "notification",
       to: recipient.email,
       subject,
       html: renderDigestHtml(digest, appUrl()),

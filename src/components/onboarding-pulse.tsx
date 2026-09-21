@@ -3,7 +3,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { ArrowRight, PlusCircle } from "lucide-react";
 
-import { canEditSales, canManage, useProfile } from "@/lib/auth";
+import { canEditDeal, useProfile } from "@/lib/auth";
 import { DeliverablesStrip } from "@/components/deliverables-strip";
 import { useToolMarks } from "@/lib/use-tool-marks";
 import { getDealPulseFn, startServicesDealFn } from "@/lib/deal-pulse.functions";
@@ -128,7 +128,7 @@ export function AddServicesButton({ customerId }: { customerId: string }) {
       });
     },
   });
-  if (!(canEditSales(profile?.role) || canManage(profile?.role))) return null;
+  if (!canEditDeal(profile?.role)) return null;
   return (
     <span className="inline-flex flex-col items-end">
       <button
