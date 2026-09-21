@@ -27,29 +27,21 @@ const ROLES: Array<{ key: string; who: string; when: string; steps: Step[] }> = 
   {
     key: "ae",
     who: "AE · the deal closes",
-    when: "Same day the deal goes closed-won. Ten minutes.",
+    when: "Same day the deal goes closed-won. Three clicks.",
     steps: [
       {
-        title: "Open the deal from the pipeline",
-        body: "Closed-won deals arrive from Zapier and Salesforce on their own. If yours is missing, add it on the pipeline board.",
+        title: "1. New account",
+        body: "On the pipeline: the company, the industry, the call notes pasted in, the signed SOW dropped on. Closed-won deals from Salesforce arrive on their own; add the notes and the SOW to those.",
         to: "/pipeline",
         label: "Pipeline",
       },
       {
-        title: "Pick the path, first",
-        body: "New customer, or an existing account adding services. It is the first question in the intake, and every screen after it follows the answer.",
+        title: "2. Build it",
+        body: "One button on the account. It reads the calls and writes the brief, fills the intake, reads the SOW into the plan, builds the plan with dates and makes the customer's link. What the calls did not say comes back as a short list — each one line on the page.",
       },
       {
-        title: "Paste the Gong brief, then generate the customer brief",
-        body: "Call notes or the account map into Notes & documents. The 'Generate customer brief' button at the top right lights up once a note and the path are in; it reads the calls and fills the intake's blanks: the process today, the forms, seats, systems. Check what it filled.",
-      },
-      {
-        title: "Upload the signed SOW and read it into the plan",
-        body: "The PDF is the record. 'Read the SOW into the plan' proposes the services on it; tick what is right, and the plan's phases fill in from the close date.",
-      },
-      {
-        title: "Hand it over",
-        body: "When the deal closes, the implementation team is told there is an account to claim, and whoever takes it becomes the owner (a manager can also assign by hand, or switch to assignment by rule under Admin → Assignment). Your part is done when the guide strip reads 7/7.",
+        title: "3. Open the deck",
+        body: "Present it, send the link, or print it. When the deal goes closed-won, the account is created and the implementation team hears there is one to claim.",
       },
     ],
   },
@@ -102,8 +94,8 @@ const ROLES: Array<{ key: string; who: string; when: string; steps: Step[] }> = 
         body: "On this path the first phase is 'review your form to make sure it is optimised for the integration'. The services you sold follow, one phase each, once the form is ready.",
       },
       {
-        title: "Same guide, same seven steps",
-        body: "Gong brief, synthesise, SOW, times, share. The guide strip on the deal points at the next one until the page is ready to send.",
+        title: "Same three clicks",
+        body: "Notes in, Build it, Open the deck. The strip at the top of the Deck tab says where the account is on that path.",
       },
     ],
   },
