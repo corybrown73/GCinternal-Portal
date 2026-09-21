@@ -1,4 +1,4 @@
-import { existingBuildFor, type IntakeAnswers } from "./intake-answers";
+import { existingBuildFor, formsOnly, isTrainingOnly, type IntakeAnswers } from "./intake-answers";
 import { type ServiceSpec } from "./onboarding-services";
 import {
   buildTimeline,
@@ -64,7 +64,9 @@ export function extraFormServices(intake: IntakeAnswers): ServiceSpec[] {
   // Phase 1 holds up to three forms: the first is THE first form, the next
   // two run alongside it from the kickoff. A fourth and beyond wait for
   // phase 2 — two weeks is two weeks.
-  return intake.wanted_forms
+  // Training has no form build at all, and a service name is not a form.
+  if (isTrainingOnly(intake)) return [];
+  return formsOnly(intake)
     .slice(1)
     .filter((f) => !named.has(f.name.trim().toLowerCase()))
     .map((f, i) => ({

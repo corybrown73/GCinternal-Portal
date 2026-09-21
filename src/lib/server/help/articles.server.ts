@@ -189,7 +189,7 @@ export async function pickHelpArticles(args: {
     brief: args.brief,
     notesText: args.notesText,
   });
-  const candidates = retrieveCandidates(query, articles);
+  const candidates = retrieveCandidates(query, articles, 4);
   if (candidates.length === 0) return { picks: [], query };
   if (!process.env["ANTHROPIC_API_KEY"]) return { picks: fallbackPicks(query, candidates), query };
   try {
@@ -202,11 +202,15 @@ export async function pickHelpArticles(args: {
           `${feature}:\n${cs.map((c) => `  - ${c.article_id} · ${c.title} (${c.category})`).join("\n")}`,
       )
       .join("\n");
-    const said = `${args.notesText}\n\n${briefWords(args.brief)}`.slice(0, 30000);
+    // The query already carries the evidence sentence for every feature;
+    // the calls are here for tone, not for a second reading.
+    const said = `${args.notesText}\n\n${briefWords(args.brief)}`.slice(0, 8000);
     const response = await client.messages.create({
-      model: "claude-opus-5",
-      max_tokens: 4000,
-      thinking: { type: "adaptive" },
+      // Choosing five rows out of a shortlist the query already narrowed
+      // and rule-checked is a selection job: Sonnet does it well, and the
+      // reading that needed Opus already happened in the brief.
+      model: "claude-sonnet-5",
+      max_tokens: 1500,
       system: PICK_SYSTEM,
       messages: [
         {

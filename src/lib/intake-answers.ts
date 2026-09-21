@@ -316,24 +316,46 @@ export function intakeStatus(a: IntakeAnswers): {
   done: boolean;
   next: string | null;
 } {
+  // THE FACTS ONLY. The forms question belongs to the flow (step 3), where
+  // it is asked and answered — asking for it here made step 2 wait on an
+  // answer step 3 could not give until step 2 finished. See flowAnswered.
   if (a.solutions_involved === null)
     return { done: false, next: "Were integrations or solutions involved?" };
-  // The forms question belongs to the flow: an existing account answers the
-  // Account Manager's questions instead, and training has no form to ask about.
-  const training = isTrainingOnly(a);
-  const asksForms = !training && a.path !== "existing";
-  if (asksForms && a.forms_built === null)
-    return { done: false, next: "Do they already have forms built?" };
-  if (asksForms && a.forms_built) {
-    return a.uploaded_forms.length > 0
-      ? { done: true, next: null }
-      : { done: false, next: "Upload the forms they have." };
-  }
   if (!a.industry) return { done: false, next: "What industry are they in?" };
   if (a.field_users === null)
     return { done: false, next: "How many people will use it in the field?" };
   if (!a.current_process) return { done: false, next: "What is the process today?" };
   return { done: true, next: null };
+}
+
+/**
+ * A name that is a SERVICE, not a form: an integration, a dispatch add-on,
+ * a PDF build, training. The brief's "scope" list mixes them in with the
+ * forms, and a service that lands in wanted_forms becomes the phase-1 form
+ * build and then appears a second time from the SOW. One rule, used by the
+ * prefill, the plan and the deck.
+ */
+const SERVICE_WORDS =
+  /\b(integration|integrate|sync|api|webhook|connector|dispatch|add-?on|module|licen[cs]e|seats?|training|onboarding|analytics|dashboard|reporting|report pack|data (load|migration|import)|pdf (designer|build|template)|custom pdf)\b/i;
+const SERVICE_SYSTEMS =
+  /\b(quickbooks|qbo|salesforce|zapier|workato|sage|netsuite|xero|hubspot|servicetitan|procore|smartsheet|kronos|sharepoint|onedrive|dropbox|power ?bi|tableau)\b/i;
+
+export function isServiceName(name: string): boolean {
+  return SERVICE_WORDS.test(name) || SERVICE_SYSTEMS.test(name);
+}
+
+/**
+ * The wanted forms that are really forms: service names dropped, and
+ * anything the SOW already holds as a service dropped too (it is planned
+ * there, with its own steps and dates).
+ */
+export function formsOnly(a: IntakeAnswers): IntakeAnswers["wanted_forms"] {
+  const services = (a.timeline.services ?? []).map((s) => s.name.trim().toLowerCase());
+  return a.wanted_forms.filter((f) => {
+    const n = f.name.trim().toLowerCase();
+    if (isServiceName(f.name)) return false;
+    return !services.some((s) => s === n || s.includes(n) || n.includes(s));
+  });
 }
 
 export type WantedForm = IntakeAnswers["wanted_forms"][number];

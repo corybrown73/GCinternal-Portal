@@ -45,9 +45,31 @@ export const sowPlanRowSchema = z.object({
 });
 export type SowPlanRow = z.infer<typeof sowPlanRowSchema>;
 
+const isoDate = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/)
+  .nullable();
+
 export const sowPlanProposalSchema = z.object({
   readable: z.boolean(),
   problem: z.string().nullable(),
+  /** The SOW's own reference or quote number, as printed. */
+  reference: z.string().trim().max(60).nullable().default(null),
+  /** The day it was signed, ISO. */
+  signed_date: isoDate.default(null),
+  /** The day the work starts, when the SOW names one; the plan's day 0. */
+  start_date: isoDate.default(null),
+  /** Total contract value, as a number, in the currency the SOW states. */
+  value: z.number().nonnegative().nullable().default(null),
+  /** The customer contact the SOW names. */
+  contact: z
+    .object({
+      name: z.string().trim().max(120).nullable().default(null),
+      role: z.string().trim().max(120).nullable().default(null),
+      email: z.string().trim().max(160).nullable().default(null),
+    })
+    .nullable()
+    .default(null),
   /** One line: what was bought. */
   summary: z.string(),
   /** The first form, when the SOW names it. */

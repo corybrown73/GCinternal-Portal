@@ -25,6 +25,7 @@ import { SERVICE_KINDS, type ServiceSpec } from "@/lib/onboarding-services";
 import { PATH_LABEL } from "@/lib/onboarding-timeline";
 import {
   addReport,
+  generateBriefForDeal,
   getIntakeFormLink,
   saveIntake,
   uploadContract,
@@ -95,13 +96,16 @@ export function IntakePanel({
   // is the first unfinished one; finished steps fold to their answer.
   const hasNotes = deal.gong_reports.length > 0;
   const hasBrief = deal.briefs.some((b) => b.status === "complete" && b.generator === "llm");
+  // A SOW uploaded on the New account dialog IS the answer: asking again,
+  // on the same page that shows the document, was the duplicate the QA
+  // found. The question only appears when no paper is on file at all.
   const hasSowFile = Boolean(deal.sow_url);
-  const paperDone =
-    answers.has_sow === true
-      ? hasSowFile
-      : answers.has_sow === false
-        ? Boolean(answers.contract)
-        : false;
+  const paperDone = hasSowFile || (answers.has_sow === false && Boolean(answers.contract));
+  const sowFacts = [
+    deal.account.sow_reference,
+    deal.account.sow_signed_date ? `signed ${deal.account.sow_signed_date}` : null,
+    deal.account.sow_value != null ? `$${Number(deal.account.sow_value).toLocaleString()}` : null,
+  ].filter(Boolean) as string[];
   const step1Done = hasNotes && paperDone;
   const status = intakeStatus(answers);
   const step2Done = answers.solutions_involved !== null && status.done;
@@ -164,7 +168,9 @@ export function IntakePanel({
           hint="The brief writes itself from the notes and fills step 2. The paper travels with the deal — seats, term, what was bought."
           answer={
             step1Done
-              ? `${deal.gong_reports.length} call note${deal.gong_reports.length === 1 ? "" : "s"} · ${hasBrief ? "brief written" : "brief pending"} · ${answers.has_sow ? "SOW on file" : "contract on file, no SOW"}`
+              ? `${deal.gong_reports.length} call note${deal.gong_reports.length === 1 ? "" : "s"} · ${hasBrief ? "brief written" : "brief pending"} · ${
+                  hasSowFile ? ["SOW on file", ...sowFacts].join(" · ") : "contract on file, no SOW"
+                }`
               : null
           }
           open={openStep === 1}
@@ -172,52 +178,66 @@ export function IntakePanel({
         >
           <NotesIn deal={deal} editable={editable} />
           <div className="mt-3 border-t border-border pt-2.5">
-            <p className="mb-1.5 text-[12px] font-medium">Is there a SOW?</p>
-            <div className="flex flex-wrap items-center gap-2">
-              <Choice
-                active={answers.has_sow === true}
-                disabled={!editable || busy}
-                onClick={() => set({ has_sow: true })}
-              >
-                Yes — upload the SOW
-              </Choice>
-              <Choice
-                active={answers.has_sow === false}
-                disabled={!editable || busy}
-                onClick={() => set({ has_sow: false })}
-              >
-                No — upload the contract
-              </Choice>
-            </div>
-            {answers.has_sow === true ? (
-              <div className="mt-2">
-                <PdfUpload
-                  dealId={dealId}
-                  kind="sow"
-                  editable={editable}
-                  onFile={hasSowFile ? "The signed SOW is on file." : null}
-                  path={null}
-                />
-                <p className="mt-1 text-[11px] text-muted-foreground">
-                  Integrations and services come from here, never from the notes: press “Read the
-                  SOW into the plan” on the plan once it is up.
+            {hasSowFile ? (
+              <div className="text-[12px]">
+                <p className="font-medium">
+                  SOW on file{sowFacts.length ? ` · ${sowFacts.join(" · ")}` : ""}
+                </p>
+                <p className="mt-0.5 text-[11px] text-muted-foreground">
+                  {sowFacts.length
+                    ? "Read from the signed document. Replace it under Notes & documents."
+                    : "The reference, signed date and value are read from the document when the plan reads the SOW."}
                 </p>
               </div>
-            ) : answers.has_sow === false ? (
-              <div className="mt-2">
-                <PdfUpload
-                  dealId={dealId}
-                  kind="contract"
-                  editable={editable}
-                  onFile={answers.contract ? `${answers.contract.name} is on file.` : null}
-                  path={answers.contract?.path ?? null}
-                />
-                <p className="mt-1 text-[11px] text-muted-foreground">
-                  No SOW means nothing bought beyond the core. The contract says how many seats and
-                  for how long, so implementation is not guessing.
-                </p>
-              </div>
-            ) : null}
+            ) : (
+              <>
+                <p className="mb-1.5 text-[12px] font-medium">Is there a SOW?</p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Choice
+                    active={answers.has_sow === true}
+                    disabled={!editable || busy}
+                    onClick={() => set({ has_sow: true })}
+                  >
+                    Yes — upload the SOW
+                  </Choice>
+                  <Choice
+                    active={answers.has_sow === false}
+                    disabled={!editable || busy}
+                    onClick={() => set({ has_sow: false })}
+                  >
+                    No — upload the contract
+                  </Choice>
+                </div>
+                {answers.has_sow === true ? (
+                  <div className="mt-2">
+                    <PdfUpload
+                      dealId={dealId}
+                      kind="sow"
+                      editable={editable}
+                      onFile={null}
+                      path={null}
+                    />
+                    <p className="mt-1 text-[11px] text-muted-foreground">
+                      Integrations and services come from here, never from the notes.
+                    </p>
+                  </div>
+                ) : answers.has_sow === false ? (
+                  <div className="mt-2">
+                    <PdfUpload
+                      dealId={dealId}
+                      kind="contract"
+                      editable={editable}
+                      onFile={answers.contract ? `${answers.contract.name} is on file.` : null}
+                      path={answers.contract?.path ?? null}
+                    />
+                    <p className="mt-1 text-[11px] text-muted-foreground">
+                      No SOW means nothing bought beyond the core. The contract says how many seats
+                      and for how long, so implementation is not guessing.
+                    </p>
+                  </div>
+                ) : null}
+              </>
+            )}
           </div>
         </Step>
 
@@ -507,6 +527,9 @@ function ExistingQuestions({
 function NotesIn({ deal, editable }: { deal: DealData; editable: boolean }) {
   const qc = useQueryClient();
   const create = useServerFn(addReport);
+  const brief = useServerFn(generateBriefForDeal);
+  const hasBrief = deal.briefs.some((b) => b.status === "complete" && b.generator === "llm");
+  const [reading, setReading] = useState(false);
   const [content, setContent] = useState("");
   const [title, setTitle] = useState("");
   const [callDate, setCallDate] = useState("");
@@ -529,6 +552,17 @@ function NotesIn({ deal, editable }: { deal: DealData; editable: boolean }) {
       setCallDate("");
       void qc.invalidateQueries({ queryKey: ["deal", deal.account.id] });
       void qc.invalidateQueries({ queryKey: ["welcome", deal.account.id] });
+      // The first notes start the brief; later ones do not re-read the
+      // account on their own — "Build it" is how a person asks for that.
+      if (!hasBrief) {
+        setReading(true);
+        void brief({ data: { dealId: deal.account.id } })
+          .catch(() => undefined)
+          .finally(() => {
+            setReading(false);
+            void qc.invalidateQueries({ queryKey: ["deal", deal.account.id] });
+          });
+      }
     },
     onError: (e) => setError((e as Error).message),
   });
@@ -580,10 +614,15 @@ function NotesIn({ deal, editable }: { deal: DealData; editable: boolean }) {
               disabled={add.isPending || !content.trim()}
               onClick={() => add.mutate()}
             >
-              {add.isPending ? "Reading the calls, writing the brief…" : "Add the notes"}
+              {add.isPending ? "Saving…" : "Add the notes"}
             </button>
           </div>
         </div>
+      ) : null}
+      {reading ? (
+        <p className="mt-1 text-[11px] text-muted-foreground">
+          Reading the calls and writing the brief… this takes about a minute. You can carry on.
+        </p>
       ) : null}
       {error ? (
         <p role="alert" className="mt-1 text-[11px] text-destructive">

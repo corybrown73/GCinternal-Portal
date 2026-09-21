@@ -248,10 +248,13 @@ export function ThreeClicks({ deal }: { deal: DealData }) {
     (deal.account as { welcome_share_url?: string | null }).welcome_share_url,
   );
   const intake = readIntake(deal.account.intake);
-  const facts = intake.solutions_involved !== null && intakeStatus(intake).done;
+  // The same three rules the panel uses, so the strip and the panel cannot
+  // disagree about which step is next.
+  const paperDone = Boolean(deal.sow_url) || (intake.has_sow === false && Boolean(intake.contract));
+  const facts = intakeStatus(intake).done;
   const flow = intake.path !== null && flowAnswered(intake);
   const items = [
-    { n: 1, label: "Notes in", done: hasNotes && hasBrief },
+    { n: 1, label: "Notes in", done: hasNotes && paperDone },
     { n: 2, label: "Confirm the facts", done: facts },
     { n: 3, label: "Pick the flow", done: flow },
     { n: 4, label: "Open the deck", done: hasLink },

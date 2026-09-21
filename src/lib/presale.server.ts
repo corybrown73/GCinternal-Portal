@@ -914,14 +914,9 @@ export async function addGongReport(
       call_date: input.callDate ?? null,
     });
   if (error) throw new Error(`Could not save the report: ${error.message}`);
-  // The notes are the first step, and the brief follows them on its own:
-  // nobody presses a button to have the calls read. A failure here is
-  // reported on the deal, not raised — the notes are already saved.
-  try {
-    await generateDealBrief(userId, input.dealId);
-  } catch (e) {
-    console.error("[reports] could not write the brief from the new notes", e);
-  }
+  // The brief is NOT written here. Saving notes took a minute while the
+  // model read them, which looked like a hang on the create dialog; the
+  // caller starts the brief as its own request and shows it running.
   return { ok: true };
 }
 

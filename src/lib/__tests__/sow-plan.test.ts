@@ -133,6 +133,11 @@ describe("normalizeProposal", () => {
     const p = normalizeProposal({
       readable: true,
       problem: null,
+      reference: "SOW-2026-705",
+      signed_date: "2026-09-18",
+      start_date: null,
+      value: 9600,
+      contact: { name: "Jamie Tester", role: "Operations Manager", email: null },
       summary: "",
       first_form: null,
       seats: null,

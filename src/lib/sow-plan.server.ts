@@ -34,15 +34,16 @@ Your job is the reading, not the calendar:
 - tier: integrations only, from the tiers below, by the complexity the SOW describes. weeks: only when the SOW states a duration for that item, else null. needs: only when the SOW names something the customer must provide for that item, else null.
 - evidence: a short verbatim quote for each row when one exists. confidence: "stated" when the SOW says it plainly, "implied" when it is a reasonable reading, "uncertain" when thin.
 - seats: the licensed user count when stated, else null.
-- Never output calendar dates. Dates the SOW names go in notes as text; the plan computes its own.
-- notes: exclusions, conditions, named dates, anything the SOW says that a services list cannot hold. gaps: what the SOW leaves unsaid that the plan needs (which system, how many forms, who owns the mapping).
+- The SOW's OWN FACTS go in their own fields, as data: reference (the quote or SOW number as printed), signed_date, start_date (the day work begins, when the SOW names one), value (total contract value as a number), contact (the customer contact it names). ISO dates, YYYY-MM-DD. Null when the document does not say. These are the only calendar dates you output.
+- Never put a schedule in the rows: the plan computes every milestone date from the start. A duration the SOW states for one item goes in that row's weeks.
+- notes: exclusions, conditions, deadlines the customer must hit, anything the SOW says that a services list cannot hold. Do NOT repeat the reference, the signed date, the start date, the value or the contact here — they have their own fields. gaps: what the SOW leaves unsaid that the plan needs (which system, how many forms, who owns the mapping).
 - Never invent a service the SOW does not support. Fewer rows, well grounded, beats a full list.
 - If the document is not a SOW, is empty or unreadable, set readable=false, explain in problem, and leave services empty.
 
 ${catalogueForPrompt()}
 
 Return JSON exactly in this shape:
-{"readable":true,"problem":null,"summary":"","first_form":null,"seats":null,"services":[{"kind":"integration","name":"","tier":3,"weeks":null,"phase":2,"needs":null,"evidence":null,"confidence":"stated"}],"notes":[],"gaps":[]}`;
+{"readable":true,"problem":null,"reference":null,"signed_date":null,"start_date":null,"value":null,"contact":null,"summary":"","first_form":null,"seats":null,"services":[{"kind":"integration","name":"","tier":3,"weeks":null,"phase":2,"needs":null,"evidence":null,"confidence":"stated"}],"notes":[],"gaps":[]}`;
 
 function tryParse(raw: string): SowPlanProposal | null {
   const cleaned = raw
@@ -68,7 +69,7 @@ function tryParse(raw: string): SowPlanProposal | null {
 export async function proposePlanFromSow(
   userId: string,
   dealId: string,
-): Promise<{ sowName: string | null; proposal: SowPlanProposal }> {
+): Promise<{ sowName: string | null; proposal: SowPlanProposal; stamped: string[] }> {
   await requireInternal(userId);
 
   const { data: deal } = await db()
@@ -117,7 +118,9 @@ export async function proposePlanFromSow(
     try {
       const response = await client.messages.create({
         model: MODEL,
-        max_tokens: 16000,
+        // The proposal is a small object: twenty rows and a few facts. The
+        // old ceiling was twice what the longest reading has ever produced.
+        max_tokens: 8000,
         system: SYSTEM_PROMPT,
         messages: [{ role: "user", content }],
       });
@@ -154,6 +157,12 @@ export async function proposePlanFromSow(
     );
   }
 
+  // The signed document's own facts, onto the record: the reference, the
+  // dates, the value and the contact. Blanks only — a person's entry stands
+  // — so the Statement of work card stops saying "nothing recorded" while
+  // holding the PDF that states all of it.
+  const stamped = await stampSowFacts(dealId, proposal);
+
   const { audit } = await import("./server/audit");
   await audit({
     actor_type: "user",
@@ -161,8 +170,69 @@ export async function proposePlanFromSow(
     action: "sow_plan.proposed",
     entity_type: "account",
     entity_id: dealId,
-    payload: { services: proposal.services.length, seats: proposal.seats },
+    payload: { services: proposal.services.length, seats: proposal.seats, stamped },
   });
 
-  return { sowName: (deal.sow_document_name as string | null) ?? null, proposal };
+  return { sowName: (deal.sow_document_name as string | null) ?? null, proposal, stamped };
+}
+
+/**
+ * Write what the SOW states onto the columns the rest of the app reads:
+ * the reference, the signed date, the value, the named contact, and the
+ * start date as the plan's day 0. Only blanks are filled. Never throws —
+ * the reading is the point, and a column that could not be written is
+ * reported, not fatal.
+ */
+async function stampSowFacts(dealId: string, p: SowPlanProposal): Promise<string[]> {
+  const stamped: string[] = [];
+  try {
+    const { data: deal } = await db()
+      .from("portal_accounts")
+      .select(
+        "sow_reference,sow_signed_date,sow_value,primary_contact_name,primary_contact_role,primary_contact_email,intake",
+      )
+      .eq("id", dealId)
+      .maybeSingle();
+    if (!deal) return stamped;
+    const patch: Record<string, unknown> = {};
+    const set = (col: string, value: unknown, label: string) => {
+      if (value === null || value === undefined || value === "") return;
+      if ((deal as Record<string, unknown>)[col]) return;
+      patch[col] = value;
+      stamped.push(label);
+    };
+    set("sow_reference", p.reference, "reference");
+    set("sow_signed_date", p.signed_date, "signed date");
+    set("sow_value", p.value, "value");
+    set("primary_contact_name", p.contact?.name ?? null, "contact");
+    set("primary_contact_role", p.contact?.role ?? null, "contact role");
+    set("primary_contact_email", p.contact?.email ?? null, "contact email");
+
+    // The plan's day 0: the SOW's start date when it names one, else its
+    // signed date. Without this every plan starts "as if today".
+    const day0 = p.start_date ?? p.signed_date;
+    if (day0) {
+      const { readIntake, intakeAnswersSchema } = await import("./intake-answers");
+      const intake = readIntake((deal as { intake?: unknown }).intake);
+      if (!intake.timeline.close_date) {
+        patch["intake"] = intakeAnswersSchema.parse({
+          ...intake,
+          timeline: { ...intake.timeline, close_date: day0 },
+          updated_at: new Date().toISOString(),
+        });
+        stamped.push("start date");
+      }
+    }
+    if (Object.keys(patch).length === 0) return stamped;
+    patch["updated_at"] = new Date().toISOString();
+    const { error } = await db().from("portal_accounts").update(patch).eq("id", dealId);
+    if (error) {
+      console.error("[sow-plan] could not stamp the SOW facts", error.message);
+      return [];
+    }
+  } catch (e) {
+    console.error("[sow-plan] could not stamp the SOW facts", e);
+    return [];
+  }
+  return stamped;
 }

@@ -14,7 +14,13 @@ import {
 import { INDUSTRIES } from "@/lib/intake-answers";
 import { mentionsDeviceMagic, mentionsFieldFusion } from "@/lib/intake-prefill";
 import { cn } from "@/lib/utils";
-import { addDeal, addReport, importDeals, uploadSow } from "@/lib/presale.functions";
+import {
+  addDeal,
+  addReport,
+  generateBriefForDeal,
+  importDeals,
+  uploadSow,
+} from "@/lib/presale.functions";
 import { STAGE_LABELS, STAGES, type AccountStage } from "@/lib/presale-stages";
 
 const inputClass =
@@ -66,6 +72,7 @@ export function NewDealDialog() {
   const create = useServerFn(addDeal);
   const report = useServerFn(addReport);
   const upload = useServerFn(uploadSow);
+  const brief = useServerFn(generateBriefForDeal);
 
   const set = (patch: Partial<DealDraft>) => setDraft((d) => ({ ...d, ...patch }));
   // The pasted notes say what kind of account this is before anyone picks.
@@ -132,6 +139,10 @@ export function NewDealDialog() {
       return result;
     },
     onSuccess: (result) => {
+      // The brief is started, not waited for: reading the calls takes the
+      // best part of a minute and the dialog used to sit on a spinner for
+      // all of it. The deal page shows it running.
+      if (notes.trim()) void brief({ data: { dealId: result.account.id } }).catch(() => undefined);
       queryClient.invalidateQueries({ queryKey: ["pipeline"] });
       setOpen(false);
       reset();

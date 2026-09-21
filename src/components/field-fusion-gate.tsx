@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { Check, Send } from "lucide-react";
@@ -31,8 +31,16 @@ export function FieldFusionGate({ deal, editable }: { deal: DealData; editable: 
     queryKey: ["assignment", deal.account.id],
     queryFn: () => getDealAssignment({ data: { dealId: deal.account.id } }),
   });
+  // The saved note only refreshes the box when the box is not being typed
+  // in: ticking a checkbox re-renders this panel, and a naive sync threw
+  // away whatever had been typed since.
   const [notes, setNotes] = useState(ff.notes);
-  useEffect(() => setNotes(ff.notes), [ff.notes]);
+  const notesRef = useRef<HTMLTextAreaElement | null>(null);
+  const dirty = useRef(false);
+  useEffect(() => {
+    if (dirty.current || document.activeElement === notesRef.current) return;
+    setNotes(ff.notes);
+  }, [ff.notes]);
   const [pick, setPick] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
@@ -109,7 +117,7 @@ export function FieldFusionGate({ deal, editable }: { deal: DealData; editable: 
                   type="checkbox"
                   className="h-4 w-4"
                   checked={c.done}
-                  disabled={!editable || busy}
+                  disabled={!editable}
                   onChange={(e) => patch.mutate({ [c.key]: e.target.checked })}
                 />
                 <span className={cn(c.done && "text-muted-foreground line-through")}>
@@ -130,10 +138,15 @@ export function FieldFusionGate({ deal, editable }: { deal: DealData; editable: 
             id="ff-notes"
             className="mt-1 min-h-[72px] w-full rounded-sm border border-border bg-background px-2 py-1.5 text-[13px]"
             placeholder="Anything the calls did not say: who to train first, what they care about, what was awkward in the setup."
+            ref={notesRef}
             value={notes}
-            disabled={!editable || busy}
-            onChange={(e) => setNotes(e.target.value)}
+            disabled={!editable}
+            onChange={(e) => {
+              dirty.current = true;
+              setNotes(e.target.value);
+            }}
             onBlur={() => {
+              dirty.current = false;
               if (notes.trim() !== ff.notes) patch.mutate({ notes: notes.trim() });
             }}
           />

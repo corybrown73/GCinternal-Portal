@@ -100,7 +100,15 @@ export function watchOutsFor(args: {
   ];
   // The SOW reader lists dates with semicolons between them; a call note's
   // semicolon joins two halves of one thought ("iPads not procured; 2–3 weeks").
-  const sowSentences = sentencesFrom(args.intake.timeline.sow_notes ?? [], true);
+  // The SOW's own identity — its reference, when it was signed, what it is
+  // worth — is a fact about the document, not a date the plan has to hit.
+  // Reading those as deadlines made the tool argue with itself.
+  const IDENTITY =
+    /\b(signed|dated|executed|effective|reference|sow[- ]?\d|quote|total|contract value|invoice(d)? (on|at)?)\b/i;
+  const sowSentences = sentencesFrom(
+    (args.intake.timeline.sow_notes ?? []).filter((n) => !IDENTITY.test(n)),
+    true,
+  );
   const firstForm = args.intake.wanted_forms[0]?.name ?? null;
 
   for (const [i, { s, source }] of callSentences.entries()) {

@@ -1,4 +1,4 @@
-import { COMPANY_SIZES, INDUSTRIES, type IntakeAnswers } from "./intake-answers";
+import { isServiceName, COMPANY_SIZES, INDUSTRIES, type IntakeAnswers } from "./intake-answers";
 import type { BriefJson } from "./server/schemas";
 import { synthesisFromBrief } from "./welcome-synthesis";
 
@@ -70,7 +70,12 @@ export function prefillFromSynthesis(
     filled.push("the process today");
   }
 
-  const scope = (b.kickoff?.scope ?? []).map((s) => s.workflow?.trim()).filter(Boolean);
+  // The brief's scope list mixes forms with what was bought. Only the forms
+  // belong here: an integration on this list becomes the phase-1 form build
+  // and then shows up again from the SOW.
+  const scope = (b.kickoff?.scope ?? [])
+    .map((s) => s.workflow?.trim())
+    .filter((n): n is string => Boolean(n) && !isServiceName(n));
   if (!intake.wanted_forms.length && scope.length) {
     patch.wanted_forms = scope.slice(0, 8).map((name, i) => ({
       id: `syn-${i + 1}`,

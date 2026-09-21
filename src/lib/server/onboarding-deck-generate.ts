@@ -1,6 +1,6 @@
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { companyNameFrom } from "@/lib/company-name";
-import { readIntake } from "@/lib/intake-answers";
+import { formsOnly, readIntake } from "@/lib/intake-answers";
 import { synthesisFromBrief } from "@/lib/welcome-synthesis";
 import { closeDateFor, timelineFor } from "@/lib/onboarding-plan";
 import { loadPipelineStages } from "@/lib/pipeline-stages.server";
@@ -59,7 +59,7 @@ export async function buildOnboardingDeckInput(dealId: string): Promise<Onboardi
   let firstForm: OnboardingDeckInput["firstForm"] = null;
   let next: Array<{ name: string; description: string | null }> = [];
   const uploaded = intake.uploaded_forms[0];
-  const wanted = intake.wanted_forms.map((f) => {
+  const wanted = formsOnly(intake).map((f) => {
     const card = f.template_id ? byId.get(f.template_id) : undefined;
     return {
       name: f.name,

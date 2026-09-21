@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   addWantedForm,
   EMPTY_INTAKE,
+  flowAnswered,
   intakeAnswersSchema,
   intakeStatus,
   INDUSTRIES,
@@ -47,26 +48,36 @@ describe("the schema", () => {
 });
 
 describe("intakeStatus — what to ask next", () => {
-  it("starts with the sale — were integrations or solutions involved — then the fork", () => {
+  it("starts with the sale — were integrations or solutions involved — then who they are", () => {
     expect(intakeStatus(EMPTY_INTAKE)).toEqual({
       done: false,
       next: "Were integrations or solutions involved?",
     });
     expect(intakeStatus(readIntake({ solutions_involved: false }))).toEqual({
       done: false,
-      next: "Do they already have forms built?",
+      next: "What industry are they in?",
     });
   });
 
-  it("on the yes branch, is done once something is uploaded", () => {
-    const yes = readIntake({ solutions_involved: false, forms_built: true });
-    expect(intakeStatus(yes).next).toMatch(/Upload/);
-    const uploaded = readIntake({
-      solutions_involved: false,
-      forms_built: true,
-      uploaded_forms: [{ path: "deals/x/forms/a.pdf", name: "a.pdf", uploaded_at: "2026-09-09" }],
+  it("never asks about forms: that question belongs to the flow, and step 2 must not wait on it", () => {
+    // The old rule made step 2 wait for an answer only step 3 could give,
+    // and step 3 was locked until step 2 finished. Nobody could get out.
+    const facts = readIntake({
+      solutions_involved: true,
+      industry: "Roofing",
+      field_users: 40,
+      current_process: "Paper tickets",
     });
-    expect(intakeStatus(uploaded).done).toBe(true);
+    expect(facts.forms_built).toBeNull();
+    expect(intakeStatus(facts)).toEqual({ done: true, next: null });
+    expect(flowAnswered(facts)).toBe(false);
+    const withFlow = readIntake({
+      ...facts,
+      path: "new_logo",
+      forms_built: false,
+      wanted_forms: [{ id: "f1", name: "Daily Job Card", template_id: null }],
+    });
+    expect(flowAnswered(withFlow)).toBe(true);
   });
 
   it("on the no branch, needs the industry, the field count and the process today", () => {
