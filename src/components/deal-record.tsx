@@ -384,7 +384,9 @@ export function DealRecord({ deal, embedded = false }: { deal: DealData; embedde
           meta={`${deal.gong_reports.length} call note${deal.gong_reports.length === 1 ? "" : "s"} · SOW ${deal.sow_url ? "on file" : "missing"} · ${deal.notes.length} sales note${deal.notes.length === 1 ? "" : "s"}`}
           level="primary"
           collapsible
-          defaultOpen={!(deal.gong_reports.length > 0 && Boolean(deal.sow_url))}
+          // Step 1 of the front door collects the notes and the paper now;
+          // this is the full record, folded until somebody wants it.
+          defaultOpen={false}
           collapseKey="deal:gong"
         >
           <div className="space-y-3 p-3">
@@ -795,7 +797,8 @@ function SowPanel({
     account.sow_reference ||
     account.sow_signed_date ||
     account.sow_value != null ||
-    account.sow_document_url;
+    account.sow_document_url ||
+    deal.sow_url;
   // "On file" means the signed document is here. A reference number alone
   // is a promise, and the Closed Won check reads the document, not the promise.
   // The upload lands in storage as a path, signed onto the record as sow_url;
@@ -815,6 +818,11 @@ function SowPanel({
           <p className="text-[12px] text-muted-foreground">
             Nothing recorded. The kickoff deck will say so, in front of the customer — the reference
             and the signed document are what implementation builds against.
+          </p>
+        ) : onFile && !account.sow_reference && !account.sow_signed_date ? (
+          <p className="text-[12px] text-muted-foreground">
+            The signed document is on file. Reference, signed date and value are still blank — fill
+            them in if the SOW names them; the plan reads the document either way.
           </p>
         ) : null}
         <div className="flex flex-wrap items-end gap-x-6 gap-y-2">
