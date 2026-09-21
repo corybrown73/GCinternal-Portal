@@ -41,6 +41,11 @@ export function BuildIt({ deal, className }: { deal: DealData; className?: strin
 
   const intake = readIntake(deal.account.intake);
   const hasNotes = deal.gong_reports.length > 0;
+  const questionsAnswered =
+    intake.path !== null &&
+    (intake.forms_built === true
+      ? intake.uploaded_forms.length > 0
+      : intake.forms_built === false && intake.wanted_forms.length > 0);
   const built =
     deal.briefs.some((b) => b.status === "complete" && b.generator === "llm") &&
     Boolean((deal.account as { welcome_share_url?: string | null }).welcome_share_url);
@@ -137,11 +142,13 @@ export function BuildIt({ deal, className }: { deal: DealData; className?: strin
         <button
           type="button"
           onClick={() => void run()}
-          disabled={!hasNotes || running}
+          disabled={!hasNotes || !questionsAnswered || running}
           title={
-            hasNotes
-              ? "Read the calls, write the brief, read the SOW, build the plan, make the customer's link"
-              : "Paste the call notes first"
+            !hasNotes
+              ? "Paste the call notes first"
+              : !questionsAnswered
+                ? "Answer the questions above first: which kind of account, and their forms"
+                : "Read the calls, write the brief, read the SOW, build the plan, make the customer's link"
           }
           className={cn(
             "inline-flex items-center gap-1.5 rounded-sm px-3 py-1.5 text-[12px] font-medium",
@@ -228,6 +235,10 @@ export function BuildIt({ deal, className }: { deal: DealData; className?: strin
         <p className="text-[12px] text-muted-foreground">
           Paste the call notes below, then press Build it. Everything else follows from them.
         </p>
+      ) : hasNotes && !questionsAnswered && !steps ? (
+        <p className="text-[12px] text-muted-foreground">
+          Answer the questions above, then press Build it.
+        </p>
       ) : null}
     </div>
   );
@@ -240,10 +251,17 @@ export function ThreeClicks({ deal }: { deal: DealData }) {
   const hasLink = Boolean(
     (deal.account as { welcome_share_url?: string | null }).welcome_share_url,
   );
+  const intake = readIntake(deal.account.intake);
+  const questions =
+    intake.path !== null &&
+    (intake.forms_built === true
+      ? intake.uploaded_forms.length > 0
+      : intake.forms_built === false && intake.wanted_forms.length > 0);
   const items = [
     { n: 1, label: "Notes in", done: hasNotes },
-    { n: 2, label: "Build it", done: hasBrief && hasLink },
-    { n: 3, label: "Open the deck", done: false },
+    { n: 2, label: "Three questions", done: questions },
+    { n: 3, label: "Build it", done: hasBrief && hasLink },
+    { n: 4, label: "Open the deck", done: false },
   ];
   return (
     <ol className="flex flex-wrap items-center gap-1 text-[12px]">

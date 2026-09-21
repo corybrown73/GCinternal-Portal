@@ -11,7 +11,6 @@ import {
   chosenFrom,
   COMPANY_SIZES,
   INDUSTRIES,
-  intakeStatus,
   makeFirstWantedForm,
   readIntake,
   templateIds,
@@ -44,7 +43,6 @@ export function IntakePanel({
   highlight?: boolean | undefined;
 }) {
   const answers = readIntake(raw);
-  const status = intakeStatus(answers);
   const qc = useQueryClient();
   // Changing the path rewrites the whole plan and its dates. A stray click
   // — the gallery loads and everything shifts under the cursor — should not
@@ -80,99 +78,237 @@ export function IntakePanel({
   });
   const set = (patch: Record<string, unknown>) => mutation.mutate(patch);
 
+  // ONE QUESTION AT A TIME. Which kind of account; do they have forms; who
+  // they are. The open step is the first unanswered one; answered steps
+  // fold to their answer with "Change". Build it fills step 3 from the
+  // calls, so on a normal account a person answers two questions.
+  const step1Done = answers.path !== null;
+  const step2Done =
+    answers.forms_built === true
+      ? answers.uploaded_forms.length > 0
+      : answers.forms_built === false
+        ? answers.wanted_forms.length > 0
+        : false;
+  const step3Done = Boolean(answers.industry) && Boolean(answers.current_process);
+  const current = !step1Done ? 1 : !step2Done ? 2 : !step3Done ? 3 : 0;
+  const [opened, setOpened] = useState<number | null>(null);
+  const openStep = opened ?? current;
+  const busy = mutation.isPending;
+
   return (
     <Panel
       id="panel-intake"
       highlight={Boolean(highlight)}
-      title="Onboarding intake"
-      meta={status.done ? "Complete" : (status.next ?? undefined)}
+      title="Three questions"
+      meta={
+        current === 0
+          ? "Answered"
+          : `${[step1Done, step2Done, step3Done].filter(Boolean).length} of 3 · next: ${
+              current === 1 ? "which kind of account" : current === 2 ? "their forms" : "about them"
+            }`
+      }
       level="primary"
       collapsible
-      // Folded once every answer is in: it is read by the plan and the page,
-      // not by the person, from then on. Opens again the moment it is next.
-      defaultOpen={!status.done}
+      defaultOpen={current !== 0}
       collapseKey="deal:intake"
     >
-      <div className="space-y-3 px-3 py-2.5">
+      <div className="divide-y divide-border">
         {error ? (
-          <p role="alert" className="text-[12px] text-destructive">
+          <p role="alert" className="px-3 py-2 text-[12px] text-destructive">
             {error}
           </p>
         ) : null}
 
-        {/* The path. Everything downstream — the plan's words, phase 1's
-            shape, the gate — follows it, so it is the first thing asked. */}
-        <div
-          className={cn(
-            "flex flex-wrap items-center gap-2 rounded-md border px-2.5 py-2",
-            answers.path === null ? "border-primary/60 bg-primary/5" : "border-border bg-muted/20",
-          )}
+        <Step
+          n={1}
+          question="New account, or an existing one adding services?"
+          answer={
+            answers.path === "new_logo"
+              ? "New customer — first implementation"
+              : answers.path === "existing"
+                ? "Existing account — adding services"
+                : null
+          }
+          open={openStep === 1}
+          onOpen={() => setOpened(1)}
         >
-          <span className="text-[12px] font-medium">
-            {answers.path === null ? "Start here — which path is this?" : "Path"}
-          </span>
-          <Choice
-            active={answers.path === "new_logo"}
-            disabled={!editable || mutation.isPending}
-            onClick={() => choosePath("new_logo")}
-          >
-            New customer — first implementation
-          </Choice>
-          <Choice
-            active={answers.path === "existing"}
-            disabled={!editable || mutation.isPending}
-            onClick={() => choosePath("existing")}
-          >
-            Existing account — adding services
-          </Choice>
-          {answers.path === "existing" ? (
-            <span className="text-[11px] text-muted-foreground">
-              Phase 1 becomes a review of the form the integration reads from.
-            </span>
-          ) : null}
-        </div>
-
-        {/* The fork. */}
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-[12px] text-muted-foreground">
+          <div className="flex flex-wrap items-center gap-2">
+            <Choice
+              active={answers.path === "new_logo"}
+              disabled={!editable || busy}
+              onClick={() => {
+                choosePath("new_logo");
+                setOpened(null);
+              }}
+            >
+              New customer — first implementation
+            </Choice>
+            <Choice
+              active={answers.path === "existing"}
+              disabled={!editable || busy}
+              onClick={() => {
+                choosePath("existing");
+                setOpened(null);
+              }}
+            >
+              Existing account — adding services
+            </Choice>
+          </div>
+          <p className="mt-1.5 text-[11px] text-muted-foreground">
+            Everything after this follows the answer: the plan's shape, the deck's words, the gate
+            before phase 2.
             {answers.path === "existing"
+              ? " On an existing account, phase 1 is a review of the form the integration reads from."
+              : ""}
+          </p>
+        </Step>
+
+        <Step
+          n={2}
+          question={
+            answers.path === "existing"
               ? "Do they already have the form this connects to?"
-              : "Do they already have forms built?"}
-          </span>
-          <Choice
-            active={answers.forms_built === true}
-            disabled={!editable || mutation.isPending}
-            onClick={() => set({ forms_built: true })}
-          >
-            Yes — upload them
-          </Choice>
-          <Choice
-            active={answers.forms_built === false}
-            disabled={!editable || mutation.isPending}
-            onClick={() => set({ forms_built: false })}
-          >
-            No — starting fresh
-          </Choice>
-        </div>
+              : "Do they already have forms built?"
+          }
+          answer={
+            answers.forms_built === true
+              ? answers.uploaded_forms.length
+                ? `Yes — ${answers.uploaded_forms.length} uploaded`
+                : "Yes — nothing uploaded yet"
+              : answers.forms_built === false
+                ? answers.wanted_forms.length
+                  ? `No — first form: ${answers.wanted_forms[0]!.name}`
+                  : "No — no first form named yet"
+                : null
+          }
+          open={openStep === 2}
+          locked={!step1Done}
+          onOpen={() => setOpened(2)}
+        >
+          <div className="flex flex-wrap items-center gap-2">
+            <Choice
+              active={answers.forms_built === true}
+              disabled={!editable || busy}
+              onClick={() => set({ forms_built: true })}
+            >
+              Yes — upload them
+            </Choice>
+            <Choice
+              active={answers.forms_built === false}
+              disabled={!editable || busy}
+              onClick={() => set({ forms_built: false })}
+            >
+              No — starting fresh
+            </Choice>
+          </div>
+          {answers.forms_built === true ? (
+            <div className="mt-2">
+              <HaveForms dealId={dealId} answers={answers} editable={editable} />
+            </div>
+          ) : null}
+          {answers.forms_built !== null ? (
+            <div className="mt-2">
+              <WantedForms answers={answers} editable={editable} busy={busy} onSet={set} />
+            </div>
+          ) : null}
+        </Step>
 
-        {answers.forms_built === true ? (
-          <HaveForms dealId={dealId} answers={answers} editable={editable} />
-        ) : null}
-
-        {answers.forms_built === false ? (
-          <NoForms answers={answers} editable={editable} busy={mutation.isPending} onSet={set} />
-        ) : null}
-
-        {answers.forms_built !== null ? (
-          <WantedForms
-            answers={answers}
-            editable={editable}
-            busy={mutation.isPending}
-            onSet={set}
-          />
-        ) : null}
+        <Step
+          n={3}
+          question="Who are they? Industry, size, people in the field, the process today."
+          hint="Build it fills these from the calls. Check them; change what is wrong."
+          answer={
+            step3Done
+              ? [
+                  answers.industry,
+                  answers.company_size,
+                  answers.field_users ? `${answers.field_users} in the field` : null,
+                ]
+                  .filter(Boolean)
+                  .join(" · ")
+              : answers.industry
+                ? `${answers.industry} — the process today is still blank`
+                : null
+          }
+          open={openStep === 3}
+          locked={!step2Done}
+          onOpen={() => setOpened(3)}
+        >
+          <NoForms answers={answers} editable={editable} busy={busy} onSet={set} />
+        </Step>
       </div>
     </Panel>
+  );
+}
+
+/** One numbered question: folded to its answer once given, open when it is next. */
+function Step({
+  n,
+  question,
+  hint,
+  answer,
+  open,
+  locked = false,
+  onOpen,
+  children,
+}: {
+  n: number;
+  question: string;
+  hint?: string;
+  answer: string | null;
+  open: boolean;
+  locked?: boolean;
+  onOpen: () => void;
+  children: React.ReactNode;
+}) {
+  const done = answer !== null;
+  return (
+    <div className={cn("px-3 py-2.5", open && "bg-primary/5")}>
+      <div className="flex items-start gap-2.5">
+        <span
+          className={cn(
+            "mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border text-[11px] font-semibold",
+            done
+              ? "border-status-ontrack-foreground bg-status-ontrack text-status-ontrack-foreground"
+              : open
+                ? "border-primary bg-primary text-primary-foreground"
+                : "border-border text-muted-foreground",
+          )}
+        >
+          {done ? <Check className="h-3 w-3" strokeWidth={3} /> : n}
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
+            <p
+              className={cn("text-[13px] font-medium", locked && !open && "text-muted-foreground")}
+            >
+              {question}
+            </p>
+            {!open && (done || !locked) ? (
+              <button
+                type="button"
+                onClick={onOpen}
+                className="text-[11px] text-muted-foreground underline decoration-dotted hover:text-foreground"
+              >
+                {done ? "Change" : "Answer"}
+              </button>
+            ) : null}
+          </div>
+          {!open && done ? (
+            <p className="mt-0.5 text-[12px] text-muted-foreground">{answer}</p>
+          ) : null}
+          {!open && !done && locked ? (
+            <p className="mt-0.5 text-[11px] text-muted-foreground">After the one above.</p>
+          ) : null}
+          {open ? (
+            <div className="mt-2">
+              {hint ? <p className="mb-2 text-[11px] text-muted-foreground">{hint}</p> : null}
+              {children}
+            </div>
+          ) : null}
+        </div>
+      </div>
+    </div>
   );
 }
 
