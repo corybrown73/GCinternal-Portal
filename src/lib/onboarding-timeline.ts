@@ -77,7 +77,7 @@ export const PATH_LABEL: Record<OnboardingPath, string> = {
   new_logo: "New customer — first implementation",
   existing: "Existing account — adding services",
   dm_conversion: "Device Magic → GoCanvas conversion",
-  field_fusion: "Field Fusion — training journey",
+  field_fusion: "Field Fusion — GoCanvas training, forms already built",
 };
 /** Short, for a chip on a board. */
 export const PATH_CHIP: Record<OnboardingPath, string> = {
@@ -354,12 +354,11 @@ export const DM_CONVERSION_PLAN: readonly MilestoneSpec[] = [
 ];
 
 /**
- * No form to build: a training journey. Same keys and days as the seven-day
- * plan, so every screen and every date keeps working; the words are about
- * the crew learning the app on their own jobs. Two short sessions, two days
- * of real jobs in between, and a live day when everyone trained is running
- * it. Field Fusion accounts always take this plan; any other account takes it
- * when the person says "no form — they just need training".
+ * No form to build: GoCanvas training. The forms already exist — a Field
+ * Fusion account ships with them, and some accounts just buy training — so
+ * the plan is three thirty-minute calls over two weeks, with real jobs in
+ * between. Same keys as the seven-day plan, so every screen and every date
+ * keeps working; the days stretch to ten.
  */
 export const TRAINING_PLAN: readonly MilestoneSpec[] = [
   {
@@ -368,22 +367,22 @@ export const TRAINING_PLAN: readonly MilestoneSpec[] = [
     label: "Welcome aboard",
     owner: "gocanvas",
     kind: "milestone",
-    detail: "Welcome email the same day, with the training call invite already in it.",
+    detail: "Welcome email the same day, with the first training call invite already in it.",
     icon: "Flag",
   },
   {
     key: "kickoff",
     day: 1,
-    label: "Training call",
+    label: "Training call 1 — the basics",
     owner: "both",
     kind: "call",
-    minutes: 60,
+    minutes: 30,
     detail:
-      "Your account, on your phones, with your jobs. We walk the crew through the app on a real job, together — no slides.",
+      "Your account, your phones, your forms. Open a job, fill it in, submit it, and watch it arrive in the office — on a real job, together.",
     homework: [
       "Send us the name and email of everyone who needs a login",
-      "Pick one person in the field to run the first real job",
-      "Tell us which job they will run it on",
+      "Pick one person in the field to run the first real jobs",
+      "Run two or three real jobs before the next call",
     ],
     icon: "PhoneCall",
   },
@@ -394,44 +393,49 @@ export const TRAINING_PLAN: readonly MilestoneSpec[] = [
     owner: "client",
     kind: "homework",
     detail:
-      "The three things above. Fifteen minutes, and the second session starts from your real people and your real jobs.",
+      "The three things above. Fifteen minutes to send the list; the real jobs are the job you were doing anyway.",
     icon: "ClipboardCheck",
   },
   {
     key: "working",
-    day: 3,
-    label: "Second session",
+    day: 5,
+    label: "Training call 2 — real jobs, questions answered",
     owner: "both",
     kind: "call",
     minutes: 30,
     detail:
-      "Thirty minutes, hands on the phones. The crew runs a job start to finish and the office watches it arrive. Questions answered as they come up.",
-    homework: ["Run it on real jobs for two days", "Write down anything that slows anyone down"],
+      "Your first real submissions in front of us. What went well, what slowed anyone down, and the next things to learn — photos, dispatch, reference data, whatever your forms use.",
+    homework: [
+      "Everyone trained runs it on their jobs for a week",
+      "Write down what slows anyone down",
+    ],
     icon: "Wrench",
   },
   {
     key: "fieldtest",
-    day: 4,
-    throughDay: 5,
-    label: "Real jobs, on your own",
+    day: 6,
+    throughDay: 9,
+    label: "A week of real jobs, on your own",
     owner: "client",
     kind: "build",
     detail:
-      "The crew runs the app on real jobs without us on the call. What slows them down is what we cover next.",
+      "The crew runs it on real jobs without us on the call. What slows them down is what the last call covers.",
     icon: "HardHat",
   },
   {
     key: "adjust",
-    day: 6,
-    label: "Questions & tune-up",
+    day: 10,
+    label: "Training call 3 — the office side, and what's next",
     owner: "both",
-    kind: "build",
-    detail: "What the real jobs raised. A setting changed, a shortcut shown, rarely more.",
+    kind: "call",
+    minutes: 30,
+    detail:
+      "Reports and exports for the office, the questions from the week, and who trains the next hire — so it stays yours.",
     icon: "Target",
   },
   {
     key: "live",
-    day: 7,
+    day: 10,
     label: "Your crew is live",
     owner: "both",
     kind: "milestone",

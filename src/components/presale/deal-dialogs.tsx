@@ -233,7 +233,9 @@ export function NewDealDialog() {
                   <option value="new_logo">New customer — first implementation</option>
                   <option value="existing">Existing account — adding services</option>
                   <option value="dm_conversion">Device Magic → GoCanvas conversion</option>
-                  <option value="field_fusion">Field Fusion — training journey</option>
+                  <option value="field_fusion">
+                    Field Fusion — GoCanvas training, forms built
+                  </option>
                 </select>
                 {suggestedFf && draft.path !== "field_fusion" ? (
                   <p className="mt-0.5 text-[11px] text-amber-700 dark:text-amber-400">
@@ -243,7 +245,7 @@ export function NewDealDialog() {
                       className="underline"
                       onClick={() => set({ path: "field_fusion" })}
                     >
-                      make this a training journey
+                      make this GoCanvas training
                     </button>
                     ?
                   </p>

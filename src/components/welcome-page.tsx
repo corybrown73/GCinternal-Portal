@@ -366,7 +366,7 @@ function screenList(view: WelcomeView): Screen[] {
       label: t.training
         ? t.phases.length || t.alongside.length
           ? "Phase 1 · training"
-          : "The training week"
+          : "The two weeks"
         : t.phases.length || t.alongside.length
           ? "Phase 1 · the form"
           : "The seven days",
@@ -703,7 +703,7 @@ function SharedBar({ view, icsBase }: { view: WelcomeView; icsBase: string | nul
         <DayChip view={view} />
         <span className="wp-toolbar-meta">
           {view.timeline.training
-            ? "Your training plan"
+            ? "Your GoCanvas training plan"
             : view.path === "existing"
               ? "Your services plan"
               : view.path === "dm_conversion"
@@ -1053,7 +1053,7 @@ function Cover({ view, qr }: { view: WelcomeView; qr?: { url: string; dataUrl: s
         <div className="wp-cover-text">
           <p className="wp-eyebrow">
             {t.training
-              ? "Training plan"
+              ? "GoCanvas training plan"
               : view.path === "existing"
                 ? "Services plan"
                 : view.path === "dm_conversion"
@@ -1092,7 +1092,7 @@ function Cover({ view, qr }: { view: WelcomeView; qr?: { url: string; dataUrl: s
               {view.path === "existing"
                 ? `Welcome back as of ${shortDay(t.closeDate)}. Form review ${shortDay(t.milestones[1]?.date ?? t.closeDate)}. Your form ready for the integration by ${shortDay(t.liveDate)} — optimised with you, not for you.`
                 : t.training
-                  ? `Welcome aboard as of ${shortDay(t.closeDate)}. Training call ${shortDay(t.milestones[1]?.date ?? t.closeDate)}. Your crew live by ${shortDay(t.liveDate)} — trained on your jobs, not ours.`
+                  ? `Welcome aboard as of ${shortDay(t.closeDate)}. First training call ${shortDay(t.milestones[1]?.date ?? t.closeDate)}. Three short calls over two weeks, and your crew is live by ${shortDay(t.liveDate)} — trained on your jobs, not ours.`
                   : `Welcome aboard as of ${shortDay(t.closeDate)}. Kickoff ${shortDay(t.milestones[1]?.date ?? t.closeDate)}. Your first form in the field by ${shortDay(t.liveDate)} — built with you, not for you.`}
             </T>
           </p>
@@ -1178,7 +1178,7 @@ function Team({ view, page }: { view: WelcomeView; page: number }) {
       does:
         t.leadCard?.bio ??
         (view.timeline.training
-          ? "Runs both sessions, trains the crew on real jobs, watches the first submissions."
+          ? "Runs all three calls, trains the crew on real jobs, watches the first submissions."
           : view.path === "existing"
             ? "Runs both calls, reviews the form with you, watches the first real submissions through."
             : "Runs both calls, builds the first form with you, watches the first submissions."),
@@ -1239,7 +1239,7 @@ function Team({ view, page }: { view: WelcomeView; page: number }) {
       eyebrow="Your team"
       title="Two teams,"
       accent="one plan"
-      lede="Small on purpose. Everyone here has a job in the next seven days."
+      lede={`Small on purpose. Everyone here has a job in the next ${view.timeline.training ? "two weeks" : "seven days"}.`}
       band="Over fifteen years of onboarding field teams says this is what works, and what gets value fast. Questions go to your onboarding lead by name."
       bandIcon="PhoneCall"
     >
@@ -1445,8 +1445,8 @@ function Plan({ view, page }: { view: WelcomeView; page: number }) {
       title={
         t.training
           ? t.phases.length
-            ? "Phase 1: seven days to a"
-            : "Seven days to a"
+            ? "Phase 1: two weeks to a"
+            : "Two weeks to a"
           : existing
             ? "Phase 1: your form,"
             : t.phases.length
@@ -1458,7 +1458,7 @@ function Plan({ view, page }: { view: WelcomeView; page: number }) {
       }
       lede={
         t.training
-          ? "Two short sessions on your phones, a little homework, two days of real jobs in between. Every day below has an owner."
+          ? "Three thirty-minute calls, a little homework, a week of real jobs in between. Every step below has an owner."
           : existing
             ? `A review call, a short optimisation session, a few real jobs through it. ${["", "One", "Two", "Three", "Four", "Five", "Six", "Seven"][days] ?? days} business days, and every day below has an owner.`
             : "Two short working sessions, a little homework, one crew on real jobs. Every day below has an owner."
@@ -1929,8 +1929,8 @@ function FirstForm({ view, page }: { view: WelcomeView; page: number }) {
       eyebrow="How we get there"
       title="From today to"
       accent={
-        existing
-          ? `day ${["", "one", "two", "three", "four", "five", "six", "seven"][lastDay] ?? lastDay}`
+        existing || view.timeline.training
+          ? `day ${["", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"][lastDay] ?? lastDay}`
           : "day seven"
       }
       band={
@@ -2110,6 +2110,9 @@ function Business({
   const planEnd = t.phases.length ? (t.phases[t.phases.length - 1]?.endsOn ?? null) : null;
   const kickoff = t.milestones.find((m) => m.key === "kickoff");
   const working = t.milestones.find((m) => m.key === "working");
+  // The training plan's third call: the last step before live, when it is a call.
+  const adjust = t.milestones.find((m) => m.key === "adjust");
+  const third = adjust && adjust.kind === "call" ? adjust : null;
   const integ = t.integration;
   const next = view.nextUseCases.slice(0, 3);
   return (
@@ -2117,7 +2120,7 @@ function Business({
       k="business"
       page={page}
       eyebrow="Let's get into business"
-      title="Two calls, then"
+      title={third ? "Three calls, then" : "Two calls, then"}
       accent="it's yours"
       band={
         planEnd
@@ -2145,7 +2148,7 @@ function Business({
               <p>
                 <T k="business.call1.body">
                   {t.training
-                    ? "Your account, your phones, your jobs. We walk the crew through a real job on the app, together. You leave with three homework items."
+                    ? "Your account, your phones, your forms. Open a job, fill it in, submit it, and watch it arrive — on a real job, together. You leave with three homework items."
                     : view.path === "existing"
                       ? "Walk the form the integration reads from, field by field, and decide together what it needs. You leave with three homework items."
                       : "Meet, agree how we work, and build the first form live on the call. You leave with three homework items."}
@@ -2170,7 +2173,7 @@ function Business({
               <p>
                 <T k="business.call2.body">
                   {t.training
-                    ? "Your hands on the phones. The crew runs a job start to finish while the office watches it arrive; every question answered as it comes up."
+                    ? "Your first real submissions in front of us. What went well, what slowed anyone down, and the next things to learn — photos, dispatch, whatever your forms use."
                     : view.path === "existing"
                       ? "Your hands on the keyboard. The fields the integration needs, named the way the other system names them, then a few real jobs through it."
                       : "Your hands on the keyboard. Finish the form, add the logic and notifications, hand it to the field tester."}
@@ -2178,6 +2181,30 @@ function Business({
               </p>
             </div>
           </div>
+          {third ? (
+            <div className="wp-call">
+              <Tile name="Target" size="lg" tone="blue" />
+              <div>
+                <p className="wp-call-when">
+                  {whenLabel(third, t.timezone)} · {third.minutes ?? 30} min
+                  {icsBase ? (
+                    <a className="wp-call-ics" href={`${icsBase}?event=adjust`}>
+                      <CalendarPlus className="h-3 w-3" /> Add to calendar
+                    </a>
+                  ) : null}
+                </p>
+                <h3>
+                  <T k="business.call3.head">{third.label}</T>
+                </h3>
+                <p>
+                  <T k="business.call3.body">
+                    Reports and exports for the office, the questions from the week, and who trains
+                    the next hire — so it stays yours.
+                  </T>
+                </p>
+              </div>
+            </div>
+          ) : null}
           <div className="wp-after">
             {t.phases.length ? (
               <>
@@ -2281,9 +2308,16 @@ function phaseOneTime(t: Timeline, kickoffMinutes: number, workingMinutes: numbe
   const serviceCalls = t.alongside.flatMap((svc) =>
     svc.milestones.filter((m) => m.kind === "call" && m.minutes),
   );
+  // The training plan's third call, when there is one.
+  const extra = t.milestones.filter(
+    (m) => m.kind === "call" && m.key !== "kickoff" && m.key !== "working",
+  );
   const minutes =
-    kickoffMinutes + workingMinutes + serviceCalls.reduce((sum, m) => sum + (m.minutes ?? 0), 0);
-  const calls = 2 + serviceCalls.length;
+    kickoffMinutes +
+    workingMinutes +
+    extra.reduce((sum, m) => sum + (m.minutes ?? 0), 0) +
+    serviceCalls.reduce((sum, m) => sum + (m.minutes ?? 0), 0);
+  const calls = 2 + extra.length + serviceCalls.length;
   const homework = 15 + 5 * t.alongside.length;
   const h = Math.floor(minutes / 60);
   const m = minutes % 60;

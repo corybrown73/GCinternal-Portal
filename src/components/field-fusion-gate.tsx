@@ -67,8 +67,8 @@ export function FieldFusionGate({ deal, editable }: { deal: DealData; editable: 
     return (
       <div className="rounded-md border border-status-ontrack-foreground/30 bg-status-ontrack/40 px-3 py-2 text-[12px] text-status-ontrack-foreground">
         <Check className="mr-1 inline h-3.5 w-3.5" strokeWidth={3} />
-        Field Fusion set up and handed to implementation <When value={ff.handed_off_at} />. Their
-        first call is a training call; the plan below is the training week.
+        Field Fusion set up and handed to implementation <When value={ff.handed_off_at} />. The
+        forms are already built; the plan below is GoCanvas training — three calls over two weeks.
       </div>
     );
   }
@@ -92,9 +92,9 @@ export function FieldFusionGate({ deal, editable }: { deal: DealData; editable: 
     >
       <div className="space-y-3 px-3 py-2.5">
         <p className="text-[12px] text-muted-foreground">
-          Field Fusion ships set up, so there is no form to build. Confirm the two things below,
-          write what implementation should know, and hand it over. Implementation&apos;s first call
-          is a training call — the plan on this page is already the training week.
+          Field Fusion ships with its forms built, so there is nothing to build. Confirm the two
+          things below, write what implementation should know, and hand it over. Implementation runs
+          GoCanvas training — three thirty-minute calls over two weeks — not a kickoff.
         </p>
         <ul className="space-y-1.5">
           {checks.map((c) => (

@@ -44,7 +44,7 @@ export function guideSteps(input: {
     ...(input.today ? { today: input.today } : {}),
   });
   const t = timelineFor(a, close.date);
-  const calls = t.milestones.filter((m) => m.key === "kickoff" || m.key === "working");
+  const calls = t.milestones.filter((m) => m.kind === "call");
   const services = a.timeline.services ?? [];
   // Training only has no form to name: the intake is done when the facts are.
   const hasForm = isTrainingOnly(a) || a.wanted_forms.length > 0 || a.uploaded_forms.length > 0;
@@ -97,7 +97,7 @@ export function guideSteps(input: {
     {
       key: "times",
       label: "Set the call times",
-      hint: "Both calls, with a time and a zone, so the invites can go out.",
+      hint: `${calls.length === 3 ? "All three" : "Both"} calls, with a time and a zone, so the invites can go out.`,
       done: calls.length > 0 && calls.every((m) => m.time),
       panel: { key: "deal:plan", id: "panel-plan" },
     },

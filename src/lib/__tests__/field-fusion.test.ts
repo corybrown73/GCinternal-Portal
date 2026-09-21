@@ -17,7 +17,7 @@ import { deliverablesFor } from "../deliverables";
 describe("the training plan — no form to build", () => {
   it("keeps the seven-day keys so every screen and every date still works", () => {
     expect(TRAINING_PLAN.map((m) => m.key)).toEqual(SEVEN_DAY_PLAN.map((m) => m.key));
-    expect(TRAINING_PLAN.map((m) => m.day)).toEqual(SEVEN_DAY_PLAN.map((m) => m.day));
+    expect(TRAINING_PLAN[TRAINING_PLAN.length - 1]!.day).toBe(10);
   });
 
   it("is what a Field Fusion account gets, and what any account gets when training only", () => {
@@ -30,7 +30,11 @@ describe("the training plan — no form to build", () => {
     expect(planFor("new_logo")).toBe(SEVEN_DAY_PLAN);
   });
 
-  it("speaks of a training call, not a kickoff, and a crew that is live, not a form", () => {
+  it("is three thirty-minute calls over two weeks, and a crew that is live, not a form", () => {
+    const calls = TRAINING_PLAN.filter((m) => m.kind === "call");
+    expect(calls).toHaveLength(3);
+    expect(calls.map((m) => m.minutes)).toEqual([30, 30, 30]);
+    expect(calls.map((m) => m.day)).toEqual([1, 5, 10]);
     const kickoff = TRAINING_PLAN.find((m) => m.key === "kickoff")!;
     expect(kickoff.label).toMatch(/training call/i);
     expect(kickoff.homework).toHaveLength(3);
@@ -42,8 +46,9 @@ describe("the training plan — no form to build", () => {
   it("flows through the timeline and flags it as training", () => {
     const t = buildTimeline({ closeDate: "2026-09-21", path: "field_fusion" });
     expect(t.training).toBe(true);
-    expect(t.milestones[1]!.label).toBe("Training call");
-    expect(t.liveDate).toBe("2026-09-30");
+    expect(t.milestones[1]!.label).toMatch(/^Training call 1/);
+    // Ten business days from a Monday close: the Monday two weeks on.
+    expect(t.liveDate).toBe("2026-10-05");
     const t2 = buildTimeline({ closeDate: "2026-09-21", path: "new_logo", trainingOnly: true });
     expect(t2.training).toBe(true);
     expect(buildTimeline({ closeDate: "2026-09-21", path: "new_logo" }).training).toBe(false);

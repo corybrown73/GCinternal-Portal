@@ -183,7 +183,7 @@ export function IntakePanel({
               : answers.path === "dm_conversion"
                 ? " On a conversion, the first form is their most-used Device Magic form, rebuilt in GoCanvas and run alongside it until it is proven."
                 : answers.path === "field_fusion"
-                  ? " Field Fusion ships set up: there is no form to build. Liesl confirms it is working, then hands the account to implementation for a training call — not a kickoff — and a training week."
+                  ? " Field Fusion ships with its forms built. Liesl confirms it is working, then hands the account to implementation for GoCanvas training — three thirty-minute calls over two weeks — not a kickoff."
                   : ""}
           </p>
         </Step>
@@ -198,7 +198,7 @@ export function IntakePanel({
           answer={
             training
               ? answers.path === "field_fusion"
-                ? "Training only — Field Fusion has no form to build"
+                ? "GoCanvas training — the forms are already built"
                 : "Training only — no form to build"
               : answers.forms_built === true
                 ? answers.uploaded_forms.length
@@ -216,8 +216,8 @@ export function IntakePanel({
         >
           {answers.path === "field_fusion" ? (
             <p className="text-[12px] text-muted-foreground">
-              Field Fusion is set up before the handoff, so there is no form to build. Phase 1 is
-              the training plan: a training call, a second session, real jobs in between.
+              Field Fusion is set up before the handoff and its forms are already built. Phase 1 is
+              GoCanvas training: three thirty-minute calls over two weeks, real jobs in between.
             </p>
           ) : (
             <div className="flex flex-wrap items-center gap-2">
@@ -243,7 +243,7 @@ export function IntakePanel({
                     !training &&
                     (answers.wanted_forms.length > 0 || answers.uploaded_forms.length > 0) &&
                     !window.confirm(
-                      "Training only rebuilds phase 1 as a training week — no first form. The forms already named stay on the record. Continue?",
+                      "Training only rebuilds phase 1 as two weeks of training — no first form. The forms already named stay on the record. Continue?",
                     )
                   )
                     return;
@@ -257,8 +257,8 @@ export function IntakePanel({
           )}
           {training && answers.path !== "field_fusion" ? (
             <p className="mt-1.5 text-[11px] text-muted-foreground">
-              Phase 1 becomes the training plan: a training call, a second session, two days of real
-              jobs, live on day seven. Anything the SOW bought still follows in phase 2.
+              Phase 1 becomes GoCanvas training: three thirty-minute calls over two weeks, real jobs
+              in between, live at the end. Anything the SOW bought still follows in phase 2.
             </p>
           ) : null}
           {!training && answers.forms_built === true ? (

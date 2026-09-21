@@ -411,7 +411,7 @@ async function notifyAssignee(a: {
           <li><b>Write what implementation should know</b> — anything the calls did not say — then press <b>Hand to implementation</b>. The use case and goals from the calls go with it.</li>
         </ol>
         <p><a href="${deal}" style="background:#12509b;color:#fff;padding:10px 22px;border-radius:6px;text-decoration:none;font-weight:600">Open the deal</a></p>
-        <p style="color:#556477;font-size:13px">Implementation's first call is a training call, not a kickoff. Nothing goes to them until you press the button.</p>
+        <p style="color:#556477;font-size:13px">The forms are already built, so implementation runs GoCanvas training — three thirty-minute calls over two weeks — not a kickoff. Nothing goes to them until you press the button.</p>
         <p style="font-size:12px;color:#888">GoCanvas Handoff Hub</p>
       </div>`,
     });
@@ -451,7 +451,7 @@ async function notifyAssignee(a: {
         }
         <p style="color:#556477;font-size:13px">${
           a.training
-            ? "The training call is the next business day. The crew is live within seven."
+            ? "The first training call is the next business day. Three thirty-minute calls over two weeks, and the crew is live."
             : "Kickoff is the next business day. The form is live within seven."
         }</p>
         <p style="font-size:12px;color:#888">GoCanvas Handoff Hub</p>
