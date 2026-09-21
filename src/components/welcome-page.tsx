@@ -390,7 +390,7 @@ function screenList(view: WelcomeView): Screen[] {
       ? [
           {
             key: "help",
-            label: "Get started on your own",
+            label: "Jump start your journey",
             render: (a: ScreenArgs) => <HelpScreen key="help" view={view} page={a.page} />,
           } satisfies Screen,
         ]
@@ -1763,11 +1763,11 @@ function HelpScreen({ view, page }: { view: WelcomeView; page: number }) {
     <Frame
       k="help"
       page={page}
-      eyebrow="Get started on your own"
-      title="The features you asked about,"
-      accent="ready when you are"
-      lede="From your calls with us: the things you said would make the difference, and how to do each one yourself. Open one, try it on a real job, and bring the question to the next call."
-      band="Every article here is one you asked about. Between calls, this is where to start."
+      eyebrow="Jump start your journey"
+      title="Key features"
+      accent="your team discussed"
+      lede="From your calls with us: the features your team said would make the difference, and how to do each one yourself. Open one, try it on a real job, and bring the question to the next call."
+      band="Every article here is one your team asked about. Between calls, this is where to start."
       bandIcon="BookOpen"
     >
       <div className="wp-help">

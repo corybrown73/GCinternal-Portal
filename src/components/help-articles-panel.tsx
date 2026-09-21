@@ -112,14 +112,14 @@ export function HelpPicksPanel({ deal, editable }: { deal: DealData; editable: b
   return (
     <Panel
       id="panel-help"
-      title="Get started on your own"
+      title="Jump start your journey"
       meta={
         picks.length
-          ? `${picks.length} article${picks.length === 1 ? "" : "s"} on the customer's page · ${openedCount} opened`
-          : "Picked from the calls once the brief is written"
+          ? `${picks.length} help article${picks.length === 1 ? "" : "s"} on the customer's page · ${openedCount} opened`
+          : "Help articles for the key features the calls discussed — press Pick again"
       }
       collapsible
-      defaultOpen={picks.length > 0}
+      defaultOpen
       collapseKey="deal:help"
       action={
         editable ? (
@@ -138,8 +138,9 @@ export function HelpPicksPanel({ deal, editable }: { deal: DealData; editable: b
     >
       {picks.length === 0 ? (
         <p className="px-3 py-2 text-[12px] text-muted-foreground">
-          Nothing picked yet. The picker reads the brief and the call notes for the features the
-          customer said would make the difference, and puts the help articles on their page.
+          Nothing picked yet. Press Pick again: the picker reads the brief and the call notes for
+          the key features your team discussed with them, and puts the help articles on their page
+          as &ldquo;Jump start your journey&rdquo;.
         </p>
       ) : (
         <ul className="divide-y divide-border">
