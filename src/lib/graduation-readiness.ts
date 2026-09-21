@@ -178,7 +178,7 @@ export function graduationReadiness(record: Customer360, impl: ReadinessImpl): R
               id: "value",
               label: "Value",
               state: "not_applicable",
-              reason: `Measured, and confirmation is not expected before Validate / Iterate (currently ${stageLabel(
+              reason: `Measured, and confirmation is not expected before ${stageLabel("validate-iterate")} (currently ${stageLabel(
                 impl.current_stage,
               )})`,
               tab: "overview",

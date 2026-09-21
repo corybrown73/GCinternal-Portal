@@ -85,7 +85,8 @@ describe("buildProjectTimeline — reading the record", () => {
       "Discovery",
       "Design",
       "Build",
-      "Validate / Iterate",
+      // A known key is shown under the lifecycle's own name, whatever the template called it.
+      "Pilot",
       "Launch",
     ]);
     expect(t.total).toBe(5);

@@ -70,9 +70,9 @@ export const PRE_HANDOFF_STAGE_LABELS: Record<string, string> = {
 export const LIFECYCLE_STAGES: LifecycleStage[] = [
   {
     id: "handoff",
-    label: "Handoff",
+    label: "Pre-kickoff",
     intent:
-      "Sales-to-implementation transfer of context, promises and risks accepted by the Technical Implementation Specialist (TIS).",
+      "The deal has closed. Call notes in, brief generated, welcome deck and the customer's link ready.",
     phase: "intake",
 
     leads: ["Implementation"],
@@ -81,22 +81,23 @@ export const LIFECYCLE_STAGES: LifecycleStage[] = [
   },
   {
     id: "plan-internal",
-    label: "Plan Internally",
-    intent: "Internal implementation plan, owners and target dates committed.",
+    label: "Kickoff",
+    intent: "The kickoff call is booked or held: the plan agreed, the first form started together.",
     phase: "delivery",
     leads: ["Implementation"],
   },
   {
     id: "align-external",
-    label: "Align Externally",
-    intent: "Customer stakeholders, success criteria and decision rights confirmed.",
+    label: "Align externally",
+    intent:
+      "Customer stakeholders, success criteria and decision rights confirmed. Hidden by default.",
     phase: "delivery",
     leads: ["Implementation"],
   },
   {
     id: "build",
     label: "Build",
-    intent: "Configuration, integrations and data migration executed.",
+    intent: "The working session held; the form finished and in the field tester's hands.",
     phase: "delivery",
     leads: ["Implementation"],
     overlay: {
@@ -106,15 +107,15 @@ export const LIFECYCLE_STAGES: LifecycleStage[] = [
   },
   {
     id: "validate-iterate",
-    label: "Validate / Iterate",
-    intent: "UAT and iteration loops closed; readiness sign-off complete.",
+    label: "Pilot",
+    intent: "One crew runs the form on real jobs; what they say is what gets fixed.",
     phase: "delivery",
     leads: ["Implementation"],
   },
   {
     id: "launch",
     label: "Launch",
-    intent: "Go-live executed and hypercare window opened.",
+    intent: "Live for the whole team. Integrations, PDFs and training follow on the plan.",
     phase: "delivery",
     leads: ["Implementation"],
   },
@@ -122,15 +123,14 @@ export const LIFECYCLE_STAGES: LifecycleStage[] = [
     id: "adopt",
     label: "Adopt",
     intent:
-      "Usage breadth and depth at the agreed bar, with success criteria showing measured movement.",
+      "Usage breadth and depth at the agreed bar, with success criteria showing measured movement. Hidden by default.",
     phase: "value",
     leads: ["Implementation"],
   },
   {
     id: "graduate-to-cs",
-    label: "Handover to Customer Success",
-    intent:
-      "Ready to hand over confirmed and accepted by Customer Success; account self-sufficient.",
+    label: "Complete",
+    intent: "Everything on the plan is live and accepted; the account is Customer Success's.",
     phase: "steady-state",
     leads: ["Implementation"],
     supports: ["Customer Success"],
@@ -176,6 +176,12 @@ export type StageOverride = {
 };
 
 let stageOverrides: Record<string, StageOverride> = {};
+let hiddenStages: Set<string> = new Set();
+
+/** True for a stage switched off in the admin screen: off the rail, never offered as next. */
+export function isStageHidden(key: string | null | undefined): boolean {
+  return Boolean(key) && hiddenStages.has(key as string);
+}
 
 /** The compiled-in list as written, so the live one can be rebuilt from it. */
 const PRISTINE_STAGES: readonly LifecycleStage[] = [...LIFECYCLE_STAGES];
@@ -213,6 +219,7 @@ export function applyStageOverrides(
     if (row.hidden) hidden.add(row.key);
   }
   stageOverrides = next;
+  hiddenStages = hidden;
 
   const byId = new Map(PRISTINE_STAGES.map((s) => [s.id as string, s]));
   const live: LifecycleStage[] = [];
@@ -242,6 +249,7 @@ export function applyStageOverrides(
 /** Back to the compiled-in list. The test seam, and the flag-off state. */
 export function resetStageOverrides(): void {
   stageOverrides = {};
+  hiddenStages = new Set();
   LIFECYCLE_STAGES.splice(0, LIFECYCLE_STAGES.length, ...PRISTINE_STAGES);
 }
 

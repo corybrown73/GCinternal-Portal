@@ -19,4 +19,4 @@ export const TIS_FULL = "Technical Implementation Specialist";
  * renamed; only what a reader sees is unified, on the canonical label already
  * declared in lifecycle.ts.
  */
-export const FINAL_STAGE_LABEL = "Handover to Customer Success";
+export const FINAL_STAGE_LABEL = "Complete";

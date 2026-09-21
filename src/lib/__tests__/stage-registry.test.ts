@@ -7,7 +7,7 @@ afterEach(() => resetStageOverrides());
 
 describe("stage label configuration", () => {
   it("renders the compiled-in label when nothing is configured", () => {
-    expect(stageLabel("plan-internal")).toBe("Plan Internally");
+    expect(stageLabel("plan-internal")).toBe("Kickoff");
   });
 
   it("renders a configured rename — the thing that did not work", () => {
@@ -53,7 +53,7 @@ describe("stage label configuration", () => {
   it("falls back to the compiled list when configuration is empty", () => {
     // A failed config read must leave the app readable, not blank every label.
     applyStageOverrides([]);
-    expect(stageLabel("graduate-to-cs")).toBe("Handover to Customer Success");
+    expect(stageLabel("graduate-to-cs")).toBe("Complete");
   });
 
   it("still renders an unknown stage as itself", () => {

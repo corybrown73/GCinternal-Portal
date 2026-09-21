@@ -2187,6 +2187,14 @@ export async function advanceStage(args: {
     .single();
   if (readError || !impl) throw new Error(readError?.message ?? "Implementation not found");
 
+  // The same list the button was drawn from: the configured order, minus
+  // the stages an admin hid. Computed from the compiled-in eight, "next"
+  // was a hidden stage and every move was refused with a key nobody sees.
+  {
+    const { applyStageOverrides } = await import("./lifecycle");
+    const { loadLifecycleStages } = await import("./lifecycle-stages.server");
+    applyStageOverrides((await loadLifecycleStages()) as never);
+  }
   const current = normalizeStage(impl.current_stage);
   const expected = nextLifecycleStage(current);
   if (!expected) {

@@ -1,5 +1,5 @@
 import { normalizeStage, stageLabel } from "./hub-format";
-import { LIFECYCLE_STAGES } from "./lifecycle";
+import { isStageHidden, LIFECYCLE_STAGES } from "./lifecycle";
 import { datePace, dwellPace, worstPace, type Pace } from "./pace";
 
 /**
@@ -124,7 +124,14 @@ export function buildProjectTimeline(
   input: TimelineInput,
   now: Date = new Date(),
 ): ProjectTimeline {
-  const rows = [...(input.stages ?? [])].sort((a, b) => a.position - b.position);
+  // A journey template names its stages itself ("Plan Internally"), and the
+  // template was written before the stages were renamed: a known key is
+  // shown under the configured name, and a hidden stage is not shown at all,
+  // so the rail, the button and the record use one word for one thing.
+  const rows = [...(input.stages ?? [])]
+    .filter((r) => !isStageHidden(normalizeStage(r.stage_key) ?? r.stage_key))
+    .sort((a, b) => a.position - b.position)
+    .map((r) => ({ ...r, name: normalizeStage(r.stage_key) ? stageLabel(r.stage_key) : r.name }));
   const isAddOn = Boolean(input.parent_implementation_id);
   const launch = datePace(input.target_launch_date, input.actual_launch_date, now);
 

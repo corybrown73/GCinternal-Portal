@@ -66,6 +66,9 @@ const DEFAULT_COLORS: Record<string, StageColor> = {
  * falls back to when the flag is off, the table is empty, or the read fails —
  * so a deploy landing ahead of its migration behaves exactly like today.
  */
+/** Off the rail unless an admin switches them on: the seven-day plan has no step for them. */
+const DEFAULT_HIDDEN = new Set(["align-external", "adopt"]);
+
 export const BUILTIN_LIFECYCLE_STAGES: readonly LifecycleStageConfig[] = LIFECYCLE_STAGES.map(
   (s, i) => ({
     key: s.id,
@@ -75,7 +78,7 @@ export const BUILTIN_LIFECYCLE_STAGES: readonly LifecycleStageConfig[] = LIFECYC
     color: DEFAULT_COLORS[s.id] ?? "idle",
     sort_order: i + 1,
     is_builtin: true,
-    hidden: false,
+    hidden: DEFAULT_HIDDEN.has(s.id),
   }),
 );
 
