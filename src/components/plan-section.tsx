@@ -1,3 +1,4 @@
+import { HelpPicksPanel } from "@/components/help-articles-panel";
 import { useQuery } from "@tanstack/react-query";
 
 import { TimelinePanel } from "@/components/timeline-panel";
@@ -67,5 +68,10 @@ export function PlanFromDeal({ dealId }: { dealId: string }) {
   const q = useQuery(dealQuery(dealId));
   if (q.isPending) return <p className="text-[13px] text-muted-foreground">Loading the plan…</p>;
   if (!q.data) return null;
-  return <PlanSection deal={q.data} editable={canEditDeal(profile?.role)} />;
+  return (
+    <>
+      <PlanSection deal={q.data} editable={canEditDeal(profile?.role)} />
+      <HelpPicksPanel deal={q.data} editable={canEditDeal(profile?.role)} />
+    </>
+  );
 }
