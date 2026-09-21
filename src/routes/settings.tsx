@@ -2,6 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { queryOptions, useSuspenseQuery } from "@tanstack/react-query";
 import { PageBody, PageHeader, EmptyState } from "@/components/page";
 import { AppearanceSettings } from "@/components/appearance-settings";
+import { HelpArticlesSettings } from "@/components/help-articles-panel";
 import { TeamProfilePanel } from "@/components/team-profile-panel";
 import { DigestPanel } from "@/components/digest-panel";
 import { PasswordPanel } from "@/components/password-panel";
@@ -86,6 +87,7 @@ function SettingsPage() {
         <DigestPanel />
         <PasswordPanel />
         <AppearanceSettings canManage={canManage(profile?.role)} />
+        <HelpArticlesSettings canManage={manage} />
 
         <section className="overflow-hidden rounded-md border border-border bg-card">
           <header className="flex flex-wrap items-baseline justify-between gap-2 border-b border-border px-4 py-2.5">

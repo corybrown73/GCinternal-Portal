@@ -18,6 +18,7 @@ import { Field, NoRows, Panel } from "@/components/record";
 import { EditableField } from "@/components/editable-field";
 import { OwnerField } from "@/components/assignment-panel";
 import { FieldFusionGate } from "@/components/field-fusion-gate";
+import { HelpPicksPanel } from "@/components/help-articles-panel";
 import { DealGuide } from "@/components/deal-guide";
 import { BuildIt, ThreeClicks } from "@/components/build-it";
 import { PlanSection } from "@/components/plan-section";
@@ -398,6 +399,8 @@ export function DealRecord({ deal, embedded = false }: { deal: DealData; embedde
         </Panel>
 
         <PlanSection deal={deal} editable={editable} highlight={nextPanel === "panel-plan"} />
+
+        <HelpPicksPanel deal={deal} editable={editable} />
 
         {/* EVERYTHING ELSE, FOLDED. The checklist, the deal's facts, the
             intake and the opportunity's history are all still here — a

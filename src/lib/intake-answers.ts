@@ -154,6 +154,23 @@ export const intakeAnswersSchema = z.object({
    * the PowerPoint all read it; a missing key means the page's own words.
    */
   welcome_text: z.record(z.string().max(80), z.string().max(1200)).default({}),
+  /**
+   * "Get started on your own": help-centre articles for the features the
+   * calls flagged, each with why in the customer's words. The picker fills
+   * this after the brief; a person can remove, add, or reword.
+   */
+  help_picks: z
+    .array(
+      z.object({
+        article_id: z.string().min(1).max(40),
+        title: z.string().trim().min(1).max(200),
+        url: z.string().url().max(500),
+        why: z.string().trim().max(240).default(""),
+        source: z.enum(["ai", "person"]).default("ai"),
+      }),
+    )
+    .max(8)
+    .default([]),
   wanted_forms: z
     .array(
       z.object({

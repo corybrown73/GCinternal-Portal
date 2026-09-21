@@ -414,6 +414,80 @@ export async function transitionDeal(
   return result;
 }
 
+/* ---------- help articles for the customer's page ---------- */
+
+/**
+ * Pick the articles for a deal from its latest brief and notes, and save
+ * them on the intake. `replace` false leaves an existing list alone; true
+ * replaces the AI's picks and keeps the ones a person added or edited.
+ */
+async function pickHelpForDeal(
+  dealId: string,
+  actorId: string | null,
+  brief: unknown,
+  replace: boolean,
+): Promise<number> {
+  const { readIntake, intakeAnswersSchema } = await import("./intake-answers");
+  const { pickHelpArticles } = await import("./server/help/articles.server");
+  const { data: row } = await db()
+    .from("portal_accounts")
+    .select("intake")
+    .eq("id", dealId)
+    .maybeSingle();
+  const current = readIntake((row as any)?.intake);
+  if (!replace && current.help_picks.length > 0) return 0;
+  const { data: notes } = await db()
+    .from("portal_gong_reports")
+    .select("content_md")
+    .eq("account_id", dealId);
+  const notesText = ((notes ?? []) as Array<{ content_md: string }>)
+    .map((r) => r.content_md)
+    .join("\n\n");
+  const picked = await pickHelpArticles({ brief, notesText });
+  const kept = current.help_picks.filter((p) => p.source === "person");
+  const merged = [
+    ...kept,
+    ...picked.filter((p) => !kept.some((k) => k.article_id === p.article_id)),
+  ].slice(0, 8);
+  const next = intakeAnswersSchema.parse({
+    ...current,
+    help_picks: merged,
+    updated_at: new Date().toISOString(),
+  });
+  const { error } = await db()
+    .from("portal_accounts")
+    .update({ intake: next, updated_at: new Date().toISOString() })
+    .eq("id", dealId);
+  if (error) throw new Error(`Could not save the help articles: ${error.message}`);
+  await audit({
+    actor_type: actorId ? "user" : "system",
+    actor_id: actorId,
+    action: "deal.help_articles_picked",
+    entity_type: "account",
+    entity_id: dealId,
+    payload: { picked: picked.length, kept: kept.length },
+  });
+  return picked.length;
+}
+
+/** Pick again, from the latest complete brief. A person's own picks stay. */
+export async function repickHelpArticles(
+  userId: string,
+  dealId: string,
+): Promise<{ picked: number }> {
+  await requireInternal(userId);
+  const { data: brief } = await db()
+    .from("portal_briefs")
+    .select("structured_json")
+    .eq("account_id", dealId)
+    .eq("status", "complete")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const picked = await pickHelpForDeal(dealId, userId, brief?.structured_json ?? null, true);
+  return { picked };
+}
+
 /* ---------- CSV import (ported from the old Next.js internal import route) ---------- */
 
 // Header names are matched case-insensitively with spaces/underscores ignored.
@@ -974,6 +1048,14 @@ export async function generateDealBrief(
       // The brief is done either way; a prefill that fails is a blank left
       // blank, not a failed synthesis.
       console.error("[brief] could not prefill the intake", e);
+    }
+
+    // "Get started on your own": the help articles for what the calls
+    // flagged. Only while nobody has picked any — a person's list stands.
+    try {
+      await pickHelpForDeal(dealId, userId, brief.structured_json, false);
+    } catch (e) {
+      console.error("[brief] could not pick the help articles", e);
     }
 
     // The deal's own header, blanks only: the champion the calls named, and

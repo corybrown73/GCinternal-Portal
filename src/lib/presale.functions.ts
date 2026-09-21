@@ -498,6 +498,18 @@ export const saveIntake = createServerFn({ method: "POST" })
             welcome_hidden_screens: z.array(z.string().max(40)).max(20).optional(),
             welcome_shared_at: z.string().nullable().optional(),
             welcome_text: z.record(z.string().max(80), z.string().max(1200)).optional(),
+            help_picks: z
+              .array(
+                z.object({
+                  article_id: z.string().min(1).max(40),
+                  title: z.string().trim().min(1).max(200),
+                  url: z.string().url().max(500),
+                  why: z.string().trim().max(240).optional(),
+                  source: z.enum(["ai", "person"]).optional(),
+                }),
+              )
+              .max(8)
+              .optional(),
             wanted_forms: z
               .array(
                 z.object({

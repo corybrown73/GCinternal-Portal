@@ -65,6 +65,12 @@ export type WelcomeView = {
   textOverrides: Record<string, string>;
   /** New logo or existing account — the words on every screen follow it. */
   path: "new_logo" | "existing" | "dm_conversion" | "field_fusion";
+  /** "Get started on your own": the help articles picked for this customer. */
+  helpPicks: Array<{ article_id: string; title: string; url: string; why: string }>;
+  /** Article id → when the customer first opened it. Internal only. */
+  helpOpened: Record<string, string>;
+  /** The tracked-link base for the customer's page (`/go/{token}`); null internally. */
+  goBase: string | null;
 };
 
 /**

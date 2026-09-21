@@ -2153,6 +2153,45 @@ body.gc-presenting {
   flex-direction: column;
   gap: 18px;
 }
+/* "Get started on your own": the picked help articles, two to a row. */
+.gc-welcome .wp-help {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px 18px;
+}
+.gc-welcome .wp-help-card {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  padding: 14px 16px;
+  border: 1px solid var(--wp-blue-line, #d6effb);
+  border-radius: 16px;
+  background: #fff;
+  text-decoration: none;
+  color: inherit;
+}
+.gc-welcome .wp-help-card:hover {
+  border-color: var(--wp-blue, #039de7);
+}
+.gc-welcome .wp-help-card h3 {
+  margin: 2px 0 4px;
+  font-size: 17px;
+  font-weight: 800;
+  color: var(--wp-navy);
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+}
+.gc-welcome .wp-help-card p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--wp-body);
+}
+@media (max-width: 760px) {
+  .gc-welcome .wp-help {
+    grid-template-columns: 1fr;
+  }
+}
 .gc-welcome .wp-call {
   display: flex;
   gap: 16px;

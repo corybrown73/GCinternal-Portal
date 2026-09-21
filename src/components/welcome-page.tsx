@@ -50,6 +50,7 @@ import {
   X,
   Zap,
   type LucideIcon,
+  BookOpen,
 } from "lucide-react";
 
 import {
@@ -112,6 +113,7 @@ const ICONS: Record<string, LucideIcon> = {
   Users,
   Smartphone,
   Workflow,
+  BookOpen,
 };
 
 function Icon({
@@ -384,6 +386,15 @@ function screenList(view: WelcomeView): Screen[] {
         <Together key="together" view={view} mode={a.mode} onTick={a.onTick} page={a.page} />
       ),
     },
+    ...(view.helpPicks.length
+      ? [
+          {
+            key: "help",
+            label: "Get started on your own",
+            render: (a: ScreenArgs) => <HelpScreen key="help" view={view} page={a.page} />,
+          } satisfies Screen,
+        ]
+      : []),
     {
       key: "form",
       label: "How we get there",
@@ -1735,6 +1746,49 @@ function PhaseScreen({ view, phase: ph, page }: { view: WelcomeView; phase: Phas
               </div>
             )}
           </div>
+        ))}
+      </div>
+    </Frame>
+  );
+}
+
+/**
+ * "Get started on your own": the help-centre articles for the features the
+ * calls flagged, each with why in the customer's words. On the customer's
+ * page every link is tracked through /go; the internal preview links direct.
+ */
+function HelpScreen({ view, page }: { view: WelcomeView; page: number }) {
+  const picks = view.helpPicks;
+  return (
+    <Frame
+      k="help"
+      page={page}
+      eyebrow="Get started on your own"
+      title="The features you asked about,"
+      accent="ready when you are"
+      lede="From your calls with us: the things you said would make the difference, and how to do each one yourself. Open one, try it on a real job, and bring the question to the next call."
+      band="Every article here is one you asked about. Between calls, this is where to start."
+      bandIcon="BookOpen"
+    >
+      <div className="wp-help">
+        {picks.map((p) => (
+          <a
+            key={p.article_id}
+            className="wp-help-card"
+            href={view.goBase ? `${view.goBase}/${p.article_id}` : p.url}
+            target="_blank"
+            rel="noreferrer noopener"
+          >
+            <Tile name="BookOpen" size="lg" tone="blue" />
+            <div>
+              <h3>{p.title}</h3>
+              <p>
+                <T k={`help.${p.article_id}.why`}>
+                  {p.why || "One of the features that came up on your calls."}
+                </T>
+              </p>
+            </div>
+          </a>
         ))}
       </div>
     </Frame>

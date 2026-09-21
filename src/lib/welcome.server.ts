@@ -32,7 +32,10 @@ function shareUrlFor(token: string): string {
   return `${appUrl()}/welcome/${token}`;
 }
 
-async function viewFor(deal: any, opts: { internal: boolean }): Promise<WelcomeView> {
+async function viewFor(
+  deal: any,
+  opts: { internal: boolean; token?: string | null },
+): Promise<WelcomeView> {
   const { buildOnboardingDeckInput } = await import("./server/onboarding-deck-generate");
   const input = await buildOnboardingDeckInput(deal.id);
   const { photoForIndustry } = await import("./industry-photos.server");
@@ -209,6 +212,21 @@ async function viewFor(deal: any, opts: { internal: boolean }): Promise<WelcomeV
       .welcome_hidden_screens,
     textOverrides: (await import("./intake-answers")).readIntake(deal.intake).welcome_text,
     path: input.timeline.path,
+    helpPicks: (await import("./intake-answers"))
+      .readIntake(deal.intake)
+      .help_picks.map((p) => ({
+        article_id: p.article_id,
+        title: p.title,
+        url: p.url,
+        why: p.why,
+      })),
+    helpOpened: opts.internal
+      ? await (await import("./server/help/articles.server")).helpOpensFor(String(deal.id))
+      : {},
+    goBase:
+      !opts.internal && opts.token
+        ? `${(await import("./app-url")).appUrl()}/go/${opts.token}`
+        : null,
   };
 }
 
@@ -303,7 +321,23 @@ export async function openWelcome(token: string): Promise<WelcomeView | null> {
       .update({ welcome_opened_at: new Date().toISOString() })
       .eq("id", deal.id);
   }
-  return viewFor(deal, { internal: false });
+  return viewFor(deal, { internal: false, token });
+}
+
+/**
+ * A tracked help link: the token names the deal, the article must be one
+ * of its picks, and the open is recorded before the reader is sent on.
+ * Null for anything else — never an open redirect.
+ */
+export async function followHelpLink(token: string, articleId: string): Promise<string | null> {
+  const deal = await dealForToken(token);
+  if (!deal) return null;
+  const { readIntake } = await import("./intake-answers");
+  const pick = readIntake(deal.intake).help_picks.find((p) => p.article_id === articleId);
+  if (!pick) return null;
+  const { recordHelpClick } = await import("./server/help/articles.server");
+  await recordHelpClick(String(deal.id), articleId);
+  return pick.url;
 }
 
 /** The one public write: a homework box, ticked or unticked. */
