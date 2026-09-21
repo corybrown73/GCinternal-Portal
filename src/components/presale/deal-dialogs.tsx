@@ -12,6 +12,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { INDUSTRIES } from "@/lib/intake-answers";
+import { mentionsDeviceMagic } from "@/lib/intake-prefill";
 import { cn } from "@/lib/utils";
 import { addDeal, addReport, importDeals, uploadSow } from "@/lib/presale.functions";
 import { STAGE_LABELS, STAGES, type AccountStage } from "@/lib/presale-stages";
@@ -36,7 +37,7 @@ type DealDraft = {
   salesforceId: string;
   arr: string;
   summary: string;
-  path: "" | "new_logo" | "existing";
+  path: "" | "new_logo" | "existing" | "dm_conversion";
   industry: string;
   stage: AccountStage;
 };
@@ -67,6 +68,8 @@ export function NewDealDialog() {
   const upload = useServerFn(uploadSow);
 
   const set = (patch: Partial<DealDraft>) => setDraft((d) => ({ ...d, ...patch }));
+  // The pasted notes say what kind of account this is before anyone picks.
+  const suggestedDm = mentionsDeviceMagic(notes);
   const reset = () => {
     setDraft(emptyDeal);
     setNotes("");
@@ -228,7 +231,21 @@ export function NewDealDialog() {
                 >
                   <option value="new_logo">New customer — first implementation</option>
                   <option value="existing">Existing account — adding services</option>
+                  <option value="dm_conversion">Device Magic → GoCanvas conversion</option>
                 </select>
+                {suggestedDm && draft.path !== "dm_conversion" ? (
+                  <p className="mt-0.5 text-[11px] text-amber-700 dark:text-amber-400">
+                    The notes mention Device Magic —{" "}
+                    <button
+                      type="button"
+                      className="underline"
+                      onClick={() => set({ path: "dm_conversion" })}
+                    >
+                      make this a conversion
+                    </button>
+                    ?
+                  </p>
+                ) : null}
               </div>
             </div>
             <div>

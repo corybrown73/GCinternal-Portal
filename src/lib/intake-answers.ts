@@ -53,7 +53,7 @@ export const intakeAnswersSchema = z.object({
    * existing account adding services reviews the form the integration reads
    * from. null until somebody says — the plan treats null as a new logo.
    */
-  path: z.enum(["new_logo", "existing"]).nullable().default(null),
+  path: z.enum(["new_logo", "existing", "dm_conversion"]).nullable().default(null),
   /** The fork. null until the question has been asked. */
   forms_built: z.boolean().nullable().default(null),
   /** What they uploaded, when forms_built is true. Paths into the private bucket. */

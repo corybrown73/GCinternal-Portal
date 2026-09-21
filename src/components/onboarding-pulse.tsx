@@ -55,8 +55,12 @@ export function OnboardingPulse({
         <span className="text-muted-foreground">{p.counter.detail}</span>
       </span>
       <span className="text-muted-foreground">
-        {p.path === "existing" ? "Existing account · services" : "New customer · 7-day plan"} ·{" "}
-        {p.done}/{p.total} set up
+        {p.path === "existing"
+          ? "Existing account · services"
+          : p.path === "dm_conversion"
+            ? "Device Magic conversion · 7-day plan"
+            : "New customer · 7-day plan"}{" "}
+        · {p.done}/{p.total} set up
       </span>
       {p.next ? (
         customerId ? (

@@ -21,6 +21,7 @@ import {
 } from "@/lib/pipeline-stages";
 import type { Account } from "@/lib/presale-types";
 import { cn } from "@/lib/utils";
+import { PATH_CHIP } from "@/lib/onboarding-timeline";
 import { fmtMoney } from "@/lib/hub-format";
 import { readIntake } from "@/lib/intake-answers";
 import { marksForIntake } from "@/lib/deliverables";
@@ -32,7 +33,7 @@ export type BoardDeal = Account & {
   /** Set once the deal has closed and has a customer page; the card opens that page. */
   customer_id?: string | null;
   implementation_id?: string | null;
-  path?: "new_logo" | "existing" | null;
+  path?: "new_logo" | "existing" | "dm_conversion" | null;
   has_notes?: boolean;
   has_sow?: boolean;
 };
@@ -73,7 +74,7 @@ function DealCard({
       <div className="mt-1 flex flex-wrap items-center gap-1 text-[10px]">
         {deal.path ? (
           <span className="rounded-sm border border-border px-1 py-px uppercase tracking-wider text-muted-foreground">
-            {deal.path === "existing" ? "Existing" : "New"}
+            {PATH_CHIP[deal.path]}
           </span>
         ) : null}
         {deal.has_notes !== undefined ? (

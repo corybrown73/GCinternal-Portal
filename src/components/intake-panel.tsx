@@ -18,6 +18,7 @@ import {
   type IntakeAnswers,
 } from "@/lib/intake-answers";
 import { SERVICE_KINDS, type ServiceSpec } from "@/lib/onboarding-services";
+import { PATH_LABEL } from "@/lib/onboarding-timeline";
 import { getIntakeFormLink, saveIntake, uploadIntakeForm } from "@/lib/presale.functions";
 import { cn } from "@/lib/utils";
 
@@ -47,7 +48,7 @@ export function IntakePanel({
   // Changing the path rewrites the whole plan and its dates. A stray click
   // — the gallery loads and everything shifts under the cursor — should not
   // be able to do that silently.
-  const choosePath = (next: "new_logo" | "existing") => {
+  const choosePath = (next: "new_logo" | "existing" | "dm_conversion") => {
     if (answers.path === next) return;
     if (
       answers.path !== null &&
@@ -122,13 +123,7 @@ export function IntakePanel({
         <Step
           n={1}
           question="New account, or an existing one adding services?"
-          answer={
-            answers.path === "new_logo"
-              ? "New customer — first implementation"
-              : answers.path === "existing"
-                ? "Existing account — adding services"
-                : null
-          }
+          answer={answers.path ? PATH_LABEL[answers.path] : null}
           open={openStep === 1}
           onOpen={() => setOpened(1)}
         >
@@ -153,13 +148,25 @@ export function IntakePanel({
             >
               Existing account — adding services
             </Choice>
+            <Choice
+              active={answers.path === "dm_conversion"}
+              disabled={!editable || busy}
+              onClick={() => {
+                choosePath("dm_conversion");
+                setOpened(null);
+              }}
+            >
+              Device Magic → GoCanvas conversion
+            </Choice>
           </div>
           <p className="mt-1.5 text-[11px] text-muted-foreground">
             Everything after this follows the answer: the plan's shape, the deck's words, the gate
             before phase 2.
             {answers.path === "existing"
               ? " On an existing account, phase 1 is a review of the form the integration reads from."
-              : ""}
+              : answers.path === "dm_conversion"
+                ? " On a conversion, the first form is their most-used Device Magic form, rebuilt in GoCanvas and run alongside it until it is proven."
+                : ""}
           </p>
         </Step>
 

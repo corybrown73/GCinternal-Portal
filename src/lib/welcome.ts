@@ -62,7 +62,7 @@ export type WelcomeView = {
   /** Screen keys the presenter switched off for this customer. Both modes honour it. */
   hiddenScreens: string[];
   /** New logo or existing account — the words on every screen follow it. */
-  path: "new_logo" | "existing";
+  path: "new_logo" | "existing" | "dm_conversion";
 };
 
 /**

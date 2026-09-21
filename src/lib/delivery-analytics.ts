@@ -19,7 +19,7 @@ import type { ServiceSpec } from "./onboarding-services";
 export type Outcome = {
   dealId: string;
   account: string;
-  path: "new_logo" | "existing";
+  path: "new_logo" | "existing" | "dm_conversion";
   /** "phase1" for the form; else the service's kind. */
   kind: string;
   kindLabel: string;
@@ -105,7 +105,7 @@ export function outcomesFor(
 function outcome(a: {
   dealId: string;
   account: string;
-  path: "new_logo" | "existing";
+  path: "new_logo" | "existing" | "dm_conversion";
   kind: string;
   kindLabel: string;
   tool: string;
@@ -223,7 +223,12 @@ export const byTool = (o: Outcome) => ({ key: o.tool, label: o.toolLabel });
 export const byKind = (o: Outcome) => ({ key: o.kind, label: o.kindLabel });
 export const byPath = (o: Outcome) => ({
   key: o.path,
-  label: o.path === "existing" ? "Existing account · services" : "New customer · implementation",
+  label:
+    o.path === "existing"
+      ? "Existing account · services"
+      : o.path === "dm_conversion"
+        ? "Device Magic conversion"
+        : "New customer · implementation",
 });
 
 /** Steps across everything, ranked by average slip. The answer to "where do we lose days". */

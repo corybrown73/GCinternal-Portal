@@ -666,7 +666,11 @@ function SharedBar({ view, icsBase }: { view: WelcomeView; icsBase: string | nul
         <img src="/branding/gocanvas-wordmark-navy.png" alt="GoCanvas" className="h-5 w-auto" />
         <DayChip view={view} />
         <span className="wp-toolbar-meta">
-          {view.path === "existing" ? "Your services plan" : "Your onboarding plan"}
+          {view.path === "existing"
+            ? "Your services plan"
+            : view.path === "dm_conversion"
+              ? "Your conversion plan"
+              : "Your onboarding plan"}
           {p.done ? ` · ${p.done} of ${p.total} steps done` : ""}
         </span>
       </div>
@@ -937,8 +941,12 @@ function Cover({ view, qr }: { view: WelcomeView; qr?: { url: string; dataUrl: s
       <div className="wp-cover-grid">
         <div className="wp-cover-text">
           <p className="wp-eyebrow">
-            {view.path === "existing" ? "Services plan" : "Onboarding plan"} ·{" "}
-            {view.industry ?? "Your team"} ·{" "}
+            {view.path === "existing"
+              ? "Services plan"
+              : view.path === "dm_conversion"
+                ? "Conversion plan"
+                : "Onboarding plan"}{" "}
+            · {view.industry ?? "Your team"} ·{" "}
             {t.phases.length
               ? `Phase ${t.currentPhase} of ${t.phases.length + 1}`
               : `${daysToValue(t)} business days to value`}
@@ -947,6 +955,10 @@ function Cover({ view, qr }: { view: WelcomeView; qr?: { url: string; dataUrl: s
             {view.path === "existing" ? (
               <>
                 Let&apos;s take your <span className="wp-accent">workflow further</span>
+              </>
+            ) : view.path === "dm_conversion" ? (
+              <>
+                Let&apos;s move your forms <span className="wp-accent">over, one at a time</span>
               </>
             ) : (
               <>
@@ -1736,7 +1748,9 @@ function FirstForm({ view, page }: { view: WelcomeView; page: number }) {
     view.currentProcess ??
     (existing
       ? "The form works in the field, but the office still retypes what it collects into the other system."
-      : "Paper on the truck, photos on somebody's phone, and the office retyping it all at the end of the week.");
+      : view.path === "dm_conversion"
+        ? "The crew runs your forms in Device Magic today; the office works from what it sends. Same jobs, same forms — moved over one at a time, starting with the one they use most."
+        : "Paper on the truck, photos on somebody's phone, and the office retyping it all at the end of the week.");
   return (
     <Frame
       page={page}

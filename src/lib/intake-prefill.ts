@@ -1,5 +1,4 @@
 import { COMPANY_SIZES, INDUSTRIES, type IntakeAnswers } from "./intake-answers";
-import type { ServiceSpec } from "./onboarding-services";
 import type { BriefJson } from "./server/schemas";
 import { synthesisFromBrief } from "./welcome-synthesis";
 
@@ -16,6 +15,8 @@ import { synthesisFromBrief } from "./welcome-synthesis";
 export function prefillFromSynthesis(
   intake: IntakeAnswers,
   brief: unknown,
+  /** The call notes as pasted, for what the brief did not keep verbatim. */
+  notes?: string | null,
 ): { patch: Partial<IntakeAnswers>; filled: string[] } {
   const patch: Partial<IntakeAnswers> = {};
   const filled: string[] = [];
@@ -23,9 +24,17 @@ export function prefillFromSynthesis(
   if (!b || typeof b !== "object") return { patch, filled };
   const synth = synthesisFromBrief(b);
 
+  // A customer moving off Device Magic: the calls say so long before a form
+  // does. Read the notes as pasted and the brief's own text; only when
+  // nobody has said which kind of account this is.
+  if (intake.path === null && mentionsDeviceMagic(`${notes ?? ""}\n${JSON.stringify(b)}`)) {
+    patch.path = "dm_conversion";
+    filled.push("the path (Device Magic conversion)");
+  }
+
   // The brief's own reading of "already runs GoCanvas, bought more" is the
   // path. Only when nobody has said yet.
-  if (intake.path === null && b.expansion) {
+  if (intake.path === null && !patch.path && b.expansion) {
     const ex = b.expansion;
     if (ex.integration_target || ex.form_already_built) {
       patch.path = "existing";
@@ -90,29 +99,22 @@ export function prefillFromSynthesis(
     }
   }
 
-  const hasServices =
-    (intake.timeline.services?.length ?? 0) > 0 || (intake.timeline.integration_tier ?? 0) > 0;
-  if (!hasServices) {
-    const names = new Set<string>();
-    for (const line of b.kickoff?.integrations ?? []) {
-      const system = line.split("·")[0]?.trim();
-      if (system) names.add(system);
-    }
-    if (b.expansion?.integration_target) names.add(b.expansion.integration_target.trim());
-    if (names.size) {
-      const services: ServiceSpec[] = [...names].slice(0, 6).map((name, i) => ({
-        id: `syn-int-${i + 1}`,
-        kind: "integration",
-        name: name.slice(0, 120),
-        phase: 2,
-        tier: 3,
-      }));
-      patch.timeline = { ...intake.timeline, services };
-      filled.push(
-        names.size === 1 ? `the ${[...names][0]} integration` : `${names.size} integrations`,
-      );
-    }
-  }
+  // Integrations and other services come from the SOW read, never from the
+  // calls. A system mentioned on a call is a wish; a system on the SOW is a
+  // sale, and the plan is built from what was sold. The brief still lists
+  // what was mentioned — the watch-outs read it against the SOW.
 
   return { patch, filled };
+}
+
+/**
+ * "Device Magic", "DeviceMagic", or "DM" used as a product ("on DM", "from DM",
+ * "DM forms", "DM to GoCanvas"). A bare "DM" for a direct message does not
+ * count: it needs the product words around it.
+ */
+export function mentionsDeviceMagic(text: string): boolean {
+  if (/device\s*magic/i.test(text)) return true;
+  return /\b(?:from|off|on|in|our|their|the|convert(?:ing)?|migrat(?:e|ing)|mov(?:e|ing)|replac(?:e|ing))\s+DM\b|\bDM\s+(?:forms?|to\s+(?:go\s*canvas|gc)|conversion|migration|account|users?|data|submissions?)\b/i.test(
+    text,
+  );
 }

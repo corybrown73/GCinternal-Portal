@@ -29,15 +29,9 @@ describe("prefillFromSynthesis", () => {
       "Chemical Delivery Ticket",
     ]);
     expect(patch.field_users).toBe(40);
-    expect(patch.timeline?.services).toEqual([
-      { id: "syn-int-1", kind: "integration", name: "QuickBooks Online", phase: 2, tier: 3 },
-    ]);
-    expect(filled).toEqual([
-      "the process today",
-      "2 forms to build",
-      "people in the field",
-      "the QuickBooks Online integration",
-    ]);
+    // An integration named on a call is not on the plan: only the SOW read adds services.
+    expect(patch.timeline).toBeUndefined();
+    expect(filled).toEqual(["the process today", "2 forms to build", "people in the field"]);
   });
 
   it("never overwrites what a person typed", () => {
@@ -56,5 +50,32 @@ describe("prefillFromSynthesis", () => {
   it("is quiet for nothing", () => {
     expect(prefillFromSynthesis(readIntake(null), null)).toEqual({ patch: {}, filled: [] });
     expect(prefillFromSynthesis(readIntake(null), {})).toEqual({ patch: {}, filled: [] });
+  });
+});
+
+describe("Device Magic conversions", () => {
+  it("reads the kind of account from the pasted notes when nobody has said", async () => {
+    const { mentionsDeviceMagic } = await import("../intake-prefill");
+    expect(mentionsDeviceMagic("They have 40 users on Device Magic and want to move by Q1.")).toBe(
+      true,
+    );
+    expect(mentionsDeviceMagic("Converting from DM; ~30 DM forms in use.")).toBe(true);
+    expect(mentionsDeviceMagic("Ray will DM me the site list.")).toBe(false);
+    const { patch, filled } = prefillFromSynthesis(
+      readIntake({ forms_built: false }),
+      brief,
+      "Ops runs everything in Device Magic today.",
+    );
+    expect(patch.path).toBe("dm_conversion");
+    expect(filled).toContain("the path (Device Magic conversion)");
+  });
+
+  it("leaves a path a person chose alone", () => {
+    const { patch } = prefillFromSynthesis(
+      readIntake({ path: "new_logo", forms_built: false }),
+      brief,
+      "Ops runs everything in Device Magic today.",
+    );
+    expect(patch.path).toBeUndefined();
   });
 });

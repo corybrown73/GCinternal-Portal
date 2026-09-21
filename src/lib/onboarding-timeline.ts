@@ -69,7 +69,20 @@ export type MilestoneSpec = {
  * form, sometimes a few fields, sometimes nothing. Same keys, same gates,
  * same rule for everything after, so every screen and every date follows.
  */
-export type OnboardingPath = "new_logo" | "existing";
+export type OnboardingPath = "new_logo" | "existing" | "dm_conversion";
+
+/** The three kinds of account, in the words the pickers use. */
+export const PATH_LABEL: Record<OnboardingPath, string> = {
+  new_logo: "New customer — first implementation",
+  existing: "Existing account — adding services",
+  dm_conversion: "Device Magic → GoCanvas conversion",
+};
+/** Short, for a chip on a board. */
+export const PATH_CHIP: Record<OnboardingPath, string> = {
+  new_logo: "New",
+  existing: "Existing",
+  dm_conversion: "DM → GC",
+};
 
 /** The seven-day plan, in order. The keys are the contract the deck renders. */
 export const SEVEN_DAY_PLAN: readonly MilestoneSpec[] = [
@@ -235,8 +248,102 @@ export const EXISTING_PLAN: readonly MilestoneSpec[] = [
   },
 ];
 
+/**
+ * A Device Magic customer moving to GoCanvas. Same keys and days as the
+ * seven-day plan, so every screen keeps working; the words are about the
+ * forms they already run and the day the first one moves over. The crew
+ * runs the GoCanvas form alongside Device Magic on real jobs, and Device
+ * Magic retires for that form on the live day.
+ */
+export const DM_CONVERSION_PLAN: readonly MilestoneSpec[] = [
+  {
+    key: "close",
+    day: 0,
+    label: "Welcome aboard",
+    owner: "gocanvas",
+    kind: "milestone",
+    detail: "Welcome email the same day, with the kickoff invite already in it.",
+    icon: "Flag",
+  },
+  {
+    key: "kickoff",
+    day: 1,
+    label: "Conversion kickoff & first form",
+    owner: "both",
+    kind: "call",
+    minutes: 60,
+    detail:
+      "Walk your Device Magic forms together, pick the one the crew uses most, and rebuild it in GoCanvas live on the call — field for field, then better.",
+    homework: [
+      "Send us your Device Magic forms list, or a screenshot of each form",
+      "Send one recent submission from the first form, as the office receives it",
+      "Add one field user who will run the GoCanvas form on real jobs",
+    ],
+    icon: "PhoneCall",
+  },
+  {
+    key: "homework",
+    day: 2,
+    label: "Your homework",
+    owner: "client",
+    kind: "homework",
+    detail:
+      "The three things above. Fifteen minutes, and the working session starts from your real form and your real output.",
+    icon: "ClipboardCheck",
+  },
+  {
+    key: "working",
+    day: 3,
+    label: "Working session",
+    owner: "both",
+    kind: "call",
+    minutes: 30,
+    detail:
+      "Thirty minutes, hands on the keyboard together. Finish the form, match the output the office expects, and you make the last changes — not us.",
+    homework: [
+      "Hand the GoCanvas form to your field tester",
+      "Run it alongside Device Magic on real jobs for two days",
+    ],
+    icon: "Wrench",
+  },
+  {
+    key: "fieldtest",
+    day: 4,
+    throughDay: 5,
+    label: "Field test, alongside Device Magic",
+    owner: "client",
+    kind: "build",
+    detail:
+      "One crew runs the GoCanvas form on real jobs while Device Magic still runs. What they say is what we fix.",
+    icon: "HardHat",
+  },
+  {
+    key: "adjust",
+    day: 6,
+    label: "Last adjustments",
+    owner: "both",
+    kind: "build",
+    detail: "What the real jobs showed. Usually a field or two, rarely more.",
+    icon: "Target",
+  },
+  {
+    key: "live",
+    day: 7,
+    label: "First form live — Device Magic retires for it",
+    owner: "both",
+    kind: "milestone",
+    detail:
+      "The crew runs the GoCanvas form and nothing else for it. The rest of your Device Magic forms follow, one at a time, the same way.",
+    icon: "Rocket",
+  },
+];
+
 export function planFor(path: OnboardingPath | null | undefined): readonly MilestoneSpec[] {
-  return path === "existing" ? EXISTING_PLAN : SEVEN_DAY_PLAN;
+  return path === "existing"
+    ? EXISTING_PLAN
+    : path === "dm_conversion"
+      ? DM_CONVERSION_PLAN
+      : SEVEN_DAY_PLAN;
 }
 
 /**

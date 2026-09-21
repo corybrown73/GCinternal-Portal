@@ -21,6 +21,7 @@ import {
   type TriageBucket,
 } from "@/lib/home-triage";
 import { cn } from "@/lib/utils";
+import { PATH_CHIP } from "@/lib/onboarding-timeline";
 
 // The scope is part of the key: switching whose accounts you are looking at
 // has to refetch, and two scopes must never share a cache entry.
@@ -312,7 +313,7 @@ function DealInboxRowView({ row }: { row: DealInboxRow }) {
       </span>
       {row.path ? (
         <span className="rounded-sm border border-border px-1 py-px text-[10px] uppercase tracking-wider text-muted-foreground">
-          {row.path === "existing" ? "Existing" : "New"}
+          {PATH_CHIP[row.path]}
         </span>
       ) : null}
       <span

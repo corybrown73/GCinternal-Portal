@@ -167,7 +167,7 @@ export interface PipelineDeal extends Account {
   implementation_id: string | null;
   se_owner_name: string | null;
   /** New customer or existing account, when the intake has said. */
-  path: "new_logo" | "existing" | null;
+  path: "new_logo" | "existing" | "dm_conversion" | null;
   /** The two things Closed Won is gated on. */
   has_notes: boolean;
   has_sow: boolean;
@@ -257,7 +257,7 @@ export async function createDeal(
     salesforce_id: string | null;
     arr: number | null;
     summary: string | null;
-    path?: "new_logo" | "existing" | null;
+    path?: "new_logo" | "existing" | "dm_conversion" | null;
     industry?: string | null;
     /** Where the deal already is. A deal entered after it closed starts closed. */
     stage?: AccountStage | null;
@@ -869,7 +869,14 @@ export async function generateDealBrief(
         .eq("id", dealId)
         .maybeSingle();
       const current = readIntake((row as any)?.intake);
-      const result = prefillFromSynthesis(current, brief.structured_json);
+      const { data: notes } = await db()
+        .from("portal_gong_reports")
+        .select("content_md")
+        .eq("account_id", dealId);
+      const notesText = ((notes ?? []) as Array<{ content_md: string }>)
+        .map((r) => r.content_md)
+        .join("\n\n");
+      const result = prefillFromSynthesis(current, brief.structured_json, notesText);
       if (result.filled.length) {
         const next = intakeAnswersSchema.parse({
           ...current,
@@ -1943,7 +1950,7 @@ export type DealInboxRow = {
   stage: AccountStage;
   stage_label: string;
   stage_entered_at: string;
-  path: "new_logo" | "existing" | null;
+  path: "new_logo" | "existing" | "dm_conversion" | null;
   /** The implementation owner from the claim ledger, when somebody has claimed it. */
   owner_name: string | null;
   /** The viewer is that owner. */
@@ -2173,6 +2180,11 @@ export function implementationNameFor(
   const services = (intake.timeline.services ?? []).map((s) => s.name.trim()).filter(Boolean);
   if (intake.path === "existing" && services.length) {
     return services.length === 1 ? services[0]! : `${services[0]} + ${services.length - 1} more`;
+  }
+  if (intake.path === "dm_conversion") {
+    return firstForm
+      ? `${firstForm} — from Device Magic`
+      : `${accountName} — Device Magic conversion`;
   }
   if (firstForm) {
     return services.length ? `${firstForm} + ${services.length} more` : `${firstForm} — first form`;
