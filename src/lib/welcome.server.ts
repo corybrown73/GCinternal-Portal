@@ -212,14 +212,12 @@ async function viewFor(
       .welcome_hidden_screens,
     textOverrides: (await import("./intake-answers")).readIntake(deal.intake).welcome_text,
     path: input.timeline.path,
-    helpPicks: (await import("./intake-answers"))
-      .readIntake(deal.intake)
-      .help_picks.map((p) => ({
-        article_id: p.article_id,
-        title: p.title,
-        url: p.url,
-        why: p.why,
-      })),
+    helpPicks: (await import("./intake-answers")).readIntake(deal.intake).help_picks.map((p) => ({
+      article_id: p.article_id,
+      title: p.title,
+      url: p.url,
+      why: p.why,
+    })),
     helpOpened: opts.internal
       ? await (await import("./server/help/articles.server")).helpOpensFor(String(deal.id))
       : {},
