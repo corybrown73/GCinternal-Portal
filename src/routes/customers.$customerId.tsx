@@ -5,6 +5,8 @@ import { queryOptions, useMutation, useQueryClient, useSuspenseQuery } from "@ta
 import { useServerFn } from "@tanstack/react-start";
 import { ChevronRight, ArrowRight } from "lucide-react";
 
+import { DeleteCustomerButton } from "@/components/delete-customer-button";
+
 import { CustomerLogo } from "@/components/customer-logo";
 import { PastImplementations } from "@/components/past-implementations";
 import { DealRecord } from "@/components/deal-record";
@@ -368,6 +370,11 @@ function Customer360Page() {
           </div>
           <div className="flex flex-wrap items-center gap-3">
             <AddServicesButton customerId={customer.id} />
+            <DeleteCustomerButton
+              customerId={customer.id}
+              customerName={customer.name}
+              implementations={record.implementations.length}
+            />
             <StatusChip status={health.level} />
             <HealthNote
               recorded={impl.health_recorded}
