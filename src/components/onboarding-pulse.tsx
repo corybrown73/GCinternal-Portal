@@ -59,7 +59,9 @@ export function OnboardingPulse({
           ? "Existing account · services"
           : p.path === "dm_conversion"
             ? "Device Magic conversion · 7-day plan"
-            : "New customer · 7-day plan"}{" "}
+            : p.path === "field_fusion"
+              ? "Field Fusion · training journey"
+              : "New customer · 7-day plan"}{" "}
         · {p.done}/{p.total} set up
       </span>
       {p.next ? (

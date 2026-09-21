@@ -10,7 +10,8 @@ import {
   type PoolMember,
   type WeightBreakdown,
 } from "@/lib/assignment";
-import { readIntake } from "@/lib/intake-answers";
+import type { HandoffNote } from "@/lib/field-fusion";
+import { isTrainingOnly, readIntake } from "@/lib/intake-answers";
 
 import { audit } from "./server/audit";
 import { sendEmail } from "./server/email";
@@ -179,6 +180,7 @@ async function dealFacts(dealId: string) {
   return {
     deal,
     intake,
+    training: isTrainingOnly(intake),
     forWeight: {
       arr: deal.arr === null || deal.arr === undefined ? null : Number(deal.arr),
       seats: intake.field_users,
@@ -223,6 +225,14 @@ export async function assignDeal(args: {
   ownerEmail?: string | undefined;
   actorProfileId?: string | null;
   note?: string | null;
+  /**
+   * Which email the assignee gets. "standard" is the three things to do
+   * first; "field_fusion_setup" is the setup checklist before the handoff;
+   * "handoff" is the standard message carrying what the setup found.
+   */
+  message?: "standard" | "field_fusion_setup" | "handoff";
+  /** What the Field Fusion setup hands over, for the "handoff" message. */
+  handoff?: HandoffNote | null;
 }): Promise<{
   assigneeName: string | null;
   teamMemberId: string;
@@ -232,7 +242,7 @@ export async function assignDeal(args: {
   notified: boolean;
 } | null> {
   const rules = await loadRules();
-  const { deal, forWeight } = await dealFacts(args.dealId);
+  const { deal, forWeight, training } = await dealFacts(args.dealId);
   const { weight, breakdown } = dealWeight(forWeight, rules);
   const pool = await loadPool(rules);
 
@@ -254,6 +264,7 @@ export async function assignDeal(args: {
       dealName: String(deal.name),
       weight,
       breakdown,
+      handoff: args.handoff ?? null,
     });
     return null;
   }
@@ -337,6 +348,9 @@ export async function assignDeal(args: {
         integrationTier: forWeight.integrationTier,
         seats: forWeight.seats,
         shareUrl,
+        training,
+        message: args.message ?? "standard",
+        handoff: args.handoff ?? null,
       });
       notified = true;
     } catch (e) {
@@ -371,10 +385,39 @@ async function notifyAssignee(a: {
   integrationTier: number | null;
   seats: number | null;
   shareUrl: string | null;
+  training: boolean;
+  message: "standard" | "field_fusion_setup" | "handoff";
+  handoff: HandoffNote | null;
 }) {
   const base = appUrl();
   const deal = `${base}/deals/${a.dealId}`;
   const welcome = `${base}/onboarding-plan/${a.dealId}`;
+  const first = a.assigneeName.split(" ")[0] ?? a.assigneeName;
+
+  if (a.message === "field_fusion_setup") {
+    await sendEmail({
+      kind: "assignment",
+      to: a.to,
+      subject: `Field Fusion setup: ${a.dealName} — confirm it, then hand it over`,
+      html: `
+      <div style="font-family:sans-serif;max-width:560px;color:#0a1628">
+        <p style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#039de7;margin:0 0 6px">Field Fusion — before the handoff</p>
+        <h2 style="margin:0 0 6px;color:#072b57">${esc(a.dealName)}</h2>
+        <p style="margin:0 0 16px;color:#556477">${esc(a.seats ? `${a.seats} seats` : "Field Fusion account")}</p>
+        <p>Hi ${esc(first)} — this one just closed and it is a Field Fusion account, so it is yours first. On the deal:</p>
+        <ol style="line-height:1.7">
+          <li><b>Tick "FFIQ is set up and working"</b> once it is.</li>
+          <li><b>Tick "The account is set up"</b> once the customer can log in.</li>
+          <li><b>Write what implementation should know</b> — anything the calls did not say — then press <b>Hand to implementation</b>. The use case and goals from the calls go with it.</li>
+        </ol>
+        <p><a href="${deal}" style="background:#12509b;color:#fff;padding:10px 22px;border-radius:6px;text-decoration:none;font-weight:600">Open the deal</a></p>
+        <p style="color:#556477;font-size:13px">Implementation's first call is a training call, not a kickoff. Nothing goes to them until you press the button.</p>
+        <p style="font-size:12px;color:#888">GoCanvas Handoff Hub</p>
+      </div>`,
+    });
+    return;
+  }
+
   const facts = [
     a.seats ? `${a.seats} seats` : null,
     a.integrationTier ? `integration tier ${a.integrationTier}` : "no integration",
@@ -382,17 +425,20 @@ async function notifyAssignee(a: {
   ]
     .filter(Boolean)
     .join(" · ");
-  const first = a.assigneeName.split(" ")[0] ?? a.assigneeName;
   await sendEmail({
     kind: "assignment",
     to: a.to,
-    subject: `New account: ${a.dealName} — three things to do first`,
+    subject:
+      a.message === "handoff"
+        ? `Handed to you: ${a.dealName} — Field Fusion training`
+        : `New account: ${a.dealName} — three things to do first`,
     html: `
       <div style="font-family:sans-serif;max-width:560px;color:#0a1628">
         <p style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#039de7;margin:0 0 6px">You're up</p>
         <h2 style="margin:0 0 6px;color:#072b57">${esc(a.dealName)}</h2>
         <p style="margin:0 0 16px;color:#556477">${esc(facts)}</p>
-        <p>Hi ${esc(first)} — this one is yours. The plan is already built with dates. Three things before the kickoff invite goes out:</p>
+        <p>Hi ${esc(first)} — this one is yours. The plan is already built with dates. Three things before the ${a.training ? "training call" : "kickoff"} invite goes out:</p>
+        ${handoffBlock(a.handoff)}
         <ol style="line-height:1.7">
           <li><b>Grab the Gong recording</b> from the closing call and paste the notes on the deal.<br/><a href="${deal}#reports" style="color:#039de7">Open the deal → Gong reports</a></li>
           <li><b>Upload the SOW</b> so the plan and the page read from what was sold.<br/><a href="${deal}#sow" style="color:#039de7">Open the deal → SOW</a></li>
@@ -403,10 +449,34 @@ async function notifyAssignee(a: {
             ? `<p style="margin:12px 0 0;padding:10px 12px;border-radius:8px;background:#eef7fd;color:#072b57;font-size:13px"><b>The customer's link is ready:</b> <a href="${a.shareUrl}" style="color:#12509b">${a.shareUrl}</a><br/><span style="color:#556477">Send it after the kickoff. It shows their dates, their homework and your face.</span></p>`
             : ""
         }
-        <p style="color:#556477;font-size:13px">Kickoff is the next business day. The form is live within seven.</p>
+        <p style="color:#556477;font-size:13px">${
+          a.training
+            ? "The training call is the next business day. The crew is live within seven."
+            : "Kickoff is the next business day. The form is live within seven."
+        }</p>
         <p style="font-size:12px;color:#888">GoCanvas Handoff Hub</p>
       </div>`,
   });
+}
+
+/** The setup's handoff, as a boxed note in the assignee's email. Empty when there is none. */
+function handoffBlock(h: HandoffNote | null): string {
+  if (!h) return "";
+  const goals = h.goals.length
+    ? `<p style="margin:8px 0 2px"><b>Goals, from the calls</b></p><ul style="margin:0 0 0 18px;padding:0;line-height:1.6">${h.goals
+        .slice(0, 6)
+        .map((g) => `<li>${esc(g)}</li>`)
+        .join("")}</ul>`
+    : "";
+  const useCase = h.useCase
+    ? `<p style="margin:8px 0 2px"><b>Use case</b><br/>${esc(h.useCase)}</p>`
+    : "";
+  const notes = h.notes
+    ? `<p style="margin:8px 0 2px"><b>From ${esc(h.from)}, on the setup</b><br/>${esc(h.notes).replaceAll("\n", "<br/>")}</p>`
+    : "";
+  if (!goals && !useCase && !notes)
+    return `<p style="margin:12px 0;padding:10px 12px;border-radius:8px;background:#fff7e6;color:#072b57;font-size:13px">Field Fusion is set up and working — ${esc(h.from)} confirmed it. The calls did not give a use case or goals; ask on the training call.</p>`;
+  return `<div style="margin:12px 0;padding:10px 12px;border-radius:8px;background:#fff7e6;color:#072b57;font-size:13px"><p style="margin:0"><b>Field Fusion is set up and working</b> — ${esc(h.from)} confirmed it and handed this over.</p>${useCase}${goals}${notes}</div>`;
 }
 
 /* ------------------------------------------ what the deal page shows */
@@ -578,7 +648,13 @@ export async function claimDeal(profileId: string, dealId: string) {
  */
 async function notifyPoolToClaim(
   pool: PoolRow[],
-  deal: { dealId: string; dealName: string; weight: number; breakdown: WeightBreakdown },
+  deal: {
+    dealId: string;
+    dealName: string;
+    weight: number;
+    breakdown: WeightBreakdown;
+    handoff?: HandoffNote | null;
+  },
 ): Promise<void> {
   const to = pool.filter((p) => p.inPool && p.active && p.email).map((p) => p.email as string);
   if (to.length === 0) return;
@@ -595,6 +671,7 @@ async function notifyPoolToClaim(
             Nobody owns it yet. Weight ${deal.weight} · ${escapeHtml(describeBreakdown(deal.breakdown))}.
             Open it and press <b>Claim this account</b> if it is yours.
           </p>
+          ${handoffBlock(deal.handoff ?? null)}
           <div style="margin:20px 0">
             <a href="${url}" style="background:#12509b;color:#fff;padding:10px 22px;border-radius:6px;text-decoration:none;font-weight:600">Open the deal</a>
           </div>

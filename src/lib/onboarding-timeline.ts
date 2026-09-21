@@ -69,20 +69,35 @@ export type MilestoneSpec = {
  * form, sometimes a few fields, sometimes nothing. Same keys, same gates,
  * same rule for everything after, so every screen and every date follows.
  */
-export type OnboardingPath = "new_logo" | "existing" | "dm_conversion";
+export type OnboardingPath =
+  "new_logo" | "existing" | "dm_conversion" | "field_fusion" | "field_fusion";
 
-/** The three kinds of account, in the words the pickers use. */
+/** The four kinds of account, in the words the pickers use. */
 export const PATH_LABEL: Record<OnboardingPath, string> = {
   new_logo: "New customer — first implementation",
   existing: "Existing account — adding services",
   dm_conversion: "Device Magic → GoCanvas conversion",
+  field_fusion: "Field Fusion — training journey",
 };
 /** Short, for a chip on a board. */
 export const PATH_CHIP: Record<OnboardingPath, string> = {
   new_logo: "New",
   existing: "Existing",
   dm_conversion: "DM → GC",
+  field_fusion: "Field Fusion",
 };
+
+/**
+ * True when phase 1 is training, not a form build: every Field Fusion
+ * account (the product ships set up; the crew needs to be shown it) and any
+ * other account where the person said "no form — they just need training".
+ */
+export function isTrainingPlan(
+  path: OnboardingPath | null | undefined,
+  trainingOnly?: boolean | null,
+): boolean {
+  return path === "field_fusion" || trainingOnly === true;
+}
 
 /** The seven-day plan, in order. The keys are the contract the deck renders. */
 export const SEVEN_DAY_PLAN: readonly MilestoneSpec[] = [
@@ -338,7 +353,99 @@ export const DM_CONVERSION_PLAN: readonly MilestoneSpec[] = [
   },
 ];
 
-export function planFor(path: OnboardingPath | null | undefined): readonly MilestoneSpec[] {
+/**
+ * No form to build: a training journey. Same keys and days as the seven-day
+ * plan, so every screen and every date keeps working; the words are about
+ * the crew learning the app on their own jobs. Two short sessions, two days
+ * of real jobs in between, and a live day when everyone trained is running
+ * it. Field Fusion accounts always take this plan; any other account takes it
+ * when the person says "no form — they just need training".
+ */
+export const TRAINING_PLAN: readonly MilestoneSpec[] = [
+  {
+    key: "close",
+    day: 0,
+    label: "Welcome aboard",
+    owner: "gocanvas",
+    kind: "milestone",
+    detail: "Welcome email the same day, with the training call invite already in it.",
+    icon: "Flag",
+  },
+  {
+    key: "kickoff",
+    day: 1,
+    label: "Training call",
+    owner: "both",
+    kind: "call",
+    minutes: 60,
+    detail:
+      "Your account, on your phones, with your jobs. We walk the crew through the app on a real job, together — no slides.",
+    homework: [
+      "Send us the name and email of everyone who needs a login",
+      "Pick one person in the field to run the first real job",
+      "Tell us which job they will run it on",
+    ],
+    icon: "PhoneCall",
+  },
+  {
+    key: "homework",
+    day: 2,
+    label: "Your homework",
+    owner: "client",
+    kind: "homework",
+    detail:
+      "The three things above. Fifteen minutes, and the second session starts from your real people and your real jobs.",
+    icon: "ClipboardCheck",
+  },
+  {
+    key: "working",
+    day: 3,
+    label: "Second session",
+    owner: "both",
+    kind: "call",
+    minutes: 30,
+    detail:
+      "Thirty minutes, hands on the phones. The crew runs a job start to finish and the office watches it arrive. Questions answered as they come up.",
+    homework: ["Run it on real jobs for two days", "Write down anything that slows anyone down"],
+    icon: "Wrench",
+  },
+  {
+    key: "fieldtest",
+    day: 4,
+    throughDay: 5,
+    label: "Real jobs, on your own",
+    owner: "client",
+    kind: "build",
+    detail:
+      "The crew runs the app on real jobs without us on the call. What slows them down is what we cover next.",
+    icon: "HardHat",
+  },
+  {
+    key: "adjust",
+    day: 6,
+    label: "Questions & tune-up",
+    owner: "both",
+    kind: "build",
+    detail: "What the real jobs raised. A setting changed, a shortcut shown, rarely more.",
+    icon: "Target",
+  },
+  {
+    key: "live",
+    day: 7,
+    label: "Your crew is live",
+    owner: "both",
+    kind: "milestone",
+    detail:
+      "Everyone trained runs it on every job. Anyone who joins later gets the same walkthrough from your own team.",
+    icon: "Rocket",
+  },
+];
+
+export function planFor(
+  path: OnboardingPath | null | undefined,
+  trainingOnly?: boolean | null,
+): readonly MilestoneSpec[] {
+  if (isTrainingPlan(path, trainingOnly)) return TRAINING_PLAN;
   return path === "existing"
     ? EXISTING_PLAN
     : path === "dm_conversion"
@@ -439,8 +546,10 @@ export const INTEGRATION_PLAN: readonly (Omit<MilestoneSpec, "day"> & { at: numb
 export type TimelineOptions = {
   /** ISO date, YYYY-MM-DD. The day the deal closed. */
   closeDate: string;
-  /** New logo (the seven-day form) or an existing account adding services (the form review). */
+  /** New logo (the seven-day form), an existing account (the form review), a conversion, or Field Fusion (training). */
   path?: OnboardingPath | null;
+  /** No form to build on this account: phase 1 is the training plan whatever the path. */
+  trainingOnly?: boolean | null;
   /** Milestone key → ISO date, for the ones a person moved. */
   overrides?: Record<string, string>;
   /** ISO dates to skip, on top of weekends. */
@@ -520,6 +629,8 @@ export type Phase = {
 export type Timeline = {
   closeDate: string;
   path: OnboardingPath;
+  /** Phase 1 is training, not a form build — the words on every screen follow it. */
+  training: boolean;
   milestones: Milestone[];
   /** The live date — the last of the seven days, after overrides. */
   liveDate: string;
@@ -661,8 +772,9 @@ export function buildTimeline(options: TimelineOptions): Timeline {
     });
   };
 
-  const path: OnboardingPath = options.path === "existing" ? "existing" : "new_logo";
-  const milestones = cascade(planFor(path), (spec) =>
+  const path: OnboardingPath = options.path ?? "new_logo";
+  const training = isTrainingPlan(path, options.trainingOnly);
+  const milestones = cascade(planFor(path, options.trainingOnly), (spec) =>
     spec.day === 0 ? options.closeDate : addBusinessDays(options.closeDate, spec.day, holidays),
   );
 
@@ -838,6 +950,7 @@ export function buildTimeline(options: TimelineOptions): Timeline {
   return {
     closeDate: options.closeDate,
     path,
+    training,
     milestones,
     liveDate,
     liveDoneOn,

@@ -6,7 +6,7 @@ import { ArrowRight, Check, Sparkles } from "lucide-react";
 
 import { Working } from "@/components/working";
 import { dealQuery, type DealData } from "@/lib/deal-query";
-import { readIntake } from "@/lib/intake-answers";
+import { isTrainingOnly, readIntake } from "@/lib/intake-answers";
 import { generateBriefForDeal, saveIntake } from "@/lib/presale.functions";
 import { proposePlanFromSowFn } from "@/lib/sow-plan.functions";
 import { mergeProposal, type SowPlanRow } from "@/lib/sow-plan";
@@ -254,9 +254,10 @@ export function ThreeClicks({ deal }: { deal: DealData }) {
   const intake = readIntake(deal.account.intake);
   const questions =
     intake.path !== null &&
-    (intake.forms_built === true
-      ? intake.uploaded_forms.length > 0
-      : intake.forms_built === false && intake.wanted_forms.length > 0);
+    (isTrainingOnly(intake) ||
+      (intake.forms_built === true
+        ? intake.uploaded_forms.length > 0
+        : intake.forms_built === false && intake.wanted_forms.length > 0));
   const items = [
     { n: 1, label: "Notes in", done: hasNotes },
     { n: 2, label: "Three questions", done: questions },

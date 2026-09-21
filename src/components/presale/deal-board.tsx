@@ -33,7 +33,7 @@ export type BoardDeal = Account & {
   /** Set once the deal has closed and has a customer page; the card opens that page. */
   customer_id?: string | null;
   implementation_id?: string | null;
-  path?: "new_logo" | "existing" | "dm_conversion" | null;
+  path?: "new_logo" | "existing" | "dm_conversion" | "field_fusion" | null;
   has_notes?: boolean;
   has_sow?: boolean;
 };

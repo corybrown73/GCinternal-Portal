@@ -1,4 +1,4 @@
-import { intakeStatus, readIntake, type IntakeAnswers } from "./intake-answers";
+import { intakeStatus, isTrainingOnly, readIntake, type IntakeAnswers } from "./intake-answers";
 import { closeDateFor, timelineFor } from "./onboarding-plan";
 
 /**
@@ -46,14 +46,15 @@ export function guideSteps(input: {
   const t = timelineFor(a, close.date);
   const calls = t.milestones.filter((m) => m.key === "kickoff" || m.key === "working");
   const services = a.timeline.services ?? [];
-  const hasForm = a.wanted_forms.length > 0 || a.uploaded_forms.length > 0;
+  // Training only has no form to name: the intake is done when the facts are.
+  const hasForm = isTrainingOnly(a) || a.wanted_forms.length > 0 || a.uploaded_forms.length > 0;
   const blockers = (input.readiness ?? []).map((r) => ({ key: r.key, label: r.label }));
 
   const steps: Array<Omit<GuideStep, "blockers">> = [
     {
       key: "path",
       label: "Pick the path",
-      hint: "New customer, or an existing account adding services. Everything below follows it.",
+      hint: "New customer, existing account, conversion, or Field Fusion. Everything below follows it.",
       done: a.path !== null,
       panel: { key: "deal:intake", id: "panel-intake" },
     },

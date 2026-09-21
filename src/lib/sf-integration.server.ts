@@ -445,6 +445,12 @@ export async function syncPresaleStageFromLifecycle(
     if (isAtOrPast(stages, account.stage, target)) {
       return { synced: false, reason: "deal is already at or past that stage" };
     }
+    // The Field Fusion gate holds until the person running it presses "Hand
+    // to implementation"; a plan step ticked early must not move the deal
+    // past it on its own.
+    if (account.stage === "field_fusion_setup") {
+      return { synced: false, reason: "Field Fusion setup holds until the handoff" };
+    }
 
     const { transitionStage } = await import("./server/accounts");
     const { changed } = await transitionStage(

@@ -53,7 +53,26 @@ export const intakeAnswersSchema = z.object({
    * existing account adding services reviews the form the integration reads
    * from. null until somebody says — the plan treats null as a new logo.
    */
-  path: z.enum(["new_logo", "existing", "dm_conversion"]).nullable().default(null),
+  path: z.enum(["new_logo", "existing", "dm_conversion", "field_fusion"]).nullable().default(null),
+  /**
+   * No form to build: the crew just needs training. Phase 1 becomes the
+   * training plan and the forms question is skipped. A Field Fusion account
+   * is training-only by definition; this flag is for every other kind.
+   */
+  training_only: z.boolean().default(false),
+  /**
+   * The Field Fusion gate, before the handoff to implementation. Liesl
+   * confirms the product is working and the account is set up, writes what
+   * the implementer should know, and presses "Hand to implementation".
+   */
+  field_fusion: z
+    .object({
+      ffiq_confirmed: z.boolean().default(false),
+      account_ready: z.boolean().default(false),
+      notes: z.string().trim().max(4000).default(""),
+      handed_off_at: z.string().nullable().default(null),
+    })
+    .default({}),
   /** The fork. null until the question has been asked. */
   forms_built: z.boolean().nullable().default(null),
   /** What they uploaded, when forms_built is true. Paths into the private bucket. */
@@ -171,6 +190,11 @@ export const intakeAnswersSchema = z.object({
 
 export type IntakeAnswers = z.infer<typeof intakeAnswersSchema>;
 
+/** Phase 1 is training, not a form build: Field Fusion, or the person said so. */
+export function isTrainingOnly(a: Pick<IntakeAnswers, "path" | "training_only">): boolean {
+  return a.path === "field_fusion" || a.training_only === true;
+}
+
 export const EMPTY_INTAKE: IntakeAnswers = intakeAnswersSchema.parse({});
 
 /** Whatever is in the column, as a well-formed object. Never throws. */
@@ -195,8 +219,12 @@ export function intakeStatus(a: IntakeAnswers): {
   done: boolean;
   next: string | null;
 } {
-  if (a.forms_built === null) return { done: false, next: "Do they already have forms built?" };
-  if (a.forms_built) {
+  // Training only: there is no form to ask about, so the questions are
+  // who they are and what the crew does today.
+  const training = isTrainingOnly(a);
+  if (!training && a.forms_built === null)
+    return { done: false, next: "Do they already have forms built?" };
+  if (!training && a.forms_built) {
     return a.uploaded_forms.length > 0
       ? { done: true, next: null }
       : { done: false, next: "Upload the forms they have." };

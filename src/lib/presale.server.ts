@@ -4,6 +4,7 @@ import { resolveAccountId, transitionStage, upsertAccount } from "./server/accou
 import { accountUpsertSchema } from "./server/schemas";
 import { isStage, type AccountStage } from "./presale-stages";
 import {
+  findStage,
   stageAfterWon,
   stageOrder,
   terminalStage,
@@ -18,6 +19,7 @@ import { createTamRequest } from "./server/tam";
 import { API_SCOPES, generateApiKey, type ApiScope } from "./server/api-auth";
 import { recordImplementationCreated } from "./server/events";
 import { sfId18 } from "./server/sf-id";
+import { FIELD_FUSION_STAGE, FIELD_FUSION_TEMPLATE_KEY } from "./field-fusion";
 import { LIFECYCLE_STAGES } from "./lifecycle";
 import type {
   Account,
@@ -167,7 +169,7 @@ export interface PipelineDeal extends Account {
   implementation_id: string | null;
   se_owner_name: string | null;
   /** New customer or existing account, when the intake has said. */
-  path: "new_logo" | "existing" | "dm_conversion" | null;
+  path: "new_logo" | "existing" | "dm_conversion" | "field_fusion" | null;
   /** The two things Closed Won is gated on. */
   has_notes: boolean;
   has_sow: boolean;
@@ -257,7 +259,7 @@ export async function createDeal(
     salesforce_id: string | null;
     arr: number | null;
     summary: string | null;
-    path?: "new_logo" | "existing" | "dm_conversion" | null;
+    path?: "new_logo" | "existing" | "dm_conversion" | "field_fusion" | null;
     industry?: string | null;
     /** Where the deal already is. A deal entered after it closed starts closed. */
     stage?: AccountStage | null;
@@ -393,6 +395,19 @@ export async function transitionDeal(
           payload: { reason: e instanceof Error ? e.message : String(e) },
         });
       }
+    }
+    // A Field Fusion account does not go to implementation yet: it moves on
+    // to the setup stage, and the person who confirms the setup owns it
+    // until she presses "Hand to implementation".
+    const { readIntake } = await import("./intake-answers");
+    const { data: closed } = await db()
+      .from("portal_accounts")
+      .select("intake")
+      .eq("id", dealId)
+      .maybeSingle();
+    if (closed && readIntake(closed.intake).path === "field_fusion") {
+      const { startFieldFusionSetup } = await import("./field-fusion.server");
+      await startFieldFusionSetup(dealId, userId);
     }
   }
   return result;
@@ -1320,6 +1335,13 @@ export async function startOnboardingAs(
   const plan = await applyPlanToNewImplementation({
     implementationId: impl.id as string,
     actorProfileId: userId,
+    // A Field Fusion account is a training journey, not a form build: the
+    // rail and the tasks come from that template when it is published.
+    preferKey:
+      (await import("./intake-answers")).readIntake((account as { intake?: unknown }).intake)
+        .path === "field_fusion"
+        ? FIELD_FUSION_TEMPLATE_KEY
+        : null,
   });
 
   // Carry what the deal already settled onto the project, so nobody is asked
@@ -1395,7 +1417,14 @@ export async function startOnboardingAs(
   // last, or everything after it is declared but not yet an account stage — the
   // deal stays where it is rather than attempting a transition the enum would
   // reject.
-  const next = stageAfterWon(pipeline);
+  // A Field Fusion deal goes to its setup wait instead: the product is
+  // confirmed working before implementation sees it.
+  const isFieldFusion =
+    (await import("./intake-answers")).readIntake((account as { intake?: unknown }).intake).path ===
+    "field_fusion";
+  const next = isFieldFusion
+    ? (findStage(pipeline, FIELD_FUSION_STAGE) ?? stageAfterWon(pipeline))
+    : stageAfterWon(pipeline);
   if (account.stage === won.key && next) {
     await transitionStage(
       dealId,
@@ -1804,9 +1833,21 @@ export async function saveDealIntake(
   if (!before) throw new Error("Deal not found");
 
   const current = readIntake((before as any).intake);
+  // The Field Fusion block is patched one tick at a time; a tick must not
+  // wipe the other tick, the note, or the handoff stamp.
+  const merged =
+    patch["field_fusion"] && typeof patch["field_fusion"] === "object"
+      ? {
+          ...patch,
+          field_fusion: {
+            ...current.field_fusion,
+            ...(patch["field_fusion"] as Record<string, unknown>),
+          },
+        }
+      : patch;
   const next = intakeAnswersSchema.parse({
     ...current,
-    ...patch,
+    ...merged,
     updated_at: new Date().toISOString(),
   });
 
@@ -1950,7 +1991,7 @@ export type DealInboxRow = {
   stage: AccountStage;
   stage_label: string;
   stage_entered_at: string;
-  path: "new_logo" | "existing" | "dm_conversion" | null;
+  path: "new_logo" | "existing" | "dm_conversion" | "field_fusion" | null;
   /** The implementation owner from the claim ledger, when somebody has claimed it. */
   owner_name: string | null;
   /** The viewer is that owner. */
@@ -2181,6 +2222,8 @@ export function implementationNameFor(
   if (intake.path === "existing" && services.length) {
     return services.length === 1 ? services[0]! : `${services[0]} + ${services.length - 1} more`;
   }
+  if (intake.path === "field_fusion") return `${accountName} — Field Fusion training`;
+  if (intake.training_only) return `${accountName} — training`;
   if (intake.path === "dm_conversion") {
     return firstForm
       ? `${firstForm} — from Device Magic`

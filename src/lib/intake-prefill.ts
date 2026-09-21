@@ -27,7 +27,14 @@ export function prefillFromSynthesis(
   // A customer moving off Device Magic: the calls say so long before a form
   // does. Read the notes as pasted and the brief's own text; only when
   // nobody has said which kind of account this is.
-  if (intake.path === null && mentionsDeviceMagic(`${notes ?? ""}\n${JSON.stringify(b)}`)) {
+  // Field Fusion is a product, not a form build: the calls name it (or its
+  // FFIQ setup) long before anything else does. Checked first, because a
+  // Field Fusion customer may also mention the tool they are leaving.
+  const said = `${notes ?? ""}\n${JSON.stringify(b)}`;
+  if (intake.path === null && mentionsFieldFusion(said)) {
+    patch.path = "field_fusion";
+    filled.push("the path (Field Fusion — training journey)");
+  } else if (intake.path === null && mentionsDeviceMagic(said)) {
     patch.path = "dm_conversion";
     filled.push("the path (Device Magic conversion)");
   }
@@ -112,6 +119,11 @@ export function prefillFromSynthesis(
  * "DM forms", "DM to GoCanvas"). A bare "DM" for a direct message does not
  * count: it needs the product words around it.
  */
+/** "Field Fusion", "FieldFusion", or its setup "FFIQ" — the product, named. */
+export function mentionsFieldFusion(text: string): boolean {
+  return /field\s*fusion|\bFFIQ\b/i.test(text);
+}
+
 export function mentionsDeviceMagic(text: string): boolean {
   if (/device\s*magic/i.test(text)) return true;
   return /\b(?:from|off|on|in|our|their|the|convert(?:ing)?|migrat(?:e|ing)|mov(?:e|ing)|replac(?:e|ing))\s+DM\b|\bDM\s+(?:forms?|to\s+(?:go\s*canvas|gc)|conversion|migration|account|users?|data|submissions?)\b/i.test(

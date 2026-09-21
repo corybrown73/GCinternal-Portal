@@ -55,6 +55,7 @@ export interface PipelineStage {
 const DEFAULT_COLORS: Record<AccountStage, StageColor> = {
   prospect: "idle",
   closed_won: "ontrack",
+  field_fusion_setup: "risk",
   onboarding_kickoff: "primary",
   in_onboarding: "primary",
   onboarding_complete: "ontrack",
@@ -147,8 +148,15 @@ export function stageLabel(stages: readonly PipelineStage[], key: string | null)
 export function stageAfterWon(stages: readonly PipelineStage[]): PipelineStage | null {
   const wonIndex = stages.findIndex((s) => s.is_won);
   if (wonIndex < 0) return null;
-  return stages.slice(wonIndex + 1).find((s) => s.enterable) ?? null;
+  return stages.slice(wonIndex + 1).find((s) => s.enterable && !SIDE_STAGES.has(s.key)) ?? null;
 }
+
+/**
+ * Stages a deal enters only by an explicit decision, never as "the next
+ * one": the Field Fusion setup wait sits between Closed Won and Onboarding
+ * Kickoff on the board, but only a Field Fusion deal goes there.
+ */
+export const SIDE_STAGES: ReadonlySet<string> = new Set(["field_fusion_setup"]);
 
 /* ------------------------------------------------------------------------- */
 /* Presentation                                                               */

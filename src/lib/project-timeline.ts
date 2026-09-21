@@ -1,5 +1,26 @@
 import { normalizeStage, stageLabel } from "./hub-format";
 import { isStageHidden, LIFECYCLE_STAGES } from "./lifecycle";
+
+/**
+ * The names the first journey templates gave the lifecycle stages, and the
+ * names the app has called them since. A stage instance carrying any of
+ * these is shown under the configured label; any other name was chosen.
+ */
+const LEGACY_STAGE_NAMES: ReadonlySet<string> = new Set([
+  "Handoff",
+  "Pre-kickoff",
+  "Plan Internally",
+  "Kickoff",
+  "Align Externally",
+  "Align externally",
+  "Build",
+  "Validate / Iterate",
+  "Pilot",
+  "Launch",
+  "Adopt",
+  "Handover to Customer Success",
+  "Complete",
+]);
 import { datePace, dwellPace, worstPace, type Pace } from "./pace";
 
 /**
@@ -125,13 +146,22 @@ export function buildProjectTimeline(
   now: Date = new Date(),
 ): ProjectTimeline {
   // A journey template names its stages itself ("Plan Internally"), and the
-  // template was written before the stages were renamed: a known key is
-  // shown under the configured name, and a hidden stage is not shown at all,
+  // first templates were written before the stages were renamed: a stage
+  // still carrying one of those names is shown under the configured name. A
+  // template that named its stages on purpose — the Field Fusion training
+  // journey calls Build "Second session" — keeps its own words. A hidden
+  // stage is not shown at all,
   // so the rail, the button and the record use one word for one thing.
   const rows = [...(input.stages ?? [])]
     .filter((r) => !isStageHidden(normalizeStage(r.stage_key) ?? r.stage_key))
     .sort((a, b) => a.position - b.position)
-    .map((r) => ({ ...r, name: normalizeStage(r.stage_key) ? stageLabel(r.stage_key) : r.name }));
+    .map((r) => ({
+      ...r,
+      name:
+        normalizeStage(r.stage_key) && (!r.name || LEGACY_STAGE_NAMES.has(r.name.trim()))
+          ? stageLabel(r.stage_key)
+          : r.name,
+    }));
   const isAddOn = Boolean(input.parent_implementation_id);
   const launch = datePace(input.target_launch_date, input.actual_launch_date, now);
 

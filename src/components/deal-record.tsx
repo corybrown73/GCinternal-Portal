@@ -17,6 +17,7 @@ import { CustomerLogo } from "@/components/customer-logo";
 import { Field, NoRows, Panel } from "@/components/record";
 import { EditableField } from "@/components/editable-field";
 import { OwnerField } from "@/components/assignment-panel";
+import { FieldFusionGate } from "@/components/field-fusion-gate";
 import { DealGuide } from "@/components/deal-guide";
 import { BuildIt, ThreeClicks } from "@/components/build-it";
 import { PlanSection } from "@/components/plan-section";
@@ -272,7 +273,7 @@ export function DealRecord({ deal, embedded = false }: { deal: DealData; embedde
   const openStage = (d: Deliverable) => {
     openPanel("deal:plan", "panel-plan");
     const id =
-      d.kind === "form"
+      d.id === "form"
         ? "plan-phase-1"
         : d.phase === 1
           ? "plan-phase-1-services"
@@ -293,6 +294,7 @@ export function DealRecord({ deal, embedded = false }: { deal: DealData; embedde
       {embedded ? (
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0 flex-1 space-y-3">
+            <FieldFusionGate deal={deal} editable={editable} />
             <ThreeClicks deal={deal} />
             <IntakePanel
               dealId={deal.account.id}
@@ -338,6 +340,7 @@ export function DealRecord({ deal, embedded = false }: { deal: DealData; embedde
       <PageBody className={cn("space-y-4", embedded && "px-0 py-0")}>
         {embedded ? null : (
           <div className="space-y-3">
+            <FieldFusionGate deal={deal} editable={editable} />
             <ThreeClicks deal={deal} />
             <IntakePanel
               dealId={deal.account.id}

@@ -39,20 +39,26 @@ export function deliverablesFor(intake: IntakeAnswers, t: Timeline): Deliverable
   const out: Deliverable[] = [];
   const existing = intake.path === "existing";
 
-  const formName =
-    intake.wanted_forms[0]?.name ??
-    intake.uploaded_forms[0]?.name ??
-    (existing ? "Form review" : "First form");
+  // Phase 1 is one tile: the first form, or — with no form to build — the
+  // crew's training week. Same id and done key, so the plan opens the same
+  // section and the same tick marks it live.
+  const formName = t.training
+    ? intake.path === "field_fusion"
+      ? "Field Fusion training"
+      : "Crew training"
+    : (intake.wanted_forms[0]?.name ??
+      intake.uploaded_forms[0]?.name ??
+      (existing ? "Form review" : "First form"));
   out.push({
     id: "form",
-    kind: "form",
+    kind: t.training ? "training" : "form",
     label: formName,
     sublabel: t.liveDoneOn
       ? `${existing ? "Ready" : "Live"} ${shortDay(t.liveDoneOn)}`
       : `Phase 1 · ${existing ? "ready" : "live"} ${shortDay(t.liveDate)}`,
     phase: 1,
     state: t.liveDoneOn ? "done" : t.currentPhase === 1 ? "active" : "upcoming",
-    mark: KIND_MARKS.form,
+    mark: t.training ? KIND_MARKS.training : KIND_MARKS.form,
     done_key: "live",
   });
 
@@ -73,7 +79,7 @@ export function deliverablesFor(intake: IntakeAnswers, t: Timeline): Deliverable
       sublabel: s.doneOn
         ? `Live ${shortDay(s.doneOn)}`
         : phase === 1
-          ? "Phase 1 · alongside the form"
+          ? `Phase 1 · alongside the ${t.training ? "training" : "form"}`
           : `Phase ${phase} · ${shortDay(s.startsOn)} → ${shortDay(s.endsOn)}`,
       phase,
       state,

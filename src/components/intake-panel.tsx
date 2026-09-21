@@ -11,6 +11,7 @@ import {
   chosenFrom,
   COMPANY_SIZES,
   INDUSTRIES,
+  isTrainingOnly,
   makeFirstWantedForm,
   readIntake,
   templateIds,
@@ -48,7 +49,7 @@ export function IntakePanel({
   // Changing the path rewrites the whole plan and its dates. A stray click
   // — the gallery loads and everything shifts under the cursor — should not
   // be able to do that silently.
-  const choosePath = (next: "new_logo" | "existing" | "dm_conversion") => {
+  const choosePath = (next: "new_logo" | "existing" | "dm_conversion" | "field_fusion") => {
     if (answers.path === next) return;
     if (
       answers.path !== null &&
@@ -84,8 +85,13 @@ export function IntakePanel({
   // fold to their answer with "Change". Build it fills step 3 from the
   // calls, so on a normal account a person answers two questions.
   const step1Done = answers.path !== null;
-  const step2Done =
-    answers.forms_built === true
+  // Training only — Field Fusion, or the person said so — has no form to ask
+  // about: the forms step folds to that answer and the plan is the training
+  // journey.
+  const training = isTrainingOnly(answers);
+  const step2Done = training
+    ? true
+    : answers.forms_built === true
       ? answers.uploaded_forms.length > 0
       : answers.forms_built === false
         ? answers.wanted_forms.length > 0
@@ -158,6 +164,16 @@ export function IntakePanel({
             >
               Device Magic → GoCanvas conversion
             </Choice>
+            <Choice
+              active={answers.path === "field_fusion"}
+              disabled={!editable || busy}
+              onClick={() => {
+                choosePath("field_fusion");
+                setOpened(null);
+              }}
+            >
+              Field Fusion — training journey
+            </Choice>
           </div>
           <p className="mt-1.5 text-[11px] text-muted-foreground">
             Everything after this follows the answer: the plan's shape, the deck's words, the gate
@@ -166,7 +182,9 @@ export function IntakePanel({
               ? " On an existing account, phase 1 is a review of the form the integration reads from."
               : answers.path === "dm_conversion"
                 ? " On a conversion, the first form is their most-used Device Magic form, rebuilt in GoCanvas and run alongside it until it is proven."
-                : ""}
+                : answers.path === "field_fusion"
+                  ? " Field Fusion ships set up: there is no form to build. Liesl confirms it is working, then hands the account to implementation for a training call — not a kickoff — and a training week."
+                  : ""}
           </p>
         </Step>
 
@@ -178,42 +196,77 @@ export function IntakePanel({
               : "Do they already have forms built?"
           }
           answer={
-            answers.forms_built === true
-              ? answers.uploaded_forms.length
-                ? `Yes — ${answers.uploaded_forms.length} uploaded`
-                : "Yes — nothing uploaded yet"
-              : answers.forms_built === false
-                ? answers.wanted_forms.length
-                  ? `No — first form: ${answers.wanted_forms[0]!.name}`
-                  : "No — no first form named yet"
-                : null
+            training
+              ? answers.path === "field_fusion"
+                ? "Training only — Field Fusion has no form to build"
+                : "Training only — no form to build"
+              : answers.forms_built === true
+                ? answers.uploaded_forms.length
+                  ? `Yes — ${answers.uploaded_forms.length} uploaded`
+                  : "Yes — nothing uploaded yet"
+                : answers.forms_built === false
+                  ? answers.wanted_forms.length
+                    ? `No — first form: ${answers.wanted_forms[0]!.name}`
+                    : "No — no first form named yet"
+                  : null
           }
           open={openStep === 2}
           locked={!step1Done}
           onOpen={() => setOpened(2)}
         >
-          <div className="flex flex-wrap items-center gap-2">
-            <Choice
-              active={answers.forms_built === true}
-              disabled={!editable || busy}
-              onClick={() => set({ forms_built: true })}
-            >
-              Yes — upload them
-            </Choice>
-            <Choice
-              active={answers.forms_built === false}
-              disabled={!editable || busy}
-              onClick={() => set({ forms_built: false })}
-            >
-              No — starting fresh
-            </Choice>
-          </div>
-          {answers.forms_built === true ? (
+          {answers.path === "field_fusion" ? (
+            <p className="text-[12px] text-muted-foreground">
+              Field Fusion is set up before the handoff, so there is no form to build. Phase 1 is
+              the training plan: a training call, a second session, real jobs in between.
+            </p>
+          ) : (
+            <div className="flex flex-wrap items-center gap-2">
+              <Choice
+                active={!training && answers.forms_built === true}
+                disabled={!editable || busy}
+                onClick={() => set({ forms_built: true, training_only: false })}
+              >
+                Yes — upload them
+              </Choice>
+              <Choice
+                active={!training && answers.forms_built === false}
+                disabled={!editable || busy}
+                onClick={() => set({ forms_built: false, training_only: false })}
+              >
+                No — starting fresh
+              </Choice>
+              <Choice
+                active={training}
+                disabled={!editable || busy}
+                onClick={() => {
+                  if (
+                    !training &&
+                    (answers.wanted_forms.length > 0 || answers.uploaded_forms.length > 0) &&
+                    !window.confirm(
+                      "Training only rebuilds phase 1 as a training week — no first form. The forms already named stay on the record. Continue?",
+                    )
+                  )
+                    return;
+                  set({ training_only: true });
+                  setOpened(null);
+                }}
+              >
+                No form — they just need training
+              </Choice>
+            </div>
+          )}
+          {training && answers.path !== "field_fusion" ? (
+            <p className="mt-1.5 text-[11px] text-muted-foreground">
+              Phase 1 becomes the training plan: a training call, a second session, two days of real
+              jobs, live on day seven. Anything the SOW bought still follows in phase 2.
+            </p>
+          ) : null}
+          {!training && answers.forms_built === true ? (
             <div className="mt-2">
               <HaveForms dealId={dealId} answers={answers} editable={editable} />
             </div>
           ) : null}
-          {answers.forms_built !== null ? (
+          {!training && answers.forms_built !== null ? (
             <div className="mt-2">
               <WantedForms answers={answers} editable={editable} busy={busy} onSet={set} />
             </div>

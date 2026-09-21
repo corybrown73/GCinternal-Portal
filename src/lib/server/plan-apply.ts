@@ -36,7 +36,7 @@ export type PlanApplyResult = {
   template_id?: string;
   template_key?: string;
   template_version?: number;
-  via?: "rule" | "fallback";
+  via?: "rule" | "fallback" | "path";
   stages?: number;
   work_items?: number;
 };
@@ -76,6 +76,12 @@ export async function applyPlanToNewImplementation(args: {
    * the configured fallback exists to cover.
    */
   inputs?: Partial<SelectionInputs>;
+  /**
+   * A template the deal itself asks for, by key — a Field Fusion account
+   * takes the training journey, whatever the rules say. Used only when a
+   * published template with that key exists; otherwise the rules decide.
+   */
+  preferKey?: string | null;
 }): Promise<PlanApplyResult> {
   try {
     // Both flags, because a plan is stages AND tasks. With `work_items` off the
@@ -90,7 +96,22 @@ export async function applyPlanToNewImplementation(args: {
     }
 
     const [candidates, key] = await Promise.all([publishedTemplates(), fallbackTemplateKey()]);
-    const selection = chooseTemplate(candidates, { ...NO_INPUTS, ...args.inputs }, key);
+    const preferred = args.preferKey
+      ? candidates.filter((c) => c.key === args.preferKey).sort((a, b) => b.version - a.version)[0]
+      : undefined;
+    const selection = preferred
+      ? {
+          winner: {
+            template_id: preferred.id,
+            template_key: preferred.key,
+            template_version: preferred.version,
+            via: "path" as const,
+            rule_index: -1,
+          },
+          evaluations: [],
+          fallback: null,
+        }
+      : chooseTemplate(candidates, { ...NO_INPUTS, ...args.inputs }, key);
 
     if (!selection.winner) {
       return {
@@ -125,9 +146,11 @@ export async function applyPlanToNewImplementation(args: {
     return {
       applied: true,
       reason:
-        selection.winner.via === "fallback"
-          ? `no rule matched; applied the configured fallback '${selection.winner.template_key}'`
-          : `rule ${selection.winner.rule_index} of '${selection.winner.template_key}' matched`,
+        selection.winner.via === "path"
+          ? `the deal's path asked for '${selection.winner.template_key}'`
+          : selection.winner.via === "fallback"
+            ? `no rule matched; applied the configured fallback '${selection.winner.template_key}'`
+            : `rule ${selection.winner.rule_index} of '${selection.winner.template_key}' matched`,
       template_id: selection.winner.template_id,
       template_key: selection.winner.template_key,
       template_version: selection.winner.template_version,

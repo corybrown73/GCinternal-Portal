@@ -94,7 +94,7 @@ async function viewFor(deal: any, opts: { internal: boolean }): Promise<WelcomeV
         label: "Industry",
         hint: "Onboarding intake → industry. Picks the icon, the phone's fields and the photo.",
       });
-    if (!input.firstForm)
+    if (!input.firstForm && !input.timeline.training)
       readiness.push({
         key: "form",
         label: "First form",

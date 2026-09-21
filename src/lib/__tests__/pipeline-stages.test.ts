@@ -125,6 +125,12 @@ describe("the stage onboarding moves a won deal into", () => {
     expect(stageAfterWon(custom)?.key).toBe("in_onboarding");
   });
 
+  it("skips the Field Fusion setup wait: only a Field Fusion deal goes there", () => {
+    const keys = BUILTIN_PIPELINE_STAGES.map((s) => s.key);
+    expect(keys.indexOf("field_fusion_setup")).toBe(keys.indexOf("closed_won") + 1);
+    expect(stageAfterWon(BUILTIN_PIPELINE_STAGES)?.key).not.toBe("field_fusion_setup");
+  });
+
   it("skips a stage that is configured but not yet an account stage", () => {
     const withPending = [
       stage({ key: "closed_won", is_won: true, sort_order: 1 }),

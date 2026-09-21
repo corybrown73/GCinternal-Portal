@@ -62,7 +62,10 @@ export const addDeal = createServerFn({ method: "POST" })
         salesforceId: z.string().trim().nullable(),
         arr: z.number().nonnegative().nullable(),
         summary: z.string().max(10000).nullable(),
-        path: z.enum(["new_logo", "existing", "dm_conversion"]).nullable().optional(),
+        path: z
+          .enum(["new_logo", "existing", "dm_conversion", "field_fusion"])
+          .nullable()
+          .optional(),
         industry: z.string().trim().max(80).nullable().optional(),
         stage: z.enum(STAGES).optional(),
       })
@@ -461,7 +464,18 @@ export const saveIntake = createServerFn({ method: "POST" })
             field_users: z.number().int().nonnegative().nullable().optional(),
             current_process: z.string().trim().max(4000).nullable().optional(),
             current_process_source: z.enum(["ai", "person"]).nullable().optional(),
-            path: z.enum(["new_logo", "existing", "dm_conversion"]).nullable().optional(),
+            path: z
+              .enum(["new_logo", "existing", "dm_conversion", "field_fusion"])
+              .nullable()
+              .optional(),
+            training_only: z.boolean().optional(),
+            field_fusion: z
+              .object({
+                ffiq_confirmed: z.boolean().optional(),
+                account_ready: z.boolean().optional(),
+                notes: z.string().trim().max(4000).optional(),
+              })
+              .optional(),
             chosen_templates: z.array(z.string().uuid()).optional(),
             welcome_hidden_screens: z.array(z.string().max(40)).max(20).optional(),
             welcome_shared_at: z.string().nullable().optional(),

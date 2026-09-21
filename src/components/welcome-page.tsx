@@ -363,7 +363,13 @@ function screenList(view: WelcomeView): Screen[] {
     },
     {
       key: "plan",
-      label: t.phases.length || t.alongside.length ? "Phase 1 · the form" : "The seven days",
+      label: t.training
+        ? t.phases.length || t.alongside.length
+          ? "Phase 1 · training"
+          : "The training week"
+        : t.phases.length || t.alongside.length
+          ? "Phase 1 · the form"
+          : "The seven days",
       render: (a) => <Plan key="plan" view={view} page={a.page} />,
     },
     ...t.phases.map((ph): Screen => ({
@@ -696,11 +702,13 @@ function SharedBar({ view, icsBase }: { view: WelcomeView; icsBase: string | nul
         <img src="/branding/gocanvas-wordmark-navy.png" alt="GoCanvas" className="h-5 w-auto" />
         <DayChip view={view} />
         <span className="wp-toolbar-meta">
-          {view.path === "existing"
-            ? "Your services plan"
-            : view.path === "dm_conversion"
-              ? "Your conversion plan"
-              : "Your onboarding plan"}
+          {view.timeline.training
+            ? "Your training plan"
+            : view.path === "existing"
+              ? "Your services plan"
+              : view.path === "dm_conversion"
+                ? "Your conversion plan"
+                : "Your onboarding plan"}
           {p.done ? ` · ${p.done} of ${p.total} steps done` : ""}
         </span>
       </div>
@@ -1044,18 +1052,24 @@ function Cover({ view, qr }: { view: WelcomeView; qr?: { url: string; dataUrl: s
       <div className="wp-cover-grid">
         <div className="wp-cover-text">
           <p className="wp-eyebrow">
-            {view.path === "existing"
-              ? "Services plan"
-              : view.path === "dm_conversion"
-                ? "Conversion plan"
-                : "Onboarding plan"}{" "}
+            {t.training
+              ? "Training plan"
+              : view.path === "existing"
+                ? "Services plan"
+                : view.path === "dm_conversion"
+                  ? "Conversion plan"
+                  : "Onboarding plan"}{" "}
             · {view.industry ?? "Your team"} ·{" "}
             {t.phases.length
               ? `Phase ${t.currentPhase} of ${t.phases.length + 1}`
               : `${daysToValue(t)} business days to value`}
           </p>
           <h1 className="wp-title is-hero">
-            {view.path === "existing" ? (
+            {t.training ? (
+              <>
+                Let&apos;s get your crew <span className="wp-accent">up and running</span>
+              </>
+            ) : view.path === "existing" ? (
               <>
                 Let&apos;s take your <span className="wp-accent">workflow further</span>
               </>
@@ -1077,7 +1091,9 @@ function Cover({ view, qr }: { view: WelcomeView; qr?: { url: string; dataUrl: s
             <T k="cover.lede">
               {view.path === "existing"
                 ? `Welcome back as of ${shortDay(t.closeDate)}. Form review ${shortDay(t.milestones[1]?.date ?? t.closeDate)}. Your form ready for the integration by ${shortDay(t.liveDate)} — optimised with you, not for you.`
-                : `Welcome aboard as of ${shortDay(t.closeDate)}. Kickoff ${shortDay(t.milestones[1]?.date ?? t.closeDate)}. Your first form in the field by ${shortDay(t.liveDate)} — built with you, not for you.`}
+                : t.training
+                  ? `Welcome aboard as of ${shortDay(t.closeDate)}. Training call ${shortDay(t.milestones[1]?.date ?? t.closeDate)}. Your crew live by ${shortDay(t.liveDate)} — trained on your jobs, not ours.`
+                  : `Welcome aboard as of ${shortDay(t.closeDate)}. Kickoff ${shortDay(t.milestones[1]?.date ?? t.closeDate)}. Your first form in the field by ${shortDay(t.liveDate)} — built with you, not for you.`}
             </T>
           </p>
           <div className="wp-pills">
@@ -1161,9 +1177,11 @@ function Team({ view, page }: { view: WelcomeView; page: number }) {
       role: `${t.leadCard?.title ?? "Onboarding lead"}, GoCanvas`,
       does:
         t.leadCard?.bio ??
-        (view.path === "existing"
-          ? "Runs both calls, reviews the form with you, watches the first real submissions through."
-          : "Runs both calls, builds the first form with you, watches the first submissions."),
+        (view.timeline.training
+          ? "Runs both sessions, trains the crew on real jobs, watches the first submissions."
+          : view.path === "existing"
+            ? "Runs both calls, reviews the form with you, watches the first real submissions through."
+            : "Runs both calls, builds the first form with you, watches the first submissions."),
       icon: "Wrench",
       side: "gocanvas",
       photoUrl: t.leadCard?.photoUrl ?? null,
@@ -1256,7 +1274,8 @@ function Team({ view, page }: { view: WelcomeView; page: number }) {
           <PhoneMock view={view} className="is-team" />
           <span className="wp-team-photo-cap">
             <Icon name="Smartphone" className="h-3.5 w-3.5" />
-            {view.firstForm?.name ?? "Your first form"}, on the crew&apos;s phone
+            {view.firstForm?.name ?? (view.timeline.training ? "Your jobs" : "Your first form")}, on
+            the crew&apos;s phone
           </span>
         </div>
       </div>
@@ -1284,9 +1303,12 @@ function Overview({ view, page }: { view: WelcomeView; page: number }) {
     {
       key: 1,
       label: "Phase 1",
-      names: [view.firstForm?.name ?? "Your first form", ...t.alongside.map((x) => x.name)],
+      names: [
+        view.firstForm?.name ?? (t.training ? "Crew training" : "Your first form"),
+        ...t.alongside.map((x) => x.name),
+      ],
       marks: [
-        KIND_MARKS.form,
+        t.training ? KIND_MARKS.training : KIND_MARKS.form,
         ...t.alongside.map((x) => markForService({ kind: x.kind, name: x.name })),
       ] as BrandMark[],
       length: `${live?.day ?? 7} business days`,
@@ -1335,12 +1357,12 @@ function Overview({ view, page }: { view: WelcomeView; page: number }) {
           ? "One phase,"
           : `${["", "One", "Two", "Three", "Four", "Five"][count] ?? count} phases,`
       }
-      accent="the form first"
+      accent={t.training ? "training first" : "the form first"}
       lede="The shape of the whole project. Each phase has its own screen with the detail — this is how long, how much of your time, and where we are."
       band={
         t.allDone
           ? "Every phase is live. From here the same team runs the working-session format for whatever you add."
-          : `You are on ${cards.find((c) => c.now)?.label.toLowerCase() ?? "phase 1"}. Nothing after the form starts until a crew has run the form on real jobs.`
+          : `You are on ${cards.find((c) => c.now)?.label.toLowerCase() ?? "phase 1"}. ${t.training ? "Nothing after the training starts until the crew has run real jobs on their own." : "Nothing after the form starts until a crew has run the form on real jobs."}`
       }
       bandIcon="Route"
     >
@@ -1421,22 +1443,32 @@ function Plan({ view, page }: { view: WelcomeView; page: number }) {
       done={Boolean(t.liveDoneOn)}
       eyebrow="Your timeline"
       title={
-        existing
-          ? "Phase 1: your form,"
-          : t.phases.length
+        t.training
+          ? t.phases.length
             ? "Phase 1: seven days to a"
             : "Seven days to a"
+          : existing
+            ? "Phase 1: your form,"
+            : t.phases.length
+              ? "Phase 1: seven days to a"
+              : "Seven days to a"
       }
-      accent={existing ? "integration-ready" : "form in the field"}
+      accent={
+        t.training ? "crew that runs it" : existing ? "integration-ready" : "form in the field"
+      }
       lede={
-        existing
-          ? `A review call, a short optimisation session, a few real jobs through it. ${["", "One", "Two", "Three", "Four", "Five", "Six", "Seven"][days] ?? days} business days, and every day below has an owner.`
-          : "Two short working sessions, a little homework, one crew on real jobs. Every day below has an owner."
+        t.training
+          ? "Two short sessions on your phones, a little homework, two days of real jobs in between. Every day below has an owner."
+          : existing
+            ? `A review call, a short optimisation session, a few real jobs through it. ${["", "One", "Two", "Three", "Four", "Five", "Six", "Seven"][days] ?? days} business days, and every day below has an owner.`
+            : "Two short working sessions, a little homework, one crew on real jobs. Every day below has an owner."
       }
       band={
-        existing
-          ? `Ready on ${shortDay(t.liveDate)}. An integration reads specific fields — a form optimised for it first is what makes the mapping right, first time.`
-          : `Live on ${shortDay(t.liveDate)}. No account should stall waiting on a form — we drive the pace, and you own the form.`
+        t.training
+          ? `Live on ${shortDay(t.liveDate)}. Nobody should be left guessing on a job — we drive the pace, and your crew owns the jobs.`
+          : existing
+            ? `Ready on ${shortDay(t.liveDate)}. An integration reads specific fields — a form optimised for it first is what makes the mapping right, first time.`
+            : `Live on ${shortDay(t.liveDate)}. No account should stall waiting on a form — we drive the pace, and you own the form.`
       }
       bandIcon="Rocket"
     >
@@ -1554,9 +1586,10 @@ function PhaseScreen({ view, phase: ph, page }: { view: WelcomeView; phase: Phas
     {
       phase: 1,
       label: "Phase 1",
-      name: [view.firstForm?.name ?? "Your first form", ...t.alongside.map((x) => x.name)].join(
-        " + ",
-      ),
+      name: [
+        view.firstForm?.name ?? (t.training ? "Crew training" : "Your first form"),
+        ...t.alongside.map((x) => x.name),
+      ].join(" + "),
       when: t.liveDoneOn ? `Live ${shortDay(t.liveDoneOn)}` : `Live ${shortDay(t.liveDate)}`,
       done: Boolean(t.liveDoneOn),
       now: t.currentPhase === 1,
@@ -1886,7 +1919,9 @@ function FirstForm({ view, page }: { view: WelcomeView; page: number }) {
       ? "The form works in the field, but the office still retypes what it collects into the other system."
       : view.path === "dm_conversion"
         ? "The crew runs your forms in Device Magic today; the office works from what it sends. Same jobs, same forms — moved over one at a time, starting with the one they use most."
-        : "Paper on the truck, photos on somebody's phone, and the office retyping it all at the end of the week.");
+        : view.timeline.training
+          ? "The app is on the phones, but nobody has walked the crew through a real job on it yet — so it waits, and the old way carries on."
+          : "Paper on the truck, photos on somebody's phone, and the office retyping it all at the end of the week.");
   return (
     <Frame
       k="form"
@@ -1956,8 +1991,12 @@ function FirstForm({ view, page }: { view: WelcomeView; page: number }) {
             <PhoneMock view={view} className="is-flow" />
           </div>
           <h3>
-            {f?.name ?? "Your first form"}
-            {existing ? ", ready for the integration" : " in the field"}
+            {f?.name ?? (view.timeline.training ? "Your crew" : "Your first form")}
+            {existing
+              ? ", ready for the integration"
+              : view.timeline.training
+                ? ", running it on every job"
+                : " in the field"}
           </h3>
           <p>
             {existing ? (
@@ -2025,7 +2064,9 @@ function FirstForm({ view, page }: { view: WelcomeView; page: number }) {
               ? `Once the form is proven on real jobs, the rest of your order builds on it — ${view.timeline.phases.length === 1 ? "phase 2, on its own screen" : `phases 2 to ${view.timeline.phases[view.timeline.phases.length - 1]!.phase}, each on its own screen`}.`
               : view.nextUseCases.length
                 ? `${view.nextUseCases.map((n) => n.name).join(" · ")}. Same team, same working-session format, whenever you are ready.`
-                : "We pick them together once the first form is in the field."}
+                : view.timeline.training
+                  ? "We pick them together once the crew is running it on their own."
+                  : "We pick them together once the first form is in the field."}
           </p>
         </div>
       </div>
@@ -2080,7 +2121,7 @@ function Business({
       accent="it's yours"
       band={
         planEnd
-          ? `${view.path === "existing" ? "Form ready" : "First form live"} on ${shortDay(t.liveDate)}; everything in your plan live by ${shortDay(planEnd)}. If any of the three on the right is not true that day, we are not done — and we say so.`
+          ? `${t.training ? "Crew live" : view.path === "existing" ? "Form ready" : "First form live"} on ${shortDay(t.liveDate)}; everything in your plan live by ${shortDay(planEnd)}. If any of the three on the right is not true that day, we are not done — and we say so.`
           : `${view.path === "existing" ? "Ready" : "Live"} on ${shortDay(t.liveDate)}. If any of the three on the right is not true that day, we are not done — and we say so.`
       }
       bandIcon="Rocket"
@@ -2103,9 +2144,11 @@ function Business({
               </h3>
               <p>
                 <T k="business.call1.body">
-                  {view.path === "existing"
-                    ? "Walk the form the integration reads from, field by field, and decide together what it needs. You leave with three homework items."
-                    : "Meet, agree how we work, and build the first form live on the call. You leave with three homework items."}
+                  {t.training
+                    ? "Your account, your phones, your jobs. We walk the crew through a real job on the app, together. You leave with three homework items."
+                    : view.path === "existing"
+                      ? "Walk the form the integration reads from, field by field, and decide together what it needs. You leave with three homework items."
+                      : "Meet, agree how we work, and build the first form live on the call. You leave with three homework items."}
                 </T>
               </p>
             </div>
@@ -2126,9 +2169,11 @@ function Business({
               </h3>
               <p>
                 <T k="business.call2.body">
-                  {view.path === "existing"
-                    ? "Your hands on the keyboard. The fields the integration needs, named the way the other system names them, then a few real jobs through it."
-                    : "Your hands on the keyboard. Finish the form, add the logic and notifications, hand it to the field tester."}
+                  {t.training
+                    ? "Your hands on the phones. The crew runs a job start to finish while the office watches it arrive; every question answered as it comes up."
+                    : view.path === "existing"
+                      ? "Your hands on the keyboard. The fields the integration needs, named the way the other system names them, then a few real jobs through it."
+                      : "Your hands on the keyboard. Finish the form, add the logic and notifications, hand it to the field tester."}
                 </T>
               </p>
             </div>
@@ -2155,7 +2200,9 @@ function Business({
                 <p className="wp-after-body">
                   {next.length
                     ? next.map((n) => n.name).join(" · ")
-                    : "We pick these together once the first form is in the field."}
+                    : t.training
+                      ? "We pick these together once the crew is running it on their own."
+                      : "We pick these together once the first form is in the field."}
                 </p>
               </>
             )}

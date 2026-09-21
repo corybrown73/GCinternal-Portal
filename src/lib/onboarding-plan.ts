@@ -77,6 +77,7 @@ export function timelineFor(intake: IntakeAnswers, closeDate: string): Timeline 
   return buildTimeline({
     closeDate,
     path: intake.path,
+    trainingOnly: intake.training_only,
     overrides: t.overrides,
     holidays: t.holidays,
     integrationTier: t.integration_tier as IntegrationTier,

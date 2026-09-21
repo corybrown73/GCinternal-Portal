@@ -3014,6 +3014,7 @@ export type Database = {
       portal_account_stage:
         | "prospect"
         | "closed_won"
+        | "field_fusion_setup"
         | "onboarding_kickoff"
         | "in_onboarding"
         | "onboarding_complete"
@@ -3164,6 +3165,7 @@ export const Constants = {
       portal_account_stage: [
         "prospect",
         "closed_won",
+        "field_fusion_setup",
         "onboarding_kickoff",
         "in_onboarding",
         "onboarding_complete",

@@ -140,6 +140,7 @@ export const TOOLS: ToolDefinition[] = [
           enum: [
             "prospect",
             "closed_won",
+            "field_fusion_setup",
             "onboarding_kickoff",
             "in_onboarding",
             "onboarding_complete",

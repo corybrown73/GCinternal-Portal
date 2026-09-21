@@ -1,0 +1,11 @@
+-- 0056: the Field Fusion setup stage, as an enum value.
+--
+-- A Field Fusion account does not go to implementation at Closed Won: the
+-- product is set up and confirmed first, by one person, and only then handed
+-- over for a training call. That wait is a pipeline stage of its own, between
+-- Closed Won and Onboarding Kickoff.
+--
+-- This migration contains ONLY the ADD VALUE: a new enum value cannot be used
+-- in the transaction that adds it (see 0004 for the same rule). The
+-- portal_pipeline_stages row that makes the stage visible lives in 0057.
+alter type portal_account_stage add value if not exists 'field_fusion_setup' after 'closed_won';
