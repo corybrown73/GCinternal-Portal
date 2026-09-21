@@ -60,10 +60,14 @@ export const NAV_CATALOGUE: readonly NavEntry[] = [
   { to: "/portfolio", label: "Leadership", hint: "Team overview", audience: "managers" },
   { to: "/signals", label: "Signals", hint: "Velocity, dwell & waiting on", audience: "everyone" },
   {
+    // Everyone: the profile photo, title and booking link on it are what the
+    // customer's welcome page shows for the onboarding lead, and the lead is
+    // usually not a manager. The manager-only parts of the page (the stage
+    // and appearance edits) are gated on the page itself.
     to: "/settings",
     label: "Settings",
     hint: "Your profile, the look, the stages",
-    audience: "managers",
+    audience: "everyone",
   },
   {
     to: "/admin",
