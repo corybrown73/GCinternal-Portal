@@ -70,6 +70,14 @@ function OnboardingPlanPage() {
         void qc.invalidateQueries({ queryKey: ["deal", dealId] });
         return url;
       }}
+      onEditText={async (key, text) => {
+        const current = query.data?.textOverrides ?? {};
+        const next = { ...current };
+        if (text === null) delete next[key];
+        else next[key] = text;
+        await save({ data: { dealId, patch: { welcome_text: next } } as never });
+        await qc.invalidateQueries({ queryKey: ["welcome", dealId] });
+      }}
       onMarkSent={async () => {
         await save({
           data: { dealId, patch: { welcome_shared_at: new Date().toISOString() } } as never,

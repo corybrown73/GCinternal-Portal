@@ -90,6 +90,12 @@ export const intakeAnswersSchema = z.object({
   welcome_hidden_screens: z.array(z.string().max(40)).max(20).default([]),
   /** When a person copied the customer's link to send it. Set by that click only. */
   welcome_shared_at: z.string().nullable().default(null),
+  /**
+   * Text on the welcome page a person rewrote in place, by text key
+   * ("team.dana-whitfield.does"). The page, the customer's link, the PDF and
+   * the PowerPoint all read it; a missing key means the page's own words.
+   */
+  welcome_text: z.record(z.string().max(80), z.string().max(1200)).default({}),
   wanted_forms: z
     .array(
       z.object({

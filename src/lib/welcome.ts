@@ -61,6 +61,8 @@ export type WelcomeView = {
   openedAt: string | null;
   /** Screen keys the presenter switched off for this customer. Both modes honour it. */
   hiddenScreens: string[];
+  /** Text rewritten in place on the page, by text key. Both modes read it. */
+  textOverrides: Record<string, string>;
   /** New logo or existing account — the words on every screen follow it. */
   path: "new_logo" | "existing" | "dm_conversion";
 };

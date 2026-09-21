@@ -207,6 +207,7 @@ async function viewFor(deal: any, opts: { internal: boolean }): Promise<WelcomeV
     openedAt: opts.internal ? (deal.welcome_opened_at ?? null) : null,
     hiddenScreens: (await import("./intake-answers")).readIntake(deal.intake)
       .welcome_hidden_screens,
+    textOverrides: (await import("./intake-answers")).readIntake(deal.intake).welcome_text,
     path: input.timeline.path,
   };
 }

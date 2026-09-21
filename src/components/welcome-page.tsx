@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import {
   AirVent,
   ArrowLeft,
@@ -127,6 +135,7 @@ export function WelcomePage({
   onTick,
   onCopyLink,
   onMarkSent,
+  onEditText,
   backHref,
   notesHref,
   icsBase,
@@ -134,6 +143,8 @@ export function WelcomePage({
 }: {
   view: WelcomeView;
   mode: WelcomeMode;
+  /** Internal: a line of the page rewritten in place. Null restores the page's own words. */
+  onEditText?: ((key: string, text: string | null) => Promise<void> | void) | undefined;
   /** The customer's page ticks its homework; the internal preview shows the ticks. */
   onTick?: (key: HomeworkKey, done: boolean) => Promise<void> | void;
   /** Internal: issue or copy the customer's link. Resolves to the URL. */
@@ -213,111 +224,116 @@ export function WelcomePage({
     };
   }, [present, total]);
 
+  const editing = mode === "internal" && !present && Boolean(onEditText);
   return (
-    <div className={cn("gc-welcome", present && "is-present")}>
-      {mode === "internal" ? (
-        <Toolbar
-          view={view}
-          onPresent={() => {
-            setAt(0);
-            setPresent(true);
-          }}
-          onCopyLink={mintForQr}
-          onMarkSent={onMarkSent}
-          onExportPptx={async (report) => {
-            // Every visible screen, unzoomed, with the talk track as notes.
-            const notes = speakerNotes(view);
-            const byKey = new Map(notes.sections.map((sec) => [sec.key, sec]));
-            await exportWelcomePptx({
-              screens: visible.map((sc, i) =>
-                sc.render({
-                  page: i + 1,
-                  qr: showQr ? qr : null,
-                  mode: "shared",
-                  onTick: undefined,
-                  icsBase: null,
+    <EditCtx.Provider
+      value={{ overrides: view.textOverrides ?? {}, onEdit: editing ? (onEditText ?? null) : null }}
+    >
+      <div className={cn("gc-welcome", present && "is-present", editing && "is-editing")}>
+        {mode === "internal" ? (
+          <Toolbar
+            view={view}
+            onPresent={() => {
+              setAt(0);
+              setPresent(true);
+            }}
+            onCopyLink={mintForQr}
+            onMarkSent={onMarkSent}
+            onExportPptx={async (report) => {
+              // Every visible screen, unzoomed, with the talk track as notes.
+              const notes = speakerNotes(view);
+              const byKey = new Map(notes.sections.map((sec) => [sec.key, sec]));
+              await exportWelcomePptx({
+                screens: visible.map((sc, i) =>
+                  sc.render({
+                    page: i + 1,
+                    qr: showQr ? qr : null,
+                    mode: "shared",
+                    onTick: undefined,
+                    icsBase: null,
+                  }),
+                ),
+                notes: visible.map((sc) => {
+                  const sec =
+                    byKey.get(sc.key) ??
+                    (sc.key.startsWith("phase-")
+                      ? byKey.get(`phase-${view.timeline.phases[0]?.phase}`)
+                      : undefined);
+                  if (!sec) return "";
+                  return [
+                    ...sec.say,
+                    "",
+                    `Why: ${sec.why}`,
+                    "",
+                    ...sec.ifTheyAsk.map((q) => `If they ask "${q.q}": ${q.a}`),
+                  ].join("\n");
                 }),
-              ),
-              notes: visible.map((sc) => {
-                const sec =
-                  byKey.get(sc.key) ??
-                  (sc.key.startsWith("phase-")
-                    ? byKey.get(`phase-${view.timeline.phases[0]?.phase}`)
-                    : undefined);
-                if (!sec) return "";
-                return [
-                  ...sec.say,
-                  "",
-                  `Why: ${sec.why}`,
-                  "",
-                  ...sec.ifTheyAsk.map((q) => `If they ask "${q.q}": ${q.a}`),
-                ].join("\n");
-              }),
-              fileName: pptxFileName(view.clientName),
-              title: `${view.clientName} — onboarding plan`,
-              onProgress: report,
-            });
-          }}
-          qrReady={Boolean(qr)}
-          showQr={showQr}
-          onToggleQr={() => setShowQr((v) => !v)}
-          backHref={backHref ?? null}
-          notesHref={notesHref ?? null}
-        />
-      ) : null}
-      {mode === "shared" ? <SharedBar view={view} icsBase={icsBase ?? null} /> : null}
+                fileName: pptxFileName(view.clientName),
+                title: `${view.clientName} — onboarding plan`,
+                onProgress: report,
+              });
+            }}
+            qrReady={Boolean(qr)}
+            showQr={showQr}
+            onToggleQr={() => setShowQr((v) => !v)}
+            backHref={backHref ?? null}
+            notesHref={notesHref ?? null}
+          />
+        ) : null}
+        {mode === "shared" ? <SharedBar view={view} icsBase={icsBase ?? null} /> : null}
 
-      {present ? (
-        <div className="wp-present" onClick={() => setAt((i) => Math.min(total - 1, i + 1))}>
-          <Stage key={at} fit="both">
-            {screens[at]}
-          </Stage>
-          {hint ? (
-            <div className="wp-present-hint">← → to move · Esc to leave · click to advance</div>
-          ) : null}
-          <div className="wp-present-hud" onClick={(e) => e.stopPropagation()}>
-            <button
-              type="button"
-              onClick={() => setAt((i) => Math.max(0, i - 1))}
-              aria-label="Previous"
-            >
-              ‹
-            </button>
-            <span>
-              {at + 1} / {total}
-            </span>
-            <button
-              type="button"
-              onClick={() => setAt((i) => Math.min(total - 1, i + 1))}
-              aria-label="Next"
-            >
-              ›
-            </button>
-            <button
-              type="button"
-              onClick={() => setPresent(false)}
-              aria-label="Exit"
-              className="wp-hud-x"
-            >
-              <X className="h-4 w-4" />
-            </button>
+        {present ? (
+          <div className="wp-present" onClick={() => setAt((i) => Math.min(total - 1, i + 1))}>
+            <Stage key={at} fit="both">
+              {screens[at]}
+            </Stage>
+            {hint ? (
+              <div className="wp-present-hint">← → to move · Esc to leave · click to advance</div>
+            ) : null}
+            <div className="wp-present-hud" onClick={(e) => e.stopPropagation()}>
+              <button
+                type="button"
+                onClick={() => setAt((i) => Math.max(0, i - 1))}
+                aria-label="Previous"
+              >
+                ‹
+              </button>
+              <span>
+                {at + 1} / {total}
+              </span>
+              <button
+                type="button"
+                onClick={() => setAt((i) => Math.min(total - 1, i + 1))}
+                aria-label="Next"
+              >
+                ›
+              </button>
+              <button
+                type="button"
+                onClick={() => setPresent(false)}
+                aria-label="Exit"
+                className="wp-hud-x"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
           </div>
-        </div>
-      ) : (
-        <div className="wp-shell">
-          {mode === "internal" ? (
-            <ScreenMenu all={all} hidden={hidden} onToggle={onToggleScreen} />
-          ) : null}
-          <div className="wp-scroll">
-            {visible.map((sc, i) => (
-              <div key={sc.key} id={`wp-screen-${sc.key}`}>
-                <Stage fit="width">{screens[i]}</Stage>
-              </div>
-            ))}
+        ) : (
+          <div className="wp-shell">
+            {mode === "internal" ? (
+              <ScreenMenu all={all} hidden={hidden} onToggle={onToggleScreen} />
+            ) : null}
+            <div className="wp-scroll">
+              {visible.map((sc, i) => (
+                <div key={sc.key} id={`wp-screen-${sc.key}`}>
+                  <Stage fit="width">{screens[i]}</Stage>
+                </div>
+              ))}
+            </div>
           </div>
-        </div>
-      )}
-    </div>
+        )}
+      </div>
+    </EditCtx.Provider>
   );
 }
 
@@ -558,6 +574,7 @@ function Toolbar({
         ) : view.shareUrl ? (
           <span className="wp-toolbar-meta">Link ready · not sent yet</span>
         ) : null}
+        <EditHint />
         {onMarkSent && view.shareUrl && !view.sharedAt && !view.openedAt ? (
           <button
             type="button"
@@ -658,6 +675,19 @@ function Toolbar({
   );
 }
 
+function EditHint() {
+  const { onEdit } = useContext(EditCtx);
+  if (!onEdit) return null;
+  return (
+    <span
+      className="wp-toolbar-meta"
+      title="Every line on the page. Changes show on the customer's link, the PDF and the PowerPoint."
+    >
+      Click any text to edit it · Esc puts the original back
+    </span>
+  );
+}
+
 function SharedBar({ view, icsBase }: { view: WelcomeView; icsBase: string | null }) {
   const p = view.timeline.progress;
   return (
@@ -690,8 +720,66 @@ function SharedBar({ view, icsBase }: { view: WelcomeView; icsBase: string | nul
 
 /* ------------------------------------------------------- shared pieces */
 
+/**
+ * EDIT IN PLACE. Every line of copy on the page is a <T> with a key. Internal
+ * mode, not presenting: click it, type, click away — the new words save on
+ * the deal and the customer's link, the PDF and the PowerPoint all show
+ * them. Escape while editing puts the page's own words back. Anywhere else
+ * a <T> is plain text, so the layout is the same pixels in every mode.
+ */
+const EditCtx = createContext<{
+  overrides: Record<string, string>;
+  onEdit: ((key: string, text: string | null) => Promise<void> | void) | null;
+}>({ overrides: {}, onEdit: null });
+
+function T({ k, children }: { k: string; children: string }) {
+  const { overrides, onEdit } = useContext(EditCtx);
+  const edited = k in overrides;
+  const text = overrides[k] ?? children;
+  if (!onEdit) return <>{text}</>;
+  return (
+    <span
+      className="wp-edit"
+      data-edited={edited || undefined}
+      contentEditable
+      suppressContentEditableWarning
+      spellCheck={false}
+      title={edited ? "Edited — Esc puts the original back" : "Click to edit"}
+      onKeyDown={(e) => {
+        if (e.key === "Escape") {
+          e.preventDefault();
+          e.currentTarget.textContent = children;
+          e.currentTarget.blur();
+          if (edited) void onEdit(k, null);
+        }
+      }}
+      onBlur={(e) => {
+        const next = (e.currentTarget.textContent ?? "").replace(/\s+/g, " ").trim();
+        if (next === text) return;
+        void onEdit(k, next === "" || next === children ? null : next);
+      }}
+    >
+      {text}
+    </span>
+  );
+}
+
+/** A key that survives a rename of the thing it names: "Dana Whitfield" → "dana-whitfield". */
+function tkey(...parts: Array<string | number | null | undefined>): string {
+  return parts
+    .filter((p) => p !== null && p !== undefined && p !== "")
+    .map((p) =>
+      String(p)
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-|-$/g, ""),
+    )
+    .join(".");
+}
+
 function Frame({
   children,
+  k,
   eyebrow,
   title,
   accent,
@@ -703,6 +791,8 @@ function Frame({
   done,
 }: {
   children: ReactNode;
+  /** The screen's key: the prefix of every editable line on it. */
+  k: string;
   eyebrow: string;
   /** The headline. `accent` is the run rendered in blue. */
   title: string;
@@ -734,12 +824,23 @@ function Frame({
         />
       </header>
       <div className="wp-body">
-        <p className="wp-eyebrow">{eyebrow}</p>
+        <p className="wp-eyebrow">
+          <T k={`${k}.eyebrow`}>{eyebrow}</T>
+        </p>
         <h2 className="wp-title">
-          {title} {accent ? <span className="wp-accent">{accent}</span> : null}
+          <T k={`${k}.title`}>{title}</T>{" "}
+          {accent ? (
+            <span className="wp-accent">
+              <T k={`${k}.accent`}>{accent}</T>
+            </span>
+          ) : null}
         </h2>
         <div className="wp-rule" />
-        {lede ? <p className="wp-lede">{lede}</p> : null}
+        {lede ? (
+          <p className="wp-lede">
+            <T k={`${k}.lede`}>{lede}</T>
+          </p>
+        ) : null}
         <div className="wp-content">{children}</div>
       </div>
       {band ? (
@@ -749,7 +850,9 @@ function Frame({
               <Icon name={bandIcon} className="h-5 w-5" />
             </span>
           ) : null}
-          <p>{band}</p>
+          <p>
+            <T k={`${k}.band`}>{band}</T>
+          </p>
         </div>
       ) : null}
       <footer className="wp-foot">
@@ -786,13 +889,13 @@ function Owner({ owner }: { owner: string }) {
   return <span className={cn("wp-owner", `is-${owner}`)}>{label}</span>;
 }
 
-function Tick({ children }: { children: ReactNode }) {
+function Tick({ k, children }: { k?: string; children: ReactNode }) {
   return (
     <li className="wp-tick">
       <span className="wp-tick-dot">
         <Check className="h-3 w-3" strokeWidth={3} />
       </span>
-      <span>{children}</span>
+      <span>{k && typeof children === "string" ? <T k={k}>{children}</T> : children}</span>
     </li>
   );
 }
@@ -967,21 +1070,15 @@ function Cover({ view, qr }: { view: WelcomeView; qr?: { url: string; dataUrl: s
             )}
           </h1>
           <div className="wp-rule" />
-          <p className="wp-cover-name">{view.clientName}</p>
+          <p className="wp-cover-name">
+            <T k="cover.name">{view.clientName}</T>
+          </p>
           <p className="wp-lede">
-            {view.path === "existing" ? (
-              <>
-                Welcome back as of {shortDay(t.closeDate)}. Form review{" "}
-                {shortDay(t.milestones[1]?.date ?? t.closeDate)}. Your form ready for the
-                integration by {shortDay(t.liveDate)} — optimised with you, not for you.
-              </>
-            ) : (
-              <>
-                Welcome aboard as of {shortDay(t.closeDate)}. Kickoff{" "}
-                {shortDay(t.milestones[1]?.date ?? t.closeDate)}. Your first form in the field by{" "}
-                {shortDay(t.liveDate)} — built with you, not for you.
-              </>
-            )}
+            <T k="cover.lede">
+              {view.path === "existing"
+                ? `Welcome back as of ${shortDay(t.closeDate)}. Form review ${shortDay(t.milestones[1]?.date ?? t.closeDate)}. Your form ready for the integration by ${shortDay(t.liveDate)} — optimised with you, not for you.`
+                : `Welcome aboard as of ${shortDay(t.closeDate)}. Kickoff ${shortDay(t.milestones[1]?.date ?? t.closeDate)}. Your first form in the field by ${shortDay(t.liveDate)} — built with you, not for you.`}
+            </T>
           </p>
           <div className="wp-pills">
             <span className="wp-pill">
@@ -995,7 +1092,9 @@ function Cover({ view, qr }: { view: WelcomeView; qr?: { url: string; dataUrl: s
             </span>
           </div>
           {view.lead ? (
-            <p className="wp-prepared">Prepared by {view.lead}, GoCanvas onboarding</p>
+            <p className="wp-prepared">
+              <T k="cover.prepared">{`Prepared by ${view.lead}, GoCanvas onboarding`}</T>
+            </p>
           ) : null}
           {qr ? (
             <div className="wp-qr">
@@ -1117,6 +1216,7 @@ function Team({ view, page }: { view: WelcomeView; page: number }) {
   });
   return (
     <Frame
+      k="team"
       page={page}
       eyebrow="Your team"
       title="Two teams,"
@@ -1136,8 +1236,12 @@ function Team({ view, page }: { view: WelcomeView; page: number }) {
               )}
               <div className="wp-person-text">
                 <p className="wp-person-name">{p.name}</p>
-                <p className="wp-person-role">{p.role}</p>
-                <p className="wp-person-does">{p.does}</p>
+                <p className="wp-person-role">
+                  <T k={tkey("team", p.name, "role")}>{p.role}</T>
+                </p>
+                <p className="wp-person-does">
+                  <T k={tkey("team", p.name, "does")}>{p.does}</T>
+                </p>
                 {p.bookingUrl ? (
                   <a href={p.bookingUrl} target="_blank" rel="noreferrer" className="wp-book">
                     <CalendarPlus className="h-3 w-3" /> Book time with {firstName(p.name)}
@@ -1223,6 +1327,7 @@ function Overview({ view, page }: { view: WelcomeView; page: number }) {
   const count = cards.length;
   return (
     <Frame
+      k="overview"
       page={page}
       eyebrow="At a glance"
       title={
@@ -1311,6 +1416,7 @@ function Plan({ view, page }: { view: WelcomeView; page: number }) {
   const days = t.milestones[t.milestones.length - 1]?.day ?? 7;
   return (
     <Frame
+      k="plan"
       page={page}
       done={Boolean(t.liveDoneOn)}
       eyebrow="Your timeline"
@@ -1357,13 +1463,17 @@ function Plan({ view, page }: { view: WelcomeView; page: number }) {
                 </span>
               ) : null}
             </span>
-            <span className="wp-node-label">{CUSTOMER_LABEL[m.key] ?? m.label}</span>
+            <span className="wp-node-label">
+              <T k={tkey("plan", m.key, "label")}>{CUSTOMER_LABEL[m.key] ?? m.label}</T>
+            </span>
             <span className={cn("wp-node-date", m.moved && "is-moved", m.doneOn && "is-done")}>
               {m.doneOn ? `Done ${shortDay(m.doneOn)}` : whenLabel(m, t.timezone)}
             </span>
             <Owner owner={m.owner} />
             {m.minutes ? <span className="wp-node-min">{m.minutes} min</span> : null}
-            <span className="wp-node-detail">{m.detail}</span>
+            <span className="wp-node-detail">
+              <T k={tkey("plan", m.key, "detail")}>{m.detail}</T>
+            </span>
           </div>
         ))}
       </div>
@@ -1479,6 +1589,7 @@ function PhaseScreen({ view, phase: ph, page }: { view: WelcomeView; phase: Phas
   const compact = ph.services.length > 2;
   return (
     <Frame
+      k={`phase-${ph.phase}`}
       page={page}
       done={ph.done}
       eyebrow={`After the form · ${ph.label}`}
@@ -1607,6 +1718,7 @@ function Together({
   const homework = HOMEWORK.map((h, i) => ({ key: h.key, text: homeworkText[i] ?? h.text }));
   return (
     <Frame
+      k="together"
       page={page}
       eyebrow="What's expected"
       title={existing ? "We optimise it" : "We build it"}
@@ -1632,17 +1744,29 @@ function Together({
           <ul className="wp-ticks">
             {existing ? (
               <>
-                <Tick>A field-by-field read of your form against what the integration needs</Tick>
-                <Tick>The changes, made live on the call, with you watching every field</Tick>
-                <Tick>The mapping, named the way the office system names things</Tick>
-                <Tick>Someone watching the first real submissions come through</Tick>
+                <Tick k="together.we.1">
+                  A field-by-field read of your form against what the integration needs
+                </Tick>
+                <Tick k="together.we.2">
+                  The changes, made live on the call, with you watching every field
+                </Tick>
+                <Tick k="together.we.3">
+                  The mapping, named the way the office system names things
+                </Tick>
+                <Tick k="together.we.4">
+                  Someone watching the first real submissions come through
+                </Tick>
               </>
             ) : (
               <>
-                <Tick>A starting point from the form library, in your vocabulary</Tick>
-                <Tick>The build, live on the call, with you watching every field</Tick>
-                <Tick>The logic, routing and notifications the office needs</Tick>
-                <Tick>Someone watching the first submissions come in</Tick>
+                <Tick k="together.we.5">
+                  A starting point from the form library, in your vocabulary
+                </Tick>
+                <Tick k="together.we.6">
+                  The build, live on the call, with you watching every field
+                </Tick>
+                <Tick k="together.we.7">The logic, routing and notifications the office needs</Tick>
+                <Tick k="together.we.8">Someone watching the first submissions come in</Tick>
               </>
             )}
           </ul>
@@ -1655,17 +1779,27 @@ function Together({
           <ul className="wp-ticks">
             {existing ? (
               <>
-                <Tick>The form the integration reads from, as your crews run it today</Tick>
-                <Tick>One example of the output the office needs on the other side</Tick>
-                <Tick>Who owns the field mapping on your side, by name</Tick>
-                <Tick>The last changes, made by you, in the optimisation session</Tick>
+                <Tick k="together.you.1">
+                  The form the integration reads from, as your crews run it today
+                </Tick>
+                <Tick k="together.you.2">
+                  One example of the output the office needs on the other side
+                </Tick>
+                <Tick k="together.you.3">Who owns the field mapping on your side, by name</Tick>
+                <Tick k="together.you.4">
+                  The last changes, made by you, in the optimisation session
+                </Tick>
               </>
             ) : (
               <>
-                <Tick>How the job actually runs — the process, not the org chart</Tick>
-                <Tick>One field user willing to try it on real work</Tick>
-                <Tick>The customer or site list, so nothing is typed twice</Tick>
-                <Tick>The last changes, made by you, in the working session</Tick>
+                <Tick k="together.you.5">
+                  How the job actually runs — the process, not the org chart
+                </Tick>
+                <Tick k="together.you.6">One field user willing to try it on real work</Tick>
+                <Tick k="together.you.7">The customer or site list, so nothing is typed twice</Tick>
+                <Tick k="together.you.8">
+                  The last changes, made by you, in the working session
+                </Tick>
               </>
             )}
           </ul>
@@ -1699,7 +1833,9 @@ function Together({
                 <span className="wp-check-box">
                   {done ? <Check className="h-4 w-4" strokeWidth={3} /> : null}
                 </span>
-                <span>{h.text}</span>
+                <span>
+                  <T k={tkey("together", "homework", h.key)}>{h.text}</T>
+                </span>
               </button>
             );
           })}
@@ -1753,6 +1889,7 @@ function FirstForm({ view, page }: { view: WelcomeView; page: number }) {
         : "Paper on the truck, photos on somebody's phone, and the office retyping it all at the end of the week.");
   return (
     <Frame
+      k="form"
       page={page}
       eyebrow="How we get there"
       title="From today to"
@@ -1784,9 +1921,15 @@ function FirstForm({ view, page }: { view: WelcomeView; page: number }) {
           {view.currentProcess && view.currentProcessSource !== "person" ? (
             // The brief's paraphrase, or the generic line: said plainly, not
             // put in the customer's mouth with quotation marks.
-            <p className="wp-journey-quote">{today}</p>
+            <p className="wp-journey-quote">
+              <T k="form.now">{today}</T>
+            </p>
           ) : (
-            <p className="wp-journey-quote">&ldquo;{today}&rdquo;</p>
+            <p className="wp-journey-quote">
+              &ldquo;
+              <T k="form.now">{today}</T>
+              &rdquo;
+            </p>
           )}
           <ul className="wp-journey-pains">
             {existing ? (
@@ -1872,7 +2015,11 @@ function FirstForm({ view, page }: { view: WelcomeView; page: number }) {
               </span>
             </div>
           </div>
-          <h3>{phase2 ? "Connected to the office" : "The next forms, built by you"}</h3>
+          <h3>
+            <T k="form.future.head">
+              {phase2 ? "Connected to the office" : "The next forms, built by you"}
+            </T>
+          </h3>
           <p>
             {phase2
               ? `Once the form is proven on real jobs, the rest of your order builds on it — ${view.timeline.phases.length === 1 ? "phase 2, on its own screen" : `phases 2 to ${view.timeline.phases[view.timeline.phases.length - 1]!.phase}, each on its own screen`}.`
@@ -1926,6 +2073,7 @@ function Business({
   const next = view.nextUseCases.slice(0, 3);
   return (
     <Frame
+      k="business"
       page={page}
       eyebrow="Let's get into business"
       title="Two calls, then"
@@ -1950,11 +2098,15 @@ function Business({
                   </a>
                 ) : null}
               </p>
-              <h3>{kickoff?.label ?? "Kickoff & build session"}</h3>
+              <h3>
+                <T k="business.call1.head">{kickoff?.label ?? "Kickoff & build session"}</T>
+              </h3>
               <p>
-                {view.path === "existing"
-                  ? "Walk the form the integration reads from, field by field, and decide together what it needs. You leave with three homework items."
-                  : "Meet, agree how we work, and build the first form live on the call. You leave with three homework items."}
+                <T k="business.call1.body">
+                  {view.path === "existing"
+                    ? "Walk the form the integration reads from, field by field, and decide together what it needs. You leave with three homework items."
+                    : "Meet, agree how we work, and build the first form live on the call. You leave with three homework items."}
+                </T>
               </p>
             </div>
           </div>
@@ -1969,11 +2121,15 @@ function Business({
                   </a>
                 ) : null}
               </p>
-              <h3>{working?.label ?? "Working session"}</h3>
+              <h3>
+                <T k="business.call2.head">{working?.label ?? "Working session"}</T>
+              </h3>
               <p>
-                {view.path === "existing"
-                  ? "Your hands on the keyboard. The fields the integration needs, named the way the other system names them, then a few real jobs through it."
-                  : "Your hands on the keyboard. Finish the form, add the logic and notifications, hand it to the field tester."}
+                <T k="business.call2.body">
+                  {view.path === "existing"
+                    ? "Your hands on the keyboard. The fields the integration needs, named the way the other system names them, then a few real jobs through it."
+                    : "Your hands on the keyboard. Finish the form, add the logic and notifications, hand it to the field tester."}
+                </T>
               </p>
             </div>
           </div>
@@ -2035,9 +2191,15 @@ function Business({
             </p>
           ) : null}
           <ul className="wp-ticks">
-            <Tick>Your crew submits from the phone, on the job, with photos and a signature.</Tick>
-            <Tick>The office sees the work as it happens — no retyping, no Friday pile.</Tick>
-            <Tick>The crew asked for a change, and it was made the same day.</Tick>
+            <Tick k="business.good.1">
+              Your crew submits from the phone, on the job, with photos and a signature.
+            </Tick>
+            <Tick k="business.good.2">
+              The office sees the work as it happens — no retyping, no Friday pile.
+            </Tick>
+            <Tick k="business.good.3">
+              The crew asked for a change, and it was made the same day.
+            </Tick>
           </ul>
           <div className="wp-good-cta">
             <span className="wp-good-cta-label">Your next step</span>

@@ -1045,6 +1045,38 @@ body.gc-presenting {
   margin: 0;
   max-width: 900px;
 }
+/* Edit in place: a dashed outline on hover and focus says "this is yours to
+   change"; an edited line carries a thin blue underline so a presenter can
+   see what is theirs and what is the page's. Never in present mode, never
+   in the export or the print. */
+.gc-welcome.is-editing .wp-edit {
+  cursor: text;
+  border-radius: 3px;
+  outline: 1px dashed transparent;
+  outline-offset: 3px;
+  transition: outline-color 0.12s;
+}
+.gc-welcome.is-editing .wp-edit:hover,
+.gc-welcome.is-editing .wp-edit:focus {
+  outline-color: var(--wp-blue);
+  background: rgba(3, 157, 231, 0.06);
+}
+.gc-welcome.is-editing .wp-edit[data-edited="true"] {
+  box-shadow: inset 0 -2px 0 rgba(3, 157, 231, 0.45);
+}
+.gc-welcome.is-present .wp-edit,
+.wp-export .wp-edit {
+  outline: none !important;
+  box-shadow: none !important;
+  background: none !important;
+}
+@media print {
+  .gc-welcome .wp-edit {
+    outline: none !important;
+    box-shadow: none !important;
+    background: none !important;
+  }
+}
 .gc-welcome .wp-content {
   flex: 1;
   display: flex;
