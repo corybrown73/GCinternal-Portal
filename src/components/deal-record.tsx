@@ -18,6 +18,7 @@ import { Field, NoRows, Panel } from "@/components/record";
 import { EditableField } from "@/components/editable-field";
 import { OwnerField } from "@/components/assignment-panel";
 import { DealGuide } from "@/components/deal-guide";
+import { BuildIt, ThreeClicks } from "@/components/build-it";
 import { WatchOutsPanel } from "@/components/watch-outs-panel";
 import { watchOutsFor } from "@/lib/watch-outs";
 import { DeliverablesStrip } from "@/components/deliverables-strip";
@@ -300,9 +301,15 @@ export function DealRecord({ deal, embedded = false }: { deal: DealData; embedde
   return (
     <>
       {embedded ? (
-        <div className="flex flex-wrap items-center justify-end gap-2">
-          <BriefActions deal={deal} onResult={setBriefResult} />
-          <StartOnboarding deal={deal} />
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="space-y-2">
+            <ThreeClicks deal={deal} />
+            <BuildIt deal={deal} />
+          </div>
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <BriefActions deal={deal} onResult={setBriefResult} />
+            <StartOnboarding deal={deal} />
+          </div>
         </div>
       ) : (
         <PageHeader
@@ -333,6 +340,12 @@ export function DealRecord({ deal, embedded = false }: { deal: DealData; embedde
         />
       )}
       <PageBody className={cn("space-y-4", embedded && "px-0 py-0")}>
+        {embedded ? null : (
+          <div className="space-y-2 rounded-md border border-border bg-card px-3 py-2.5">
+            <ThreeClicks deal={deal} />
+            <BuildIt deal={deal} />
+          </div>
+        )}
         <DealGuide steps={steps} setup={setup.data ?? null} manager={canManage(profile?.role)} />
         {briefResult ? (
           <p

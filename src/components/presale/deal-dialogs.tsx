@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/dialog";
 import { INDUSTRIES } from "@/lib/intake-answers";
 import { cn } from "@/lib/utils";
-import { addDeal, importDeals } from "@/lib/presale.functions";
+import { addDeal, addReport, importDeals, uploadSow } from "@/lib/presale.functions";
 import { STAGE_LABELS, STAGES, type AccountStage } from "@/lib/presale-stages";
 
 const inputClass =
@@ -55,13 +55,31 @@ const emptyDeal: DealDraft = {
 export function NewDealDialog() {
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState<DealDraft>(emptyDeal);
+  const [notes, setNotes] = useState("");
+  const [sow, setSow] = useState<File | null>(null);
+  const [more, setMore] = useState(false);
   const [touched, setTouched] = useState(false);
+  const [phase, setPhase] = useState<string | null>(null);
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const create = useServerFn(addDeal);
+  const report = useServerFn(addReport);
+  const upload = useServerFn(uploadSow);
 
   const set = (patch: Partial<DealDraft>) => setDraft((d) => ({ ...d, ...patch }));
+  const reset = () => {
+    setDraft(emptyDeal);
+    setNotes("");
+    setSow(null);
+    setMore(false);
+    setTouched(false);
+    setPhase(null);
+  };
 
+  // One dialog, three things the tool needs: who, what they do, what was
+  // said. The deal, the call notes and the SOW used to be three panels on
+  // the record after the fact; a person's first click now leaves the
+  // account ready for "Build it".
   const mutation = useMutation({
     mutationFn: async () => {
       const arrRaw = draft.arr.trim().replace(/[$,]/g, "");
@@ -69,44 +87,77 @@ export function NewDealDialog() {
       if (arr != null && !Number.isFinite(arr)) {
         throw new Error("ARR must be a number");
       }
-      return create({
+      setPhase("Creating the account");
+      const result = await create({
         data: {
           name: draft.name.trim(),
           domain: nullable(draft.domain),
           salesforceId: nullable(draft.salesforceId),
           arr,
           summary: nullable(draft.summary),
-          path: draft.path || null,
+          path: draft.path || "new_logo",
           industry: nullable(draft.industry),
           stage: draft.stage,
         },
       });
+      const dealId = result.account.id;
+      if (notes.trim()) {
+        setPhase("Saving the call notes");
+        await report({
+          data: {
+            dealId,
+            title: `${draft.name.trim()} — call notes`,
+            reportType: "call_notes",
+            contentMd: notes.trim(),
+            callDate: null,
+          },
+        });
+      }
+      if (sow) {
+        setPhase("Uploading the SOW");
+        const dataBase64 = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onerror = () => reject(new Error("Could not read that file."));
+          reader.onload = () => resolve(String(reader.result).split(",")[1] ?? "");
+          reader.readAsDataURL(sow);
+        });
+        await upload({
+          data: { dealId, fileName: sow.name, contentType: "application/pdf", dataBase64 },
+        });
+      }
+      return result;
     },
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ["pipeline"] });
       setOpen(false);
-      setDraft(emptyDeal);
-      setTouched(false);
+      reset();
       navigate({ to: "/deals/$dealId", params: { dealId: result.account.id } });
     },
+    onError: () => setPhase(null),
   });
 
   return (
     <>
       <button type="button" className={buttonClass} onClick={() => setOpen(true)}>
-        <Plus className="h-3 w-3" /> New deal
+        <Plus className="h-3 w-3" /> New account
       </button>
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-md">
+      <Dialog
+        open={open}
+        onOpenChange={(v) => {
+          setOpen(v);
+          if (!v) reset();
+        }}
+      >
+        <DialogContent className="max-h-[90vh] max-w-lg overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="text-[14px]">New deal</DialogTitle>
+            <DialogTitle className="text-[14px]">New account</DialogTitle>
             <DialogDescription className="text-[12px]">
-              Creates a presale account. Matching on Salesforce ID or name updates the existing
-              record instead of duplicating it.
+              Who they are, what they do, what was said on the calls. Press Create, then Build it on
+              the next screen — the deck comes from these.
             </DialogDescription>
           </DialogHeader>
           <form
-            className="space-y-2.5"
+            className="space-y-3"
             onSubmit={(e) => {
               e.preventDefault();
               setTouched(true);
@@ -116,7 +167,7 @@ export function NewDealDialog() {
           >
             <div>
               <label className={labelClass} htmlFor="new-deal-name">
-                Name *
+                Company *
               </label>
               <input
                 id="new-deal-name"
@@ -127,6 +178,7 @@ export function NewDealDialog() {
                 onBlur={() => setTouched(true)}
                 aria-invalid={touched && draft.name.trim() === "" ? true : undefined}
                 aria-describedby="new-deal-name-hint"
+                placeholder="As the customer says it"
                 autoFocus
               />
               <p
@@ -139,29 +191,11 @@ export function NewDealDialog() {
                 )}
               >
                 {touched && draft.name.trim() === ""
-                  ? "The deal needs the company's name."
-                  : "The company, as the customer says it. Required."}
+                  ? "The account needs the company's name."
+                  : "Required. Everything else can be filled in later."}
               </p>
             </div>
-            {/* What kind of deal, and what they do: the two facts everything
-                downstream reads — the plan's path and the page's industry. */}
             <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className={labelClass} htmlFor="new-deal-path">
-                  Path
-                </label>
-                <select
-                  id="new-deal-path"
-                  name="path"
-                  className={inputClass}
-                  value={draft.path}
-                  onChange={(e) => set({ path: e.target.value as DealDraft["path"] })}
-                >
-                  <option value="">Decide later</option>
-                  <option value="new_logo">New customer — first implementation</option>
-                  <option value="existing">Existing account — adding services</option>
-                </select>
-              </div>
               <div>
                 <label className={labelClass} htmlFor="new-deal-industry">
                   Industry
@@ -181,86 +215,155 @@ export function NewDealDialog() {
                   ))}
                 </select>
               </div>
-            </div>
-            <div className="grid grid-cols-2 gap-2">
               <div>
-                <label className={labelClass} htmlFor="new-deal-domain">
-                  Domain
-                </label>
-                <input
-                  id="new-deal-domain"
-                  name="domain"
-                  className={inputClass}
-                  value={draft.domain}
-                  placeholder="acme.com"
-                  onChange={(e) => set({ domain: e.target.value })}
-                />
-              </div>
-              <div>
-                <label className={labelClass} htmlFor="new-deal-sfid">
-                  Salesforce ID
-                </label>
-                <input
-                  id="new-deal-sfid"
-                  name="sfid"
-                  className={inputClass}
-                  value={draft.salesforceId}
-                  onChange={(e) => set({ salesforceId: e.target.value })}
-                />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className={labelClass} htmlFor="new-deal-arr">
-                  ARR
-                </label>
-                <input
-                  id="new-deal-arr"
-                  name="arr"
-                  className={inputClass}
-                  value={draft.arr}
-                  placeholder="120000"
-                  onChange={(e) => set({ arr: e.target.value })}
-                />
-              </div>
-              <div>
-                <label className={labelClass} htmlFor="new-deal-stage">
-                  Stage
+                <label className={labelClass} htmlFor="new-deal-path">
+                  Kind
                 </label>
                 <select
-                  id="new-deal-stage"
-                  name="stage"
+                  id="new-deal-path"
+                  name="path"
                   className={inputClass}
-                  value={draft.stage}
-                  onChange={(e) => set({ stage: e.target.value as AccountStage })}
-                  title="A deal that already closed can start there; the move is written to the history."
+                  value={draft.path || "new_logo"}
+                  onChange={(e) => set({ path: e.target.value as DealDraft["path"] })}
                 >
-                  {STAGES.map((s) => (
-                    <option key={s} value={s}>
-                      {STAGE_LABELS[s]}
-                    </option>
-                  ))}
+                  <option value="new_logo">New customer — first implementation</option>
+                  <option value="existing">Existing account — adding services</option>
                 </select>
               </div>
             </div>
             <div>
-              <label className={labelClass} htmlFor="new-deal-summary">
-                Summary
+              <label className={labelClass} htmlFor="new-deal-notes">
+                Call notes
               </label>
               <textarea
-                id="new-deal-summary"
-                name="summary"
+                id="new-deal-notes"
+                name="notes"
                 className={areaClass}
-                rows={3}
-                value={draft.summary}
-                onChange={(e) => set({ summary: e.target.value })}
+                rows={6}
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                placeholder="Paste the Gong recap or your own notes. Plain text is fine. The brief, the plan and the deck are written from this."
               />
             </div>
+            <div>
+              <label className={labelClass} htmlFor="new-deal-sow">
+                Signed SOW (PDF, optional)
+              </label>
+              <input
+                id="new-deal-sow"
+                name="sow"
+                type="file"
+                accept="application/pdf,.pdf"
+                className="block w-full text-[11px] text-muted-foreground file:mr-2 file:rounded-sm file:border file:border-border file:bg-background file:px-1.5 file:py-0.5 file:text-[11px] file:text-foreground"
+                onChange={(e) => setSow(e.target.files?.[0] ?? null)}
+              />
+              <p className="mt-0.5 text-[11px] text-muted-foreground">
+                Build it reads the services and dates out of it. Without one, the plan is the first
+                form only.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              className="text-[11px] text-muted-foreground hover:text-foreground"
+              onClick={() => setMore((v) => !v)}
+            >
+              {more ? "Hide the rest" : "More: domain, Salesforce ID, ARR, stage, summary"}
+            </button>
+            {more ? (
+              <div className="space-y-2 rounded-md border border-border bg-muted/20 p-2.5">
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className={labelClass} htmlFor="new-deal-domain">
+                      Domain
+                    </label>
+                    <input
+                      id="new-deal-domain"
+                      name="domain"
+                      className={inputClass}
+                      value={draft.domain}
+                      placeholder="acme.com"
+                      onChange={(e) => set({ domain: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <label className={labelClass} htmlFor="new-deal-sfid">
+                      Salesforce ID
+                    </label>
+                    <input
+                      id="new-deal-sfid"
+                      name="sfid"
+                      className={inputClass}
+                      value={draft.salesforceId}
+                      onChange={(e) => set({ salesforceId: e.target.value })}
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className={labelClass} htmlFor="new-deal-arr">
+                      ARR
+                    </label>
+                    <input
+                      id="new-deal-arr"
+                      name="arr"
+                      className={inputClass}
+                      value={draft.arr}
+                      placeholder="120000"
+                      onChange={(e) => set({ arr: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <label className={labelClass} htmlFor="new-deal-stage">
+                      Stage
+                    </label>
+                    <select
+                      id="new-deal-stage"
+                      name="stage"
+                      className={inputClass}
+                      value={draft.stage}
+                      onChange={(e) => set({ stage: e.target.value as AccountStage })}
+                      title="A deal that already closed can start there; the move is written to the history."
+                    >
+                      {STAGES.map((s) => (
+                        <option key={s} value={s}>
+                          {STAGE_LABELS[s]}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                <div>
+                  <label className={labelClass} htmlFor="new-deal-summary">
+                    Summary
+                  </label>
+                  <textarea
+                    id="new-deal-summary"
+                    name="summary"
+                    className={areaClass}
+                    rows={2}
+                    value={draft.summary}
+                    onChange={(e) => set({ summary: e.target.value })}
+                  />
+                </div>
+              </div>
+            ) : null}
+
             {mutation.isError ? (
               <p className="text-[11px] text-destructive">{(mutation.error as Error).message}</p>
             ) : null}
-            <div className="flex justify-end gap-2 pt-1">
-              <button type="button" className={buttonClass} onClick={() => setOpen(false)}>
+            <div className="flex items-center justify-end gap-2 pt-1">
+              {mutation.isPending && phase ? (
+                <span className="mr-auto text-[11px] text-muted-foreground">{phase}…</span>
+              ) : null}
+              <button
+                type="button"
+                className={buttonClass}
+                onClick={() => {
+                  setOpen(false);
+                  reset();
+                }}
+              >
                 Cancel
               </button>
               <button
@@ -268,7 +371,7 @@ export function NewDealDialog() {
                 className={primaryButtonClass}
                 disabled={mutation.isPending || draft.name.trim() === ""}
               >
-                {mutation.isPending ? "Creating…" : "Create deal"}
+                {mutation.isPending ? "Creating…" : "Create account"}
               </button>
             </div>
           </form>
