@@ -54,7 +54,7 @@ import {
   type ServicePlan,
   type Timeline,
 } from "@/lib/onboarding-timeline";
-import { HOMEWORK_KEYS, type HomeworkKey, type WelcomeView } from "@/lib/welcome";
+import { HOMEWORK_KEYS, isScreenShown, type HomeworkKey, type WelcomeView } from "@/lib/welcome";
 import { whenLabel } from "@/lib/welcome-events";
 import { speakerNotes } from "@/lib/welcome-notes";
 import { exportWelcomePptx, pptxFileName } from "@/components/welcome-export";
@@ -166,9 +166,11 @@ export function WelcomePage({
   // Every screen the page can show, in order. The presenter can switch any
   // of them off for this customer; page numbers follow what is shown, so a
   // plan with two later phases and nothing hidden numbers to nine.
-  const hidden = new Set(view.hiddenScreens);
   const all = screenList(view);
-  const visible = all.filter((sc) => !hidden.has(sc.key));
+  const visible = all.filter((sc) => isScreenShown(sc.key, view.hiddenScreens));
+  const hidden = new Set(
+    all.filter((sc) => !isScreenShown(sc.key, view.hiddenScreens)).map((sc) => sc.key),
+  );
   const total = visible.length;
   const screens = visible.map((sc, i) =>
     sc.render({
@@ -1107,7 +1109,7 @@ function Team({ view, page }: { view: WelcomeView; page: number }) {
       eyebrow="Your team"
       title="Two teams,"
       accent="one plan"
-      lede="Small on purpose. Everyone here has a job in the next seven days, and nobody on this page is a ticket queue."
+      lede="Small on purpose. Everyone here has a job in the next seven days."
       band="Over fifteen years of onboarding field teams says this is what works, and what gets value fast. Questions go to your onboarding lead by name."
       bandIcon="PhoneCall"
     >

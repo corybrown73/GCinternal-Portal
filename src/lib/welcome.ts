@@ -65,6 +65,28 @@ export type WelcomeView = {
   path: "new_logo" | "existing";
 };
 
+/**
+ * Screens that are OFF unless the presenter switches them on for this
+ * customer: the "at a glance" phase cards and the "today → live" story. Both
+ * say things the timeline and the plan already say; five screens is the deck,
+ * seven is the long version. They are stored in the same hidden list as a
+ * "+key" entry, so nothing about the record's shape changes.
+ */
+export const OPTIONAL_SCREENS: ReadonlySet<string> = new Set(["overview", "form"]);
+
+export function isScreenShown(key: string, hidden: ReadonlyArray<string>): boolean {
+  return OPTIONAL_SCREENS.has(key) ? hidden.includes(`+${key}`) : !hidden.includes(key);
+}
+
+/** The hidden list after switching one screen on or off. */
+export function toggleScreen(hidden: ReadonlyArray<string>, key: string, show: boolean): string[] {
+  if (OPTIONAL_SCREENS.has(key)) {
+    const marker = `+${key}`;
+    return show ? [...new Set([...hidden, marker])] : hidden.filter((k) => k !== marker);
+  }
+  return show ? hidden.filter((k) => k !== key) : [...new Set([...hidden, key])];
+}
+
 /** The homework items the customer ticks, keyed so a reworded item keeps its tick. */
 export const HOMEWORK_KEYS = ["app", "user", "list"] as const;
 export type HomeworkKey = (typeof HOMEWORK_KEYS)[number];

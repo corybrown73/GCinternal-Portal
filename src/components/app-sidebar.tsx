@@ -1,4 +1,5 @@
-import { Link } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
+import { Search } from "lucide-react";
 import { canManage, isSuperAdmin, ROLE_LABELS, signOut, type PortalProfile } from "@/lib/auth";
 import { NO_HIDDEN, visibleNav, type NavVisibility } from "@/lib/nav-visibility";
 import {
@@ -78,6 +79,7 @@ export function AppSidebar({
         </span>
       </div>
 
+      <SearchBox />
       <nav className="flex flex-col gap-0.5 p-2">
         {nav.map((item) => (
           <Link
@@ -132,5 +134,35 @@ export function AppSidebar({
         )}
       </div>
     </aside>
+  );
+}
+
+/** Search, as a box rather than a page in the list: type, Enter, results. */
+function SearchBox() {
+  const navigate = useNavigate();
+  return (
+    <form
+      className="px-3 pt-3"
+      onSubmit={(e) => {
+        e.preventDefault();
+        const q = String(new FormData(e.currentTarget).get("q") ?? "").trim();
+        if (q) void navigate({ to: "/search", search: { q } });
+      }}
+    >
+      <label className="relative block">
+        <Search
+          className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2"
+          style={{ color: "var(--nav-muted)" }}
+        />
+        <input
+          name="q"
+          type="search"
+          placeholder="Search"
+          aria-label="Search across every surface"
+          className="h-7 w-full rounded-sm border bg-transparent pl-7 pr-2 text-[12px] outline-none focus:ring-1"
+          style={{ borderColor: "var(--nav-border)", color: "var(--nav-fg)" }}
+        />
+      </label>
+    </form>
   );
 }

@@ -349,30 +349,30 @@ function HomePage() {
     <>
       <PageHeader
         title="Today"
-        description="What needs my attention — deals waiting before kickoff, then every implementation sorted by what's driving it, not by task due dates."
+        description="Your accounts, each with its stage and the one thing to do next."
         actions={<ScopeSwitch scope={data.scope} onChange={setScope} />}
       />
       <PageBody className="space-y-4">
         <DealInboxPanel scope={param} />
-        {SECTIONS.map((section) => {
-          const rows = queue[section.bucket];
+        {/* ONE LIST. It used to be three panels by urgency; the urgency is
+            now the dot on each card, and the order is the same — needs
+            action first, then keep an eye on, then on track. */}
+        {(() => {
+          const rows = SECTIONS.flatMap((section) =>
+            queue[section.bucket].map((row) => ({ row, section })),
+          );
           return (
             <Panel
-              key={section.bucket}
-              level={section.level}
-              title={
-                <span className="flex items-center gap-2">
-                  <span className={cn("h-2 w-2 rounded-full", section.accent)} />
-                  {section.title}
-                </span>
-              }
+              level="primary"
+              title="Your accounts"
               count={rows.length}
+              meta="Needs action first, then keep an eye on, then on track"
             >
               {rows.length === 0 ? (
-                <NoRows label={section.empty} />
+                <NoRows label="No implementations in this scope. Widen it with the control above." />
               ) : (
                 <ul className="space-y-2 p-2">
-                  {rows.map((row) => (
+                  {rows.map(({ row, section }) => (
                     <ImplementationCard
                       key={row.impl.id}
                       row={row}
@@ -386,7 +386,7 @@ function HomePage() {
               )}
             </Panel>
           );
-        })}
+        })()}
 
         {/* This used to claim "sign-in isn't set up yet, so this shows every
             implementation regardless of who owns it". Sign-in has been set up

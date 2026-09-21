@@ -76,7 +76,11 @@ function SettingsPage() {
           <Link to="/how-it-works" className="font-medium text-primary hover:underline">
             How it works
           </Link>{" "}
-          — the whole flow, by role, on one page.
+          — the whole flow, by role, on one page.{" "}
+          <Link to="/form-templates" className="font-medium text-primary hover:underline">
+            Form library
+          </Link>{" "}
+          — the starting points by industry.
         </p>
         <TeamProfilePanel />
         <DigestPanel />

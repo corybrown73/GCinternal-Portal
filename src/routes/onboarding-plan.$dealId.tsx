@@ -5,6 +5,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { WelcomePage } from "@/components/welcome-page";
 import { saveIntake } from "@/lib/presale.functions";
 import { getWelcome, issueWelcomeLinkFn } from "@/lib/welcome.functions";
+import { toggleScreen } from "@/lib/welcome";
 
 /**
  * The internal view of a deal's welcome page: preview, present, print, and
@@ -78,7 +79,7 @@ function OnboardingPlanPage() {
       }}
       onToggleScreen={async (key, hide) => {
         const current = query.data?.hiddenScreens ?? [];
-        const next = hide ? [...new Set([...current, key])] : current.filter((k) => k !== key);
+        const next = toggleScreen(current, key, !hide);
         await save({ data: { dealId, patch: { welcome_hidden_screens: next } } as never });
         await qc.invalidateQueries({ queryKey: ["welcome", dealId] });
       }}

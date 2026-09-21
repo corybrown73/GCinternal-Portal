@@ -1,5 +1,5 @@
 import { shortDay } from "./onboarding-timeline";
-import type { WelcomeView } from "./welcome";
+import { isScreenShown, type WelcomeView } from "./welcome";
 
 /**
  * The talk track for the first call.
@@ -53,7 +53,18 @@ export function speakerNotes(view: WelcomeView): {
   const live = shortDay(t.liveDate);
   const existing = view.path === "existing";
 
-  const hidden = new Set(view.hiddenScreens);
+  const hidden = new Set(
+    [
+      "cover",
+      "team",
+      "overview",
+      "plan",
+      "together",
+      "form",
+      "business",
+      ...t.phases.map((ph) => `phase-${ph.phase}`),
+    ].filter((k) => !isScreenShown(k, view.hiddenScreens)),
+  );
   const sections: Array<Omit<NoteSection, "screen">> = [
     {
       key: "cover",
@@ -227,7 +238,9 @@ export function speakerNotes(view: WelcomeView): {
   for (const s of shown) {
     n += 1;
     // Later phase screens count in the page numbering but share the section.
-    numbered.push({ ...s, screen: n });
+    // Three lines to say and two answers per screen: a presenter reads a
+    // card, not an essay, and the room gets the customer's attention back.
+    numbered.push({ ...s, say: s.say.slice(0, 3), ifTheyAsk: s.ifTheyAsk.slice(0, 2), screen: n });
     if (s.key === `phase-${t.phases[0]?.phase}`) {
       n += [...laterPhaseKeys].filter((k) => !hidden.has(k)).length;
     }
