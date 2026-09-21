@@ -41,7 +41,7 @@ describe("outcomesFor", () => {
     });
     const rows = outcomesFor(
       { dealId: "d", account: "Maverick", timeline: t, services },
-      "2026-10-14",
+      "2026-10-21",
     );
     const form = rows.find((r) => r.kind === "phase1")!;
     expect(form).toMatchObject({ plannedDays: 10, actualDays: 12, slipDays: 2, status: "done" });

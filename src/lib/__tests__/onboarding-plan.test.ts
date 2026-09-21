@@ -81,7 +81,7 @@ describe("timelineFor", () => {
     expect(t.milestones.find((m) => m.key === "kickoff")!.date).toBe("2026-09-11");
     expect(t.milestones.find((m) => m.key === "working")!.date).toBe("2026-09-16");
     expect(t.integration.target).toBe("Dropbox");
-    expect(t.integration.weeks).toBe(1);
+    expect(t.integration.weeks).toBe(2);
   });
 });
 

@@ -505,7 +505,8 @@ export function TimelinePanel({
                             >
                               {INTEGRATION_TIERS.filter((t) => t.weeks > 0).map((t) => (
                                 <option key={t.tier} value={t.tier}>
-                                  Tier {t.tier} · {t.name} · {t.weeks} wk{t.weeks === 1 ? "" : "s"}
+                                  Tier {t.tier} · {t.name} · {t.weeks} wk
+                                  {Number(t.weeks) === 1 ? "" : "s"}
                                 </option>
                               ))}
                             </select>
@@ -698,7 +699,8 @@ export function TimelinePanel({
                           >
                             {INTEGRATION_TIERS.filter((t) => t.weeks > 0).map((t) => (
                               <option key={t.tier} value={t.tier}>
-                                Tier {t.tier} · {t.name} · {t.weeks} wk{t.weeks === 1 ? "" : "s"}
+                                Tier {t.tier} · {t.name} · {t.weeks} wk
+                                {Number(t.weeks) === 1 ? "" : "s"}
                               </option>
                             ))}
                           </select>

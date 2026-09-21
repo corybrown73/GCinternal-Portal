@@ -97,7 +97,7 @@ export function speakerNotes(view: WelcomeView): {
       ifTheyAsk: [
         {
           q: "We don't have a field tester yet.",
-          a: `Pick the crew lead who complains loudest about the paper. Have a name to us by ${homework ? shortDay(homework.date) : "the homework date"} — it is one of the three homework items.`,
+          a: `Pick the crew lead who complains loudest about the paper. Have a name to us by ${homework ? shortDay(homework.date) : "the homework date"} — it is one of the three things they do before the next call.`,
         },
       ],
     },
@@ -177,7 +177,7 @@ export function speakerNotes(view: WelcomeView): {
       title: "What's expected",
       say: [
         "We build it with you, not for you. A form you built yourself is one you will change yourself — and the second use case shows up on its own.",
-        `Three homework items before the ${existing ? "optimisation" : "working"} session, due ${homework ? shortDay(homework.date) : ""}: ${(kickoff?.homework ?? []).map(lower1).join(", ") || "download the app and log in, add one field user who will test on a real job, send us the customer or site list"}.`,
+        `Three things on their side before the ${existing ? "optimisation" : "working"} session, due ${homework ? shortDay(homework.date) : ""}: ${(kickoff?.homework ?? []).map(lower1).join(", ") || "download the app and log in, add one field user who will test on a real job, send us the customer or site list"}.`,
         "Fifteen minutes. It means the working session starts from a live account instead of a blank one.",
         ...t.alongside.map((svc) => `And for ${svc.name}: ${svc.needs}`),
       ],

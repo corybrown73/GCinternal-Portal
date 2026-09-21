@@ -1117,7 +1117,7 @@ function Cover({ view, qr }: { view: WelcomeView; qr?: { url: string; dataUrl: s
               <img src={qr.dataUrl} alt="" />
               <span>
                 <b>Scan for your plan</b>
-                Your dates, your homework, on your phone.
+                Your dates, your part, on your phone.
               </span>
             </div>
           ) : null}
@@ -1466,14 +1466,14 @@ function Plan({ view, page }: { view: WelcomeView; page: number }) {
       }
       lede={
         t.training
-          ? "Three thirty-minute calls, a little homework, a week of real jobs in between. Every step below has an owner."
+          ? "Three thirty-minute calls, a little to do between calls, a week of real jobs in between. Every step below has an owner."
           : existing
             ? t.existingBuild === "customer"
               ? "A kickoff that splits the work, your build with a date, a check-in, real jobs through it, and a freeze. Two weeks, and every step below has an owner."
               : t.existingBuild === "us"
-                ? "Two build calls with you driving, a little homework, one crew on real jobs. Every step below has an owner."
+                ? "Two build calls with you driving, a little to do between them, one crew on real jobs. Every step below has an owner."
                 : `A review call, a short optimisation session, a few real jobs through it. ${["", "One", "Two", "Three", "Four", "Five", "Six", "Seven"][days] ?? days} business days, and every day below has an owner.`
-            : "Two build calls with you driving, a little homework, one crew on real jobs. The build is the training. Every step below has an owner."
+            : "Two build calls with you driving, a little to do between them, one crew on real jobs. We teach and build together. Every step below has an owner."
       }
       band={
         t.training
@@ -1571,7 +1571,7 @@ function Plan({ view, page }: { view: WelcomeView; page: number }) {
           <Owner owner="gocanvas" /> we do it, you hear about it
         </span>
         <span>
-          <Owner owner="client" /> your homework, fifteen minutes
+          <Owner owner="client" /> your part before the next call, fifteen minutes
         </span>
         <span>
           <Owner owner="both" /> on a call, hands on the keyboard together
@@ -1775,8 +1775,8 @@ function Together({
       }
       band={
         existing
-          ? "Fifteen minutes of homework means the optimisation session starts from your real form and your real output."
-          : "Fifteen minutes of homework means the second session starts from a live account, not a blank one."
+          ? "Fifteen minutes on your side means the optimisation session starts from your real form and your real output."
+          : "Fifteen minutes on your side means the second session starts from a live account, not a blank one."
       }
       bandIcon="Users"
     >
@@ -1852,7 +1852,7 @@ function Together({
       </div>
       <div className="wp-homework">
         <p className="wp-homework-title">
-          Your homework before the {existing ? "optimisation" : "working"} session
+          Your part before the {existing ? "optimisation" : "working"} session
           {due ? ` · due ${shortDay(due.date)}` : ""}
         </p>
         <div className="wp-homework-row">
@@ -2156,12 +2156,12 @@ function Business({
               <p>
                 <T k="business.call1.body">
                   {t.training
-                    ? "How to find your way around the admin portal, and how to build a form — you build one with us on the call, start to finish. You leave with three homework items."
+                    ? "How to find your way around the admin portal, and how to build a form — you build one with us on the call, start to finish. You leave with three things to do before the next call."
                     : t.existingBuild === "customer"
-                      ? "You build the form, we build the integration. Agree the split out loud: which form, by when, and the fields the integration needs from it. You leave with three homework items."
+                      ? "You build the form, we build the integration. Agree the split out loud: which form, by when, and the fields the integration needs from it. You leave with three things to do before the next call."
                       : t.existingBuild === "review"
-                        ? "Walk the form the integration reads from, field by field, and decide together what it needs. You leave with three homework items."
-                        : "Meet, agree how we work, and build the first form live on the call — your hands on the keyboard, we guide. You leave with three homework items."}
+                        ? "Walk the form the integration reads from, field by field, and decide together what it needs. You leave with three things to do before the next call."
+                        : "Meet, agree how we work, and build the first form live on the call — your hands on the keyboard, we guide. You leave with three things to do before the next call."}
                 </T>
               </p>
             </div>
@@ -2334,7 +2334,7 @@ function phaseOneTime(t: Timeline, kickoffMinutes: number, workingMinutes: numbe
   const h = Math.floor(minutes / 60);
   const m = minutes % 60;
   const time = h ? `${h} h${m ? ` ${m} min` : ""}` : `${m} min`;
-  return `${time} on ${calls} call${calls === 1 ? "" : "s"} · ${homework} min homework`;
+  return `${time} on ${calls} call${calls === 1 ? "" : "s"} · ${homework} min on your side`;
 }
 
 /** When a service's ask is needed, next to the shared homework due date. */

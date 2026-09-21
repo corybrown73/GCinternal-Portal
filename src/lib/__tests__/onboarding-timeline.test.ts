@@ -104,7 +104,7 @@ describe("integrations", () => {
     });
     expect(t.integration.startsOn).toBe(addBusinessDays(t.liveDate, 1));
     expect(t.integration.startsOn! > t.liveDate).toBe(true);
-    expect(t.integration.weeks).toBe(2);
+    expect(t.integration.weeks).toBe(3);
     expect(t.integration.target).toBe("QuickBooks Online");
   });
 
@@ -160,7 +160,7 @@ describe("phase 2 is gated on the form", () => {
     });
     expect(t.integration.tentative).toBe(false);
     expect(t.integration.startsOn).toBe(addBusinessDays("2026-09-25", 1));
-    expect(t.integration.endsOn).toBe(addWeeks(t.integration.startsOn!, 2));
+    expect(t.integration.endsOn).toBe(addWeeks(t.integration.startsOn!, 3));
   });
 
   it("never lets a proven date pull phase 2 before the form is live", () => {
@@ -243,8 +243,8 @@ describe("moving a date moves everything after it", () => {
     expect(t.integration.startsOn).toBe("2026-09-28");
     expect(t.integration.milestones[0]!.moved).toBe(true);
     expect(t.integration.milestones.slice(1).every((m) => m.shifted)).toBe(true);
-    // Two weeks after the planned Mon Sep 21 was Mon Oct 5; +5 business days → Mon Oct 12.
-    expect(t.integration.endsOn).toBe("2026-10-12");
+    // Three weeks after the planned Mon Sep 21 was Mon Oct 12; +5 business days → Mon Oct 19.
+    expect(t.integration.endsOn).toBe("2026-10-19");
   });
 });
 
@@ -304,7 +304,7 @@ describe("phases with several services", () => {
     expect(p2.services.map((s) => s.name)).toEqual(["QuickBooks Online", "Invoice PDF"]);
     expect(p2.services[0]!.startsOn).toBe(p2.services[1]!.startsOn);
     expect(p2.services[0]!.startsOn).toBe(p2.startsOn);
-    expect(p2.services[0]!.weeks).toBe(2);
+    expect(p2.services[0]!.weeks).toBe(3);
     expect(p2.services[1]!.weeks).toBe(1);
     expect(p2.endsOn).toBe(p2.services[0]!.endsOn);
     expect(p2.tentative).toBe(false);
@@ -421,7 +421,7 @@ describe("services alongside the form (phase 1)", () => {
 });
 
 describe("the existing-account path", () => {
-  it("makes phase 1 a form review with the same keys, six business days, and its own gate", () => {
+  it("makes phase 1 a form review with the same keys, six business days, and the integration beside it", () => {
     const t = buildTimeline({
       closeDate: "2026-09-09",
       path: "existing",
@@ -443,7 +443,21 @@ describe("the existing-account path", () => {
     expect(t.milestones.find((m) => m.key === "kickoff")!.minutes).toBe(45);
     expect(t.milestones[t.milestones.length - 1]!.day).toBe(6);
     expect(t.liveDate).toBe(addBusinessDays("2026-09-09", 6));
-    expect(t.phases[0]!.gate).toBe("Starts once your form is optimised for the integration");
+    // A final form: the integration starts in week one, beside the review,
+    // so a three-week integration is a three-week project.
+    expect(t.phases[0]!.gate).toBe("Starts in week one, beside the form review");
+    expect(t.phases[0]!.startsOn).toBe(addBusinessDays("2026-09-09", 1));
+    expect(t.phases[0]!.tentative).toBe(false);
+    const built = buildTimeline({
+      closeDate: "2026-09-09",
+      path: "existing",
+      existingBuild: "customer",
+      services: [{ id: "qb", kind: "integration", name: "QuickBooks Online", phase: 2, tier: 3 }],
+    });
+    expect(built.phases[0]!.gate).toBe(
+      "Starts once your form is proven or frozen for the integration",
+    );
+    expect(built.phases[0]!.startsOn! > built.liveDate).toBe(true);
   });
 
   it("is the new-logo plan when the path is unset or new_logo", () => {

@@ -56,7 +56,7 @@ describe("the SOW read into the plan", () => {
       name: "Job Safety Analysis",
       phase: 1,
     });
-    expect(rowWeeks(qb)).toBe(2);
+    expect(rowWeeks(qb)).toBe(3);
     expect(rowWeeks(jsa)).toBe(2);
   });
 

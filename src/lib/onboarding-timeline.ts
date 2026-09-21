@@ -135,7 +135,7 @@ export const NEW_LOGO_PLAN: readonly MilestoneSpec[] = [
   {
     key: "homework",
     day: 2,
-    label: "Your homework",
+    label: "Your part before the next call",
     owner: "client",
     kind: "homework",
     detail:
@@ -224,7 +224,7 @@ export const EXISTING_PLAN: readonly MilestoneSpec[] = [
   {
     key: "homework",
     day: 2,
-    label: "Your homework",
+    label: "Your part before the next call",
     owner: "client",
     kind: "homework",
     detail:
@@ -308,7 +308,7 @@ export const CUSTOMER_BUILD_PLAN: readonly MilestoneSpec[] = [
   {
     key: "homework",
     day: 2,
-    label: "Your homework",
+    label: "Your part before the next call",
     owner: "client",
     kind: "homework",
     detail: "The three things above. Fifteen minutes, and your build has a name and a date.",
@@ -394,7 +394,7 @@ export const DM_CONVERSION_PLAN: readonly MilestoneSpec[] = [
   {
     key: "homework",
     day: 2,
-    label: "Your homework",
+    label: "Your part before the next call",
     owner: "client",
     kind: "homework",
     detail:
@@ -484,7 +484,7 @@ export const TRAINING_PLAN: readonly MilestoneSpec[] = [
   {
     key: "homework",
     day: 2,
-    label: "Your homework",
+    label: "Your part before the next call",
     owner: "client",
     kind: "homework",
     detail:
@@ -571,7 +571,10 @@ export function planFor(
 
 /**
  * Integration complexity, from the tiering GoCanvas already uses internally.
- * Weeks are what the plan extends by, AFTER day 7.
+ * Weeks are what the integration takes once it starts: two to four by tier,
+ * six when nobody has tiered it. On an existing account with a final form
+ * it starts in week one, beside the review, so the whole thing is two to
+ * four weeks; a form that still needs building adds its two weeks first.
  */
 export const INTEGRATION_TIERS = [
   { tier: 0, name: "None", weeks: 0, summary: "No integration in scope." },
@@ -584,14 +587,14 @@ export const INTEGRATION_TIERS = [
   {
     tier: 2,
     name: "Intermediate",
-    weeks: 1,
+    weeks: 2,
     summary:
       "Level 1: PDF to Drive, OneDrive or Dropbox; form-to-form; calendar; text or email notifications.",
   },
   {
     tier: 3,
     name: "Advanced",
-    weeks: 2,
+    weeks: 3,
     summary:
       "Level 2: form-to-form loops, dispatch, QuickBooks Online, Salesforce, Slack, photo integration.",
   },
@@ -1010,15 +1013,21 @@ export function buildTimeline(options: TimelineOptions): Timeline {
     // Phase 2 never starts before the form is live, even if a person recorded
     // the form as proven earlier by mistake. A later phase starts the day its
     // predecessor actually finished — early or late — else on its planned end.
+    // An existing account whose form is already final is the exception: the
+    // integration starts in week one, beside the review, so a two-to-four
+    // week integration is a two-to-four week project.
+    const reviewOnly = existingBuild === "review";
     const anchor = isFirst
-      ? provenOn && provenOn > liveDate
-        ? provenOn
-        : liveDate
+      ? reviewOnly
+        ? options.closeDate
+        : provenOn && provenOn > liveDate
+          ? provenOn
+          : liveDate
       : prevDone && prevDoneOn
         ? prevDoneOn
         : (prevEnds ?? liveDate);
     const phaseStart = addBusinessDays(anchor, 1, holidays);
-    const tentative = isFirst ? !provenOn : !(prevDone && prevDoneOn);
+    const tentative = isFirst ? !reviewOnly && !provenOn : !(prevDone && prevDoneOn);
     const plans: ServicePlan[] = services
       .filter((x) => x.phase === n)
       .map((svc) => planService(svc, n, phaseStart));
@@ -1037,9 +1046,11 @@ export function buildTimeline(options: TimelineOptions): Timeline {
       phase: n,
       label: `Phase ${n}`,
       gate: isFirst
-        ? path === "existing"
-          ? "Starts once your form is optimised for the integration"
-          : "Starts once the form is tested and dialed in"
+        ? reviewOnly
+          ? "Starts in week one, beside the form review"
+          : path === "existing"
+            ? "Starts once your form is proven or frozen for the integration"
+            : "Starts once the form is tested and dialed in"
         : `Starts once phase ${phases[phases.length - 1]!.phase} is live`,
       tentative,
       startsOn: phaseStart,

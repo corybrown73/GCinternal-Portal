@@ -446,7 +446,7 @@ async function notifyAssignee(a: {
         </ol>
         ${
           a.shareUrl
-            ? `<p style="margin:12px 0 0;padding:10px 12px;border-radius:8px;background:#eef7fd;color:#072b57;font-size:13px"><b>The customer's link is ready:</b> <a href="${a.shareUrl}" style="color:#12509b">${a.shareUrl}</a><br/><span style="color:#556477">Send it after the kickoff. It shows their dates, their homework and your face.</span></p>`
+            ? `<p style="margin:12px 0 0;padding:10px 12px;border-radius:8px;background:#eef7fd;color:#072b57;font-size:13px"><b>The customer's link is ready:</b> <a href="${a.shareUrl}" style="color:#12509b">${a.shareUrl}</a><br/><span style="color:#556477">Send it after the kickoff. It shows their dates, their part and your face.</span></p>`
             : ""
         }
         <p style="color:#556477;font-size:13px">${

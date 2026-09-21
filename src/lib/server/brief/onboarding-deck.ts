@@ -582,7 +582,7 @@ function slideTogether(pptx: Pptx, d: OnboardingDeckInput) {
   const homeworkDue = t.milestones.find((m) => m.key === "homework");
   const hy = top + 1.95;
   s.addText(
-    `Your homework before the working session${homeworkDue ? ` · due ${shortDay(homeworkDue.date)}` : ""}`,
+    `Your part before the working session${homeworkDue ? ` · due ${shortDay(homeworkDue.date)}` : ""}`,
     {
       x: PAD,
       y: hy,
@@ -629,7 +629,7 @@ function slideTogether(pptx: Pptx, d: OnboardingDeckInput) {
     "Fifteen minutes of homework means the second session starts from a live account, not a blank one.",
   );
   s.addNotes(
-    "This is the slide that changes the relationship. Say it plainly: you make the last changes, not us. Assign the three homework items to a named person before moving on.",
+    "This is the slide that changes the relationship. Say it plainly: you make the last changes, not us. Assign the three things they do before the next call to a named person before moving on.",
   );
 }
 
@@ -924,7 +924,7 @@ function slideNext(pptx: Pptx, d: OnboardingDeckInput) {
         color: on ? BRAND.white : BRAND.fg1,
         fontFace: FONT,
       });
-      s.addText(x.weeks ? `${x.weeks} wk${x.weeks === 1 ? "" : "s"}` : "—", {
+      s.addText(x.weeks ? `${x.weeks} wk${Number(x.weeks) === 1 ? "" : "s"}` : "—", {
         x: bx + 0.1,
         y: top + 0.56,
         w: bw - 0.2,
