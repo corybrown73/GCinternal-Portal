@@ -195,25 +195,36 @@ export async function loadPipeline(
       db().from("portal_gong_reports").select("account_id"),
       db()
         .from("implementations")
-        .select("id,deal_id,created_at")
+        .select("id,deal_id,created_at,owner_id")
         .is("superseded_by_implementation_id", null)
         .not("deal_id", "is", null)
         .order("created_at", { ascending: false }),
     ]);
   const implByDeal = new Map<string, string>();
-  for (const i of (impls ?? []) as Array<{ id: string; deal_id: string }>) {
-    if (!implByDeal.has(i.deal_id)) implByDeal.set(i.deal_id, String(i.id));
+  const implOwnerByDeal = new Map<string, string | null>();
+  for (const i of (impls ?? []) as Array<{
+    id: string;
+    deal_id: string;
+    owner_id: string | null;
+  }>) {
+    if (!implByDeal.has(i.deal_id)) {
+      implByDeal.set(i.deal_id, String(i.id));
+      implOwnerByDeal.set(i.deal_id, i.owner_id ?? null);
+    }
   }
   if (error) throw new Error(error.message);
   const withNotes = new Set(
     ((noted ?? []) as Array<{ account_id: string }>).map((r) => r.account_id),
   );
   const { readIntake } = await import("./intake-answers");
+  // "My accounts" on the board: a deal is mine when I own it as AM or SE, or
+  // when I own the implementation it became. Most closed deals carry no
+  // pre-sale owner at all, so the second is how a specialist's board fills.
   const inScope = (a: Account) =>
     !scope ||
     matchesScope(
       {
-        implementationOwnerId: null,
+        implementationOwnerId: implOwnerByDeal.get(a.id) ?? null,
         csmOwnerId: null,
         amOwnerProfileId: a.am_owner_id ?? null,
         seOwnerProfileId: a.se_owner_id ?? null,
