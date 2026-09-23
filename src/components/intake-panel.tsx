@@ -242,9 +242,9 @@ export function FlowStep({ deal, editable }: { deal: DealData; editable: boolean
       ) : null}
       <p className="mt-1.5 text-[11px] text-muted-foreground">
         {answers.path === "new_logo"
-          ? "Three sixty-minute training days, first form live in fourteen business days — their hands on the keyboard, we guide. Up to three forms in phase 1."
+          ? "Three sixty-minute training days, first form live in fifteen business days — their hands on the keyboard, we guide. Up to three forms in phase 1."
           : answers.path === "dm_conversion"
-            ? "Their most-used Device Magic form, rebuilt in GoCanvas with them over three training days and run alongside it until it is proven. Fourteen business days."
+            ? "Their most-used Device Magic form, rebuilt in GoCanvas with them over three training days and run alongside it until it is proven. Fifteen business days."
             : answers.path === "existing"
               ? "The Account Manager's questions decide phase 1: a review, our build, or their build with a freeze before the integration."
               : answers.path === "field_fusion"

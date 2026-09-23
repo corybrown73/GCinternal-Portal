@@ -113,7 +113,7 @@ describe("the stage checklist", () => {
 });
 
 describe("the new-logo plan", () => {
-  it("is three sixty-minute training days, first form live fourteen business days from the close", () => {
+  it("is three sixty-minute training days, first form live fifteen business days from the close", () => {
     const t = buildTimeline({ closeDate: "2026-09-22", path: "new_logo" });
     const calls = t.milestones.filter((m) => m.kind === "call");
     expect(calls.map((c) => c.minutes)).toEqual([60, 60, 60]);
@@ -122,7 +122,7 @@ describe("the new-logo plan", () => {
       expect.stringMatching(/^Training day 2/),
       expect.stringMatching(/^Training day 3/),
     ]);
-    // Tue 22 Sep + 14 business days = Mon 12 Oct.
-    expect(t.liveDate).toBe("2026-10-12");
+    // Tue 22 Sep + 15 business days = Tue 13 Oct.
+    expect(t.liveDate).toBe("2026-10-13");
   });
 });

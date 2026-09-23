@@ -2,7 +2,7 @@
  * Phase 1, as dates.
  *
  * THE RULE THIS ENCODES. A new customer has their first form live within
- * fourteen business days of closing, trained over three sixty-minute calls
+ * fifteen business days of closing, trained over three sixty-minute calls
  * with real jobs between them. We drive the pace: the plan has dates before
  * anyone asks for them, and the kickoff is booked in the first days, not
  * "when they are ready" — the accounts that stalled were the ones that
@@ -62,7 +62,7 @@ export type MilestoneSpec = {
 /**
  * Two paths, one shape.
  *
- * A NEW LOGO builds its first form in fourteen business days. An EXISTING ACCOUNT that
+ * A NEW LOGO builds its first form in fifteen business days. An EXISTING ACCOUNT that
  * bought services already runs forms — phase 1 there is a review: the form
  * the integration reads from, optimised for it. Sometimes that means a new
  * form, sometimes a few fields, sometimes nothing. Same keys, same gates,
@@ -99,7 +99,7 @@ export function isTrainingPlan(
 }
 
 /**
- * Phase 1 for a new logo: the three training days, over fourteen business
+ * Phase 1 for a new logo: the three training days, over fifteen business
  * days from the close. The keys are the contract the deck renders.
  *
  * Day 1 is the kickoff call: 25 minutes on the kickoff deck (introductions,
@@ -182,7 +182,7 @@ export const NEW_LOGO_PLAN: readonly MilestoneSpec[] = [
   },
   {
     key: "live",
-    day: 14,
+    day: 15,
     label: "First form live",
     owner: "both",
     kind: "milestone",
@@ -445,7 +445,7 @@ export const DM_CONVERSION_PLAN: readonly MilestoneSpec[] = [
   },
   {
     key: "live",
-    day: 14,
+    day: 15,
     label: "First form live — Device Magic retires for it",
     owner: "both",
     kind: "milestone",

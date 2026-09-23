@@ -30,7 +30,7 @@ describe("business days", () => {
   });
 });
 
-describe("the new-logo plan — three training days, fourteen business days", () => {
+describe("the new-logo plan — three training days, fifteen business days", () => {
   // 2026-09-09 is a Wednesday.
   const t = buildTimeline({ closeDate: "2026-09-09" });
 
@@ -40,9 +40,9 @@ describe("the new-logo plan — three training days, fourteen business days", ()
     expect(kickoff.minutes).toBe(60);
   });
 
-  it("is live within fourteen business days, and the last step is the live one", () => {
+  it("is live within fifteen business days, and the last step is the live one", () => {
     expect(t.milestones[t.milestones.length - 1]!.key).toBe("live");
-    expect(t.liveDate).toBe(addBusinessDays("2026-09-09", 14));
+    expect(t.liveDate).toBe(addBusinessDays("2026-09-09", 15));
   });
 
   it("has three sixty-minute training calls with work between them", () => {
@@ -134,9 +134,9 @@ describe("integrations", () => {
 describe("presentation helpers", () => {
   it("counts business days to value, the plan's own unit", () => {
     const t = buildTimeline({ closeDate: "2026-09-09" });
-    // Fourteen business days from a Wednesday spans three weekends; the
-    // count still reads fourteen, the same number as "Day 14".
-    expect(daysToValue(t)).toBe(14);
+    // Fifteen business days from a Wednesday spans three weekends; the
+    // count still reads fifteen, the same number as "Day 15".
+    expect(daysToValue(t)).toBe(15);
   });
 
   it("formats a date the way a slide reads it", () => {
@@ -213,8 +213,8 @@ describe("moving a date moves everything after it", () => {
     expect(by("homework").date).toBe("2026-09-15");
     expect(by("homework").shifted).toBe(true);
     expect(by("working").date).toBe("2026-09-17");
-    expect(by("live").date).toBe("2026-09-30");
-    expect(t.liveDate).toBe("2026-09-30");
+    expect(by("live").date).toBe("2026-10-01");
+    expect(t.liveDate).toBe("2026-10-01");
     // Nothing before it moved.
     expect(by("close").date).toBe("2026-09-09");
     expect(by("close").shifted).toBe(false);
@@ -462,27 +462,27 @@ describe("the existing-account path", () => {
 
   it("is the new-logo plan when the path is unset or new_logo", () => {
     expect(buildTimeline({ closeDate: "2026-09-09" }).path).toBe("new_logo");
-    expect(buildTimeline({ closeDate: "2026-09-09", path: null }).milestones[6]!.day).toBe(14);
+    expect(buildTimeline({ closeDate: "2026-09-09", path: null }).milestones[6]!.day).toBe(15);
   });
 });
 
 describe("dayCounter", () => {
-  const t = buildTimeline({ closeDate: "2026-09-09" }); // Wed; live Tue Sep 29 (day 14)
+  const t = buildTimeline({ closeDate: "2026-09-09" }); // Wed; live Wed Sep 30 (day 15)
   it("counts business days from the close, and to live", () => {
     expect(dayCounter(t, "2026-09-09")).toMatchObject({
       day: 0,
-      total: 14,
-      toLive: 14,
+      total: 15,
+      toLive: 15,
       state: "during",
     });
     const mid = dayCounter(t, "2026-09-14");
-    expect(mid).toMatchObject({ day: 3, toLive: 11, state: "during", label: "Day 3 of 14" });
-    expect(mid.detail).toBe("Live Tue, Sep 29 · in 11 business days");
-    expect(dayCounter(t, "2026-09-29")).toMatchObject({
+    expect(mid).toMatchObject({ day: 3, toLive: 12, state: "during", label: "Day 3 of 15" });
+    expect(mid.detail).toBe("Live Wed, Sep 30 · in 12 business days");
+    expect(dayCounter(t, "2026-09-30")).toMatchObject({
       state: "live_today",
       detail: "Live today",
     });
-    expect(dayCounter(t, "2026-10-01")).toMatchObject({ state: "past_due", toLive: -2 });
+    expect(dayCounter(t, "2026-10-02")).toMatchObject({ state: "past_due", toLive: -2 });
     expect(dayCounter(t, "2026-09-07")).toMatchObject({
       state: "before",
       label: "Begins in 2 days",
@@ -494,10 +494,10 @@ describe("dayCounter", () => {
       state: "live",
       actual: 5,
       label: "Live in 5 days",
-      detail: "9 days ahead of the 14-day plan",
+      detail: "10 days ahead of the 15-day plan",
     });
-    const onPlan = buildTimeline({ closeDate: "2026-09-09", completed: { live: "2026-09-29" } });
-    expect(dayCounter(onPlan, "2026-09-30").detail).toBe("On plan — 14 days");
+    const onPlan = buildTimeline({ closeDate: "2026-09-09", completed: { live: "2026-09-30" } });
+    expect(dayCounter(onPlan, "2026-10-01").detail).toBe("On plan — 15 days");
   });
 });
 
