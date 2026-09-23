@@ -71,6 +71,33 @@ export async function transitionStage(
       entity_id: accountId,
       payload: { to_stage: toStage, source: ctx.source },
     });
+    // Out to whoever subscribed — the Salesforce flow, a Zapier zap — so the
+    // AE sees Closed Won → Pre-kickoff → Onboarding where they work.
+    try {
+      const { data: acct } = await admin
+        .from("portal_accounts")
+        .select("name, salesforce_id")
+        .eq("id", accountId)
+        .maybeSingle();
+      const { emitEvent } = await import("./events");
+      const { STAGE_LABELS } = await import("../presale-stages");
+      await emitEvent({
+        event_type: "deal.stage_changed",
+        entity_type: "account",
+        entity_id: accountId,
+        payload: {
+          deal_id: accountId,
+          name: (acct as { name?: string } | null)?.name ?? null,
+          salesforce_id: (acct as { salesforce_id?: string | null } | null)?.salesforce_id ?? null,
+          to_stage: toStage,
+          to_stage_label: STAGE_LABELS[toStage] ?? toStage,
+          source: ctx.source,
+          occurred_at: occurredAt ?? new Date().toISOString(),
+        },
+      });
+    } catch (e) {
+      console.error("[events] could not emit the stage change", e);
+    }
   }
   return { changed };
 }

@@ -235,6 +235,18 @@ async function runSlaSweep(): Promise<Response> {
   summary.health_recomputed = health.updated;
   summary.health_failed = health.failed;
 
+  /* ---- 7. Deal nudges: the checklist's own limits (stage-flow.ts) ----
+     The owner hears when a deal sits past its stage's limit or a training
+     call is two business days overdue; managers too once it is stuck, or
+     when nobody has claimed a closed deal. One email per step, ever. */
+  try {
+    const { runDealNudges } = await import("@/lib/nudges.server");
+    const n = await runDealNudges();
+    (summary as Record<string, number>)["deal_nudges_sent"] = n.sent;
+  } catch (e) {
+    console.error("[cron] deal nudges failed", e);
+  }
+
   /* ---- 6. Phase 6 signal alerts: champion gone quiet, launch date at risk ----
    * Off unless the `signals_alerts` flag is on. Both kinds require a named,
    * dated blocker rather than an absence, and neither emails — they land on

@@ -403,3 +403,70 @@ export function stuckLevel(stage: string, businessDaysInStage: number): StuckLev
       ? "warn"
       : "ok";
 }
+
+export type Nudge = {
+  /** Unique per deal and stage visit, so each is sent once. */
+  key: string;
+  level: "warn" | "escalate";
+  /** Who hears: the owner, or the owner and the managers, or managers only. */
+  to: "owner" | "owner_and_managers" | "managers";
+  subject: string;
+  line: string;
+};
+
+/**
+ * What the hourly sweep should say about a deal, if anything. Pure: the
+ * sweep gathers the facts, this decides, and the audit log makes each
+ * nudge go out once. Reads the same checklist and limits as every screen.
+ */
+export function nudgesFor(args: {
+  name: string;
+  stage: string;
+  /** Business days since the deal entered this stage. */
+  businessDaysInStage: number;
+  /** ISO timestamp the deal entered the stage: part of every key. */
+  enteredAt: string;
+  flow: StageFlow;
+  /** Business days late, per training call not ticked, on Onboarding. */
+  overdueCalls?: Array<{ key: string; label: string; date: string; businessDaysLate: number }>;
+}): Nudge[] {
+  const out: Nudge[] = [];
+  const visit = `${args.stage}@${args.enteredAt.slice(0, 10)}`;
+  const current = args.flow.stages.find((s) => s.key === args.flow.current);
+  const next = current?.tasks.find((t) => !t.done)?.label ?? null;
+  const unowned =
+    args.stage === "closed_won" &&
+    !(args.flow.stages[0]?.tasks.find((t) => t.key === "assign")?.done ?? true);
+
+  if (unowned && args.businessDaysInStage >= 1) {
+    out.push({
+      key: `${visit}:unclaimed`,
+      level: "escalate",
+      to: "managers",
+      subject: `Unclaimed: ${args.name}`,
+      line: `${args.name} closed ${args.businessDaysInStage} business day${args.businessDaysInStage === 1 ? "" : "s"} ago and nobody owns it yet. Assign it, or ask the pool to claim it.`,
+    });
+  }
+  const level = stuckLevel(args.stage, args.businessDaysInStage);
+  if (level !== "ok" && !unowned) {
+    const where = current?.label ?? args.stage;
+    out.push({
+      key: `${visit}:${level}`,
+      level,
+      to: level === "escalate" ? "owner_and_managers" : "owner",
+      subject: `${level === "escalate" ? "Stuck" : "Waiting"}: ${args.name} — ${where}`,
+      line: `${args.name} has been in ${where} for ${args.businessDaysInStage} business days${next ? `. Next: ${next}.` : "."}`,
+    });
+  }
+  for (const c of args.overdueCalls ?? []) {
+    if (c.businessDaysLate < 2) continue;
+    out.push({
+      key: `${visit}:overdue:${c.key}`,
+      level: "warn",
+      to: "owner",
+      subject: `Overdue: ${args.name} — ${c.label}`,
+      line: `${c.label} was due ${c.date}. Tick it on the checklist if it happened, or move the date on the plan so everything after it moves too.`,
+    });
+  }
+  return out;
+}

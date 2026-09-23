@@ -24,6 +24,7 @@ export const EVENT_TYPES = [
   "handoff.returned",
   "salesforce.write_back",
   "completion.recorded",
+  "deal.stage_changed",
 ] as const;
 export type EventType = (typeof EVENT_TYPES)[number];
 

@@ -265,6 +265,8 @@ function webhookNote(type: string): string {
       return "Declared, with no emitter yet — the launch gate does not publish events today.";
     case "handoff.returned":
       return "Declared, with no emitter yet — Phase 3's handoff gate does not publish events today.";
+    case "deal.stage_changed":
+      return "Every move of a deal's stage — Closed Won, Pre-kickoff, Onboarding, Complete — with `data.salesforce_id` for an 'Update Record by Id' step.";
     case "salesforce.write_back":
       return "Field-level write-back for a Zapier 'Update Record by Id' step. `data.fields` is keyed by Salesforce API name.";
     default:

@@ -193,3 +193,52 @@ describe("a service is never the first form", () => {
     expect(isServiceName("Analytics dashboard")).toBe(true);
   });
 });
+
+describe("nudges", () => {
+  it("tells managers about an unclaimed close, the owner about a slow stage, and both when it is stuck", async () => {
+    const { nudgesFor } = await import("../stage-flow");
+    const unclaimed = nudgesFor({
+      name: "Maverick",
+      stage: "closed_won",
+      businessDaysInStage: 1,
+      enteredAt: "2026-09-21T15:00:00Z",
+      flow: stageFlow(input({ owner: null, hasBrief: false })),
+    });
+    expect(unclaimed.map((n) => [n.to, n.key])).toEqual([
+      ["managers", "closed_won@2026-09-21:unclaimed"],
+    ]);
+    const slow = nudgesFor({
+      name: "Maverick",
+      stage: "onboarding_kickoff",
+      businessDaysInStage: 3,
+      enteredAt: "2026-09-21T15:00:00Z",
+      flow: stageFlow(input({ stage: "onboarding_kickoff" })),
+    });
+    expect(slow[0]).toMatchObject({ to: "owner", level: "warn" });
+    expect(slow[0]!.line).toMatch(/Next: Reply to the AE's email/);
+    const stuck = nudgesFor({
+      name: "Maverick",
+      stage: "onboarding_kickoff",
+      businessDaysInStage: 5,
+      enteredAt: "2026-09-21T15:00:00Z",
+      flow: stageFlow(input({ stage: "onboarding_kickoff" })),
+    });
+    expect(stuck[0]).toMatchObject({ to: "owner_and_managers", level: "escalate" });
+  });
+
+  it("flags a training call two business days late, and not before", async () => {
+    const { nudgesFor } = await import("../stage-flow");
+    const n = nudgesFor({
+      name: "Maverick",
+      stage: "in_onboarding",
+      businessDaysInStage: 4,
+      enteredAt: "2026-09-21T15:00:00Z",
+      flow: stageFlow(input({ stage: "in_onboarding" })),
+      overdueCalls: [
+        { key: "working", label: "Training day 2", date: "2026-09-24", businessDaysLate: 2 },
+        { key: "adjust", label: "Training day 3", date: "2026-09-29", businessDaysLate: 1 },
+      ],
+    });
+    expect(n.map((x) => x.key)).toEqual(["in_onboarding@2026-09-21:overdue:working"]);
+  });
+});

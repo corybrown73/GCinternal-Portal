@@ -1192,7 +1192,7 @@ function Team({ view, page }: { view: WelcomeView; page: number }) {
           ? "Runs all three calls, trains the crew on real jobs, watches the first submissions."
           : view.path === "existing"
             ? "Runs both calls, reviews the form with you, watches the first real submissions through."
-            : "Runs both calls, builds the first form with you, watches the first submissions."),
+            : "Runs all three training calls, builds the first form with you, watches the first submissions."),
       icon: "Wrench",
       side: "gocanvas",
       photoUrl: t.leadCard?.photoUrl ?? null,
@@ -1432,7 +1432,54 @@ function Overview({ view, page }: { view: WelcomeView; page: number }) {
           </div>
         ))}
       </div>
+      {!kickoff?.doneOn ? <BeforeKickoff view={view} /> : null}
     </Frame>
+  );
+}
+
+/**
+ * What we need from them before the first call, so the kickoff starts from
+ * their real form and their real list instead of a blank account. Three
+ * asks, in the words of their flow; gone once the kickoff is done.
+ */
+function BeforeKickoff({ view }: { view: WelcomeView }) {
+  const t = view.timeline;
+  const asks =
+    view.path === "existing"
+      ? [
+          "Which form or forms feed the integration",
+          "One example of the output the office needs, as it looks today",
+          "Who owns the field mapping on your side",
+        ]
+      : t.training
+        ? [
+            "The name and email of everyone who needs a login",
+            "A client or parts list you use today, as a spreadsheet",
+            "Who will run GoCanvas day to day",
+          ]
+        : [
+            "The paper form, PDF or spreadsheet you use today for the first form",
+            "Your client, site or parts list, as a spreadsheet",
+            "Who will own GoCanvas on your side — they drive on the calls",
+          ];
+  return (
+    <div className="wp-card" style={{ marginTop: 16, padding: "14px 18px" }}>
+      <p className="wp-ov-name" style={{ margin: 0 }}>
+        <T k="before.title">Before your kickoff</T>
+      </p>
+      <ol style={{ margin: "8px 0 6px", paddingLeft: 20, lineHeight: 1.7 }}>
+        {asks.map((a, i) => (
+          <li key={i}>
+            <T k={`before.${i}`}>{a}</T>
+          </li>
+        ))}
+      </ol>
+      <p style={{ margin: 0, opacity: 0.75, fontSize: 13 }}>
+        <T k="before.how">
+          {`Reply to ${view.team.lead ? `${view.team.lead}'s` : "your onboarding lead's"} email with these. The kickoff starts from your real work, not a blank account.`}
+        </T>
+      </p>
+    </div>
   );
 }
 
