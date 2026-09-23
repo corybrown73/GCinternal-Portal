@@ -8,6 +8,7 @@ const ready = {
   path: "new_logo",
   forms_built: false,
   wanted_forms: [{ id: "f1", name: "Daily job report", template_id: null }],
+  handoff_tasks: { reviewed: "2026-09-22T15:00:00Z" },
 };
 
 function input(over: Partial<StageFlowInput> = {}): StageFlowInput {
@@ -31,15 +32,30 @@ describe("the stage checklist", () => {
     expect(f.stages[0]!.tasks.find((t) => t.key === "assign")!.done).toBe(false);
   });
 
-  it("moves to Pre-kickoff once the welcome brief is generated", () => {
+  it("moves to Pre-kickoff once the AI's reading is approved and the deck exists", () => {
     expect(stageFlow(input()).advanceTo).toBe("onboarding_kickoff");
     expect(stageFlow(input({ hasLink: false })).advanceTo).toBeNull();
+    expect(stageFlow(input({ intake: { ...ready, handoff_tasks: {} } })).advanceTo).toBeNull();
   });
 
-  it("locks the brief until the recording, the SOW and the flow are in, and names what is missing", () => {
+  it("is four tasks, and the review waits for the Gong brief and the SOW", () => {
     const f = stageFlow(input({ gongReports: 0, hasSow: false, intake: {} }));
-    const gen = f.stages[0]!.tasks.find((t) => t.key === "generate")!;
-    expect(gen.locked).toBe("Needs the Gong recording, the SOW and the flow first");
+    expect(f.stages[0]!.tasks.map((t) => t.key)).toEqual(["assign", "notes", "sow", "review"]);
+    const review = f.stages[0]!.tasks.find((t) => t.key === "review")!;
+    expect(review.locked).toBe("Needs the Gong brief and the SOW first");
+  });
+
+  it("says the AI is reading while it reads", () => {
+    const f = stageFlow(
+      input({
+        intake: {
+          ...ready,
+          handoff_tasks: {},
+          ai_reading: { status: "running", started_at: new Date().toISOString() },
+        },
+      }),
+    );
+    expect(f.stages[0]!.tasks.find((t) => t.key === "review")!.summary).toMatch(/reading/);
   });
 
   it("counts no SOW as answered", () => {
@@ -50,7 +66,11 @@ describe("the stage checklist", () => {
   it("moves Pre-kickoff to Onboarding when the AE reply, the cadence and the booked kickoff are all in", () => {
     const base = {
       ...ready,
-      handoff_tasks: { reply_ae: "2026-09-22T15:00:00Z", cadence: "2026-09-22T15:05:00Z" },
+      handoff_tasks: {
+        reviewed: "2026-09-22T15:00:00Z",
+        reply_ae: "2026-09-22T15:00:00Z",
+        cadence: "2026-09-22T15:05:00Z",
+      },
     };
     expect(stageFlow(input({ stage: "onboarding_kickoff", intake: base })).advanceTo).toBeNull();
     const booked = {

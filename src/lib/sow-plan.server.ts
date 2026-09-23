@@ -212,15 +212,14 @@ async function stampSowFacts(dealId: string, p: SowPlanProposal): Promise<string
     // The plan's day 0: the SOW's start date when it names one, else its
     // signed date. Without this every plan starts "as if today".
     const day0 = p.start_date ?? p.signed_date;
-    if (day0) {
-      const { readIntake, intakeAnswersSchema } = await import("./intake-answers");
+    if (day0 && /^\d{4}-\d{2}-\d{2}$/.test(day0)) {
+      const { readIntake } = await import("./intake-answers");
       const intake = readIntake((deal as { intake?: unknown }).intake);
       if (!intake.timeline.close_date) {
-        patch["intake"] = intakeAnswersSchema.parse({
-          ...intake,
-          timeline: { ...intake.timeline, close_date: day0 },
-          updated_at: new Date().toISOString(),
-        });
+        // Merged into intake.timeline, never the whole intake written back:
+        // the brief may be filling the rest of it at this very moment.
+        const { mergeIntake } = await import("./server/intake-merge");
+        await mergeIntake(dealId, {}, { close_date: day0 });
         stamped.push("start date");
       }
     }

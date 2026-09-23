@@ -422,7 +422,7 @@ export async function transitionDeal(
  * them on the intake. `replace` false leaves an existing list alone; true
  * replaces the AI's picks and keeps the ones a person added or edited.
  */
-async function pickHelpForDeal(
+export async function pickHelpForDeal(
   dealId: string,
   actorId: string | null,
   brief: unknown,
@@ -454,16 +454,11 @@ async function pickHelpForDeal(
     ...kept,
     ...picked.filter((p) => !kept.some((k) => k.article_id === p.article_id)),
   ].slice(0, 8);
-  const next = intakeAnswersSchema.parse({
-    ...current,
-    help_picks: merged,
-    updated_at: new Date().toISOString(),
-  });
-  const { error } = await db()
-    .from("portal_accounts")
-    .update({ intake: next, updated_at: new Date().toISOString() })
-    .eq("id", dealId);
-  if (error) throw new Error(`Could not save the help articles: ${error.message}`);
+  intakeAnswersSchema.parse({ ...current, help_picks: merged });
+  // A merge: the picker ran for a minute, and the rest of the intake may
+  // have moved on meanwhile.
+  const { mergeIntake } = await import("./server/intake-merge");
+  await mergeIntake(dealId, { help_picks: merged });
   await audit({
     actor_type: actorId ? "user" : "system",
     actor_id: actorId,
@@ -1029,15 +1024,13 @@ export async function generateDealBrief(
         .join("\n\n");
       const result = prefillFromSynthesis(current, brief.structured_json, notesText);
       if (Object.keys(result.patch).length) {
-        const next = intakeAnswersSchema.parse({
-          ...current,
-          ...result.patch,
-          updated_at: new Date().toISOString(),
-        });
-        const { error } = await db()
-          .from("portal_accounts")
-          .update({ intake: next, updated_at: new Date().toISOString() })
-          .eq("id", dealId);
+        // Validated whole, written as a merge of only what changed.
+        intakeAnswersSchema.parse({ ...current, ...result.patch });
+        const { mergeIntake } = await import("./server/intake-merge");
+        const error = await mergeIntake(dealId, result.patch as Record<string, unknown>).then(
+          () => null,
+          (e: unknown) => e,
+        );
         if (!error) {
           filled = result.filled;
           await audit({

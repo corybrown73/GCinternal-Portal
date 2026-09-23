@@ -6,8 +6,8 @@ import type { Timeline } from "./onboarding-timeline";
  * The deal's stages as a checklist: what each stage asks of the person who
  * owns it, and when the deal moves on by itself.
  *
- *   Closed Won    assign it · the Gong recording · the SOW · the flow ·
- *                 generate the welcome brief            → Pre-kickoff
+ *   Closed Won    assigned · the Gong brief · the SOW · review what the
+ *                 AI filled and approve                 → Pre-kickoff
  *   Pre-kickoff   reply to the AE · the Salesloft cadence ·
  *                 book the kickoff call                 → Onboarding
  *   Onboarding    the three training days, the form, the field test, the
@@ -34,8 +34,7 @@ export type TaskAction =
   | "assign"
   | "notes"
   | "sow"
-  | "flow"
-  | "generate"
+  | "review"
   | "reply_ae"
   | "cadence"
   | "kickoff"
@@ -91,6 +90,14 @@ export const KICKOFF_CADENCE: ReadonlyArray<{ day: string; step: string }> = [
   { day: "Day 7", step: "Escalate to the AE to get the kickoff on the calendar" },
 ];
 
+/** A reading that started this long ago and never finished died with its request. */
+export const READING_STALE_MS = 6 * 60 * 1000;
+
+/** The automatic reading is running right now (and has not quietly died). */
+export function readingInFlight(r: IntakeAnswers["ai_reading"], now = Date.now()): boolean {
+  return r?.status === "running" && now - Date.parse(r.started_at) < READING_STALE_MS;
+}
+
 export const PRE_KICKOFF_TASKS = ["reply_ae", "cadence", "kickoff"] as const;
 
 function flowStageOf(stage: string): FlowStageKey | null {
@@ -115,10 +122,12 @@ function closedWonTasks(a: IntakeAnswers, input: StageFlowInput, closed: boolean
   const paperDone = input.hasSow || a.has_sow === false;
   const flowDone = a.path !== null && flowAnswered(a);
   const built = input.hasBrief && input.hasLink;
+  const reading = a.ai_reading;
+  const running = readingInFlight(reading);
+  const approved = Boolean(a.handoff_tasks["reviewed"]);
   const before: string[] = [];
-  if (!hasNotes) before.push("the Gong recording");
+  if (!hasNotes) before.push("the Gong brief");
   if (!paperDone) before.push("the SOW");
-  if (!flowDone) before.push("the flow");
   return [
     {
       key: "assign",
@@ -132,8 +141,8 @@ function closedWonTasks(a: IntakeAnswers, input: StageFlowInput, closed: boolean
     },
     {
       key: "notes",
-      label: "Add the Gong recording",
-      hint: "Paste the Gong transcript or the call notes. The brief is written from them.",
+      label: "Add the Gong brief",
+      hint: "Upload the Gong brief (.md) or paste the call notes. The AI reads it on its own.",
       done: hasNotes,
       summary: hasNotes
         ? `${input.gongReports} call note${input.gongReports === 1 ? "" : "s"} on file`
@@ -143,7 +152,7 @@ function closedWonTasks(a: IntakeAnswers, input: StageFlowInput, closed: boolean
     },
     {
       key: "sow",
-      label: "Upload the SOW",
+      label: "Add the SOW",
       hint: "The signed SOW. Integrations and services come from it, never from the notes.",
       done: paperDone,
       summary: input.hasSow ? "SOW on file" : a.has_sow === false ? "No SOW — core only" : null,
@@ -151,21 +160,17 @@ function closedWonTasks(a: IntakeAnswers, input: StageFlowInput, closed: boolean
       locked: null,
     },
     {
-      key: "flow",
-      label: "Confirm the onboarding flow",
-      hint: "Pre-picked from the calls. Check it, and name the first form.",
-      done: flowDone,
-      summary: flowDone ? flowSummary(a) : null,
-      action: "flow",
-      locked: null,
-    },
-    {
-      key: "generate",
-      label: "Generate the welcome brief",
-      hint: "Writes the brief, reads the SOW into the plan, and builds the kickoff deck and the customer's page.",
-      done: built,
-      summary: built ? "Brief and kickoff deck ready" : null,
-      action: "generate",
+      key: "review",
+      label: "Review what the AI filled, and approve",
+      hint: "The flow, the forms, the process and the plan, read from the Gong brief and the SOW. Fix anything wrong, then approve.",
+      done: approved && flowDone && built,
+      summary:
+        approved && flowDone && built
+          ? flowSummary(a)
+          : running
+            ? "AI is reading the Gong brief and the SOW…"
+            : null,
+      action: "review",
       locked: before.length ? `Needs ${joinAnd(before)} first` : null,
     },
   ];

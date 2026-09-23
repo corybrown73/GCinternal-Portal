@@ -159,6 +159,22 @@ export const intakeAnswersSchema = z.object({
    * written by it again. `ai_sources` keeps the words each AI answer came
    * from, shown beside it. See intake-prefill.ts.
    */
+  /**
+   * The automatic reading's own state, so every screen can say "reading…"
+   * and a reload does not lose it. `again` asks for one more run when new
+   * notes or a new SOW arrived while one was in flight.
+   */
+  ai_reading: z
+    .object({
+      status: z.enum(["running", "done", "failed"]),
+      started_at: z.string(),
+      finished_at: z.string().nullable().default(null),
+      filled: z.array(z.string().max(120)).max(30).default([]),
+      error: z.string().max(500).nullable().default(null),
+      again: z.boolean().default(false),
+    })
+    .nullable()
+    .default(null),
   ai_filled: z.array(z.string().max(40)).max(40).default([]),
   person_set: z.array(z.string().max(40)).max(40).default([]),
   ai_sources: z

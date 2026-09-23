@@ -1,120 +1,92 @@
-import { useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useEffect, useRef } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { Sparkles } from "lucide-react";
+import { RefreshCw, Sparkles } from "lucide-react";
 
-import { applySowRead } from "@/components/build-it";
-import { Working } from "@/components/working";
-import { dealQuery, type DealData } from "@/lib/deal-query";
+import { When } from "@/components/when";
+import type { DealData } from "@/lib/deal-query";
 import { readIntake, type IntakeAnswers } from "@/lib/intake-answers";
-import { generateBriefForDeal, saveIntake } from "@/lib/presale.functions";
-import { proposePlanFromSowFn } from "@/lib/sow-plan.functions";
+import { readingInFlight } from "@/lib/stage-flow";
+import { prepareDealFn } from "@/lib/stage-flow.functions";
 import { cn } from "@/lib/utils";
 
 /**
- * "Fill in the rest": press it after a new Gong brief or a new SOW.
- *
- * One reading of the calls and the SOW together, checked by a second
- * reading and by the code rules, fills the flow, the forms, the process and
- * the facts — then the SOW's services go on the plan. Anything the AI filled
- * before is refreshed; anything a person answered stays exactly as they left
- * it. Safe to press as often as the sources change.
+ * Start the reading and do not wait for it: the progress is on the record.
+ * Used by the Gong and SOW uploads (automatically) and by "Read again".
  */
-export function FillFromSources({
-  deal,
-  className,
-  compact = false,
-}: {
-  deal: DealData;
-  className?: string;
-  compact?: boolean;
-}) {
+export function useStartReading(dealId: string) {
   const qc = useQueryClient();
-  const synthesize = useServerFn(generateBriefForDeal);
-  const readSow = useServerFn(proposePlanFromSowFn);
-  const save = useServerFn(saveIntake);
-  const [busy, setBusy] = useState(false);
-  const [result, setResult] = useState<{ ok: boolean; text: string } | null>(null);
-  const hasNotes = deal.gong_reports.length > 0;
-  const hasSow = Boolean(deal.sow_url);
+  const prepare = useServerFn(prepareDealFn);
+  return useMutation({
+    mutationFn: async () => {
+      const run = prepare({ data: { dealId } });
+      // The record says "running" within a second; show it.
+      setTimeout(() => void qc.invalidateQueries({ queryKey: ["deal", dealId] }), 1500);
+      return run;
+    },
+    onSettled: () => {
+      void qc.invalidateQueries({ queryKey: ["deal", dealId] });
+      void qc.invalidateQueries({ queryKey: ["welcome", dealId] });
+    },
+  });
+}
 
-  async function run() {
-    const dealId = deal.account.id;
-    setBusy(true);
-    setResult(null);
-    try {
-      const r = await synthesize({ data: { dealId } });
-      if (r.generator !== "llm") {
-        throw new Error(
-          r.error ??
-            "The AI reading did not run, so nothing was filled. Check the API key in Vercel.",
-        );
-      }
-      let services = 0;
-      if (hasSow) {
-        const fresh = await qc.fetchQuery(dealQuery(dealId));
-        services = await applySowRead(
-          dealId,
-          readIntake(fresh?.account.intake),
-          readSow as never,
-          save as never,
-        );
-      }
-      await Promise.all([
-        qc.invalidateQueries({ queryKey: ["deal", dealId] }),
-        qc.invalidateQueries({ queryKey: ["welcome", dealId] }),
-      ]);
-      const parts = [...r.filled];
-      if (services)
-        parts.push(`${services} service${services === 1 ? "" : "s"} from the SOW on the plan`);
-      setResult({
-        ok: true,
-        text: parts.length
-          ? `Filled: ${parts.join(", ")}. Anything you typed yourself was left alone.`
-          : "Up to date — nothing new in the notes or the SOW, and your own answers stand.",
-      });
-    } catch (e) {
-      setResult({ ok: false, text: e instanceof Error ? e.message : "Something did not finish." });
-    } finally {
-      setBusy(false);
-    }
-  }
+/**
+ * Where the reading stands, from the record: reading now, what it filled,
+ * or what went wrong. Also queues the extra run a mid-flight upload asked
+ * for, once the first finishes.
+ */
+export function ReadingStatus({ deal, editable }: { deal: DealData; editable: boolean }) {
+  const intake = readIntake(deal.account.intake);
+  const r = intake.ai_reading;
+  const start = useStartReading(deal.account.id);
+  const running = readingInFlight(r);
+  const queued = useRef<string | null>(null);
+  useEffect(() => {
+    if (!editable || !r || running || !r.again || queued.current === r.started_at) return;
+    queued.current = r.started_at;
+    start.mutate();
+  }, [editable, r, running, start]);
 
   return (
-    <div className={cn("space-y-1", className)}>
-      <button
-        type="button"
-        onClick={() => void run()}
-        disabled={busy || !hasNotes}
-        title={
-          hasNotes
-            ? "Read the Gong brief and the SOW together and fill the flow, the forms, the process and the plan"
-            : "Add the Gong brief first"
-        }
-        className={cn(
-          "inline-flex items-center gap-1.5 rounded-sm font-medium disabled:opacity-50",
-          compact
-            ? "h-7 border border-primary/40 bg-card px-2.5 text-[12px] text-primary hover:bg-primary/5"
-            : "h-8 bg-primary px-3 text-[12px] text-primary-foreground hover:bg-primary/90",
-        )}
-      >
-        <Sparkles className="h-3.5 w-3.5" />
-        {busy ? (
-          <Working label="Reading the Gong brief and the SOW…" estimateSeconds={120} />
-        ) : (
-          `Fill in the rest from the Gong brief${hasSow ? " and SOW" : ""}`
-        )}
-      </button>
-      {result ? (
-        <p
-          role={result.ok ? undefined : "alert"}
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px]">
+      {running ? (
+        <span className="inline-flex items-center gap-1.5 text-primary">
+          <span className="h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent" />
+          AI is reading the Gong brief{deal.sow_url ? " and the SOW" : ""} — about two minutes. You
+          can leave this page.
+        </span>
+      ) : r?.status === "failed" ? (
+        <span role="alert" className="text-destructive">
+          The reading did not finish: {r.error ?? "unknown error"}
+        </span>
+      ) : r?.status === "done" ? (
+        <span className="text-muted-foreground">
+          <Sparkles className="mr-1 inline h-3 w-3 text-primary" />
+          Read <When value={r.finished_at ?? r.started_at} />
+          {r.filled.length ? ` · filled ${r.filled.join(", ")}` : " · nothing new to fill"}
+          {r.error ? (
+            <span className="text-amber-700 dark:text-amber-400"> · {r.error}</span>
+          ) : null}
+        </span>
+      ) : (
+        <span className="text-muted-foreground">Not read yet.</span>
+      )}
+      {editable && !running ? (
+        <button
+          type="button"
+          onClick={() => start.mutate()}
+          disabled={start.isPending || deal.gong_reports.length === 0}
           className={cn(
-            "text-[12px]",
-            result.ok ? "text-status-ontrack-foreground" : "text-destructive",
+            "inline-flex h-7 items-center gap-1 rounded-sm px-2.5 text-[12px] font-medium disabled:opacity-50",
+            r
+              ? "border border-border hover:bg-muted"
+              : "bg-primary text-primary-foreground hover:bg-primary/90",
           )}
         >
-          {result.text}
-        </p>
+          <RefreshCw className="h-3 w-3" />
+          {r ? "Read again" : "Read the Gong brief and SOW"}
+        </button>
       ) : null}
     </div>
   );

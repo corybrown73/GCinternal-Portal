@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { ArrowUp, Check, ExternalLink, ListPlus, Upload, X } from "lucide-react";
 
-import { AiSource } from "@/components/fill-from-sources";
+import { AiSource, useStartReading } from "@/components/fill-from-sources";
 import { TemplateCard } from "@/components/template-card";
 import { suggestFormTemplatesFn } from "@/lib/form-templates.functions";
 import type { DealData } from "@/lib/deal-query";
@@ -24,7 +24,6 @@ import { SERVICE_KINDS, type ServiceSpec } from "@/lib/onboarding-services";
 import { PATH_LABEL } from "@/lib/onboarding-timeline";
 import {
   addReport,
-  generateBriefForDeal,
   getIntakeFormLink,
   saveIntake,
   uploadContract,
@@ -435,9 +434,7 @@ function ExistingQuestions({
 export function NotesIn({ deal, editable }: { deal: DealData; editable: boolean }) {
   const qc = useQueryClient();
   const create = useServerFn(addReport);
-  const brief = useServerFn(generateBriefForDeal);
-  const hasBrief = deal.briefs.some((b) => b.status === "complete" && b.generator === "llm");
-  const [reading, setReading] = useState(false);
+  const reading = useStartReading(deal.account.id);
   const [content, setContent] = useState("");
   const [title, setTitle] = useState("");
   const [callDate, setCallDate] = useState("");
@@ -463,17 +460,9 @@ export function NotesIn({ deal, editable }: { deal: DealData; editable: boolean 
       setCallDate("");
       void qc.invalidateQueries({ queryKey: ["deal", deal.account.id] });
       void qc.invalidateQueries({ queryKey: ["welcome", deal.account.id] });
-      // The first notes start the brief; later ones do not re-read the
-      // account on their own — "Build it" is how a person asks for that.
-      if (!hasBrief) {
-        setReading(true);
-        void brief({ data: { dealId: deal.account.id } })
-          .catch(() => undefined)
-          .finally(() => {
-            setReading(false);
-            void qc.invalidateQueries({ queryKey: ["deal", deal.account.id] });
-          });
-      }
+      // Every new Gong brief is read on its own: the flow, the forms, the
+      // process and the plan refresh, and a person's own answers stand.
+      reading.mutate();
     },
     onError: (e) => setError((e as Error).message),
   });
@@ -584,11 +573,6 @@ export function NotesIn({ deal, editable }: { deal: DealData; editable: boolean 
           </div>
         </div>
       ) : null}
-      {reading ? (
-        <p className="mt-1 text-[11px] text-muted-foreground">
-          Reading the calls and writing the brief… this takes about a minute. You can carry on.
-        </p>
-      ) : null}
       {error ? (
         <p role="alert" className="mt-1 text-[11px] text-destructive">
           {error}
@@ -618,6 +602,7 @@ function PdfUpload({
   const sow = useServerFn(uploadSow);
   const contract = useServerFn(uploadContract);
   const link = useServerFn(getIntakeFormLink);
+  const reading = useStartReading(dealId);
   const inputRef = useRef<HTMLInputElement>(null);
   const [error, setError] = useState<string | null>(null);
   const upload = useMutation({
@@ -638,7 +623,11 @@ function PdfUpload({
       return kind === "sow" ? sow({ data }) : contract({ data });
     },
     onMutate: () => setError(null),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ["deal", dealId] }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["deal", dealId] });
+      // A new SOW is read on its own, with the calls: services onto the plan.
+      if (kind === "sow") reading.mutate();
+    },
     onError: (e) => setError((e as Error).message),
   });
   return (

@@ -4,19 +4,31 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { ArrowRight, Check, Copy, Lock, UserRoundCheck } from "lucide-react";
 
-import { BuildIt } from "@/components/build-it";
 import { FieldFusionGate } from "@/components/field-fusion-gate";
-import { FillFromSources } from "@/components/fill-from-sources";
+import { AiSource, ReadingStatus } from "@/components/fill-from-sources";
 import { FactsStep, FlowStep, NotesIn, SowStep } from "@/components/intake-panel";
 import { assignDealFn, claimDealFn, getDealAssignment } from "@/lib/assignment.functions";
 import { canEditDeal, canManage, useProfile } from "@/lib/auth";
 import { dealQuery, type DealData } from "@/lib/deal-query";
-import { readIntake, type IntakeAnswers } from "@/lib/intake-answers";
+import {
+  firstFormName,
+  flowAnswered,
+  formsOnly,
+  readIntake,
+  type IntakeAnswers,
+} from "@/lib/intake-answers";
 import { closeDateFor, timelineFor } from "@/lib/onboarding-plan";
-import { dayCounter, localIso } from "@/lib/onboarding-timeline";
+import { dayCounter, localIso, PATH_LABEL } from "@/lib/onboarding-timeline";
+import { getWelcome } from "@/lib/welcome.functions";
 import { wonStage } from "@/lib/pipeline-stages";
 import { moveDealStage, saveIntake } from "@/lib/presale.functions";
-import { KICKOFF_CADENCE, stageFlow, type FlowStageKey, type FlowTask } from "@/lib/stage-flow";
+import {
+  KICKOFF_CADENCE,
+  readingInFlight,
+  stageFlow,
+  type FlowStageKey,
+  type FlowTask,
+} from "@/lib/stage-flow";
 import { syncDealStageFn } from "@/lib/stage-flow.functions";
 import { cn } from "@/lib/utils";
 
@@ -41,6 +53,11 @@ export function StageFlow({ deal }: { deal: DealData }) {
   const assignment = useQuery({
     queryKey: ["assignment", dealId],
     queryFn: () => getDealAssignment({ data: { dealId } }),
+  });
+  // While the AI reads, the record changes under the page: follow it.
+  useQuery({
+    ...dealQuery(dealId),
+    refetchInterval: readingInFlight(intake.ai_reading) ? 4000 : false,
   });
   const close = closeDateFor({
     intake,
@@ -143,21 +160,6 @@ export function StageFlow({ deal }: { deal: DealData }) {
           {stageFooter(shown, flow.current)}
         </p>
       </div>
-      {/* After a new Gong brief or a re-uploaded SOW: one press refreshes
-          everything the AI filled, from any stage. Hidden while the flow
-          task is open, which carries the same button. */}
-      {editable &&
-      deal.gong_reports.length > 0 &&
-      shown !== "complete" &&
-      openTask?.action !== "flow" ? (
-        <div className="flex flex-wrap items-start gap-x-3 gap-y-1 border-b border-border px-4 py-2">
-          <FillFromSources deal={deal} compact />
-          <p className="pt-1 text-[11px] text-muted-foreground">
-            New Gong brief or SOW? This refreshes the flow, the forms, the process and the plan.
-            Your own answers stay.
-          </p>
-        </div>
-      ) : null}
       {moved ? (
         <p className="border-b border-border bg-status-ontrack/40 px-4 py-1.5 text-[12px] text-status-ontrack-foreground">
           <Check className="mr-1 inline h-3.5 w-3.5" strokeWidth={3} />
@@ -356,23 +358,10 @@ function TaskBody({
       return <NotesIn deal={deal} editable={editable} />;
     case "sow":
       return <SowStep deal={deal} editable={editable} />;
-    case "flow":
-      return (
-        <div className="space-y-2">
-          {editable ? <FillFromSources deal={deal} /> : null}
-          <FlowStep deal={deal} editable={editable} />
-          <details className="rounded-sm border border-border px-2.5 py-1.5">
-            <summary className="cursor-pointer text-[12px] font-medium">
-              The facts from the calls — industry, size, field users, the process today
-            </summary>
-            <div className="mt-2">
-              <FactsStep deal={deal} editable={editable} />
-            </div>
-          </details>
-        </div>
+    case "review":
+      return task.locked && !task.done ? null : (
+        <ReviewBody deal={deal} intake={intake} editable={editable} />
       );
-    case "generate":
-      return task.locked && !task.done ? null : <BuildIt deal={deal} />;
     case "reply_ae":
       return <ReplyBody deal={deal} intake={intake} editable={editable} />;
     case "cadence":
@@ -481,6 +470,153 @@ function AssignBody({ dealId, editable }: { dealId: string; editable: boolean })
         </p>
       ) : null}
       {error ? <p className="w-full text-[12px] text-destructive">{error}</p> : null}
+    </div>
+  );
+}
+
+/**
+ * The one review. What the AI read, laid out to be checked in a glance —
+ * the flow, the forms, the process, what the SOW bought, and what the calls
+ * never said — each with where it came from. Edit opens the answers in
+ * place; Approve moves the deal to Pre-kickoff once the deck exists.
+ */
+function ReviewBody({
+  deal,
+  intake,
+  editable,
+}: {
+  deal: DealData;
+  intake: IntakeAnswers;
+  editable: boolean;
+}) {
+  const tick = useHandoffTick(deal.account.id);
+  const welcome = useQuery({
+    queryKey: ["welcome", deal.account.id],
+    queryFn: () => getWelcome({ data: { dealId: deal.account.id } }),
+  });
+  const running = readingInFlight(intake.ai_reading);
+  const flowDone = intake.path !== null && flowAnswered(intake);
+  const hasBrief = deal.briefs.some((b) => b.status === "complete" && b.generator === "llm");
+  const hasLink = Boolean(
+    (deal.account as { welcome_share_url?: string | null }).welcome_share_url,
+  );
+  const [editing, setEditing] = useState(false);
+  const approved = Boolean(intake.handoff_tasks["reviewed"]);
+  const forms = formsOnly(intake);
+  const services = intake.timeline.services ?? [];
+  const blanks = welcome.data?.readiness ?? [];
+  const showEdit = editing || (!running && !flowDone);
+  const why = !hasBrief
+    ? "The AI has not read the Gong brief yet"
+    : !hasLink
+      ? "The customer's page is not made yet — read again"
+      : !flowDone
+        ? "Pick the onboarding flow first"
+        : null;
+
+  return (
+    <div className="space-y-3">
+      <ReadingStatus deal={deal} editable={editable} />
+      {hasBrief || intake.path ? (
+        <dl className="grid gap-x-4 gap-y-1.5 rounded-md border border-border bg-background px-3 py-2.5 text-[12px] sm:grid-cols-[140px_1fr]">
+          <dt className="text-muted-foreground">Flow</dt>
+          <dd>
+            {intake.path ? (
+              PATH_LABEL[intake.path]
+            ) : (
+              <i className="text-amber-700">not clear from the calls</i>
+            )}
+            {intake.training_only ? " · training only" : ""}
+            <AiSource answers={intake} field="path" />
+          </dd>
+          {!intake.training_only && intake.path !== "field_fusion" ? (
+            <>
+              <dt className="text-muted-foreground">First form</dt>
+              <dd>
+                {firstFormName(intake) ?? <i className="text-amber-700">not named</i>}
+                {forms.length > 1 ? (
+                  <span className="text-muted-foreground">
+                    {" "}
+                    · then{" "}
+                    {forms
+                      .slice(1)
+                      .map((f) => f.name)
+                      .join(", ")}
+                  </span>
+                ) : null}
+                <AiSource answers={intake} field="wanted_forms" />
+              </dd>
+            </>
+          ) : null}
+          <dt className="text-muted-foreground">Process today</dt>
+          <dd>
+            {intake.current_process ?? <i className="text-amber-700">not described</i>}
+            <AiSource answers={intake} field="current_process" />
+          </dd>
+          <dt className="text-muted-foreground">From the SOW</dt>
+          <dd>
+            {services.length
+              ? services.map((sv) => `${sv.name} (phase ${sv.phase})`).join(" · ")
+              : deal.sow_url
+                ? "Core only — no services"
+                : "No SOW"}
+          </dd>
+          {blanks.length ? (
+            <>
+              <dt className="text-muted-foreground">The calls did not say</dt>
+              <dd className="text-amber-800 dark:text-amber-300">
+                {blanks.map((b) => b.label).join(" · ")}
+                <span className="block text-[11px] text-muted-foreground">
+                  Fine to leave: the deck marks each one for you to fill on the call.
+                </span>
+              </dd>
+            </>
+          ) : null}
+        </dl>
+      ) : null}
+      {showEdit ? (
+        <div className="space-y-2 rounded-md border border-border px-3 py-2.5">
+          <FlowStep deal={deal} editable={editable} />
+          <details className="rounded-sm border border-border px-2.5 py-1.5">
+            <summary className="cursor-pointer text-[12px] font-medium">
+              Industry, size, people in the field, the process today
+            </summary>
+            <div className="mt-2">
+              <FactsStep deal={deal} editable={editable} />
+            </div>
+          </details>
+        </div>
+      ) : null}
+      <div className="flex flex-wrap items-center gap-2">
+        <DoneButton
+          done={approved}
+          label="Looks right — approve"
+          pending={tick.isPending}
+          disabled={!editable || running || (!approved && Boolean(why))}
+          onClick={() => tick.mutate({ key: "reviewed", on: !approved })}
+        />
+        {!showEdit || editing ? (
+          <button
+            type="button"
+            className="inline-flex h-8 items-center rounded-sm border border-border px-3 text-[12px] hover:bg-muted"
+            onClick={() => setEditing((v) => !v)}
+          >
+            {editing ? "Done editing" : "Edit"}
+          </button>
+        ) : null}
+        {hasLink ? (
+          <Link
+            to="/onboarding-plan/$dealId"
+            params={{ dealId: deal.account.id }}
+            className="inline-flex h-8 items-center gap-1.5 rounded-sm border border-border px-3 text-[12px] hover:bg-muted"
+          >
+            Open the deck <ArrowRight className="h-3.5 w-3.5" />
+          </Link>
+        ) : null}
+        {why && !running && !approved ? (
+          <span className="text-[11px] text-muted-foreground">{why}.</span>
+        ) : null}
+      </div>
     </div>
   );
 }

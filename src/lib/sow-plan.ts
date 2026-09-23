@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import {
   SERVICE_KIND_LIST,
+  normalizeServices,
   SERVICE_KINDS,
   serviceWeeks,
   type ServiceKind,
@@ -146,4 +147,40 @@ export function mergeProposal(
 /** The length the plan will use for a row, for the review table. */
 export function rowWeeks(row: SowPlanRow): number {
   return serviceWeeks(rowToService(row, "preview"));
+}
+
+/**
+ * What a SOW reading puts on the plan: every row it is sure of, merged into
+ * the services by name. The uncertain rows wait for a person on the plan
+ * panel; a paid form the intake already names is not added twice. Returns
+ * the timeline keys to merge, and how many rows went on.
+ */
+export function sowTimelinePatch(
+  intake: {
+    wanted_forms: Array<{ name: string }>;
+    timeline: { services?: unknown };
+  } & { timeline: Parameters<typeof normalizeServices>[1] },
+  proposal: { services: SowPlanRow[]; notes: string[] },
+  makeId: (row: SowPlanRow) => string,
+): { timeline: Record<string, unknown>; accepted: number } {
+  const wanted = new Set(intake.wanted_forms.map((f) => f.name.trim().toLowerCase()));
+  const accepted = proposal.services.filter(
+    (row) =>
+      row.confidence !== "uncertain" &&
+      !(row.kind === "paid_form" && wanted.has(row.name.trim().toLowerCase())),
+  );
+  return {
+    accepted: accepted.length,
+    timeline: {
+      services: mergeProposal(
+        normalizeServices((intake.timeline.services ?? []) as ServiceSpec[], intake.timeline),
+        accepted,
+        makeId,
+      ),
+      integration_tier: 0,
+      integration_target: null,
+      sow_applied_at: new Date().toISOString(),
+      sow_notes: proposal.notes.map((n) => n.slice(0, 300)).slice(0, 20),
+    },
+  };
 }
