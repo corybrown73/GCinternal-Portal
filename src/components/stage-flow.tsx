@@ -30,6 +30,7 @@ import {
   type FlowTask,
 } from "@/lib/stage-flow";
 import { syncDealStageFn } from "@/lib/stage-flow.functions";
+import { moveWithGate } from "@/lib/stage-move";
 import { aeReplyDraft, googleCalendarLink } from "@/lib/ae-reply";
 import { cn } from "@/lib/utils";
 
@@ -167,9 +168,19 @@ export function StageFlow({ deal }: { deal: DealData }) {
           Moved to {moved}.
         </p>
       ) : null}
-      {flow.current === null && shown === "closed_won" ? (
-        <p className="border-b border-border px-4 py-2 text-[12px] text-muted-foreground">
-          Not closed yet. You can get ahead on these; the checklist starts counting at Closed Won.
+      {/* WHAT HAPPENS NEXT, always in words. A deal that is not closed says
+          so, with the button that closes it; a stage whose tasks are all done
+          says where the deal goes now — a folded row is not an answer. */}
+      {flow.current === null && deal.account.stage === "prospect" ? (
+        <NotClosedBar deal={deal} editable={editable} ready={stage.done} />
+      ) : stage.tasks.length > 0 && stage.done && shown === flow.current ? (
+        <p className="border-b border-border bg-status-ontrack/40 px-4 py-2 text-[12px] text-status-ontrack-foreground">
+          <Check className="mr-1 inline h-3.5 w-3.5" strokeWidth={3} />
+          {flow.advanceTo
+            ? `Everything here is done — moving the deal to ${flow.advanceTo === "in_onboarding" ? "Onboarding" : "Pre-kickoff"}…`
+            : shown === "closed_won" && !flow.stages[0]!.tasks[0]!.done
+              ? "Waiting on an owner."
+              : "Everything here is done."}
         </p>
       ) : null}
 
@@ -205,6 +216,63 @@ export function DealStageFlow({ dealId }: { dealId: string }) {
   const q = useQuery(dealQuery(dealId));
   if (!q.data) return null;
   return <StageFlow deal={q.data} />;
+}
+
+/**
+ * The deal is still a prospect: say so plainly, with the button that closes
+ * it. Closing runs the Closed Won check (the Gong brief and the SOW), makes
+ * the customer's page, and hands it to the rotation; anything already done
+ * here counts straight away.
+ */
+function NotClosedBar({
+  deal,
+  editable,
+  ready,
+}: {
+  deal: DealData;
+  editable: boolean;
+  ready: boolean;
+}) {
+  const qc = useQueryClient();
+  const move = useServerFn(moveDealStage);
+  const [error, setError] = useState<string | null>(null);
+  const m = useMutation({
+    mutationFn: () =>
+      moveWithGate((force) =>
+        move({
+          data: force
+            ? { dealId: deal.account.id, toStage: "closed_won", force: true }
+            : { dealId: deal.account.id, toStage: "closed_won" },
+        }),
+      ),
+    onMutate: () => setError(null),
+    onSuccess: () => void qc.invalidateQueries(),
+    onError: (e) => {
+      const msg = (e as Error).message;
+      if (msg !== "Left where it was.") setError(msg);
+    },
+  });
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-amber-500/30 bg-amber-500/10 px-4 py-2 text-[12px]">
+      <span className="text-amber-900 dark:text-amber-200">
+        <b>Not closed yet.</b>{" "}
+        {ready
+          ? "Everything here is ready — close it and the deal moves on straight away."
+          : "You can get ahead on these; nothing moves until the deal is Closed Won."}
+      </span>
+      {editable ? (
+        <button
+          type="button"
+          className="inline-flex h-8 items-center gap-1.5 rounded-sm bg-primary px-3 text-[12px] font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+          disabled={m.isPending}
+          onClick={() => m.mutate()}
+        >
+          {m.isPending ? "Closing…" : "Mark Closed Won"}
+        </button>
+      ) : null}
+      {error ? <p className="w-full text-destructive">{error}</p> : null}
+    </div>
+  );
 }
 
 /** One line under the stage name: what moves the deal on from here. */
@@ -805,8 +873,10 @@ function KickoffBody({
   const browserZone =
     typeof Intl !== "undefined" ? Intl.DateTimeFormat().resolvedOptions().timeZone : "";
   const [date, setDate] = useState(t.overrides["kickoff"] ?? planned?.date ?? "");
-  const [time, setTime] = useState(t.times["kickoff"] ?? "");
-  const [zone, setZone] = useState(t.timezone ?? browserZone ?? "");
+  // 10:00 unless it was booked at another time: an empty time field was a
+  // disabled button with no reason, which read as the page freezing.
+  const [time, setTime] = useState(t.times["kickoff"] ?? "10:00");
+  const [zone, setZone] = useState(t.timezone ?? browserZone ?? "America/New_York");
   const [error, setError] = useState<string | null>(null);
   const m = useMutation({
     mutationFn: () =>
@@ -850,23 +920,36 @@ function KickoffBody({
         </label>
         <label className="text-[11px] text-muted-foreground">
           Time
-          <input
-            type="time"
+          {/* A list, not the browser's time box: that one reports nothing
+              until AM/PM is filled too, and a half-typed time blanked out
+              the moment you clicked away. */}
+          <select
             className="mt-0.5 block h-8 rounded-sm border border-border bg-background px-2 text-[12px] text-foreground"
             value={time}
             disabled={!editable || m.isPending}
             onChange={(e) => setTime(e.target.value)}
-          />
+          >
+            {[...new Set([time, ...TIMES])].sort().map((v) => (
+              <option key={v} value={v}>
+                {clock(v)}
+              </option>
+            ))}
+          </select>
         </label>
         <label className="text-[11px] text-muted-foreground">
-          Time zone
-          <input
-            className="mt-0.5 block h-8 w-44 rounded-sm border border-border bg-background px-2 text-[12px] text-foreground"
+          Their time zone
+          <select
+            className="mt-0.5 block h-8 w-48 rounded-sm border border-border bg-background px-2 text-[12px] text-foreground"
             value={zone}
-            placeholder="America/Chicago"
             disabled={!editable || m.isPending}
             onChange={(e) => setZone(e.target.value)}
-          />
+          >
+            {[...new Set([zone, ...ZONES.map((z) => z[0])])].map((z) => (
+              <option key={z} value={z}>
+                {ZONES.find((x) => x[0] === z)?.[1] ?? z}
+              </option>
+            ))}
+          </select>
         </label>
         <button
           type="button"
@@ -875,14 +958,38 @@ function KickoffBody({
           onClick={() => m.mutate()}
         >
           <Check className="h-3.5 w-3.5" strokeWidth={3} />
-          {m.isPending ? "Saving…" : booked ? "Save the new time" : "Kickoff is booked"}
+          {m.isPending ? "Saving…" : booked ? "Reschedule to this time" : "Kickoff is booked"}
         </button>
       </div>
-      <p className="text-[11px] text-muted-foreground">
-        {planned
-          ? `The plan had it on ${planned.date}. Every date after the kickoff moves with it.`
-          : "Every date after the kickoff moves with it."}
-      </p>
+      {!date || !time ? (
+        <p className="text-[12px] text-amber-800 dark:text-amber-300">
+          Pick {!date ? "the date" : "the time"} the customer agreed to.
+        </p>
+      ) : !booked ? (
+        <p className="text-[11px] text-muted-foreground">
+          {planned
+            ? `The plan had it on ${planned.date}. Every date after the kickoff moves with it.`
+            : "Every date after the kickoff moves with it."}
+        </p>
+      ) : null}
+      {booked ? (
+        <div className="rounded-md border border-status-ontrack-foreground/30 bg-status-ontrack/40 px-3 py-2 text-[12px] text-status-ontrack-foreground">
+          <Check className="mr-1 inline h-3.5 w-3.5" strokeWidth={3} />
+          Kickoff booked for {t.overrides["kickoff"]} at {clock(t.times["kickoff"]!)}
+          {t.timezone
+            ? ` (${ZONES.find((z) => z[0] === t.timezone)?.[1] ?? t.timezone})`
+            : ""}.{" "}
+          <span className="text-foreground">
+            {deal.account.stage === "prospect"
+              ? "Next: mark the deal Closed Won at the top — it goes straight to Onboarding."
+              : deal.account.stage === "closed_won"
+                ? "Next: finish the Closed Won tasks — the deal then goes straight to Onboarding."
+                : deal.account.stage === "onboarding_kickoff"
+                  ? "Moving the deal to Onboarding…"
+                  : "Next: send the invite below, then run the call."}
+          </span>
+        </div>
+      ) : null}
       {booked && t.timezone ? (
         <InviteLinks
           deal={deal}
@@ -895,6 +1002,32 @@ function KickoffBody({
     </div>
   );
 }
+
+/** Kickoff times on offer: every quarter hour, 7:00 to 6:00 pm. */
+const TIMES: readonly string[] = Array.from({ length: 45 }, (_, i) => {
+  const mins = 7 * 60 + i * 15;
+  return `${String(Math.floor(mins / 60)).padStart(2, "0")}:${String(mins % 60).padStart(2, "0")}`;
+});
+
+/** "14:30" → "2:30 pm". */
+function clock(v: string): string {
+  const [h, m] = v.split(":").map(Number) as [number, number];
+  return `${h % 12 === 0 ? 12 : h % 12}:${String(m).padStart(2, "0")} ${h < 12 ? "am" : "pm"}`;
+}
+
+/** The zones a kickoff is booked in, with the words a person reads. */
+const ZONES: ReadonlyArray<[string, string]> = [
+  ["America/New_York", "Eastern"],
+  ["America/Chicago", "Central"],
+  ["America/Denver", "Mountain"],
+  ["America/Phoenix", "Arizona"],
+  ["America/Los_Angeles", "Pacific"],
+  ["America/Anchorage", "Alaska"],
+  ["Pacific/Honolulu", "Hawaii"],
+  ["America/Halifax", "Atlantic"],
+  ["Europe/London", "UK"],
+  ["Australia/Sydney", "Sydney"],
+];
 
 /**
  * The invite, one click from the booked time: a Google Calendar event with
