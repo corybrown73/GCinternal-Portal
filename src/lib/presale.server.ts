@@ -410,6 +410,18 @@ export async function transitionDeal(
     if (closed && readIntake(closed.intake).path === "field_fusion") {
       const { startFieldFusionSetup } = await import("./field-fusion.server");
       await startFieldFusionSetup(dealId, userId);
+    } else {
+      // The close hands the deal to the rotation, the way the Salesforce
+      // webhook always has: by rule in auto mode, or an email to the pool to
+      // claim it in claim mode. A deal closed here used to wait, unowned,
+      // until somebody noticed.
+      try {
+        const { assignDeal, dealAssignment } = await import("./assignment.server");
+        const current = await dealAssignment(dealId);
+        if (!current.owner) await assignDeal({ dealId, actorProfileId: userId });
+      } catch (e) {
+        console.error("[close] could not hand the deal to the rotation", e);
+      }
     }
   }
   return result;

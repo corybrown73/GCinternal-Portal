@@ -30,6 +30,7 @@ import {
   type FlowTask,
 } from "@/lib/stage-flow";
 import { syncDealStageFn } from "@/lib/stage-flow.functions";
+import { aeReplyDraft, googleCalendarLink } from "@/lib/ae-reply";
 import { cn } from "@/lib/utils";
 
 /**
@@ -680,37 +681,58 @@ function ReplyBody({
   const tick = useHandoffTick(deal.account.id);
   const done = Boolean(intake.handoff_tasks["reply_ae"]);
   const share = (deal.account as { welcome_share_url?: string | null }).welcome_share_url ?? null;
+  const assignment = useQuery({
+    queryKey: ["assignment", deal.account.id],
+    queryFn: () => getDealAssignment({ data: { dealId: deal.account.id } }),
+  });
+  const planned = timelineFor(
+    intake,
+    closeDateFor({
+      intake,
+      stageHistory: deal.stage_history,
+      wonStageKey: wonStage(deal.stages).key,
+      today: localIso(),
+    }).date,
+  ).milestones.find((m) => m.key === "kickoff");
+  const draft = aeReplyDraft({
+    company: deal.account.name,
+    contactName: deal.account.primary_contact_name ?? null,
+    ownerName: assignment.data?.owner?.name ?? null,
+    intake,
+    welcomeUrl: share,
+    plannedKickoff: planned?.date ?? null,
+    today: localIso(),
+    timezone:
+      intake.timeline.timezone ??
+      (typeof Intl !== "undefined" ? Intl.DateTimeFormat().resolvedOptions().timeZone : null),
+  });
   const [copied, setCopied] = useState(false);
   return (
     <div className="space-y-2">
-      <ol className="list-decimal space-y-0.5 pl-5 text-[12px]">
-        <li>Reply-all to the AE's closed-won email the same day.</li>
-        <li>Introduce yourself and the three training days ahead.</li>
-        <li>Share the welcome page and offer two kickoff times — sixty minutes.</li>
-      </ol>
+      <p className="text-[12px]">
+        Reply-all to the AE's closed-won email with this — written for you from the deal.
+      </p>
+      <pre className="max-h-64 overflow-auto whitespace-pre-wrap rounded-md border border-border bg-background px-3 py-2 font-sans text-[12px] leading-relaxed">
+        <b>Subject: {draft.subject}</b>
+        {"\n\n"}
+        {draft.body}
+      </pre>
       <div className="flex flex-wrap items-center gap-2">
-        {share ? (
-          <button
-            type="button"
-            className="inline-flex h-8 items-center gap-1.5 rounded-sm border border-border px-3 text-[12px] hover:bg-muted"
-            onClick={() => {
-              void navigator.clipboard.writeText(share).then(() => setCopied(true));
-            }}
-          >
-            <Copy className="h-3.5 w-3.5" />
-            {copied ? "Link copied" : "Copy the welcome page link"}
-          </button>
-        ) : null}
-        <Link
-          to="/onboarding-plan/$dealId"
-          params={{ dealId: deal.account.id }}
-          className="inline-flex h-8 items-center gap-1.5 rounded-sm border border-border px-3 text-[12px] hover:bg-muted"
+        <button
+          type="button"
+          className="inline-flex h-8 items-center gap-1.5 rounded-sm bg-primary px-3 text-[12px] font-medium text-primary-foreground hover:bg-primary/90"
+          onClick={() => {
+            void navigator.clipboard
+              .writeText(`Subject: ${draft.subject}\n\n${draft.body}`)
+              .then(() => setCopied(true));
+          }}
         >
-          Open the welcome page
-        </Link>
+          <Copy className="h-3.5 w-3.5" />
+          {copied ? "Copied" : "Copy the email"}
+        </button>
         <DoneButton
           done={done}
-          label="I replied"
+          label="Sent — mark it done"
           pending={tick.isPending}
           disabled={!editable}
           onClick={() => tick.mutate({ key: "reply_ae", on: !done })}
@@ -861,7 +883,65 @@ function KickoffBody({
           ? `The plan had it on ${planned.date}. Every date after the kickoff moves with it.`
           : "Every date after the kickoff moves with it."}
       </p>
+      {booked && t.timezone ? (
+        <InviteLinks
+          deal={deal}
+          date={t.overrides["kickoff"]!}
+          time={t.times["kickoff"]!}
+          zone={t.timezone}
+        />
+      ) : null}
       {error ? <p className="text-[12px] text-destructive">{error}</p> : null}
+    </div>
+  );
+}
+
+/**
+ * The invite, one click from the booked time: a Google Calendar event with
+ * the contact on it and the welcome page in it, or the .ics for Outlook.
+ */
+function InviteLinks({
+  deal,
+  date,
+  time,
+  zone,
+}: {
+  deal: DealData;
+  date: string;
+  time: string;
+  zone: string;
+}) {
+  const share = (deal.account as { welcome_share_url?: string | null }).welcome_share_url ?? null;
+  const token = share ? share.split("/").filter(Boolean).pop() : null;
+  let google: string | null = null;
+  try {
+    google = googleCalendarLink({
+      title: `${deal.account.name} × GoCanvas — kickoff and first form`,
+      date,
+      time,
+      timezone: zone,
+      minutes: 60,
+      details: `Training day 1: introductions, your process walked together, then your first form built and published.${share ? `\n\nYour welcome page: ${share}` : ""}`,
+      guests: deal.account.primary_contact_email ? [deal.account.primary_contact_email] : [],
+    });
+  } catch {
+    google = null; // an unknown time zone: the .ics still works
+  }
+  const cls =
+    "inline-flex h-8 items-center gap-1.5 rounded-sm border border-border px-3 text-[12px] hover:bg-muted";
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <span className="text-[12px] font-medium">Send the invite:</span>
+      {google ? (
+        <a href={google} target="_blank" rel="noreferrer noopener" className={cls}>
+          Google Calendar
+        </a>
+      ) : null}
+      {token ? (
+        <a href={`/api/welcome-ics/${token}?event=kickoff`} className={cls}>
+          Outlook / .ics
+        </a>
+      ) : null}
     </div>
   );
 }
