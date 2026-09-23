@@ -175,6 +175,24 @@ export const intakeAnswersSchema = z.object({
     })
     .nullable()
     .default(null),
+  /**
+   * The recap after each core meeting (the playbook's close): what was done,
+   * what is open and whose, what each side prepares, the next objective.
+   * Keyed by the meeting's milestone key.
+   */
+  recaps: z
+    .record(
+      z.string().max(40),
+      z.object({
+        completed: z.string().max(2000).default(""),
+        open_items: z.string().max(2000).default(""),
+        customer_prep: z.string().max(1000).default(""),
+        gocanvas_prep: z.string().max(1000).default(""),
+        next_objective: z.string().max(500).default(""),
+        at: z.string().max(40),
+      }),
+    )
+    .default({}),
   ai_filled: z.array(z.string().max(40)).max(40).default([]),
   person_set: z.array(z.string().max(40)).max(40).default([]),
   ai_sources: z

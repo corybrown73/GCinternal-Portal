@@ -2037,6 +2037,10 @@ export async function saveDealIntake(
     const { claimByPerson } = await import("./intake-answers");
     Object.assign(merged, claimByPerson(current, Object.keys(patch)));
   }
+  // A recap replaces only its own meeting's.
+  if (patch["recaps"] && typeof patch["recaps"] === "object") {
+    merged["recaps"] = { ...current.recaps, ...(patch["recaps"] as Record<string, unknown>) };
+  }
   // The pre-kickoff ticks, the same way: one at a time, null to untick.
   if (patch["handoff_tasks"] && typeof patch["handoff_tasks"] === "object") {
     const tasks: Record<string, string> = { ...current.handoff_tasks };

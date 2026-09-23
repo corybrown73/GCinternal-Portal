@@ -6,6 +6,8 @@ import { ArrowRight, Check, Copy, Lock, UserRoundCheck } from "lucide-react";
 
 import { FieldFusionGate } from "@/components/field-fusion-gate";
 import { AiSource, ReadingStatus } from "@/components/fill-from-sources";
+import { MeetingRecap } from "@/components/meeting-recap";
+import { ParkingLot } from "@/components/parking-lot";
 import { FactsStep, FlowStep, NotesIn, SowStep } from "@/components/intake-panel";
 import { assignDealFn, claimDealFn, getDealAssignment } from "@/lib/assignment.functions";
 import { canEditDeal, canManage, useProfile } from "@/lib/auth";
@@ -236,6 +238,10 @@ export function StageFlow({ deal }: { deal: DealData }) {
           ))}
         </ol>
       )}
+      {/* The parking lot lives beside the work from the first call on. */}
+      {(shown === "pre_kickoff" || shown === "onboarding") && flow.current !== null ? (
+        <ParkingLot dealId={dealId} editable={editable} />
+      ) : null}
     </section>
   );
 }
@@ -1480,6 +1486,13 @@ function OnboardingList({
     onSuccess: () => void qc.invalidateQueries(),
     onError: (e) => setError((e as Error).message),
   });
+  const [recapFor, setRecapFor] = useState<string | null>(null);
+  const playbook = intake.path === "new_logo";
+  const meetingWhen = (k: string) => {
+    const d = intake.timeline.overrides[k];
+    const tm = intake.timeline.times[k];
+    return d ? `${d}${tm ? ` at ${clock(tm)}` : ""}` : null;
+  };
   const hasLaterPhases = tasks.some((t) => t.key.startsWith("svc:"));
   const allDone = tasks.length > 0 && tasks.every((t) => t.done || t.optional);
   const nextKey = tasks.find((t) => !t.done && !t.optional)?.key ?? null;
@@ -1546,6 +1559,35 @@ function OnboardingList({
                   {t.key === nextKey || (t.optional && !t.done) ? (
                     <p className="mt-0.5 text-[12px] text-muted-foreground">{t.hint}</p>
                   ) : null}
+                  {playbook && CORE_MEETINGS.some((c) => c.key === t.key) ? (
+                    <button
+                      type="button"
+                      className="mt-1 text-[11px] text-primary underline decoration-dotted"
+                      onClick={() => setRecapFor(recapFor === t.key ? null : t.key)}
+                    >
+                      {intake.recaps[t.key]
+                        ? recapFor === t.key
+                          ? "Hide the recap"
+                          : "Recap sent — view or edit"
+                        : "Write the recap"}
+                    </button>
+                  ) : null}
+                  {recapFor === t.key
+                    ? (() => {
+                        const i = CORE_MEETINGS.findIndex((c) => c.key === t.key);
+                        const nxt = CORE_MEETINGS[i + 1];
+                        return (
+                          <MeetingRecap
+                            deal={deal}
+                            intake={intake}
+                            meetingKey={t.key}
+                            meetingLabel={CORE_MEETINGS[i]!.label}
+                            next={nxt ? { label: nxt.label, when: meetingWhen(nxt.key) } : null}
+                            editable={editable}
+                          />
+                        );
+                      })()
+                    : null}
                 </div>
               </li>
             </Fragment>

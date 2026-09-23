@@ -1433,6 +1433,7 @@ function Overview({ view, page }: { view: WelcomeView; page: number }) {
         ))}
       </div>
       {!kickoff?.doneOn ? <BeforeKickoff view={view} /> : null}
+      {view.parkingLot?.length ? <ParkingLotCard items={view.parkingLot} /> : null}
     </Frame>
   );
 }
@@ -1479,6 +1480,42 @@ function BeforeKickoff({ view }: { view: WelcomeView }) {
           {`Reply to ${view.team.lead ? `${view.team.lead}'s` : "your onboarding lead's"} email with these. The kickoff starts from your real work, not a blank account.`}
         </T>
       </p>
+    </div>
+  );
+}
+
+/**
+ * The parking lot, on their page: everything that came up and when it will
+ * be handled, so nothing raised on a call quietly disappears. "Not no — when."
+ */
+function ParkingLotCard({ items }: { items: NonNullable<WelcomeView["parkingLot"]> }) {
+  const word = { open: "Open", scheduled: "Scheduled", done: "Done" } as const;
+  return (
+    <div className="wp-card" style={{ marginTop: 16, padding: "14px 18px" }}>
+      <p className="wp-ov-name" style={{ margin: 0 }}>
+        <T k="parking.title">The parking lot</T>
+      </p>
+      <p style={{ margin: "2px 0 8px", opacity: 0.75, fontSize: 13 }}>
+        <T k="parking.lede">
+          Everything that came up that was not that day's goal — we are not saying no, we are
+          deciding when.
+        </T>
+      </p>
+      <ul style={{ margin: 0, paddingLeft: 18, lineHeight: 1.7, fontSize: 14 }}>
+        {items.map((i, n) => (
+          <li key={n} style={{ opacity: i.status === "done" ? 0.6 : 1 }}>
+            <span style={{ textDecoration: i.status === "done" ? "line-through" : "none" }}>
+              {i.request}
+            </span>
+            <span style={{ opacity: 0.7 }}>
+              {" "}
+              — {word[i.status]}
+              {i.target ? ` · ${i.target}` : ""}
+              {i.neededForLaunch ? " · needed for launch" : ""}
+            </span>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

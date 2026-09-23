@@ -226,7 +226,25 @@ async function viewFor(
       !opts.internal && opts.token
         ? `${(await import("./app-url")).appUrl()}/go/${opts.token}`
         : null,
+    parkingLot: await parkingLotFor(String(deal.id)),
   };
+}
+
+/** The parking lot for the customer's page. Never throws: an empty lot is a quiet page. */
+async function parkingLotFor(dealId: string): Promise<NonNullable<WelcomeView["parkingLot"]>> {
+  try {
+    const { listParkingLot } = await import("./parking-lot.server");
+    return (await listParkingLot(dealId))
+      .filter((i) => i.status !== "dropped")
+      .map((i) => ({
+        request: i.request,
+        target: i.target,
+        status: i.status as "open" | "scheduled" | "done",
+        neededForLaunch: i.needed_for_launch,
+      }));
+  } catch {
+    return [];
+  }
 }
 
 const DEAL_COLUMNS =

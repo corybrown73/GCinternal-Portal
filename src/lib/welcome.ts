@@ -77,6 +77,16 @@ export type WelcomeView = {
   helpOpened: Record<string, string>;
   /** The tracked-link base for the customer's page (`/go/{token}`); null internally. */
   goBase: string | null;
+  /**
+   * The parking lot, as the customer sees it: what came up, when it will be
+   * handled, where it stands. Dropped items are left off their page.
+   */
+  parkingLot?: Array<{
+    request: string;
+    target: string;
+    status: "open" | "scheduled" | "done";
+    neededForLaunch: boolean;
+  }>;
 };
 
 /**
