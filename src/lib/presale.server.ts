@@ -1,5 +1,6 @@
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { firstFormName as firstFormNameOf } from "./intake-answers";
+import { nextChecklistTask } from "./stage-flow";
 import { TERM_LABELS } from "./terms";
 import { resolveAccountId, transitionStage, upsertAccount } from "./server/accounts";
 import { accountUpsertSchema } from "./server/schemas";
@@ -175,6 +176,13 @@ export interface PipelineDeal extends Account {
   /** The two things Closed Won is gated on. */
   has_notes: boolean;
   has_sow: boolean;
+  /** The implementation owner, once somebody owns it. */
+  owner_name: string | null;
+  /** The checklist's next task for the stage the deal is in. */
+  next_step: string | null;
+  /** Business days in this stage, and whether that is past its limit. */
+  business_days_in_stage: number;
+  stuck: "ok" | "warn" | "escalate";
 }
 
 /**
@@ -191,19 +199,28 @@ export async function loadPipeline(
   // Loaded alongside the deals rather than after them: the board needs both to
   // render one column per configured stage, and a waterfall here is a second
   // round trip on the busiest internal page.
-  const [{ data: accounts, error }, names, stages, { data: noted }, { data: impls }] =
-    await Promise.all([
-      db().from("portal_accounts").select("*").order("name"),
-      profileNames(),
-      loadPipelineStages(),
-      db().from("portal_gong_reports").select("account_id"),
-      db()
-        .from("implementations")
-        .select("id,deal_id,created_at,owner_id")
-        .is("superseded_by_implementation_id", null)
-        .not("deal_id", "is", null)
-        .order("created_at", { ascending: false }),
-    ]);
+  const [
+    { data: accounts, error },
+    names,
+    stages,
+    { data: noted },
+    { data: impls },
+    { data: briefed },
+    { data: members },
+  ] = await Promise.all([
+    db().from("portal_accounts").select("*").order("name"),
+    profileNames(),
+    loadPipelineStages(),
+    db().from("portal_gong_reports").select("account_id"),
+    db()
+      .from("implementations")
+      .select("id,deal_id,created_at,owner_id")
+      .is("superseded_by_implementation_id", null)
+      .not("deal_id", "is", null)
+      .order("created_at", { ascending: false }),
+    db().from("portal_briefs").select("account_id").eq("status", "complete").eq("generator", "llm"),
+    db().from("team_members").select("id,name"),
+  ]);
   const implByDeal = new Map<string, string>();
   const implOwnerByDeal = new Map<string, string | null>();
   for (const i of (impls ?? []) as Array<{
@@ -221,6 +238,15 @@ export async function loadPipeline(
     ((noted ?? []) as Array<{ account_id: string }>).map((r) => r.account_id),
   );
   const { readIntake } = await import("./intake-answers");
+  const { businessDaysBetween, localIso } = await import("./onboarding-timeline");
+  const { stuckLevel } = await import("./stage-flow");
+  const withBrief = new Set(
+    ((briefed ?? []) as Array<{ account_id: string }>).map((r) => r.account_id),
+  );
+  const memberName = new Map(
+    ((members ?? []) as Array<{ id: string; name: string }>).map((m) => [String(m.id), m.name]),
+  );
+  const today = localIso();
   // "My accounts" on the board: a deal is mine when I own it as AM or SE, or
   // when I own the implementation it became. Most closed deals carry no
   // pre-sale owner at all, so the second is how a specialist's board fills.
@@ -240,16 +266,37 @@ export async function loadPipeline(
 
   const deals = ((accounts ?? []) as Array<Account & { customer_id?: string | null }>)
     .filter(inScope)
-    .map((a) => ({
-      ...a,
-      customer_id: a.customer_id ?? null,
-      implementation_id: implByDeal.get(a.id) ?? null,
-      am_owner_name: a.am_owner_id ? (names.get(a.am_owner_id) ?? null) : null,
-      se_owner_name: a.se_owner_id ? (names.get(a.se_owner_id) ?? null) : null,
-      path: readIntake(a.intake).path,
-      has_notes: withNotes.has(a.id),
-      has_sow: Boolean(a.sow_document_path),
-    }));
+    .map((a) => {
+      const ownerId = implOwnerByDeal.get(a.id) ?? null;
+      const ownerName = ownerId ? (memberName.get(ownerId) ?? null) : null;
+      const inStage = Math.max(
+        0,
+        businessDaysBetween(String(a.stage_entered_at ?? today).slice(0, 10), today),
+      );
+      return {
+        ...a,
+        customer_id: a.customer_id ?? null,
+        implementation_id: implByDeal.get(a.id) ?? null,
+        am_owner_name: a.am_owner_id ? (names.get(a.am_owner_id) ?? null) : null,
+        se_owner_name: a.se_owner_id ? (names.get(a.se_owner_id) ?? null) : null,
+        path: readIntake(a.intake).path,
+        has_notes: withNotes.has(a.id),
+        has_sow: Boolean(a.sow_document_path),
+        owner_name: ownerName,
+        // The same next task the deal's checklist shows.
+        next_step: nextChecklistTask({
+          stage: a.stage,
+          intake: a.intake,
+          owner: ownerName,
+          gongReports: withNotes.has(a.id) ? 1 : 0,
+          hasSow: Boolean(a.sow_document_path),
+          hasBrief: withBrief.has(a.id),
+          hasLink: Boolean((a as { welcome_share_url?: string | null }).welcome_share_url),
+        }),
+        business_days_in_stage: inStage,
+        stuck: stuckLevel(a.stage, inStage),
+      };
+    });
   return { deals, stages };
 }
 
@@ -2226,9 +2273,7 @@ export async function loadDealInbox(scope: ResolvedScope | null): Promise<DealIn
   );
   const owner = ownersFromLedger(ledger);
 
-  const { guideSteps } = await import("./deal-guide");
   const labels = new Map(stages.map((s) => [s.key, s.label]));
-  const won = wonStage(stages).key;
   const me = scope?.viewer.teamMemberId ?? null;
   const person = scope?.person?.teamMemberId ?? null;
 
@@ -2237,16 +2282,16 @@ export async function loadDealInbox(scope: ResolvedScope | null): Promise<DealIn
     .map((d): DealInboxRow => {
       const o = owner.get(d.id);
       const ownerId = o?.id ?? null;
-      const next =
-        guideSteps({
-          intake: d.intake,
-          gongReports: d.has_notes ? 1 : 0,
-          aiBriefs: briefed.has(d.id) ? 1 : 0,
-          hasSow: d.has_sow,
-          shareUrl: (d as { welcome_share_url?: string | null }).welcome_share_url ?? null,
-          stageHistory: [],
-          wonStageKey: won,
-        }).find((s) => !s.done)?.label ?? "Start onboarding";
+      // The checklist's own next task: Home says what the deal says.
+      const next = nextChecklistTask({
+        stage: d.stage,
+        intake: d.intake,
+        owner: ownerId ? (o?.name ?? "someone") : null,
+        gongReports: d.has_notes ? 1 : 0,
+        hasSow: d.has_sow,
+        hasBrief: briefed.has(d.id),
+        hasLink: Boolean((d as { welcome_share_url?: string | null }).welcome_share_url),
+      });
       return {
         id: d.id,
         name: d.name,

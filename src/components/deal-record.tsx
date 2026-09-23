@@ -18,15 +18,11 @@ import { Field, NoRows, Panel } from "@/components/record";
 import { EditableField } from "@/components/editable-field";
 import { OwnerField } from "@/components/assignment-panel";
 import { HelpPicksPanel } from "@/components/help-articles-panel";
-import { DealGuide } from "@/components/deal-guide";
 import { StageFlow } from "@/components/stage-flow";
 import { PlanSection } from "@/components/plan-section";
 import { DeliverablesStrip } from "@/components/deliverables-strip";
 import { deliverablePhases } from "@/lib/deliverables";
 import { useToolMarks } from "@/lib/use-tool-marks";
-import { getSetupStatusFn } from "@/lib/setup-status.functions";
-import { getWelcome } from "@/lib/welcome.functions";
-import { guideSteps } from "@/lib/deal-guide";
 import { readIntake } from "@/lib/intake-answers";
 import { closeDateFor, timelineFor } from "@/lib/onboarding-plan";
 import { dayCounter, localIso } from "@/lib/onboarding-timeline";
@@ -202,35 +198,6 @@ export function DealRecord({ deal, embedded = false }: { deal: DealData; embedde
   const set = (name: EditableDealField) => (value: string | null) =>
     field.mutateAsync({ field: name, value });
 
-  // What is done and what is next, from the record. Clicking a step opens
-  // its section; the section the guide points at carries a ring. The share
-  // step also reads the welcome page's own readiness list, so "send the
-  // link" cannot tick while the page still has blanks.
-  const welcome = useQuery({
-    queryKey: ["welcome", account.id],
-    queryFn: () => getWelcome({ data: { dealId: account.id } }),
-    refetchInterval: 10_000,
-  });
-  const setup = useQuery({
-    queryKey: ["setup-status"],
-    queryFn: () => getSetupStatusFn(),
-    staleTime: 60_000,
-  });
-  const steps = guideSteps({
-    intake: account.intake,
-    gongReports: deal.gong_reports.length,
-    aiBriefs: deal.briefs.filter((b) => b.status === "complete" && b.generator === "llm").length,
-    hasSow: Boolean(deal.sow_url),
-    shareUrl: ((account as { welcome_share_url?: string | null }).welcome_share_url ?? null) as
-      string | null,
-    stageHistory: deal.stage_history,
-    wonStageKey: wonStage(deal.stages).key,
-    readiness: welcome.data?.readiness ?? [],
-    customerOpened: Boolean(welcome.data?.openedAt),
-    today: localIso(),
-  });
-  const nextPanel = steps.find((s) => !s.done)?.panel.id ?? null;
-
   // The day counter: where this account sits against its plan, today.
   const intakeForDay = readIntake(account.intake);
   const dayTimeline = timelineFor(
@@ -317,201 +284,215 @@ export function DealRecord({ deal, embedded = false }: { deal: DealData; embedde
       )}
       <PageBody className={cn("space-y-4", embedded && "px-0 py-0")}>
         {embedded ? null : <StageFlow deal={deal} />}
-        {deliverables.length ? (
-          <div className="rounded-md border border-border bg-card px-4 py-3">
-            <p className="mb-2.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-              What we&apos;re building
-            </p>
-            <DeliverablesStrip
-              phases={deliverables}
-              overrides={toolMarks}
-              onOpen={openStage}
-              {...(editable ? { onComplete: (d: Deliverable) => tick.mutate(d.done_key) } : {})}
-            />
-          </div>
-        ) : null}
+        {/* THE RECORD, FOLDED. The checklist above is the work; everything
+            here is what it stands on — the build, the notes and documents,
+            the plan's dates, the help articles, the deal's facts and its
+            history. Open when you need it; on the customer page's Record
+            tab it is open, because that tab is the record. */}
+        <Panel
+          id="panel-record"
+          title="Record"
+          meta="What we're building · notes and documents · the plan · help articles · the deal's facts and history"
+          level="supporting"
+          collapsible
+          defaultOpen={embedded}
+          collapseKey={embedded ? "deal:record-tab" : "deal:record"}
+        >
+          <div className="space-y-4 p-3">
+            {deliverables.length ? (
+              <div className="rounded-md border border-border bg-card px-4 py-3">
+                <p className="mb-2.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  What we&apos;re building
+                </p>
+                <DeliverablesStrip
+                  phases={deliverables}
+                  overrides={toolMarks}
+                  onOpen={openStage}
+                  {...(editable ? { onComplete: (d: Deliverable) => tick.mutate(d.done_key) } : {})}
+                />
+              </div>
+            ) : null}
 
-        {/* THE ORDER OF THE PAGE. What we collect up front, folded once it is
+            {/* THE ORDER OF THE PAGE. What we collect up front, folded once it is
             in; the intake, folded once it is complete; the brief beside them;
             then the plan across the whole width, because it is the thing
             everyone works from; and the opportunity's history last, folded,
             for the day somebody needs it. */}
-        <Panel
-          id="panel-gong"
-          highlight={nextPanel === "panel-gong"}
-          title="Notes & documents"
-          meta={`${deal.gong_reports.length} call note${deal.gong_reports.length === 1 ? "" : "s"} · SOW ${deal.sow_url ? "on file" : "missing"} · ${deal.notes.length} sales note${deal.notes.length === 1 ? "" : "s"}`}
-          level="primary"
-          collapsible
-          // Step 1 of the front door collects the notes and the paper now;
-          // this is the full record, folded until somebody wants it.
-          defaultOpen={false}
-          collapseKey="deal:gong"
-        >
-          <div className="space-y-3 p-3">
-            <p className="text-[12px] text-muted-foreground">
-              Everything we collect up front: the Gong brief and call notes, the signed statement of
-              work, and any sales notes. The AI synthesis and the welcome page read from here.
-            </p>
-            <ReportsPanel deal={deal} />
-            <SowPanel deal={deal} onSave={set} editable={editable} />
-            <NotesPanel deal={deal} />
-          </div>
-        </Panel>
+            <Panel
+              id="panel-gong"
+              title="Notes & documents"
+              meta={`${deal.gong_reports.length} call note${deal.gong_reports.length === 1 ? "" : "s"} · SOW ${deal.sow_url ? "on file" : "missing"} · ${deal.notes.length} sales note${deal.notes.length === 1 ? "" : "s"}`}
+              level="primary"
+              collapsible
+              // Step 1 of the front door collects the notes and the paper now;
+              // this is the full record, folded until somebody wants it.
+              defaultOpen={false}
+              collapseKey="deal:gong"
+            >
+              <div className="space-y-3 p-3">
+                <p className="text-[12px] text-muted-foreground">
+                  Everything we collect up front: the Gong brief and call notes, the signed
+                  statement of work, and any sales notes. The AI synthesis and the welcome page read
+                  from here.
+                </p>
+                <ReportsPanel deal={deal} />
+                <SowPanel deal={deal} onSave={set} editable={editable} />
+                <NotesPanel deal={deal} />
+              </div>
+            </Panel>
 
-        <PlanSection deal={deal} editable={editable} highlight={nextPanel === "panel-plan"} />
+            <PlanSection deal={deal} editable={editable} />
 
-        <HelpPicksPanel deal={deal} editable={editable} />
+            <HelpPicksPanel deal={deal} editable={editable} />
 
-        {/* EVERYTHING ELSE, FOLDED. The checklist, the deal's facts, the
+            {/* EVERYTHING ELSE, FOLDED. The checklist, the deal's facts, the
             intake and the opportunity's history are all still here — a
             person building a deck does not need to look at any of them until
             "Build it" names a blank, and then it names where. */}
-        <Panel
-          id="panel-details"
-          title="Details"
-          meta="The checklist, the deal's facts, the intake answers, the history"
-          level="supporting"
-          collapsible
-          defaultOpen={false}
-          collapseKey="deal:details"
-        >
-          <div className="space-y-4 p-3">
-            <DealGuide
-              steps={steps}
-              setup={setup.data ?? null}
-              manager={canManage(profile?.role)}
-            />
-            <div className="flex flex-wrap items-center gap-x-6 gap-y-2 rounded-md border border-border bg-card px-4 py-3">
-              {/* One clock. Before closed-won it is days in stage; after, it is
+            <Panel
+              id="panel-details"
+              title="Details"
+              meta="The deal's facts, the stage, and the opportunity's history"
+              level="supporting"
+              collapsible
+              defaultOpen={false}
+              collapseKey="deal:details"
+            >
+              <div className="space-y-4 p-3">
+                <div className="flex flex-wrap items-center gap-x-6 gap-y-2 rounded-md border border-border bg-card px-4 py-3">
+                  {/* One clock. Before closed-won it is days in stage; after, it is
               the day counter against the plan. Two numbers side by side is
               how somebody asks which one they are meant to be watching. */}
-              <div className="flex items-center gap-2">
-                <StageControl
-                  dealId={account.id}
-                  stage={account.stage}
-                  stages={deal.stages}
-                  editable={editable}
-                />
-                {!(counter && onPlan) ? (
-                  <span className="font-mono text-[11px] text-muted-foreground">
-                    {days ?? 0}d in stage
-                  </span>
-                ) : null}
-              </div>
-              {counter && onPlan ? (
-                <span
-                  className={cn(
-                    "inline-flex items-baseline gap-2 rounded-full border px-2.5 py-1 text-[11px]",
-                    counter.state === "live"
-                      ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-800 dark:text-emerald-300"
-                      : counter.state === "past_due"
-                        ? "border-amber-500/40 bg-amber-500/10 text-amber-800 dark:text-amber-300"
-                        : "border-primary/30 bg-primary/5 text-foreground",
-                  )}
-                  title={counter.detail}
-                >
-                  <b className="font-semibold">{counter.label}</b>
-                  <span className="text-muted-foreground">{counter.detail}</span>
-                </span>
-              ) : null}
-              {/* ARR leads, and is editable, because an account that starts at 5k
+                  <div className="flex items-center gap-2">
+                    {/* The checklist moves the stage. By hand is a manager's call,
+                    for the deal the checklist cannot describe. */}
+                    <StageControl
+                      dealId={account.id}
+                      stage={account.stage}
+                      stages={deal.stages}
+                      editable={canManage(profile?.role)}
+                    />
+                    {!(counter && onPlan) ? (
+                      <span className="font-mono text-[11px] text-muted-foreground">
+                        {days ?? 0}d in stage
+                      </span>
+                    ) : null}
+                  </div>
+                  {counter && onPlan ? (
+                    <span
+                      className={cn(
+                        "inline-flex items-baseline gap-2 rounded-full border px-2.5 py-1 text-[11px]",
+                        counter.state === "live"
+                          ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-800 dark:text-emerald-300"
+                          : counter.state === "past_due"
+                            ? "border-amber-500/40 bg-amber-500/10 text-amber-800 dark:text-amber-300"
+                            : "border-primary/30 bg-primary/5 text-foreground",
+                      )}
+                      title={counter.detail}
+                    >
+                      <b className="font-semibold">{counter.label}</b>
+                      <span className="text-muted-foreground">{counter.detail}</span>
+                    </span>
+                  ) : null}
+                  {/* ARR leads, and is editable, because an account that starts at 5k
               and grows to 8k is the fact this pipeline exists to notice. Every
               change lands in the activity feed, so the account carries its own
               record of what the number was and when it moved. */}
-              <EditableField
-                label="Company name"
-                value={account.name}
-                placeholder="The company, as the customer says it"
-                onSave={set("name")}
-                disabled={!editable}
-              />
-              <EditableField
-                label="ARR"
-                value={account.arr != null ? String(account.arr) : null}
-                format={(v) => (v ? fmtMoney(Number(v)) : "—")}
-                type="number"
-                placeholder="48000"
-                onSave={set("arr")}
-                disabled={!editable}
-              />
-              <EditableField
-                label="Salesforce"
-                value={account.salesforce_id ?? null}
-                format={(v) => (v ? <span className="font-mono">{v}</span> : "—")}
-                onSave={set("salesforce_id")}
-                disabled={!editable}
-              />
-              <EditableField
-                label="Domain"
-                value={account.domain ?? null}
-                onSave={set("domain")}
-                disabled={!editable}
-              />
-              <EditableField
-                label="AM owner"
-                value={account.am_owner_id ?? null}
-                display={deal.am_owner_name ?? "Unassigned"}
-                type="select"
-                options={deal.am_owner_options ?? deal.owner_options ?? []}
-                onSave={set("am_owner_id")}
-                disabled={!editable}
-              />
-              <EditableField
-                label="SE owner"
-                value={account.se_owner_id ?? null}
-                display={deal.se_owner_name ?? "Unassigned"}
-                type="select"
-                options={deal.se_owner_options ?? deal.owner_options ?? []}
-                onSave={set("se_owner_id")}
-                disabled={!editable}
-              />
-              {/* The champion, and the two facts that make them reachable.
+                  <EditableField
+                    label="Company name"
+                    value={account.name}
+                    placeholder="The company, as the customer says it"
+                    onSave={set("name")}
+                    disabled={!editable}
+                  />
+                  <EditableField
+                    label="ARR"
+                    value={account.arr != null ? String(account.arr) : null}
+                    format={(v) => (v ? fmtMoney(Number(v)) : "—")}
+                    type="number"
+                    placeholder="48000"
+                    onSave={set("arr")}
+                    disabled={!editable}
+                  />
+                  <EditableField
+                    label="Salesforce"
+                    value={account.salesforce_id ?? null}
+                    format={(v) => (v ? <span className="font-mono">{v}</span> : "—")}
+                    onSave={set("salesforce_id")}
+                    disabled={!editable}
+                  />
+                  <EditableField
+                    label="Domain"
+                    value={account.domain ?? null}
+                    onSave={set("domain")}
+                    disabled={!editable}
+                  />
+                  <EditableField
+                    label="AM owner"
+                    value={account.am_owner_id ?? null}
+                    display={deal.am_owner_name ?? "Unassigned"}
+                    type="select"
+                    options={deal.am_owner_options ?? deal.owner_options ?? []}
+                    onSave={set("am_owner_id")}
+                    disabled={!editable}
+                  />
+                  <EditableField
+                    label="SE owner"
+                    value={account.se_owner_id ?? null}
+                    display={deal.se_owner_name ?? "Unassigned"}
+                    type="select"
+                    options={deal.se_owner_options ?? deal.owner_options ?? []}
+                    onSave={set("se_owner_id")}
+                    disabled={!editable}
+                  />
+                  {/* The champion, and the two facts that make them reachable.
               Carried into customer_contacts when this deal becomes a project,
               which is the point at which one contact becomes many. */}
-              <span id="deal-contact" className="contents">
-                <EditableField
-                  label="Contact"
-                  value={account.primary_contact_name ?? null}
-                  placeholder="Who to call at the customer"
-                  onSave={set("primary_contact_name")}
-                  disabled={!editable}
-                />
-              </span>
-              <EditableField
-                label="Contact email"
-                value={account.primary_contact_email ?? null}
-                type="email"
-                placeholder="name@company.com"
-                onSave={set("primary_contact_email")}
-                disabled={!editable}
-              />
-              <EditableField
-                label="Contact role"
-                value={account.primary_contact_role ?? null}
-                placeholder="Champion, sponsor, ops lead"
-                onSave={set("primary_contact_role")}
-                disabled={!editable}
-              />
-              <span id="deal-owner" className="contents">
-                <OwnerField dealId={account.id} editable={editable} />
-              </span>
-              <Field label="Created" value={fmtDate(account.created_at)} />
-            </div>
-            {field.error ? (
-              <p className="text-[12px] text-destructive">{(field.error as Error).message}</p>
-            ) : null}
-            <Panel
-              title="Opportunity history"
-              meta="Generated briefs, the stage history and TAM requests"
-              collapsible
-              defaultOpen={false}
-              collapseKey="deal:more"
-            >
-              <div className="space-y-4 p-3">
-                <BriefsPanel deal={deal} />
-                <HistoryPanel deal={deal} />
-                <TamPanel deal={deal} />
+                  <span id="deal-contact" className="contents">
+                    <EditableField
+                      label="Contact"
+                      value={account.primary_contact_name ?? null}
+                      placeholder="Who to call at the customer"
+                      onSave={set("primary_contact_name")}
+                      disabled={!editable}
+                    />
+                  </span>
+                  <EditableField
+                    label="Contact email"
+                    value={account.primary_contact_email ?? null}
+                    type="email"
+                    placeholder="name@company.com"
+                    onSave={set("primary_contact_email")}
+                    disabled={!editable}
+                  />
+                  <EditableField
+                    label="Contact role"
+                    value={account.primary_contact_role ?? null}
+                    placeholder="Champion, sponsor, ops lead"
+                    onSave={set("primary_contact_role")}
+                    disabled={!editable}
+                  />
+                  <span id="deal-owner" className="contents">
+                    <OwnerField dealId={account.id} editable={editable} />
+                  </span>
+                  <Field label="Created" value={fmtDate(account.created_at)} />
+                </div>
+                {field.error ? (
+                  <p className="text-[12px] text-destructive">{(field.error as Error).message}</p>
+                ) : null}
+                <Panel
+                  title="Opportunity history"
+                  meta="Generated briefs, the stage history and TAM requests"
+                  collapsible
+                  defaultOpen={false}
+                  collapseKey="deal:more"
+                >
+                  <div className="space-y-4 p-3">
+                    <BriefsPanel deal={deal} />
+                    <HistoryPanel deal={deal} />
+                    <TamPanel deal={deal} />
+                  </div>
+                </Panel>
               </div>
             </Panel>
           </div>

@@ -93,7 +93,7 @@ describe("the stage checklist", () => {
     expect(stageFlow(input({ stage: "field_fusion_setup" })).advanceTo).toBeNull();
   });
 
-  it("lists the three training days, the form, the field test, the first process and each SOW service", () => {
+  it("lists the training calls, the first form live, each SOW service, then graduation", () => {
     const intake = readIntake({
       ...ready,
       timeline: {
@@ -112,23 +112,33 @@ describe("the stage checklist", () => {
     expect(tasks.map((x) => x.key)).toEqual([
       "kickoff",
       "working",
-      "form_built",
-      "fieldtest",
       "adjust",
       "live",
       "svc:qb",
+      "grad_admin_built",
+      "grad_second",
+      "grad_office",
     ]);
     expect(tasks[0]!.done).toBe(true);
     expect(tasks[0]!.label).toMatch(/Training day 1/);
-    expect(tasks.at(-1)!.label).toBe("QuickBooks Online complete");
+    expect(tasks.find((x) => x.key === "svc:qb")!.label).toBe("QuickBooks Online complete");
   });
 
-  it("skips the form task on a training plan", () => {
+  it("asks a training account for no second form", () => {
     const intake = readIntake({ path: "field_fusion" });
     const t = buildTimeline({ closeDate: "2026-09-22", path: "field_fusion" });
     const f = stageFlow(input({ stage: "in_onboarding", intake, timeline: t }));
     const keys = f.stages.find((s) => s.key === "onboarding")!.tasks.map((x) => x.key);
-    expect(keys).not.toContain("form_built");
+    expect(keys).not.toContain("grad_second");
+    expect(keys).toContain("grad_admin_built");
+  });
+
+  it("calls a deal stuck by the same limits everywhere", async () => {
+    const { stuckLevel } = await import("../stage-flow");
+    expect(stuckLevel("onboarding_kickoff", 2)).toBe("ok");
+    expect(stuckLevel("onboarding_kickoff", 3)).toBe("warn");
+    expect(stuckLevel("onboarding_kickoff", 5)).toBe("escalate");
+    expect(stuckLevel("onboarding_complete", 90)).toBe("ok");
   });
 });
 

@@ -36,6 +36,10 @@ export type BoardDeal = Account & {
   path?: "new_logo" | "existing" | "dm_conversion" | "field_fusion" | null;
   has_notes?: boolean;
   has_sow?: boolean;
+  owner_name?: string | null;
+  next_step?: string | null;
+  business_days_in_stage?: number;
+  stuck?: "ok" | "warn" | "escalate";
 };
 
 function daysIn(since: string): number {
@@ -107,18 +111,44 @@ function DealCard({
       {/* What they bought, as marks: the QuickBooks tile says more than
           "integration" and takes less room. */}
       {marks.length ? <MarkRow marks={marks} className="mt-1.5" overrides={toolMarks} /> : null}
+      {/* The one thing a manager scans for: what this deal is waiting on,
+          and whether it has waited too long. Same next task the deal's own
+          checklist shows; same limits the nudges use. */}
+      {deal.next_step && deal.stage !== terminalKey ? (
+        <p className="mt-1.5 truncate text-[11px]" title={deal.next_step}>
+          <span className="text-muted-foreground">Next: </span>
+          {deal.next_step}
+        </p>
+      ) : null}
       <div className="mt-1 flex items-center justify-between font-mono text-[11px] text-muted-foreground">
         <span>{fmtArr(deal.arr)}</span>
-        <span
-          title="Days in stage"
-          className={cn(days > 14 && deal.stage !== terminalKey && "text-status-risk-foreground")}
-        >
-          {days}d in stage
-        </span>
+        {deal.business_days_in_stage !== undefined ? (
+          <span
+            title="Business days in this stage"
+            className={cn(
+              "rounded-sm px-1",
+              deal.stuck === "escalate" && "bg-status-blocked text-status-blocked-foreground",
+              deal.stuck === "warn" && "bg-status-risk text-status-risk-foreground",
+            )}
+          >
+            {deal.business_days_in_stage}bd in stage
+          </span>
+        ) : (
+          <span
+            title="Days in stage"
+            className={cn(days > 14 && deal.stage !== terminalKey && "text-status-risk-foreground")}
+          >
+            {days}d in stage
+          </span>
+        )}
       </div>
-      {deal.am_owner_name ? (
-        <p className="mt-0.5 truncate text-[11px] text-muted-foreground/70">{deal.am_owner_name}</p>
-      ) : null}
+      <p className="mt-0.5 truncate text-[11px] text-muted-foreground/70">
+        {deal.owner_name
+          ? deal.owner_name
+          : deal.customer_id
+            ? "Unclaimed"
+            : (deal.am_owner_name ?? "")}
+      </p>
     </div>
   );
 }

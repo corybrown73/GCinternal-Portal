@@ -437,21 +437,21 @@ async function notifyAssignee(a: {
         <p style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#039de7;margin:0 0 6px">You're up</p>
         <h2 style="margin:0 0 6px;color:#072b57">${esc(a.dealName)}</h2>
         <p style="margin:0 0 16px;color:#556477">${esc(facts)}</p>
-        <p>Hi ${esc(first)} — this one is yours. The plan is already built with dates. Three things before the ${a.training ? "training call" : "kickoff"} invite goes out:</p>
+        <p>Hi ${esc(first)} — this one is yours. The checklist at the top of the deal walks you through it; the AI does the reading. Three things:</p>
         ${handoffBlock(a.handoff)}
         <ol style="line-height:1.7">
-          <li><b>Grab the Gong recording</b> from the closing call and paste the notes on the deal.<br/><a href="${deal}#reports" style="color:#039de7">Open the deal → Gong reports</a></li>
-          <li><b>Upload the SOW</b> so the plan and the page read from what was sold.<br/><a href="${deal}#sow" style="color:#039de7">Open the deal → SOW</a></li>
-          <li><b>Open the welcome page</b> — the brief. Follow the "Getting started" strip on the deal: it says what is still blank and what is next.<br/><a href="${welcome}" style="color:#039de7">Open the welcome page</a></li>
+          <li><b>Add the Gong brief and the SOW</b> — upload the .md and the PDF. The AI reads both and fills the flow, the forms, the process and the plan.<br/><a href="${deal}" style="color:#039de7">Open the deal's checklist</a></li>
+          <li><b>Review what it filled and approve</b> — each answer shows where it came from. Approving moves the deal to Pre-kickoff.</li>
+          <li><b>Reply to the AE</b> — the email is drafted for you with the welcome page and two kickoff times. Book the kickoff and the invite is one click.<br/><a href="${welcome}" style="color:#039de7">Open the welcome page</a></li>
         </ol>
         ${
           a.shareUrl
-            ? `<p style="margin:12px 0 0;padding:10px 12px;border-radius:8px;background:#eef7fd;color:#072b57;font-size:13px"><b>The customer's link is ready:</b> <a href="${a.shareUrl}" style="color:#12509b">${a.shareUrl}</a><br/><span style="color:#556477">Send it after the kickoff. It shows their dates, their part and your face.</span></p>`
+            ? `<p style="margin:12px 0 0;padding:10px 12px;border-radius:8px;background:#eef7fd;color:#072b57;font-size:13px"><b>The customer's link is ready:</b> <a href="${a.shareUrl}" style="color:#12509b">${a.shareUrl}</a><br/><span style="color:#556477">It goes in your reply to the AE. It shows their dates, their part and your face.</span></p>`
             : ""
         }
         <p style="color:#556477;font-size:13px">${
           a.training
-            ? "The first training call is the next business day. Three thirty-minute calls over two weeks, and the crew is live."
+            ? "Book the first training call in the first few days. Three thirty-minute calls over two weeks, and the crew is live."
             : "Reply to the AE's email today and book the kickoff. Three sixty-minute training days, and the first form is live within fifteen business days — built with them, not for them."
         }</p>
         <p style="font-size:12px;color:#888">GoCanvas Handoff Hub</p>

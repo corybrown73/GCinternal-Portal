@@ -966,6 +966,7 @@ function OnboardingList({
   const qc = useQueryClient();
   const save = useServerFn(saveIntake);
   const move = useServerFn(moveDealStage);
+  const grad = useHandoffTick(deal.account.id);
   const [error, setError] = useState<string | null>(null);
   const tick = useMutation({
     mutationFn: (v: { doneKey: string; on: boolean; hasLaterPhases: boolean }) => {
@@ -1020,9 +1021,11 @@ function OnboardingList({
                 type="checkbox"
                 className="mt-0.5 h-4 w-4 shrink-0"
                 checked={t.done}
-                disabled={!editable || tick.isPending}
+                disabled={!editable || tick.isPending || grad.isPending}
                 onChange={(e) =>
-                  tick.mutate({ doneKey: t.doneKey!, on: e.target.checked, hasLaterPhases })
+                  t.action === "graduate"
+                    ? grad.mutate({ key: t.key, on: e.target.checked })
+                    : tick.mutate({ doneKey: t.doneKey!, on: e.target.checked, hasLaterPhases })
                 }
                 aria-label={t.label}
               />

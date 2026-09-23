@@ -154,7 +154,7 @@ function resolveTab(raw: string | undefined): TabId {
 
 const TAB_LABEL: Record<TabId, string> = {
   overview: "Overview",
-  prekickoff: "Deck",
+  prekickoff: "Record",
   details: "Details",
 };
 
@@ -417,32 +417,11 @@ function Customer360Page() {
           </div>
         ) : null}
 
-        <div className="min-w-0 px-6 pt-2.5">
-          <ProjectTimelines
-            customerId={customerId}
-            tab={tab}
-            activeId={impl.id}
-            implementations={record.implementations}
-          />
-        </div>
-        {/* The projects that came before this one: how they went, in one
-            tile each, so the next one starts with the last in view. */}
-        <PastImplementations customerId={customerId} activeImplementationId={impl.id} />
-
-        {/* THE ATTENTION BAND, RE-CUT.
-            It used to be a tall muted block holding two label-above-value
-            stacks — four lines and ~120px of header for what is, on most
-            accounts, one short sentence and one instruction.
-
-            Now the label sits on the same baseline as its value in a fixed
-            leading column, so the eye lands on the sentence and the label is
-            available without being read. Two rows instead of four, and the
-            space it gives back is space the sections below get to use. */}
-        <AttentionSummary
-          now={whatMattersNow(record)}
-          next={nextAction(record, impl)}
-          waiting={waitingOnLine(record)}
-        />
+        {/* ONE TRACKER. With a deal behind it, the checklist above is where
+            this account stands; the project lanes, the earlier projects and
+            the attention band are the record behind it, on the Details tab.
+            Without a deal they are still the header. */}
+        {impl.deal_id ? null : <HeaderTrackers record={record} customerId={customerId} tab={tab} />}
 
         <nav className="flex flex-wrap gap-px border-t border-border px-4">
           {TABS.map((t) => (
@@ -490,12 +469,58 @@ function Customer360Page() {
           <div className="min-w-0 space-y-3">
             <SectionControls />
             {tab === "overview" ? <OverviewTab record={record} customerId={customerId} /> : null}
+            {tab === "details" && impl.deal_id ? (
+              <HeaderTrackers record={record} customerId={customerId} tab={tab} />
+            ) : null}
             {tab === "details" ? <DetailsTab record={record} customerId={customerId} /> : null}
           </div>
           <AccountRail record={record} customerId={customerId} full={tab === "details"} />
         </div>
       </CollapsibleSections>
     </div>
+  );
+}
+
+/** The project lanes, earlier projects and the attention band. */
+function HeaderTrackers({
+  record,
+  customerId,
+  tab,
+}: {
+  record: Customer360;
+  customerId: string;
+  tab: TabId;
+}) {
+  const impl = record.implementation!;
+  return (
+    <>
+      <div className="min-w-0 px-6 pt-2.5">
+        <ProjectTimelines
+          customerId={customerId}
+          tab={tab}
+          activeId={impl.id}
+          implementations={record.implementations}
+        />
+      </div>
+      {/* The projects that came before this one: how they went, in one
+            tile each, so the next one starts with the last in view. */}
+      <PastImplementations customerId={customerId} activeImplementationId={impl.id} />
+
+      {/* THE ATTENTION BAND, RE-CUT.
+            It used to be a tall muted block holding two label-above-value
+            stacks — four lines and ~120px of header for what is, on most
+            accounts, one short sentence and one instruction.
+
+            Now the label sits on the same baseline as its value in a fixed
+            leading column, so the eye lands on the sentence and the label is
+            available without being read. Two rows instead of four, and the
+            space it gives back is space the sections below get to use. */}
+      <AttentionSummary
+        now={whatMattersNow(record)}
+        next={nextAction(record, impl)}
+        waiting={waitingOnLine(record)}
+      />
+    </>
   );
 }
 

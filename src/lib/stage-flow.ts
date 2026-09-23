@@ -10,8 +10,8 @@ import type { Timeline } from "./onboarding-timeline";
  *                 AI filled and approve                 → Pre-kickoff
  *   Pre-kickoff   reply to the AE · the Salesloft cadence ·
  *                 book the kickoff call                 → Onboarding
- *   Onboarding    the three training days, the form, the field test, the
- *                 first process live, and every service the SOW bought
+ *   Onboarding    the training calls, the first form live, every service
+ *                 the SOW bought, and the graduation checks
  *                                                       → Complete (a person presses it)
  *
  * Pure, so the page, the server that moves the stage, and the tests all read
@@ -39,7 +39,8 @@ export type TaskAction =
   | "cadence"
   | "kickoff"
   | "field_fusion"
-  | "tick";
+  | "tick"
+  | "graduate";
 
 export type FlowTask = {
   key: string;
@@ -212,13 +213,17 @@ function preKickoffTasks(a: IntakeAnswers): FlowTask[] {
   ];
 }
 
+/**
+ * The Onboarding stage: only what a person can honestly tick and a manager
+ * wants to see — each training call held, the first form live, each thing
+ * the SOW bought delivered, then the graduation checks. The homework and
+ * field-test days stay on the plan, where they are dates, not chores.
+ */
 function onboardingTasks(a: IntakeAnswers, t: Timeline | null | undefined): FlowTask[] {
   if (!t) return [];
-  const completed = a.timeline.completed;
   const out: FlowTask[] = [];
-  const buildsAForm = !t.training && !(a.path === "existing" && t.existingBuild === "review");
   for (const m of t.milestones) {
-    if (m.key === "close" || m.kind === "homework") continue;
+    if (m.kind !== "call" && m.key !== "live") continue;
     out.push({
       key: m.key,
       label: m.label,
@@ -230,21 +235,6 @@ function onboardingTasks(a: IntakeAnswers, t: Timeline | null | undefined): Flow
       date: m.date,
       doneKey: m.key,
     });
-    // "Form built" is its own tick: day 2 teaches the build, and the form is
-    // finished when it is finished — sometimes on the call, sometimes after.
-    if (m.key === "working" && buildsAForm) {
-      out.push({
-        key: "form_built",
-        label: "Form built",
-        hint: "The form is finished and published: lists, logic, calculations, the PDF.",
-        done: Boolean(completed["form_built"]),
-        summary: completed["form_built"] ? `Done ${completed["form_built"]}` : null,
-        action: "tick",
-        locked: null,
-        date: m.date,
-        doneKey: "form_built",
-      });
-    }
   }
   const services = [...t.alongside, ...t.phases.flatMap((p) => p.services)];
   for (const s of services) {
@@ -265,7 +255,48 @@ function onboardingTasks(a: IntakeAnswers, t: Timeline | null | undefined): Flow
       doneKey: key,
     });
   }
+  for (const g of graduationChecks(a, t)) out.push(g);
   return out;
+}
+
+/**
+ * Graduation: the proof they can run it without us. These gate "Complete",
+ * so an account is never closed out while its admin still calls us to add a
+ * field. Ticked by the owner; stored with the other handoff ticks.
+ */
+export const GRADUATION = [
+  {
+    key: "grad_admin_built",
+    label: "Their admin built or changed a form without us",
+    hint: "The real test of self-sufficiency: a change we did not make, published by them.",
+  },
+  {
+    key: "grad_second",
+    label: "A second form or process is live",
+    hint: "The next use case, running — usually the second form from the kickoff list.",
+  },
+  {
+    key: "grad_office",
+    label: "The office works from the data",
+    hint: "Emails, the PDF, reports or exports in daily use — nobody retyping submissions.",
+  },
+] as const;
+
+function graduationChecks(a: IntakeAnswers, t: Timeline): FlowTask[] {
+  const training = t.training;
+  return GRADUATION.filter((g) => !(training && g.key === "grad_second")).map((g) => {
+    const on = a.handoff_tasks[g.key];
+    return {
+      key: g.key,
+      label: g.label,
+      hint: g.hint,
+      done: Boolean(on),
+      summary: on ? `Done ${on.slice(0, 10)}` : null,
+      action: "graduate" as const,
+      locked: null,
+      date: null,
+    };
+  });
 }
 
 export function stageFlow(input: StageFlowInput): StageFlow {
@@ -332,4 +363,43 @@ function flowSummary(a: IntakeAnswers): string {
 function joinAnd(xs: string[]): string {
   if (xs.length <= 1) return xs.join("");
   return `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`;
+}
+
+/**
+ * The one line every list shows for a deal: the next task of the stage it
+ * is in, from the same rules as the deal's checklist. Null when the stage
+ * has nothing left for a person to do.
+ */
+export function nextChecklistTask(input: StageFlowInput): string | null {
+  const f = stageFlow(input);
+  const stage = f.stages.find((s) => s.key === (f.current ?? "closed_won"));
+  if (!stage) return null;
+  const next = stage.tasks.find((t) => !t.done && !t.locked) ?? stage.tasks.find((t) => !t.done);
+  return next?.label ?? null;
+}
+
+/**
+ * How long a deal may sit in a stage, in business days, before the owner is
+ * nudged (warn) and then the managers too (escalate). One table, read by the
+ * board, Home and the hourly nudge, so "stuck" means the same everywhere.
+ * Onboarding's limit sits past the 15-day plan: the plan's own overdue calls
+ * are nudged separately.
+ */
+export const STAGE_LIMITS: Readonly<Record<string, { warn: number; escalate: number }>> = {
+  closed_won: { warn: 2, escalate: 4 },
+  field_fusion_setup: { warn: 3, escalate: 5 },
+  onboarding_kickoff: { warn: 3, escalate: 5 },
+  in_onboarding: { warn: 20, escalate: 30 },
+};
+
+export type StuckLevel = "ok" | "warn" | "escalate";
+
+export function stuckLevel(stage: string, businessDaysInStage: number): StuckLevel {
+  const l = STAGE_LIMITS[stage];
+  if (!l) return "ok";
+  return businessDaysInStage >= l.escalate
+    ? "escalate"
+    : businessDaysInStage >= l.warn
+      ? "warn"
+      : "ok";
 }
