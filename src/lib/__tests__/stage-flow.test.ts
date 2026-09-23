@@ -73,8 +73,10 @@ describe("the stage checklist", () => {
   });
 
   it("moves Pre-kickoff to Onboarding when the AE reply, the cadence and the booked kickoff are all in", () => {
+    // The classic Pre-kickoff: every type but a new logo.
     const base = {
       ...ready,
+      path: "dm_conversion",
       handoff_tasks: {
         reviewed: "2026-09-22T15:00:00Z",
         reply_ae: "2026-09-22T15:00:00Z",
@@ -105,6 +107,7 @@ describe("the stage checklist", () => {
   it("lists the training calls, the first form live, each SOW service, then graduation", () => {
     const intake = readIntake({
       ...ready,
+      path: "dm_conversion",
       timeline: {
         completed: { kickoff: "2026-09-24" },
         services: [{ id: "qb", kind: "integration", name: "QuickBooks Online", phase: 2, tier: 3 }],
@@ -112,7 +115,7 @@ describe("the stage checklist", () => {
     });
     const t = buildTimeline({
       closeDate: "2026-09-22",
-      path: "new_logo",
+      path: "dm_conversion",
       completed: intake.timeline.completed,
       services: intake.timeline.services as never,
     });
@@ -151,18 +154,103 @@ describe("the stage checklist", () => {
   });
 });
 
-describe("the new-logo plan", () => {
-  it("is three sixty-minute training days, first form live fifteen business days from the close", () => {
+describe("the new-logo plan: the Implementation Playbook", () => {
+  it("is three sixty-minute core meetings, Functional fifteen business days from the close, a 30-day window", async () => {
+    const { coreWindowEnd } = await import("../onboarding-timeline");
     const t = buildTimeline({ closeDate: "2026-09-22", path: "new_logo" });
     const calls = t.milestones.filter((m) => m.kind === "call");
     expect(calls.map((c) => c.minutes)).toEqual([60, 60, 60]);
     expect(calls.map((c) => c.label)).toEqual([
-      expect.stringMatching(/^Training day 1/),
-      expect.stringMatching(/^Training day 2/),
-      expect.stringMatching(/^Training day 3/),
+      "Stage 1 — Make It Work",
+      "Stage 2 — Make It Work for Them",
+      "Stage 3 — Make It Operational",
     ]);
-    // Tue 22 Sep + 15 business days = Tue 13 Oct.
+    // Tue 22 Sep + 15 business days = Tue 13 Oct; Week 4 ends Tue 20 Oct.
     expect(t.liveDate).toBe("2026-10-13");
+    expect(coreWindowEnd(t)).toBe("2026-10-20");
+  });
+
+  it("asks for prep and all three meetings booked before Onboarding", () => {
+    const ticks = {
+      reviewed: "2026-09-22T15:00:00Z",
+      reply_ae: "2026-09-22T15:00:00Z",
+      cadence: "2026-09-22T15:05:00Z",
+    };
+    const oneBooked = {
+      ...ready,
+      handoff_tasks: ticks,
+      timeline: { overrides: { kickoff: "2026-09-25" }, times: { kickoff: "10:00" } },
+    };
+    const f = stageFlow(input({ stage: "onboarding_kickoff", intake: oneBooked }));
+    const pk = f.stages.find((s) => s.key === "pre_kickoff")!.tasks;
+    expect(pk.map((t) => t.key)).toEqual(["reply_ae", "cadence", "prep", "kickoff"]);
+    expect(pk.find((t) => t.key === "kickoff")!.summary).toBe("1 of 3 booked");
+    expect(f.advanceTo).toBeNull();
+    const ready3 = {
+      ...ready,
+      handoff_tasks: { ...ticks, prep_process: "x", prep_form: "x", prep_data: "x" },
+      timeline: {
+        overrides: { kickoff: "2026-09-25", working: "2026-09-29", adjust: "2026-10-07" },
+        times: { kickoff: "10:00", working: "10:00", adjust: "14:00" },
+      },
+    };
+    expect(stageFlow(input({ stage: "onboarding_kickoff", intake: ready3 })).advanceTo).toBe(
+      "in_onboarding",
+    );
+  });
+
+  it("runs Onboarding as the three stages, the work between them, Functional, the SOW, and a close-out", () => {
+    const intake = readIntake({
+      ...ready,
+      timeline: {
+        completed: { kickoff: "2026-09-25" },
+        services: [{ id: "qb", kind: "integration", name: "QuickBooks Online", phase: 2, tier: 3 }],
+      },
+    });
+    const t = buildTimeline({
+      closeDate: "2026-09-22",
+      path: "new_logo",
+      completed: intake.timeline.completed,
+      services: intake.timeline.services as never,
+    });
+    const f = stageFlow(input({ stage: "in_onboarding", intake, timeline: t }));
+    const tasks = f.stages.find((s) => s.key === "onboarding")!.tasks;
+    expect(tasks.map((x) => x.key)).toEqual([
+      "kickoff",
+      "between_1",
+      "working",
+      "between_2",
+      "adjust",
+      "func_web_login",
+      "func_mobile_login",
+      "func_submit",
+      "func_output",
+      "func_users",
+      "func_edit",
+      "func_data_open",
+      "func_data_update",
+      "svc:qb",
+      "activate",
+      "closeout",
+    ]);
+    expect(tasks[0]!.summary).toBe("Held 2026-09-25");
+    // The optional activation session never holds the stage back.
+    expect(tasks.find((x) => x.key === "activate")!.optional).toBe(true);
+    const all = Object.fromEntries(
+      tasks.filter((x) => x.doneKey && !x.optional).map((x) => [x.doneKey!, "2026-10-14"]),
+    );
+    const doneIntake = readIntake({
+      ...ready,
+      timeline: { completed: all, services: intake.timeline.services },
+    });
+    const doneT = buildTimeline({
+      closeDate: "2026-09-22",
+      path: "new_logo",
+      completed: all,
+      services: intake.timeline.services as never,
+    });
+    const done = stageFlow(input({ stage: "in_onboarding", intake: doneIntake, timeline: doneT }));
+    expect(done.stages.find((s) => s.key === "onboarding")!.done).toBe(true);
   });
 });
 

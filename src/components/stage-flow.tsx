@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -18,13 +18,16 @@ import {
   type IntakeAnswers,
 } from "@/lib/intake-answers";
 import { closeDateFor, timelineFor } from "@/lib/onboarding-plan";
-import { dayCounter, localIso } from "@/lib/onboarding-timeline";
+import { coreWindowEnd, dayCounter, localIso } from "@/lib/onboarding-timeline";
 import { getWelcome } from "@/lib/welcome.functions";
 import { wonStage } from "@/lib/pipeline-stages";
 import { moveDealStage, saveIntake } from "@/lib/presale.functions";
 import {
+  CORE_MEETINGS,
   DEAL_TYPES,
+  FUNCTIONAL,
   KICKOFF_CADENCE,
+  PREP_ITEMS,
   readingInFlight,
   stageFlow,
   type FlowStageKey,
@@ -177,6 +180,12 @@ export function StageFlow({ deal }: { deal: DealData }) {
               title={counter.detail}
             >
               {counter.label} · {counter.detail}
+            </span>
+          ) : null}
+          {intake.path === "new_logo" &&
+          (flow.current === "onboarding" || flow.current === "pre_kickoff") ? (
+            <span className="rounded-full border border-border px-2 py-0.5">
+              Functional by {timeline.liveDate} · 30-day window ends {coreWindowEnd(timeline)}
             </span>
           ) : null}
           {stageFooter(shown, flow.current)}
@@ -461,6 +470,10 @@ function TaskBody({
       return <KickoffBody deal={deal} intake={intake} editable={editable} />;
     case "field_fusion":
       return <FieldFusionGate deal={deal} editable={editable} />;
+    case "prep":
+      return <PrepBody deal={deal} intake={intake} editable={editable} />;
+    case "book_core":
+      return <BookCoreBody deal={deal} intake={intake} editable={editable} />;
     default:
       return null;
   }
@@ -1140,23 +1153,31 @@ function InviteLinks({
   date,
   time,
   zone,
+  event = "kickoff",
+  title = "kickoff and first form",
+  about = "Training day 1: introductions, your process walked together, then your first form built and published.",
+  label = "Send the invite:",
 }: {
   deal: DealData;
   date: string;
   time: string;
   zone: string;
+  event?: string;
+  title?: string;
+  about?: string;
+  label?: string;
 }) {
   const share = (deal.account as { welcome_share_url?: string | null }).welcome_share_url ?? null;
   const token = share ? share.split("/").filter(Boolean).pop() : null;
   let google: string | null = null;
   try {
     google = googleCalendarLink({
-      title: `${deal.account.name} × GoCanvas — kickoff and first form`,
+      title: `${deal.account.name} × GoCanvas — ${title}`,
       date,
       time,
       timezone: zone,
       minutes: 60,
-      details: `Training day 1: introductions, your process walked together, then your first form built and published.${share ? `\n\nYour welcome page: ${share}` : ""}`,
+      details: `${about}${share ? `\n\nYour welcome page: ${share}` : ""}`,
       guests: deal.account.primary_contact_email ? [deal.account.primary_contact_email] : [],
     });
   } catch {
@@ -1166,17 +1187,231 @@ function InviteLinks({
     "inline-flex h-8 items-center gap-1.5 rounded-sm border border-border px-3 text-[12px] hover:bg-muted";
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <span className="text-[12px] font-medium">Send the invite:</span>
+      <span className="text-[12px] font-medium">{label}</span>
       {google ? (
         <a href={google} target="_blank" rel="noreferrer noopener" className={cls}>
           Google Calendar
         </a>
       ) : null}
       {token ? (
-        <a href={`/api/welcome-ics/${token}?event=kickoff`} className={cls}>
+        <a href={`/api/welcome-ics/${token}?event=${event}`} className={cls}>
           Outlook / .ics
         </a>
       ) : null}
+    </div>
+  );
+}
+
+/** The playbook's "come prepared": three ticks, each with what good looks like. */
+function PrepBody({
+  deal,
+  intake,
+  editable,
+}: {
+  deal: DealData;
+  intake: IntakeAnswers;
+  editable: boolean;
+}) {
+  const tick = useHandoffTick(deal.account.id);
+  return (
+    <ul className="space-y-1.5">
+      {PREP_ITEMS.map((p) => {
+        const on = Boolean(intake.handoff_tasks[p.key]);
+        return (
+          <li key={p.key}>
+            <label className="flex cursor-pointer items-start gap-2 text-[13px]">
+              <input
+                type="checkbox"
+                className="mt-0.5 h-4 w-4"
+                checked={on}
+                disabled={!editable || tick.isPending}
+                onChange={(e) => tick.mutate({ key: p.key, on: e.target.checked })}
+              />
+              <span>
+                <span className={cn(on && "text-muted-foreground line-through")}>{p.label}</span>
+                <span className="block text-[11px] text-muted-foreground">{p.hint}</span>
+              </span>
+            </label>
+          </li>
+        );
+      })}
+      <li className="pt-1 text-[11px] text-muted-foreground">
+        No starting form possible? Use Stage 1 to get the decisions, so Stage 2 starts prepared.
+      </li>
+    </ul>
+  );
+}
+
+/**
+ * All three core meetings on the calendar at once — the playbook's rule. One
+ * row per stage, one time zone, one save; then an invite per stage. Every
+ * date after a moved one follows, and any row can be changed for a
+ * reschedule.
+ */
+function BookCoreBody({
+  deal,
+  intake,
+  editable,
+}: {
+  deal: DealData;
+  intake: IntakeAnswers;
+  editable: boolean;
+}) {
+  const qc = useQueryClient();
+  const save = useServerFn(saveIntake);
+  const t = intake.timeline;
+  const plan = timelineFor(
+    intake,
+    closeDateFor({
+      intake,
+      stageHistory: deal.stage_history,
+      wonStageKey: wonStage(deal.stages).key,
+      today: localIso(),
+    }).date,
+  );
+  const plannedDate = (k: string) => plan.milestones.find((m) => m.key === k)?.date ?? "";
+  const browserZone =
+    typeof Intl !== "undefined" ? Intl.DateTimeFormat().resolvedOptions().timeZone : "";
+  const [rows, setRows] = useState(() =>
+    CORE_MEETINGS.map((m) => ({
+      key: m.key,
+      date: t.overrides[m.key] ?? plannedDate(m.key),
+      time: t.times[m.key] ?? "10:00",
+    })),
+  );
+  const [zone, setZone] = useState(t.timezone ?? browserZone ?? "America/New_York");
+  const [error, setError] = useState<string | null>(null);
+  const m = useMutation({
+    mutationFn: () =>
+      save({
+        data: {
+          dealId: deal.account.id,
+          patch: {
+            timeline: {
+              ...t,
+              overrides: {
+                ...t.overrides,
+                ...Object.fromEntries(rows.map((r) => [r.key, r.date])),
+              },
+              times: { ...t.times, ...Object.fromEntries(rows.map((r) => [r.key, r.time])) },
+              timezone: zone || null,
+            },
+          },
+        } as never,
+      }),
+    onMutate: () => setError(null),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["deal", deal.account.id] });
+      void qc.invalidateQueries({ queryKey: ["welcome", deal.account.id] });
+    },
+    onError: (e) => setError((e as Error).message),
+  });
+  const booked = CORE_MEETINGS.every((c) => t.overrides[c.key] && t.times[c.key]);
+  const order = rows.every((r, i) => i === 0 || r.date > rows[i - 1]!.date);
+  const changed =
+    rows.some((r) => r.date !== (t.overrides[r.key] ?? "") || r.time !== (t.times[r.key] ?? "")) ||
+    zone !== (t.timezone ?? "");
+  const zoneName = ZONES.find((z) => z[0] === zone)?.[1] ?? zone;
+  return (
+    <div className="space-y-2">
+      <div className="space-y-1.5">
+        {CORE_MEETINGS.map((c, i) => (
+          <div key={c.key} className="flex flex-wrap items-end gap-2">
+            <span className="w-56 pb-1.5 text-[12px] font-medium">{c.label}</span>
+            <input
+              type="date"
+              aria-label={`${c.label} date`}
+              className="h-8 rounded-sm border border-border bg-background px-2 text-[12px]"
+              value={rows[i]!.date}
+              disabled={!editable || m.isPending}
+              onChange={(e) =>
+                setRows((prev) =>
+                  prev.map((r, j) => (j === i ? { ...r, date: e.target.value } : r)),
+                )
+              }
+            />
+            <select
+              aria-label={`${c.label} time`}
+              className="h-8 rounded-sm border border-border bg-background px-2 text-[12px]"
+              value={rows[i]!.time}
+              disabled={!editable || m.isPending}
+              onChange={(e) =>
+                setRows((prev) =>
+                  prev.map((r, j) => (j === i ? { ...r, time: e.target.value } : r)),
+                )
+              }
+            >
+              {[...new Set([rows[i]!.time, ...TIMES])].sort().map((v) => (
+                <option key={v} value={v}>
+                  {clock(v)}
+                </option>
+              ))}
+            </select>
+          </div>
+        ))}
+      </div>
+      <div className="flex flex-wrap items-end gap-2">
+        <label className="text-[11px] text-muted-foreground">
+          Their time zone
+          <select
+            className="mt-0.5 block h-8 w-48 rounded-sm border border-border bg-background px-2 text-[12px] text-foreground"
+            value={zone}
+            disabled={!editable || m.isPending}
+            onChange={(e) => setZone(e.target.value)}
+          >
+            {[...new Set([zone, ...ZONES.map((z) => z[0])])].map((z) => (
+              <option key={z} value={z}>
+                {ZONES.find((x) => x[0] === z)?.[1] ?? z}
+              </option>
+            ))}
+          </select>
+        </label>
+        <button
+          type="button"
+          className="inline-flex h-8 items-center gap-1.5 rounded-sm bg-primary px-3 text-[12px] font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+          disabled={
+            !editable || m.isPending || rows.some((r) => !r.date) || !order || (booked && !changed)
+          }
+          onClick={() => m.mutate()}
+        >
+          <Check className="h-3.5 w-3.5" strokeWidth={3} />
+          {m.isPending ? "Saving…" : booked ? "Save the new times" : "All three are booked"}
+        </button>
+      </div>
+      {!order ? (
+        <p className="text-[12px] text-amber-800 dark:text-amber-300">
+          Stage 2 has to fall after Stage 1, and Stage 3 after Stage 2.
+        </p>
+      ) : !booked ? (
+        <p className="text-[11px] text-muted-foreground">
+          Pre-filled from the plan. Change any date to what they agreed; every date after it
+          follows.
+        </p>
+      ) : null}
+      {booked ? (
+        <div className="space-y-1.5 rounded-md border border-status-ontrack-foreground/30 bg-status-ontrack/40 px-3 py-2">
+          <p className="text-[12px] text-status-ontrack-foreground">
+            <Check className="mr-1 inline h-3.5 w-3.5" strokeWidth={3} />
+            All three booked ({zoneName}). Send each invite:
+          </p>
+          {t.timezone
+            ? CORE_MEETINGS.map((c) => (
+                <InviteLinks
+                  key={c.key}
+                  deal={deal}
+                  date={t.overrides[c.key]!}
+                  time={t.times[c.key]!}
+                  zone={t.timezone!}
+                  event={c.key}
+                  title={c.label}
+                  about={plan.milestones.find((x) => x.key === c.key)?.detail ?? ""}
+                  label={`${c.label} — ${t.overrides[c.key]} ${clock(t.times[c.key]!)}:`}
+                />
+              ))
+            : null}
+        </div>
+      ) : null}
+      {error ? <p className="text-[12px] text-destructive">{error}</p> : null}
     </div>
   );
 }
@@ -1209,10 +1444,20 @@ function OnboardingList({
       const completed = { ...t.completed };
       if (v.on) completed[v.doneKey] = localIso();
       else delete completed[v.doneKey];
+      // Functional IS the first form live: the last of the eight ticks marks
+      // it, so nobody ticks the same fact twice.
+      if (
+        v.on &&
+        !completed["live"] &&
+        FUNCTIONAL.some((f) => f.key === v.doneKey) &&
+        FUNCTIONAL.every((f) => completed[f.key])
+      ) {
+        completed["live"] = localIso();
+      }
       // The first process live IS the form proven: phase 2 opens from it,
       // unless somebody already recorded an earlier day.
       const provenOn =
-        v.on && v.doneKey === "live" && v.hasLaterPhases && !t.form_proven_on
+        v.on && completed["live"] && !t.completed["live"] && v.hasLaterPhases && !t.form_proven_on
           ? localIso()
           : t.form_proven_on;
       return save({
@@ -1236,55 +1481,74 @@ function OnboardingList({
     onError: (e) => setError((e as Error).message),
   });
   const hasLaterPhases = tasks.some((t) => t.key.startsWith("svc:"));
-  const allDone = tasks.length > 0 && tasks.every((t) => t.done);
-  const nextKey = tasks.find((t) => !t.done)?.key ?? null;
+  const allDone = tasks.length > 0 && tasks.every((t) => t.done || t.optional);
+  const nextKey = tasks.find((t) => !t.done && !t.optional)?.key ?? null;
   const today = localIso();
   return (
     <div>
       <ul className="divide-y divide-border">
-        {tasks.map((t) => {
-          const late = !t.done && t.date && t.date < today;
+        {tasks.map((t, i) => {
+          const late = !t.done && !t.optional && t.date && t.date < today;
+          const heading = t.group && t.group !== tasks[i - 1]?.group ? t.group : null;
           return (
-            <li
-              key={t.key}
-              className={cn(
-                "flex items-start gap-2.5 px-4 py-2",
-                t.key === nextKey && "bg-primary/5",
-              )}
-            >
-              <input
-                type="checkbox"
-                className="mt-0.5 h-4 w-4 shrink-0"
-                checked={t.done}
-                disabled={!editable || tick.isPending || grad.isPending}
-                onChange={(e) =>
-                  t.action === "graduate"
-                    ? grad.mutate({ key: t.key, on: e.target.checked })
-                    : tick.mutate({ doneKey: t.doneKey!, on: e.target.checked, hasLaterPhases })
-                }
-                aria-label={t.label}
-              />
-              <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-baseline justify-between gap-x-3">
-                  <span
-                    className={cn("text-[13px]", t.done && "text-muted-foreground line-through")}
-                  >
-                    {t.label}
-                  </span>
-                  <span
-                    className={cn(
-                      "font-mono text-[11px]",
-                      late ? "text-amber-700 dark:text-amber-400" : "text-muted-foreground",
-                    )}
-                  >
-                    {t.done ? t.summary : t.date ? `${late ? "was due" : "due"} ${t.date}` : ""}
-                  </span>
+            <Fragment key={t.key}>
+              {heading ? (
+                <li className="bg-muted/40 px-4 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  {heading}
+                  {heading.startsWith("Functional") ? (
+                    <span className="ml-2 font-normal normal-case tracking-normal">
+                      {tasks.filter((x) => x.group === heading && x.done).length} of{" "}
+                      {tasks.filter((x) => x.group === heading).length} — all eight marks the first
+                      form live
+                    </span>
+                  ) : null}
+                </li>
+              ) : null}
+              <li
+                className={cn(
+                  "flex items-start gap-2.5 px-4 py-2",
+                  t.key === nextKey && "bg-primary/5",
+                )}
+              >
+                <input
+                  type="checkbox"
+                  className="mt-0.5 h-4 w-4 shrink-0"
+                  checked={t.done}
+                  disabled={!editable || tick.isPending || grad.isPending}
+                  onChange={(e) =>
+                    t.action === "graduate"
+                      ? grad.mutate({ key: t.key, on: e.target.checked })
+                      : tick.mutate({ doneKey: t.doneKey!, on: e.target.checked, hasLaterPhases })
+                  }
+                  aria-label={t.label}
+                />
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-baseline justify-between gap-x-3">
+                    <span
+                      className={cn("text-[13px]", t.done && "text-muted-foreground line-through")}
+                    >
+                      {t.label}
+                      {t.optional ? (
+                        <span className="ml-1.5 rounded-full border border-border px-1.5 py-px text-[10px] text-muted-foreground">
+                          optional
+                        </span>
+                      ) : null}
+                    </span>
+                    <span
+                      className={cn(
+                        "font-mono text-[11px]",
+                        late ? "text-amber-700 dark:text-amber-400" : "text-muted-foreground",
+                      )}
+                    >
+                      {t.done ? t.summary : t.date ? `${late ? "was due" : "due"} ${t.date}` : ""}
+                    </span>
+                  </div>
+                  {t.key === nextKey || (t.optional && !t.done) ? (
+                    <p className="mt-0.5 text-[12px] text-muted-foreground">{t.hint}</p>
+                  ) : null}
                 </div>
-                {t.key === nextKey ? (
-                  <p className="mt-0.5 text-[12px] text-muted-foreground">{t.hint}</p>
-                ) : null}
-              </div>
-            </li>
+              </li>
+            </Fragment>
           );
         })}
       </ul>
@@ -1292,7 +1556,7 @@ function OnboardingList({
         <p className="text-[12px] text-muted-foreground">
           {allDone
             ? "Every step is done."
-            : `${tasks.filter((t) => !t.done).length} step${tasks.filter((t) => !t.done).length === 1 ? "" : "s"} to go. Dates come from the plan; move them on the plan below.`}
+            : `${tasks.filter((t) => !t.done && !t.optional).length} step${tasks.filter((t) => !t.done && !t.optional).length === 1 ? "" : "s"} to go. Dates come from the plan; move them on the plan below.`}
         </p>
         {deal.account.stage === "in_onboarding" ? (
           <button

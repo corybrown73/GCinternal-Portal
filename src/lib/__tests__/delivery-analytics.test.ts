@@ -74,8 +74,11 @@ describe("outcomesFor", () => {
       avgPlannedDays: 15,
     });
     expect(r!.avgSlipDays).toBe(1);
-    expect(r!.worstStep?.label).toBe("First form live");
+    expect(r!.worstStep?.label).toBe("Functional — in your users' hands");
     expect(rollup(rows, byTool)[0]!.label).toBe("First form (15 business days)");
-    expect(stepSlips(rows)[0]).toMatchObject({ label: "First form live", avgSlipDays: 1 });
+    expect(stepSlips(rows)[0]).toMatchObject({
+      label: "Functional — in your users' hands",
+      avgSlipDays: 1,
+    });
   });
 });

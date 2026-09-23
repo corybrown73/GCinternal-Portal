@@ -60,6 +60,8 @@ export const FLOW_STAGES: ReadonlyArray<{ key: FlowStageKey; stage: AccountStage
 
 export type TaskAction =
   | "deal_type"
+  | "prep"
+  | "book_core"
   | "assign"
   | "notes"
   | "sow"
@@ -86,6 +88,10 @@ export type FlowTask = {
   date?: string | null;
   /** The key a tick writes to `timeline.completed`, on the Onboarding stage. */
   doneKey?: string;
+  /** A heading the task sits under, for a run of related ticks. */
+  group?: string;
+  /** Offered, never required: does not hold a stage back. */
+  optional?: boolean;
 };
 
 export type StageFlowInput = {
@@ -216,7 +222,76 @@ function closedWonTasks(a: IntakeAnswers, input: StageFlowInput, closed: boolean
   ];
 }
 
+/** The internal prep before Stage 1 (the playbook's "come prepared"). */
+export const PREP_ITEMS = [
+  {
+    key: "prep_process",
+    label: "Process map",
+    hint: "Their workflow, start to finish: field activity → submission → what happens next → where it lands.",
+  },
+  {
+    key: "prep_form",
+    label: "Starting form (POC)",
+    hint: "A first version of their form built from the calls, so Stage 1 validates instead of starting blank.",
+  },
+  {
+    key: "prep_data",
+    label: "Reference-data example",
+    hint: "One of their lists — customers, sites, parts — structured the way the form will use it.",
+  },
+] as const;
+
+/** The three core meetings, booked at the start (the playbook's rule). */
+export const CORE_MEETINGS = [
+  { key: "kickoff", label: "Stage 1 — Make It Work" },
+  { key: "working", label: "Stage 2 — Make It Work for Them" },
+  { key: "adjust", label: "Stage 3 — Make It Operational" },
+] as const;
+
 function preKickoffTasks(a: IntakeAnswers): FlowTask[] {
+  return a.path === "new_logo" ? playbookPreKickoff(a) : classicPreKickoff(a);
+}
+
+/** Pre-kickoff on the playbook: the AE, the cadence, prep, all three meetings booked. */
+function playbookPreKickoff(a: IntakeAnswers): FlowTask[] {
+  const [reply, cadence] = classicPreKickoff(a);
+  const t = a.handoff_tasks;
+  const prepDone = PREP_ITEMS.filter((p) => t[p.key]).length;
+  const booked = CORE_MEETINGS.filter(
+    (m) => a.timeline.overrides[m.key] && a.timeline.times[m.key],
+  ).length;
+  return [
+    reply!,
+    cadence!,
+    {
+      key: "prep",
+      label: "Prepare before Stage 1",
+      hint: "Stage 1 should validate prepared work, not discover it: a process map, a starting form and one real list.",
+      done: prepDone === PREP_ITEMS.length,
+      summary: prepDone === PREP_ITEMS.length ? "Process map, starting form and data ready" : null,
+      action: "prep",
+      locked: null,
+    },
+    {
+      key: "kickoff",
+      label: "Book all three core meetings",
+      hint: "Stage 1, 2 and 3 on the calendar now, sixty minutes each — the structure that keeps the 30 days from drifting.",
+      done: booked === CORE_MEETINGS.length,
+      summary:
+        booked === CORE_MEETINGS.length
+          ? CORE_MEETINGS.map(
+              (m) => `${a.timeline.overrides[m.key]} ${a.timeline.times[m.key]}`,
+            ).join(" · ")
+          : booked
+            ? `${booked} of 3 booked`
+            : null,
+      action: "book_core",
+      locked: null,
+    },
+  ];
+}
+
+function classicPreKickoff(a: IntakeAnswers): FlowTask[] {
   const t = a.handoff_tasks;
   const kickoffDate = a.timeline.overrides["kickoff"] ?? null;
   const kickoffTime = a.timeline.times["kickoff"] ?? null;
@@ -258,8 +333,114 @@ function preKickoffTasks(a: IntakeAnswers): FlowTask[] {
  * the SOW bought delivered, then the graduation checks. The homework and
  * field-test days stay on the plan, where they are dates, not chores.
  */
+/** What "Functional" means: the minimum they can do without us, checked on a call. */
+export const FUNCTIONAL = [
+  { key: "func_web_login", label: "Logs into the web portal" },
+  { key: "func_mobile_login", label: "Logs into the mobile app" },
+  { key: "func_submit", label: "Opens, completes and submits the main workflow" },
+  { key: "func_output", label: "Gets the output — the PDF, the email" },
+  { key: "func_users", label: "Adds users and updates roles and access" },
+  { key: "func_edit", label: "Makes a basic form edit and republishes" },
+  { key: "func_data_open", label: "Opens the datasets that power the form" },
+  { key: "func_data_update", label: "Updates those datasets when things change" },
+] as const;
+
+/**
+ * Onboarding on the playbook: each stage held, the work between them done,
+ * the Functional checklist (which marks the first form live when it is
+ * full), what the SOW bought, the optional activation session, and the
+ * close-out that hands the account to Customer Success.
+ */
+function playbookOnboarding(a: IntakeAnswers, t: Timeline): FlowTask[] {
+  const done = a.timeline.completed;
+  const tick = (
+    key: string,
+    label: string,
+    hint: string,
+    extra: Partial<FlowTask> = {},
+  ): FlowTask => ({
+    key,
+    label,
+    hint,
+    done: Boolean(done[key]),
+    summary: done[key] ? `Done ${done[key]}` : null,
+    action: "tick",
+    locked: null,
+    doneKey: key,
+    ...extra,
+  });
+  const at = (k: string) => t.milestones.find((m) => m.key === k);
+  const stage = (k: string) => {
+    const m = at(k)!;
+    return tick(k, m.label, m.detail, {
+      date: m.date,
+      done: Boolean(m.doneOn),
+      summary: m.doneOn ? `Held ${m.doneOn}` : null,
+    });
+  };
+  const out: FlowTask[] = [
+    stage("kickoff"),
+    tick(
+      "between_1",
+      "Between 1 and 2: they tested and sent what was missing; we prepared Stage 2",
+      "If they have not tested, say so now — do not find out on the Stage 2 call.",
+      { date: at("homework")?.date ?? null },
+    ),
+    stage("working"),
+    tick(
+      "between_2",
+      "Between 2 and 3: real users submitting; outputs and admin prepared",
+      "Real submissions in, the agreed fixes made, and the Stage 3 attendees confirmed.",
+      { date: at("fieldtest")?.date ?? null },
+    ),
+    stage("adjust"),
+    ...FUNCTIONAL.map((f) =>
+      tick(f.key, f.label, "Checked with them, on their account.", {
+        group: "Functional — what they can do without us",
+        date: at("live")?.date ?? null,
+      }),
+    ),
+  ];
+  const services = [...t.alongside, ...t.phases.flatMap((p) => p.services)];
+  for (const s of services) {
+    const last = s.milestones[s.milestones.length - 1];
+    const key = last?.key ?? `${s.id}:live`;
+    out.push({
+      key: `svc:${s.id}`,
+      label: `${s.name || s.label} complete`,
+      hint:
+        s.kind === "integration"
+          ? "Connected, tested end to end, and live."
+          : "Delivered and signed off.",
+      done: Boolean(s.doneOn),
+      summary: s.doneOn ? `Done ${s.doneOn}` : null,
+      action: "tick",
+      locked: null,
+      date: s.endsOn,
+      doneKey: key,
+      group: "What the SOW bought",
+    });
+  }
+  out.push(
+    tick(
+      "activate",
+      "Activate & Optimize with their real users",
+      "For larger or adoption-sensitive rollouts: watch real users run it, and fix where they hesitate.",
+      { optional: true, group: "Week 4" },
+    ),
+    tick(
+      "closeout",
+      "Close-out: parking lot reviewed, follow-ups scheduled, handed to Customer Success",
+      "The core is done when they are Functional; anything left is scheduled on purpose, not left as unfinished implementation.",
+      { group: "Week 4" },
+    ),
+  );
+  return out;
+}
+
 function onboardingTasks(a: IntakeAnswers, t: Timeline | null | undefined): FlowTask[] {
   if (!t) return [];
+  if (a.path === "new_logo") return playbookOnboarding(a, t);
   const out: FlowTask[] = [];
   for (const m of t.milestones) {
     if (m.kind !== "call" && m.key !== "live") continue;
@@ -344,7 +525,8 @@ export function stageFlow(input: StageFlowInput): StageFlow {
   const cw = closedWonTasks(a, input, current !== null);
   const pk = preKickoffTasks(a);
   const ob = onboardingTasks(a, input.timeline);
-  const allDone = (ts: FlowTask[]) => ts.length > 0 && ts.every((x) => x.done);
+  // Optional tasks are offered, never waited on.
+  const allDone = (ts: FlowTask[]) => ts.length > 0 && ts.every((x) => x.done || x.optional);
 
   const stages: StageFlow["stages"] = [
     { key: "closed_won", label: "Closed Won", tasks: cw, done: allDone(cw) },

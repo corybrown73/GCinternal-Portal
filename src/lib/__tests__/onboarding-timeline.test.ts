@@ -50,8 +50,9 @@ describe("the new-logo plan — three training days, fifteen business days", () 
     expect(calls.map((c) => c.key)).toEqual(["kickoff", "working", "adjust"]);
     expect(calls.map((c) => c.minutes)).toEqual([60, 60, 60]);
     expect(calls[0]!.homework?.length).toBeGreaterThanOrEqual(3);
+    // Between the stages both sides work: they test, we prepare the next call.
     const homework = t.milestones.find((m) => m.key === "homework")!;
-    expect(homework.owner).toBe("client");
+    expect(homework.owner).toBe("both");
   });
 
   it("is a two-way street: most steps are shared or the customer's", () => {

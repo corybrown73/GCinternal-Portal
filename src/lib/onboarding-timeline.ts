@@ -99,8 +99,108 @@ export function isTrainingPlan(
 }
 
 /**
- * Phase 1 for a new logo: the three training days, over fifteen business
- * days from the close. The keys are the contract the deck renders.
+ * Phase 1 for a new logo: the Implementation Playbook.
+ *
+ * Three core meetings, all booked at the start — Make It Work, Make It Work
+ * for Them, Make It Operational — with prepared work between them, so no
+ * live call is spent on setup that could have been done before it. The core
+ * work runs about three weeks and ends at "Functional": the minimum an
+ * account needs to run it without us. Week 4 is held back for activation,
+ * catch-up and whatever the account needs more time on; it is the window,
+ * not the plan. Same keys as every other plan, so every screen follows.
+ */
+export const NEW_LOGO_PLAN: readonly MilestoneSpec[] = [
+  {
+    key: "close",
+    day: 0,
+    label: "Deal closes",
+    owner: "gocanvas",
+    kind: "milestone",
+    detail:
+      "We reply to your account executive's email the same day and book all three core meetings.",
+    icon: "Flag",
+  },
+  {
+    key: "kickoff",
+    day: 2,
+    label: "Stage 1 — Make It Work",
+    owner: "both",
+    kind: "call",
+    minutes: 60,
+    detail:
+      "We start from what sales already learned: your process mapped and a starting form built. Together we confirm the workflow, refine the form, publish it, submit from a phone and follow the result end to end.",
+    homework: [
+      "Test the form on real jobs",
+      "Send us any missing data — your lists, as spreadsheets",
+      "Tell us who your first users are",
+      "Note anything that slows you down",
+    ],
+    icon: "PhoneCall",
+  },
+  {
+    key: "homework",
+    day: 3,
+    label: "Between Stages 1 and 2 — build from what was learned",
+    owner: "both",
+    kind: "homework",
+    detail:
+      "You test and send what is missing. We update the form, structure your reference data and set up the logic and calculations — so Stage 2 starts prepared, not from a blank page.",
+    icon: "ClipboardCheck",
+  },
+  {
+    key: "working",
+    day: 5,
+    label: "Stage 2 — Make It Work for Them",
+    owner: "both",
+    kind: "call",
+    minutes: 60,
+    detail:
+      "Your reference data, logic, calculations and usability — and one question: after a submission, does anything need to happen next? Email, PDF, approval, Dispatch or an integration: we choose the simplest that does the job.",
+    homework: [
+      "Get your real users testing",
+      "Collect real submissions",
+      "Tell us who in the office runs it day to day",
+    ],
+    icon: "Wrench",
+  },
+  {
+    key: "fieldtest",
+    day: 6,
+    throughDay: 10,
+    label: "Between Stages 2 and 3 — put it into real use",
+    owner: "both",
+    kind: "build",
+    detail:
+      "Your users run it on real jobs. We review the submissions, make the agreed fixes and prepare your outputs, reports and admin setup for Stage 3.",
+    icon: "HardHat",
+  },
+  {
+    key: "adjust",
+    day: 11,
+    label: "Stage 3 — Make It Operational",
+    owner: "both",
+    kind: "call",
+    minutes: 60,
+    detail:
+      "How you run it day to day: submissions, users and roles, keeping your data current, basic form edits, the PDF and automatic delivery, reports and exports, and where to get help — with a named owner for each recurring task.",
+    icon: "Target",
+  },
+  {
+    key: "live",
+    day: 15,
+    label: "Functional — in your users' hands",
+    owner: "both",
+    kind: "milestone",
+    detail:
+      "Logged in on web and mobile, the main workflow submitted, the output delivered, users managed, a form edit republished, your data kept current. Week 4 is held for activation and anything that needs more time.",
+    icon: "Rocket",
+  },
+];
+
+/**
+ * Phase 1 when WE build the form on an existing account: the three training
+ * days, over fifteen business days from the close. (New logos run the
+ * playbook plan below.) The keys are the contract the deck renders.
  *
  * Day 1 is the kickoff call: 25 minutes on the kickoff deck (introductions,
  * their process walked together), then the lay of the land and their own
@@ -109,7 +209,7 @@ export function isTrainingPlan(
  * minutes with their hands on the keyboard; the goal is an admin who can
  * build and fix forms without us by the end of day 3.
  */
-export const NEW_LOGO_PLAN: readonly MilestoneSpec[] = [
+export const BUILD_PLAN: readonly MilestoneSpec[] = [
   {
     key: "close",
     day: 0,
@@ -568,7 +668,7 @@ export function planFor(
   if (isTrainingPlan(path, o.trainingOnly)) return TRAINING_PLAN;
   if (path === "existing") {
     return o.existingBuild === "us"
-      ? NEW_LOGO_PLAN
+      ? BUILD_PLAN
       : o.existingBuild === "customer"
         ? CUSTOMER_BUILD_PLAN
         : EXISTING_PLAN;
@@ -847,6 +947,15 @@ export function businessDaysBetween(
     if (!isWeekend(d) && !skip.has(toIso(d))) n += sign;
   }
   return n;
+}
+
+/**
+ * The end of the 30-day implementation window: Week 4 after the Functional
+ * date, held for activation, catch-up and what needs more time. Moves with
+ * the plan, because it is counted from the live date.
+ */
+export function coreWindowEnd(t: { liveDate: string }, holidays: readonly string[] = []): string {
+  return addBusinessDays(t.liveDate, 5, holidays);
 }
 
 /** The same day, or the next business day if it lands on a weekend or holiday. */
