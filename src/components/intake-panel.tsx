@@ -10,6 +10,7 @@ import {
   addWantedForm,
   chosenFrom,
   COMPANY_SIZES,
+  formsOnly,
   INDUSTRIES,
   isTrainingOnly,
   makeFirstWantedForm,
@@ -989,7 +990,9 @@ function WantedForms({
   onSet: (patch: Record<string, unknown>) => void;
 }) {
   const [name, setName] = useState("");
-  const forms = answers.wanted_forms;
+  // Only real forms: a service an older brief wrote onto this list is shown
+  // where it belongs, on the plan, and the next save here drops it.
+  const forms = formsOnly(answers);
   const services = (answers.timeline.services ?? []) as ServiceSpec[];
   const disabled = !editable || busy;
   const input =

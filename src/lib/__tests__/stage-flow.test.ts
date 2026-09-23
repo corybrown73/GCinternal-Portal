@@ -126,3 +126,40 @@ describe("the new-logo plan", () => {
     expect(t.liveDate).toBe("2026-10-13");
   });
 });
+
+describe("a service is never the first form", () => {
+  it("skips services an older brief wrote onto the forms list, everywhere the first form is named", async () => {
+    const { firstFormName, isServiceName } = await import("../intake-answers");
+    const { deliverablesFor } = await import("../deliverables");
+    const intake = readIntake({
+      path: "existing",
+      wanted_forms: [
+        { id: "syn-1", name: "Salesforce integration — tickets create cases automatically" },
+        { id: "syn-2", name: "Dispatch add-on — office pushes jobs to techs" },
+        { id: "syn-3", name: "Safety Audit form" },
+        { id: "syn-4", name: "Timesheet form" },
+      ],
+      existing: { form_final: false, builder: "us" },
+      timeline: {
+        services: [
+          { id: "sf", kind: "integration", name: "Salesforce integration", phase: 2, tier: 3 },
+          { id: "dp", kind: "integration", name: "Dispatch add-on setup", phase: 2, tier: 3 },
+        ],
+      },
+    });
+    expect(firstFormName(intake)).toBe("Safety Audit form");
+    const t = (await import("../onboarding-plan")).timelineFor(intake, "2026-09-21");
+    const labels = deliverablesFor(intake, t).map((d) => `${d.phase}:${d.label}`);
+    expect(labels).toEqual([
+      "1:Safety Audit form",
+      "1:Timesheet form",
+      "2:Salesforce integration",
+      "2:Dispatch add-on setup",
+    ]);
+    // A form that happens to say dispatch or training is still a form.
+    expect(isServiceName("Dispatch ticket form")).toBe(false);
+    expect(isServiceName("Safety training sign-in sheet")).toBe(false);
+    expect(isServiceName("QuickBooks Online sync")).toBe(true);
+    expect(isServiceName("Analytics dashboard")).toBe(true);
+  });
+});

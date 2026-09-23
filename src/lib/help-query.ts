@@ -5,7 +5,12 @@ import {
   type HelpArticle,
   type HelpPick,
 } from "./help-articles";
-import { existingBuildFor, isTrainingOnly, type IntakeAnswers } from "./intake-answers";
+import {
+  existingBuildFor,
+  firstFormName,
+  isTrainingOnly,
+  type IntakeAnswers,
+} from "./intake-answers";
 
 /**
  * The help-article query: what this customer needs to read, worked out
@@ -234,7 +239,7 @@ export function buildHelpQuery(args: {
     phase1,
     industry: intake.industry ?? null,
     fieldUsers: intake.field_users ?? null,
-    firstForm: intake.wanted_forms[0]?.name ?? intake.uploaded_forms[0]?.name ?? null,
+    firstForm: firstFormName(intake),
     allowedIntegrations,
     features,
     excluded,

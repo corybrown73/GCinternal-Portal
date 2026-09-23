@@ -1,4 +1,4 @@
-import { flowAnswered, readIntake, type IntakeAnswers } from "./intake-answers";
+import { firstFormName, flowAnswered, readIntake, type IntakeAnswers } from "./intake-answers";
 import type { AccountStage } from "./presale-stages";
 import type { Timeline } from "./onboarding-timeline";
 
@@ -320,7 +320,7 @@ function flowSummary(a: IntakeAnswers): string {
           ? "Device Magic conversion"
           : "Field Fusion";
   if (a.path === "field_fusion" || a.training_only) return `${head} · training`;
-  const first = a.wanted_forms[0]?.name ?? a.uploaded_forms[0]?.name ?? null;
+  const first = firstFormName(a);
   return first ? `${head} · ${first}` : head;
 }
 

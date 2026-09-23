@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 
 import { Panel } from "@/components/record";
-import { readIntake, type IntakeAnswers } from "@/lib/intake-answers";
+import { firstFormName, readIntake, type IntakeAnswers } from "@/lib/intake-answers";
 import { buildIcs } from "@/lib/ics";
 import { closeDateFor, extraFormServices, isIntakeForm, timelineFor } from "@/lib/onboarding-plan";
 import {
@@ -256,9 +256,7 @@ export function TimelinePanel({
     : null;
 
   const formName =
-    answers.wanted_forms[0]?.name ??
-    answers.uploaded_forms[0]?.name ??
-    (timeline.path === "existing" ? "Form review" : "First form");
+    firstFormName(answers) ?? (timeline.path === "existing" ? "Form review" : "First form");
   const phaseOneDone = timeline.milestones.filter((m) => m.doneOn).length;
   const tzLabel = (knobs.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone)
     .replace(/^(America|Pacific|Europe)\//, "")

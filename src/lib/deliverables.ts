@@ -1,5 +1,5 @@
 import { markForService, KIND_MARKS, type BrandMark } from "./brand-marks";
-import type { IntakeAnswers } from "./intake-answers";
+import { firstFormName, type IntakeAnswers } from "./intake-answers";
 import type { ServiceKind } from "./onboarding-services";
 import type { Timeline } from "./onboarding-timeline";
 import type { ServiceSpec } from "./onboarding-services";
@@ -46,9 +46,7 @@ export function deliverablesFor(intake: IntakeAnswers, t: Timeline): Deliverable
     ? intake.path === "field_fusion"
       ? "Field Fusion training"
       : "Crew training"
-    : (intake.wanted_forms[0]?.name ??
-      intake.uploaded_forms[0]?.name ??
-      (existing ? "Form review" : "First form"));
+    : (firstFormName(intake) ?? (existing ? "Form review" : "First form"));
   out.push({
     id: "form",
     kind: t.training ? "training" : "form",
@@ -101,7 +99,7 @@ function toolKeyOf(s: { id: string }): string | null {
  * the pipeline board. First form, then every service, deduped by mark.
  */
 export function marksForIntake(intake: IntakeAnswers): BrandMark[] {
-  const hasForm = intake.wanted_forms.length > 0 || intake.uploaded_forms.length > 0;
+  const hasForm = firstFormName(intake) !== null;
   const marks: BrandMark[] = hasForm ? [KIND_MARKS.form] : [];
   for (const s of (intake.timeline.services ?? []) as ServiceSpec[]) {
     marks.push(markForService({ kind: s.kind, name: s.name, tool: s.tool ?? null }));

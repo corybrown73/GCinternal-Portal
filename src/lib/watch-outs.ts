@@ -1,5 +1,5 @@
 import type { BriefJson } from "./server/schemas";
-import type { IntakeAnswers } from "./intake-answers";
+import { firstFormName, type IntakeAnswers } from "./intake-answers";
 import type { Timeline } from "./onboarding-timeline";
 import { shortDay } from "./onboarding-timeline";
 
@@ -109,7 +109,7 @@ export function watchOutsFor(args: {
     (args.intake.timeline.sow_notes ?? []).filter((n) => !IDENTITY.test(n)),
     true,
   );
-  const firstForm = args.intake.wanted_forms[0]?.name ?? null;
+  const firstForm = firstFormName(args.intake);
 
   for (const [i, { s, source }] of callSentences.entries()) {
     const dates = datesIn(s, t.closeDate);

@@ -280,7 +280,7 @@ export function flowAnswered(a: IntakeAnswers): boolean {
   if (a.training_only) return true;
   return a.forms_built === true
     ? a.uploaded_forms.length > 0
-    : a.forms_built === false && a.wanted_forms.length > 0;
+    : a.forms_built === false && formsOnly(a).length > 0;
 }
 
 /**
@@ -345,8 +345,23 @@ const SERVICE_WORDS =
 const SERVICE_SYSTEMS =
   /\b(quickbooks|qbo|salesforce|zapier|workato|sage|netsuite|xero|hubspot|servicetitan|procore|smartsheet|kronos|sharepoint|onedrive|dropbox|power ?bi|tableau)\b/i;
 
+/** Words that make it a service whatever else the name says. */
+const SERVICE_STRONG = /\b(integration|integrate|sync|api|webhook|connector|add-?on)\b/i;
+/** Words that make it a form, when nothing stronger says otherwise. */
+const FORM_WORDS =
+  /\b(form|checklist|inspection|log|sheet|ticket|audit|survey|assessment|work order|timesheet)\b/i;
+
+/**
+ * A service, not a form: "Salesforce integration", "Dispatch add-on",
+ * "Analytics dashboard". A named system or an integration word always
+ * wins; otherwise a form word keeps it a form, so "Dispatch ticket form" and
+ * "Safety training sign-in sheet" are not thrown away for saying dispatch
+ * or training.
+ */
 export function isServiceName(name: string): boolean {
-  return SERVICE_WORDS.test(name) || SERVICE_SYSTEMS.test(name);
+  if (SERVICE_STRONG.test(name) || SERVICE_SYSTEMS.test(name)) return true;
+  if (FORM_WORDS.test(name)) return false;
+  return SERVICE_WORDS.test(name);
 }
 
 /**
@@ -361,6 +376,15 @@ export function formsOnly(a: IntakeAnswers): IntakeAnswers["wanted_forms"] {
     if (isServiceName(f.name)) return false;
     return !services.some((s) => s === n || s.includes(n) || n.includes(s));
   });
+}
+
+/**
+ * The first form, the way every screen names it: the first wanted form that
+ * really is a form, or the first uploaded one. Never a service a brief once
+ * wrote onto the forms list.
+ */
+export function firstFormName(a: IntakeAnswers): string | null {
+  return formsOnly(a)[0]?.name ?? a.uploaded_forms[0]?.name ?? null;
 }
 
 export type WantedForm = IntakeAnswers["wanted_forms"][number];

@@ -1,4 +1,5 @@
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import { firstFormName as firstFormNameOf } from "./intake-answers";
 import { TERM_LABELS } from "./terms";
 import { resolveAccountId, transitionStage, upsertAccount } from "./server/accounts";
 import { accountUpsertSchema } from "./server/schemas";
@@ -2393,7 +2394,7 @@ export function implementationNameFor(
   intake: import("./intake-answers").IntakeAnswers,
   accountName: string,
 ): string {
-  const firstForm = intake.wanted_forms[0]?.name?.trim() || intake.uploaded_forms[0]?.name?.trim();
+  const firstForm = firstFormNameOf(intake)?.trim();
   const services = (intake.timeline.services ?? []).map((s) => s.name.trim()).filter(Boolean);
   if (intake.path === "existing" && services.length) {
     return services.length === 1 ? services[0]! : `${services[0]} + ${services.length - 1} more`;
