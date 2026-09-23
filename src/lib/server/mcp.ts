@@ -63,6 +63,31 @@ export type ToolDefinition = {
  */
 export const TOOLS: ToolDefinition[] = [
   {
+    name: "pipeline_report",
+    title: "Pipeline report",
+    description:
+      "The whole onboarding pipeline in one read: how many deals are in each stage and how many are past the stage's time limit, which deals are stuck or unclaimed and what each is waiting on (the checklist's own next task), which have gone quiet, which closed deals still have no Gong brief, and the time from close to onboarding and to first form live. Use it for 'how is the pipeline', a daily or weekly summary, or 'what needs attention'. Returns Markdown to show as it is, and the same numbers as JSON.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        untouchedAfter: {
+          type: "integer",
+          minimum: 1,
+          maximum: 30,
+          description:
+            "Business days without any activity before a deal counts as untouched. Default 3.",
+        },
+        sinceDays: {
+          type: "integer",
+          minimum: 7,
+          maximum: 365,
+          description: "Only time deals that closed in the last N days. Default: all of them.",
+        },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
     name: "find_deal",
     title: "Find a deal",
     description:
@@ -207,6 +232,7 @@ export const TOOLS: ToolDefinition[] = [
 
 /** The scope each tool needs. Reading transcripts is not writing documents. */
 export const TOOL_SCOPES: Record<string, "handoff:read" | "handoff:write"> = {
+  pipeline_report: "handoff:read",
   find_deal: "handoff:read",
   get_handoff_context: "handoff:read",
   describe_deck_fields: "handoff:read",

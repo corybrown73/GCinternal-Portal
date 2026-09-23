@@ -70,6 +70,7 @@ describe("tools/list", () => {
       "find_deal",
       "generate_kickoff_deck",
       "get_handoff_context",
+      "pipeline_report",
       "update_deal",
     ]);
   });

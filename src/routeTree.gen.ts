@@ -66,6 +66,7 @@ import { Route as TicketsRoutingRouteImport } from "./routes/tickets.routing";
 import { Route as ViewTokenRouteImport } from "./routes/view.$token";
 import { Route as WelcomeTokenRouteImport } from "./routes/welcome.$token";
 import { Route as ApiCompletionRecordTokenRouteImport } from "./routes/api/completion-record.$token";
+import { Route as ApiCronDailyReportRouteImport } from "./routes/api/cron/daily-report";
 import { Route as ApiCronDispatchRouteImport } from "./routes/api/cron/dispatch";
 import { Route as ApiCronJourneysRouteImport } from "./routes/api.cron.journeys";
 import { Route as ApiCronPlanSnapshotsRouteImport } from "./routes/api/cron/plan-snapshots";
@@ -375,6 +376,11 @@ const ApiCompletionRecordTokenRoute = ApiCompletionRecordTokenRouteImport.update
   path: "/api/completion-record/$token",
   getParentRoute: () => rootRouteImport,
 } as any);
+const ApiCronDailyReportRoute = ApiCronDailyReportRouteImport.update({
+  id: "/api/cron/daily-report",
+  path: "/api/cron/daily-report",
+  getParentRoute: () => rootRouteImport,
+} as any);
 const ApiCronDispatchRoute = ApiCronDispatchRouteImport.update({
   id: "/api/cron/dispatch",
   path: "/api/cron/dispatch",
@@ -549,6 +555,7 @@ export interface FileRoutesByFullPath {
   "/technical-solutions/": typeof TechnicalSolutionsIndexRoute;
   "/tickets/": typeof TicketsIndexRoute;
   "/api/completion-record/$token": typeof ApiCompletionRecordTokenRoute;
+  "/api/cron/daily-report": typeof ApiCronDailyReportRoute;
   "/api/cron/dispatch": typeof ApiCronDispatchRoute;
   "/api/cron/journeys": typeof ApiCronJourneysRoute;
   "/api/cron/plan-snapshots": typeof ApiCronPlanSnapshotsRoute;
@@ -625,6 +632,7 @@ export interface FileRoutesByTo {
   "/technical-solutions": typeof TechnicalSolutionsIndexRoute;
   "/tickets": typeof TicketsIndexRoute;
   "/api/completion-record/$token": typeof ApiCompletionRecordTokenRoute;
+  "/api/cron/daily-report": typeof ApiCronDailyReportRoute;
   "/api/cron/dispatch": typeof ApiCronDispatchRoute;
   "/api/cron/journeys": typeof ApiCronJourneysRoute;
   "/api/cron/plan-snapshots": typeof ApiCronPlanSnapshotsRoute;
@@ -708,6 +716,7 @@ export interface FileRoutesById {
   "/technical-solutions/": typeof TechnicalSolutionsIndexRoute;
   "/tickets/": typeof TicketsIndexRoute;
   "/api/completion-record/$token": typeof ApiCompletionRecordTokenRoute;
+  "/api/cron/daily-report": typeof ApiCronDailyReportRoute;
   "/api/cron/dispatch": typeof ApiCronDispatchRoute;
   "/api/cron/journeys": typeof ApiCronJourneysRoute;
   "/api/cron/plan-snapshots": typeof ApiCronPlanSnapshotsRoute;
@@ -792,6 +801,7 @@ export interface FileRouteTypes {
     | "/technical-solutions/"
     | "/tickets/"
     | "/api/completion-record/$token"
+    | "/api/cron/daily-report"
     | "/api/cron/dispatch"
     | "/api/cron/journeys"
     | "/api/cron/plan-snapshots"
@@ -868,6 +878,7 @@ export interface FileRouteTypes {
     | "/technical-solutions"
     | "/tickets"
     | "/api/completion-record/$token"
+    | "/api/cron/daily-report"
     | "/api/cron/dispatch"
     | "/api/cron/journeys"
     | "/api/cron/plan-snapshots"
@@ -950,6 +961,7 @@ export interface FileRouteTypes {
     | "/technical-solutions/"
     | "/tickets/"
     | "/api/completion-record/$token"
+    | "/api/cron/daily-report"
     | "/api/cron/dispatch"
     | "/api/cron/journeys"
     | "/api/cron/plan-snapshots"
@@ -1008,6 +1020,7 @@ export interface RootRouteChildren {
   ViewTokenRoute: typeof ViewTokenRoute;
   WelcomeTokenRoute: typeof WelcomeTokenRoute;
   ApiCompletionRecordTokenRoute: typeof ApiCompletionRecordTokenRoute;
+  ApiCronDailyReportRoute: typeof ApiCronDailyReportRoute;
   ApiCronDispatchRoute: typeof ApiCronDispatchRoute;
   ApiCronJourneysRoute: typeof ApiCronJourneysRoute;
   ApiCronPlanSnapshotsRoute: typeof ApiCronPlanSnapshotsRoute;
@@ -1431,6 +1444,13 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof ApiCompletionRecordTokenRouteImport;
       parentRoute: typeof rootRouteImport;
     };
+    "/api/cron/daily-report": {
+      id: "/api/cron/daily-report";
+      path: "/api/cron/daily-report";
+      fullPath: "/api/cron/daily-report";
+      preLoaderRoute: typeof ApiCronDailyReportRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
     "/api/cron/dispatch": {
       id: "/api/cron/dispatch";
       path: "/api/cron/dispatch";
@@ -1762,6 +1782,7 @@ const rootRouteChildren: RootRouteChildren = {
   ViewTokenRoute: ViewTokenRoute,
   WelcomeTokenRoute: WelcomeTokenRoute,
   ApiCompletionRecordTokenRoute: ApiCompletionRecordTokenRoute,
+  ApiCronDailyReportRoute: ApiCronDailyReportRoute,
   ApiCronDispatchRoute: ApiCronDispatchRoute,
   ApiCronJourneysRoute: ApiCronJourneysRoute,
   ApiCronPlanSnapshotsRoute: ApiCronPlanSnapshotsRoute,

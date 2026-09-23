@@ -67,6 +67,8 @@ async function dispatch(request: Request, message: any): Promise<unknown | null>
         capabilities: { tools: { listChanged: false } },
         serverInfo: SERVER_INFO,
         instructions:
+          "pipeline_report for the state of the whole onboarding pipeline — stages, stuck and " +
+          "untouched deals, Gong briefs, time to onboarding. " +
           "Use this to turn a pre-sale deal into the client kickoff deck. find_deal to get an id, " +
           "get_handoff_context to read the call notes and SOW verbatim, describe_deck_fields to see " +
           "what the template accepts, then generate_kickoff_deck to render it into the account. " +
@@ -179,6 +181,19 @@ async function runTool(name: string, args: Record<string, unknown>): Promise<str
         null,
         2,
       );
+
+    case "pipeline_report": {
+      const n = (v: unknown) => (typeof v === "number" && Number.isInteger(v) ? v : undefined);
+      const untouchedAfter = n(args["untouchedAfter"]);
+      const sinceDays = n(args["sinceDays"]);
+      const { loadPipelineReport } = await import("../pipeline-report.server");
+      const { reportMarkdown } = await import("../pipeline-report");
+      const report = await loadPipelineReport({
+        ...(untouchedAfter ? { untouchedAfter } : {}),
+        ...(sinceDays ? { sinceDays } : {}),
+      });
+      return `${reportMarkdown(report)}\n\n---\n\n${JSON.stringify(report, null, 2)}`;
+    }
 
     case "find_deal": {
       const query = String(args["query"] ?? "").trim();
