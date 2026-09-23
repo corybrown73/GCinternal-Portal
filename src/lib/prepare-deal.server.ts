@@ -53,12 +53,18 @@ export async function prepareDeal(
   try {
     const { generateDealBrief } = await import("./presale.server");
     const { proposePlanFromSow } = await import("./sow-plan.server");
+    // No notes yet (the SOW came first): read the SOW now, the calls when
+    // they arrive — their upload starts another reading.
+    const { count: notes } = await db()
+      .from("portal_gong_reports")
+      .select("id", { count: "exact", head: true })
+      .eq("account_id", dealId);
     const [brief, sow] = await Promise.allSettled([
-      generateDealBrief(userId, dealId),
+      (notes ?? 0) > 0 ? generateDealBrief(userId, dealId) : Promise.resolve(null),
       before.sow_document_path ? proposePlanFromSow(userId, dealId) : Promise.resolve(null),
     ]);
 
-    if (brief.status === "fulfilled") {
+    if (brief.status === "fulfilled" && brief.value) {
       if (brief.value.generator !== "llm") {
         problems.push(
           brief.value.error ??
@@ -66,7 +72,7 @@ export async function prepareDeal(
         );
       }
       filled.push(...brief.value.filled);
-    } else {
+    } else if (brief.status === "rejected") {
       problems.push(`The brief did not finish: ${errText(brief.reason)}`);
     }
 
