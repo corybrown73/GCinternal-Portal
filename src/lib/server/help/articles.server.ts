@@ -206,11 +206,11 @@ export async function pickHelpArticles(args: {
     // the calls are here for tone, not for a second reading.
     const said = `${args.notesText}\n\n${briefWords(args.brief)}`.slice(0, 8000);
     const response = await client.messages.create({
-      // Choosing five rows out of a shortlist the query already narrowed
-      // and rule-checked is a selection job: Sonnet does it well, and the
-      // reading that needed Opus already happened in the brief.
-      model: "claude-sonnet-5",
-      max_tokens: 1500,
+      // The articles land on the customer's page under their own words:
+      // the stronger reader, with room to think, picks them.
+      model: "claude-opus-5",
+      max_tokens: 8000,
+      thinking: { type: "adaptive" },
       system: PICK_SYSTEM,
       messages: [
         {

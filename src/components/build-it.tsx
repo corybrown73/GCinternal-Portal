@@ -64,52 +64,36 @@ export function BuildIt({ deal, className }: { deal: DealData; className?: strin
     setSteps(plan);
     const dealId = deal.account.id;
     try {
-      mark("brief", "busy");
-      const r = await synthesize({ data: { dealId } });
-      if (r.generator !== "llm") {
-        throw new Error(
-          "The AI step did not run, so nothing was read from the calls. Check the API key in Vercel, then press Build it again.",
-        );
+      // The first build reuses a brief written after the newest notes — Fill
+      // in the rest has usually just written it. Build it again re-reads.
+      const newestBrief = deal.briefs
+        .filter((x) => x.status === "complete" && x.generator === "llm")
+        .map((x) => x.created_at)
+        .sort()
+        .at(-1);
+      const newestNotes = deal.gong_reports
+        .map((x) => x.created_at)
+        .sort()
+        .at(-1);
+      if (!built && newestBrief && newestNotes && newestBrief >= newestNotes) {
+        mark("brief", "done");
+      } else {
+        mark("brief", "busy");
+        const r = await synthesize({ data: { dealId } });
+        if (r.generator !== "llm") {
+          throw new Error(
+            "The AI step did not run, so nothing was read from the calls. Check the API key in Vercel, then press Build it again.",
+          );
+        }
+        mark("brief", "done");
       }
-      mark("brief", "done");
 
       // The brief filled the intake; read the record again before touching it.
       const fresh = await qc.fetchQuery(dealQuery(dealId));
       const freshIntake = readIntake(fresh?.account.intake);
       if (fresh?.sow_url && !freshIntake.timeline.sow_applied_at) {
         mark("sow", "busy");
-        const read = await readSow({ data: { dealId } });
-        const wanted = new Set(freshIntake.wanted_forms.map((f) => f.name.trim().toLowerCase()));
-        // Every row the reader is sure of; the uncertain ones wait for a person.
-        const accepted = read.proposal.services.filter(
-          (row: SowPlanRow) =>
-            row.confidence !== "uncertain" &&
-            !(row.kind === "paid_form" && wanted.has(row.name.trim().toLowerCase())),
-        );
-        const makeId = (row: SowPlanRow) =>
-          `${row.kind.slice(0, 4)}-${Math.random().toString(36).slice(2, 8)}`;
-        await save({
-          data: {
-            dealId,
-            patch: {
-              timeline: {
-                ...freshIntake.timeline,
-                services: mergeProposal(
-                  normalizeServices(
-                    (freshIntake.timeline.services ?? []) as ServiceSpec[],
-                    freshIntake.timeline,
-                  ),
-                  accepted,
-                  makeId,
-                ),
-                integration_tier: 0,
-                integration_target: null,
-                sow_applied_at: new Date().toISOString(),
-                sow_notes: read.proposal.notes.map((n: string) => n.slice(0, 300)).slice(0, 20),
-              },
-            },
-          } as never,
-        });
+        await applySowRead(dealId, freshIntake, readSow, save);
         mark("sow", "done");
       } else {
         mark("sow", "skip");
@@ -241,4 +225,49 @@ export function BuildIt({ deal, className }: { deal: DealData; className?: strin
       ) : null}
     </div>
   );
+}
+
+/**
+ * Read the signed SOW and put every row it is sure of on the plan. The
+ * uncertain rows wait for a person on the plan panel; a paid form the
+ * intake already names is not added twice. Shared by Build it and Fill in
+ * the rest.
+ */
+export async function applySowRead(
+  dealId: string,
+  intake: ReturnType<typeof readIntake>,
+  readSow: (a: { data: { dealId: string } }) => Promise<{
+    proposal: { services: SowPlanRow[]; notes: string[] };
+  }>,
+  save: (a: { data: never }) => Promise<unknown>,
+): Promise<number> {
+  const read = await readSow({ data: { dealId } });
+  const wanted = new Set(intake.wanted_forms.map((f) => f.name.trim().toLowerCase()));
+  const accepted = read.proposal.services.filter(
+    (row: SowPlanRow) =>
+      row.confidence !== "uncertain" &&
+      !(row.kind === "paid_form" && wanted.has(row.name.trim().toLowerCase())),
+  );
+  const makeId = (row: SowPlanRow) =>
+    `${row.kind.slice(0, 4)}-${Math.random().toString(36).slice(2, 8)}`;
+  await save({
+    data: {
+      dealId,
+      patch: {
+        timeline: {
+          ...intake.timeline,
+          services: mergeProposal(
+            normalizeServices((intake.timeline.services ?? []) as ServiceSpec[], intake.timeline),
+            accepted,
+            makeId,
+          ),
+          integration_tier: 0,
+          integration_target: null,
+          sow_applied_at: new Date().toISOString(),
+          sow_notes: read.proposal.notes.map((n: string) => n.slice(0, 300)).slice(0, 20),
+        },
+      },
+    } as never,
+  });
+  return accepted.length;
 }

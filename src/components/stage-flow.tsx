@@ -6,6 +6,7 @@ import { ArrowRight, Check, Copy, Lock, UserRoundCheck } from "lucide-react";
 
 import { BuildIt } from "@/components/build-it";
 import { FieldFusionGate } from "@/components/field-fusion-gate";
+import { FillFromSources } from "@/components/fill-from-sources";
 import { FactsStep, FlowStep, NotesIn, SowStep } from "@/components/intake-panel";
 import { assignDealFn, claimDealFn, getDealAssignment } from "@/lib/assignment.functions";
 import { canEditDeal, canManage, useProfile } from "@/lib/auth";
@@ -142,6 +143,21 @@ export function StageFlow({ deal }: { deal: DealData }) {
           {stageFooter(shown, flow.current)}
         </p>
       </div>
+      {/* After a new Gong brief or a re-uploaded SOW: one press refreshes
+          everything the AI filled, from any stage. Hidden while the flow
+          task is open, which carries the same button. */}
+      {editable &&
+      deal.gong_reports.length > 0 &&
+      shown !== "complete" &&
+      openTask?.action !== "flow" ? (
+        <div className="flex flex-wrap items-start gap-x-3 gap-y-1 border-b border-border px-4 py-2">
+          <FillFromSources deal={deal} compact />
+          <p className="pt-1 text-[11px] text-muted-foreground">
+            New Gong brief or SOW? This refreshes the flow, the forms, the process and the plan.
+            Your own answers stay.
+          </p>
+        </div>
+      ) : null}
       {moved ? (
         <p className="border-b border-border bg-status-ontrack/40 px-4 py-1.5 text-[12px] text-status-ontrack-foreground">
           <Check className="mr-1 inline h-3.5 w-3.5" strokeWidth={3} />
@@ -343,6 +359,7 @@ function TaskBody({
     case "flow":
       return (
         <div className="space-y-2">
+          {editable ? <FillFromSources deal={deal} /> : null}
           <FlowStep deal={deal} editable={editable} />
           <details className="rounded-sm border border-border px-2.5 py-1.5">
             <summary className="cursor-pointer text-[12px] font-medium">

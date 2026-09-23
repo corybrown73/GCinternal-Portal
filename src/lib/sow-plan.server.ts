@@ -118,9 +118,10 @@ export async function proposePlanFromSow(
     try {
       const response = await client.messages.create({
         model: MODEL,
-        // The proposal is a small object: twenty rows and a few facts. The
-        // old ceiling was twice what the longest reading has ever produced.
-        max_tokens: 8000,
+        // A SOW is where a service gets mistaken for a form or a phase gets
+        // wrong: room to reason through it is worth the tokens.
+        max_tokens: 16000,
+        thinking: { type: "adaptive" },
         system: SYSTEM_PROMPT,
         messages: [{ role: "user", content }],
       });

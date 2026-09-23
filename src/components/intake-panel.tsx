@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { ArrowUp, Check, ExternalLink, ListPlus, Upload, X } from "lucide-react";
 
+import { AiSource } from "@/components/fill-from-sources";
 import { TemplateCard } from "@/components/template-card";
 import { suggestFormTemplatesFn } from "@/lib/form-templates.functions";
 import type { DealData } from "@/lib/deal-query";
@@ -187,6 +188,7 @@ export function FactsStep({ deal, editable }: { deal: DealData; editable: boolea
           Who are they? Industry, size, people in the field, the process today.
         </p>
         <NoForms answers={answers} editable={editable} busy={busy} onSet={set} />
+        <AiSource answers={answers} field="current_process" />
       </div>
       <SaveError error={error} />
     </div>
@@ -227,6 +229,7 @@ export function FlowStep({ deal, editable }: { deal: DealData; editable: boolean
           </Choice>
         ))}
       </div>
+      <AiSource answers={answers} field="path" />
       {answers.path_suggested && answers.path !== answers.path_suggested ? (
         <p className="mt-1.5 text-[11px] text-amber-700 dark:text-amber-400">
           The notes suggest {PATH_LABEL[answers.path_suggested]} —{" "}
@@ -303,6 +306,7 @@ export function FlowStep({ deal, editable }: { deal: DealData; editable: boolean
           {!training && answers.forms_built !== null ? (
             <div className="mt-2">
               <WantedForms answers={answers} editable={editable} busy={busy} onSet={set} />
+              <AiSource answers={answers} field="wanted_forms" />
               <p className="mt-1 text-[11px] text-muted-foreground">
                 Up to three forms in phase 1: the first is built live on the kickoff call, the next
                 two alongside it. A fourth waits for phase 2.

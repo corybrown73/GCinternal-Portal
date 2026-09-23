@@ -1028,7 +1028,7 @@ export async function generateDealBrief(
         .map((r) => r.content_md)
         .join("\n\n");
       const result = prefillFromSynthesis(current, brief.structured_json, notesText);
-      if (result.filled.length) {
+      if (Object.keys(result.patch).length) {
         const next = intakeAnswersSchema.parse({
           ...current,
           ...result.patch,
@@ -1979,6 +1979,11 @@ export async function saveDealIntake(
     if (patch[block] && typeof patch[block] === "object") {
       merged[block] = { ...current[block], ...(patch[block] as Record<string, unknown>) };
     }
+  }
+  // A person's answer is theirs: the AI reading stops refreshing it.
+  {
+    const { claimByPerson } = await import("./intake-answers");
+    Object.assign(merged, claimByPerson(current, Object.keys(patch)));
   }
   // The pre-kickoff ticks, the same way: one at a time, null to untick.
   if (patch["handoff_tasks"] && typeof patch["handoff_tasks"] === "object") {

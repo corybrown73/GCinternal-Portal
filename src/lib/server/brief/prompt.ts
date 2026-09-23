@@ -32,7 +32,15 @@ The \`expansion\` object is for a customer who ALREADY runs GoCanvas and has bou
 - time_saved: only what THEY said. "Two days a month" if they said two days a month. Never your own estimate.
 - data_flows: what has to move and which way, one line each, e.g. what "Approved job", direction "GoCanvas -> QuickBooks Online".
 - environment_notes: anything said about their instance — edition, version, hosting, add-ons — that would change how this is built.
-- blockers: what this cannot start without, if the notes name any.`;
+- blockers: what this cannot start without, if the notes name any.
+
+The \`onboarding\` object fills the onboarding intake on the deal, so nobody retypes it. The signed SOW may be attached as a PDF alongside the calls: read both, and where they disagree about what was bought, the SOW wins.
+- flow: "new_logo" for a first GoCanvas rollout; "existing" for a customer who already runs GoCanvas and bought more (usually an integration or services); "dm_conversion" for a customer moving off Device Magic; "field_fusion" when the product is Field Fusion (or its FFIQ setup). Null when neither source makes it clear. flow_evidence: the words that decide it.
+- training_only: true only when they need training and no form built; false when a form is to be built; null when unclear.
+- solutions_involved: true when the SOW or the calls include integrations or paid services beyond the core product; false when the SOW is core only; null when unknown.
+- forms: the FORMS to build in GoCanvas, most important first — the first is the one built on the kickoff call. A form is something a person fills in on a phone or tablet: an inspection, a work order, a timesheet, a safety audit, a service ticket. NEVER list an integration, a sync, a connector, a dispatch add-on, a dashboard, analytics, reporting, training, a PDF design service or any other paid service as a form, even when the SOW lists it as a deliverable — those are services, and the plan reads them from the SOW separately. Name each form the way the customer does, short (under 60 characters, no description after a dash). Up to 8. Empty when no form is named.
+- current_process.summary: how the work is done today, two or three sentences, in their words where possible.
+- Every quote is copied word for word from its source, under 200 characters. source is "SOW" or the title of the call notes it came from. If you cannot quote it, leave it out: a blank a person fills beats a guess the customer reads.`;
 
 export function buildBriefUserPrompt(
   account: Account,
@@ -59,3 +67,7 @@ export function buildBriefUserPrompt(
   }
   return parts.join("\n\n---\n\n");
 }
+
+/** Said up front when the SOW travels with the calls, so the model reads it as the source of what was sold. */
+export const SOW_ATTACHED_NOTE =
+  "The signed Statement of Work is attached above as a PDF. It is the record of what was bought; the calls are the record of how they work and what they said.";

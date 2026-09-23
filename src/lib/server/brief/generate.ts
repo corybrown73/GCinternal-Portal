@@ -179,6 +179,21 @@ async function loadHandoffContext(
   };
 }
 
+/** The signed SOW's bytes, when one is on file and small enough to read. Never throws. */
+async function sowBytes(admin: SupabaseClient, account: Account): Promise<Uint8Array | null> {
+  const path = (account as any).sow_document_path as string | null | undefined;
+  if (!path) return null;
+  try {
+    const { data, error } = await admin.storage.from("attachments").download(path);
+    if (error || !data) return null;
+    const bytes = new Uint8Array(await data.arrayBuffer());
+    return bytes.byteLength > 0 && bytes.byteLength <= 8_000_000 ? bytes : null;
+  } catch (e) {
+    console.error("[brief] could not read the SOW; the brief reads the calls alone", e);
+    return null;
+  }
+}
+
 /** The deal contact, if their recorded role marks them as the technical one. */
 function itContactFor(account: Account): { name: string; role: string } | null {
   const name = ((account as any).primary_contact_name as string | null)?.trim();
@@ -313,12 +328,26 @@ export async function generateBrief(accountId: string, createdBy: string): Promi
     const { generateBriefWithLLM, llmAvailable } = await import("./llm");
     const { describeLlmError } = await import("./llm-error");
     if (llmAvailable()) {
+      // The SOW is read WITH the calls, so what was sold and how they work
+      // come out of one reading instead of two that disagree.
+      const sowPdf = await sowBytes(admin, account);
       try {
-        json = await generateBriefWithLLM(account, reports, notes ?? []);
+        json = await generateBriefWithLLM(account, reports, notes ?? [], sowPdf);
         if (json) generator = "llm";
         else llmError = "LLM declined or returned unparseable output; used template";
       } catch (e) {
         llmError = describeLlmError(e);
+      }
+      // Then a second reading checks the onboarding facts against the same
+      // sources, and the code rules run on its answer.
+      if (json) {
+        const { verifyOnboarding } = await import("./verify");
+        const onboarding = await verifyOnboarding({
+          reading: json.onboarding,
+          callsText: reports.map((r: GongReport) => `${r.title}\n${r.content_md}`).join("\n\n"),
+          sowPdf,
+        });
+        json = { ...json, ...(onboarding ? { onboarding } : {}) };
       }
     }
     if (!json) {

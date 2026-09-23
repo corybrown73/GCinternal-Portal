@@ -12,7 +12,9 @@ export default defineConfig({
     viteReact(),
     tailwindcss(),
     // Deploy target: Vercel (Build Output API). `npm run build` emits .vercel/output.
-    nitro({ preset: "vercel" }),
+    // Five minutes: one "Fill in the rest" reads the calls and the SOW,
+    // checks the reading, and picks the help articles — three model calls.
+    nitro({ preset: "vercel", vercel: { functions: { maxDuration: 300 } } }),
   ],
   resolve: {
     // One copy of React/TanStack across app + linked deps.

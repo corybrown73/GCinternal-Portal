@@ -154,6 +154,20 @@ export const intakeAnswersSchema = z.object({
    */
   handoff_tasks: z.record(z.string().max(40), z.string().max(40)).default({}),
   /**
+   * Who owns each answer. The AI reading fills and REFRESHES the fields in
+   * `ai_filled`; a field a person has answered (`person_set`) is never
+   * written by it again. `ai_sources` keeps the words each AI answer came
+   * from, shown beside it. See intake-prefill.ts.
+   */
+  ai_filled: z.array(z.string().max(40)).max(40).default([]),
+  person_set: z.array(z.string().max(40)).max(40).default([]),
+  ai_sources: z
+    .record(
+      z.string().max(40),
+      z.object({ quote: z.string().max(400), source: z.string().max(200) }),
+    )
+    .default({}),
+  /**
    * Text on the welcome page a person rewrote in place, by text key
    * ("team.dana-whitfield.does"). The page, the customer's link, the PDF and
    * the PowerPoint all read it; a missing key means the page's own words.
@@ -298,6 +312,40 @@ export function existingBuildFor(
 }
 
 export const EMPTY_INTAKE: IntakeAnswers = intakeAnswersSchema.parse({});
+
+/** The answers the AI reading may fill, and a person may take over. */
+export const AI_OWNED_FIELDS = [
+  "path",
+  "training_only",
+  "forms_built",
+  "wanted_forms",
+  "current_process",
+  "solutions_involved",
+  "industry",
+  "company_size",
+  "field_users",
+] as const;
+export type AiOwnedField = (typeof AI_OWNED_FIELDS)[number];
+
+/**
+ * A person answered some of these: they are theirs from now on. The AI
+ * stops refreshing them and their quoted source goes, because the answer
+ * is no longer the model's.
+ */
+export function claimByPerson(
+  current: Pick<IntakeAnswers, "ai_filled" | "person_set" | "ai_sources">,
+  patchKeys: readonly string[],
+): Pick<IntakeAnswers, "ai_filled" | "person_set" | "ai_sources"> {
+  const touched = AI_OWNED_FIELDS.filter((f) => patchKeys.includes(f));
+  if (!touched.length) return current;
+  const sources = { ...current.ai_sources };
+  for (const f of touched) delete sources[f];
+  return {
+    ai_filled: current.ai_filled.filter((f) => !(touched as readonly string[]).includes(f)),
+    person_set: [...new Set([...current.person_set, ...touched])],
+    ai_sources: sources,
+  };
+}
 
 /** Whatever is in the column, as a well-formed object. Never throws. */
 export function readIntake(raw: unknown): IntakeAnswers {

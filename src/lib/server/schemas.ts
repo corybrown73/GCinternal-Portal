@@ -146,5 +146,38 @@ export const briefJsonSchema = z4.object({
     /** Open questions this integration cannot start without. */
     blockers: z4.array(z4.string()),
   }),
+  /**
+   * The onboarding intake, read out of the calls AND the signed SOW together,
+   * every fact with the words it came from. This is what fills the flow, the
+   * forms and the process on the deal, so nobody retypes them.
+   *
+   * Optional so briefs written before it existed still read.
+   */
+  onboarding: z4
+    .object({
+      /** Which kind of onboarding this is. Null when neither source says. */
+      flow: z4.enum(["new_logo", "existing", "dm_conversion", "field_fusion"]).nullable(),
+      flow_evidence: z4.object({ quote: z4.string(), source: z4.string() }).nullable(),
+      /** True when they need training only — no form to build. */
+      training_only: z4.boolean().nullable(),
+      /** True when integrations or other services were bought. */
+      solutions_involved: z4.boolean().nullable(),
+      /**
+       * The FORMS to build, first form first — never an integration, a
+       * dispatch add-on, a dashboard or any other service.
+       */
+      forms: z4.array(
+        z4.object({
+          name: z4.string(),
+          quote: z4.string(),
+          source: z4.string(),
+        }),
+      ),
+      /** How the work is done today, two or three sentences. */
+      current_process: z4
+        .object({ summary: z4.string(), quote: z4.string(), source: z4.string() })
+        .nullable(),
+    })
+    .optional(),
 });
 export type BriefJson = z4.infer<typeof briefJsonSchema>;
