@@ -77,8 +77,8 @@ describe("timelineFor", () => {
       },
     });
     const t = timelineFor(intake, "2026-09-09");
-    // The holiday pushes the kickoff to Friday; the override still wins for the working session.
-    expect(t.milestones.find((m) => m.key === "kickoff")!.date).toBe("2026-09-11");
+    // The holiday pushes the kickoff to Monday; the override still wins for the working session.
+    expect(t.milestones.find((m) => m.key === "kickoff")!.date).toBe("2026-09-14");
     expect(t.milestones.find((m) => m.key === "working")!.date).toBe("2026-09-16");
     expect(t.integration.target).toBe("Dropbox");
     expect(t.integration.weeks).toBe(2);

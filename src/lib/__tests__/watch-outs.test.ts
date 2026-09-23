@@ -4,9 +4,9 @@ import { readIntake } from "../intake-answers";
 import { timelineFor } from "../onboarding-plan";
 import { datesIn, watchOutsFor } from "../watch-outs";
 
-// Close Mon 21 Sep 2026: the form is live 30 Sep; a phase-2 custom PDF
-// (6 weeks, so phase 2 runs to 12 Nov) and a Kronos integration (tier 3)
-// run from the first of October.
+// Close Mon 21 Sep 2026: the form is live Fri 9 Oct (day 14); a phase-2
+// custom PDF (6 weeks, so phase 2 runs to 23 Nov) and a Kronos integration
+// (tier 3) run from the day after.
 const intake = readIntake({
   path: "new_logo",
   wanted_forms: [{ id: "f1", name: "Storm Damage Assessment" }],
@@ -66,7 +66,7 @@ describe("watchOutsFor", () => {
     expect(
       titles.some((t) =>
         t.startsWith(
-          "conflict: The calls name Sat, Nov 7; the plan has everything live Tue, Nov 17",
+          "conflict: The calls name Sat, Nov 7; the plan has everything live Mon, Nov 23",
         ),
       ),
     ).toBe(true);
@@ -102,7 +102,7 @@ describe("watchOutsFor", () => {
   it("reads the SOW's named dates against the plan, met or missed", () => {
     const sda = rows.find((r) => r.source === "sow" && r.title.includes("Oct 9"));
     expect(sda?.severity).toBe("ok");
-    expect(sda?.title).toContain("Storm Damage Assessment live Mon, Oct 5");
+    expect(sda?.title).toContain("Storm Damage Assessment live Fri, Oct 9");
     const kronos = rows.find((r) => r.source === "sow" && r.title.includes("Nov 13"));
     expect(kronos?.severity).toBe("ok");
   });

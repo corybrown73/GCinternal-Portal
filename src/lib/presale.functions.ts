@@ -497,6 +497,8 @@ export const saveIntake = createServerFn({ method: "POST" })
             chosen_templates: z.array(z.string().uuid()).optional(),
             welcome_hidden_screens: z.array(z.string().max(40)).max(20).optional(),
             welcome_shared_at: z.string().nullable().optional(),
+            // One tick at a time, merged on the server; null unticks.
+            handoff_tasks: z.record(z.string().max(40), z.string().max(40).nullable()).optional(),
             welcome_text: z.record(z.string().max(80), z.string().max(1200)).optional(),
             help_picks: z
               .array(

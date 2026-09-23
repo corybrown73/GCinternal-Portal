@@ -89,7 +89,7 @@ describe("deliverables", () => {
       [2, "Phase 2", "upcoming", ["QuickBooks Online", "Invoice PDF"]],
     ]);
     expect(phases[1]!.gate).toMatch(/form/i);
-    expect(phases[0]!.when).toBe("Sep 9 → Sep 23");
+    expect(phases[0]!.when).toBe("Sep 9 → Sep 29");
   });
 
   it("gives a card the marks alone, deduped", () => {

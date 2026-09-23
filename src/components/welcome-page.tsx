@@ -371,7 +371,7 @@ function screenList(view: WelcomeView): Screen[] {
           : "The two weeks"
         : t.phases.length || t.alongside.length
           ? "Phase 1 · the form"
-          : "The two weeks",
+          : "The first form",
       render: (a) => <Plan key="plan" view={view} page={a.page} />,
     },
     ...t.phases.map((ph): Screen => ({
@@ -1463,8 +1463,8 @@ function Plan({ view, page }: { view: WelcomeView; page: number }) {
               ? "Phase 1: your build,"
               : "Phase 1: your form,"
             : t.phases.length
-              ? "Phase 1: two weeks to a"
-              : "Two weeks to a"
+              ? "Phase 1: three training days to a"
+              : "Three training days to a"
       }
       accent={
         t.training
@@ -1482,9 +1482,9 @@ function Plan({ view, page }: { view: WelcomeView; page: number }) {
             ? t.existingBuild === "customer"
               ? "A kickoff that splits the work, your build with a date, a check-in, real jobs through it, and a freeze. Two weeks, and every step below has an owner."
               : t.existingBuild === "us"
-                ? "Two build calls with you driving, a little to do between them, one crew on real jobs. Every step below has an owner."
+                ? "Three sixty-minute training calls with you driving, real jobs between them. Every step below has an owner."
                 : `A review call, a short optimisation session, a few real jobs through it. ${["", "One", "Two", "Three", "Four", "Five", "Six", "Seven"][days] ?? days} business days, and every day below has an owner.`
-            : "Two build calls with you driving, a little to do between them, one crew on real jobs. We teach and build together. Every step below has an owner."
+            : "Three sixty-minute training calls with you driving, a week of real jobs between them. We teach and build together, and by day 3 you build forms without us. Every step below has an owner."
       }
       band={
         t.training

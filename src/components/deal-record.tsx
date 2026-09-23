@@ -17,10 +17,9 @@ import { CustomerLogo } from "@/components/customer-logo";
 import { Field, NoRows, Panel } from "@/components/record";
 import { EditableField } from "@/components/editable-field";
 import { OwnerField } from "@/components/assignment-panel";
-import { FieldFusionGate } from "@/components/field-fusion-gate";
 import { HelpPicksPanel } from "@/components/help-articles-panel";
 import { DealGuide } from "@/components/deal-guide";
-import { BuildIt, ThreeClicks } from "@/components/build-it";
+import { StageFlow } from "@/components/stage-flow";
 import { PlanSection } from "@/components/plan-section";
 import { DeliverablesStrip } from "@/components/deliverables-strip";
 import { deliverablePhases } from "@/lib/deliverables";
@@ -31,7 +30,6 @@ import { guideSteps } from "@/lib/deal-guide";
 import { readIntake } from "@/lib/intake-answers";
 import { closeDateFor, timelineFor } from "@/lib/onboarding-plan";
 import { dayCounter, localIso } from "@/lib/onboarding-timeline";
-import { IntakePanel } from "@/components/intake-panel";
 import { openPlanSection } from "@/components/timeline-panel";
 import { openPanel } from "@/lib/panel-open";
 import type { Deliverable } from "@/lib/deliverables";
@@ -283,27 +281,16 @@ export function DealRecord({ deal, embedded = false }: { deal: DealData; embedde
   };
   const [today, setToday] = useState<string | null>(null);
   useEffect(() => setToday(localIso()), []);
-  const [briefResult, setBriefResult] = useState<{
-    tone: "ok" | "warn" | "error";
-    text: string;
-  } | null>(null);
   const counter = today ? dayCounter(dayTimeline, today) : null;
   const onPlan = isAtOrPast(deal.stages, account.stage, wonStage(deal.stages).key);
 
   return (
     <>
       {embedded ? (
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="min-w-0 flex-1 space-y-3">
-            <FieldFusionGate deal={deal} editable={editable} />
-            <ThreeClicks deal={deal} />
-            <IntakePanel deal={deal} editable={editable} highlight={nextPanel === "panel-intake"} />
-            <BuildIt deal={deal} />
-          </div>
-          <div className="flex flex-wrap items-center justify-end gap-2">
-            <BriefActions deal={deal} onResult={setBriefResult} />
-            <StartOnboarding deal={deal} />
-          </div>
+        // The checklist sits in the customer page's header, above every tab;
+        // this tab is the record behind it.
+        <div className="flex justify-end">
+          <StartOnboarding deal={deal} />
         </div>
       ) : (
         <PageHeader
@@ -325,39 +312,11 @@ export function DealRecord({ deal, embedded = false }: { deal: DealData; embedde
           // The deal page is long and dense; a header that re-states the summary
           // over every scroll clipped the record beneath it.
           sticky={false}
-          actions={
-            <div className="flex flex-wrap items-center gap-2">
-              <BriefActions deal={deal} onResult={setBriefResult} />
-              <StartOnboarding deal={deal} />
-            </div>
-          }
+          actions={<StartOnboarding deal={deal} />}
         />
       )}
       <PageBody className={cn("space-y-4", embedded && "px-0 py-0")}>
-        {embedded ? null : (
-          <div className="space-y-3">
-            <FieldFusionGate deal={deal} editable={editable} />
-            <ThreeClicks deal={deal} />
-            <IntakePanel deal={deal} editable={editable} highlight={nextPanel === "panel-intake"} />
-            <div className="rounded-md border border-border bg-card px-3 py-2.5">
-              <BuildIt deal={deal} />
-            </div>
-          </div>
-        )}
-        {briefResult ? (
-          <p
-            className={cn(
-              "rounded-md border px-3 py-2 text-[12px]",
-              briefResult.tone === "ok" &&
-                "border-emerald-500/30 bg-emerald-500/10 text-emerald-800 dark:text-emerald-300",
-              briefResult.tone === "warn" &&
-                "border-amber-500/40 bg-amber-500/10 text-amber-800 dark:text-amber-300",
-              briefResult.tone === "error" && "border-destructive/40 text-destructive",
-            )}
-          >
-            {briefResult.text}
-          </p>
-        ) : null}
+        {embedded ? null : <StageFlow deal={deal} />}
         {deliverables.length ? (
           <div className="rounded-md border border-border bg-card px-4 py-3">
             <p className="mb-2.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
@@ -559,89 +518,6 @@ export function DealRecord({ deal, embedded = false }: { deal: DealData; embedde
         </Panel>
       </PageBody>
     </>
-  );
-}
-
-/* ---------- Generate customer brief: one button, lit when it can do its job ---------- */
-
-/**
- * The synthesis lives in the header now, next to Start onboarding, instead
- * of a section of its own. It stays quiet until the deal has what it reads
- * — a call note and a chosen path — then turns primary. The result lands as
- * one line under the guide, not a panel.
- */
-function BriefActions({
-  deal,
-  onResult,
-}: {
-  deal: DealData;
-  onResult: (r: { tone: "ok" | "warn" | "error"; text: string }) => void;
-}) {
-  const synthesize = useServerFn(generateBriefForDeal);
-  const queryClient = useQueryClient();
-  const intake = readIntake(deal.account.intake);
-  const missing: string[] = [];
-  if (deal.gong_reports.length === 0) missing.push("a Gong brief or call note");
-  if (intake.path === null) missing.push("the path");
-  const ready = missing.length === 0;
-
-  const synthesis = useMutation({
-    mutationFn: () => synthesize({ data: { dealId: deal.account.id } }),
-    onSuccess: (r) => {
-      void queryClient.invalidateQueries({ queryKey: ["deal", deal.account.id] });
-      void queryClient.invalidateQueries({ queryKey: ["welcome", deal.account.id] });
-      if (r.generator !== "llm") {
-        onResult({
-          tone: "warn",
-          text:
-            r.error ??
-            "AI synthesis is not set up on this deployment, so a template brief was written instead.",
-        });
-      } else if (r.status !== "complete") {
-        onResult({ tone: "error", text: r.error ?? "The synthesis did not complete." });
-      } else if (r.filled.length) {
-        onResult({
-          tone: "ok",
-          text: `Brief generated, and the intake filled in from it: ${r.filled.join(", ")}. Your answers always win.`,
-        });
-      } else {
-        onResult({
-          tone: "ok",
-          text: "Brief generated. The intake already had its answers; the welcome page reads the brief wherever a field is blank.",
-        });
-      }
-    },
-    onError: (e) => onResult({ tone: "error", text: (e as Error).message }),
-  });
-
-  return (
-    <span id="brief-actions" className="inline-flex items-center gap-2">
-      <button
-        type="button"
-        className={cn(ready ? primaryButtonClass : buttonClass, !ready && "opacity-70")}
-        disabled={synthesis.isPending || !ready}
-        onClick={() => synthesis.mutate()}
-        title={
-          ready
-            ? "Read the call notes and write the customer brief with AI; fills the intake's blanks"
-            : `Needs ${missing.join(" and ")} first`
-        }
-      >
-        {synthesis.isPending ? (
-          <Working label="Generating the brief…" estimateSeconds={60} />
-        ) : (
-          "Generate customer brief"
-        )}
-      </button>
-      <Link
-        to="/onboarding-plan/$dealId"
-        params={{ dealId: deal.account.id }}
-        className={buttonClass}
-        title="The customer-facing page: present it, print it, send it"
-      >
-        Open the welcome page
-      </Link>
-    </span>
   );
 }
 

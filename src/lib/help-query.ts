@@ -377,7 +377,7 @@ export function fallbackPicks(query: HelpQuery, candidates: Candidate[], max = 5
 /** The query, as the model reads it. */
 export function describeQuery(q: HelpQuery): string {
   const lines = [
-    `Flow: ${q.flow}. Phase 1 is ${q.phase1 === "training" ? "GoCanvas training (three sessions: build a form; reference data, calculations and a PDF; where the data goes)" : q.phase1 === "review" ? "a review of a form that is already final, then the integration" : q.phase1 === "customer_build" ? "the customer building the form, then the integration" : "the collaborative form build in two weeks"}.`,
+    `Flow: ${q.flow}. Phase 1 is ${q.phase1 === "training" ? "GoCanvas training (three sessions: build a form; reference data, calculations and a PDF; where the data goes)" : q.phase1 === "review" ? "a review of a form that is already final, then the integration" : q.phase1 === "customer_build" ? "the customer building the form, then the integration" : "the collaborative form build over three training days (build a form; reference data, logic and calculations; the back office)"}.`,
     q.industry ? `Industry: ${q.industry}.` : null,
     q.fieldUsers ? `People in the field: ${q.fieldUsers}.` : null,
     q.firstForm ? `First form: ${q.firstForm}.` : null,

@@ -1,18 +1,17 @@
 /**
- * The first seven days, as dates.
+ * Phase 1, as dates.
  *
- * THE RULE THIS ENCODES. A customer should have a working form in the field
- * within seven days of closing, and the first call should be the next
- * business day. Not "within a few weeks" — the older way of onboarding let
- * accounts stall waiting on a form, and the accounts that stalled were the
- * ones that churned. We drive the pace: the plan has dates before anyone
- * asks for them.
+ * THE RULE THIS ENCODES. A new customer has their first form live within
+ * fourteen business days of closing, trained over three sixty-minute calls
+ * with real jobs between them. We drive the pace: the plan has dates before
+ * anyone asks for them, and the kickoff is booked in the first days, not
+ * "when they are ready" — the accounts that stalled were the ones that
+ * churned.
  *
- * TEACH THEM TO FISH. The plan is two short working sessions with homework
- * between, because a customer who built their own form comes back with the
- * second use case, and a customer who was handed a form comes back with a
- * support ticket. Every step below is owned by somebody — us, them, or both
- * — and the "both" steps are where the value is.
+ * TEACH THEM TO FISH. Every call is hands on their keyboard, on their real
+ * form, with their real data; by the end of day 3 their admin builds and
+ * fixes forms without us. Every step below is owned by somebody — us, them,
+ * or both — and the "both" steps are where the value is.
  *
  * INTEGRATIONS ARE PHASE 2, always, and PHASE 2 IS GATED. The form is the
  * star: field mapping cannot be right until a crew has run the form on real
@@ -63,7 +62,7 @@ export type MilestoneSpec = {
 /**
  * Two paths, one shape.
  *
- * A NEW LOGO builds its first form in seven days. An EXISTING ACCOUNT that
+ * A NEW LOGO builds its first form in fourteen business days. An EXISTING ACCOUNT that
  * bought services already runs forms — phase 1 there is a review: the form
  * the integration reads from, optimised for it. Sometimes that means a new
  * form, sometimes a few fields, sometimes nothing. Same keys, same gates,
@@ -100,11 +99,15 @@ export function isTrainingPlan(
 }
 
 /**
- * Phase 1 for a new logo: the initial form build, together, in two weeks.
- * The keys are the contract the deck renders. The first form is built live
- * on the kickoff call with the customer driving — the build is the training
- * — one crew runs it on real jobs, and it is live by business day ten. Up to
- * two more forms run alongside it in phase 1 (see onboarding-plan.ts).
+ * Phase 1 for a new logo: the three training days, over fourteen business
+ * days from the close. The keys are the contract the deck renders.
+ *
+ * Day 1 is the kickoff call: 25 minutes on the kickoff deck (introductions,
+ * their process walked together), then the lay of the land and their own
+ * form, published. Day 2 builds it properly on their real data. A week of
+ * real jobs follows, then day 3 runs the back office. Every call is sixty
+ * minutes with their hands on the keyboard; the goal is an admin who can
+ * build and fix forms without us by the end of day 3.
  */
 export const NEW_LOGO_PLAN: readonly MilestoneSpec[] = [
   {
@@ -113,75 +116,78 @@ export const NEW_LOGO_PLAN: readonly MilestoneSpec[] = [
     label: "Deal closes",
     owner: "gocanvas",
     kind: "milestone",
-    detail: "Welcome email the same day, with the kickoff invite already in it.",
+    detail: "We reply to your account executive's email the same day and book the kickoff.",
     icon: "Flag",
   },
   {
     key: "kickoff",
-    day: 1,
-    label: "Kickoff & build call — you drive, we guide",
+    day: 2,
+    label: "Training day 1 — kickoff and your first form",
     owner: "both",
     kind: "call",
     minutes: 60,
     detail:
-      "Meet the team, agree how we'll work, and build the first form live on the call — your hands on the keyboard, from the starting point we chose together. The build is the training.",
+      "Introductions and your process, walked together. Then the lay of the land — screens, fields, field types — your form on screen, published by you, and one submission landing.",
     homework: [
-      "Download the GoCanvas app and log in",
-      "Add one field user who will test on a real job",
-      "Send us the customer or site list to load",
+      "Run the form on two real jobs",
+      "Send us your client or parts list as a spreadsheet",
+      "Add one field user who will test on real jobs",
     ],
     icon: "PhoneCall",
   },
   {
     key: "homework",
-    day: 2,
+    day: 3,
     label: "Your part before the next call",
     owner: "client",
     kind: "homework",
     detail:
-      "The three things above. Fifteen minutes, and the second build call starts from a live account instead of a blank one.",
+      "The three things above. Day 2 starts from two real submissions and your real list, not a blank account.",
     icon: "ClipboardCheck",
   },
   {
     key: "working",
     day: 5,
-    label: "Build call 2 — finish it together",
+    label: "Training day 2 — build it properly",
     owner: "both",
     kind: "call",
-    minutes: 30,
+    minutes: 60,
     detail:
-      "Thirty minutes, hands on the keyboard together. Finish the form, add the logic and the notifications, and you make the last changes — not us.",
-    homework: ["Hand the form to your field tester", "Run it on real jobs for a few days"],
+      "Reference data, dropdowns, conditional logic, calculations, workflow and dispatch — on your real data. You leave with the form as it will actually be used.",
+    homework: ["One crew runs it on real jobs", "Write down what slows them down"],
     icon: "Wrench",
   },
   {
     key: "fieldtest",
     day: 6,
-    throughDay: 8,
-    label: "Field test",
+    throughDay: 10,
+    label: "A week of real jobs",
     owner: "client",
     kind: "build",
     detail:
-      "One crew, real jobs. We watch the submissions come in and fix what the field tells us.",
+      "One crew, real jobs. We watch the submissions come in; what slows the crew down is the first thing day 3 fixes.",
     icon: "HardHat",
   },
   {
     key: "adjust",
-    day: 9,
-    label: "Adjust from the field",
+    day: 11,
+    label: "Training day 3 — run the back office",
     owner: "both",
-    kind: "build",
-    detail: "The changes the crew asked for, made together. Usually three, rarely more.",
+    kind: "call",
+    minutes: 60,
+    detail:
+      "Edit submissions, automatic emails, the PDF the office receives, exports and reports, users and departments. Then the changes the crew asked for, made by you.",
+    homework: ["Build your second form on your own — we review it"],
     icon: "Target",
   },
   {
     key: "live",
-    day: 10,
-    label: "Live — first value",
+    day: 14,
+    label: "First form live",
     owner: "both",
     kind: "milestone",
     detail:
-      "The form is in the field and the office is seeing the work as it happens. Two weeks from the close.",
+      "The form is in the field, the office works from the data, and your admin builds the next one without us.",
     icon: "Rocket",
   },
 ];
@@ -372,18 +378,18 @@ export const DM_CONVERSION_PLAN: readonly MilestoneSpec[] = [
     label: "Welcome aboard",
     owner: "gocanvas",
     kind: "milestone",
-    detail: "Welcome email the same day, with the kickoff invite already in it.",
+    detail: "We reply to your account executive's email the same day and book the kickoff.",
     icon: "Flag",
   },
   {
     key: "kickoff",
-    day: 1,
-    label: "Conversion kickoff & first form",
+    day: 2,
+    label: "Training day 1 — kickoff and your first form",
     owner: "both",
     kind: "call",
     minutes: 60,
     detail:
-      "Walk your Device Magic forms together, pick the one the crew uses most, and rebuild it in GoCanvas live on the call — field for field, then better.",
+      "Introductions, and your Device Magic forms walked together. Pick the one the crew uses most and put it on screen in GoCanvas — field for field, then better — published by you.",
     homework: [
       "Send us your Device Magic forms list, or a screenshot of each form",
       "Send one recent submission from the first form, as the office receives it",
@@ -393,34 +399,33 @@ export const DM_CONVERSION_PLAN: readonly MilestoneSpec[] = [
   },
   {
     key: "homework",
-    day: 2,
+    day: 3,
     label: "Your part before the next call",
     owner: "client",
     kind: "homework",
-    detail:
-      "The three things above. Fifteen minutes, and the working session starts from your real form and your real output.",
+    detail: "The three things above. Day 2 starts from your real form and your real output.",
     icon: "ClipboardCheck",
   },
   {
     key: "working",
     day: 5,
-    label: "Working session",
+    label: "Training day 2 — build it properly",
     owner: "both",
     kind: "call",
-    minutes: 30,
+    minutes: 60,
     detail:
-      "Thirty minutes, hands on the keyboard together. Finish the form, match the output the office expects, and you make the last changes — not us.",
+      "Reference data, dropdowns, logic and calculations, matched to the output the office expects. You make the changes, not us.",
     homework: [
       "Hand the GoCanvas form to your field tester",
-      "Run it alongside Device Magic on real jobs for a few days",
+      "Run it alongside Device Magic on real jobs for a week",
     ],
     icon: "Wrench",
   },
   {
     key: "fieldtest",
     day: 6,
-    throughDay: 8,
-    label: "Field test, alongside Device Magic",
+    throughDay: 10,
+    label: "A week alongside Device Magic",
     owner: "client",
     kind: "build",
     detail:
@@ -429,16 +434,18 @@ export const DM_CONVERSION_PLAN: readonly MilestoneSpec[] = [
   },
   {
     key: "adjust",
-    day: 9,
-    label: "Last adjustments",
+    day: 11,
+    label: "Training day 3 — run the back office",
     owner: "both",
-    kind: "build",
-    detail: "What the real jobs showed. Usually a field or two, rarely more.",
+    kind: "call",
+    minutes: 60,
+    detail:
+      "Edit submissions, automatic emails, the PDF, exports and reports, users and departments — and the changes the real jobs asked for.",
     icon: "Target",
   },
   {
     key: "live",
-    day: 10,
+    day: 14,
     label: "First form live — Device Magic retires for it",
     owner: "both",
     kind: "milestone",

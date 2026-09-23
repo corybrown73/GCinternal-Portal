@@ -27,24 +27,24 @@ describe("outcomesFor", () => {
       formProvenOn: "2026-09-18",
       completed: {
         close: "2026-09-09",
-        kickoff: "2026-09-10",
-        homework: "2026-09-11",
-        working: "2026-09-14",
-        fieldtest: "2026-09-15",
-        adjust: "2026-09-22",
-        live: "2026-09-25", // two business days late
-        "pdf:kickoff": "2026-09-24",
-        "pdf:build": "2026-09-28",
-        "pdf:review": "2026-09-30",
-        "pdf:live": "2026-10-01",
+        kickoff: "2026-09-11",
+        homework: "2026-09-14",
+        working: "2026-09-16",
+        fieldtest: "2026-09-23",
+        adjust: "2026-09-24",
+        live: "2026-10-01", // two business days late
+        "pdf:kickoff": "2026-09-30",
+        "pdf:build": "2026-10-02",
+        "pdf:review": "2026-10-06",
+        "pdf:live": "2026-10-07",
       },
     });
     const rows = outcomesFor(
       { dealId: "d", account: "Maverick", timeline: t, services },
-      "2026-10-21",
+      "2026-10-28",
     );
     const form = rows.find((r) => r.kind === "phase1")!;
-    expect(form).toMatchObject({ plannedDays: 10, actualDays: 12, slipDays: 2, status: "done" });
+    expect(form).toMatchObject({ plannedDays: 14, actualDays: 16, slipDays: 2, status: "done" });
     const pdf = rows.find((r) => r.tool === "name:invoice pdf")!;
     expect(pdf.status).toBe("done");
     expect(pdf.slipDays).toBe(0);
@@ -58,12 +58,12 @@ describe("outcomesFor", () => {
   it("rolls up by tool and by kind, with on-time share and the step that slips most", () => {
     const late = buildTimeline({
       closeDate: "2026-09-09",
-      completed: { adjust: "2026-09-21", live: "2026-09-25" },
+      completed: { adjust: "2026-09-24", live: "2026-10-01" },
     });
-    const onTime = buildTimeline({ closeDate: "2026-09-09", completed: { live: "2026-09-23" } });
+    const onTime = buildTimeline({ closeDate: "2026-09-09", completed: { live: "2026-09-29" } });
     const rows = [
-      ...outcomesFor({ dealId: "a", account: "A", timeline: late, services: [] }, "2026-10-01"),
-      ...outcomesFor({ dealId: "b", account: "B", timeline: onTime, services: [] }, "2026-10-01"),
+      ...outcomesFor({ dealId: "a", account: "A", timeline: late, services: [] }, "2026-10-02"),
+      ...outcomesFor({ dealId: "b", account: "B", timeline: onTime, services: [] }, "2026-10-02"),
     ];
     const [r] = rollup(rows, byKind);
     expect(r).toMatchObject({
@@ -71,11 +71,11 @@ describe("outcomesFor", () => {
       count: 2,
       done: 2,
       onTimePct: 50,
-      avgPlannedDays: 10,
+      avgPlannedDays: 14,
     });
     expect(r!.avgSlipDays).toBe(1);
-    expect(r!.worstStep?.label).toBe("Live — first value");
-    expect(rollup(rows, byTool)[0]!.label).toBe("First form (two weeks)");
-    expect(stepSlips(rows)[0]).toMatchObject({ label: "Live — first value", avgSlipDays: 1 });
+    expect(r!.worstStep?.label).toBe("First form live");
+    expect(rollup(rows, byTool)[0]!.label).toBe("First form (14 business days)");
+    expect(stepSlips(rows)[0]).toMatchObject({ label: "First form live", avgSlipDays: 1 });
   });
 });

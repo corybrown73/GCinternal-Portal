@@ -13,7 +13,8 @@ import { PastImplementations } from "@/components/past-implementations";
 import { DealRecord } from "@/components/deal-record";
 import { dealQuery } from "@/lib/deal-query";
 import { useQuery } from "@tanstack/react-query";
-import { AddServicesButton, OnboardingPulse } from "@/components/onboarding-pulse";
+import { AddServicesButton } from "@/components/onboarding-pulse";
+import { DealStageFlow } from "@/components/stage-flow";
 import { HealthNote } from "@/components/health-note";
 import { PlanPanel } from "@/components/plan-panel";
 import { HandoffPanel } from "@/components/handoff-panel";
@@ -407,8 +408,13 @@ function Customer360Page() {
             date, its own stages and its own pace. Each lane is that project's
             board at a glance and deep-links to it through `?impl=`. With a
             single project this collapses to just that project's rail. */}
+        {/* The deal's stages as one checklist: only the stage it is in, only
+            the next task open. It replaced the pulse strip, whose "next"
+            came from an older list and disagreed with this one. */}
         {impl.deal_id ? (
-          <OnboardingPulse dealId={impl.deal_id} customerId={customerId} implId={impl.id} />
+          <div className="px-6 pt-2.5">
+            <DealStageFlow dealId={impl.deal_id} />
+          </div>
         ) : null}
 
         <div className="min-w-0 px-6 pt-2.5">

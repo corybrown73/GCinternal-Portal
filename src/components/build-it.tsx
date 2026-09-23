@@ -6,7 +6,7 @@ import { ArrowRight, Check, Sparkles } from "lucide-react";
 
 import { Working } from "@/components/working";
 import { dealQuery, type DealData } from "@/lib/deal-query";
-import { flowAnswered, intakeStatus, readIntake } from "@/lib/intake-answers";
+import { flowAnswered, readIntake } from "@/lib/intake-answers";
 import { generateBriefForDeal, saveIntake } from "@/lib/presale.functions";
 import { proposePlanFromSowFn } from "@/lib/sow-plan.functions";
 import { mergeProposal, type SowPlanRow } from "@/lib/sow-plan";
@@ -41,7 +41,10 @@ export function BuildIt({ deal, className }: { deal: DealData; className?: strin
 
   const intake = readIntake(deal.account.intake);
   const hasNotes = deal.gong_reports.length > 0;
-  const questionsAnswered = intakeStatus(intake).done && flowAnswered(intake);
+  // The flow is the one answer the build cannot guess. The facts are filled
+  // by the brief this very button writes, so waiting on them was backwards;
+  // whatever the calls did not say comes back as the blanks list below.
+  const questionsAnswered = flowAnswered(intake);
   const built =
     deal.briefs.some((b) => b.status === "complete" && b.generator === "llm") &&
     Boolean((deal.account as { welcome_share_url?: string | null }).welcome_share_url);
@@ -143,7 +146,7 @@ export function BuildIt({ deal, className }: { deal: DealData; className?: strin
             !hasNotes
               ? "Paste the call notes first"
               : !questionsAnswered
-                ? "Answer the questions above first: which kind of account, and their forms"
+                ? "Confirm the onboarding flow first"
                 : "Read the calls, write the brief, read the SOW, build the plan, make the customer's link"
           }
           className={cn(
@@ -233,51 +236,9 @@ export function BuildIt({ deal, className }: { deal: DealData; className?: strin
         </p>
       ) : hasNotes && !questionsAnswered && !steps ? (
         <p className="text-[12px] text-muted-foreground">
-          Answer the questions above, then press Build it.
+          Confirm the onboarding flow, then press Build it.
         </p>
       ) : null}
     </div>
-  );
-}
-
-/** The three clicks, as a strip: where this account is on the way to a deck. */
-export function ThreeClicks({ deal }: { deal: DealData }) {
-  const hasNotes = deal.gong_reports.length > 0;
-  const hasBrief = deal.briefs.some((b) => b.status === "complete" && b.generator === "llm");
-  const hasLink = Boolean(
-    (deal.account as { welcome_share_url?: string | null }).welcome_share_url,
-  );
-  const intake = readIntake(deal.account.intake);
-  // The same three rules the panel uses, so the strip and the panel cannot
-  // disagree about which step is next.
-  const paperDone = Boolean(deal.sow_url) || (intake.has_sow === false && Boolean(intake.contract));
-  const facts = intakeStatus(intake).done;
-  const flow = intake.path !== null && flowAnswered(intake);
-  const items = [
-    { n: 1, label: "Notes in", done: hasNotes && paperDone },
-    { n: 2, label: "Confirm the facts", done: facts },
-    { n: 3, label: "Pick the flow", done: flow },
-    { n: 4, label: "Open the deck", done: hasLink },
-  ];
-  return (
-    <ol className="flex flex-wrap items-center gap-1 text-[12px]">
-      {items.map((it, i) => (
-        <li key={it.n} className="flex items-center gap-1">
-          <span
-            className={cn(
-              "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5",
-              it.done
-                ? "border-status-ontrack-foreground/40 bg-status-ontrack/60 text-status-ontrack-foreground"
-                : "border-border text-muted-foreground",
-            )}
-          >
-            <span className="font-mono text-[10px]">{it.n}</span>
-            {it.label}
-            {it.done ? <Check className="h-3 w-3" strokeWidth={3} /> : null}
-          </span>
-          {i < items.length - 1 ? <ArrowRight className="h-3 w-3 text-muted-foreground" /> : null}
-        </li>
-      ))}
-    </ol>
   );
 }

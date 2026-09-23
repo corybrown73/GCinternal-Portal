@@ -149,6 +149,11 @@ export const intakeAnswersSchema = z.object({
   /** When a person copied the customer's link to send it. Set by that click only. */
   welcome_shared_at: z.string().nullable().default(null),
   /**
+   * The pre-kickoff tasks that live nowhere else, by key ("reply_ae",
+   * "cadence") → ISO timestamp they were ticked. See stage-flow.ts.
+   */
+  handoff_tasks: z.record(z.string().max(40), z.string().max(40)).default({}),
+  /**
    * Text on the welcome page a person rewrote in place, by text key
    * ("team.dana-whitfield.does"). The page, the customer's link, the PDF and
    * the PowerPoint all read it; a missing key means the page's own words.

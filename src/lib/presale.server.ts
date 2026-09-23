@@ -1554,20 +1554,15 @@ export async function startOnboardingAs(
     if (linkError) throw new Error(`Could not link the deal: ${linkError.message}`);
   }
 
-  // (c) move the deal one stage on (only forward, never backward). Which stage
-  // that is comes from the configuration: the first stage after the won stage
-  // that an account can actually be in. If there is none — the won stage is
-  // last, or everything after it is declared but not yet an account stage — the
-  // deal stays where it is rather than attempting a transition the enum would
-  // reject.
-  // A Field Fusion deal goes to its setup wait instead: the product is
-  // confirmed working before implementation sees it.
+  // (c) the stage. Starting onboarding creates the customer's page and the
+  // project; it does NOT move the deal. A closed deal stays in Closed Won
+  // until its own checklist moves it — assigned, the recording and the SOW
+  // in, the welcome brief generated (see stage-flow.ts). The one exception
+  // is Field Fusion, whose setup gate is its own stage.
   const isFieldFusion =
     (await import("./intake-answers")).readIntake((account as { intake?: unknown }).intake).path ===
     "field_fusion";
-  const next = isFieldFusion
-    ? (findStage(pipeline, FIELD_FUSION_STAGE) ?? stageAfterWon(pipeline))
-    : stageAfterWon(pipeline);
+  const next = isFieldFusion ? findStage(pipeline, FIELD_FUSION_STAGE) : null;
   if (account.stage === won.key && next) {
     await transitionStage(
       dealId,
@@ -1984,6 +1979,15 @@ export async function saveDealIntake(
       merged[block] = { ...current[block], ...(patch[block] as Record<string, unknown>) };
     }
   }
+  // The pre-kickoff ticks, the same way: one at a time, null to untick.
+  if (patch["handoff_tasks"] && typeof patch["handoff_tasks"] === "object") {
+    const tasks: Record<string, string> = { ...current.handoff_tasks };
+    for (const [k, v] of Object.entries(patch["handoff_tasks"] as Record<string, unknown>)) {
+      if (typeof v === "string" && v) tasks[k] = v;
+      else delete tasks[k];
+    }
+    merged["handoff_tasks"] = tasks;
+  }
   const next = intakeAnswersSchema.parse({
     ...current,
     ...merged,
@@ -2009,6 +2013,14 @@ export async function saveDealIntake(
   {
     const { syncJourneyStage } = await import("./journey-sync.server");
     await syncJourneyStage(dealId, userId);
+  }
+  // And the deal's own stage follows its checklist: a booked kickoff moves
+  // it to Onboarding without anybody touching the stage picker.
+  try {
+    const { syncDealStage } = await import("./stage-flow.server");
+    await syncDealStage(dealId, userId);
+  } catch (e) {
+    console.error("[stage flow] could not sync the deal's stage", e);
   }
 
   // The flow was set to Field Fusion on a deal that has already closed —

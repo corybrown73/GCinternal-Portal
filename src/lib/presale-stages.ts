@@ -13,8 +13,8 @@ export const STAGE_LABELS: Record<AccountStage, string> = {
   prospect: "Prospect",
   closed_won: "Closed Won",
   field_fusion_setup: "Field Fusion setup",
-  onboarding_kickoff: "Onboarding Kickoff",
-  in_onboarding: "In Onboarding",
+  onboarding_kickoff: "Pre-kickoff",
+  in_onboarding: "Onboarding",
   onboarding_complete: "Onboarding Complete",
 };
 

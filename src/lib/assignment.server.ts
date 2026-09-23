@@ -190,7 +190,7 @@ async function dealFacts(dealId: string) {
   };
 }
 
-async function implementationForDeal(dealId: string, customerId: string | null) {
+export async function implementationForDeal(dealId: string, customerId: string | null) {
   const byDeal = await db()
     .from("implementations")
     .select("id")
@@ -452,7 +452,7 @@ async function notifyAssignee(a: {
         <p style="color:#556477;font-size:13px">${
           a.training
             ? "The first training call is the next business day. Three thirty-minute calls over two weeks, and the crew is live."
-            : "Kickoff is the next business day. The first form is live within two weeks — built with them, not for them."
+            : "Reply to the AE's email today and book the kickoff. Three sixty-minute training days, and the first form is live within fourteen business days — built with them, not for them."
         }</p>
         <p style="font-size:12px;color:#888">GoCanvas Handoff Hub</p>
       </div>`,
