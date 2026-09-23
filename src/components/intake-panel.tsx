@@ -438,14 +438,17 @@ export function NotesIn({ deal, editable }: { deal: DealData; editable: boolean 
   const [title, setTitle] = useState("");
   const [callDate, setCallDate] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [dragging, setDragging] = useState(false);
   const add = useMutation({
-    mutationFn: () =>
+    // A file saves as it is dropped: its name is the title, its text the notes.
+    mutationFn: (file?: { name: string; text: string }) =>
       create({
         data: {
           dealId: deal.account.id,
-          title: title.trim() || `Call notes${callDate ? ` — ${callDate}` : ""}`,
+          title: file ? file.name : title.trim() || `Call notes${callDate ? ` — ${callDate}` : ""}`,
           reportType: "call_notes",
-          contentMd: content.trim(),
+          contentMd: (file ? file.text : content).trim(),
           callDate: callDate || null,
         },
       }),
@@ -470,6 +473,27 @@ export function NotesIn({ deal, editable }: { deal: DealData; editable: boolean 
     },
     onError: (e) => setError((e as Error).message),
   });
+  // The Gong brief comes out of Gong as a Markdown file; a text export works
+  // the same way. Read in the browser, saved as the notes — no PDF parsing.
+  const readFile = async (f: File | undefined) => {
+    if (!f) return;
+    setError(null);
+    if (!/\.(md|markdown|txt)$/i.test(f.name) && !/^text\//.test(f.type)) {
+      setError("A Markdown (.md) or text (.txt) file, please.");
+      return;
+    }
+    if (f.size > 2_000_000) {
+      setError("That file is over 2 MB. Paste the part that matters instead.");
+      return;
+    }
+    const text = await f.text();
+    if (!text.trim()) {
+      setError("That file is empty.");
+      return;
+    }
+    add.mutate({ name: f.name.replace(/\.(md|markdown|txt)$/i, ""), text });
+  };
+
   return (
     <div>
       {deal.gong_reports.length ? (
@@ -486,11 +510,24 @@ export function NotesIn({ deal, editable }: { deal: DealData; editable: boolean 
       {editable ? (
         <div className="space-y-1.5">
           <textarea
-            className="min-h-[88px] w-full rounded-sm border border-border bg-background px-2 py-1.5 text-[12px]"
+            className={cn(
+              "min-h-[88px] w-full rounded-sm border border-border bg-background px-2 py-1.5 text-[12px]",
+              dragging && "border-primary bg-primary/5",
+            )}
+            onDragOver={(e) => {
+              e.preventDefault();
+              setDragging(true);
+            }}
+            onDragLeave={() => setDragging(false)}
+            onDrop={(e) => {
+              e.preventDefault();
+              setDragging(false);
+              void readFile(e.dataTransfer.files?.[0]);
+            }}
             placeholder={
               deal.gong_reports.length
-                ? "Another call? Paste it here."
-                : "Paste the Gong transcript or the call notes here."
+                ? "Another call? Paste it here, or drop the Gong brief (.md) on this box."
+                : "Paste the Gong transcript or call notes here — or drop the Gong brief (.md) on this box."
             }
             value={content}
             disabled={add.isPending}
@@ -519,6 +556,26 @@ export function NotesIn({ deal, editable }: { deal: DealData; editable: boolean 
               onClick={() => add.mutate()}
             >
               {add.isPending ? "Saving…" : "Add the notes"}
+            </button>
+            <span className="text-[11px] text-muted-foreground">or</span>
+            <input
+              ref={fileRef}
+              type="file"
+              accept=".md,.markdown,.txt,text/markdown,text/plain"
+              className="hidden"
+              onChange={(e) => {
+                void readFile(e.target.files?.[0]);
+                e.target.value = "";
+              }}
+            />
+            <button
+              type="button"
+              className="inline-flex h-7 items-center gap-1 rounded-sm border border-border px-2.5 text-[12px] hover:bg-muted disabled:opacity-50"
+              disabled={add.isPending}
+              onClick={() => fileRef.current?.click()}
+            >
+              <Upload className="h-3 w-3" />
+              Upload the Gong brief (.md)
             </button>
           </div>
         </div>
