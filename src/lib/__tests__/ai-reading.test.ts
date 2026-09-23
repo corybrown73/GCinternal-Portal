@@ -127,4 +127,21 @@ describe("filling from the reading", () => {
     expect(next.person_set).toEqual(["path"]);
     expect(next.ai_sources).toEqual({});
   });
+
+  it("treats what an older reading wrote as the AI's, so the first refresh replaces it", () => {
+    const old = readIntake({
+      wanted_forms: [
+        { id: "syn-1", name: "Salesforce integration — tickets create cases automatically" },
+        { id: "syn-2", name: "Timesheet form" },
+      ],
+      current_process: "Old paraphrase",
+      current_process_source: "ai",
+    });
+    const { patch } = prefillFromSynthesis(old, {
+      ...brief,
+      onboarding: groundOnboarding(reading, calls),
+    });
+    expect(patch.wanted_forms?.[0]?.name).toBe("Service Ticket");
+    expect(patch.current_process).toMatch(/retypes them/);
+  });
 });

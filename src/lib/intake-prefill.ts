@@ -34,6 +34,18 @@ export function prefillFromSynthesis(
   const ob = b.onboarding ?? null;
 
   const aiFilled = new Set(intake.ai_filled);
+  // Written by the reading before ownership was tracked: the forms it made
+  // carry "syn-" ids, the process it wrote is marked "ai". Still the AI's.
+  if (
+    intake.wanted_forms.length &&
+    intake.wanted_forms.every((f) => f.id.startsWith("syn-")) &&
+    !intake.person_set.includes("wanted_forms")
+  ) {
+    aiFilled.add("wanted_forms");
+  }
+  if (intake.current_process_source === "ai" && !intake.person_set.includes("current_process")) {
+    aiFilled.add("current_process");
+  }
   const sources: IntakeAnswers["ai_sources"] = { ...intake.ai_sources };
   const blank: Record<AiOwnedField, boolean> = {
     path: intake.path === null,
