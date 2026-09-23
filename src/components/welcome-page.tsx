@@ -1104,7 +1104,9 @@ function Cover({ view, qr }: { view: WelcomeView; qr?: { url: string; dataUrl: s
                 ? `Welcome back as of ${shortDay(t.closeDate)}. Form review ${shortDay(t.milestones[1]?.date ?? t.closeDate)}. Your form ready for the integration by ${shortDay(t.liveDate)} — optimised with you, not for you.`
                 : t.training
                   ? `Welcome aboard as of ${shortDay(t.closeDate)}. First training call ${shortDay(t.milestones[1]?.date ?? t.closeDate)}. Three short calls over two weeks, and your crew is live by ${shortDay(t.liveDate)} — trained on your jobs, not ours.`
-                  : `Welcome aboard as of ${shortDay(t.closeDate)}. Kickoff ${shortDay(t.milestones[1]?.date ?? t.closeDate)}. Your first form in the field by ${shortDay(t.liveDate)} — built with you, not for you.`}
+                  : view.path === "new_logo"
+                    ? `Welcome aboard as of ${shortDay(t.closeDate)}. Three core meetings, starting ${shortDay(t.milestones[1]?.date ?? t.closeDate)}. Functional by ${shortDay(t.liveDate)}, with Week 4 held for anything that needs more time — built with you, not for you.`
+                    : `Welcome aboard as of ${shortDay(t.closeDate)}. Kickoff ${shortDay(t.milestones[1]?.date ?? t.closeDate)}. Your first form in the field by ${shortDay(t.liveDate)} — built with you, not for you.`}
             </T>
           </p>
           <div className="wp-pills">
@@ -1192,7 +1194,9 @@ function Team({ view, page }: { view: WelcomeView; page: number }) {
           ? "Runs all three calls, trains the crew on real jobs, watches the first submissions."
           : view.path === "existing"
             ? "Runs both calls, reviews the form with you, watches the first real submissions through."
-            : "Runs all three training calls, builds the first form with you, watches the first submissions."),
+            : view.path === "new_logo"
+              ? "Runs the three core meetings, prepares the work between them, and makes sure you are functional — not just trained."
+              : "Runs all three training calls, builds the first form with you, watches the first submissions."),
       icon: "Wrench",
       side: "gocanvas",
       photoUrl: t.leadCard?.photoUrl ?? null,
@@ -1433,6 +1437,7 @@ function Overview({ view, page }: { view: WelcomeView; page: number }) {
         ))}
       </div>
       {!kickoff?.doneOn ? <BeforeKickoff view={view} /> : null}
+      {view.path === "new_logo" ? <WhatYouReceive /> : null}
       {view.parkingLot?.length ? <ParkingLotCard items={view.parkingLot} /> : null}
     </Frame>
   );
@@ -1480,6 +1485,36 @@ function BeforeKickoff({ view }: { view: WelcomeView }) {
           {`Reply to ${view.team.lead ? `${view.team.lead}'s` : "your onboarding lead's"} email with these. The kickoff starts from your real work, not a blank account.`}
         </T>
       </p>
+    </div>
+  );
+}
+
+/**
+ * What the implementation is, beyond three calls: the preparation, the
+ * artifacts and the follow-up. The playbook's "make the value visible".
+ */
+function WhatYouReceive() {
+  const items = [
+    "Three core working sessions, all booked at the start",
+    "Preparation and configuration before and between every session",
+    "Your process mapped, start to finish",
+    "Your reference data structured the way your forms use it",
+    "A shared parking lot, so nothing raised is lost",
+    "The Functional checklist: what you can run without us",
+    "Follow-up sessions whenever there is a reason for one",
+  ];
+  return (
+    <div className="wp-card" style={{ marginTop: 16, padding: "14px 18px" }}>
+      <p className="wp-ov-name" style={{ margin: 0 }}>
+        <T k="receive.title">What you receive</T>
+      </p>
+      <ul style={{ margin: "8px 0 0", paddingLeft: 18, lineHeight: 1.7, fontSize: 14 }}>
+        {items.map((a, i) => (
+          <li key={i}>
+            <T k={`receive.${i}`}>{a}</T>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
@@ -1546,9 +1581,13 @@ function Plan({ view, page }: { view: WelcomeView; page: number }) {
             ? t.existingBuild === "customer"
               ? "Phase 1: your build,"
               : "Phase 1: your form,"
-            : t.phases.length
-              ? "Phase 1: three training days to a"
-              : "Three training days to a"
+            : view.path === "new_logo"
+              ? t.phases.length
+                ? "Phase 1: three core meetings to a"
+                : "Three core meetings to a"
+              : t.phases.length
+                ? "Phase 1: three training days to a"
+                : "Three training days to a"
       }
       accent={
         t.training
@@ -1568,7 +1607,9 @@ function Plan({ view, page }: { view: WelcomeView; page: number }) {
               : t.existingBuild === "us"
                 ? "Three sixty-minute training calls with you driving, real jobs between them. Every step below has an owner."
                 : `A review call, a short optimisation session, a few real jobs through it. ${["", "One", "Two", "Three", "Four", "Five", "Six", "Seven"][days] ?? days} business days, and every day below has an owner.`
-            : "Three sixty-minute training calls with you driving, a week of real jobs between them. We teach and build together, and by day 3 you build forms without us. Every step below has an owner."
+            : view.path === "new_logo"
+              ? "Make It Work, Make It Work for Them, Make It Operational: three sixty-minute meetings, all booked up front, with the work between them prepared on both sides. Functional in about three weeks, and Week 4 held for anything that needs more time. Every step below has an owner."
+              : "Three sixty-minute training calls with you driving, a week of real jobs between them. We teach and build together, and by day 3 you build forms without us. Every step below has an owner."
       }
       band={
         t.training

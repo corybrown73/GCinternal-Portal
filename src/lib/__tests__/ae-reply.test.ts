@@ -14,15 +14,23 @@ describe("the AE reply", () => {
     timezone: "America/Chicago",
   };
 
-  it("introduces the owner, lays out the three training days and offers two kickoff times", () => {
+  it("introduces the owner, lays out the three core meetings and offers two Stage 1 times", () => {
     const { subject, body } = aeReplyDraft(base);
     expect(subject).toBe("Maverick Roofing × GoCanvas — booking your kickoff");
     expect(body).toMatch(/^Hi Ray,/);
     expect(body).toContain("I'm Dana Whitfield");
-    expect(body).toContain("Training day 2");
+    expect(body).toContain("Stage 2 — Make It Work for Them");
+    expect(body).toContain("30-day implementation");
+    expect(body).toContain("Could we hold Stage 1");
     expect(body).toContain("https://www.gcinternalportal.com/welcome/wlc_abc");
     expect(body).toContain("• Fri, Sep 25 at 10:00 Central time");
     expect(body).toContain("• Mon, Sep 28 at 2:00 pm Central time");
+  });
+
+  it("keeps the training days for a Device Magic conversion", () => {
+    expect(
+      aeReplyDraft({ ...base, intake: { path: "dm_conversion", training_only: false } }).body,
+    ).toContain("Training day 2");
   });
 
   it("speaks to a training account and an existing account in their own terms", () => {

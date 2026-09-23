@@ -46,16 +46,24 @@ export function aeReplyDraft(i: AeReplyInput): { subject: string; body: string }
             "• Session 2 — reference data, calculations and the PDF",
             "• Session 3 — where the data goes and what you can do with it",
           ]
-        : [
-            "• Training day 1 — kickoff, and your first form built with your hands on the keyboard",
-            "• Training day 2 — build it properly: your lists, logic and calculations",
-            "• Training day 3 — the back office: emails, the PDF, reports and users",
-          ];
+        : i.intake.path === "new_logo"
+          ? [
+              "• Stage 1 — Make It Work: your process confirmed and your first form working end to end",
+              "• Stage 2 — Make It Work for Them: your data, your rules, and what happens after a submission",
+              "• Stage 3 — Make It Operational: how your team runs it day to day",
+            ]
+          : [
+              "• Training day 1 — kickoff, and your first form built with your hands on the keyboard",
+              "• Training day 2 — build it properly: your lists, logic and calculations",
+              "• Training day 3 — the back office: emails, the PDF, reports and users",
+            ];
   const length = training
     ? "Three 30-minute sessions over two weeks."
     : i.intake.path === "existing"
       ? "Most of this runs in the first two to four weeks."
-      : "Three 60-minute working sessions, and your first form is live within about three weeks.";
+      : i.intake.path === "new_logo"
+        ? "A 30-day implementation built around three 60-minute meetings, which we'd like to book now — you're functional in about three weeks, with week 4 held for anything that needs more time."
+        : "Three 60-minute working sessions, and your first form is live within about three weeks.";
   const body = [
     `Hi ${first},`,
     "",
@@ -68,7 +76,9 @@ export function aeReplyDraft(i: AeReplyInput): { subject: string; body: string }
       ? `Your welcome page has the plan, the dates and what we'll need from you: ${i.welcomeUrl}`
       : "I'll send your welcome page with the plan and the dates shortly.",
     "",
-    "Could we hold the kickoff for one of these (60 minutes)?",
+    i.intake.path === "new_logo"
+      ? "Could we hold Stage 1 for one of these (60 minutes)? I'll send Stages 2 and 3 right after."
+      : "Could we hold the kickoff for one of these (60 minutes)?",
     `• ${shortDay(a)} at 10:00${zone}`,
     `• ${shortDay(b)} at 2:00 pm${zone}`,
     "",

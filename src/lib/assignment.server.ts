@@ -452,7 +452,7 @@ async function notifyAssignee(a: {
         <p style="color:#556477;font-size:13px">${
           a.training
             ? "Book the first training call in the first few days. Three thirty-minute calls over two weeks, and the crew is live."
-            : "Reply to the AE's email today and book the kickoff. Three sixty-minute training days, and the first form is live within fifteen business days — built with them, not for them."
+            : "Reply to the AE's email today and book the meetings. The checklist walks you through the rest — built with them, not for them."
         }</p>
         <p style="font-size:12px;color:#888">GoCanvas Handoff Hub</p>
       </div>`,
