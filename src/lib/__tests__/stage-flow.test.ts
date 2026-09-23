@@ -38,11 +38,20 @@ describe("the stage checklist", () => {
     expect(stageFlow(input({ intake: { ...ready, handoff_tasks: {} } })).advanceTo).toBeNull();
   });
 
-  it("is four tasks, and the review waits for the Gong brief and the SOW", () => {
+  it("asks the type of deal first, and the review waits for it, the Gong brief and the SOW", () => {
     const f = stageFlow(input({ gongReports: 0, hasSow: false, intake: {} }));
-    expect(f.stages[0]!.tasks.map((t) => t.key)).toEqual(["assign", "notes", "sow", "review"]);
+    expect(f.stages[0]!.tasks.map((t) => t.key)).toEqual([
+      "type",
+      "assign",
+      "notes",
+      "sow",
+      "review",
+    ]);
+    expect(f.stages[0]!.tasks[0]!.done).toBe(false);
     const review = f.stages[0]!.tasks.find((t) => t.key === "review")!;
-    expect(review.locked).toBe("Needs the Gong brief and the SOW first");
+    expect(review.locked).toBe("Needs the type of deal, the Gong brief and the SOW first");
+    const typed = stageFlow(input({ intake: { path: "dm_conversion" } }));
+    expect(typed.stages[0]!.tasks[0]!.summary).toBe("Device Magic → GoCanvas");
   });
 
   it("says the AI is reading while it reads", () => {
@@ -89,7 +98,7 @@ describe("the stage checklist", () => {
     expect(stageFlow(input({ stage: "prospect" })).advanceTo).toBeNull();
     // Nothing to assign before the close makes the project.
     const pre = stageFlow(input({ stage: "prospect", owner: null }));
-    expect(pre.stages[0]!.tasks[0]!.locked).toMatch(/Closed Won/);
+    expect(pre.stages[0]!.tasks.find((t) => t.key === "assign")!.locked).toMatch(/Closed Won/);
     expect(stageFlow(input({ stage: "field_fusion_setup" })).advanceTo).toBeNull();
   });
 

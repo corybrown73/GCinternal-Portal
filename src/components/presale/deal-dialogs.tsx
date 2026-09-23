@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/dialog";
 import { INDUSTRIES } from "@/lib/intake-answers";
 import { mentionsDeviceMagic, mentionsFieldFusion } from "@/lib/intake-prefill";
+import { DEAL_TYPES } from "@/lib/stage-flow";
 import { cn } from "@/lib/utils";
 import {
   addDeal,
@@ -232,7 +233,7 @@ export function NewDealDialog() {
               </div>
               <div>
                 <label className={labelClass} htmlFor="new-deal-path">
-                  Kind
+                  Type of deal
                 </label>
                 <select
                   id="new-deal-path"
@@ -241,12 +242,11 @@ export function NewDealDialog() {
                   value={draft.path || "new_logo"}
                   onChange={(e) => set({ path: e.target.value as DealDraft["path"] })}
                 >
-                  <option value="new_logo">New customer — first implementation</option>
-                  <option value="existing">Existing account — adding services</option>
-                  <option value="dm_conversion">Device Magic → GoCanvas conversion</option>
-                  <option value="field_fusion">
-                    Field Fusion — GoCanvas training, forms built
-                  </option>
+                  {DEAL_TYPES.map((t) => (
+                    <option key={t.path} value={t.path}>
+                      {t.label}
+                    </option>
+                  ))}
                 </select>
                 {suggestedFf && draft.path !== "field_fusion" ? (
                   <p className="mt-0.5 text-[11px] text-amber-700 dark:text-amber-400">

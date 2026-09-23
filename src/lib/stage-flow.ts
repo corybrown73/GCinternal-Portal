@@ -6,8 +6,8 @@ import type { Timeline } from "./onboarding-timeline";
  * The deal's stages as a checklist: what each stage asks of the person who
  * owns it, and when the deal moves on by itself.
  *
- *   Closed Won    assigned · the Gong brief · the SOW · review what the
- *                 AI filled and approve                 → Pre-kickoff
+ *   Closed Won    the type of deal · assigned · the Gong brief · the SOW ·
+ *                 review what the AI filled and approve → Pre-kickoff
  *   Pre-kickoff   reply to the AE · the Salesloft cadence ·
  *                 book the kickoff call                 → Onboarding
  *   Onboarding    the training calls, the first form live, every service
@@ -18,6 +18,34 @@ import type { Timeline } from "./onboarding-timeline";
  * the same rules. A stage moves forward only, and only when every task in it
  * is done; nothing here ever moves a deal back.
  */
+
+/**
+ * The four kinds of deal, in the team's words, each with the one line that
+ * says how its onboarding runs. One question decides which plan the deal
+ * gets; everything downstream reads it.
+ */
+export const DEAL_TYPES = [
+  {
+    path: "new_logo",
+    label: "New logo",
+    plan: "First GoCanvas rollout: three 60-minute training days, first form live in 15 business days.",
+  },
+  {
+    path: "existing",
+    label: "Existing account",
+    plan: "Already on GoCanvas, buying more: a form review, then the integration or services — 2 to 6 weeks.",
+  },
+  {
+    path: "dm_conversion",
+    label: "Device Magic → GoCanvas",
+    plan: "Moving off Device Magic: their most-used form rebuilt with them and run alongside DM, live in 15 business days.",
+  },
+  {
+    path: "field_fusion",
+    label: "Field Fusion",
+    plan: "Forms already built: Liesl's setup check, then three 30-minute training sessions over two weeks.",
+  },
+] as const;
 
 export type FlowStageKey =
   "closed_won" | "field_fusion" | "pre_kickoff" | "onboarding" | "complete";
@@ -31,6 +59,7 @@ export const FLOW_STAGES: ReadonlyArray<{ key: FlowStageKey; stage: AccountStage
   ];
 
 export type TaskAction =
+  | "deal_type"
   | "assign"
   | "notes"
   | "sow"
@@ -127,9 +156,19 @@ function closedWonTasks(a: IntakeAnswers, input: StageFlowInput, closed: boolean
   const running = readingInFlight(reading);
   const approved = Boolean(a.handoff_tasks["reviewed"]);
   const before: string[] = [];
+  if (a.path === null) before.push("the type of deal");
   if (!hasNotes) before.push("the Gong brief");
   if (!paperDone) before.push("the SOW");
   return [
+    {
+      key: "type",
+      label: "What type of deal is this?",
+      hint: "New logo, existing account, Device Magic → GoCanvas, or Field Fusion. The plan, the deck and the training all follow it.",
+      done: a.path !== null,
+      summary: a.path ? DEAL_TYPES.find((t) => t.path === a.path)!.label : null,
+      action: "deal_type",
+      locked: null,
+    },
     {
       key: "assign",
       label: "Assign an owner",

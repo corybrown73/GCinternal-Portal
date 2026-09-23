@@ -21,7 +21,6 @@ import {
   type IntakeAnswers,
 } from "@/lib/intake-answers";
 import { SERVICE_KINDS, type ServiceSpec } from "@/lib/onboarding-services";
-import { PATH_LABEL } from "@/lib/onboarding-timeline";
 import {
   addReport,
   getIntakeFormLink,
@@ -200,61 +199,15 @@ export function FlowStep({ deal, editable }: { deal: DealData; editable: boolean
   const answers = readIntake(deal.account.intake);
   const { set, busy, error } = useIntakeSaver(dealId);
   const training = isTrainingOnly(answers);
-  // Changing the flow rewrites the whole plan and its dates. A stray click
-  // — the gallery loads and everything shifts under the cursor — should not
-  // be able to do that silently.
-  const choosePath = (next: "new_logo" | "existing" | "dm_conversion" | "field_fusion") => {
-    if (answers.path === next) return;
-    if (
-      answers.path !== null &&
-      !window.confirm(
-        "Switching the flow rebuilds the plan: the phases, the go-live date and what the customer's page says. Continue?",
-      )
-    )
-      return;
-    set({ path: next });
-  };
   return (
     <div>
-      <div className="flex flex-wrap items-center gap-2">
-        {(["new_logo", "existing", "dm_conversion", "field_fusion"] as const).map((p) => (
-          <Choice
-            key={p}
-            active={answers.path === p}
-            disabled={!editable || busy}
-            onClick={() => choosePath(p)}
-          >
-            {PATH_LABEL[p]}
-          </Choice>
-        ))}
-      </div>
-      <AiSource answers={answers} field="path" />
-      {answers.path_suggested && answers.path !== answers.path_suggested ? (
-        <p className="mt-1.5 text-[11px] text-amber-700 dark:text-amber-400">
-          The notes suggest {PATH_LABEL[answers.path_suggested]} —{" "}
-          <button
-            type="button"
-            className="underline"
-            disabled={!editable || busy}
-            onClick={() => choosePath(answers.path_suggested!)}
-          >
-            use it
-          </button>
-          ?
+      {/* The type of deal is its own question on the checklist; this is
+          what that type asks next. */}
+      {answers.path === null ? (
+        <p className="text-[12px] text-muted-foreground">
+          Answer "What type of deal is this?" first — these questions depend on it.
         </p>
       ) : null}
-      <p className="mt-1.5 text-[11px] text-muted-foreground">
-        {answers.path === "new_logo"
-          ? "Three sixty-minute training days, first form live in fifteen business days — their hands on the keyboard, we guide. Up to three forms in phase 1."
-          : answers.path === "dm_conversion"
-            ? "Their most-used Device Magic form, rebuilt in GoCanvas with them over three training days and run alongside it until it is proven. Fifteen business days."
-            : answers.path === "existing"
-              ? "The Account Manager's questions decide phase 1: a review, our build, or their build with a freeze before the integration."
-              : answers.path === "field_fusion"
-                ? "Forms already built. Liesl confirms the form is connected and the client is trained, then hands to TIS for GoCanvas training: three 30-minute sessions over two weeks."
-                : ""}
-      </p>
-
       {answers.path === "new_logo" || answers.path === "dm_conversion" ? (
         <div className="mt-3 border-t border-border pt-2.5">
           <p className="mb-1.5 text-[12px] font-medium">Do they already have forms built?</p>

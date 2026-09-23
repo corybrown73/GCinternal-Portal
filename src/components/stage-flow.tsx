@@ -18,11 +18,12 @@ import {
   type IntakeAnswers,
 } from "@/lib/intake-answers";
 import { closeDateFor, timelineFor } from "@/lib/onboarding-plan";
-import { dayCounter, localIso, PATH_LABEL } from "@/lib/onboarding-timeline";
+import { dayCounter, localIso } from "@/lib/onboarding-timeline";
 import { getWelcome } from "@/lib/welcome.functions";
 import { wonStage } from "@/lib/pipeline-stages";
 import { moveDealStage, saveIntake } from "@/lib/presale.functions";
 import {
+  DEAL_TYPES,
   KICKOFF_CADENCE,
   readingInFlight,
   stageFlow,
@@ -130,7 +131,26 @@ export function StageFlow({ deal }: { deal: DealData }) {
         }}
       />
       <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-border bg-muted/30 px-4 py-2">
-        <p className="text-[12px]">
+        <p className="flex flex-wrap items-center gap-x-1 text-[12px]">
+          {/* The type of deal, on every stage: it is what the plan follows. */}
+          <button
+            type="button"
+            onClick={() => {
+              setViewing(flow.current === "closed_won" ? null : "closed_won");
+              setManual({ key: "type", wasDone: intake.path !== null });
+            }}
+            className={cn(
+              "mr-1.5 rounded-full border px-2 py-0.5 text-[11px] font-medium",
+              intake.path
+                ? "border-primary/40 bg-primary/10 text-primary"
+                : "border-amber-500/50 bg-amber-500/10 text-amber-800 dark:text-amber-300",
+            )}
+            title="The type of deal decides the plan. Click to change it."
+          >
+            {intake.path
+              ? DEAL_TYPES.find((t) => t.path === intake.path)!.label
+              : "Type of deal not set"}
+          </button>
           <b className="font-semibold">{stage.label}</b>
           {stage.tasks.length ? (
             <span className="text-muted-foreground">
@@ -178,7 +198,7 @@ export function StageFlow({ deal }: { deal: DealData }) {
           <Check className="mr-1 inline h-3.5 w-3.5" strokeWidth={3} />
           {flow.advanceTo
             ? `Everything here is done — moving the deal to ${flow.advanceTo === "in_onboarding" ? "Onboarding" : "Pre-kickoff"}…`
-            : shown === "closed_won" && !flow.stages[0]!.tasks[0]!.done
+            : shown === "closed_won" && !flow.stages[0]!.tasks.find((x) => x.key === "assign")?.done
               ? "Waiting on an owner."
               : "Everything here is done."}
         </p>
@@ -421,6 +441,8 @@ function TaskBody({
   editable: boolean;
 }) {
   switch (task.action) {
+    case "deal_type":
+      return <DealTypeBody deal={deal} intake={intake} editable={editable} />;
     case "assign":
       return task.locked ? null : <AssignBody dealId={deal.account.id} editable={editable} />;
     case "notes":
@@ -588,12 +610,12 @@ function ReviewBody({
       <ReadingStatus deal={deal} editable={editable} />
       {hasBrief || intake.path ? (
         <dl className="grid gap-x-4 gap-y-1.5 rounded-md border border-border bg-background px-3 py-2.5 text-[12px] sm:grid-cols-[140px_1fr]">
-          <dt className="text-muted-foreground">Flow</dt>
+          <dt className="text-muted-foreground">Type of deal</dt>
           <dd>
             {intake.path ? (
-              PATH_LABEL[intake.path]
+              DEAL_TYPES.find((t) => t.path === intake.path)!.label
             ) : (
-              <i className="text-amber-700">not clear from the calls</i>
+              <i className="text-amber-700">not set — answer the first question</i>
             )}
             {intake.training_only ? " · training only" : ""}
             <AiSource answers={intake} field="path" />
@@ -686,6 +708,86 @@ function ReviewBody({
           <span className="text-[11px] text-muted-foreground">{why}.</span>
         ) : null}
       </div>
+    </div>
+  );
+}
+
+/**
+ * The one question that decides the plan. Four choices, each saying how
+ * that kind of onboarding runs; the calls' suggestion is pre-marked, and a
+ * change of mind asks first because it rebuilds the dates.
+ */
+function DealTypeBody({
+  deal,
+  intake,
+  editable,
+}: {
+  deal: DealData;
+  intake: IntakeAnswers;
+  editable: boolean;
+}) {
+  const qc = useQueryClient();
+  const save = useServerFn(saveIntake);
+  const [error, setError] = useState<string | null>(null);
+  const m = useMutation({
+    mutationFn: (path: (typeof DEAL_TYPES)[number]["path"]) =>
+      save({ data: { dealId: deal.account.id, patch: { path } } as never }),
+    onMutate: () => setError(null),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["deal", deal.account.id] });
+      void qc.invalidateQueries({ queryKey: ["welcome", deal.account.id] });
+    },
+    onError: (e) => setError((e as Error).message),
+  });
+  const suggested = intake.path === null ? intake.path_suggested : null;
+  const pick = (path: (typeof DEAL_TYPES)[number]["path"]) => {
+    if (intake.path === path) return;
+    if (
+      intake.path !== null &&
+      !window.confirm(
+        "Changing the type rebuilds the plan: the phases, the go-live date and what the customer's page says. Continue?",
+      )
+    )
+      return;
+    m.mutate(path);
+  };
+  return (
+    <div className="space-y-2">
+      <div className="grid gap-2 sm:grid-cols-2">
+        {DEAL_TYPES.map((t) => {
+          const active = intake.path === t.path;
+          return (
+            <button
+              key={t.path}
+              type="button"
+              disabled={!editable || m.isPending}
+              onClick={() => pick(t.path)}
+              aria-pressed={active}
+              className={cn(
+                "rounded-md border px-3 py-2.5 text-left transition-colors disabled:opacity-60",
+                active
+                  ? "border-primary bg-primary/10 ring-1 ring-primary"
+                  : "border-border bg-background hover:bg-muted",
+              )}
+            >
+              <span className="flex items-center justify-between gap-2 text-[13px] font-semibold">
+                {t.label}
+                {active ? (
+                  <Check className="h-4 w-4 text-primary" strokeWidth={3} />
+                ) : suggested === t.path ? (
+                  <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
+                    The calls suggest this
+                  </span>
+                ) : null}
+              </span>
+              <span className="mt-0.5 block text-[12px] text-muted-foreground">{t.plan}</span>
+            </button>
+          );
+        })}
+      </div>
+      <AiSource answers={intake} field="path" />
+      {m.isPending ? <p className="text-[12px] text-muted-foreground">Saving…</p> : null}
+      {error ? <p className="text-[12px] text-destructive">{error}</p> : null}
     </div>
   );
 }
