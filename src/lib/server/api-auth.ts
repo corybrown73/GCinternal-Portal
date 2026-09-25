@@ -1,26 +1,14 @@
 import { createHash, randomBytes } from "crypto";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import type { SupabaseClient } from "@supabase/supabase-js";
+
+import { API_SCOPES, type ApiScope } from "@/lib/api-scopes";
+
 const createAdminClient = () => supabaseAdmin as unknown as SupabaseClient;
 
-export const API_SCOPES = [
-  "accounts:read",
-  "accounts:write",
-  "transitions:write",
-  "tam:write",
-  "tickets:write",
-  "alerts:write",
-  // Phase 5 — the Salesforce opportunity hook and its read-back.
-  "implementations:read",
-  "implementations:write",
-  // The MCP server. `handoff:read` hands a model the call notes and the SOW;
-  // `handoff:write` lets it render a deck into an account's attachments. Two
-  // scopes because reading a customer's transcripts and writing a document
-  // into their account are different amounts of trust.
-  "handoff:read",
-  "handoff:write",
-] as const;
-export type ApiScope = (typeof API_SCOPES)[number];
+// The catalogue lives in a browser-safe module so the admin page reads the
+// same list; re-exported here for the server code that always imported it.
+export { API_SCOPES, type ApiScope };
 
 export function hashKey(key: string): string {
   return createHash("sha256").update(key).digest("hex");
@@ -65,26 +53,45 @@ export async function requireApiKey(
   if (!key || key.revoked_at) {
     return apiError(401, "invalid_api_key", "Unknown or revoked API key");
   }
-  if (!key.scopes.includes(scope)) {
-    return apiError(403, "missing_scope", `This key does not have the '${scope}' scope`);
-  }
+
+  // A live key was presented: that is a use, whether or not this call is
+  // allowed. Stamped here, before any refusal, because a key refused for a
+  // scope it lacks used to read "never used" on the admin page — the one
+  // clue that would have said "this is the key the connector holds".
+  void admin
+    .from("portal_api_keys")
+    .update({ last_used_at: new Date().toISOString() })
+    .eq("id", key.id)
+    .then(
+      ({ error }) => {
+        if (error) console.error(`API_KEY_STAMP_FAILED key=${key.id} error=${error.message}`);
+      },
+      (e: unknown) => console.error(`API_KEY_STAMP_FAILED key=${key.id} error=${String(e)}`),
+    );
 
   // Phase 7: expiry and rate limits, both behind `api_key_limits`. The failure
   // mode of getting a rate limit wrong is a silently broken integration, so the
   // columns ship inert and an operator can see what WOULD happen (the admin
   // page shows both values) before enforcement is turned on.
   const { isFlagOn } = await import("@/lib/app-config.server");
-  if (await isFlagOn("api_key_limits")) {
-    // Distinct from invalid_api_key on purpose: an integration owner needs to
-    // tell "your key ran out" from "your key is wrong".
-    if (key.expires_at && new Date(key.expires_at).getTime() <= Date.now()) {
-      return apiError(
-        401,
-        "expired_api_key",
-        `This API key expired on ${key.expires_at}. Create a new one in /admin/api-keys.`,
-      );
-    }
+  const limitsOn = await isFlagOn("api_key_limits");
 
+  // Expiry is decided before authorisation: an expired key never gets as far
+  // as scopes, so "your key ran out" is never reported as "your key lacks a
+  // scope". Distinct from invalid_api_key on purpose, too.
+  if (limitsOn && key.expires_at && new Date(key.expires_at).getTime() <= Date.now()) {
+    return apiError(
+      401,
+      "expired_api_key",
+      `This API key expired on ${key.expires_at}. Create a new one in /admin/api-keys.`,
+    );
+  }
+
+  if (!key.scopes.includes(scope)) {
+    return apiError(403, "missing_scope", `This key does not have the '${scope}' scope`);
+  }
+
+  if (limitsOn) {
     const limit = key.rate_limit_per_minute ?? 120;
     const { data: used, error } = await admin.rpc("portal_api_key_consume", {
       p_key_id: key.id,
@@ -114,13 +121,6 @@ export async function requireApiKey(
       );
     }
   }
-
-  // Fire-and-forget usage stamp.
-  void admin
-    .from("portal_api_keys")
-    .update({ last_used_at: new Date().toISOString() })
-    .eq("id", key.id)
-    .then(() => {});
 
   return { apiKeyId: key.id };
 }

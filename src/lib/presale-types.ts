@@ -126,7 +126,8 @@ export interface ApiKey {
   id: string;
   name: string;
   key_prefix: string;
-  key_hash: string;
+  /** Never selected for the browser any more; present only on the server's own reads. */
+  key_hash?: string;
   scopes: string[];
   created_by: string | null;
   created_at: string;

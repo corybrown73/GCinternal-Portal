@@ -67,6 +67,7 @@ describe("audit policy", () => {
   it("matches critical actions by prefix so siblings inherit", () => {
     expect(isCriticalAudit("api_key.create", "user")).toBe(true);
     expect(isCriticalAudit("api_key.rotate", "user")).toBe(true);
+    expect(isCriticalAudit("api_key.scopes_update", "user")).toBe(true);
     expect(isCriticalAudit("profile.role_change", "user")).toBe(true);
     expect(isCriticalAudit("ticket.comment", "user")).toBe(false);
   });

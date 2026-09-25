@@ -122,8 +122,40 @@ describe("authorization", () => {
     expect(body.result.isError).toBe(true);
     expect(text).toContain("does not have the 'handoff:read' scope");
     expect(text).toContain("Admin -> API keys");
+    // Scopes are edited on the key now; the old text sent people to mint a
+    // new key in a form that could not grant the scope either.
+    expect(text).toContain("Edit scopes");
+    expect(text).not.toContain("Scopes are fixed");
     // Not the generic branch, which would print the raw code instead.
     expect(text).not.toContain("(missing_scope)");
+  });
+
+  it("tells an expired key and an unknown key apart, each with its own fix", async () => {
+    const { requireApiKey } = await import("../server/api-auth");
+    vi.mocked(requireApiKey).mockResolvedValueOnce(
+      Response.json(
+        { error: { code: "expired_api_key", message: "This API key expired on 2026-09-30." } },
+        { status: 401 },
+      ),
+    );
+    let body = await (
+      await post(rpc("tools/call", { name: "find_deal", arguments: { query: "x" } }))
+    ).json();
+    expect(body.result.isError).toBe(true);
+    expect(body.result.content[0].text).toContain("has expired");
+    expect(body.result.content[0].text).toContain("create a new key");
+
+    vi.mocked(requireApiKey).mockResolvedValueOnce(
+      Response.json(
+        { error: { code: "invalid_api_key", message: "Unknown or revoked API key" } },
+        { status: 401 },
+      ),
+    );
+    body = await (
+      await post(rpc("tools/call", { name: "find_deal", arguments: { query: "x" } }))
+    ).json();
+    expect(body.result.content[0].text).toContain("unknown or has been revoked");
+    expect(body.result.content[0].text).toContain("first 12 characters");
   });
 
   it("refuses an unknown tool before it ever reaches the key check", async () => {

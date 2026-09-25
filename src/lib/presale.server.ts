@@ -19,7 +19,7 @@ import { isFlagOn } from "./app-config.server";
 import { handoffConflictMessage, resolveHandoffCustomer } from "./presale-handoff";
 import { audit } from "./server/audit";
 import { createTamRequest } from "./server/tam";
-import { API_SCOPES, generateApiKey, type ApiScope } from "./server/api-auth";
+import { generateApiKey } from "./server/api-auth";
 import { recordImplementationCreated } from "./server/events";
 import { sfId18 } from "./server/sf-id";
 import { FIELD_FUSION_STAGE, FIELD_FUSION_TEMPLATE_KEY } from "./field-fusion";
@@ -1698,14 +1698,21 @@ export async function startOnboardingAs(
 
 /* ---------- admin: API keys ---------- */
 
-export async function listApiKeys(userId: string): Promise<ApiKey[]> {
+// Everything but the hash: the secret's digest has no business in a browser.
+const API_KEY_COLUMNS =
+  "id, name, key_prefix, scopes, created_by, created_at, last_used_at, revoked_at, expires_at, rate_limit_per_minute";
+
+export async function listApiKeys(
+  userId: string,
+): Promise<{ keys: ApiKey[]; limitsEnforced: boolean }> {
   await requireSuperAdmin(userId);
-  const { data, error } = await db()
-    .from("portal_api_keys")
-    .select("*")
-    .order("created_at", { ascending: false });
+  const { isFlagOn } = await import("./app-config.server");
+  const [{ data, error }, limitsEnforced] = await Promise.all([
+    db().from("portal_api_keys").select(API_KEY_COLUMNS).order("created_at", { ascending: false }),
+    isFlagOn("api_key_limits"),
+  ]);
   if (error) throw new Error(error.message);
-  return (data ?? []) as ApiKey[];
+  return { keys: (data ?? []) as ApiKey[], limitsEnforced };
 }
 
 export async function createApiKeyRecord(
@@ -1720,9 +1727,8 @@ export async function createApiKeyRecord(
   },
 ): Promise<{ key: string; record: ApiKey }> {
   await requireSuperAdmin(userId);
-  const scopes = input.scopes.filter((s): s is ApiScope =>
-    (API_SCOPES as readonly string[]).includes(s),
-  );
+  const { normalizeScopes } = await import("./api-scopes");
+  const scopes = normalizeScopes(input.scopes);
   if (scopes.length === 0) throw new Error("Pick at least one scope");
 
   const { key, hash, prefix } = generateApiKey();
@@ -1737,7 +1743,7 @@ export async function createApiKeyRecord(
       expires_at: input.expiresAt ?? null,
       ...(input.rateLimitPerMinute ? { rate_limit_per_minute: input.rateLimitPerMinute } : {}),
     })
-    .select("*")
+    .select(API_KEY_COLUMNS)
     .single();
   if (error || !data) throw new Error(error?.message ?? "Could not create the key");
 
@@ -1773,6 +1779,62 @@ export async function revokeApiKeyRecord(userId: string, keyId: string): Promise
     entity_id: keyId,
   });
   return { ok: true };
+}
+
+/**
+ * Change what a key may do, without changing the key.
+ *
+ * The credential is the hash; the scopes are policy about it. Adding a scope
+ * used to mean minting a new key and pasting it through a connector's URL a
+ * second time, for no gain in security — and removing one was not possible at
+ * all. The change is on the record twice: this audit row (critical by its
+ * `api_key.` prefix) and the 0064 trigger's `.observed` row, which cannot be
+ * skipped. A revoked key stays revoked, and a key is never left with nothing.
+ */
+export async function updateApiKeyScopesRecord(
+  userId: string,
+  keyId: string,
+  input: string[],
+): Promise<ApiKey> {
+  await requireSuperAdmin(userId);
+  const { normalizeScopes } = await import("./api-scopes");
+  const scopes = normalizeScopes(input);
+  if (scopes.length === 0) throw new Error("Pick at least one scope");
+
+  const { data: before } = await db()
+    .from("portal_api_keys")
+    .select("id, name, scopes, revoked_at")
+    .eq("id", keyId)
+    .maybeSingle();
+  if (!before) throw new Error("No such key");
+  if (before.revoked_at) throw new Error("A revoked key cannot be changed — create a new one.");
+
+  const { data, error } = await db()
+    .from("portal_api_keys")
+    .update({ scopes })
+    .eq("id", keyId)
+    .is("revoked_at", null)
+    .select(API_KEY_COLUMNS)
+    .single();
+  if (error || !data) throw new Error(error?.message ?? "Could not change the key's scopes");
+
+  const was = new Set<string>(before.scopes ?? []);
+  const now = new Set<string>(scopes);
+  await audit({
+    actor_type: "user",
+    actor_id: userId,
+    action: "api_key.scopes_update",
+    entity_type: "api_key",
+    entity_id: keyId,
+    payload: {
+      name: before.name,
+      from: before.scopes ?? [],
+      to: scopes,
+      added: scopes.filter((s) => !was.has(s)),
+      removed: (before.scopes ?? []).filter((s: string) => !now.has(s)),
+    },
+  });
+  return data as ApiKey;
 }
 
 /* ---------- admin: users ---------- */

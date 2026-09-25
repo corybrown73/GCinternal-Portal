@@ -354,6 +354,22 @@ export const revokeApiKey = createServerFn({ method: "POST" })
     return revokeApiKeyRecord(context.userId, data.keyId);
   });
 
+/** The key stays; what it may do changes. Super admin, audited, never on a revoked key. */
+export const updateApiKeyScopes = createServerFn({ method: "POST" })
+  .middleware([requireInternalAuth])
+  .inputValidator((data: unknown) =>
+    z
+      .object({
+        keyId: z.string().uuid(),
+        scopes: z.array(z.string()).min(1, "Pick at least one scope"),
+      })
+      .parse(data),
+  )
+  .handler(async ({ data, context }) => {
+    const { updateApiKeyScopesRecord } = await import("./presale.server");
+    return updateApiKeyScopesRecord(context.userId, data.keyId, data.scopes);
+  });
+
 export const getUsers = createServerFn({ method: "GET" })
   .middleware([requireInternalAuth])
   .handler(async ({ context }) => {

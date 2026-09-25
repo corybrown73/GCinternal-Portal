@@ -153,16 +153,40 @@ function authHelp(code: string, message: string, scope: string): string {
       `Mint the key at Admin -> API keys -> Add, with the '${scope}' scope.`,
     ].join("\n");
   }
-  // The code api-auth actually emits is `missing_scope`. This branch guessed
-  // `insufficient_scope` and so never fired — the first real connector to hit
-  // it got the generic fallback instead of the sentence saying where to fix it.
+  // The code api-auth actually emits is `missing_scope`. This branch once
+  // guessed `insufficient_scope` and never fired; it also once said scopes were
+  // fixed at creation, which sent people to mint a new key for a form that
+  // could not grant the scope either. Scopes are edited in place now.
   if (code === "missing_scope") {
     return [
       `Not authorized: this key does not have the '${scope}' scope.`,
       "",
-      "Go to Admin -> API keys. Scopes are fixed when a key is created, so add a",
-      "new key with both 'handoff:read' and 'handoff:write', then put it in the",
-      "connector in place of the current one. Revoke the old key once it works.",
+      "Go to Admin -> API keys, find the key the connector uses (its first 12",
+      "characters are shown there) and press Edit scopes. Tick",
+      `'${scope}' — for the whole connector, tick both 'handoff:read' and`,
+      "'handoff:write'. The key itself does not change, so the connector needs",
+      "nothing else once you save. If that key is revoked, create a new one with",
+      "both scopes and paste it into the connector.",
+    ].join("\n");
+  }
+  if (code === "expired_api_key") {
+    return [
+      "Not authorized: this key has expired.",
+      "",
+      message,
+      "",
+      "Go to Admin -> API keys and create a new key with 'handoff:read' and",
+      "'handoff:write', then put it in the connector in place of the current one.",
+    ].join("\n");
+  }
+  if (code === "invalid_api_key") {
+    return [
+      "Not authorized: the key this request carried is unknown or has been revoked.",
+      "",
+      "Check the connector's URL (?key=) or Authorization header against",
+      "Admin -> API keys — the first 12 characters of every key are shown there.",
+      "A revoked key cannot be reactivated; create a new one with 'handoff:read'",
+      "and 'handoff:write'.",
     ].join("\n");
   }
   return `Not authorized (${code}): ${message}`;

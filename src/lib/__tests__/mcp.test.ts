@@ -24,8 +24,12 @@ describe("the tool surface", () => {
     expect(Object.keys(TOOL_SCOPES).sort()).toEqual(TOOLS.map((t) => t.name).sort());
   });
 
-  it("only the deck generator can write", () => {
+  it("the four deal-writing tools need handoff:write; the readers need handoff:read", () => {
     expect(TOOL_SCOPES["generate_kickoff_deck"]).toBe("handoff:write");
+    expect(TOOL_SCOPES["create_deal"]).toBe("handoff:write");
+    expect(TOOL_SCOPES["update_deal"]).toBe("handoff:write");
+    expect(TOOL_SCOPES["add_call_notes"]).toBe("handoff:write");
+    expect(TOOL_SCOPES["pipeline_report"]).toBe("handoff:read");
     expect(TOOL_SCOPES["find_deal"]).toBe("handoff:read");
     expect(TOOL_SCOPES["get_handoff_context"]).toBe("handoff:read");
     expect(TOOL_SCOPES["describe_deck_fields"]).toBe("handoff:read");

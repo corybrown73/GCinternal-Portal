@@ -28,8 +28,11 @@ it against the account's Attachments.
 
 ## Setting it up
 
-1. **Admin → API keys → Add.** Give it `handoff:read`, and `handoff:write` if
-   it should be able to file decks. The key is shown once.
+1. **Admin → API keys → Create a key.** Use the **Claude MCP connector**
+   preset (`handoff:read` and `handoff:write`) or tick them by hand. The key
+   is shown once. An existing key can be given the scopes with **Edit
+   scopes** — the key itself does not change, so nothing in the connector
+   needs updating.
 2. Add the server to Claude.
 
    **claude.ai custom connectors** have no field for a static header — they
@@ -54,6 +57,11 @@ it against the account's Attachments.
    it at Admin → API keys if it goes somewhere it should not have.
 
 3. Ask for what you want: *"Build the kickoff deck for Ridgeline Excavation."*
+
+If a tool answers *"this key does not have the 'handoff:read' scope"*, the key
+in the connector predates the handoff scopes or was made without them: open
+Admin → API keys, find it by its first 12 characters, press **Edit scopes**,
+tick both handoff scopes and save. The next call works; no re-paste.
 
 If a tool call comes back as a bare "execution failed", the connector is almost
 certainly missing that header. The tool list is unauthenticated, so the
