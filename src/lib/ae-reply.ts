@@ -79,7 +79,7 @@ export function aeReplyDraft(i: AeReplyInput): { subject: string; body: string }
     i.intake.path === "new_logo"
       ? "Could we hold Stage 1 for one of these (60 minutes)? I'll send Stages 2 and 3 right after."
       : "Could we hold the kickoff for one of these (60 minutes)?",
-    `• ${shortDay(a)} at 10:00${zone}`,
+    `• ${shortDay(a)} at 10:00 am${zone}`,
     `• ${shortDay(b)} at 2:00 pm${zone}`,
     "",
     training

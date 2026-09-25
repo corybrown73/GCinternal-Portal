@@ -417,14 +417,16 @@ export function TimelinePanel({
                   sowRead.mutate();
                 }}
                 title={
-                  hasSow
-                    ? "Read the signed SOW and propose the services — you review every row before it lands"
-                    : "Upload the signed SOW first"
+                  !hasSow
+                    ? "Upload the signed SOW first"
+                    : services.length
+                      ? "Read the SOW again and propose changes — what is on the plan stays until you remove it"
+                      : "Read the signed SOW and propose the services — you review every row before it lands"
                 }
               >
                 {sowRead.isPending ? (
                   <Working label="Reading the SOW…" estimateSeconds={60} />
-                ) : services.length ? (
+                ) : hasSow && services.length ? (
                   "Re-read the SOW"
                 ) : (
                   "Read the SOW into the plan"
@@ -452,6 +454,9 @@ export function TimelinePanel({
                     </p>
                     <p className="text-[11px] text-muted-foreground">
                       Tick what is right, fix what is not. Dates follow once you apply.
+                      {services.length
+                        ? ` The plan already holds ${services.length}: a twin updates it, a new row is added.`
+                        : ""}
                     </p>
                   </div>
                   {proposal.rows.length ? (
@@ -608,7 +613,7 @@ export function TimelinePanel({
                       className="rounded-sm border border-border px-2 py-1 text-[11px] hover:bg-muted"
                       onClick={() => setProposal(null)}
                     >
-                      Discard
+                      {services.length ? "Close" : "Discard"}
                     </button>
                   </div>
                 </div>
@@ -770,7 +775,7 @@ export function TimelinePanel({
                       </option>
                     ))}
                   </select>
-                  {toolsForKind(newKind).length ? (
+                  {newKind === "integration" && toolsForKind(newKind).length ? (
                     <select
                       className={input}
                       value={newTool}

@@ -67,13 +67,16 @@ function escapeText(s: string): string {
     .replace(/\r?\n/g, "\\n");
 }
 
+/** UTF-8 octets, in the browser and on the server alike (`Buffer` is Node only). */
+const octets = (s: string): number => new TextEncoder().encode(s).length;
+
 /** RFC 5545 line folding: 75 octets, continuation lines start with a space. */
 function fold(line: string): string {
   const out: string[] = [];
   let rest = line;
-  while (Buffer.byteLength(rest, "utf8") > 75) {
+  while (octets(rest) > 75) {
     let cut = 75;
-    while (cut > 0 && Buffer.byteLength(rest.slice(0, cut), "utf8") > 75) cut -= 1;
+    while (cut > 0 && octets(rest.slice(0, cut)) > 75) cut -= 1;
     out.push(rest.slice(0, cut));
     rest = " " + rest.slice(cut);
   }

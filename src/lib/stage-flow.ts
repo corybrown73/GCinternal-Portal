@@ -117,13 +117,16 @@ export type StageFlow = {
   advanceTo: AccountStage | null;
 };
 
-/** The cadence we run in Salesloft until the kickoff is on the calendar. */
+/** The cadence we run in Salesloft until the first meeting is on the calendar. */
 export const KICKOFF_CADENCE: ReadonlyArray<{ day: string; step: string }> = [
-  { day: "Day 0", step: "Reply-all to the AE's email: intro, the welcome page, two kickoff times" },
+  {
+    day: "Day 0",
+    step: "Reply-all to the AE's email: intro, the welcome page, two times for the first meeting",
+  },
   { day: "Day 1", step: "Call the champion; leave a voicemail and follow with a short email" },
   { day: "Day 3", step: "Call again; email one time slot with a calendar hold" },
   { day: "Day 5", step: "Email with the AE copied: what they lose by waiting" },
-  { day: "Day 7", step: "Escalate to the AE to get the kickoff on the calendar" },
+  { day: "Day 7", step: "Escalate to the AE to get the first meeting on the calendar" },
 ];
 
 /**
@@ -284,7 +287,11 @@ function playbookPreKickoff(a: IntakeAnswers): FlowTask[] {
       summary:
         booked === CORE_MEETINGS.length
           ? CORE_MEETINGS.map((m) =>
-              whenLabel(a.timeline.overrides[m.key]!, a.timeline.times[m.key]!),
+              whenLabel(
+                a.timeline.overrides[m.key]!,
+                a.timeline.times[m.key]!,
+                a.timeline.timezone,
+              ),
             ).join(" · ")
           : booked
             ? `${booked} of 3 booked`
@@ -312,12 +319,25 @@ export function stampDay(iso: string): string {
 }
 
 /** "Tue, Sep 29 at 2:30 PM" — a booked meeting in a person's words, not the record's. */
-export function whenLabel(isoDate: string, time: string): string {
+export function whenLabel(isoDate: string, time: string, zone?: string | null): string {
   const [h, m] = time.split(":").map(Number) as [number, number];
   const clock = Number.isFinite(h)
     ? `${h % 12 === 0 ? 12 : h % 12}:${String(m || 0).padStart(2, "0")} ${h >= 12 ? "PM" : "AM"}`
     : time;
-  return `${shortDay(isoDate)} at ${clock}`;
+  return `${shortDay(isoDate)} at ${clock}${zone ? ` ${zoneShort(zone, isoDate)}` : ""}`;
+}
+
+/** "America/Chicago" on a September day → "CDT"; an unknown zone → "". */
+export function zoneShort(zone: string, isoDate: string): string {
+  try {
+    return (
+      new Intl.DateTimeFormat("en-US", { timeZone: zone, timeZoneName: "short" })
+        .formatToParts(new Date(`${isoDate}T12:00:00Z`))
+        .find((p) => p.type === "timeZoneName")?.value ?? ""
+    );
+  } catch {
+    return "";
+  }
 }
 
 function classicPreKickoff(a: IntakeAnswers): FlowTask[] {
@@ -349,7 +369,7 @@ function classicPreKickoff(a: IntakeAnswers): FlowTask[] {
       label: "Book the kickoff call",
       hint: "The first call. The date and time go on the plan and every date after it follows.",
       done: booked,
-      summary: booked ? whenLabel(kickoffDate!, kickoffTime!) : null,
+      summary: booked ? whenLabel(kickoffDate!, kickoffTime!, a.timeline.timezone) : null,
       action: "kickoff",
       locked: null,
     },

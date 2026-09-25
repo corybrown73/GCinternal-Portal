@@ -51,3 +51,27 @@ describe("buildIcs", () => {
       expect(Buffer.byteLength(line, "utf8")).toBeLessThanOrEqual(75);
   });
 });
+
+describe("buildIcs in the browser", () => {
+  it("folds without Node's Buffer", () => {
+    const saved = (globalThis as { Buffer?: unknown }).Buffer;
+    (globalThis as { Buffer?: unknown }).Buffer = undefined;
+    try {
+      const body = buildIcs([
+        {
+          uid: "x@gocanvas",
+          summary: "GoCanvas · Stage 1 — Make It Work — a customer with a rather long name",
+          description: "A".repeat(200),
+          date: "2026-09-28",
+          time: "10:00",
+          timezone: "America/Chicago",
+          minutes: 60,
+        },
+      ]);
+      expect(body).toContain("DTSTART:20260928T150000Z");
+      expect(body.split("\r\n").every((l) => new TextEncoder().encode(l).length <= 75)).toBe(true);
+    } finally {
+      (globalThis as { Buffer?: unknown }).Buffer = saved;
+    }
+  });
+});

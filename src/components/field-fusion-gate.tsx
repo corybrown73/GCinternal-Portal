@@ -61,9 +61,8 @@ export function FieldFusionGate({ deal, editable }: { deal: DealData; editable: 
           ? `Handed to ${r.assigneeName}. Their email has the use case, the goals and your note.`
           : "Handed over. Nobody was named, so the pool has been told to claim it — with your note.",
       );
-      void qc.invalidateQueries({ queryKey: ["deal", deal.account.id] });
-      void qc.invalidateQueries({ queryKey: ["assignment", deal.account.id] });
-      void qc.invalidateQueries({ queryKey: ["pipeline"] });
+      // Everything: the customer header shows the new owner too.
+      void qc.invalidateQueries();
     },
     onError: (e) => setError((e as Error).message),
   });

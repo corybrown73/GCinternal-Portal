@@ -11,6 +11,20 @@ import { createFileRoute } from "@tanstack/react-router";
  */
 async function handle(params: unknown, request: Request): Promise<Response> {
   const { token } = params as { token: string };
+  try {
+    return await serve(token, request);
+  } catch (e) {
+    // A customer's calendar link must never show the app's error page: say
+    // what failed in one line, and log it where the next person can find it.
+    console.error("[welcome-ics]", token.slice(0, 12), e);
+    return new Response("The calendar file could not be made. Please try again later.", {
+      status: 500,
+      headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" },
+    });
+  }
+}
+
+async function serve(token: string, request: Request): Promise<Response> {
   const { openWelcome } = await import("@/lib/welcome.server");
   const view = await openWelcome(token);
   if (!view) return new Response("Not found", { status: 404 });

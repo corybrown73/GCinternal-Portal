@@ -2123,6 +2123,10 @@ export async function saveDealIntake(
     console.error("[stage flow] could not sync the deal's stage", e);
   }
 
+  // A re-booked meeting moves "Functional": the project's target launch,
+  // which the Customers list and "At a glance" read, follows the plan.
+  if (patch["timeline"]) await syncTargetLaunch(dealId);
+
   // The flow was set to Field Fusion on a deal that has already closed —
   // a Salesforce close, or a person who picked the flow late. The setup
   // gate runs now, the way it would have at the close.
@@ -2147,6 +2151,49 @@ export async function saveDealIntake(
     }
   }
   return next;
+}
+
+/**
+ * The project's target launch is the plan's last date: "Functional" (or the
+ * last phase's end when the SOW bought more). Set at the handoff and kept
+ * in step here, so a Stage 3 moved on the checklist moves the date the
+ * Customers list shows. Never throws — the plan change already succeeded.
+ */
+export async function syncTargetLaunch(dealId: string): Promise<void> {
+  try {
+    const { data: account } = await db()
+      .from("portal_accounts")
+      .select("id,intake,customer_id")
+      .eq("id", dealId)
+      .maybeSingle();
+    if (!account) return;
+    const { implementationForDeal } = await import("./assignment.server");
+    const implId = await implementationForDeal(dealId, account.customer_id ?? null);
+    if (!implId) return;
+    const { readIntake } = await import("./intake-answers");
+    const { closeDateFor, timelineFor } = await import("./onboarding-plan");
+    const [{ data: transitions }, stages] = await Promise.all([
+      db().from("portal_stage_transitions").select("to_stage,occurred_at").eq("account_id", dealId),
+      loadPipelineStages(),
+    ]);
+    const intake = readIntake(account.intake);
+    const close = closeDateFor({
+      intake,
+      stageHistory: (transitions ?? []) as Array<{ to_stage: string; occurred_at: string }>,
+      wonStageKey: wonStage(stages).key,
+    }).date;
+    const t = timelineFor(intake, close);
+    const target = t.phases.length
+      ? (t.phases[t.phases.length - 1]?.endsOn ?? t.liveDate)
+      : t.liveDate;
+    await db()
+      .from("implementations")
+      .update({ target_launch_date: target })
+      .eq("id", implId)
+      .neq("target_launch_date", target);
+  } catch (e) {
+    console.error("[plan] could not sync the target launch", e);
+  }
 }
 
 /**

@@ -38,6 +38,12 @@ export function appUrl(): string {
   // link minted on gcinternalportal.com should not point at the deployment's
   // vercel.app alias because the variable was never set.
   const fromRequest = requestOrigin();
+  // A request that reached the deployment's own vercel.app alias still mints
+  // links on the production domain: Vercel names that domain itself.
+  const production = process.env["VERCEL_PROJECT_PRODUCTION_URL"];
+  if (fromRequest && /\.vercel\.app$/i.test(new URL(fromRequest).hostname) && production) {
+    return `https://${production.replace(/^https?:\/\//, "").replace(/\/+$/, "")}`;
+  }
   if (fromRequest) return fromRequest;
 
   if (!warned && process.env["NODE_ENV"] === "production") {

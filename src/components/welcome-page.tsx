@@ -63,6 +63,7 @@ import {
   type ServicePlan,
   type Timeline,
 } from "@/lib/onboarding-timeline";
+import { stampDay } from "@/lib/stage-flow";
 import { HOMEWORK_KEYS, isScreenShown, type HomeworkKey, type WelcomeView } from "@/lib/welcome";
 import { whenLabel } from "@/lib/welcome-events";
 import { speakerNotes } from "@/lib/welcome-notes";
@@ -583,10 +584,8 @@ function Toolbar({
         <DayChip view={view} />
         {view.sharedAt || view.openedAt ? (
           <span className="wp-toolbar-meta">
-            {view.sharedAt ? `Link sent ${shortDay(view.sharedAt.slice(0, 10))}` : "Link"}
-            {view.openedAt
-              ? ` · opened ${shortDay(view.openedAt.slice(0, 10))}`
-              : " · not opened yet"}
+            {view.sharedAt ? `Link sent ${stampDay(view.sharedAt)}` : "Link"}
+            {view.openedAt ? ` · opened ${stampDay(view.openedAt)}` : " · not opened yet"}
           </span>
         ) : view.shareUrl ? (
           <span className="wp-toolbar-meta">Link ready · not sent yet</span>

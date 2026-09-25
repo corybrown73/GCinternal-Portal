@@ -69,6 +69,11 @@ export function ReadingStatus({ deal, editable }: { deal: DealData; editable: bo
             <span className="text-amber-700 dark:text-amber-400"> · {r.error}</span>
           ) : null}
         </span>
+      ) : deal.briefs.some((b) => b.status === "complete" && b.generator === "llm") ? (
+        <span className="text-muted-foreground">
+          <Sparkles className="mr-1 inline h-3 w-3 text-primary" />
+          Read from the Gong brief. Read again to include the SOW.
+        </span>
       ) : (
         <span className="text-muted-foreground">Not read yet.</span>
       )}

@@ -23,7 +23,7 @@ describe("the AE reply", () => {
     expect(body).toContain("30-day implementation");
     expect(body).toContain("Could we hold Stage 1");
     expect(body).toContain("https://www.gcinternalportal.com/welcome/wlc_abc");
-    expect(body).toContain("• Fri, Sep 25 at 10:00 Central time");
+    expect(body).toContain("• Fri, Sep 25 at 10:00 am Central time");
     expect(body).toContain("• Mon, Sep 28 at 2:00 pm Central time");
   });
 

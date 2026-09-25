@@ -524,10 +524,8 @@ function AssignBody({ dealId, editable }: { dealId: string; editable: boolean })
   });
   const [pick, setPick] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const done = () => {
-    void qc.invalidateQueries({ queryKey: ["assignment", dealId] });
-    void qc.invalidateQueries({ queryKey: ["deal", dealId] });
-  };
+  // Everything: the customer header and the board show the owner too.
+  const done = () => void qc.invalidateQueries();
   const m = useMutation({
     mutationFn: (teamMemberId: string | null) => assign({ data: { dealId, teamMemberId } }),
     onMutate: () => setError(null),
@@ -1256,7 +1254,7 @@ function PrepBody({
                 type="checkbox"
                 className="mt-0.5 h-4 w-4"
                 checked={on}
-                disabled={!editable || tick.isPending}
+                disabled={!editable}
                 onChange={(e) => tick.mutate({ key: p.key, on: e.target.checked })}
               />
               <span>
@@ -1470,45 +1468,73 @@ function OnboardingList({
   const move = useServerFn(moveDealStage);
   const grad = useHandoffTick(deal.account.id);
   const [error, setError] = useState<string | null>(null);
-  const tick = useMutation({
-    mutationFn: (v: { doneKey: string; on: boolean; hasLaterPhases: boolean }) => {
-      const t = intake.timeline;
-      const completed = { ...t.completed };
-      if (v.on) completed[v.doneKey] = localIso();
-      else delete completed[v.doneKey];
-      // Functional IS the first form live: the last of the eight ticks marks
-      // it, so nobody ticks the same fact twice.
-      if (
-        v.on &&
-        !completed["live"] &&
-        FUNCTIONAL.some((f) => f.key === v.doneKey) &&
-        FUNCTIONAL.every((f) => completed[f.key])
-      ) {
-        completed["live"] = localIso();
-      }
-      // The first process live IS the form proven: phase 2 opens from it,
-      // unless somebody already recorded an earlier day.
-      const provenOn =
-        v.on && completed["live"] && !t.completed["live"] && v.hasLaterPhases && !t.form_proven_on
-          ? localIso()
-          : t.form_proven_on;
-      return save({
-        data: {
-          dealId: deal.account.id,
-          patch: { timeline: { ...t, completed, form_proven_on: provenOn } },
-        } as never,
-      });
-    },
-    onMutate: () => setError(null),
-    // Awaited: the boxes stay disabled until the saved plan is back, so two
-    // quick ticks cannot send the same stale plan and lose the first.
-    onSuccess: () =>
-      Promise.all([
-        qc.invalidateQueries({ queryKey: ["deal", deal.account.id] }),
-        qc.invalidateQueries({ queryKey: ["welcome", deal.account.id] }),
-      ]),
-    onError: (e) => setError((e as Error).message),
-  });
+  // Ticks land as fast as they are clicked: the box changes at once, the
+  // saves go out one after another, and each carries every tick made so far
+  // (the server replaces the plan whole, so the last save is the truth).
+  // The record is read back once the last save is in; a failed save puts
+  // the boxes back and says why.
+  const [optimistic, setOptimistic] = useState<Record<string, string | null>>({});
+  const queue = useRef<Promise<unknown>>(Promise.resolve());
+  const latest = useRef<Record<string, string> | null>(null);
+  const pending = useRef(0);
+  const isDone = (t: FlowTask) =>
+    t.doneKey && optimistic[t.doneKey] !== undefined ? Boolean(optimistic[t.doneKey]) : t.done;
+  const tick = (v: { doneKey: string; on: boolean; hasLaterPhases: boolean }) => {
+    const t = intake.timeline;
+    const completed = { ...(latest.current ?? t.completed) };
+    if (v.on) completed[v.doneKey] = localIso();
+    else delete completed[v.doneKey];
+    // Functional IS the first form live: the last of the eight ticks marks
+    // it, so nobody ticks the same fact twice.
+    if (
+      v.on &&
+      !completed["live"] &&
+      FUNCTIONAL.some((f) => f.key === v.doneKey) &&
+      FUNCTIONAL.every((f) => completed[f.key])
+    ) {
+      completed["live"] = localIso();
+    }
+    // The first process live IS the form proven: phase 2 opens from it,
+    // unless somebody already recorded an earlier day.
+    const provenOn =
+      v.on && completed["live"] && !t.completed["live"] && v.hasLaterPhases && !t.form_proven_on
+        ? localIso()
+        : t.form_proven_on;
+    latest.current = completed;
+    setError(null);
+    setOptimistic((o) => ({
+      ...o,
+      [v.doneKey]: completed[v.doneKey] ?? null,
+      ...(completed["live"] && !t.completed["live"] ? { live: completed["live"] } : {}),
+    }));
+    pending.current += 1;
+    const id = deal.account.id;
+    queue.current = queue.current
+      .then(() =>
+        save({
+          data: { dealId: id, patch: { timeline: { ...t, completed, form_proven_on: provenOn } } },
+        } as never),
+      )
+      .then(
+        async () => {
+          pending.current -= 1;
+          if (pending.current > 0) return;
+          await Promise.all([
+            qc.invalidateQueries({ queryKey: ["deal", id] }),
+            qc.invalidateQueries({ queryKey: ["welcome", id] }),
+          ]);
+          latest.current = null;
+          setOptimistic({});
+        },
+        async (e: unknown) => {
+          pending.current -= 1;
+          setError(e instanceof Error ? e.message : "The tick did not save.");
+          latest.current = null;
+          setOptimistic({});
+          await qc.invalidateQueries({ queryKey: ["deal", id] });
+        },
+      );
+  };
   const complete = useMutation({
     mutationFn: () => move({ data: { dealId: deal.account.id, toStage: "onboarding_complete" } }),
     onMutate: () => setError(null),
@@ -1539,7 +1565,7 @@ function OnboardingList({
                   {heading}
                   {heading.startsWith("Functional") ? (
                     <span className="ml-2 font-normal normal-case tracking-normal">
-                      {tasks.filter((x) => x.group === heading && x.done).length} of{" "}
+                      {tasks.filter((x) => x.group === heading && isDone(x)).length} of{" "}
                       {tasks.filter((x) => x.group === heading).length} — all eight marks the first
                       form live
                     </span>
@@ -1555,19 +1581,22 @@ function OnboardingList({
                 <input
                   type="checkbox"
                   className="mt-0.5 h-4 w-4 shrink-0"
-                  checked={t.done}
-                  disabled={!editable || tick.isPending || grad.isPending}
+                  checked={isDone(t)}
+                  disabled={!editable || grad.isPending}
                   onChange={(e) =>
                     t.action === "graduate"
                       ? grad.mutate({ key: t.key, on: e.target.checked })
-                      : tick.mutate({ doneKey: t.doneKey!, on: e.target.checked, hasLaterPhases })
+                      : tick({ doneKey: t.doneKey!, on: e.target.checked, hasLaterPhases })
                   }
                   aria-label={t.label}
                 />
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-baseline justify-between gap-x-3">
                     <span
-                      className={cn("text-[13px]", t.done && "text-muted-foreground line-through")}
+                      className={cn(
+                        "text-[13px]",
+                        isDone(t) && "text-muted-foreground line-through",
+                      )}
                     >
                       {t.label}
                       {t.optional ? (
@@ -1582,7 +1611,11 @@ function OnboardingList({
                         late ? "text-amber-700 dark:text-amber-400" : "text-muted-foreground",
                       )}
                     >
-                      {t.done ? t.summary : t.date ? `${late ? "was due" : "due"} ${t.date}` : ""}
+                      {isDone(t)
+                        ? t.summary
+                        : t.date
+                          ? `${late ? "was due" : "due"} ${t.date}`
+                          : ""}
                     </span>
                   </div>
                   {t.key === nextKey || (t.optional && !t.done) ? (
