@@ -68,7 +68,7 @@ export async function prepareDeal(
       if (brief.value.generator !== "llm") {
         problems.push(
           brief.value.error ??
-            "The AI reading did not run (check ANTHROPIC_API_KEY in Vercel); nothing was filled.",
+            "The AI reading did not run — AI is not configured here (an admin can check Admin → Integrations); nothing was filled.",
         );
       }
       filled.push(...brief.value.filled);

@@ -20,7 +20,7 @@ import {
   type IntakeAnswers,
 } from "@/lib/intake-answers";
 import { closeDateFor, timelineFor } from "@/lib/onboarding-plan";
-import { coreWindowEnd, dayCounter, localIso } from "@/lib/onboarding-timeline";
+import { coreWindowEnd, dayCounter, localIso, shortDay } from "@/lib/onboarding-timeline";
 import { getWelcome } from "@/lib/welcome.functions";
 import { wonStage } from "@/lib/pipeline-stages";
 import { moveDealStage, saveIntake } from "@/lib/presale.functions";
@@ -90,9 +90,14 @@ export function StageFlow({ deal }: { deal: DealData }) {
   const sync = useServerFn(syncDealStageFn);
   const asked = useRef<string | null>(null);
   const [moved, setMoved] = useState<string | null>(null);
+  // A move that failed says so, with the button that tries again; a page
+  // that only ever said "moving…" would be lying from the second attempt on.
+  const [syncError, setSyncError] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     if (!editable || !flow.advanceTo || asked.current === flow.advanceTo) return;
     asked.current = flow.advanceTo;
+    setSyncError(null);
     void sync({ data: { dealId } })
       .then((r) => {
         if (r.moved) {
@@ -100,10 +105,11 @@ export function StageFlow({ deal }: { deal: DealData }) {
           void qc.invalidateQueries();
         }
       })
-      .catch(() => {
+      .catch((e: unknown) => {
         asked.current = null;
+        setSyncError(e instanceof Error ? e.message : "The deal could not be moved.");
       });
-  }, [editable, flow.advanceTo, dealId, sync, qc]);
+  }, [editable, flow.advanceTo, dealId, sync, qc, attempt]);
 
   const [today, setToday] = useState<string | null>(null);
   useEffect(() => setToday(localIso()), []);
@@ -187,10 +193,11 @@ export function StageFlow({ deal }: { deal: DealData }) {
           {intake.path === "new_logo" &&
           (flow.current === "onboarding" || flow.current === "pre_kickoff") ? (
             <span className="rounded-full border border-border px-2 py-0.5">
-              Functional by {timeline.liveDate} · 30-day window ends {coreWindowEnd(timeline)}
+              Functional by {shortDay(timeline.liveDate)} · 30-day window ends{" "}
+              {shortDay(coreWindowEnd(timeline))}
             </span>
           ) : null}
-          {stageFooter(shown, flow.current)}
+          {stageFooter(shown, flow.current, intake.path)}
         </p>
       </div>
       {moved ? (
@@ -204,11 +211,24 @@ export function StageFlow({ deal }: { deal: DealData }) {
           says where the deal goes now — a folded row is not an answer. */}
       {flow.current === null && deal.account.stage === "prospect" ? (
         <NotClosedBar deal={deal} editable={editable} ready={stage.done} />
+      ) : syncError && flow.advanceTo && shown === flow.current ? (
+        <p className="flex flex-wrap items-center gap-2 border-b border-border bg-destructive/10 px-4 py-2 text-[12px] text-destructive">
+          Everything here is done, but the deal could not be moved: {syncError}
+          <button
+            type="button"
+            className="rounded-sm border border-destructive/40 px-2 py-0.5 font-medium hover:bg-destructive/10"
+            onClick={() => setAttempt((n) => n + 1)}
+          >
+            Try again
+          </button>
+        </p>
       ) : stage.tasks.length > 0 && stage.done && shown === flow.current ? (
         <p className="border-b border-border bg-status-ontrack/40 px-4 py-2 text-[12px] text-status-ontrack-foreground">
           <Check className="mr-1 inline h-3.5 w-3.5" strokeWidth={3} />
           {flow.advanceTo
-            ? `Everything here is done — moving the deal to ${flow.advanceTo === "in_onboarding" ? "Onboarding" : "Pre-kickoff"}…`
+            ? editable
+              ? `Everything here is done — moving the deal to ${flow.advanceTo === "in_onboarding" ? "Onboarding" : "Pre-kickoff"}…`
+              : `Everything here is done — the deal moves to ${flow.advanceTo === "in_onboarding" ? "Onboarding" : "Pre-kickoff"} when its owner opens it.`
             : shown === "closed_won" && !flow.stages[0]!.tasks.find((x) => x.key === "assign")?.done
               ? "Waiting on an owner."
               : "Everything here is done."}
@@ -311,15 +331,21 @@ function NotClosedBar({
 }
 
 /** One line under the stage name: what moves the deal on from here. */
-function stageFooter(shown: FlowStageKey, current: FlowStageKey | null): string {
+function stageFooter(
+  shown: FlowStageKey,
+  current: FlowStageKey | null,
+  path: IntakeAnswers["path"],
+): string {
   if (shown !== current) return "Not the current stage — you can still work ahead.";
   switch (shown) {
     case "closed_won":
-      return "Moves to Pre-kickoff when the welcome brief is generated.";
+      return "Moves to Pre-kickoff when the review is approved.";
     case "field_fusion":
       return "Moves to Pre-kickoff when the setup is handed over.";
     case "pre_kickoff":
-      return "Moves to Onboarding when the kickoff is booked.";
+      return path === "new_logo"
+        ? "Moves to Onboarding when the AE is answered, the prep is done and all three core meetings are booked."
+        : "Moves to Onboarding when the AE is answered, the cadence is on and the kickoff is booked.";
     case "onboarding":
       return "Mark it complete once every step is done.";
     default:
@@ -1474,10 +1500,13 @@ function OnboardingList({
       });
     },
     onMutate: () => setError(null),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ["deal", deal.account.id] });
-      void qc.invalidateQueries({ queryKey: ["welcome", deal.account.id] });
-    },
+    // Awaited: the boxes stay disabled until the saved plan is back, so two
+    // quick ticks cannot send the same stale plan and lose the first.
+    onSuccess: () =>
+      Promise.all([
+        qc.invalidateQueries({ queryKey: ["deal", deal.account.id] }),
+        qc.invalidateQueries({ queryKey: ["welcome", deal.account.id] }),
+      ]),
     onError: (e) => setError((e as Error).message),
   });
   const complete = useMutation({

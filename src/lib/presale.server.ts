@@ -207,6 +207,7 @@ export async function loadPipeline(
     { data: impls },
     { data: briefed },
     { data: members },
+    { data: ledger },
   ] = await Promise.all([
     db().from("portal_accounts").select("*").order("name"),
     profileNames(),
@@ -220,6 +221,10 @@ export async function loadPipeline(
       .order("created_at", { ascending: false }),
     db().from("portal_briefs").select("account_id").eq("status", "complete").eq("generator", "llm"),
     db().from("team_members").select("id,name"),
+    db()
+      .from("portal_assignments")
+      .select("deal_id,team_member_id,created_at")
+      .order("created_at", { ascending: false }),
   ]);
   const implByDeal = new Map<string, string>();
   const implOwnerByDeal = new Map<string, string | null>();
@@ -233,6 +238,11 @@ export async function loadPipeline(
       implOwnerByDeal.set(i.deal_id, i.owner_id ?? null);
     }
   }
+  // An owner assigned at the close, before the project exists, is only in
+  // the ledger; the board shows the same owner the deal page does.
+  for (const l of (ledger ?? []) as Array<{ deal_id: string; team_member_id: string }>) {
+    if (!implOwnerByDeal.get(l.deal_id)) implOwnerByDeal.set(l.deal_id, String(l.team_member_id));
+  }
   if (error) throw new Error(error.message);
   const withNotes = new Set(
     ((noted ?? []) as Array<{ account_id: string }>).map((r) => r.account_id),
@@ -240,6 +250,7 @@ export async function loadPipeline(
   const { readIntake } = await import("./intake-answers");
   const { businessDaysBetween, localIso } = await import("./onboarding-timeline");
   const { stuckLevel } = await import("./stage-flow");
+  const { timelineFor } = await import("./onboarding-plan");
   const withBrief = new Set(
     ((briefed ?? []) as Array<{ account_id: string }>).map((r) => r.account_id),
   );
@@ -273,13 +284,24 @@ export async function loadPipeline(
         0,
         businessDaysBetween(String(a.stage_entered_at ?? today).slice(0, 10), today),
       );
+      const intake = readIntake(a.intake);
+      // Onboarding's tasks are the plan's steps: the board needs the plan
+      // to name the next one. Day 0 is the recorded close, else the day the
+      // deal entered its stage — the label does not depend on the dates.
+      const timeline =
+        a.stage === "in_onboarding"
+          ? timelineFor(
+              intake,
+              intake.timeline.close_date ?? String(a.stage_entered_at ?? today).slice(0, 10),
+            )
+          : undefined;
       return {
         ...a,
         customer_id: a.customer_id ?? null,
         implementation_id: implByDeal.get(a.id) ?? null,
         am_owner_name: a.am_owner_id ? (names.get(a.am_owner_id) ?? null) : null,
         se_owner_name: a.se_owner_id ? (names.get(a.se_owner_id) ?? null) : null,
-        path: readIntake(a.intake).path,
+        path: intake.path,
         has_notes: withNotes.has(a.id),
         has_sow: Boolean(a.sow_document_path),
         owner_name: ownerName,
@@ -292,6 +314,7 @@ export async function loadPipeline(
           hasSow: Boolean(a.sow_document_path),
           hasBrief: withBrief.has(a.id),
           hasLink: Boolean((a as { welcome_share_url?: string | null }).welcome_share_url),
+          ...(timeline && { timeline }),
         }),
         business_days_in_stage: inStage,
         stuck: stuckLevel(a.stage, inStage),
@@ -322,6 +345,21 @@ export async function createDeal(
     ...(input.arr != null ? { arr: input.arr } : {}),
     ...(input.summary ? { summary: input.summary } : {}),
   });
+  // A person typing a name that already exists is not a Zapier retry: the
+  // upsert's name match would quietly rewrite the other deal's ARR, type
+  // and papers. Say so, and point at the door that adds to an account.
+  {
+    const { data: twin } = await db()
+      .from("portal_accounts")
+      .select("id,name")
+      .ilike("name", parsed.name)
+      .maybeSingle();
+    if (twin) {
+      throw new Error(
+        `A deal named "${twin.name}" already exists. Open it from the pipeline — or, to add services to that customer, use "Add services" on the customer's page.`,
+      );
+    }
+  }
   const result = await upsertAccount(parsed, { source: "ui", actorProfileId: userId });
 
   // The two facts the plan and the page read, captured while they are known.

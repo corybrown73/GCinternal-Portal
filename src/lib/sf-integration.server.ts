@@ -451,6 +451,15 @@ export async function syncPresaleStageFromLifecycle(
     if (account.stage === "field_fusion_setup") {
       return { synced: false, reason: "Field Fusion setup holds until the handoff" };
     }
+    // Closed Won and Pre-kickoff belong to the deal's checklist: the brief
+    // being generated moves the project to planning, but the deal only
+    // reaches Onboarding when the AE is answered, the prep is done and the
+    // meetings are booked. Ask the checklist; it moves the deal when it may.
+    if (target !== "onboarding_complete") {
+      const { syncDealStage } = await import("./stage-flow.server");
+      const { moved } = await syncDealStage(account.id, null);
+      return moved ? { synced: true } : { synced: false, reason: "the checklist is not done" };
+    }
 
     const { transitionStage } = await import("./server/accounts");
     const { changed } = await transitionStage(

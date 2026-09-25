@@ -371,7 +371,16 @@ export function claimByPerson(
   patchKeys: readonly string[],
 ): Pick<IntakeAnswers, "ai_filled" | "person_set" | "ai_sources"> {
   const touched = AI_OWNED_FIELDS.filter((f) => patchKeys.includes(f));
-  if (!touched.length) return current;
+  // Only these three keys, ever: the caller spreads the result over its
+  // patch, and a whole intake returned here would put every old answer back
+  // on top of the new one.
+  if (!touched.length) {
+    return {
+      ai_filled: current.ai_filled,
+      person_set: current.person_set,
+      ai_sources: current.ai_sources,
+    };
+  }
   const sources = { ...current.ai_sources };
   for (const f of touched) delete sources[f];
   return {

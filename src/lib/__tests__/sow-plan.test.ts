@@ -86,7 +86,7 @@ describe("the SOW read into the plan", () => {
     expect(t.phases[0]!.tentative).toBe(true);
   });
 
-  it("rejects a row with a kind outside the catalogue or a calendar date", () => {
+  it("drops a row with a kind outside the catalogue, and keeps the reading", () => {
     const ok = sowPlanProposalSchema.safeParse({
       readable: true,
       problem: null,
@@ -104,11 +104,55 @@ describe("the SOW read into the plan", () => {
       summary: "",
       first_form: null,
       seats: null,
-      services: [{ ...qb, kind: "sorcery" }],
+      services: [{ ...qb, kind: "sorcery" }, qb],
       notes: [],
       gaps: [],
     });
-    expect(bad.success).toBe(false);
+    expect(bad.success).toBe(true);
+    expect(bad.success && bad.data.services).toEqual([qb]);
+  });
+
+  it("reads the model's JSON forgivingly: text numbers, loose dates, a bare contact, long quotes", () => {
+    const r = sowPlanProposalSchema.safeParse({
+      // readable, summary, notes and gaps left out entirely
+      reference: "Q-2026-0917",
+      signed_date: "2026-09-17",
+      start_date: "upon signature",
+      value: "$12,500",
+      contact: "Dana Ortiz",
+      first_form: "Roof Inspection",
+      seats: "20 users",
+      services: [
+        {
+          ...qb,
+          tier: "3",
+          weeks: "n/a",
+          phase: "2",
+          evidence: "x".repeat(400),
+          confidence: "sure",
+        },
+      ],
+    });
+    expect(r.success).toBe(true);
+    if (!r.success) return;
+    expect(r.data).toMatchObject({
+      readable: true,
+      problem: null,
+      summary: "",
+      start_date: null,
+      value: 12500,
+      contact: { name: "Dana Ortiz", role: null, email: null },
+      seats: 20,
+      notes: [],
+      gaps: [],
+    });
+    expect(r.data.services[0]).toMatchObject({
+      tier: 3,
+      weeks: null,
+      phase: 2,
+      confidence: "implied",
+    });
+    expect(r.data.services[0]!.evidence).toHaveLength(300);
   });
 
   it("describes every kind and the integration tiers to the model", () => {

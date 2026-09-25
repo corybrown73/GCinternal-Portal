@@ -28,60 +28,118 @@ import { toolFromName } from "./onboarding-tools";
 
 const kindEnum = z.enum(SERVICE_KIND_LIST.map((k) => k.kind) as [ServiceKind, ...ServiceKind[]]);
 
+/*
+ * The model's JSON is read forgivingly. A reading that names the right
+ * services must not be thrown away because a value came as "$12,500", a
+ * date as "on signature", a quote ran past 300 characters or a tier was
+ * written on a form row: each of those is a field to tidy, not a failed
+ * reading. What cannot be tidied becomes null; the person sees the rows.
+ */
+
+/** A number, or a number written as text ("$12,500", "150 users"); else null. */
+const looseNumber = (v: unknown): unknown => {
+  if (typeof v === "number") return Number.isFinite(v) ? v : null;
+  if (typeof v === "string") {
+    const n = Number(v.replace(/[^0-9.-]/g, ""));
+    return v.trim() && Number.isFinite(n) ? n : null;
+  }
+  return null;
+};
+/** A string cut to fit; anything else null. */
+const looseText = (max: number) => (v: unknown) =>
+  typeof v === "string" ? v.trim().slice(0, max) || null : null;
+const inRange = (min: number, max: number) => (v: unknown) =>
+  typeof v === "number" && v >= min && v <= max ? v : null;
+
 export const sowPlanRowSchema = z.object({
   kind: kindEnum,
   /** The name the SOW uses: "QuickBooks Online", "Invoice PDF", "JSA form". */
-  name: z.string().trim().min(1).max(120),
+  name: z.preprocess(
+    (v) => (typeof v === "string" ? v.trim().slice(0, 120) : v),
+    z.string().min(1).max(120),
+  ),
   /** Integrations only: 2 intermediate, 3 advanced, 4 complex, 5 unknown. Null elsewhere. */
-  tier: z.number().int().min(2).max(5).nullable(),
+  tier: z.preprocess(
+    (v) => inRange(2, 5)(Math.round(Number(looseNumber(v) ?? NaN))),
+    z.number().int().min(2).max(5).nullable(),
+  ),
   /** Length in weeks when the SOW states one; null to use the catalogue. */
-  weeks: z.number().min(0.5).max(52).nullable(),
+  weeks: z.preprocess((v) => inRange(0.5, 52)(looseNumber(v)), z.number().nullable()),
   /** 1 = alongside the form from kickoff; 2 and up wait for the phase before. */
-  phase: z.number().int().min(1).max(4),
+  phase: z.preprocess(
+    (v) => inRange(1, 4)(Math.round(Number(looseNumber(v) ?? NaN))) ?? 1,
+    z.number().int().min(1).max(4),
+  ),
   /** What we need from the customer, when the SOW says; null for the catalogue line. */
-  needs: z.string().trim().max(300).nullable(),
+  needs: z.preprocess(looseText(300), z.string().nullable()),
   /** A short verbatim quote from the SOW that this row rests on. */
-  evidence: z.string().trim().max(300).nullable(),
-  confidence: z.enum(["stated", "implied", "uncertain"]),
+  evidence: z.preprocess(looseText(300), z.string().nullable()),
+  confidence: z.preprocess(
+    (v) => (v === "stated" || v === "implied" || v === "uncertain" ? v : "implied"),
+    z.enum(["stated", "implied", "uncertain"]),
+  ),
 });
 export type SowPlanRow = z.infer<typeof sowPlanRowSchema>;
 
-const isoDate = z
-  .string()
-  .regex(/^\d{4}-\d{2}-\d{2}$/)
-  .nullable();
+const isoDate = z.preprocess(
+  (v) => (typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v.trim()) ? v.trim() : null),
+  z.string().nullable(),
+);
+const textList = (max: number) =>
+  z.preprocess(
+    (v) =>
+      Array.isArray(v)
+        ? v.filter((x): x is string => typeof x === "string" && x.trim() !== "").slice(0, max)
+        : [],
+    z.array(z.string()).max(max),
+  );
 
 export const sowPlanProposalSchema = z.object({
-  readable: z.boolean(),
-  problem: z.string().nullable(),
+  readable: z.preprocess((v) => (typeof v === "boolean" ? v : true), z.boolean()),
+  problem: z.preprocess(looseText(500), z.string().nullable()),
   /** The SOW's own reference or quote number, as printed. */
-  reference: z.string().trim().max(60).nullable().default(null),
+  reference: z.preprocess(looseText(60), z.string().nullable()),
   /** The day it was signed, ISO. */
-  signed_date: isoDate.default(null),
+  signed_date: isoDate,
   /** The day the work starts, when the SOW names one; the plan's day 0. */
-  start_date: isoDate.default(null),
+  start_date: isoDate,
   /** Total contract value, as a number, in the currency the SOW states. */
-  value: z.number().nonnegative().nullable().default(null),
-  /** The customer contact the SOW names. */
-  contact: z
-    .object({
-      name: z.string().trim().max(120).nullable().default(null),
-      role: z.string().trim().max(120).nullable().default(null),
-      email: z.string().trim().max(160).nullable().default(null),
-    })
-    .nullable()
-    .default(null),
+  value: z.preprocess((v) => {
+    const n = looseNumber(v);
+    return typeof n === "number" && n >= 0 ? n : null;
+  }, z.number().nullable()),
+  /** The customer contact the SOW names (a bare name is a contact too). */
+  contact: z.preprocess(
+    (v) => (typeof v === "string" ? { name: v } : v && typeof v === "object" ? v : null),
+    z
+      .object({
+        name: z.preprocess(looseText(120), z.string().nullable()),
+        role: z.preprocess(looseText(120), z.string().nullable()),
+        email: z.preprocess(looseText(160), z.string().nullable()),
+      })
+      .nullable(),
+  ),
   /** One line: what was bought. */
-  summary: z.string(),
+  summary: z.preprocess((v) => (typeof v === "string" ? v : ""), z.string()),
   /** The first form, when the SOW names it. */
-  first_form: z.string().trim().max(160).nullable(),
+  first_form: z.preprocess(looseText(160), z.string().nullable()),
   /** Licensed seats as stated, or null. */
-  seats: z.number().int().nonnegative().nullable(),
-  services: z.array(sowPlanRowSchema).max(20),
+  seats: z.preprocess(
+    (v) => inRange(0, 1_000_000)(Math.round(Number(looseNumber(v) ?? NaN))),
+    z.number().int().nullable(),
+  ),
+  /** Rows the plan can hold; one the model could not shape is dropped, not fatal. */
+  services: z.preprocess(
+    (v) =>
+      Array.isArray(v)
+        ? v.filter((row) => sowPlanRowSchema.safeParse(row).success).slice(0, 20)
+        : [],
+    z.array(sowPlanRowSchema).max(20),
+  ),
   /** Things the SOW says that the plan cannot hold: exclusions, conditions, dates it names. */
-  notes: z.array(z.string()).max(20),
+  notes: textList(20),
   /** What the SOW does not say that the plan needs. */
-  gaps: z.array(z.string()).max(20),
+  gaps: textList(20),
 });
 export type SowPlanProposal = z.infer<typeof sowPlanProposalSchema>;
 

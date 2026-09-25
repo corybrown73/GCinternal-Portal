@@ -45,12 +45,26 @@ ${catalogueForPrompt()}
 Return JSON exactly in this shape:
 {"readable":true,"problem":null,"reference":null,"signed_date":null,"start_date":null,"value":null,"contact":null,"summary":"","first_form":null,"seats":null,"services":[{"kind":"integration","name":"","tier":3,"weeks":null,"phase":2,"needs":null,"evidence":null,"confidence":"stated"}],"notes":[],"gaps":[]}`;
 
-function tryParse(raw: string): SowPlanProposal | null {
+/**
+ * The JSON object in the model's text, wherever it sits: a model that
+ * reasons first sometimes writes a line before the object or after the
+ * closing fence, and a reading that is right must not be thrown away for
+ * the sentence around it.
+ */
+export function extractJsonObject(raw: string): string {
   const cleaned = raw
     .trim()
     .replace(/^```(?:json)?/i, "")
     .replace(/```$/, "")
     .trim();
+  if (cleaned.startsWith("{")) return cleaned;
+  const start = cleaned.indexOf("{");
+  const end = cleaned.lastIndexOf("}");
+  return start >= 0 && end > start ? cleaned.slice(start, end + 1) : cleaned;
+}
+
+function tryParse(raw: string): SowPlanProposal | null {
+  const cleaned = extractJsonObject(raw);
   let json: unknown;
   try {
     json = JSON.parse(cleaned);
@@ -82,7 +96,7 @@ export async function proposePlanFromSow(
     throw new Error("Upload the signed SOW first — the plan is read from that document.");
   }
   if (!process.env["ANTHROPIC_API_KEY"]) {
-    throw new Error("AI reading is not configured — set ANTHROPIC_API_KEY on the deployment.");
+    throw new Error("AI reading is not configured here — an admin can check Admin → Integrations.");
   }
 
   const download = await db()

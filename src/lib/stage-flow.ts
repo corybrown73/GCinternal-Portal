@@ -1,6 +1,6 @@
 import { firstFormName, flowAnswered, readIntake, type IntakeAnswers } from "./intake-answers";
 import type { AccountStage } from "./presale-stages";
-import type { Timeline } from "./onboarding-timeline";
+import { TEAM_ZONE, shortDay, type Timeline } from "./onboarding-timeline";
 
 /**
  * The deal's stages as a checklist: what each stage asks of the person who
@@ -28,7 +28,7 @@ export const DEAL_TYPES = [
   {
     path: "new_logo",
     label: "New logo",
-    plan: "First GoCanvas rollout: three 60-minute training days, first form live in 15 business days.",
+    plan: "First GoCanvas rollout on the Implementation Playbook: three 60-minute core meetings — Make It Work, Make It Work for Them, Make It Operational — Functional by business day 15, inside a 30-day window.",
   },
   {
     path: "existing",
@@ -126,8 +126,12 @@ export const KICKOFF_CADENCE: ReadonlyArray<{ day: string; step: string }> = [
   { day: "Day 7", step: "Escalate to the AE to get the kickoff on the calendar" },
 ];
 
-/** A reading that started this long ago and never finished died with its request. */
-export const READING_STALE_MS = 6 * 60 * 1000;
+/**
+ * A reading that started this long ago and never finished died with its
+ * request: the function it ran in is cut off at five minutes, so a spinner
+ * past this is a spinner for nothing.
+ */
+export const READING_STALE_MS = 4.5 * 60 * 1000;
 
 /** The automatic reading is running right now (and has not quietly died). */
 export function readingInFlight(r: IntakeAnswers["ai_reading"], now = Date.now()): boolean {
@@ -279,8 +283,8 @@ function playbookPreKickoff(a: IntakeAnswers): FlowTask[] {
       done: booked === CORE_MEETINGS.length,
       summary:
         booked === CORE_MEETINGS.length
-          ? CORE_MEETINGS.map(
-              (m) => `${a.timeline.overrides[m.key]} ${a.timeline.times[m.key]}`,
+          ? CORE_MEETINGS.map((m) =>
+              whenLabel(a.timeline.overrides[m.key]!, a.timeline.times[m.key]!),
             ).join(" · ")
           : booked
             ? `${booked} of 3 booked`
@@ -289,6 +293,31 @@ function playbookPreKickoff(a: IntakeAnswers): FlowTask[] {
       locked: null,
     },
   ];
+}
+
+/**
+ * The day a tick was made, on the team's clock. The stamp is UTC, and after
+ * 8 pm Eastern that is tomorrow's date: "Replied Sep 25" for a reply sent
+ * on the 24th.
+ */
+export function stampDay(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso.slice(0, 10);
+  return d.toLocaleDateString("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    timeZone: TEAM_ZONE,
+  });
+}
+
+/** "Tue, Sep 29 at 2:30 PM" — a booked meeting in a person's words, not the record's. */
+export function whenLabel(isoDate: string, time: string): string {
+  const [h, m] = time.split(":").map(Number) as [number, number];
+  const clock = Number.isFinite(h)
+    ? `${h % 12 === 0 ? 12 : h % 12}:${String(m || 0).padStart(2, "0")} ${h >= 12 ? "PM" : "AM"}`
+    : time;
+  return `${shortDay(isoDate)} at ${clock}`;
 }
 
 function classicPreKickoff(a: IntakeAnswers): FlowTask[] {
@@ -302,7 +331,7 @@ function classicPreKickoff(a: IntakeAnswers): FlowTask[] {
       label: "Reply to the AE's email",
       hint: "Reply-all: introduce yourself, share the welcome page, offer two kickoff times.",
       done: Boolean(t["reply_ae"]),
-      summary: t["reply_ae"] ? `Replied ${t["reply_ae"].slice(0, 10)}` : null,
+      summary: t["reply_ae"] ? `Replied ${stampDay(t["reply_ae"])}` : null,
       action: "reply_ae",
       locked: null,
     },
@@ -311,16 +340,16 @@ function classicPreKickoff(a: IntakeAnswers): FlowTask[] {
       label: "Add them to the Salesloft cadence",
       hint: "Calls and emails on a schedule until the kickoff is on the calendar, so nothing goes quiet.",
       done: Boolean(t["cadence"]),
-      summary: t["cadence"] ? `In the cadence since ${t["cadence"].slice(0, 10)}` : null,
+      summary: t["cadence"] ? `In the cadence since ${stampDay(t["cadence"])}` : null,
       action: "cadence",
       locked: null,
     },
     {
       key: "kickoff",
       label: "Book the kickoff call",
-      hint: "Training day 1, sixty minutes. The date and time go on the plan and every date after it follows.",
+      hint: "The first call. The date and time go on the plan and every date after it follows.",
       done: booked,
-      summary: booked ? `${kickoffDate} at ${kickoffTime}` : null,
+      summary: booked ? whenLabel(kickoffDate!, kickoffTime!) : null,
       action: "kickoff",
       locked: null,
     },
@@ -570,7 +599,7 @@ export function stageFlow(input: StageFlowInput): StageFlow {
 function flowSummary(a: IntakeAnswers): string {
   const head =
     a.path === "new_logo"
-      ? "New customer"
+      ? "New logo"
       : a.path === "existing"
         ? "Existing account"
         : a.path === "dm_conversion"

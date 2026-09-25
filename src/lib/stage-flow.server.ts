@@ -51,6 +51,20 @@ export async function syncDealStage(
       .maybeSingle();
     owner = impl?.owner_id ? String(impl.owner_id) : null;
   }
+  // Before Start onboarding there is no project to carry the owner: the
+  // assignment made at the close lives in the ledger. The page reads it
+  // from there, so the move must too, or "Assign an owner" is done on the
+  // screen and not done here, and the deal never leaves Closed Won.
+  if (!owner) {
+    const { data: led } = await db()
+      .from("portal_assignments")
+      .select("team_member_id")
+      .eq("deal_id", dealId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    owner = led?.team_member_id ? String(led.team_member_id) : null;
+  }
 
   const flow = stageFlow({
     stage: String(account.stage),
