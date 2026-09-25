@@ -42,13 +42,16 @@ export function OnboardingPlansPanel() {
   const base = basePlanFor(key);
   const overrides = plans[key] ?? {};
   const effective = withPlanOverrides(base, overrides);
-  const problems = planProblems({ [key]: overrides });
+  // Every plan in the draft, not just the one on screen: Save sends them all.
+  const problems = planProblems(plans);
   const dirty = draft !== null;
 
   const edit = (mKey: string, patch: Partial<MilestoneOverride>) => {
     setError(null);
-    setDraft((d) => {
-      const cur = d ?? q.data ?? {};
+    setDraft(() => {
+      // Seeded from what is on screen, never from a cache the last save has
+      // not reached yet.
+      const cur = plans;
       const plan: Record<string, MilestoneOverride> = { ...(cur[key] ?? {}) };
       const row: MilestoneOverride = { ...(plan[mKey] ?? {}), ...patch };
       // An emptied field is the default again, not a stored blank.
@@ -69,6 +72,10 @@ export function OnboardingPlansPanel() {
     mutationFn: () => save({ data: { plans } }),
     onSuccess: (saved) => {
       applyPlanOverrides(saved);
+      // The saved plans go straight into the cache, so the table never shows
+      // the old ones while the refetch is in flight; then everything that
+      // draws a plan is asked to redraw.
+      qc.setQueryData(["onboarding-plans"], saved);
       setDraft(null);
       void qc.invalidateQueries();
     },
@@ -201,8 +208,8 @@ export function OnboardingPlansPanel() {
             disabled={!(plans[key] && Object.keys(plans[key]!).length) || m.isPending}
             onClick={() => {
               setError(null);
-              setDraft((d) => {
-                const next: PlanOverrides = { ...(d ?? q.data ?? {}) };
+              setDraft(() => {
+                const next: PlanOverrides = { ...plans };
                 delete next[key];
                 return next;
               });

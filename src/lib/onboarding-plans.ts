@@ -3,7 +3,6 @@ import { z } from "zod";
 import {
   basePlanFor,
   PLAN_KEYS,
-  withPlanOverrides,
   type MilestoneOverride,
   type PlanKey,
   type PlanOverrides,
@@ -90,8 +89,25 @@ export function planProblems(o: PlanOverrides): string[] {
         problems.push(`${key}: "${k}" is not a step of this plan.`);
         continue;
       }
+      if (v.day !== undefined && (!Number.isInteger(v.day) || v.day < 0 || v.day > 90)) {
+        problems.push(`${key}: "${m.label}" needs a whole day between 0 and 90 (got ${v.day}).`);
+      }
+      if (
+        v.throughDay != null &&
+        (!Number.isInteger(v.throughDay) || v.throughDay < 0 || v.throughDay > 120)
+      ) {
+        problems.push(`${key}: "${m.label}" needs a whole last day between 0 and 120.`);
+      }
       if (v.minutes != null && m.kind !== "call") {
         problems.push(`${key}: "${m.label}" is not a call, so it has no length.`);
+      } else if (
+        v.minutes != null &&
+        (!Number.isInteger(v.minutes) || v.minutes < 15 || v.minutes > 240)
+      ) {
+        problems.push(`${key}: "${m.label}" needs a length between 15 and 240 minutes.`);
+      }
+      if (v.label !== undefined && (v.label.trim() === "" || v.label.trim().length > 120)) {
+        problems.push(`${key}: "${m.label}" needs a label of 1 to 120 characters.`);
       }
       const day = v.day ?? m.day;
       const through = v.throughDay === undefined ? m.throughDay : v.throughDay;
@@ -101,19 +117,12 @@ export function planProblems(o: PlanOverrides): string[] {
         );
       }
     }
-    const effective = withPlanOverrides(base, plan);
     const days = base.map((m) => plan[m.key]?.day ?? m.day);
     for (let i = 1; i < days.length; i += 1) {
       if (days[i]! < days[i - 1]!) {
         problems.push(
           `${key}: "${base[i]!.label}" (day ${days[i]}) would run before "${base[i - 1]!.label}" (day ${days[i - 1]}).`,
         );
-      }
-    }
-    if (effective === base && Object.keys(plan).length) {
-      // Every change was dropped: say so once, in case none of the above fired.
-      if (!problems.some((p) => p.startsWith(`${key}:`))) {
-        problems.push(`${key}: none of these changes can be applied.`);
       }
     }
   }

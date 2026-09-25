@@ -111,3 +111,20 @@ describe("an admin's changes to a plan", () => {
     expect(p.some((x) => x.includes("ends on day 2"))).toBe(true);
   });
 });
+
+describe("the form's checks mirror the stored shape", () => {
+  it("names a day that is not a whole day in range, a bad length, a bad label", () => {
+    const p = planProblems({
+      new_logo: {
+        kickoff: { day: 2.5 },
+        working: { minutes: 5 },
+        adjust: { label: "" },
+        live: { day: 500 },
+      },
+    });
+    expect(p.some((x) => x.includes("whole day between 0 and 90 (got 2.5)"))).toBe(true);
+    expect(p.some((x) => x.includes("between 15 and 240 minutes"))).toBe(true);
+    expect(p.some((x) => x.includes("label of 1 to 120"))).toBe(true);
+    expect(p.some((x) => x.includes("(got 500)"))).toBe(true);
+  });
+});

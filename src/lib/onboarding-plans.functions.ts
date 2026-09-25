@@ -23,7 +23,18 @@ export const getOnboardingPlans = createServerFn({ method: "GET" })
 
 export const setOnboardingPlans = createServerFn({ method: "POST" })
   .middleware([requireInternalAuth])
-  .inputValidator((data: unknown) => z.object({ plans: planOverridesSchema }).parse(data))
+  .inputValidator((data: unknown) => {
+    // A sentence per problem, not zod's JSON: the panel shows this text.
+    const r = z.object({ plans: planOverridesSchema }).safeParse(data);
+    if (!r.success) {
+      throw new Error(
+        r.error.issues
+          .map((i) => `${i.path.slice(1).join(" › ") || "plans"}: ${i.message}`)
+          .join(" "),
+      );
+    }
+    return r.data;
+  })
   .handler(async ({ data, context }) => {
     const { requireInternal } = await import("./presale.server");
     const actor = await requireInternal(context.userId);

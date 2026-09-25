@@ -25,11 +25,12 @@ export function resetPlanOverridesCache(): void {
 export async function loadPlanOverrides(): Promise<PlanOverrides> {
   if (cache && Date.now() - cache.at < CACHE_MS) return cache.value;
   try {
-    const { data } = await db()
+    const { data, error } = await db()
       .from("portal_app_config")
       .select("value")
       .eq("key", KEY)
       .maybeSingle();
+    if (error) throw new Error(error.message);
     const value = readPlanOverrides(data?.value);
     cache = { at: Date.now(), value };
     return value;

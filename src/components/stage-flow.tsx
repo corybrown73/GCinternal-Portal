@@ -1300,6 +1300,13 @@ function BookCoreBody({
     }).date,
   );
   const plannedDate = (k: string) => plan.milestones.find((m) => m.key === k)?.date ?? "";
+  // The plan's own words for each meeting: "Stage 1 — Make It Work" on a new
+  // logo, "Stage 1 — Make It Work: the form the integration reads" on an
+  // existing account.
+  const labelFor = (k: string) =>
+    plan.milestones.find((m) => m.key === k)?.label ??
+    CORE_MEETINGS.find((c) => c.key === k)?.label ??
+    k;
   const browserZone =
     typeof Intl !== "undefined" ? Intl.DateTimeFormat().resolvedOptions().timeZone : "";
   const [rows, setRows] = useState(() =>
@@ -1347,10 +1354,10 @@ function BookCoreBody({
       <div className="space-y-1.5">
         {CORE_MEETINGS.map((c, i) => (
           <div key={c.key} className="flex flex-wrap items-end gap-2">
-            <span className="w-56 pb-1.5 text-[12px] font-medium">{c.label}</span>
+            <span className="w-56 pb-1.5 text-[12px] font-medium">{labelFor(c.key)}</span>
             <input
               type="date"
-              aria-label={`${c.label} date`}
+              aria-label={`${labelFor(c.key)} date`}
               className="h-8 rounded-sm border border-border bg-background px-2 text-[12px]"
               value={rows[i]!.date}
               disabled={!editable || m.isPending}
@@ -1361,7 +1368,7 @@ function BookCoreBody({
               }
             />
             <select
-              aria-label={`${c.label} time`}
+              aria-label={`${labelFor(c.key)} time`}
               className="h-8 rounded-sm border border-border bg-background px-2 text-[12px]"
               value={rows[i]!.time}
               disabled={!editable || m.isPending}
@@ -1433,9 +1440,9 @@ function BookCoreBody({
                   time={t.times[c.key]!}
                   zone={t.timezone!}
                   event={c.key}
-                  title={c.label}
+                  title={labelFor(c.key)}
                   about={plan.milestones.find((x) => x.key === c.key)?.detail ?? ""}
-                  label={`${c.label} — ${t.overrides[c.key]} ${clock(t.times[c.key]!)}:`}
+                  label={`${labelFor(c.key)} — ${t.overrides[c.key]} ${clock(t.times[c.key]!)}:`}
                 />
               ))
             : null}

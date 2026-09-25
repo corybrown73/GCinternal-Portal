@@ -32,8 +32,14 @@ with reversed as (
    where k.revoked_at is null
      and exists (select 1 from public.portal_audit_log a
                   where a.entity_id = k.id and a.action = 'api_key.scopes_backfill')
+     -- The trigger's row cannot be skipped, unlike the app's: any scopes change
+     -- after the backfill is an operator's decision and stays.
      and not exists (select 1 from public.portal_audit_log a
-                      where a.entity_id = k.id and a.action = 'api_key.scopes_update')
+                      where a.entity_id = k.id
+                        and a.action in ('api_key.scopes_update', 'api_key.scopes_update.observed')
+                        and a.created_at > (select max(b.created_at) from public.portal_audit_log b
+                                             where b.entity_id = k.id
+                                               and b.action = 'api_key.scopes_backfill'))
   returning k.id, k.name, k.key_prefix, k.scopes
 )
 insert into public.portal_audit_log (actor_type, action, entity_type, entity_id, payload)

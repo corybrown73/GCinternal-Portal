@@ -15,25 +15,33 @@
 -- revoke. (A) runs before (B) so the backfill is recorded once, by its own
 -- row, and not also as an unattributed '.observed' row.
 
--- A. Backfill.
-with granted as (
+-- A. Backfill. A key holding one of the two already gets only the other, and
+-- the audit row names exactly what was added.
+with candidates as (
+  select k.id, k.scopes as before_scopes
+    from public.portal_api_keys k
+   where k.revoked_at is null
+     and k.scopes @> array['accounts:read', 'accounts:write', 'transitions:write', 'tam:write',
+                           'tickets:write', 'alerts:write',
+                           'implementations:read', 'implementations:write']
+     and not (k.scopes @> array['handoff:read', 'handoff:write'])
+),
+granted as (
   update public.portal_api_keys k
      set scopes = k.scopes || (
        select coalesce(array_agg(s), '{}'::text[])
          from unnest(array['handoff:read', 'handoff:write']) as s
         where not (s = any (k.scopes))
      )
-   where k.revoked_at is null
-     and k.scopes @> array['accounts:read', 'accounts:write', 'transitions:write', 'tam:write',
-                           'tickets:write', 'alerts:write',
-                           'implementations:read', 'implementations:write']
-     and not (k.scopes @> array['handoff:read', 'handoff:write'])
-  returning k.id, k.name, k.key_prefix, k.scopes
+    from candidates c
+   where k.id = c.id
+  returning k.id, k.name, k.key_prefix, k.scopes, c.before_scopes
 )
 insert into public.portal_audit_log (actor_type, action, entity_type, entity_id, payload)
 select 'system', 'api_key.scopes_backfill', 'api_key', id,
        jsonb_build_object('source', 'migration 0064', 'name', name, 'key_prefix', key_prefix,
-                          'added', jsonb_build_array('handoff:read', 'handoff:write'),
+                          'added', to_jsonb(array(select s from unnest(scopes) as s
+                                                   where not (s = any (before_scopes)))),
                           'scopes', to_jsonb(scopes))
   from granted;
 

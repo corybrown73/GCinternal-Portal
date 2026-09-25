@@ -145,14 +145,12 @@ async function viewFor(
         label: `A photo for ${input.industry ?? "the industry"}`,
         hint: "Admin → Industry photos. The icon composition stands in until then.",
       });
-    const calls = input.timeline.milestones.filter(
-      (m) => m.key === "kickoff" || m.key === "working",
-    );
+    const calls = input.timeline.milestones.filter((m) => m.kind === "call");
     if (calls.some((m) => !m.time))
       readiness.push({
         key: "times",
-        label: "Times for both calls",
-        hint: "Onboarding plan → set a time on the kickoff and the working session, then send the invites.",
+        label: `Times for all ${calls.length} calls`,
+        hint: "Book the meetings on the checklist (or set the times on the plan), then send the invites.",
       });
   }
 

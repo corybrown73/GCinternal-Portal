@@ -89,7 +89,7 @@ export function speakerNotes(view: WelcomeView): {
       key: "team",
       title: "Your team",
       say: [
-        `${cap(lead)} runs both calls and builds with you. ${cap(champion)} owns the plan on your side and makes the last changes to the form in the working session.`,
+        `${cap(lead)} runs all three calls and builds with you. ${cap(champion)} owns the plan on your side and makes the last changes to the form in the working session.`,
         `${cap(tester)} is the most important name on this page: one crew, real jobs, from ${fieldtest ? shortDay(fieldtest.date) : "the field test"}. What they say is what we fix.`,
         "Questions go to a person, by name. There is no ticket queue between you and us in the first seven days.",
       ],
@@ -112,7 +112,7 @@ export function speakerNotes(view: WelcomeView): {
       ifTheyAsk: [
         {
           q: "How much of my team's time does this take overall?",
-          a: "Add the minutes on this screen out loud. Two calls and fifteen minutes of homework for the form; a thirty-minute kickoff and a short review for each thing after it.",
+          a: "Add the minutes on this screen out loud. Three calls and fifteen minutes of homework for the form; a thirty-minute kickoff and a short review for each thing after it.",
         },
       ],
     },
@@ -132,7 +132,7 @@ export function speakerNotes(view: WelcomeView): {
             ]
           : []),
       ],
-      why: "Book both calls before you leave this screen. A date that is on the calendar is a date; a date that is on a slide is a hope. If one does not work, move it now in the portal — the page updates in front of them.",
+      why: "Book all three calls before you leave this screen. A date that is on the calendar is a date; a date that is on a slide is a hope. If one does not work, move it now in the portal — the page updates in front of them.",
       ifTheyAsk: [
         existing
           ? {
@@ -177,7 +177,7 @@ export function speakerNotes(view: WelcomeView): {
       title: "What's expected",
       say: [
         "We build it with you, not for you. A form you built yourself is one you will change yourself — and the second use case shows up on its own.",
-        `Three things on their side before the ${existing ? "optimisation" : "working"} session, due ${homework ? shortDay(homework.date) : ""}: ${(kickoff?.homework ?? []).map(lower1).join(", ") || "download the app and log in, add one field user who will test on a real job, send us the customer or site list"}.`,
+        `Three things on their side before ${existing ? "Stage 2" : "the working session"}, due ${homework ? shortDay(homework.date) : ""}: ${(kickoff?.homework ?? []).map(lower1).join(", ") || "download the app and log in, add one field user who will test on a real job, send us the customer or site list"}.`,
         "Fifteen minutes. It means the working session starts from a live account instead of a blank one.",
         ...t.alongside.map((svc) => `And for ${svc.name}: ${svc.needs}`),
       ],
@@ -215,7 +215,7 @@ export function speakerNotes(view: WelcomeView): {
       key: "business",
       title: "Let's get into business",
       say: [
-        `Two calls: ${(kickoff?.label ?? "kickoff").toLowerCase()} ${kickoff ? shortDay(kickoff.date) : ""}, ${(working?.label ?? "working session").toLowerCase()} ${working ? shortDay(working.date) : ""}. Then it is yours.`,
+        `Three calls: ${(kickoff?.label ?? "kickoff").toLowerCase()} ${kickoff ? shortDay(kickoff.date) : ""}, ${(working?.label ?? "working session").toLowerCase()} ${working ? shortDay(working.date) : ""}, and the third after a week of real jobs. Then it is yours.`,
         `What good looks like on ${live}: the crew submits from the phone, the office sees it the same day, and a change the crew asked for was made the same day.`,
         `Your next step: accept the ${existing ? "Stage 1" : "kickoff"} invite for ${kickoff ? shortDay(kickoff.date) : "day one"}${existing ? " and send us the form the integration reads from" : " and download the app"}.`,
       ],
@@ -254,7 +254,7 @@ export function speakerNotes(view: WelcomeView): {
     sections: numbered,
     close: [
       `Send the customer their link right after the call. It has the dates, their homework as checkboxes, and it updates when a date moves.`,
-      `Book both calls before you hang up. Confirm the field tester's name. Then start the clock.`,
+      `Book all three calls before you hang up. Confirm the field tester's name. Then start the clock.`,
     ],
   };
 }

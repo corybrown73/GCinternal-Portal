@@ -256,10 +256,19 @@ export const CORE_MEETINGS = [
 ] as const;
 
 function preKickoffTasks(a: IntakeAnswers): FlowTask[] {
-  return a.path === "new_logo" ? playbookPreKickoff(a) : classicPreKickoff(a);
+  // The playbook's three core meetings: a new logo and an existing account
+  // alike (its form plan runs the same three calls). The rest book one call
+  // here and set the other times on the plan.
+  return a.path === "new_logo" || a.path === "existing"
+    ? playbookPreKickoff(a)
+    : classicPreKickoff(a);
 }
 
-/** Pre-kickoff on the playbook: the AE, the cadence, prep, all three meetings booked. */
+/**
+ * Pre-kickoff on the playbook: the AE, the cadence, prep (a new logo — an
+ * existing account's preparation is the customer's homework), all three
+ * meetings booked.
+ */
 function playbookPreKickoff(a: IntakeAnswers): FlowTask[] {
   const [reply, cadence] = classicPreKickoff(a);
   const t = a.handoff_tasks;
@@ -267,18 +276,25 @@ function playbookPreKickoff(a: IntakeAnswers): FlowTask[] {
   const booked = CORE_MEETINGS.filter(
     (m) => a.timeline.overrides[m.key] && a.timeline.times[m.key],
   ).length;
+  const prep: FlowTask[] =
+    a.path === "new_logo"
+      ? [
+          {
+            key: "prep",
+            label: "Prepare before Stage 1",
+            hint: "Stage 1 should validate prepared work, not discover it: a process map, a starting form and one real list.",
+            done: prepDone === PREP_ITEMS.length,
+            summary:
+              prepDone === PREP_ITEMS.length ? "Process map, starting form and data ready" : null,
+            action: "prep",
+            locked: null,
+          },
+        ]
+      : [];
   return [
     reply!,
     cadence!,
-    {
-      key: "prep",
-      label: "Prepare before Stage 1",
-      hint: "Stage 1 should validate prepared work, not discover it: a process map, a starting form and one real list.",
-      done: prepDone === PREP_ITEMS.length,
-      summary: prepDone === PREP_ITEMS.length ? "Process map, starting form and data ready" : null,
-      action: "prep",
-      locked: null,
-    },
+    ...prep,
     {
       key: "kickoff",
       label: "Book all three core meetings",
