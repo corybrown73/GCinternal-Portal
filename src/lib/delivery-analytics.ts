@@ -61,7 +61,7 @@ export function outcomesFor(
       kindLabel: t.path === "existing" ? "Form review" : "First form build",
       tool: t.path === "existing" ? "form_review" : "form_build",
       toolLabel:
-        t.path === "existing" ? "Form review for the integration" : "First form (15 business days)",
+        t.path === "existing" ? "Form review (15 business days)" : "First form (15 business days)",
       phase: 1,
       plannedStart: first.plannedDate,
       plannedEnd: live.plannedDate,

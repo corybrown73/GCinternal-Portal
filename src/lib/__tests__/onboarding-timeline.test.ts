@@ -422,7 +422,7 @@ describe("services alongside the form (phase 1)", () => {
 });
 
 describe("the existing-account path", () => {
-  it("makes phase 1 a form review with the same keys, six business days, and the integration beside it", () => {
+  it("makes phase 1 a form review on the three core meetings, fifteen business days, and the integration beside it", () => {
     const t = buildTimeline({
       closeDate: "2026-09-09",
       path: "existing",
@@ -439,11 +439,12 @@ describe("the existing-account path", () => {
       "live",
     ]);
     expect(t.milestones.find((m) => m.key === "kickoff")!.label).toBe(
-      "Form review for the integration",
+      "Stage 1 — Make It Work: the form the integration reads",
     );
-    expect(t.milestones.find((m) => m.key === "kickoff")!.minutes).toBe(45);
-    expect(t.milestones[t.milestones.length - 1]!.day).toBe(6);
-    expect(t.liveDate).toBe(addBusinessDays("2026-09-09", 6));
+    expect(t.milestones.find((m) => m.key === "kickoff")!.minutes).toBe(60);
+    expect(t.milestones.filter((m) => m.kind === "call").map((m) => m.day)).toEqual([2, 5, 11]);
+    expect(t.milestones[t.milestones.length - 1]!.day).toBe(15);
+    expect(t.liveDate).toBe(addBusinessDays("2026-09-09", 15));
     // A final form: the integration starts in week one, beside the review,
     // so a three-week integration is a three-week project.
     expect(t.phases[0]!.gate).toBe("Starts in week one, beside the form review");

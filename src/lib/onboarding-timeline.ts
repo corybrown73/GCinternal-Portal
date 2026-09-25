@@ -296,10 +296,13 @@ export const BUILD_PLAN: readonly MilestoneSpec[] = [
 export const SEVEN_DAY_PLAN = NEW_LOGO_PLAN;
 
 /**
- * Phase 1 for an existing account adding services: review the form the
- * integration reads from and make it ready. Same keys as the seven-day plan
- * so times, invites, homework and every screen keep working; different
- * words, six business days instead of seven.
+ * Phase 1 for an existing account adding services: the form the integration
+ * reads from, made ready — on the same three core meetings as a new logo.
+ * Stephen and Nikki's plan: fifteen business days, not six, because a form
+ * that feeds an integration has to be proven on real jobs before the mapping
+ * is built on it, and the people who run it have to be able to change it.
+ * Same keys as every plan so times, invites, homework and every screen keep
+ * working; the words are about a form that already exists.
  */
 export const EXISTING_PLAN: readonly MilestoneSpec[] = [
   {
@@ -308,18 +311,18 @@ export const EXISTING_PLAN: readonly MilestoneSpec[] = [
     label: "Welcome aboard",
     owner: "gocanvas",
     kind: "milestone",
-    detail: "Welcome email the same day, with the review call invite already in it.",
+    detail: "Welcome email the same day, with all three meeting invites already in it.",
     icon: "Flag",
   },
   {
     key: "kickoff",
-    day: 1,
-    label: "Form review for the integration",
+    day: 2,
+    label: "Stage 1 — Make It Work: the form the integration reads",
     owner: "both",
     kind: "call",
-    minutes: 45,
+    minutes: 60,
     detail:
-      "Walk the form the integration reads from, field by field. Decide together: use it as it is, adjust it, or build the one it needs.",
+      "Walk the form the integration reads from, field by field, against what the other system needs. Decide together: use it as it is, adjust it, or build the one it needs — and make the first changes on the call.",
     homework: [
       "Tell us which form or forms feed this integration",
       "Send one example of the output the office needs",
@@ -329,61 +332,66 @@ export const EXISTING_PLAN: readonly MilestoneSpec[] = [
   },
   {
     key: "homework",
-    day: 2,
-    label: "Your part before the next call",
-    owner: "client",
+    day: 3,
+    label: "Between Stages 1 and 2 — the agreed changes, and a real list",
+    owner: "both",
     kind: "homework",
     detail:
-      "The three things above. Fifteen minutes, and the optimisation session starts from the real form and the real output.",
+      "You make the field changes agreed on the call and send one real list the form uses; we prepare the data structure and the output the integration will read.",
     icon: "ClipboardCheck",
   },
   {
     key: "working",
-    day: 3,
-    label: "Optimisation session",
+    day: 5,
+    label: "Stage 2 — Make It Work for Them: data, rules and outputs",
     owner: "both",
     kind: "call",
-    minutes: 30,
+    minutes: 60,
     detail:
-      "Hands on the keyboard together. The fields the integration needs, named the way the other system names them — you make the changes, we guide.",
-    homework: ["Run the optimised form on a few real jobs"],
+      "Hands on the keyboard together: the fields the integration needs, named the way the other system names them, the reference data behind them, and what happens after a submission.",
+    homework: ["Run the reviewed form on real jobs — several people, several days"],
     icon: "Wrench",
   },
   {
     key: "fieldtest",
-    day: 4,
-    label: "Run it on real jobs",
+    day: 6,
+    throughDay: 10,
+    label: "Between Stages 2 and 3 — real jobs through the reviewed form",
     owner: "client",
     kind: "build",
     detail:
-      "A handful of real submissions through the optimised form, so the mapping is built on real data, not a guess.",
+      "A week of real submissions through the reviewed form, so the mapping is built on real data, not a guess. Note what the crew stumbles on.",
     icon: "HardHat",
   },
   {
     key: "adjust",
-    day: 5,
-    label: "Last adjustments",
+    day: 11,
+    label: "Stage 3 — Make It Operational",
     owner: "both",
-    kind: "build",
-    detail: "What the real submissions showed. Usually a field or two, rarely more.",
+    kind: "call",
+    minutes: 60,
+    detail:
+      "What the real jobs showed, fixed together. Your admin adds users, changes a field and republishes, and updates the lists — so the form keeps working when the integration depends on it.",
     icon: "Target",
   },
   {
     key: "live",
-    day: 6,
-    label: "Form ready for the integration",
+    day: 15,
+    label: "Form ready for the integration — Functional",
     owner: "both",
     kind: "milestone",
-    detail: "Every field the integration needs is there and proven on real jobs. Phase 2 can open.",
+    detail:
+      "Every field the integration needs is there and proven on real jobs, and your team runs the form without us. Phase 2 opens.",
     icon: "Rocket",
   },
 ];
 
 /**
  * An existing account where the CUSTOMER builds the form and we build the
- * integration. The kickoff splits the work out loud, their build has a date,
- * a check-in keeps it honest, and the integration starts the day the form is
- * frozen. Same keys, same gates: "live" here means "frozen".
+ * integration. The same three meetings and fifteen days: Stage 1 splits the
+ * work out loud, Stage 2 checks their build while there is time, real jobs
+ * run through it, and Stage 3 freezes it. Same keys, same gates: "live"
+ * here means "frozen — the integration starts".
  */
 export const CUSTOMER_BUILD_PLAN: readonly MilestoneSpec[] = [
   {
@@ -392,13 +400,13 @@ export const CUSTOMER_BUILD_PLAN: readonly MilestoneSpec[] = [
     label: "Welcome aboard",
     owner: "gocanvas",
     kind: "milestone",
-    detail: "Welcome email the same day, with the kickoff invite already in it.",
+    detail: "Welcome email the same day, with all three meeting invites already in it.",
     icon: "Flag",
   },
   {
     key: "kickoff",
-    day: 1,
-    label: "Kickoff — you build the form, we build the integration",
+    day: 2,
+    label: "Stage 1 — Make It Work: you build the form, we build the integration",
     owner: "both",
     kind: "call",
     minutes: 60,
@@ -413,53 +421,55 @@ export const CUSTOMER_BUILD_PLAN: readonly MilestoneSpec[] = [
   },
   {
     key: "homework",
-    day: 2,
-    label: "Your part before the next call",
+    day: 3,
+    label: "Between Stages 1 and 2 — your build starts",
     owner: "client",
     kind: "homework",
-    detail: "The three things above. Fifteen minutes, and your build has a name and a date.",
+    detail:
+      "The three things above, and the first version of your form. Fifteen minutes on the answers; the build has a name and a date.",
     icon: "ClipboardCheck",
   },
   {
     key: "working",
     day: 5,
-    label: "Check-in on your build",
+    label: "Stage 2 — Make It Work for Them: check-in on your build",
     owner: "both",
     kind: "call",
-    minutes: 30,
+    minutes: 60,
     detail:
-      "Thirty minutes on your form as it stands. The fields the integration needs are there, or we say which are missing — while there is still time.",
-    homework: ["Finish the form", "Run it on a few real jobs before it is frozen"],
+      "Your form as it stands, together. The fields the integration needs are there, or we say which are missing — while there is still time — and the reference data behind them is in place.",
+    homework: ["Finish the form", "Run it on real jobs before it is frozen"],
     icon: "Wrench",
   },
   {
     key: "fieldtest",
     day: 6,
-    throughDay: 8,
-    label: "Your build, on real jobs",
+    throughDay: 10,
+    label: "Between Stages 2 and 3 — your build, on real jobs",
     owner: "client",
     kind: "build",
-    detail:
-      "A handful of real submissions through your form, so the mapping is built on real data.",
+    detail: "A week of real submissions through your form, so the mapping is built on real data.",
     icon: "HardHat",
   },
   {
     key: "adjust",
-    day: 9,
-    label: "Freeze the form together",
+    day: 11,
+    label: "Stage 3 — Make It Operational: freeze the form together",
     owner: "both",
-    kind: "build",
+    kind: "call",
+    minutes: 60,
     detail:
-      "The last field changes. After this the form does not move while the integration is built.",
+      "The last field changes, made by you with us on the call. After this the form does not move while the integration is built.",
     icon: "Target",
   },
   {
     key: "live",
-    day: 10,
+    day: 15,
     label: "Form frozen — the integration starts",
     owner: "both",
     kind: "milestone",
-    detail: "Every field the integration needs is there and proven on real jobs. Phase 2 opens.",
+    detail:
+      "Every field the integration needs is there and proven on real jobs, and your team runs the form without us. Phase 2 opens.",
     icon: "Rocket",
   },
 ];
@@ -654,26 +664,134 @@ export const TRAINING_PLAN: readonly MilestoneSpec[] = [
  */
 export type ExistingBuild = "review" | "us" | "customer";
 
-export function planFor(
-  path: OnboardingPath | null | undefined,
-  opts:
-    | {
-        trainingOnly?: boolean | null | undefined;
-        existingBuild?: ExistingBuild | null | undefined;
-      }
-    | boolean
-    | null = null,
-): readonly MilestoneSpec[] {
-  const o = typeof opts === "object" && opts !== null ? opts : { trainingOnly: opts };
-  if (isTrainingPlan(path, o.trainingOnly)) return TRAINING_PLAN;
+/**
+ * The six plans a deal can run, as the admin page names them. The plans are
+ * written in code — the team's standard — and an admin may move a day, a
+ * length or a label from Settings for the odd case, without a deploy.
+ */
+export const PLAN_KEYS = [
+  "new_logo",
+  "existing_review",
+  "existing_us",
+  "existing_customer",
+  "dm_conversion",
+  "training",
+] as const;
+export type PlanKey = (typeof PLAN_KEYS)[number];
+export const PLAN_KEY_LABEL: Record<PlanKey, string> = {
+  new_logo: "New logo — the Implementation Playbook",
+  existing_review: "Existing account — the form the integration reads",
+  existing_us: "Existing account — we build the form",
+  existing_customer: "Existing account — they build the form",
+  dm_conversion: "Device Magic → GoCanvas",
+  training: "Field Fusion / training only",
+};
+
+/** One milestone's admin overrides; a null clears the field. */
+export type MilestoneOverride = {
+  day?: number | undefined;
+  throughDay?: number | null | undefined;
+  minutes?: number | null | undefined;
+  label?: string | undefined;
+};
+export type PlanOverrides = Partial<Record<PlanKey, Record<string, MilestoneOverride>>>;
+
+let planOverrides: PlanOverrides = {};
+
+/** Install the configured overrides; every planFor() after this reads them. */
+export function applyPlanOverrides(o: PlanOverrides | null | undefined): void {
+  planOverrides = o ?? {};
+}
+export function currentPlanOverrides(): PlanOverrides {
+  return planOverrides;
+}
+
+type PlanOpts = {
+  trainingOnly?: boolean | null | undefined;
+  existingBuild?: ExistingBuild | null | undefined;
+};
+
+export function planKeyFor(path: OnboardingPath | null | undefined, o: PlanOpts = {}): PlanKey {
+  if (isTrainingPlan(path, o.trainingOnly)) return "training";
   if (path === "existing") {
     return o.existingBuild === "us"
-      ? BUILD_PLAN
+      ? "existing_us"
       : o.existingBuild === "customer"
-        ? CUSTOMER_BUILD_PLAN
-        : EXISTING_PLAN;
+        ? "existing_customer"
+        : "existing_review";
   }
-  return path === "dm_conversion" ? DM_CONVERSION_PLAN : NEW_LOGO_PLAN;
+  return path === "dm_conversion" ? "dm_conversion" : "new_logo";
+}
+
+/** The plan as written in code, before any admin override. */
+export function basePlanFor(key: PlanKey): readonly MilestoneSpec[] {
+  switch (key) {
+    case "training":
+      return TRAINING_PLAN;
+    case "existing_us":
+      return BUILD_PLAN;
+    case "existing_customer":
+      return CUSTOMER_BUILD_PLAN;
+    case "existing_review":
+      return EXISTING_PLAN;
+    case "dm_conversion":
+      return DM_CONVERSION_PLAN;
+    default:
+      return NEW_LOGO_PLAN;
+  }
+}
+
+/**
+ * The plan with an admin's changes on it. A change that would break the
+ * plan — a day out of range, a step ending before it starts, days out of
+ * order — is dropped rather than obeyed: a wrong number in Settings must
+ * never take the customer's page down.
+ */
+export function withPlanOverrides(
+  base: readonly MilestoneSpec[],
+  o: Record<string, MilestoneOverride> | undefined,
+): readonly MilestoneSpec[] {
+  if (!o || Object.keys(o).length === 0) return base;
+  const out = base.map((m) => {
+    const x = o[m.key];
+    if (!x) return m;
+    const next: MilestoneSpec = { ...m };
+    if (Number.isInteger(x.day) && (x.day as number) >= 0 && (x.day as number) <= 90) {
+      next.day = x.day as number;
+    }
+    if (x.throughDay === null) delete next.throughDay;
+    else if (Number.isInteger(x.throughDay) && (x.throughDay as number) <= 120) {
+      next.throughDay = x.throughDay as number;
+    }
+    if (next.throughDay !== undefined && next.throughDay < next.day) delete next.throughDay;
+    if (m.kind === "call") {
+      if (x.minutes === null) delete next.minutes;
+      else if (
+        Number.isInteger(x.minutes) &&
+        (x.minutes as number) >= 15 &&
+        (x.minutes as number) <= 240
+      ) {
+        next.minutes = x.minutes as number;
+      }
+    }
+    if (typeof x.label === "string" && x.label.trim() && x.label.trim().length <= 120) {
+      next.label = x.label.trim();
+    }
+    return next;
+  });
+  for (let i = 1; i < out.length; i += 1) {
+    if (out[i]!.day < out[i - 1]!.day) return base;
+  }
+  return out;
+}
+
+export function planFor(
+  path: OnboardingPath | null | undefined,
+  opts: PlanOpts | boolean | null = null,
+): readonly MilestoneSpec[] {
+  const o: PlanOpts = typeof opts === "object" && opts !== null ? opts : { trainingOnly: opts };
+  const key = planKeyFor(path, o);
+  return withPlanOverrides(basePlanFor(key), planOverrides[key]);
 }
 
 /**

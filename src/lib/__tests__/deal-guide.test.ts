@@ -55,7 +55,8 @@ describe("guideSteps", () => {
           services: [
             { id: "qb", kind: "integration", name: "QuickBooks Online", phase: 2, tier: 3 },
           ],
-          times: { kickoff: "10:00", working: "14:30" },
+          // Three core meetings on an existing account too: all three need a time.
+          times: { kickoff: "10:00", working: "14:30", adjust: "10:00" },
           timezone: "America/Chicago",
           sow_applied_at: "2026-09-10T15:00:00Z",
         },

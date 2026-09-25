@@ -33,7 +33,7 @@ export const DEAL_TYPES = [
   {
     path: "existing",
     label: "Existing account",
-    plan: "Already on GoCanvas, buying more: a form review, then the integration or services — 2 to 6 weeks.",
+    plan: "Already on GoCanvas, buying more: three core meetings over 15 business days to get the form ready, then the integration or services.",
   },
   {
     path: "dm_conversion",

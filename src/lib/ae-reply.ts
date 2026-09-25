@@ -60,7 +60,7 @@ export function aeReplyDraft(i: AeReplyInput): { subject: string; body: string }
   const length = training
     ? "Three 30-minute sessions over two weeks."
     : i.intake.path === "existing"
-      ? "Most of this runs in the first two to four weeks."
+      ? "Three 60-minute working sessions over fifteen business days get your form ready; the integration builds on it from there."
       : i.intake.path === "new_logo"
         ? "A 30-day implementation built around three 60-minute meetings, which we'd like to book now — you're functional in about three weeks, with week 4 held for anything that needs more time."
         : "Three 60-minute working sessions, and your first form is live within about three weeks.";

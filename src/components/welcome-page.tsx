@@ -1607,7 +1607,7 @@ function Plan({ view, page }: { view: WelcomeView; page: number }) {
               ? "A kickoff that splits the work, your build with a date, a check-in, real jobs through it, and a freeze. Two weeks, and every step below has an owner."
               : t.existingBuild === "us"
                 ? "Three sixty-minute training calls with you driving, real jobs between them. Every step below has an owner."
-                : `A review call, a short optimisation session, a few real jobs through it. ${["", "One", "Two", "Three", "Four", "Five", "Six", "Seven"][days] ?? days} business days, and every day below has an owner.`
+                : `Three working sessions, with real jobs through the form between them. ${["", "One", "Two", "Three", "Four", "Five", "Six", "Seven"][days] ?? days} business days, and every day below has an owner.`
             : view.path === "new_logo"
               ? "Make It Work, Make It Work for Them, Make It Operational: three sixty-minute meetings, all booked up front, with the work between them prepared on both sides. Functional in about three weeks, and Week 4 held for anything that needs more time. Every step below has an owner."
               : "Three sixty-minute training calls with you driving, a week of real jobs between them. We teach and build together, and by day 3 you build forms without us. Every step below has an owner."
@@ -1956,7 +1956,7 @@ function Together({
       }
       band={
         existing
-          ? "Fifteen minutes on your side means the optimisation session starts from your real form and your real output."
+          ? "Fifteen minutes on your side means Stage 2 starts from your real form and your real output."
           : "Fifteen minutes on your side means the second session starts from a live account, not a blank one."
       }
       bandIcon="Users"
@@ -2012,9 +2012,7 @@ function Together({
                   One example of the output the office needs on the other side
                 </Tick>
                 <Tick k="together.you.3">Who owns the field mapping on your side, by name</Tick>
-                <Tick k="together.you.4">
-                  The last changes, made by you, in the optimisation session
-                </Tick>
+                <Tick k="together.you.4">The last changes, made by you, in Stages 2 and 3</Tick>
               </>
             ) : (
               <>
@@ -2034,11 +2032,7 @@ function Together({
       <div className="wp-homework">
         <p className="wp-homework-title">
           Your part before{" "}
-          {existing
-            ? "the optimisation session"
-            : view.path === "new_logo"
-              ? "Stage 2"
-              : "the working session"}
+          {existing ? "Stage 2" : view.path === "new_logo" ? "Stage 2" : "the working session"}
           {due ? ` · due ${shortDay(due.date)}` : ""}
         </p>
         <div className="wp-homework-row">
@@ -2096,8 +2090,11 @@ function Together({
         </div>
         {HOMEWORK_KEYS.every((k) => view.homeworkDone[k]) ? (
           <p className="wp-homework-done">
-            All three done — {view.path === "new_logo" ? "Stage 2" : "the working session"} starts
-            from a live account.
+            All three done —{" "}
+            {view.path === "new_logo" || view.path === "existing"
+              ? "Stage 2"
+              : "the working session"}{" "}
+            starts from a live account.
           </p>
         ) : null}
       </div>
@@ -2196,11 +2193,10 @@ function FirstForm({ view, page }: { view: WelcomeView; page: number }) {
           <p>
             {existing ? (
               <>
-                Reviewed together{" "}
-                {at("kickoff") ? shortDay(at("kickoff")!.date) : "on the review call"}, adjusted by
-                your hands{" "}
-                {at("working") ? shortDay(at("working")!.date) : "in the optimisation session"}, run
-                on real jobs by {view.fieldTester ?? "your crew"}.
+                Reviewed together {at("kickoff") ? shortDay(at("kickoff")!.date) : "in Stage 1"},
+                adjusted by your hands{" "}
+                {at("working") ? shortDay(at("working")!.date) : "in Stage 2"}, run on real jobs by{" "}
+                {view.fieldTester ?? "your crew"}.
               </>
             ) : (
               <>
@@ -2479,9 +2475,9 @@ function Business({
           <div className="wp-good-cta">
             <span className="wp-good-cta-label">Your next step</span>
             <span className="wp-good-cta-text">
-              {view.path === "new_logo"
+              {view.path === "new_logo" || view.path === "existing"
                 ? `Accept the invites for Stages 1, 2 and 3 — the first is ${kickoff ? shortDay(kickoff.date) : "day one"} — and download the app.`
-                : `Accept the ${view.path === "existing" ? "review call" : "kickoff"} invite for ${kickoff ? shortDay(kickoff.date) : "day one"} and download the app.`}
+                : `Accept the kickoff invite for ${kickoff ? shortDay(kickoff.date) : "day one"} and download the app.`}
             </span>
             <span className="wp-good-cta-links">
               <a href={GOCANVAS_APP.ios} target="_blank" rel="noreferrer">

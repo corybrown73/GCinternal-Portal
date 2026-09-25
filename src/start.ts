@@ -18,6 +18,20 @@ const errorMiddleware = createMiddleware().server(async ({ next }) => {
   }
 });
 
+// The onboarding plans an admin adjusted in Settings, on every request —
+// server functions, API routes and the customer's page alike — so a date
+// computed on the server is the date the admin set. Cached fifteen seconds;
+// never fatal: the plans in code are the fallback.
+const planMiddleware = createMiddleware().server(async ({ next }) => {
+  try {
+    const { ensurePlanOverrides } = await import("./lib/onboarding-plans.server");
+    await ensurePlanOverrides();
+  } catch (e) {
+    console.error("[plans] could not load the configured plans; using the defaults", e);
+  }
+  return next();
+});
+
 // Start installs this automatically when src/start.ts is absent; defining the
 // file opts out, so re-add it explicitly to keep server functions protected
 // from cross-site requests.
@@ -32,5 +46,5 @@ export const startInstance = createStart(() => ({
   // shell still SSRs); loaders then run with the attached session.
   defaultSsr: false,
   functionMiddleware: [attachSupabaseAuth],
-  requestMiddleware: [errorMiddleware, csrfMiddleware],
+  requestMiddleware: [errorMiddleware, csrfMiddleware, planMiddleware],
 }));

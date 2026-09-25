@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { applyStageOverrides } from "@/lib/lifecycle";
+import { applyPlanOverrides } from "@/lib/onboarding-timeline";
 import { isPublicRoute } from "@/components/auth-gate";
 import {
   Outlet,
@@ -183,6 +184,10 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       const { getLifecycleStages } = await import("@/lib/lifecycle-stages.functions");
       const stages = await getLifecycleStages();
       applyStageOverrides(stages as never);
+      // The plan days an admin adjusted, on the same terms: the dates a
+      // page computes for itself match the ones the server computed.
+      const { getOnboardingPlans } = await import("@/lib/onboarding-plans.functions");
+      applyPlanOverrides(await getOnboardingPlans());
       stagesLoadedAt = Date.now();
     } catch (e) {
       // An unauthenticated caller is not a fault worth logging: a signed-out

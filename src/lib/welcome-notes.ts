@@ -74,7 +74,7 @@ export function speakerNotes(view: WelcomeView): {
           ? `Welcome back as of ${shortDay(t.closeDate)}. Your form is ready for the integration by ${live}, and the integration builds on it from there.`
           : `Welcome aboard as of ${shortDay(t.closeDate)}. Your first form is in the field by ${live}.`,
         existing
-          ? `Phase 1 is a review, not a build. Sometimes the form needs nothing, sometimes a few fields, sometimes it is a new form — we find out on the review call, and the plan holds either way.`
+          ? `Phase 1 is a review, not a build. Sometimes the form needs nothing, sometimes a few fields, sometimes it is a new form — we find out in Stage 1, and the plan holds either way.`
           : `That phone on the right is ${form} — yours, not a demo. It is what your crew will be holding on ${live}.`,
       ],
       why: "Say the live date in the first thirty seconds. Every account that stalled, stalled because nobody named a date on the first call.",
@@ -217,7 +217,7 @@ export function speakerNotes(view: WelcomeView): {
       say: [
         `Two calls: ${(kickoff?.label ?? "kickoff").toLowerCase()} ${kickoff ? shortDay(kickoff.date) : ""}, ${(working?.label ?? "working session").toLowerCase()} ${working ? shortDay(working.date) : ""}. Then it is yours.`,
         `What good looks like on ${live}: the crew submits from the phone, the office sees it the same day, and a change the crew asked for was made the same day.`,
-        `Your next step: accept the ${existing ? "review call" : "kickoff"} invite for ${kickoff ? shortDay(kickoff.date) : "day one"}${existing ? " and send us the form the integration reads from" : " and download the app"}.`,
+        `Your next step: accept the ${existing ? "Stage 1" : "kickoff"} invite for ${kickoff ? shortDay(kickoff.date) : "day one"}${existing ? " and send us the form the integration reads from" : " and download the app"}.`,
       ],
       why: "End on the one thing they do next. Not three things. One.",
       ifTheyAsk: [

@@ -5,6 +5,7 @@ import { AppearanceSettings } from "@/components/appearance-settings";
 import { HelpArticlesSettings } from "@/components/help-articles-panel";
 import { TeamProfilePanel } from "@/components/team-profile-panel";
 import { DigestPanel } from "@/components/digest-panel";
+import { OnboardingPlansPanel } from "@/components/onboarding-plans-panel";
 import { PasswordPanel } from "@/components/password-panel";
 import { canManage, useProfile } from "@/lib/auth";
 import { LIFECYCLE_BOUNDARY_LABEL, LIFECYCLE_STAGE_MAP } from "@/lib/lifecycle";
@@ -190,6 +191,8 @@ function SettingsPage() {
             })}
           </ul>
         </section>
+
+        {canManage(profile?.role) ? <OnboardingPlansPanel /> : null}
 
         <EmptyState
           title="Team & roles"
