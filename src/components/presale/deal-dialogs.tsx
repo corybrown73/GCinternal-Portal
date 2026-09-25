@@ -168,8 +168,8 @@ export function NewDealDialog() {
           <DialogHeader>
             <DialogTitle className="text-[14px]">New account</DialogTitle>
             <DialogDescription className="text-[12px]">
-              Who they are, what they do, what was said on the calls. Press Create, then Build it on
-              the next screen — the deck comes from these.
+              Who they are, what they do, what was said on the calls. Press Create; the AI reads the
+              notes and the SOW on the next screen, and the plan comes from these.
             </DialogDescription>
           </DialogHeader>
           <form
@@ -303,7 +303,7 @@ export function NewDealDialog() {
                 onChange={(e) => setSow(e.target.files?.[0] ?? null)}
               />
               <p className="mt-0.5 text-[11px] text-muted-foreground">
-                Build it reads the services and dates out of it. Without one, the plan is the first
+                The AI reads the services and dates out of it. Without one, the plan is the first
                 form only.
               </p>
             </div>

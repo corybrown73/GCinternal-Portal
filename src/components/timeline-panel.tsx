@@ -955,7 +955,7 @@ export function TimelinePanel({
                     : close.source === "intake"
                       ? "Set by hand."
                       : "Not closed yet — planned as if it closed today."}{" "}
-                  Kickoff is the next business day; the form is live within seven.
+                  Every date on the plan counts business days from here.
                 </span>
               </label>
               <label className="space-y-1 text-[11px] text-muted-foreground">

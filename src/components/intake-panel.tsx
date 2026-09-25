@@ -1097,7 +1097,7 @@ function WantedForms({
       ) : (
         <p className="text-[12px] text-muted-foreground">
           Pick cards from the library or type the forms they named — three or four is normal. The
-          first on the list is the one we build in seven days; the rest can go on the plan.
+          first on the list is the first one we build; the rest can go on the plan.
         </p>
       )}
       {editable ? (

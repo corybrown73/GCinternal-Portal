@@ -40,7 +40,12 @@ export function closeDateFor(args: {
   // A deal that closed on a Sunday starts its plan on the Monday: day 0 is a
   // working day the customer can be welcomed on, not the weekend the CRM
   // happened to record. A date a person set on the intake is taken as given.
-  if (won) return { date: onBusinessDay(won.slice(0, 10), holidays), source: "stage" };
+  // The day is the team's day, not UTC's: a 9 pm Eastern close is today,
+  // not tomorrow.
+  if (won) {
+    const day = todayIn(args.intake.timeline.timezone, new Date(won));
+    return { date: onBusinessDay(day, holidays), source: "stage" };
+  }
   return {
     date: onBusinessDay(args.today ?? todayIn(args.intake.timeline.timezone), holidays),
     source: "today",

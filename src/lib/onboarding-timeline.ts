@@ -1273,6 +1273,8 @@ export function dayCounter(
   const toLive = businessDaysBetween(todayIso, t.liveDate, holidays);
   const actual = t.liveDoneOn ? businessDaysBetween(t.closeDate, t.liveDoneOn, holidays) : null;
   const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? "" : "s"}`;
+  // The playbook's finish line is "Functional"; every other plan ends "live".
+  const word = t.path === "new_logo" ? "Functional" : "Live";
 
   if (actual !== null) {
     const diff = actual - total;
@@ -1282,7 +1284,7 @@ export function dayCounter(
       toLive,
       state: "live",
       actual,
-      label: `Live in ${plural(actual, "day")}`,
+      label: `${word} in ${plural(actual, "day")}`,
       detail:
         diff === 0
           ? `On plan — ${plural(total, "day")}`
@@ -1299,7 +1301,7 @@ export function dayCounter(
       state: "before",
       actual,
       label: `Begins in ${plural(-day, "day")}`,
-      detail: `Live ${shortDay(t.liveDate)} · ${plural(total, "day")}`,
+      detail: `${word} ${shortDay(t.liveDate)} · ${plural(total, "day")}`,
     };
   }
   if (toLive === 0) {
@@ -1310,7 +1312,7 @@ export function dayCounter(
       state: "live_today",
       actual,
       label: `Day ${day} of ${total}`,
-      detail: "Live today",
+      detail: `${word} today`,
     };
   }
   if (toLive < 0) {
@@ -1321,7 +1323,7 @@ export function dayCounter(
       state: "past_due",
       actual,
       label: `Day ${day} of ${total}`,
-      detail: `${plural(-toLive, "day")} past the planned live date, ${shortDay(t.liveDate)}`,
+      detail: `${plural(-toLive, "day")} past the planned ${word} date, ${shortDay(t.liveDate)}`,
     };
   }
   return {
@@ -1331,7 +1333,7 @@ export function dayCounter(
     state: "during",
     actual,
     label: `Day ${day} of ${total}`,
-    detail: `Live ${shortDay(t.liveDate)} · in ${plural(toLive, "business day")}`,
+    detail: `${word} ${shortDay(t.liveDate)} · in ${plural(toLive, "business day")}`,
   };
 }
 

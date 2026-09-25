@@ -478,10 +478,13 @@ describe("dayCounter", () => {
     });
     const mid = dayCounter(t, "2026-09-14");
     expect(mid).toMatchObject({ day: 3, toLive: 12, state: "during", label: "Day 3 of 15" });
-    expect(mid.detail).toBe("Live Wed, Sep 30 · in 12 business days");
+    expect(mid.detail).toBe("Functional Wed, Sep 30 · in 12 business days");
+    // Every other plan ends "live"; only the playbook says "Functional".
+    const dm = buildTimeline({ closeDate: "2026-09-09", path: "dm_conversion" });
+    expect(dayCounter(dm, "2026-09-14").detail).toMatch(/^Live /);
     expect(dayCounter(t, "2026-09-30")).toMatchObject({
       state: "live_today",
-      detail: "Live today",
+      detail: "Functional today",
     });
     expect(dayCounter(t, "2026-10-02")).toMatchObject({ state: "past_due", toLive: -2 });
     expect(dayCounter(t, "2026-09-07")).toMatchObject({
@@ -494,7 +497,7 @@ describe("dayCounter", () => {
     expect(dayCounter(early, "2026-09-30")).toMatchObject({
       state: "live",
       actual: 5,
-      label: "Live in 5 days",
+      label: "Functional in 5 days",
       detail: "10 days ahead of the 15-day plan",
     });
     const onPlan = buildTimeline({ closeDate: "2026-09-09", completed: { live: "2026-09-30" } });

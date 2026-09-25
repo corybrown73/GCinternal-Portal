@@ -709,7 +709,7 @@ function OverviewTab({ record, customerId }: { record: Customer360; customerId: 
         <PlanFromDeal dealId={impl.deal_id} />
       ) : (
         <p className="rounded-md border border-border bg-card px-3 py-2 text-[12px] text-muted-foreground">
-          This project was not started from a deal, so it has no seven-day plan. Its stages are
+          This project was not started from a deal, so it has no onboarding plan. Its stages are
           above; the rest is under Details.
         </p>
       )}

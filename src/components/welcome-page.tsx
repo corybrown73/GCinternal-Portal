@@ -1254,7 +1254,7 @@ function Team({ view, page }: { view: WelcomeView; page: number }) {
       eyebrow="Your team"
       title="Two teams,"
       accent="one plan"
-      lede="Small on purpose. Everyone here has a job in the next two weeks."
+      lede="Small on purpose. Everyone here has a job between now and Functional."
       band="Over fifteen years of onboarding field teams says this is what works, and what gets value fast. Questions go to your onboarding lead by name."
       bandIcon="PhoneCall"
     >
@@ -1471,7 +1471,9 @@ function BeforeKickoff({ view }: { view: WelcomeView }) {
   return (
     <div className="wp-card" style={{ marginTop: 16, padding: "14px 18px" }}>
       <p className="wp-ov-name" style={{ margin: 0 }}>
-        <T k="before.title">Before your kickoff</T>
+        <T k="before.title">
+          {view.path === "new_logo" ? "Before Stage 1" : "Before your kickoff"}
+        </T>
       </p>
       <ol style={{ margin: "8px 0 6px", paddingLeft: 20, lineHeight: 1.7 }}>
         {asks.map((a, i) => (
@@ -1482,7 +1484,7 @@ function BeforeKickoff({ view }: { view: WelcomeView }) {
       </ol>
       <p style={{ margin: 0, opacity: 0.75, fontSize: 13 }}>
         <T k="before.how">
-          {`Reply to ${view.team.lead ? `${view.team.lead}'s` : "your onboarding lead's"} email with these. The kickoff starts from your real work, not a blank account.`}
+          {`Reply to ${view.team.lead ? `${view.team.lead}'s` : "your onboarding lead's"} email with these. ${view.path === "new_logo" ? "Stage 1" : "The kickoff"} starts from your real work, not a blank account.`}
         </T>
       </p>
     </div>
@@ -1616,7 +1618,7 @@ function Plan({ view, page }: { view: WelcomeView; page: number }) {
           ? `Live on ${shortDay(t.liveDate)}. Nobody should be left guessing on a job — we drive the pace, and your crew owns the jobs.`
           : existing
             ? `Ready on ${shortDay(t.liveDate)}. An integration reads specific fields — a form optimised for it first is what makes the mapping right, first time.`
-            : `Live on ${shortDay(t.liveDate)}. No account should stall waiting on a form — we drive the pace, and you own the form.`
+            : `${view.path === "new_logo" ? "Functional" : "Live"} on ${shortDay(t.liveDate)}. No account should stall waiting on a form — we drive the pace, and you own the form.`
       }
       bandIcon="Rocket"
     >
@@ -2032,7 +2034,12 @@ function Together({
       </div>
       <div className="wp-homework">
         <p className="wp-homework-title">
-          Your part before the {existing ? "optimisation" : "working"} session
+          Your part before{" "}
+          {existing
+            ? "the optimisation session"
+            : view.path === "new_logo"
+              ? "Stage 2"
+              : "the working session"}
           {due ? ` · due ${shortDay(due.date)}` : ""}
         </p>
         <div className="wp-homework-row">
@@ -2090,7 +2097,8 @@ function Together({
         </div>
         {HOMEWORK_KEYS.every((k) => view.homeworkDone[k]) ? (
           <p className="wp-homework-done">
-            All three done — the working session starts from a live account.
+            All three done — {view.path === "new_logo" ? "Stage 2" : "the working session"} starts
+            from a live account.
           </p>
         ) : null}
       </div>
@@ -2313,7 +2321,7 @@ function Business({
       band={
         planEnd
           ? `${t.training ? "Crew live" : view.path === "existing" ? "Form ready" : "First form live"} on ${shortDay(t.liveDate)}; everything in your plan live by ${shortDay(planEnd)}. If any of the three on the right is not true that day, we are not done — and we say so.`
-          : `${view.path === "existing" ? "Ready" : "Live"} on ${shortDay(t.liveDate)}. If any of the three on the right is not true that day, we are not done — and we say so.`
+          : `${view.path === "existing" ? "Ready" : view.path === "new_logo" ? "Functional" : "Live"} on ${shortDay(t.liveDate)}. If any of the three on the right is not true that day, we are not done — and we say so.`
       }
       bandIcon="Rocket"
     >
@@ -2341,7 +2349,9 @@ function Business({
                       ? "You build the form, we build the integration. Agree the split out loud: which form, by when, and the fields the integration needs from it. You leave with three things to do before the next call."
                       : t.existingBuild === "review"
                         ? "Walk the form the integration reads from, field by field, and decide together what it needs. You leave with three things to do before the next call."
-                        : "Meet, agree how we work, and build the first form live on the call — your hands on the keyboard, we guide. You leave with three things to do before the next call."}
+                        : view.path === "new_logo"
+                          ? "Confirm the workflow, refine the starting form we prepared, publish it and follow one submission end to end — your hands on the keyboard, we guide. You leave with what to test before Stage 2."
+                          : "Meet, agree how we work, and build the first form live on the call — your hands on the keyboard, we guide. You leave with three things to do before the next call."}
                 </T>
               </p>
             </div>
@@ -2470,8 +2480,9 @@ function Business({
           <div className="wp-good-cta">
             <span className="wp-good-cta-label">Your next step</span>
             <span className="wp-good-cta-text">
-              Accept the {view.path === "existing" ? "review call" : "kickoff"} invite for{" "}
-              {kickoff ? shortDay(kickoff.date) : "day one"} and download the app.
+              {view.path === "new_logo"
+                ? `Accept the invites for Stages 1, 2 and 3 — the first is ${kickoff ? shortDay(kickoff.date) : "day one"} — and download the app.`
+                : `Accept the ${view.path === "existing" ? "review call" : "kickoff"} invite for ${kickoff ? shortDay(kickoff.date) : "day one"} and download the app.`}
             </span>
             <span className="wp-good-cta-links">
               <a href={GOCANVAS_APP.ios} target="_blank" rel="noreferrer">

@@ -7,7 +7,7 @@ import { addBusinessDays, shortDay, type Milestone, type Timeline } from "./onbo
  * event so the invite is also the way back to the page.
  */
 
-const CALLS = new Set(["kickoff", "working", "integ_kickoff"]);
+const CALLS = new Set(["kickoff", "working", "adjust", "integ_kickoff"]);
 
 export function isCall(m: Milestone): boolean {
   return CALLS.has(m.key);

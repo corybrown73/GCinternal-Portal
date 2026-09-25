@@ -36,19 +36,19 @@ const ROLES: Array<{ key: string; who: string; when: string; steps: Step[] }> = 
         label: "Pipeline",
       },
       {
-        title: "2. Build it",
-        body: "One button on the account. It reads the calls and writes the brief, fills the intake, reads the SOW into the plan, builds the plan with dates and makes the customer's link. What the calls did not say comes back as a short list — each one line on the page.",
+        title: "2. Say what type of deal it is",
+        body: "The first question on the checklist: New logo, Existing account, Device Magic → GoCanvas, or Field Fusion. The plan, the checklist and the customer's page all follow it. The AI then reads the calls and the SOW on its own — the brief, the first form, the services on the plan and the customer's link, with what the calls did not say as a short list.",
       },
       {
-        title: "3. Open the deck",
-        body: "Present it, send the link, or print it. When the deal goes closed-won, the account is created and the implementation team hears there is one to claim.",
+        title: "3. Mark it Closed Won",
+        body: "The account is created, the implementation team hears there is one to claim, and the checklist takes it from there — every stage says what is next.",
       },
     ],
   },
   {
     key: "impl",
     who: "Implementation · the first call",
-    when: "Day 1 is the kickoff. Live by day 7 on the new-customer path.",
+    when: "New logo: three core meetings, Functional by business day 15, inside a 30-day window.",
     steps: [
       {
         title: "Claim the account, then start from the deal",
@@ -63,8 +63,8 @@ const ROLES: Array<{ key: string; who: string; when: string; steps: Step[] }> = 
         label: "Settings → My profile",
       },
       {
-        title: "Check the plan before the call",
-        body: "Set the two call times on the plan, and clear the 'before the link goes out' list. The welcome page is what you present; the notes under it are what you say.",
+        title: "Review what the AI filled, then Pre-kickoff",
+        body: "Approve the review on the checklist, reply to the AE, add them to the Salesloft cadence, prepare before Stage 1 (a process map, a starting form, one real list) and book all three core meetings. The welcome page is what you present; the notes under it are what you say.",
       },
       {
         title: "Present the welcome page, send the link",
@@ -85,7 +85,7 @@ const ROLES: Array<{ key: string; who: string; when: string; steps: Step[] }> = 
     steps: [
       {
         title: "Open the customer, press 'Add services'",
-        body: "That starts the existing-account path from their record: the closed-won deal, its implementation on the same customer page, the assignment. It lands you on the Pre-kickoff tab of that implementation.",
+        body: "That starts the existing-account path from their record: the closed-won deal, its implementation on the same customer page, the assignment. It lands you on the checklist at the top of that customer's page.",
         to: "/customers",
         label: "Customers",
       },
@@ -94,8 +94,8 @@ const ROLES: Array<{ key: string; who: string; when: string; steps: Step[] }> = 
         body: "On this path the first phase is 'review your form to make sure it is optimised for the integration'. The services you sold follow, one phase each, once the form is ready.",
       },
       {
-        title: "Same three clicks",
-        body: "Notes in, Build it, Open the deck. The strip at the top of the Deck tab says where the account is on that path.",
+        title: "Same checklist",
+        body: "Notes and SOW in, review what the AI filled, approve. The checklist at the top of the deal says where the account is on that path.",
       },
     ],
   },
@@ -131,15 +131,15 @@ function HowItWorksPage() {
     <>
       <PageHeader
         title="How it works"
-        description="One record per customer, from the closed-won deal to live in the field. Two paths: a new customer on the 7-day plan, or an existing account adding services. Here is where each role comes in."
+        description="One record per customer, from the closed-won deal to a form in the field. Four deal types: New logo on the Implementation Playbook, Existing account adding services, Device Magic → GoCanvas, and Field Fusion. Here is where each role comes in."
       />
       <PageBody className="space-y-4">
         {/* The stage vocabulary used to sit as a bar over every page, highlighting
             nothing. A customer record draws its own stages; the words themselves
             belong here, where somebody looks them up. */}
         <Panel
-          title="The standard journey"
-          meta={`${LIFECYCLE_STAGES.length} stages · Closed / Won is the trigger, not a stage`}
+          title="The project stages"
+          meta={`${LIFECYCLE_STAGES.length} stages the customer's record moves through · the deal itself runs Closed Won → Pre-kickoff → Onboarding → Complete`}
         >
           <ol className="grid gap-x-6 divide-y divide-border md:grid-cols-2 md:divide-y-0">
             {LIFECYCLE_STAGES.map((stage, i) => (

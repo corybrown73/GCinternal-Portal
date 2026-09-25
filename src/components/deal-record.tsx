@@ -1115,7 +1115,7 @@ function BriefsPanel({ deal }: { deal: DealData }) {
                     className="rounded-sm bg-status-risk px-1.5 py-0.5 text-[10px] font-medium text-status-risk-foreground"
                     title={
                       b.error ??
-                      "The AI step did not run — most often because ANTHROPIC_API_KEY is not set. The content is the template fallback, not a synthesis of the calls."
+                      "The AI step did not run — AI is not configured here (an admin can check Admin → Integrations). The content is the template fallback, not a synthesis of the calls."
                     }
                   >
                     Template only — no AI synthesis
