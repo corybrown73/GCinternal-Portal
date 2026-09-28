@@ -19,6 +19,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { PlanIcon } from "@/components/plan-icon";
+import { ask } from "@/components/ui/ask";
 import { EMPTY_PLAN_EDITS, type IntakeAnswers, type PlanEdits } from "@/lib/intake-answers";
 import {
   KIND_LABEL,
@@ -147,13 +148,32 @@ export function PlanEditor({
       shape: mode === "full",
     }));
   const [rows, setRows] = useState<Row[]>(fromTimeline);
+  const [initial, setInitial] = useState<string>(() => JSON.stringify(fromTimeline()));
   const [seeded, setSeeded] = useState(open);
   // Re-seed from the plan each time the editor opens.
   if (open && !seeded) {
-    setRows(fromTimeline());
+    const fresh = fromTimeline();
+    setRows(fresh);
+    setInitial(JSON.stringify(fresh));
     setSeeded(true);
   }
   if (!open && seeded) setSeeded(false);
+  const dirty = JSON.stringify(rows) !== initial;
+  // Cancel, the ✕, Esc and a click on the backdrop all come through here:
+  // a clean form closes at once, a changed one asks first.
+  const requestClose = async () => {
+    if (!dirty) {
+      onClose();
+      return;
+    }
+    const discard = await ask({
+      title: "Discard your changes to this plan?",
+      confirmLabel: "Discard",
+      cancelLabel: "Keep editing",
+      destructive: true,
+    });
+    if (discard) onClose();
+  };
 
   const update = (key: string, patch: Partial<Row>) =>
     setRows((rs) => rs.map((r) => (r.key === key ? { ...r, ...patch } : r)));
@@ -341,7 +361,7 @@ export function PlanEditor({
     });
 
   return (
-    <Dialog open={open} onOpenChange={(v) => (v ? null : onClose())}>
+    <Dialog open={open} onOpenChange={(v) => (v ? null : void requestClose())}>
       <DialogContent className="max-h-[92vh] w-[min(96vw,900px)] max-w-none overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="text-[15px]">
@@ -446,7 +466,7 @@ export function PlanEditor({
             <button
               type="button"
               className="inline-flex h-8 items-center rounded-sm border border-border px-3 text-[12px] hover:bg-muted"
-              onClick={onClose}
+              onClick={() => void requestClose()}
             >
               Cancel
             </button>

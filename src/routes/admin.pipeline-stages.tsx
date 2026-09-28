@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useBlocker } from "@tanstack/react-router";
 import { queryOptions, useMutation, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { ChevronDown, ChevronLeft, ChevronUp, Flag, Plus, Trash2, Trophy } from "lucide-react";
@@ -21,6 +21,7 @@ import {
   STAGE_COLORS,
   type StageColor,
 } from "@/lib/pipeline-stages";
+import { ask } from "@/components/ui/ask";
 import { cn } from "@/lib/utils";
 
 /**
@@ -166,6 +167,33 @@ function PipelineStagesPage() {
 
   const keyValid = PIPELINE_STAGE_KEY_PATTERN.test(newKey.trim().toLowerCase());
 
+  // A rename typed and not saved used to vanish on navigating away. Each row
+  // reports whether it holds an unsaved change; leaving the page asks first.
+  const [dirtyRows, setDirtyRows] = useState<Set<string>>(new Set());
+  const reportDirty = (key: string, isDirty: boolean) =>
+    setDirtyRows((prev) => {
+      if (prev.has(key) === isDirty) return prev;
+      const next = new Set(prev);
+      if (isDirty) next.add(key);
+      else next.delete(key);
+      return next;
+    });
+  const hasUnsaved = dirtyRows.size > 0 || newLabel.trim() !== "" || newKey.trim() !== "";
+  useBlocker({
+    shouldBlockFn: async () => {
+      if (!hasUnsaved) return false;
+      const discard = await ask({
+        title: "Discard your unsaved changes to the pipeline stages?",
+        body: "A renamed stage that was not saved will be lost.",
+        confirmLabel: "Discard",
+        cancelLabel: "Keep editing",
+        destructive: true,
+      });
+      return !discard;
+    },
+    enableBeforeUnload: hasUnsaved,
+  });
+
   return (
     <>
       <PageHeader
@@ -221,6 +249,7 @@ function PipelineStagesPage() {
                   count={data.stages.length}
                   stage={stage}
                   editable={data.flagOn && data.configured && !busy}
+                  onDirty={(isDirty) => reportDirty(stage.key, isDirty)}
                   onSave={(label, color) => editMutation.mutate({ key: stage.key, label, color })}
                   onMark={(m) => markMutation.mutate({ key: stage.key, mark: m })}
                   onMove={(delta) => move(i, delta)}
@@ -308,6 +337,7 @@ function StageRow({
   index,
   count,
   editable,
+  onDirty,
   onSave,
   onMark,
   onMove,
@@ -326,6 +356,7 @@ function StageRow({
   index: number;
   count: number;
   editable: boolean;
+  onDirty: (isDirty: boolean) => void;
   onSave: (label: string, color: StageColor) => void;
   onMark: (mark: "won" | "terminal") => void;
   onMove: (delta: number) => void;
@@ -339,6 +370,7 @@ function StageRow({
   useEffect(() => setColor(stage.color), [stage.color]);
 
   const dirty = label.trim() !== stage.label || color !== stage.color;
+  useEffect(() => onDirty(dirty), [dirty, onDirty]);
   const blockingCount = stage.account_count;
 
   return (
