@@ -86,8 +86,8 @@ function whenFor(feature: string, phase1: HelpQuery["phase1"]): PickWhen {
   if (feature === "integrations") return phase1 === "review" ? "after session 1" : "phase 2";
   if (early.has(feature)) return "before session 1";
   if (phase1 === "training") {
-    // Session 1 builds a form; session 2 is reference data, calculations, the
-    // PDF; session 3 is where the data goes.
+    // Session 1 walks the forms as built; session 2 is reference data, the
+    // PDF and dispatch; session 3 is where the data goes.
     if (build.has(feature)) return "after session 1";
     if (feature === "reports and exports") return "after session 2";
     return "after session 2";
@@ -382,7 +382,7 @@ export function fallbackPicks(query: HelpQuery, candidates: Candidate[], max = 5
 /** The query, as the model reads it. */
 export function describeQuery(q: HelpQuery): string {
   const lines = [
-    `Flow: ${q.flow}. Phase 1 is ${q.phase1 === "training" ? "GoCanvas training (three sessions: build a form; reference data, calculations and a PDF; where the data goes)" : q.phase1 === "review" ? "a review of a form that is already final, then the integration" : q.phase1 === "customer_build" ? "the customer building the form, then the integration" : "the collaborative form build over three training days (build a form; reference data, logic and calculations; the back office)"}.`,
+    `Flow: ${q.flow}. Phase 1 is ${q.phase1 === "training" ? "GoCanvas training (three sessions: the admin portal and the forms as built; reference data, the PDF and dispatch; where the data goes)" : q.phase1 === "review" ? "a review of a form that is already final, then the integration" : q.phase1 === "customer_build" ? "the customer building the form, then the integration" : "the collaborative form build over three training days (build a form; reference data, logic and calculations; the back office)"}.`,
     q.industry ? `Industry: ${q.industry}.` : null,
     q.fieldUsers ? `People in the field: ${q.fieldUsers}.` : null,
     q.firstForm ? `First form: ${q.firstForm}.` : null,

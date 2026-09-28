@@ -2339,7 +2339,7 @@ function Business({
               <p>
                 <T k="business.call1.body">
                   {t.training
-                    ? "How to find your way around the admin portal, and how to build a form — you build one with us on the call, start to finish. You leave with three things to do before the next call."
+                    ? "How to find your way around the admin portal, and a walk through the forms set up for you — what each one collects, who fills it in, and where a submission goes. You leave with three things to do before the next session."
                     : t.existingBuild === "customer"
                       ? "You build the form, we build the integration. Agree the split out loud: which form, by when, and the fields the integration needs from it. You leave with three things to do before the next call."
                       : t.existingBuild === "review"

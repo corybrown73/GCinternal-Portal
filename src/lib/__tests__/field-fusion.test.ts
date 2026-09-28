@@ -37,8 +37,17 @@ describe("the training plan — no form to build", () => {
     expect(calls.map((m) => m.day)).toEqual([1, 5, 10]);
     const kickoff = TRAINING_PLAN.find((m) => m.key === "kickoff")!;
     expect(kickoff.label).toMatch(/^Session 1/);
-    expect(kickoff.label).toMatch(/build a form/i);
+    expect(kickoff.label).toMatch(/forms as built/i);
     expect(TRAINING_PLAN.find((m) => m.key === "working")!.label).toMatch(/reference data/i);
+    expect(TRAINING_PLAN.find((m) => m.key === "working")!.label).toMatch(/dispatch/i);
+    // The forms ship built: nothing in the plan asks the customer to build one,
+    // and the sessions are sessions, never a kickoff.
+    const words = TRAINING_PLAN.flatMap((m) => [m.label, m.detail, ...(m.homework ?? [])]).join(
+      "\n",
+    );
+    expect(words).not.toMatch(/build (a|one) form/i);
+    expect(words).not.toMatch(/kickoff/i);
+    expect(words).toMatch(/set up your crews for dispatch/i);
     expect(TRAINING_PLAN.find((m) => m.key === "adjust")!.label).toMatch(/where the data goes/i);
     expect(kickoff.homework).toHaveLength(3);
     const live = TRAINING_PLAN[TRAINING_PLAN.length - 1]!;

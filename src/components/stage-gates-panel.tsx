@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { ArrowRight, Check, CircleDashed } from "lucide-react";
@@ -64,10 +65,32 @@ export function StageGatesPanel({
     void queryClient.invalidateQueries({ queryKey: ["customer", customerId] });
   };
 
+  // The row changes as it is clicked; the save follows, and a failure puts
+  // it back and says why.
+  const [optimistic, setOptimistic] = useState<Record<string, boolean>>({});
   const toggle = useMutation({
     mutationFn: (v: { id: string; done: boolean }) =>
       tick({ data: { workItemId: v.id, status: v.done ? "done" : "not_started" } }),
+    onMutate: (v) => setOptimistic((o) => ({ ...o, [v.id]: v.done })),
     onSuccess: refresh,
+    onError: (_e, v) => {
+      setOptimistic((o) => {
+        const next = { ...o };
+        delete next[v.id];
+        return next;
+      });
+    },
+    onSettled: (_r, _e, v) => {
+      // Cleared once the record has been read back, not before: the row
+      // would flash to its old state between the save and the refetch.
+      void queryClient.invalidateQueries({ queryKey: ["plan", implementationId] }).then(() =>
+        setOptimistic((o) => {
+          const next = { ...o };
+          delete next[v.id];
+          return next;
+        }),
+      );
+    },
   });
 
   const move = useMutation({
@@ -108,14 +131,13 @@ export function StageGatesPanel({
     >
       <ul className="divide-y divide-border">
         {status.gates.map((g) => {
-          const done = isSettled(g.status);
+          const done = optimistic[g.id] ?? isSettled(g.status);
           return (
             <li key={g.id} className="flex items-center gap-3 px-3 py-2">
               {/* The whole row is the target, not a 14px box. A checklist you
                   have to aim at is a checklist people stop ticking. */}
               <button
                 type="button"
-                disabled={toggle.isPending}
                 onClick={() => toggle.mutate({ id: g.id, done: !done })}
                 className="flex min-w-0 flex-1 items-center gap-2.5 text-left"
               >

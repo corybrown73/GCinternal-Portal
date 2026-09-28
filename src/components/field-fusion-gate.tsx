@@ -11,16 +11,18 @@ import { FIELD_FUSION_STAGE, fieldFusionChecklist, fieldFusionReady } from "@/li
 import { handToImplementationFn } from "@/lib/field-fusion.functions";
 import { readIntake } from "@/lib/intake-answers";
 import { saveIntake } from "@/lib/presale.functions";
+import { useOptimisticTick } from "@/lib/use-optimistic-tick";
 import { cn } from "@/lib/utils";
 import { ask } from "@/components/ui/ask";
+import { MemberOptions } from "@/components/member-options";
 
 /**
  * The Field Fusion gate, on the deal.
  *
  * Shown only on a Field Fusion account, from the close until the handoff.
- * Two ticks, a note, one button. The button moves the deal to Onboarding
- * Kickoff and sends implementation the use case and goals from the calls
- * plus the note — the training call is theirs from there.
+ * Two ticks, a note, one button. The button moves the deal to Pre-kickoff
+ * and sends implementation the use case and goals from the calls plus the
+ * note — the training sessions are theirs from there.
  */
 export function FieldFusionGate({ deal, editable }: { deal: DealData; editable: boolean }) {
   const intake = readIntake(deal.account.intake);
@@ -46,6 +48,12 @@ export function FieldFusionGate({ deal, editable }: { deal: DealData; editable: 
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
 
+  // The two checks change the moment they are clicked.
+  const check = useOptimisticTick({
+    dealId: deal.account.id,
+    section: "field_fusion",
+    encode: (on) => on,
+  });
   const patch = useMutation({
     mutationFn: (p: Record<string, unknown>) =>
       save({ data: { dealId: deal.account.id, patch: { field_fusion: p } } as never }),
@@ -76,24 +84,32 @@ export function FieldFusionGate({ deal, editable }: { deal: DealData; editable: 
       <div className="rounded-md border border-status-ontrack-foreground/30 bg-status-ontrack/40 px-3 py-2 text-[12px] text-status-ontrack-foreground">
         <Check className="mr-1 inline h-3.5 w-3.5" strokeWidth={3} />
         Field Fusion set up and handed to implementation <When value={ff.handed_off_at} />. The
-        forms are already built; the plan below is GoCanvas training — three calls over two weeks.
+        forms are already built; the plan below is GoCanvas training — three sessions over two
+        weeks.
       </div>
     );
   }
-  const checks = fieldFusionChecklist(intake);
-  const ready = fieldFusionReady(intake);
+  const checks = fieldFusionChecklist(intake).map((c) => ({
+    ...c,
+    done: check.isOn(c.key, c.done),
+  }));
+  const ready = checks.every((c) => c.done);
   const busy = patch.isPending || handoff.isPending;
+  // One source for the owner: the assignment ledger, the same one the
+  // header and the checklist read. "Nobody" only once it has answered.
   const ownerName = assignment.data?.owner?.name ?? null;
-  const pool = assignment.data?.pool ?? [];
+  const members = assignment.data?.members ?? [];
 
   return (
     <Panel
       id="panel-field-fusion"
       title="Field Fusion setup — before the handoff"
       meta={
-        ownerName
-          ? `${ownerName} confirms the setup, then hands it over`
-          : "Nobody owns the setup yet — assign it under Details"
+        assignment.isPending
+          ? "Checking who owns the setup…"
+          : ownerName
+            ? `${ownerName} confirms the setup, then hands it over`
+            : "Nobody owns the setup yet — assign it in the checklist above"
       }
       level="primary"
       highlight={!ready}
@@ -102,7 +118,7 @@ export function FieldFusionGate({ deal, editable }: { deal: DealData; editable: 
         <p className="text-[12px] text-muted-foreground">
           Field Fusion ships with its forms built, so there is nothing to build. Confirm the two
           things below, write what implementation should know, and hand it over. Implementation runs
-          GoCanvas training — three thirty-minute calls over two weeks — not a kickoff.
+          GoCanvas training on the forms as built — three thirty-minute sessions over two weeks.
         </p>
         <ul className="space-y-1.5">
           {checks.map((c) => (
@@ -118,7 +134,7 @@ export function FieldFusionGate({ deal, editable }: { deal: DealData; editable: 
                   className="h-4 w-4"
                   checked={c.done}
                   disabled={!editable}
-                  onChange={(e) => patch.mutate({ [c.key]: e.target.checked })}
+                  onChange={(e) => check.mutate({ key: c.key, on: e.target.checked })}
                 />
                 <span className={cn(c.done && "text-muted-foreground line-through")}>
                   {c.label}
@@ -165,12 +181,7 @@ export function FieldFusionGate({ deal, editable }: { deal: DealData; editable: 
               disabled={!editable || busy}
             >
               <option value="">Let the team claim it</option>
-              {pool.map((p) => (
-                <option key={p.teamMemberId} value={p.teamMemberId}>
-                  {p.name}
-                  {p.rank ? ` (#${p.rank}, carrying ${p.load})` : ""}
-                </option>
-              ))}
+              <MemberOptions members={members} />
             </select>
             <button
               type="button"
@@ -204,9 +215,9 @@ export function FieldFusionGate({ deal, editable }: { deal: DealData; editable: 
             ) : null}
           </div>
         )}
-        {error ? (
+        {error || check.error ? (
           <p role="alert" className="text-[12px] text-destructive">
-            {error}
+            {error ?? check.error}
           </p>
         ) : null}
       </div>

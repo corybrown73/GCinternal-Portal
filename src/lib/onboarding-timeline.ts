@@ -585,14 +585,14 @@ export const TRAINING_PLAN: readonly MilestoneSpec[] = [
   {
     key: "kickoff",
     day: 1,
-    label: "Session 1 — the admin portal, and build a form",
+    label: "Session 1 — the admin portal, and your forms as built",
     owner: "both",
     kind: "call",
     minutes: 30,
     detail:
-      "How to find your way around the admin portal, and how to build a form — you build one with us on the call, start to finish.",
+      "How to find your way around the admin portal, and a walk through the forms Field Fusion set up for you — what each one collects, who fills it in, and where a submission goes.",
     homework: [
-      "Build one form yourself, for a job you actually do",
+      "Run the forms on real jobs this week",
       "Send us the name and email of everyone who needs a login",
       "Send us a client list or parts list you use today, as a spreadsheet",
     ],
@@ -601,24 +601,25 @@ export const TRAINING_PLAN: readonly MilestoneSpec[] = [
   {
     key: "homework",
     day: 2,
-    label: "Your part before the next call",
+    label: "Your part before the next session",
     owner: "client",
     kind: "homework",
     detail:
-      "The three things above. The form you build is what session 2 starts from; the list is what it loads.",
+      "The three things above. What the crew ran into on real jobs is what session 2 starts from; the list is what it loads.",
     icon: "ClipboardCheck",
   },
   {
     key: "working",
     day: 5,
-    label: "Session 2 — reference data, calculations, and a PDF",
+    label: "Session 2 — reference data, the PDF, and dispatch",
     owner: "both",
     kind: "call",
     minutes: 30,
     detail:
-      "Load your client or parts list as reference data, add the advanced calculations your jobs need, and build the PDF the office receives.",
+      "Load your client or parts list as reference data, set up the PDF the office receives, and set up dispatch and scheduling so each job reaches the right crew.",
     homework: [
-      "Run the form on real jobs for a week",
+      "Run the forms on real jobs for a week",
+      "Set up your crews for dispatch",
       "Write down what the office wants to see from the data",
     ],
     icon: "Wrench",
@@ -631,7 +632,7 @@ export const TRAINING_PLAN: readonly MilestoneSpec[] = [
     owner: "client",
     kind: "build",
     detail:
-      "The crew runs it on real jobs without us on the call. What slows them down is what session 3 covers first.",
+      "The crew runs the forms on real jobs, dispatched from the office, without us on the call. What slows them down is what session 3 covers first.",
     icon: "HardHat",
   },
   {
@@ -652,7 +653,7 @@ export const TRAINING_PLAN: readonly MilestoneSpec[] = [
     owner: "both",
     kind: "milestone",
     detail:
-      "You have built a form, loaded your data, and know where it goes. Anyone who joins later gets the same walkthrough from your own team.",
+      "Your crews run the forms as built, the office dispatches the work and reads the data, and you know where it all goes. Anyone who joins later gets the same walkthrough from your own team.",
     icon: "Rocket",
   },
 ];

@@ -495,6 +495,15 @@ export type DealAssignment = {
     rank: number | null;
     load: number;
   }>;
+  /** Every active team member, rotation or not, so a picker can always name the owner. */
+  members: Array<{
+    teamMemberId: string;
+    name: string;
+    email: string | null;
+    inPool: boolean;
+    rank: number | null;
+    load: number;
+  }>;
   steps: Array<{ key: "gong" | "sow" | "welcome"; label: string; done: boolean }>;
 };
 
@@ -591,6 +600,14 @@ export async function dealAssignment(dealId: string): Promise<DealAssignment> {
         rank: p.rank,
         load: p.load,
       })),
+    members: pool.map((p) => ({
+      teamMemberId: p.teamMemberId,
+      name: p.name,
+      email: p.email,
+      inPool: p.inPool && p.active,
+      rank: p.rank,
+      load: p.load,
+    })),
     steps: [
       { key: "gong", label: "Gong recording on the deal", done: (reports ?? 0) > 0 },
       {

@@ -10,6 +10,8 @@ import { MeetingRecap } from "@/components/meeting-recap";
 import { ParkingLot } from "@/components/parking-lot";
 import { FactsStep, FlowStep, NotesIn, SowStep } from "@/components/intake-panel";
 import { assignDealFn, claimDealFn, getDealAssignment } from "@/lib/assignment.functions";
+import { MemberOptions } from "@/components/member-options";
+import { useOptimisticTick } from "@/lib/use-optimistic-tick";
 import { canEditDeal, canManage, useProfile } from "@/lib/auth";
 import { dealQuery, type DealData } from "@/lib/deal-query";
 import {
@@ -605,12 +607,7 @@ function AssignBody({ dealId, editable }: { dealId: string; editable: boolean })
             <option value="">
               {a.nextUp ? `Next in rotation — ${a.nextUp.name}` : "Pick someone…"}
             </option>
-            {a.pool.map((p) => (
-              <option key={p.teamMemberId} value={p.teamMemberId}>
-                {p.name}
-                {p.rank ? ` (#${p.rank}, carrying ${p.load})` : ""}
-              </option>
-            ))}
+            <MemberOptions members={a.members} />
           </select>
           <button
             type="button"
@@ -680,7 +677,7 @@ function ReviewBody({
     (deal.account as { welcome_share_url?: string | null }).welcome_share_url,
   );
   const [editing, setEditing] = useState(false);
-  const approved = Boolean(intake.handoff_tasks["reviewed"]);
+  const approved = tick.isOn("reviewed", Boolean(intake.handoff_tasks["reviewed"]));
   const forms = formsOnly(intake);
   const services = intake.timeline.services ?? [];
   const blanks = welcome.data?.readiness ?? [];
@@ -883,19 +880,9 @@ function DealTypeBody({
 }
 
 /** Tick one of the pre-kickoff tasks that live nowhere else. */
+/** The handoff tasks' ticks: the box changes at once, the save follows. */
 function useHandoffTick(dealId: string) {
-  const qc = useQueryClient();
-  const save = useServerFn(saveIntake);
-  return useMutation({
-    mutationFn: (v: { key: string; on: boolean }) =>
-      save({
-        data: {
-          dealId,
-          patch: { handoff_tasks: { [v.key]: v.on ? new Date().toISOString() : null } },
-        } as never,
-      }),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ["deal", dealId] }),
-  });
+  return useOptimisticTick({ dealId, section: "handoff_tasks" });
 }
 
 function DoneButton({
@@ -911,11 +898,14 @@ function DoneButton({
   disabled: boolean;
   onClick: () => void;
 }) {
+  // The button never waits on the save: the state shown is the state
+  // clicked, and a failed save reverts it with a message.
   return (
     <button
       type="button"
       onClick={onClick}
-      disabled={disabled || pending}
+      disabled={disabled}
+      title={pending ? "Saving…" : undefined}
       className={cn(
         "inline-flex h-8 items-center gap-1.5 rounded-sm px-3 text-[12px] font-medium disabled:opacity-50",
         done
@@ -924,7 +914,7 @@ function DoneButton({
       )}
     >
       <Check className="h-3.5 w-3.5" strokeWidth={3} />
-      {pending ? "Saving…" : done ? "Undo" : label}
+      {done ? "Undo" : label}
     </button>
   );
 }
@@ -939,7 +929,7 @@ function ReplyBody({
   editable: boolean;
 }) {
   const tick = useHandoffTick(deal.account.id);
-  const done = Boolean(intake.handoff_tasks["reply_ae"]);
+  const done = tick.isOn("reply_ae", Boolean(intake.handoff_tasks["reply_ae"]));
   const share = (deal.account as { welcome_share_url?: string | null }).welcome_share_url ?? null;
   const assignment = useQuery({
     queryKey: ["assignment", deal.account.id],
@@ -1012,7 +1002,7 @@ function CadenceBody({
   editable: boolean;
 }) {
   const tick = useHandoffTick(deal.account.id);
-  const done = Boolean(intake.handoff_tasks["cadence"]);
+  const done = tick.isOn("cadence", Boolean(intake.handoff_tasks["cadence"]));
   return (
     <div className="space-y-2">
       <table className="w-full max-w-xl text-[12px]">
@@ -1293,7 +1283,7 @@ function PrepBody({
   return (
     <ul className="space-y-1.5">
       {PREP_ITEMS.map((p) => {
-        const on = Boolean(intake.handoff_tasks[p.key]);
+        const on = tick.isOn(p.key, Boolean(intake.handoff_tasks[p.key]));
         return (
           <li key={p.key}>
             <label className="flex cursor-pointer items-start gap-2 text-[13px]">
@@ -1315,6 +1305,11 @@ function PrepBody({
       <li className="pt-1 text-[11px] text-muted-foreground">
         No starting form possible? Use Stage 1 to get the decisions, so Stage 2 starts prepared.
       </li>
+      {tick.error ? (
+        <li role="alert" className="text-[12px] text-destructive">
+          {tick.error}
+        </li>
+      ) : null}
     </ul>
   );
 }
@@ -1635,8 +1630,8 @@ function OnboardingList({
                 <input
                   type="checkbox"
                   className="mt-0.5 h-4 w-4 shrink-0"
-                  checked={isDone(t)}
-                  disabled={!editable || grad.isPending}
+                  checked={t.action === "graduate" ? grad.isOn(t.key, t.done) : isDone(t)}
+                  disabled={!editable}
                   onChange={(e) =>
                     t.action === "graduate"
                       ? grad.mutate({ key: t.key, on: e.target.checked })
