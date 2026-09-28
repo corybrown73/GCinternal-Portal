@@ -50,7 +50,10 @@ export function AppSidebar({
          than a quarter of the screen and the content beside it has nowhere to
          go. The links stay full-width and readable; only the hint line under
          each one is dropped, because it is the part a person reads once. */
-      className="flex w-[164px] shrink-0 flex-col border-r lg:w-[228px]"
+      /* Sticky, one screen tall. The panel used to stretch to the page's
+         full height while its links stayed at the top, so a long page
+         scrolled the labels away and left a blank dark column. */
+      className="sticky top-0 flex h-screen w-[164px] shrink-0 flex-col overflow-y-auto border-r lg:w-[228px]"
       data-nav-scheme={scheme.key}
     >
       <div
