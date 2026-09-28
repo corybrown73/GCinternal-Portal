@@ -878,6 +878,7 @@ export function applyDealEdits(
         return {
           key: a.key,
           day: a.day,
+          ...(a.throughDay != null && a.throughDay > a.day ? { throughDay: a.throughDay } : {}),
           label: a.label,
           owner: a.owner ?? "both",
           kind,
@@ -903,6 +904,10 @@ export function applyDealEdits(
         ...(e.detail !== undefined ? { detail: e.detail } : {}),
         ...(e.day !== undefined ? { day: e.day } : {}),
       };
+      // A span (Day 6–10) is a start and an end; null takes the end away.
+      if (e.throughDay === null) delete next.throughDay;
+      else if (e.throughDay !== undefined && e.throughDay > next.day)
+        next.throughDay = e.throughDay;
       if (kind === "call") {
         if (e.minutes !== undefined && e.minutes !== null) next.minutes = e.minutes;
         else if (next.minutes === undefined) next.minutes = 60;

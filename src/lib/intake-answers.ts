@@ -35,6 +35,8 @@ export const planStepEditSchema = z.object({
   detail: z.string().trim().max(400).optional(),
   /** Business days after the close: the step's own base date. */
   day: z.number().int().min(0).max(120).optional(),
+  /** For work between calls: the business day it runs through; null clears a span. */
+  throughDay: z.number().int().min(0).max(120).nullable().optional(),
 });
 export type PlanStepEdit = z.infer<typeof planStepEditSchema>;
 

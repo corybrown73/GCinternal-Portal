@@ -22,7 +22,7 @@ const STATUS: Record<Item["status"], string> = {
 const OWNER: Record<Item["owner"], string> = {
   gocanvas: "GoCanvas",
   customer: "Customer",
-  both: "Both",
+  both: "Together",
 };
 
 /**
