@@ -56,5 +56,5 @@ export const KIND_LABEL: Record<MilestoneKind, string> = {
 export const OWNER_LABEL: Record<MilestoneOwner, string> = {
   gocanvas: "GoCanvas",
   client: "Customer",
-  both: "Both",
+  both: "Together",
 };
