@@ -8,7 +8,7 @@ import {
   useSensors,
   type DragEndEvent,
 } from "@dnd-kit/core";
-import { ArrowDown, ArrowUp, GripVertical, Plus, RotateCcw, X } from "lucide-react";
+import { ArrowDown, ArrowDownUp, ArrowUp, GripVertical, Plus, RotateCcw, X } from "lucide-react";
 
 import {
   Dialog,
@@ -264,6 +264,26 @@ export function PlanEditor({
   const input =
     "h-7 rounded-sm border border-border bg-background px-1.5 text-[12px] focus:outline-none focus:ring-1 focus:ring-primary disabled:opacity-60";
 
+  // Dates out of order are shown, not swallowed: a Stage 2 before Stage 1
+  // gets an amber line on its row and a one-click sort. Only a date before
+  // the close — before the plan exists — stops the save.
+  const warnings = rows.map((r, i) =>
+    i > 0 && r.date < rows[i - 1]!.date ? "This is before the step above it." : null,
+  );
+  const outOfOrder = warnings.some(Boolean);
+  const beforeClose = rows.filter((r, i) => i > 0 && r.date < timeline.closeDate);
+  const sortByDate = () =>
+    setRows((rs) => {
+      const first = rs[0]!;
+      const last = rs[rs.length - 1]!;
+      const middle = rs
+        .slice(1, -1)
+        .map((r, i) => ({ r, i }))
+        .sort((a, b) => a.r.date.localeCompare(b.r.date) || a.i - b.i)
+        .map((x) => x.r);
+      return [first, ...middle, last];
+    });
+
   return (
     <Dialog open={open} onOpenChange={(v) => (v ? null : onClose())}>
       <DialogContent className="max-h-[92vh] w-[min(96vw,900px)] max-w-none overflow-y-auto">
@@ -288,6 +308,11 @@ export function PlanEditor({
                 count={rows.length}
                 busy={busy}
                 inputClass={input}
+                warning={
+                  r.date < timeline.closeDate && i > 0
+                    ? `Before the close date, ${shortDay(timeline.closeDate)} — the plan cannot start before it.`
+                    : warnings[i]
+                }
                 onChange={(patch) => update(r.key, patch)}
                 onRemove={() => remove(r.key)}
                 onMove={(dir) => move(i, i + dir)}
@@ -320,7 +345,24 @@ export function PlanEditor({
               </>
             ) : null}
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            {outOfOrder ? (
+              <button
+                type="button"
+                className="inline-flex h-8 items-center gap-1.5 rounded-sm border border-amber-500/50 bg-amber-500/10 px-3 text-[12px] text-amber-800 hover:bg-amber-500/20 dark:text-amber-300"
+                onClick={sortByDate}
+                disabled={busy}
+                title="Put the steps in date order; the close and the finish stay at the ends"
+              >
+                <ArrowDownUp className="h-3.5 w-3.5" /> Sort by date
+              </button>
+            ) : null}
+            {beforeClose.length ? (
+              <span className="text-[11px] text-destructive">
+                {beforeClose.length === 1 ? "A step is" : `${beforeClose.length} steps are`} before
+                the close date.
+              </span>
+            ) : null}
             <button
               type="button"
               className="inline-flex h-8 items-center rounded-sm border border-border px-3 text-[12px] hover:bg-muted"
@@ -332,7 +374,12 @@ export function PlanEditor({
               type="button"
               className="inline-flex h-8 items-center rounded-sm bg-primary px-3 text-[12px] font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
               onClick={save}
-              disabled={busy || rows.length < 2}
+              disabled={busy || rows.length < 2 || beforeClose.length > 0}
+              title={
+                beforeClose.length
+                  ? "Move the steps that fall before the close date first"
+                  : undefined
+              }
             >
               Save the plan
             </button>
@@ -349,6 +396,7 @@ function EditorRow({
   count,
   busy,
   inputClass,
+  warning,
   onChange,
   onRemove,
   onMove,
@@ -358,6 +406,8 @@ function EditorRow({
   count: number;
   busy: boolean;
   inputClass: string;
+  /** Why this row's date looks wrong, when it does. */
+  warning: string | null;
   onChange: (patch: Partial<Row>) => void;
   onRemove: () => void;
   onMove: (dir: -1 | 1) => void;
@@ -373,6 +423,7 @@ function EditorRow({
         "space-y-1.5 px-2 py-2",
         drop.isOver && !row.anchor && "bg-primary/5 ring-1 ring-inset ring-primary/40",
         drag.isDragging && "opacity-50",
+        warning && "bg-amber-500/5",
       )}
     >
       <div className="flex flex-wrap items-center gap-2">
@@ -526,6 +577,11 @@ function EditorRow({
           <X className="h-4 w-4" />
         </button>
       </div>
+      {warning ? (
+        <p role="alert" className="text-[11px] text-amber-800 dark:text-amber-300">
+          {warning}
+        </p>
+      ) : null}
       {row.shape ? (
         <input
           className={cn(inputClass, "w-full text-muted-foreground")}
