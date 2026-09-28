@@ -32,6 +32,7 @@ export const planOverridesSchema = z
   .object({
     new_logo: planSchema.optional(),
     existing_review: planSchema.optional(),
+    existing_services: planSchema.optional(),
     existing_us: planSchema.optional(),
     existing_customer: planSchema.optional(),
     dm_conversion: planSchema.optional(),

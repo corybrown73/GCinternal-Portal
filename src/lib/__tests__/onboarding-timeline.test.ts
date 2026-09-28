@@ -447,10 +447,12 @@ describe("the existing-account path", () => {
     expect(t.milestones.filter((m) => m.kind === "call").map((m) => m.day)).toEqual([2, 5, 11]);
     expect(t.milestones[t.milestones.length - 1]!.day).toBe(15);
     expect(t.liveDate).toBe(addBusinessDays("2026-09-09", 15));
-    // A final form: the integration starts in week one, beside the review,
-    // so a three-week integration is a three-week project.
+    // A final form: the integration starts in week one, beside the review —
+    // the day after Stage 1, never before anyone has met.
     expect(t.phases[0]!.gate).toBe("Starts in week one, beside the form review");
-    expect(t.phases[0]!.startsOn).toBe(addBusinessDays("2026-09-09", 1));
+    expect(t.phases[0]!.startsOn).toBe(
+      addBusinessDays(t.milestones.find((m) => m.key === "kickoff")!.date, 1),
+    );
     expect(t.phases[0]!.tentative).toBe(false);
     const built = buildTimeline({
       closeDate: "2026-09-09",
@@ -572,5 +574,59 @@ describe("the core meetings' length", () => {
         sessionMinutes: 5,
       }).milestones.find((m) => m.key === "kickoff")!.minutes,
     ).toBe(60);
+  });
+});
+
+describe("an existing account with services and no form work", () => {
+  const services = [
+    {
+      id: "qb",
+      kind: "integration" as const,
+      name: "QuickBooks Online",
+      phase: 2,
+      tier: 3 as const,
+    },
+    { id: "pdf", kind: "custom_pdf" as const, name: "Invoice PDF", phase: 2, weeks: 2 },
+  ];
+
+  it("gets one walkthrough, and the services start the day after it", () => {
+    const t = buildTimeline({
+      closeDate: "2026-09-21",
+      path: "existing",
+      servicesOnly: true,
+      services,
+    });
+    expect(t.servicesOnly).toBe(true);
+    expect(t.milestones.map((m) => m.key)).toEqual(["close", "kickoff", "live"]);
+    const walk = t.milestones.find((m) => m.key === "kickoff")!;
+    expect(walk.label).toMatch(/^Walkthrough/);
+    expect(walk.minutes).toBe(30);
+    expect(t.milestones.some((m) => m.key === "fieldtest" || m.key === "homework")).toBe(false);
+    expect(t.phases[0]!.gate).toBe("Starts the day after the walkthrough");
+    expect(t.phases[0]!.startsOn).toBe(addBusinessDays(walk.date, 1));
+    expect(t.phases[0]!.tentative).toBe(false);
+    expect(t.phases[0]!.services.map((s) => s.name)).toEqual(["QuickBooks Online", "Invoice PDF"]);
+  });
+
+  it("is the form plan again as soon as there is a form to build", () => {
+    const t = buildTimeline({
+      closeDate: "2026-09-21",
+      path: "existing",
+      servicesOnly: false,
+      services,
+    });
+    expect(t.servicesOnly).toBe(false);
+    expect(t.milestones.map((m) => m.key)).toContain("fieldtest");
+  });
+
+  it("the SOW's length sizes the walkthrough too", () => {
+    const t = buildTimeline({
+      closeDate: "2026-09-21",
+      path: "existing",
+      servicesOnly: true,
+      sessionMinutes: 45,
+      services,
+    });
+    expect(t.milestones.find((m) => m.key === "kickoff")!.minutes).toBe(45);
   });
 });

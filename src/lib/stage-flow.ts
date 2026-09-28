@@ -1,4 +1,10 @@
-import { firstFormName, flowAnswered, readIntake, type IntakeAnswers } from "./intake-answers";
+import {
+  firstFormName,
+  flowAnswered,
+  isServicesOnly,
+  readIntake,
+  type IntakeAnswers,
+} from "./intake-answers";
 import type { AccountStage } from "./presale-stages";
 import { TEAM_ZONE, shortDay, type Timeline } from "./onboarding-timeline";
 
@@ -284,7 +290,29 @@ function preKickoffTasks(a: IntakeAnswers): FlowTask[] {
  * meetings booked.
  */
 function playbookPreKickoff(a: IntakeAnswers): FlowTask[] {
-  const [reply, cadence] = classicPreKickoff(a);
+  const [reply, cadenceTask, oneCall] = classicPreKickoff(a);
+  // An existing customer already talks to us: the cadence is there if the
+  // reply goes quiet, never a gate on their plan.
+  const cadence: FlowTask =
+    a.path === "existing"
+      ? {
+          ...cadenceTask!,
+          optional: true,
+          hint: "Optional for an existing customer — use it only if the reply goes quiet.",
+        }
+      : cadenceTask!;
+  // Services and nothing to build: one walkthrough, not three form meetings.
+  if (isServicesOnly(a)) {
+    return [
+      reply!,
+      cadence,
+      {
+        ...oneCall!,
+        label: "Book the services walkthrough",
+        hint: "One call: what was bought, who does what, and the dates. Every service starts the day after it.",
+      },
+    ];
+  }
   const t = a.handoff_tasks;
   const prepDone = PREP_ITEMS.filter((p) => t[p.key]).length;
   const booked = CORE_MEETINGS.filter(
@@ -307,7 +335,7 @@ function playbookPreKickoff(a: IntakeAnswers): FlowTask[] {
       : [];
   return [
     reply!,
-    cadence!,
+    cadence,
     ...prep,
     {
       key: "kickoff",

@@ -1,5 +1,6 @@
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { companyNameFrom } from "@/lib/company-name";
+import { displayName as customerDisplayName } from "../names";
 import { formsOnly, readIntake } from "@/lib/intake-answers";
 import { synthesisFromBrief } from "@/lib/welcome-synthesis";
 import { closeDateFor, timelineFor } from "@/lib/onboarding-plan";
@@ -127,7 +128,7 @@ export async function buildOnboardingDeckInput(dealId: string): Promise<Onboardi
     : (synth?.nextUseCases ?? []);
 
   return {
-    clientName: companyNameFrom(String(deal.name)) || String(deal.name),
+    clientName: customerDisplayName(String(deal.name)) || String(deal.name),
     industry: intake.industry,
     timeline,
     lead,

@@ -455,14 +455,16 @@ export async function loadCustomer360(
   ) as string[];
   const dealNames = new Map<string, string>();
   const dealStageById = new Map<string, string>();
+  const dealArrById = new Map<string, number | null>();
   if (dealIds.length) {
     const { data: dealRows } = await db()
       .from("portal_accounts")
-      .select("id,name,stage")
+      .select("id,name,stage,arr,sow_value")
       .in("id", dealIds);
     for (const d of (dealRows ?? []) as any[]) {
       dealNames.set(d.id, d.name);
       dealStageById.set(d.id, d.stage);
+      dealArrById.set(d.id, d.arr ?? d.sow_value ?? null);
     }
   }
   const dealStageOf = (i: any) =>
@@ -931,6 +933,7 @@ export async function loadCustomer360(
       // 4f3a-…" is a link nobody clicks.
       deal_id: impl.deal_id ?? null,
       deal_name: impl.deal_id ? (dealNames.get(impl.deal_id) ?? null) : null,
+      deal_arr: impl.deal_id ? demo.arr(dealArrById.get(impl.deal_id) ?? null) : null,
       sales_owner: impl.sales_owner,
       tier: impl.tier,
       sow_reference: impl.sow_reference,
@@ -2856,4 +2859,36 @@ export async function updateRecordField(args: {
   );
 
   return { ok: true, field: args.field, value: next };
+}
+
+/**
+ * Every customer and every open deal by name, for the new-account dialog:
+ * the "existing account" picker, and the live "this already exists" hint
+ * under the name for every type of deal.
+ */
+export async function loadCustomerOptions(): Promise<{
+  customers: Array<{ id: string; name: string; industry: string | null }>;
+  deals: Array<{ id: string; name: string; stage: string }>;
+}> {
+  const demo = await demoMasker();
+  const [{ data: customers }, { data: deals }] = await Promise.all([
+    db().from("customers").select("id,name,industry").order("name"),
+    db()
+      .from("portal_accounts")
+      .select("id,name,stage")
+      .neq("stage", "onboarding_complete")
+      .order("name"),
+  ]);
+  return {
+    customers: ((customers ?? []) as any[]).map((c) => ({
+      id: String(c.id),
+      name: demo.org(String(c.name), String(c.id)),
+      industry: (c.industry as string | null) ?? null,
+    })),
+    deals: ((deals ?? []) as any[]).map((d) => ({
+      id: String(d.id),
+      name: demo.org(String(d.name), String(d.id)),
+      stage: String(d.stage),
+    })),
+  };
 }

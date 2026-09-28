@@ -60,3 +60,29 @@ describe("the AE reply", () => {
     expect(url).toContain("add=ray%40maverick.com");
   });
 });
+
+describe("an existing customer's reply", () => {
+  const base = {
+    company: "Maverick Roofing",
+    contactName: "Ray Okonkwo",
+    ownerName: "Dana Whitfield",
+    intake: { path: "new_logo" as const, training_only: false },
+    welcomeUrl: "https://www.gcinternalportal.com/welcome/wlc_abc",
+    plannedKickoff: "2026-09-25",
+    today: "2026-09-23",
+    timezone: "America/Chicago",
+  };
+  it("speaks to a customer we already know, by their real name, and books Stage 1", () => {
+    const { subject, body } = aeReplyDraft({
+      ...base,
+      company: "Varley Group — services",
+      intake: { path: "existing", training_only: false },
+    });
+    expect(subject).toBe("Varley Group × GoCanvas — booking your Stage 1");
+    expect(body).toContain("Good to be working with you again");
+    expect(body).toContain("Varley Group's new services on GoCanvas");
+    expect(body).not.toContain("Thanks for the introduction");
+    expect(body).not.toContain("— services");
+    expect(body).toContain("Stage 1 — Make It Work: a form review");
+  });
+});

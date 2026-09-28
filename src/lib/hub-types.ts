@@ -252,6 +252,8 @@ export type Customer360 = {
     /** The pre-sales deal this project came from, and its name for display. */
     deal_id: string | null;
     deal_name: string | null;
+    /** What that deal is worth on its own — its ARR, else its SOW value. Never the customer's total. */
+    deal_arr: number | null;
     sales_owner: string | null;
     tier: string | null;
     sow_reference: string | null;

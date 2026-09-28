@@ -1,5 +1,6 @@
 import { zonedToUtc } from "./ics";
 import type { IntakeAnswers } from "./intake-answers";
+import { displayName, possessive } from "./names";
 import { addBusinessDays, onBusinessDay, shortDay } from "./onboarding-timeline";
 
 /**
@@ -36,12 +37,14 @@ export function aeReplyDraft(i: AeReplyInput): { subject: string; body: string }
   const [a, b] = kickoffOptions(i.plannedKickoff, i.today);
   const training = i.intake.path === "field_fusion" || i.intake.training_only;
   const minutes = i.sessionMinutes ?? (training ? 30 : 60);
+  const existing = i.intake.path === "existing";
+  const company = displayName(i.company) || i.company;
   const plan =
     i.intake.path === "existing"
       ? [
-          "• A form review with the integration in mind — the fields it needs, named the way the other system names them",
-          "• Real jobs through the reviewed form",
-          "• Then the integration, built against data your crew has already produced",
+          "• Stage 1 — Make It Work: a form review with the integration in mind — the fields it needs, named the way the other system names them",
+          "• Stage 2 — Make It Work for Them: real jobs through the reviewed form, and the integration built beside it",
+          "• Stage 3 — Make It Operational: the integration live against data your crew has already produced",
         ]
       : training
         ? [
@@ -70,7 +73,9 @@ export function aeReplyDraft(i: AeReplyInput): { subject: string; body: string }
   const body = [
     `Hi ${first},`,
     "",
-    `Thanks for the introduction. I'm ${i.ownerName ?? "[your name]"}, and I'll be leading ${i.company}'s GoCanvas onboarding.`,
+    existing
+      ? `Good to be working with you again. I'm ${i.ownerName ?? "[your name]"}, and I'll be leading ${possessive(company)} new services on GoCanvas.`
+      : `Thanks for the introduction. I'm ${i.ownerName ?? "[your name]"}, and I'll be leading ${possessive(company)} GoCanvas onboarding.`,
     "",
     `Here's what's ahead. ${length}`,
     ...plan,
@@ -81,9 +86,11 @@ export function aeReplyDraft(i: AeReplyInput): { subject: string; body: string }
     "",
     i.intake.path === "new_logo"
       ? `Could we hold Stage 1 for one of these (${minutes} minutes)? I'll send Stages 2 and 3 right after.`
-      : training
-        ? `Could we hold Session 1 for one of these (${minutes} minutes)?`
-        : `Could we hold the kickoff for one of these (${minutes} minutes)?`,
+      : existing
+        ? `Could we hold Stage 1 for one of these (${minutes} minutes)? I'll send the rest right after.`
+        : training
+          ? `Could we hold Session 1 for one of these (${minutes} minutes)?`
+          : `Could we hold the kickoff for one of these (${minutes} minutes)?`,
     `• ${shortDay(a)} at 10:00 am${zone}`,
     `• ${shortDay(b)} at 2:00 pm${zone}`,
     "",
@@ -95,8 +102,8 @@ export function aeReplyDraft(i: AeReplyInput): { subject: string; body: string }
     i.ownerName ?? "[your name]",
   ].join("\n");
   return {
-    subject: `${i.company} × GoCanvas — booking your ${
-      i.intake.path === "new_logo" ? "Stage 1" : training ? "first session" : "kickoff"
+    subject: `${company} × GoCanvas — booking your ${
+      i.intake.path === "new_logo" || existing ? "Stage 1" : training ? "first session" : "kickoff"
     }`,
     body,
   };

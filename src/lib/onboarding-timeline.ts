@@ -304,6 +304,48 @@ export const SEVEN_DAY_PLAN = NEW_LOGO_PLAN;
  * Same keys as every plan so times, invites, homework and every screen keep
  * working; the words are about a form that already exists.
  */
+/**
+ * An existing account that bought services and nothing to build: no first
+ * form, no field tester, no homework. One walkthrough on the day after the
+ * close — what was bought, who does what on each side, and the dates — and
+ * the services themselves are the plan, each starting the day after it at
+ * the length the SOW gives it. `session_minutes` from the SOW sizes the
+ * walkthrough like any other call.
+ */
+export const ADDON_PLAN: readonly MilestoneSpec[] = [
+  {
+    key: "close",
+    day: 0,
+    label: "Welcome aboard",
+    owner: "gocanvas",
+    kind: "milestone",
+    detail: "Welcome email the same day, with the walkthrough invite in it.",
+    icon: "Flag",
+  },
+  {
+    key: "kickoff",
+    day: 1,
+    label: "Walkthrough — what you bought, and the dates",
+    owner: "both",
+    kind: "call",
+    minutes: 30,
+    detail:
+      "The services in your SOW, one by one: what each delivers, what we need from you to start it, who owns it on each side, and the date it lands.",
+    homework: ["Send what each service needs from you — it is listed under each one below"],
+    icon: "PhoneCall",
+  },
+  {
+    key: "live",
+    day: 1,
+    label: "Services underway",
+    owner: "both",
+    kind: "milestone",
+    detail:
+      "Every service starts the day after the walkthrough and runs at its own length. Each one below has its own steps and its own date.",
+    icon: "Rocket",
+  },
+];
+
 export const EXISTING_PLAN: readonly MilestoneSpec[] = [
   {
     key: "close",
@@ -673,6 +715,7 @@ export type ExistingBuild = "review" | "us" | "customer";
 export const PLAN_KEYS = [
   "new_logo",
   "existing_review",
+  "existing_services",
   "existing_us",
   "existing_customer",
   "dm_conversion",
@@ -682,6 +725,7 @@ export type PlanKey = (typeof PLAN_KEYS)[number];
 export const PLAN_KEY_LABEL: Record<PlanKey, string> = {
   new_logo: "New logo — the Implementation Playbook",
   existing_review: "Existing account — the form the integration reads",
+  existing_services: "Existing account — services only, no form work",
   existing_us: "Existing account — we build the form",
   existing_customer: "Existing account — they build the form",
   dm_conversion: "Device Magic → GoCanvas",
@@ -710,11 +754,14 @@ export function currentPlanOverrides(): PlanOverrides {
 type PlanOpts = {
   trainingOnly?: boolean | null | undefined;
   existingBuild?: ExistingBuild | null | undefined;
+  /** No form work at all: one walkthrough, then the services. */
+  servicesOnly?: boolean | null | undefined;
 };
 
 export function planKeyFor(path: OnboardingPath | null | undefined, o: PlanOpts = {}): PlanKey {
   if (isTrainingPlan(path, o.trainingOnly)) return "training";
   if (path === "existing") {
+    if (o.servicesOnly && (o.existingBuild ?? "review") === "review") return "existing_services";
     return o.existingBuild === "us"
       ? "existing_us"
       : o.existingBuild === "customer"
@@ -735,6 +782,8 @@ export function basePlanFor(key: PlanKey): readonly MilestoneSpec[] {
       return CUSTOMER_BUILD_PLAN;
     case "existing_review":
       return EXISTING_PLAN;
+    case "existing_services":
+      return ADDON_PLAN;
     case "dm_conversion":
       return DM_CONVERSION_PLAN;
     default:
@@ -917,6 +966,8 @@ export type TimelineOptions = {
   timezone?: string | null;
   /** The core meetings' length when the SOW states one; the plan's own otherwise. */
   sessionMinutes?: number | null;
+  /** An existing account with services and no form work: the walkthrough plan. */
+  servicesOnly?: boolean | null;
   /**
    * Everything bought beyond the first form, each assigned to a phase ≥ 2.
    * See onboarding-services.ts. The legacy integrationTier/Target pair is
@@ -980,6 +1031,8 @@ export type Timeline = {
   path: OnboardingPath;
   /** Phase 1 is training, not a form build — the words on every screen follow it. */
   training: boolean;
+  /** An existing account's services with no form work: one walkthrough, then the services. */
+  servicesOnly: boolean;
   /** On an existing account, who builds the form in phase 1. Null elsewhere. */
   existingBuild: ExistingBuild | null;
   milestones: Milestone[];
@@ -1141,8 +1194,9 @@ export function buildTimeline(options: TimelineOptions): Timeline {
   // the milestone, so this is the only place it is set.
   const sessionMinutes =
     options.sessionMinutes && options.sessionMinutes >= 15 ? options.sessionMinutes : null;
+  const servicesOnly = Boolean(options.servicesOnly) && path === "existing" && !training;
   const milestones = cascade(
-    planFor(path, { trainingOnly: options.trainingOnly, existingBuild }),
+    planFor(path, { trainingOnly: options.trainingOnly, existingBuild, servicesOnly }),
     (spec) =>
       spec.day === 0 ? options.closeDate : addBusinessDays(options.closeDate, spec.day, holidays),
   ).map((m) =>
@@ -1280,7 +1334,14 @@ export function buildTimeline(options: TimelineOptions): Timeline {
       : prevDone && prevDoneOn
         ? prevDoneOn
         : (prevEnds ?? liveDate);
-    const phaseStart = addBusinessDays(anchor, 1, holidays);
+    // Never before the first call: the integration beside a form review
+    // starts the day after Stage 1 (or the walkthrough), not the day after
+    // the close, when nobody has met yet.
+    const earliest = addBusinessDays(anchor, 1, holidays);
+    const phaseStart =
+      isFirst && reviewOnly && earliest <= kickoffDate
+        ? addBusinessDays(kickoffDate, 1, holidays)
+        : earliest;
     const tentative = isFirst ? !reviewOnly && !provenOn : !(prevDone && prevDoneOn);
     const plans: ServicePlan[] = services
       .filter((x) => x.phase === n)
@@ -1301,7 +1362,9 @@ export function buildTimeline(options: TimelineOptions): Timeline {
       label: `Phase ${n}`,
       gate: isFirst
         ? reviewOnly
-          ? "Starts in week one, beside the form review"
+          ? servicesOnly
+            ? "Starts the day after the walkthrough"
+            : "Starts in week one, beside the form review"
           : path === "existing"
             ? "Starts once your form is proven or frozen for the integration"
             : "Starts once the form is tested and dialed in"
@@ -1340,6 +1403,7 @@ export function buildTimeline(options: TimelineOptions): Timeline {
     closeDate: options.closeDate,
     path,
     training,
+    servicesOnly,
     existingBuild,
     milestones,
     liveDate,

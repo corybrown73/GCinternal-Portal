@@ -686,3 +686,11 @@ export const setSowDocumentForImplementation = createServerFn({ method: "POST" }
     const { setSowDocument } = await import("./sow-analysis.server");
     return setSowDocument(data);
   });
+
+/** Customers and open deals by name, for the new-account dialog. */
+export const listCustomerOptions = createServerFn({ method: "GET" })
+  .middleware([requireInternalAuth])
+  .handler(async () => {
+    const { loadCustomerOptions } = await import("./hub.server");
+    return loadCustomerOptions();
+  });

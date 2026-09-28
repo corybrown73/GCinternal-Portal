@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useNavigate } from "@tanstack/react-router";
 import { Plus, Upload } from "lucide-react";
@@ -18,6 +18,9 @@ import { cn } from "@/lib/utils";
 import { addDeal, addReport, importDeals, moveDealStage, uploadSow } from "@/lib/presale.functions";
 import { parseWonGate } from "@/lib/won-gate";
 import { prepareDealFn } from "@/lib/stage-flow.functions";
+import { listCustomerOptions } from "@/lib/hub.functions";
+import { startServicesDealFn } from "@/lib/deal-pulse.functions";
+import { dealStageLabel } from "@/lib/deal-stage";
 import { STAGE_LABELS, STAGES, type AccountStage } from "@/lib/presale-stages";
 
 const inputClass =
@@ -43,6 +46,8 @@ type DealDraft = {
   path: "" | "new_logo" | "existing" | "dm_conversion" | "field_fusion";
   industry: string;
   stage: AccountStage;
+  /** An existing account: the customer record the services are added to. */
+  customerId: string;
 };
 
 const emptyDeal: DealDraft = {
@@ -54,6 +59,7 @@ const emptyDeal: DealDraft = {
   path: "",
   industry: "",
   stage: "prospect",
+  customerId: "",
 };
 
 export function NewDealDialog() {
@@ -71,6 +77,26 @@ export function NewDealDialog() {
   const report = useServerFn(addReport);
   const upload = useServerFn(uploadSow);
   const prepare = useServerFn(prepareDealFn);
+  const startServices = useServerFn(startServicesDealFn);
+  // Who already exists, for the picker and for the "this is already here"
+  // hint under the name. Loaded once the dialog opens.
+  const options = useQuery({
+    queryKey: ["customer-options"],
+    queryFn: () => listCustomerOptions(),
+    enabled: open,
+    staleTime: 60_000,
+  });
+  const typed = draft.name.trim().toLowerCase();
+  const matches =
+    typed.length >= 3
+      ? {
+          customers: (options.data?.customers ?? []).filter((c) =>
+            c.name.toLowerCase().includes(typed),
+          ),
+          deals: (options.data?.deals ?? []).filter((d) => d.name.toLowerCase().includes(typed)),
+        }
+      : { customers: [], deals: [] };
+  const existing = draft.path === "existing";
 
   const set = (patch: Partial<DealDraft>) => setDraft((d) => ({ ...d, ...patch }));
   // The pasted notes say what kind of account this is before anyone picks.
@@ -96,19 +122,31 @@ export function NewDealDialog() {
       if (arr != null && !Number.isFinite(arr)) {
         throw new Error("ARR must be a number");
       }
-      setPhase("Creating the account");
-      const result = await create({
-        data: {
-          name: draft.name.trim(),
-          domain: nullable(draft.domain),
-          salesforceId: nullable(draft.salesforceId),
-          arr,
-          summary: nullable(draft.summary),
-          path: draft.path || "new_logo",
-          industry: nullable(draft.industry),
-        },
-      });
-      const dealId = result.account.id;
+      let dealId: string;
+      let result: { account: { id: string } };
+      if (existing && draft.customerId) {
+        // Services for a customer we already have: the add-on deal starts
+        // from their record — closed, linked, inheriting what they told us
+        // — the same as "Add services" on their page.
+        setPhase("Starting the services deal");
+        const started = await startServices({ data: { customerId: draft.customerId } });
+        dealId = started.dealId;
+        result = { account: { id: dealId } };
+      } else {
+        setPhase("Creating the account");
+        result = await create({
+          data: {
+            name: draft.name.trim(),
+            domain: nullable(draft.domain),
+            salesforceId: nullable(draft.salesforceId),
+            arr,
+            summary: nullable(draft.summary),
+            path: draft.path || "new_logo",
+            industry: nullable(draft.industry),
+          },
+        });
+        dealId = result.account.id;
+      }
       if (notes.trim()) {
         setPhase("Saving the call notes");
         await report({
@@ -137,7 +175,7 @@ export function NewDealDialog() {
       // the SOW are on it — the same gated move a person makes from the
       // board. Refused for a missing piece, the deal stays a Prospect and its
       // page says what to add; that is not a failure of the creation.
-      if (draft.stage && draft.stage !== "prospect") {
+      if (!(existing && draft.customerId) && draft.stage && draft.stage !== "prospect") {
         setPhase("Moving it to its stage");
         try {
           await moveStage({ data: { dealId, toStage: draft.stage } });
@@ -188,26 +226,57 @@ export function NewDealDialog() {
             onSubmit={(e) => {
               e.preventDefault();
               setTouched(true);
-              if (draft.name.trim() === "") return;
+              if (existing ? !draft.customerId : draft.name.trim() === "") return;
               if (!mutation.isPending) mutation.mutate();
             }}
           >
             <div>
               <label className={labelClass} htmlFor="new-deal-name">
-                Company *
+                {existing ? "Customer *" : "Company *"}
               </label>
-              <input
-                id="new-deal-name"
-                name="name"
-                className={inputClass}
-                value={draft.name}
-                onChange={(e) => set({ name: e.target.value })}
-                onBlur={() => setTouched(true)}
-                aria-invalid={touched && draft.name.trim() === "" ? true : undefined}
-                aria-describedby="new-deal-name-hint"
-                placeholder="As the customer says it"
-                autoFocus
-              />
+              {existing ? (
+                // An existing account IS one of our customers: pick the
+                // record, and the services deal hangs off it — its champion,
+                // its industry and the forms they run come along.
+                <select
+                  id="new-deal-name"
+                  name="customerId"
+                  className={inputClass}
+                  value={draft.customerId}
+                  onChange={(e) => {
+                    const c = options.data?.customers.find((x) => x.id === e.target.value);
+                    set({
+                      customerId: e.target.value,
+                      name: c?.name ?? draft.name,
+                      industry: c?.industry ?? draft.industry,
+                    });
+                  }}
+                  aria-describedby="new-deal-name-hint"
+                  autoFocus
+                >
+                  <option value="">
+                    {options.isPending ? "Loading customers…" : "Pick the customer…"}
+                  </option>
+                  {(options.data?.customers ?? []).map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  id="new-deal-name"
+                  name="name"
+                  className={inputClass}
+                  value={draft.name}
+                  onChange={(e) => set({ name: e.target.value })}
+                  onBlur={() => setTouched(true)}
+                  aria-invalid={touched && draft.name.trim() === "" ? true : undefined}
+                  aria-describedby="new-deal-name-hint"
+                  placeholder="As the customer says it"
+                  autoFocus
+                />
+              )}
               <p
                 id="new-deal-name-hint"
                 className={cn(
@@ -217,10 +286,27 @@ export function NewDealDialog() {
                     : "text-muted-foreground",
                 )}
               >
-                {touched && draft.name.trim() === ""
-                  ? "The account needs the company's name."
-                  : "Required. Everything else can be filled in later."}
+                {existing
+                  ? draft.customerId
+                    ? "The services deal starts closed on this customer's record, with what they already told us."
+                    : "Not one of our customers yet? Pick a different type of deal."
+                  : touched && draft.name.trim() === ""
+                    ? "The account needs the company's name."
+                    : "Required. Everything else can be filled in later."}
               </p>
+              {!existing && (matches.customers.length || matches.deals.length) ? (
+                <p role="status" className="mt-1 text-[11px] text-amber-800 dark:text-amber-300">
+                  Already here:{" "}
+                  {[
+                    ...matches.customers.slice(0, 3).map((c) => `${c.name} (customer)`),
+                    ...matches.deals
+                      .slice(0, 3)
+                      .map((d) => `${d.name} (deal · ${dealStageLabel(d.stage)})`),
+                  ].join(", ")}
+                  . For a customer we already have, choose “Existing account” and pick them — the
+                  services are added to their record.
+                </p>
+              ) : null}
             </div>
             <div className="grid grid-cols-2 gap-2">
               <div>
@@ -425,9 +511,15 @@ export function NewDealDialog() {
               <button
                 type="submit"
                 className={primaryButtonClass}
-                disabled={mutation.isPending || draft.name.trim() === ""}
+                disabled={
+                  mutation.isPending || (existing ? !draft.customerId : draft.name.trim() === "")
+                }
               >
-                {mutation.isPending ? "Creating…" : "Create account"}
+                {mutation.isPending
+                  ? (phase ?? "Creating…")
+                  : existing
+                    ? "Add the services"
+                    : "Create account"}
               </button>
             </div>
           </form>

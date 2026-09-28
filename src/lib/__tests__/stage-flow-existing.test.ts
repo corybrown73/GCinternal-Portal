@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { isServicesOnly, readIntake } from "../intake-answers";
 import { stageFlow } from "../stage-flow";
 
 const input = (path: string) => ({
@@ -55,5 +56,53 @@ describe("Pre-kickoff on an existing account", () => {
       },
     });
     expect(all.advanceTo).toBe("in_onboarding");
+  });
+});
+
+describe("an existing account's Pre-kickoff", () => {
+  it("keeps the cadence optional: it never holds the plan", () => {
+    const f = stageFlow({
+      stage: "onboarding_kickoff",
+      intake: { path: "existing", existing: { form_final: false, builder: "us" } },
+      owner: "Dana",
+      gongReports: 1,
+      hasSow: true,
+      hasBrief: true,
+      hasLink: true,
+    });
+    const pk = f.stages.find((s) => s.key === "pre_kickoff")!;
+    expect(pk.tasks.find((t) => t.key === "cadence")!.optional).toBe(true);
+  });
+
+  it("books one walkthrough when the SOW is services only", () => {
+    const intake = readIntake({
+      path: "existing",
+      existing: { form_final: true },
+      timeline: {
+        services: [{ id: "qb", kind: "integration", name: "QuickBooks Online", phase: 2, tier: 3 }],
+      },
+    });
+    expect(isServicesOnly(intake)).toBe(true);
+    const f = stageFlow({
+      stage: "onboarding_kickoff",
+      intake,
+      owner: "Dana",
+      gongReports: 1,
+      hasSow: true,
+      hasBrief: true,
+      hasLink: true,
+    });
+    const pk = f.stages.find((s) => s.key === "pre_kickoff")!;
+    expect(pk.tasks.map((t) => t.key)).toEqual(["reply_ae", "cadence", "kickoff"]);
+    expect(pk.tasks.find((t) => t.key === "kickoff")!.label).toBe("Book the services walkthrough");
+    // A paid form in the SOW brings the three form meetings back.
+    const withForm = readIntake({
+      path: "existing",
+      existing: { form_final: true },
+      timeline: {
+        services: [{ id: "f", kind: "paid_form", name: "Job ticket", phase: 1 }],
+      },
+    });
+    expect(isServicesOnly(withForm)).toBe(false);
   });
 });

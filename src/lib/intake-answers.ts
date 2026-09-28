@@ -376,6 +376,22 @@ export function existingBuildFor(
   return "review";
 }
 
+/**
+ * An existing account that bought services and no form work: the form is
+ * final, nothing named to build, no paid form in the SOW. Phase 1 is then a
+ * walkthrough, not three form meetings, and the services start straight
+ * after it.
+ */
+export function isServicesOnly(
+  a: Pick<IntakeAnswers, "path" | "existing" | "wanted_forms" | "timeline" | "training_only">,
+): boolean {
+  if (a.path !== "existing") return false;
+  // Said out loud, not defaulted: the Account Manager answered "final".
+  if (a.existing.form_final !== true || existingBuildFor(a) !== "review") return false;
+  if (formsOnly(a as IntakeAnswers).length > 0) return false;
+  return !(a.timeline.services ?? []).some((s) => s.kind === "paid_form");
+}
+
 export const EMPTY_INTAKE: IntakeAnswers = intakeAnswersSchema.parse({});
 
 /** The answers the AI reading may fill, and a person may take over. */

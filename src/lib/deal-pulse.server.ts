@@ -127,6 +127,10 @@ export async function startServicesDeal(
     return { dealId: String(open.id), created: false, implementationId: impl?.id ?? null };
   }
 
+  // What the customer already told us: their champion and the forms they
+  // run come from the record and the deal before this one, marked as a
+  // person's answers so the review never asks for them again.
+  const inherited = await inheritance(customerId);
   const name = `${String(customer.name)} — services`;
   const { data: created, error } = await db()
     .from("portal_accounts")
@@ -134,7 +138,23 @@ export async function startServicesDeal(
       name,
       customer_id: customerId,
       stage: won,
-      intake: { path: "existing", industry: customer.industry ?? null },
+      created_by: userId,
+      ...(inherited.contact
+        ? {
+            primary_contact_name: inherited.contact.name,
+            primary_contact_role: inherited.contact.role,
+            primary_contact_email: inherited.contact.email,
+          }
+        : {}),
+      intake: {
+        path: "existing",
+        industry: customer.industry ?? null,
+        ...(inherited.forms.length ? { wanted_forms: inherited.forms, forms_built: true } : {}),
+        person_set: [
+          ...(customer.industry ? ["industry"] : []),
+          ...(inherited.forms.length ? ["wanted_forms", "forms_built"] : []),
+        ],
+      },
     })
     .select("id")
     .single();
@@ -183,4 +203,56 @@ export async function startServicesDeal(
     console.error("[services deal] could not assign", e);
   }
   return { dealId, created: true, implementationId };
+}
+
+/**
+ * What a customer's earlier record already says: the champion (the first
+ * contact whose role reads as one, else the first contact) and the forms
+ * their last deal named. Never throws; an empty answer just means the
+ * review asks.
+ */
+async function inheritance(customerId: string): Promise<{
+  contact: { name: string; role: string; email: string | null } | null;
+  forms: Array<{ id: string; name: string; template_id: null }>;
+}> {
+  try {
+    const [{ data: contacts }, { data: deals }] = await Promise.all([
+      db()
+        .from("customer_contacts")
+        .select("name,role,email,created_at")
+        .eq("customer_id", customerId)
+        .order("created_at", { ascending: true })
+        .limit(10),
+      db()
+        .from("portal_accounts")
+        .select("intake,created_at")
+        .eq("customer_id", customerId)
+        .order("created_at", { ascending: false })
+        .limit(3),
+    ]);
+    const rows = (contacts ?? []) as Array<{ name: string; role: string; email: string | null }>;
+    const champion =
+      rows.find((c) => /champion|primary|owner|sponsor|manager|director/i.test(c.role ?? "")) ??
+      rows[0] ??
+      null;
+    const forms: Array<{ id: string; name: string; template_id: null }> = [];
+    const seen = new Set<string>();
+    for (const d of (deals ?? []) as Array<{ intake: unknown }>) {
+      for (const f of readIntake(d.intake).wanted_forms) {
+        const key = f.name.trim().toLowerCase();
+        if (seen.has(key)) continue;
+        seen.add(key);
+        forms.push({ id: `inherited-${forms.length + 1}`, name: f.name, template_id: null });
+      }
+    }
+    return {
+      contact: champion
+        ? { name: champion.name, role: champion.role || "Champion", email: champion.email ?? null }
+        : null,
+      forms: forms.slice(0, 8),
+    };
+  } catch (e) {
+    console.error("[services deal] could not read the customer's earlier record", e);
+    return { contact: null, forms: [] };
+  }
 }

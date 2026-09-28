@@ -1,4 +1,10 @@
-import { existingBuildFor, formsOnly, isTrainingOnly, type IntakeAnswers } from "./intake-answers";
+import {
+  existingBuildFor,
+  formsOnly,
+  isServicesOnly,
+  isTrainingOnly,
+  type IntakeAnswers,
+} from "./intake-answers";
 import { type ServiceSpec } from "./onboarding-services";
 import {
   buildTimeline,
@@ -70,7 +76,10 @@ export function extraFormServices(intake: IntakeAnswers): ServiceSpec[] {
   // two run alongside it from the kickoff. A fourth and beyond wait for
   // phase 2 — two weeks is two weeks.
   // Training has no form build at all, and a service name is not a form.
-  if (isTrainingOnly(intake)) return [];
+  // An existing account whose form is final builds nothing: its plan rows
+  // come from the SOW only, and a form the calls mentioned is one they
+  // already run. When we (or they) build, the named forms are rows as usual.
+  if (isTrainingOnly(intake) || existingBuildFor(intake) === "review") return [];
   return formsOnly(intake)
     .slice(1)
     .filter((f) => !named.has(f.name.trim().toLowerCase()))
@@ -104,6 +113,7 @@ export function timelineFor(intake: IntakeAnswers, closeDate: string): Timeline 
     times: t.times,
     timezone: t.timezone,
     sessionMinutes: t.session_minutes,
+    servicesOnly: isServicesOnly(intake),
     services: [...(t.services as ServiceSpec[]), ...extraFormServices(intake)],
   });
 }

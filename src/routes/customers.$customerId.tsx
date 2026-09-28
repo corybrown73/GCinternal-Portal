@@ -337,6 +337,37 @@ function Customer360Page() {
               />
               <h1 className="text-[17px] font-semibold tracking-tight">{customer.name}</h1>
             </div>
+            {/* One customer, several projects: the add-on beside the original.
+                Newest first; the pill is the project, the badge its deal's
+                stage, and `?impl=` keeps the pick across tabs. */}
+            {record.implementations.length > 1 ? (
+              <div className="mt-1.5 flex flex-wrap items-center gap-1.5" aria-label="Projects">
+                {[...record.implementations]
+                  .sort((a, b) =>
+                    String(b.created_at ?? "").localeCompare(String(a.created_at ?? "")),
+                  )
+                  .map((s) => (
+                    <Link
+                      key={s.id}
+                      to="/customers/$customerId"
+                      params={{ customerId }}
+                      search={{ tab, impl: s.id }}
+                      aria-current={s.id === impl.id ? "true" : undefined}
+                      className={cn(
+                        "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px]",
+                        s.id === impl.id
+                          ? "border-primary bg-primary/10 text-foreground"
+                          : "border-border text-muted-foreground hover:text-foreground",
+                      )}
+                    >
+                      {s.name && s.name !== customer.name ? s.name : "Original project"}
+                      <span className="font-mono text-[10px] text-muted-foreground">
+                        {dealStageLabel(s.deal_stage)}
+                      </span>
+                    </Link>
+                  ))}
+              </div>
+            ) : null}
             <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] text-muted-foreground">
               <span>
                 {[
@@ -1346,11 +1377,17 @@ function AccountRail({
               value={impl.tier ?? null}
               display={dash(impl.tier)}
             />
+            {impl.deal_id ? (
+              <Field
+                label="This deal"
+                value={impl.deal_arr == null ? dash(null) : fmtMoney(impl.deal_arr)}
+              />
+            ) : null}
             <EditableRecordField
               implementationId={impl.id}
               customerId={customerId}
               field="arr"
-              label="ARR"
+              label={impl.deal_id ? "Customer ARR" : "ARR"}
               value={record.customer.arr == null ? null : String(record.customer.arr)}
               type="number"
               format={(v) => (v == null || v === "" ? dash(null) : fmtMoney(Number(v)))}

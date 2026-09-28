@@ -149,7 +149,8 @@ async function viewFor(
     if (calls.some((m) => !m.time))
       readiness.push({
         key: "times",
-        label: `Times for all ${calls.length} calls`,
+        label:
+          calls.length === 1 ? "A time for the walkthrough" : `Times for all ${calls.length} calls`,
         hint: "Book the meetings on the checklist (or set the times on the plan), then send the invites.",
       });
   }

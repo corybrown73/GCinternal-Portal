@@ -136,7 +136,8 @@ export function prefillFromSynthesis(
           .map((x) => x.workflow?.trim())
           .filter((n): n is string => Boolean(n) && !isServiceName(n))
           .map((name) => ({ name, from: null }));
-  if (forms.length && !intake.training_only && !(ob?.training_only === true)) {
+  const existingAccount = intake.path === "existing" || ob?.flow === "existing";
+  if (forms.length && !intake.training_only && !(ob?.training_only === true) && !existingAccount) {
     write(
       "wanted_forms",
       forms.slice(0, 8).map((f, i) => ({

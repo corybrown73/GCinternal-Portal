@@ -2,6 +2,7 @@ import type Anthropic from "@anthropic-ai/sdk";
 
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 
+import { readIntake } from "./intake-answers";
 import { requireInternal } from "./presale.server";
 import {
   catalogueForPrompt,
@@ -205,7 +206,7 @@ async function stampSowFacts(dealId: string, p: SowPlanProposal): Promise<string
     const { data: deal } = await db()
       .from("portal_accounts")
       .select(
-        "sow_reference,sow_signed_date,sow_value,primary_contact_name,primary_contact_role,primary_contact_email,intake",
+        "sow_reference,sow_signed_date,sow_value,primary_contact_name,primary_contact_role,primary_contact_email,intake,arr",
       )
       .eq("id", dealId)
       .maybeSingle();
@@ -220,6 +221,9 @@ async function stampSowFacts(dealId: string, p: SowPlanProposal): Promise<string
     set("sow_reference", p.reference, "reference");
     set("sow_signed_date", p.signed_date, "signed date");
     set("sow_value", p.value, "value");
+    // An add-on deal is worth what its own SOW says. It never inherits the
+    // customer's ARR, and the pipeline's total counts it once.
+    if (readIntake(deal.intake).path === "existing") set("arr", p.value, "ARR");
     set("primary_contact_name", p.contact?.name ?? null, "contact");
     set("primary_contact_role", p.contact?.role ?? null, "contact role");
     set("primary_contact_email", p.contact?.email ?? null, "contact email");
@@ -228,7 +232,6 @@ async function stampSowFacts(dealId: string, p: SowPlanProposal): Promise<string
     // signed date. Without this every plan starts "as if today".
     const day0 = p.start_date ?? p.signed_date;
     if (day0 && /^\d{4}-\d{2}-\d{2}$/.test(day0)) {
-      const { readIntake } = await import("./intake-answers");
       const intake = readIntake((deal as { intake?: unknown }).intake);
       if (!intake.timeline.close_date) {
         // Merged into intake.timeline, never the whole intake written back:
