@@ -201,7 +201,7 @@ export function speakerNotes(view: WelcomeView): {
         `By ${live}: ${form} on the crew's phone. Same day in the office, photos and a signature on every one, no retyping.`,
         t.phases.length
           ? `Then the rest of the order, once the form is dialed in. Do not list it here — it has its own screen${t.phases.length > 1 ? "s" : ""}, and the customer has already seen ${t.phases.length > 1 ? "them" : "it"}.`
-          : `Then the next forms — ${view.nextUseCases.map((n) => n.name).join(", ") || "the ones you pick"} — built by you, with us on a call if you want us.`,
+          : `Then the common forms in their industry — ${view.nextUseCases.map((n) => n.name).join(", ") || "the ones you pick"}. Ask: "do you want these on your account?" A yes goes on the intake; nothing here is scheduled.`,
       ],
       why: "The customer's own words on the 'today' side is what makes this land. If the intake did not capture them, ask now and type it into the portal after the call.",
       ifTheyAsk: [

@@ -51,6 +51,10 @@ import {
   Zap,
   type LucideIcon,
   BookOpen,
+  CalendarDays,
+  GraduationCap,
+  Handshake,
+  Search,
 } from "lucide-react";
 
 import {
@@ -115,6 +119,13 @@ const ICONS: Record<string, LucideIcon> = {
   Smartphone,
   Workflow,
   BookOpen,
+  FileText,
+  Table2,
+  Cloud,
+  CalendarDays,
+  GraduationCap,
+  Search,
+  Handshake,
 };
 
 function Icon({
@@ -2439,7 +2450,9 @@ function Business({
               </>
             ) : (
               <>
-                <p className="wp-after-title">Then, the next ones — built by you</p>
+                <p className="wp-after-title">
+                  Common forms in your industry — want them on your account?
+                </p>
                 <p className="wp-after-body">
                   {next.length
                     ? next.map((n) => n.name).join(" · ")

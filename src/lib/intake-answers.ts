@@ -22,6 +22,52 @@ export const typedDateSchema = z.object({
 export type TypedDate = z.infer<typeof typedDateSchema>;
 
 /**
+ * One step of this account's plan, as a person changed it. Everything is
+ * optional: only what differs from the standard is stored, so a standard
+ * that improves later still flows through untouched fields.
+ */
+export const planStepEditSchema = z.object({
+  label: z.string().trim().max(120).optional(),
+  kind: z.enum(["call", "homework", "build", "milestone"]).optional(),
+  icon: z.string().trim().max(40).optional(),
+  owner: z.enum(["gocanvas", "client", "both"]).optional(),
+  minutes: z.number().int().min(15).max(240).nullable().optional(),
+  detail: z.string().trim().max(400).optional(),
+  /** Business days after the close: the step's own base date. */
+  day: z.number().int().min(0).max(120).optional(),
+});
+export type PlanStepEdit = z.infer<typeof planStepEditSchema>;
+
+/**
+ * The account's departures from the standard plan. Our standard (Settings →
+ * Onboarding plans) is what every account starts from; this is what the
+ * implementation team changed for THIS one — a stage that already happened
+ * pre-sale taken out, two stages swapped, a step renamed, a call made a
+ * working session. Empty means "as standard".
+ */
+export const planEditsSchema = z.object({
+  /** Step keys taken off this account's plan. */
+  removed: z.array(z.string().max(40)).max(40).default([]),
+  /** The full order of step keys when a person reordered them; null for the standard order. */
+  order: z.array(z.string().max(40)).max(40).nullable().default(null),
+  /** Per-step changes, by key. */
+  steps: z.record(z.string().max(40), planStepEditSchema).default({}),
+  /** Steps this account has that the standard does not. */
+  added: z
+    .array(
+      planStepEditSchema.extend({
+        key: z.string().min(1).max(40),
+        label: z.string().trim().min(1).max(120),
+        day: z.number().int().min(0).max(120),
+      }),
+    )
+    .max(20)
+    .default([]),
+});
+export type PlanEdits = z.infer<typeof planEditsSchema>;
+export const EMPTY_PLAN_EDITS: PlanEdits = { removed: [], order: null, steps: {}, added: [] };
+
+/**
  * The onboarding intake: what we ask a customer after the deal closes, and
  * the shape the answers are stored in (`portal_accounts.intake`).
  *
@@ -305,6 +351,8 @@ export const intakeAnswersSchema = z.object({
       removed_services: z.array(z.string().max(160)).max(40).default([]),
       /** The core meetings' length when the SOW states one; null for the plan's own. */
       session_minutes: z.number().int().min(15).max(240).nullable().default(null),
+      /** This account's departures from the standard plan (see planEditsSchema). */
+      plan_edits: planEditsSchema.default({}),
       /** Everything bought beyond the first form: phase 1 runs alongside it, 2 and up wait. */
       services: z
         .array(
@@ -528,30 +576,28 @@ export function firstFormName(a: IntakeAnswers): string | null {
 export type WantedForm = IntakeAnswers["wanted_forms"][number];
 
 /**
- * Picking a library card puts it on the wanted list (and takes it off again).
- * Both fields are returned so the older readers of chosen_templates stay in
- * step with the list.
+ * Picking a library card marks it for the TALK TRACK, not the plan: the deck
+ * and the welcome page show it under "common forms we see in your industry —
+ * do you want these on your account?", and nothing is scheduled until the
+ * customer says yes. Picking again unmarks it. A card that is also on the
+ * wanted list (named as a form to build) stays on the list.
  */
 export function toggleWantedTemplate(
   a: Pick<IntakeAnswers, "wanted_forms" | "chosen_templates">,
   template: { id: string; name: string },
 ): { wanted_forms: WantedForm[]; chosen_templates: string[] } {
-  // A deal from before the list existed may have the card chosen with no
-  // list entry: picking it again un-chooses it, and the list stays empty.
-  if (!a.wanted_forms.length && a.chosen_templates.includes(template.id)) {
-    return {
-      wanted_forms: [],
-      chosen_templates: a.chosen_templates.filter((id) => id !== template.id),
-    };
-  }
-  const has = a.wanted_forms.some((f) => f.template_id === template.id);
-  const wanted_forms = has
-    ? a.wanted_forms.filter((f) => f.template_id !== template.id)
-    : [
-        ...a.wanted_forms,
-        { id: `t-${template.id.slice(0, 8)}`, name: template.name, template_id: template.id },
-      ];
-  return { wanted_forms, chosen_templates: templateIds(wanted_forms) };
+  const has = a.chosen_templates.includes(template.id);
+  const chosen_templates = has
+    ? a.chosen_templates.filter((id) => id !== template.id)
+    : [...a.chosen_templates, template.id];
+  return { wanted_forms: a.wanted_forms, chosen_templates };
+}
+
+/** The library cards to talk about, plus any card that is on the build list. */
+export function talkTrackTemplates(
+  a: Pick<IntakeAnswers, "wanted_forms" | "chosen_templates">,
+): string[] {
+  return [...new Set([...a.chosen_templates, ...templateIds(a.wanted_forms)])];
 }
 
 /** A form named on the call, no card behind it. */
@@ -563,7 +609,7 @@ export function addWantedForm(
   if (!clean) return { wanted_forms: a.wanted_forms, chosen_templates: a.chosen_templates };
   const id = `f-${Math.random().toString(36).slice(2, 8)}`;
   const wanted_forms = [...a.wanted_forms, { id, name: clean, template_id: null }];
-  return { wanted_forms, chosen_templates: templateIds(wanted_forms) };
+  return { wanted_forms, chosen_templates: a.chosen_templates };
 }
 
 /** Move one to the front: it becomes the first form. */
@@ -577,7 +623,7 @@ export function templateIds(forms: WantedForm[]): string[] {
   return forms.map((f) => f.template_id).filter((x): x is string => Boolean(x));
 }
 
-/** What the grid outlines: the list's cards, or — with no list yet — what was chosen before it existed. */
+/** What the grid outlines: every card marked for the talk track, and every card on the build list. */
 export function chosenFrom(forms: WantedForm[], previous: string[]): string[] {
-  return forms.length ? templateIds(forms) : previous;
+  return [...new Set([...previous, ...templateIds(forms)])];
 }

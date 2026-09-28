@@ -114,3 +114,22 @@ read as written is a bug.
 Delete the three `QA TEST – …` deals from the pipeline (and the Prairie / Summit
 customers they created). The Varley add-on deal can stay or go; deleting it removes
 its project.
+
+## 4 · Edit plan (added Sep 28, later)
+
+1. On any deal's Plan, Phase 1 has a primary **Edit plan** button. Press it: a solid
+   dialog lists every step with its icon (the same icon the welcome page and the
+   deck draw), name, type, owner, date, length for calls, and a one-line detail.
+2. Drag a step by its grip (or use the arrows) above another: it moves; the close
+   and the finish line stay at the ends and cannot be removed. Press ✕ on a step
+   that already happened pre-sale: it is gone from this account only.
+3. Change a step's type to "Call": a minutes box appears; change its icon; rename
+   it. **Save the plan**. The Phase 1 summary now ends "· edited for this account",
+   the step list shows the new icons and order, and the welcome page and the .ics
+   follow.
+4. Settings → Onboarding plans is untouched (that is our standard). **Back to the
+   standard** in the dialog clears this account's edits; dates you moved stay.
+5. Intake → "Common forms in your industry": picking a card no longer puts it on the
+   plan. It appears on the deck's last slide and the welcome page's "Common forms in
+   your industry — want them on your account?" block. Naming a form under the
+   forms list is what schedules a build.

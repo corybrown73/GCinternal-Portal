@@ -114,6 +114,7 @@ export function timelineFor(intake: IntakeAnswers, closeDate: string): Timeline 
     timezone: t.timezone,
     sessionMinutes: t.session_minutes,
     servicesOnly: isServicesOnly(intake),
+    planEdits: t.plan_edits,
     services: [...(t.services as ServiceSpec[]), ...extraFormServices(intake)],
   });
 }

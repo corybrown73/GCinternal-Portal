@@ -914,8 +914,8 @@ function NoForms({
       <div>
         <p className="mb-1.5 text-[12px] text-muted-foreground">
           {answers.industry
-            ? `Starting points for ${answers.industry}. Pick every one they want — each lands on the list below, and the first on the list is the first form.`
-            : "Pick an industry to see starting points from the form library."}
+            ? `Common forms we see in ${answers.industry}. A picked card goes on the deck's talk track — “these are common forms in your industry, do you want them on your account?” — not on the plan. A form they actually want built is named on the list below.`
+            : "Pick an industry to see the common forms from the library for the talk track."}
         </p>
         {suggestions.isLoading ? (
           <p className="text-[12px] text-muted-foreground">Loading the library…</p>
@@ -1003,8 +1003,8 @@ function WantedForms({
   const disabled = !editable || busy;
   const input =
     "rounded-sm border border-border bg-background px-2 py-1 text-[12px] focus:outline-none focus:ring-1 focus:ring-primary disabled:opacity-60";
-  const write = (next: IntakeAnswers["wanted_forms"]) =>
-    onSet({ wanted_forms: next, chosen_templates: templateIds(next) });
+  // The build list changes; the talk-track picks are a separate answer.
+  const write = (next: IntakeAnswers["wanted_forms"]) => onSet({ wanted_forms: next });
   const add = () => {
     const patch = addWantedForm(answers, name);
     if (patch.wanted_forms !== answers.wanted_forms) onSet(patch);

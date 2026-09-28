@@ -135,14 +135,20 @@ describe("the forms they want built", () => {
   const a = readIntake({ forms_built: false });
   const card = { id: "11111111-1111-4111-8111-111111111111", name: "Daily Site Inspection" };
 
-  it("picking a card adds it to the list and to chosen_templates; picking again removes it", () => {
+  it("picking a card marks it for the talk track, never the build list; picking again unmarks it", () => {
     const on = toggleWantedTemplate(a, card);
-    expect(on.wanted_forms.map((f) => f.name)).toEqual(["Daily Site Inspection"]);
-    expect(on.wanted_forms[0]!.template_id).toBe(card.id);
+    expect(on.wanted_forms).toEqual([]);
     expect(on.chosen_templates).toEqual([card.id]);
     const off = toggleWantedTemplate({ ...a, ...on }, card);
     expect(off.wanted_forms).toEqual([]);
     expect(off.chosen_templates).toEqual([]);
+  });
+
+  it("naming a form to build leaves the talk-track picks alone", () => {
+    const picked = { ...a, ...toggleWantedTemplate(a, card) };
+    const named = addWantedForm(picked, "Chemical Delivery Ticket");
+    expect(named.chosen_templates).toEqual([card.id]);
+    expect(named.wanted_forms.map((f) => f.name)).toEqual(["Chemical Delivery Ticket"]);
   });
 
   it("a form named on the call has no card behind it, and the first on the list is the first form", () => {

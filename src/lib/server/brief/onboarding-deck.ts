@@ -1038,10 +1038,10 @@ function slideNext(pptx: Pptx, d: OnboardingDeckInput) {
   }
 
   eyebrow(s, "After the form is live");
-  title(s, "Your next use cases");
+  title(s, "Common forms in your industry");
   sub(
     s,
-    "Three forms your industry runs next. You will build these yourselves — that is the point of the first seven days.",
+    "These are forms we see your industry run. Would you want any of them on your account? You would build them yourselves — that is the point of the first stages.",
   );
 
   const cards = d.nextUseCases.slice(0, 3);
@@ -1112,7 +1112,7 @@ function slideNext(pptx: Pptx, d: OnboardingDeckInput) {
     "Support is built in: the same team, the same working-session format, whenever the next form is ready to start.",
   );
   s.addNotes(
-    "Do not sell these. Point at them and ask which one they would build next. The answer tells you what the second working session is about.",
+    'The talk track: "these are common forms we see in your industry — do you want these on your account?" Do not sell them and do not schedule them. A yes goes on the intake as a form to build; a no stays here as an idea. The answer tells you what the second working session is about.',
   );
 }
 

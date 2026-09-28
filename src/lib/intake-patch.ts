@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { typedDateSchema } from "./intake-answers";
+import { planEditsSchema, typedDateSchema } from "./intake-answers";
 
 /**
  * The plan's knobs as the save accepts them.
@@ -60,5 +60,6 @@ export const timelinePatchSchema = z
     sow_dates: z.array(typedDateSchema).max(20).nullable().optional(),
     removed_services: z.array(z.string().max(160)).max(40).optional(),
     session_minutes: z.number().int().min(15).max(240).nullable().optional(),
+    plan_edits: planEditsSchema.optional(),
   })
   .strict();

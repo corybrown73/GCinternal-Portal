@@ -15,6 +15,8 @@ import {
 } from "lucide-react";
 
 import { Panel } from "@/components/record";
+import { PlanEditor } from "@/components/plan-editor";
+import { PlanIcon } from "@/components/plan-icon";
 import { firstFormName, readIntake, type IntakeAnswers } from "@/lib/intake-answers";
 import { buildIcs } from "@/lib/ics";
 import { closeDateFor, extraFormServices, isIntakeForm, timelineFor } from "@/lib/onboarding-plan";
@@ -215,6 +217,7 @@ export function TimelinePanel({
     mutation.mutate({ ...knobs, ...patch });
 
   const busy = !editable || mutation.isPending;
+  const [editing, setEditing] = useState(false);
   const input =
     "rounded-sm border border-border bg-background px-2 py-1 text-[12px] focus:outline-none focus:ring-1 focus:ring-primary disabled:opacity-60";
   const moved = timeline.milestones.filter((m) => m.moved).length;
@@ -363,12 +366,30 @@ export function TimelinePanel({
           chip={timeline.liveDoneOn ? "done" : timeline.currentPhase === 1 ? "now" : "later"}
           title={`Phase 1 · ${formName}`}
           summary={
-            timeline.liveDoneOn
+            (timeline.liveDoneOn
               ? `Form build complete · ${timeline.path === "existing" ? "ready" : "live"} ${shortDay(timeline.liveDoneOn)}`
-              : `${phaseOneDone}/${timeline.milestones.length} steps · ${timeline.path === "existing" ? "ready" : "live"} ${shortDay(timeline.liveDate)}`
+              : `${phaseOneDone}/${timeline.milestones.length} steps · ${timeline.path === "existing" ? "ready" : "live"} ${shortDay(timeline.liveDate)}`) +
+            (timeline.edited ? " · edited for this account" : "")
           }
           defaultOpen={!timeline.liveDoneOn}
           adjustable={editable}
+          right={
+            editable ? (
+              // The big, clear door: every account starts from our standard
+              // and the team changes it here, for this account only.
+              <button
+                type="button"
+                className="inline-flex h-8 items-center gap-1.5 rounded-sm bg-primary px-3 text-[12px] font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+                disabled={mutation.isPending}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setEditing(true);
+                }}
+              >
+                <Pencil className="h-3.5 w-3.5" /> Edit plan
+              </button>
+            ) : undefined
+          }
         >
           {(adjust) => (
             <>
@@ -398,6 +419,15 @@ export function TimelinePanel({
             </>
           )}
         </PlanSection>
+
+        <PlanEditor
+          open={editing}
+          onClose={() => setEditing(false)}
+          timeline={timeline}
+          knobs={knobs}
+          busy={busy}
+          onSave={(patch) => set(patch)}
+        />
 
         {/* SCOPE — what the SOW bought beyond the form. Open until there is
             a list; a line once there is one. */}
@@ -1248,6 +1278,15 @@ function StepList({
               {dayLabel(m)}
             </span>
           ) : null}
+          {/* The same icon the customer sees, so what is edited here is what lands there. */}
+          <span
+            className={cn(
+              "flex h-6 w-6 shrink-0 items-center justify-center rounded-md",
+              m.doneOn ? "bg-muted text-muted-foreground" : "bg-primary/10 text-primary",
+            )}
+          >
+            <PlanIcon name={m.icon} />
+          </span>
           <span className="min-w-0 flex-1">
             <span
               className={cn(

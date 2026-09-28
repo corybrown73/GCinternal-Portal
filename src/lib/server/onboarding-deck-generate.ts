@@ -1,7 +1,7 @@
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { companyNameFrom } from "@/lib/company-name";
 import { displayName as customerDisplayName } from "../names";
-import { formsOnly, readIntake } from "@/lib/intake-answers";
+import { formsOnly, readIntake, talkTrackTemplates } from "@/lib/intake-answers";
 import { synthesisFromBrief } from "@/lib/welcome-synthesis";
 import { closeDateFor, timelineFor } from "@/lib/onboarding-plan";
 import { loadPipelineStages } from "@/lib/pipeline-stages.server";
@@ -49,7 +49,10 @@ export async function buildOnboardingDeckInput(dealId: string): Promise<Onboardi
   const { listFormTemplates } = await import("@/lib/form-templates.server");
   const library = await listFormTemplates();
   const byId = new Map(library.map((t) => [t.id, t]));
-  const chosen = intake.chosen_templates
+  // The talk track: the cards picked as "common forms in your industry — do
+  // you want these?", then the rest of the industry's shelf. They are shown
+  // and asked about, never scheduled.
+  const chosen = talkTrackTemplates(intake)
     .map((id) => byId.get(id))
     .filter(Boolean) as typeof library;
   const industryKey = (intake.industry ?? "").trim().toLowerCase();
@@ -76,7 +79,12 @@ export async function buildOnboardingDeckInput(dealId: string): Promise<Onboardi
       objective: wanted[0].description,
       source: wanted[0].source,
     };
-    next = [...wanted.slice(1), ...shelf.filter((t) => !wanted.some((w) => w.name === t.name))];
+    const notWanted = (t: { name: string }) => !wanted.some((w) => w.name === t.name);
+    next = [
+      ...wanted.slice(1),
+      ...chosen.filter(notWanted),
+      ...shelf.filter((t) => notWanted(t) && !chosen.includes(t)),
+    ];
   } else if (uploaded) {
     firstForm = { name: displayName(uploaded.name), objective: null, source: "uploaded" };
     next = [...chosen, ...shelf];

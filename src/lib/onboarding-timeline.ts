@@ -30,6 +30,7 @@
  * plan reports which date a person moved and which ones followed.
  */
 
+import type { PlanEdits } from "./intake-answers";
 import {
   normalizeServices,
   SERVICE_KINDS,
@@ -836,6 +837,129 @@ export function withPlanOverrides(
   return out;
 }
 
+/** True when the account's edits change anything at all. */
+export function hasDealEdits(e: PlanEdits | null | undefined): boolean {
+  if (!e) return false;
+  return (
+    e.removed.length > 0 ||
+    e.added.length > 0 ||
+    Object.keys(e.steps).length > 0 ||
+    (e.order !== null && e.order.length > 0)
+  );
+}
+
+/**
+ * The standard plan, changed for one account.
+ *
+ * Applied after the Settings-level standard, before dates are laid down:
+ * a step's changes land on the step, added steps join with their own day,
+ * removed steps go — except the first and the last, which anchor the plan
+ * (the close and the finish line the day counter reads) — and the order a
+ * person set stands. Days are then made monotonic in that order, so a step
+ * dragged above another never lands after it on the calendar; the last
+ * step keeps the latest day so the finish line never moves earlier by
+ * accident.
+ */
+export function applyDealEdits(
+  base: readonly MilestoneSpec[],
+  edits: PlanEdits | null | undefined,
+): readonly MilestoneSpec[] {
+  if (!edits || !hasDealEdits(edits)) return base;
+  if (base.length === 0) return base;
+  const anchors = new Set([base[0]!.key, base[base.length - 1]!.key]);
+  const removed = new Set(edits.removed.filter((k) => !anchors.has(k)));
+
+  const withAdded: MilestoneSpec[] = [
+    ...base,
+    ...edits.added
+      .filter((a) => !base.some((b) => b.key === a.key))
+      .map((a) => {
+        const kind = a.kind ?? "milestone";
+        return {
+          key: a.key,
+          day: a.day,
+          label: a.label,
+          owner: a.owner ?? "both",
+          kind,
+          ...(kind === "call" ? { minutes: a.minutes ?? 60 } : {}),
+          detail: a.detail ?? "",
+          icon: a.icon ?? defaultIconForKind(kind),
+        } satisfies MilestoneSpec;
+      }),
+  ];
+
+  const patched = withAdded
+    .filter((m) => !removed.has(m.key))
+    .map((m) => {
+      const e = edits.steps[m.key];
+      if (!e) return m;
+      const kind = e.kind ?? m.kind;
+      const next: MilestoneSpec = {
+        ...m,
+        kind,
+        ...(e.label !== undefined && e.label.trim() ? { label: e.label.trim() } : {}),
+        ...(e.icon !== undefined ? { icon: e.icon } : {}),
+        ...(e.owner !== undefined ? { owner: e.owner } : {}),
+        ...(e.detail !== undefined ? { detail: e.detail } : {}),
+        ...(e.day !== undefined ? { day: e.day } : {}),
+      };
+      if (kind === "call") {
+        if (e.minutes !== undefined && e.minutes !== null) next.minutes = e.minutes;
+        else if (next.minutes === undefined) next.minutes = 60;
+      } else {
+        delete next.minutes;
+      }
+      return next;
+    });
+
+  // The order a person set; anything they never saw keeps its place after.
+  // With no order set, a step lands where its day puts it — an added step
+  // on day 7 sits between day 5 and day 11, not at the end.
+  const order = edits.order;
+  const ordered = order
+    ? [...patched].sort((a, b) => {
+        const ia = order.indexOf(a.key);
+        const ib = order.indexOf(b.key);
+        if (ia < 0 && ib < 0) return patched.indexOf(a) - patched.indexOf(b);
+        if (ia < 0) return 1;
+        if (ib < 0) return -1;
+        return ia - ib;
+      })
+    : [...patched].sort((a, b) => a.day - b.day || patched.indexOf(a) - patched.indexOf(b));
+
+  // Anchors stay at the ends whatever the order says.
+  const first = ordered.find((m) => m.key === base[0]!.key);
+  const last = ordered.find((m) => m.key === base[base.length - 1]!.key);
+  const middle = ordered.filter((m) => m !== first && m !== last);
+  const finalOrder = [first, ...middle, last].filter((m): m is MilestoneSpec => Boolean(m));
+
+  // Days never run backwards down the list; the finish keeps the latest day.
+  let floor = 0;
+  const maxDay = Math.max(...finalOrder.map((m) => m.throughDay ?? m.day));
+  return finalOrder.map((m, i) => {
+    const isLast = i === finalOrder.length - 1;
+    const day = isLast ? Math.max(m.day, maxDay, floor) : Math.max(m.day, floor);
+    floor = Math.max(floor, day);
+    return day === m.day
+      ? m
+      : {
+          ...m,
+          day,
+          ...(m.throughDay !== undefined ? { throughDay: Math.max(m.throughDay, day) } : {}),
+        };
+  });
+}
+
+function defaultIconForKind(kind: MilestoneKind): string {
+  return kind === "call"
+    ? "PhoneCall"
+    : kind === "homework"
+      ? "ClipboardCheck"
+      : kind === "build"
+        ? "HardHat"
+        : "Flag";
+}
+
 export function planFor(
   path: OnboardingPath | null | undefined,
   opts: PlanOpts | boolean | null = null,
@@ -969,6 +1093,8 @@ export type TimelineOptions = {
   sessionMinutes?: number | null;
   /** An existing account with services and no form work: the walkthrough plan. */
   servicesOnly?: boolean | null;
+  /** This account's departures from the standard plan (intake.timeline.plan_edits). */
+  planEdits?: PlanEdits | null;
   /**
    * Everything bought beyond the first form, each assigned to a phase ≥ 2.
    * See onboarding-services.ts. The legacy integrationTier/Target pair is
@@ -1036,6 +1162,8 @@ export type Timeline = {
   servicesOnly: boolean;
   /** The days skipped besides weekends, so every counter on this plan skips the same ones. */
   holidays: string[];
+  /** True when this account's plan departs from the standard (a step removed, moved, renamed, added). */
+  edited: boolean;
   /** On an existing account, who builds the form in phase 1. Null elsewhere. */
   existingBuild: ExistingBuild | null;
   milestones: Milestone[];
@@ -1198,8 +1326,12 @@ export function buildTimeline(options: TimelineOptions): Timeline {
   const sessionMinutes =
     options.sessionMinutes && options.sessionMinutes >= 15 ? options.sessionMinutes : null;
   const servicesOnly = Boolean(options.servicesOnly) && path === "existing" && !training;
+  const edits = options.planEdits ?? null;
   const milestones = cascade(
-    planFor(path, { trainingOnly: options.trainingOnly, existingBuild, servicesOnly }),
+    applyDealEdits(
+      planFor(path, { trainingOnly: options.trainingOnly, existingBuild, servicesOnly }),
+      edits,
+    ),
     (spec) =>
       spec.day === 0 ? options.closeDate : addBusinessDays(options.closeDate, spec.day, holidays),
   ).map((m) =>
@@ -1300,7 +1432,10 @@ export function buildTimeline(options: TimelineOptions): Timeline {
   // Phase 1 services run alongside the form from the first call — on the
   // next free day after it, never on a day that already holds one of the
   // plan's calls, so a customer is not booked twice in one afternoon.
-  const kickoffDate = milestones.find((m) => m.key === "kickoff")?.date ?? liveDate;
+  const kickoffDate =
+    milestones.find((m) => m.key === "kickoff")?.date ??
+    milestones.find((m) => m.kind === "call")?.date ??
+    liveDate;
   const callDays = new Set(milestones.filter((m) => m.kind === "call").map((m) => m.date));
   const nextFreeDay = (from: string): string => {
     let d = from;
@@ -1408,6 +1543,7 @@ export function buildTimeline(options: TimelineOptions): Timeline {
     training,
     servicesOnly,
     holidays: [...holidays],
+    edited: hasDealEdits(edits),
     existingBuild,
     milestones,
     liveDate,
