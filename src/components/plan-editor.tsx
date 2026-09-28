@@ -311,7 +311,7 @@ export function PlanEditor({
                 warning={
                   r.date < timeline.closeDate && i > 0
                     ? `Before the close date, ${shortDay(timeline.closeDate)} — the plan cannot start before it.`
-                    : warnings[i]
+                    : (warnings[i] ?? null)
                 }
                 onChange={(patch) => update(r.key, patch)}
                 onRemove={() => remove(r.key)}
