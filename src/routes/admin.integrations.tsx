@@ -605,7 +605,135 @@ function ZapierTab() {
           </div>
         </div>
       </Panel>
+
+      <FieldFusionRequestCard origin={origin} copied={copied} copy={copy} />
     </div>
+  );
+}
+
+/**
+ * The second Zap: the "New FF Client Request" form in GoCanvas opens a
+ * Field Fusion proof-of-concept deal, with every answer kept on it. This
+ * card is the copy-paste for its webhook step — the body lists a key for
+ * every field on the form, so mapping it in Zapier is matching names.
+ */
+function FieldFusionRequestCard({
+  origin,
+  copied,
+  copy,
+}: {
+  origin: string;
+  copied: string | null;
+  copy: (label: string, text: string) => void;
+}) {
+  const url = `${origin}/api/v1/field-fusion-requests`;
+  const body = `{
+  "submission_id":       "{{Submission ID}}",
+  "submission_no":       "{{No.}}",
+  "submitted_at":        "{{Date}}",
+  "company_name":        "{{Company Name}}",
+  "logo_url":            "{{Logo}}",
+  "admin_first_name":    "{{Main Admin First Name}}",
+  "admin_last_name":     "{{Main Admin Last Name}}",
+  "admin_gcid":          "{{Main Admin GCID}}",
+  "admin_email":         "{{Main Admin Email}}",
+  "admin_phone":         "{{Main Admin Phone}}",
+  "salesforce_url":      "{{SalesForce Opp/Account link}}",
+  "industry":            "{{Industry}}",
+  "features":            "{{Relevant Features}}",
+  "analytics_needs":     "{{Describe analytics needs}}",
+  "output_destinations": "{{Output Destinations}}",
+  "first_use_case":      "{{First Use Case is}}",
+  "process_description": "{{Description of Process}}",
+  "forms_in_progress":   "{{GoCanvas Form/s In-Progress}}",
+  "pdf_designer":        "{{PDF is Designer}}",
+  "data_sets":           "{{Relevant Data Sets}}",
+  "customers_are":       "{{Customers are}}",
+  "customers_have":      "{{Customers have}}",
+  "sites_are":           "{{Customer Sites have/are}}",
+  "notes":               "{{Notes / Other Use Cases}}",
+  "requester_name":      "{{Requester name}}",
+  "requester_email":     "{{Requester email address}}"
+}`;
+  return (
+    <Panel title="Field Fusion request → proof-of-concept deal, from GoCanvas" level="primary">
+      <div className="space-y-3 px-3 py-2.5 text-[12px]">
+        <p className="text-muted-foreground">
+          Every <em>New FF Client Request</em> submission opens the company as a{" "}
+          <strong>Prospect</strong> on the Field Fusion path, marked <strong>POC</strong> on the
+          board, with the main admin as its contact and every answer kept on the deal. The Field
+          Fusion setup notes are written from it, so at Closed Won nothing is typed twice.
+          Delivering the same submission again updates the deal; it never opens a second one, and it
+          never moves a won deal back.
+        </p>
+
+        <ol className="list-decimal space-y-3 pl-5">
+          <li>
+            <span className="font-medium text-foreground">A key.</span> The same{" "}
+            <code className="font-mono">accounts:write</code> key as the closed-won Zap works here.
+          </li>
+          <li>
+            <span className="font-medium text-foreground">The Zap.</span> Trigger:{" "}
+            <em>GoCanvas → New Submission</em> on the New FF Client Request form. Action:{" "}
+            <em>Webhooks by Zapier → POST</em>, payload type <em>json</em>.
+          </li>
+          <li>
+            <span className="font-medium text-foreground">The action, exactly.</span>
+            <div className="mt-1.5 space-y-1.5">
+              <Row
+                label="URL"
+                value={url}
+                onCopy={() => copy("ff-url", url)}
+                copied={copied === "ff-url"}
+              />
+              <Row
+                label="Header"
+                value="Authorization: Bearer gcp_live_…"
+                onCopy={() => copy("ff-header", "Authorization")}
+                copied={copied === "ff-header"}
+              />
+            </div>
+            <p className="mt-1.5 text-muted-foreground">
+              Body — one key per field on the form. Only{" "}
+              <code className="font-mono">company_name</code> is required. The checkbox groups
+              (features, data sets, customers are/have, sites) take a list, or the text Zapier gives
+              with commas or line breaks between the ticked boxes.
+            </p>
+            <div className="relative mt-1">
+              <pre className="overflow-x-auto rounded-md border border-border bg-muted/30 p-2.5 font-mono text-[11px] leading-relaxed">
+                {body}
+              </pre>
+              <button
+                type="button"
+                onClick={() => copy("ff-body", body)}
+                className="absolute right-2 top-2 inline-flex items-center gap-1 rounded-sm border border-border bg-background px-1.5 py-0.5 text-[11px] hover:bg-muted"
+              >
+                <Copy className="h-3 w-3" /> {copied === "ff-body" ? "Copied" : "Copy"}
+              </button>
+            </div>
+          </li>
+          <li>
+            <span className="font-medium text-foreground">Test it.</span> Submit the form once.
+            Within a minute the company is on the{" "}
+            <Link to="/pipeline" className="underline">
+              pipeline
+            </Link>{" "}
+            as a Prospect with a POC mark, and its deal page has a “Field Fusion request” panel with
+            every answer.
+          </li>
+        </ol>
+
+        <div className="rounded-md border border-dashed border-border bg-muted/20 px-3 py-2 text-muted-foreground">
+          <p className="font-medium text-foreground">What fills in from the form.</p>
+          <p className="mt-0.5">
+            The deal’s type (Field Fusion), its industry when the form’s wording matches one of
+            ours, the current process in the requester’s words, the primary contact, and the Field
+            Fusion setup notes. A Salesforce <em>account</em> link (001…) also links the deal; an
+            opportunity link is kept for the page but does not.
+          </p>
+        </div>
+      </div>
+    </Panel>
   );
 }
 

@@ -80,6 +80,7 @@ import { Route as ApiV1AccountsRouteImport } from "./routes/api/v1/accounts";
 import { Route as ApiV1AlertsRouteImport } from "./routes/api/v1/alerts";
 import { Route as ApiV1ClosedWonRouteImport } from "./routes/api/v1/closed-won";
 import { Route as ApiV1DocsRouteImport } from "./routes/api/v1/docs";
+import { Route as ApiV1FieldFusionRequestsRouteImport } from "./routes/api/v1/field-fusion-requests";
 import { Route as ApiV1ImplementationsRouteImport } from "./routes/api/v1/implementations";
 import { Route as ApiV1OpenapiDotjsonRouteImport } from "./routes/api/v1/openapi[.]json";
 import { Route as ApiV1TamRequestsRouteImport } from "./routes/api/v1/tam-requests";
@@ -446,6 +447,11 @@ const ApiV1DocsRoute = ApiV1DocsRouteImport.update({
   path: "/api/v1/docs",
   getParentRoute: () => rootRouteImport,
 } as any);
+const ApiV1FieldFusionRequestsRoute = ApiV1FieldFusionRequestsRouteImport.update({
+  id: "/api/v1/field-fusion-requests",
+  path: "/api/v1/field-fusion-requests",
+  getParentRoute: () => rootRouteImport,
+} as any);
 const ApiV1ImplementationsRoute = ApiV1ImplementationsRouteImport.update({
   id: "/api/v1/implementations",
   path: "/api/v1/implementations",
@@ -569,6 +575,7 @@ export interface FileRoutesByFullPath {
   "/api/v1/alerts": typeof ApiV1AlertsRoute;
   "/api/v1/closed-won": typeof ApiV1ClosedWonRoute;
   "/api/v1/docs": typeof ApiV1DocsRoute;
+  "/api/v1/field-fusion-requests": typeof ApiV1FieldFusionRequestsRoute;
   "/api/v1/implementations": typeof ApiV1ImplementationsRoute;
   "/api/v1/openapi.json": typeof ApiV1OpenapiDotjsonRoute;
   "/api/v1/tam-requests": typeof ApiV1TamRequestsRoute;
@@ -646,6 +653,7 @@ export interface FileRoutesByTo {
   "/api/v1/alerts": typeof ApiV1AlertsRoute;
   "/api/v1/closed-won": typeof ApiV1ClosedWonRoute;
   "/api/v1/docs": typeof ApiV1DocsRoute;
+  "/api/v1/field-fusion-requests": typeof ApiV1FieldFusionRequestsRoute;
   "/api/v1/implementations": typeof ApiV1ImplementationsRoute;
   "/api/v1/openapi.json": typeof ApiV1OpenapiDotjsonRoute;
   "/api/v1/tam-requests": typeof ApiV1TamRequestsRoute;
@@ -730,6 +738,7 @@ export interface FileRoutesById {
   "/api/v1/alerts": typeof ApiV1AlertsRoute;
   "/api/v1/closed-won": typeof ApiV1ClosedWonRoute;
   "/api/v1/docs": typeof ApiV1DocsRoute;
+  "/api/v1/field-fusion-requests": typeof ApiV1FieldFusionRequestsRoute;
   "/api/v1/implementations": typeof ApiV1ImplementationsRoute;
   "/api/v1/openapi.json": typeof ApiV1OpenapiDotjsonRoute;
   "/api/v1/tam-requests": typeof ApiV1TamRequestsRoute;
@@ -815,6 +824,7 @@ export interface FileRouteTypes {
     | "/api/v1/alerts"
     | "/api/v1/closed-won"
     | "/api/v1/docs"
+    | "/api/v1/field-fusion-requests"
     | "/api/v1/implementations"
     | "/api/v1/openapi.json"
     | "/api/v1/tam-requests"
@@ -892,6 +902,7 @@ export interface FileRouteTypes {
     | "/api/v1/alerts"
     | "/api/v1/closed-won"
     | "/api/v1/docs"
+    | "/api/v1/field-fusion-requests"
     | "/api/v1/implementations"
     | "/api/v1/openapi.json"
     | "/api/v1/tam-requests"
@@ -975,6 +986,7 @@ export interface FileRouteTypes {
     | "/api/v1/alerts"
     | "/api/v1/closed-won"
     | "/api/v1/docs"
+    | "/api/v1/field-fusion-requests"
     | "/api/v1/implementations"
     | "/api/v1/openapi.json"
     | "/api/v1/tam-requests"
@@ -1034,6 +1046,7 @@ export interface RootRouteChildren {
   ApiV1AlertsRoute: typeof ApiV1AlertsRoute;
   ApiV1ClosedWonRoute: typeof ApiV1ClosedWonRoute;
   ApiV1DocsRoute: typeof ApiV1DocsRoute;
+  ApiV1FieldFusionRequestsRoute: typeof ApiV1FieldFusionRequestsRoute;
   ApiV1ImplementationsRoute: typeof ApiV1ImplementationsRoute;
   ApiV1OpenapiDotjsonRoute: typeof ApiV1OpenapiDotjsonRoute;
   ApiV1TamRequestsRoute: typeof ApiV1TamRequestsRoute;
@@ -1542,6 +1555,13 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof ApiV1DocsRouteImport;
       parentRoute: typeof rootRouteImport;
     };
+    "/api/v1/field-fusion-requests": {
+      id: "/api/v1/field-fusion-requests";
+      path: "/api/v1/field-fusion-requests";
+      fullPath: "/api/v1/field-fusion-requests";
+      preLoaderRoute: typeof ApiV1FieldFusionRequestsRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
     "/api/v1/implementations": {
       id: "/api/v1/implementations";
       path: "/api/v1/implementations";
@@ -1796,6 +1816,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiV1AlertsRoute: ApiV1AlertsRoute,
   ApiV1ClosedWonRoute: ApiV1ClosedWonRoute,
   ApiV1DocsRoute: ApiV1DocsRoute,
+  ApiV1FieldFusionRequestsRoute: ApiV1FieldFusionRequestsRoute,
   ApiV1ImplementationsRoute: ApiV1ImplementationsRoute,
   ApiV1OpenapiDotjsonRoute: ApiV1OpenapiDotjsonRoute,
   ApiV1TamRequestsRoute: ApiV1TamRequestsRoute,

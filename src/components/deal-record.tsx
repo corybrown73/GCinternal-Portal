@@ -18,6 +18,7 @@ import { Field, NoRows, Panel } from "@/components/record";
 import { EditableField } from "@/components/editable-field";
 import { OwnerField } from "@/components/assignment-panel";
 import { HelpPicksPanel } from "@/components/help-articles-panel";
+import { FieldFusionRequestPanel } from "@/components/field-fusion-request-panel";
 import { StageFlow } from "@/components/stage-flow";
 import { PlanSection } from "@/components/plan-section";
 import { DeliverablesStrip } from "@/components/deliverables-strip";
@@ -362,6 +363,10 @@ export function DealRecord({ deal, embedded = false }: { deal: DealData; embedde
                 <NotesPanel deal={deal} />
               </div>
             </Panel>
+
+            {/* The Field Fusion request form, when the deal arrived through
+                it: the answers Liesl already wrote, kept for the handoff. */}
+            <FieldFusionRequestPanel deal={deal} />
 
             {/* On the customer page the plan and the watch-outs are on
                 Overview already; the Record tab shows the record only. */}

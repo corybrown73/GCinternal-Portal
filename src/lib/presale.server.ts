@@ -176,6 +176,8 @@ export interface PipelineDeal extends Account {
   /** The two things Closed Won is gated on. */
   has_notes: boolean;
   has_sow: boolean;
+  /** A Field Fusion proof of concept: opened by the New FF Client Request form, not yet won. */
+  ff_poc: boolean;
   /** The implementation owner, once somebody owns it. */
   owner_name: string | null;
   /** The checklist's next task for the stage the deal is in. */
@@ -305,6 +307,8 @@ export async function loadPipeline(
         path: intake.path,
         has_notes: withNotes.has(a.id),
         has_sow: Boolean(a.sow_document_path) || Boolean(a.sow_reference?.trim()),
+        // A POC until it is won: the form marks it, the close ends it.
+        ff_poc: intake.field_fusion.poc && !isAtOrPast(stages, a.stage, wonStage(stages).key),
         owner_name: ownerName,
         // The same next task the deal's checklist shows.
         next_step: nextChecklistTask({

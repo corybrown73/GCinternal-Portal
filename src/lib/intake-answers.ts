@@ -116,6 +116,46 @@ export const INDUSTRIES = [
 
 export const COMPANY_SIZES = ["1–10", "11–50", "51–200", "201–1,000", "1,000+"] as const;
 
+const shortText = z.string().trim().max(300).nullable().default(null);
+const longText = z.string().trim().max(6000).nullable().default(null);
+const list = z.array(z.string().trim().min(1).max(120)).max(40).default([]);
+
+/**
+ * The "New FF Client Request" form in GoCanvas, one submission. Field for
+ * field what the form asks, so the deal page can show it as it was written
+ * and the handoff to implementation carries it without retyping.
+ */
+export const fieldFusionRequestSchema = z.object({
+  submission_id: shortText,
+  submission_no: shortText,
+  submitted_at: shortText,
+  company_name: shortText,
+  logo_url: z.string().trim().max(1000).nullable().default(null),
+  admin_first_name: shortText,
+  admin_last_name: shortText,
+  admin_gcid: shortText,
+  admin_email: shortText,
+  admin_phone: shortText,
+  salesforce_url: z.string().trim().max(1000).nullable().default(null),
+  industry: shortText,
+  /** The relevant features ticked: Dispatch to Field, Scheduling, Route optimization… */
+  features: list,
+  analytics_needs: longText,
+  output_destinations: list,
+  first_use_case: shortText,
+  process_description: longText,
+  forms_in_progress: shortText,
+  pdf_designer: shortText,
+  data_sets: list,
+  customers_are: list,
+  customers_have: list,
+  sites_are: list,
+  notes: longText,
+  requester_name: shortText,
+  requester_email: shortText,
+});
+export type FieldFusionRequest = z.infer<typeof fieldFusionRequestSchema>;
+
 export const intakeAnswersSchema = z.object({
   /**
    * Which path this is. A new logo builds its first form in seven days; an
@@ -179,6 +219,14 @@ export const intakeAnswersSchema = z.object({
       client_trained: z.boolean().default(false),
       notes: z.string().trim().max(4000).default(""),
       handed_off_at: z.string().nullable().default(null),
+      /**
+       * A Field Fusion proof of concept: the deal was opened by the "New FF
+       * Client Request" form in GoCanvas (via Zapier), before any close. The
+       * board marks it so the POCs can be tracked as a group.
+       */
+      poc: z.boolean().default(false),
+      /** The request form's answers, as submitted — what Liesl already typed, kept so nobody types it twice. */
+      request: fieldFusionRequestSchema.nullable().default(null),
     })
     .default({}),
   /** The fork. null until the question has been asked. */

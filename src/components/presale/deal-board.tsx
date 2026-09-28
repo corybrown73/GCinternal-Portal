@@ -37,6 +37,8 @@ export type BoardDeal = Account & {
   path?: "new_logo" | "existing" | "dm_conversion" | "field_fusion" | null;
   has_notes?: boolean;
   has_sow?: boolean;
+  /** A Field Fusion proof of concept, from the GoCanvas request form. */
+  ff_poc?: boolean;
   owner_name?: string | null;
   next_step?: string | null;
   business_days_in_stage?: number;
@@ -80,6 +82,14 @@ function DealCard({
         {deal.path ? (
           <span className="rounded-sm border border-border px-1 py-px uppercase tracking-wider text-muted-foreground">
             {PATH_CHIP[deal.path]}
+          </span>
+        ) : null}
+        {deal.ff_poc ? (
+          <span
+            title="Field Fusion proof of concept — opened by the New FF Client Request form"
+            className="rounded-sm bg-primary/10 px-1 py-px font-medium text-primary"
+          >
+            POC
           </span>
         ) : null}
         {deal.has_notes !== undefined ? (

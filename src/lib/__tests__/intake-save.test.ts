@@ -69,6 +69,8 @@ describe("saving an intake patch", () => {
       client_trained: true,
       notes: "Uses the JSA form daily.",
       handed_off_at: null,
+      poc: false,
+      request: null,
     });
   });
 

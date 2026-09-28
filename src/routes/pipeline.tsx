@@ -70,6 +70,7 @@ function PipelinePage() {
   const gate = moveMutation.isError ? parseWonGate((moveMutation.error as Error).message) : null;
 
   const arrTotal = data.deals.reduce((sum, d) => sum + (dealValue(d) ?? 0), 0);
+  const pocCount = data.deals.filter((d) => d.ff_poc).length;
 
   return (
     <>
@@ -81,6 +82,7 @@ function PipelinePage() {
             <span className="font-mono text-[11px] text-muted-foreground">
               {data.deals.length} {data.deals.length === 1 ? "deal" : "deals"} ·{" "}
               {fmtMoney(arrTotal)}
+              {pocCount ? ` · ${pocCount} Field Fusion POC${pocCount === 1 ? "" : "s"}` : ""}
             </span>
             <ScopeSwitch scope={data.scope} onChange={setScope} />
             {editable ? (
