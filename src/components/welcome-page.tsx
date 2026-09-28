@@ -1104,7 +1104,7 @@ function Cover({ view, qr }: { view: WelcomeView; qr?: { url: string; dataUrl: s
                 : t.training
                   ? `Welcome aboard as of ${shortDay(t.closeDate)}. First training call ${shortDay(t.milestones[1]?.date ?? t.closeDate)}. Three short calls over two weeks, and your crew is live by ${shortDay(t.liveDate)} — trained on your jobs, not ours.`
                   : view.path === "new_logo"
-                    ? `Welcome aboard as of ${shortDay(t.closeDate)}. Three core meetings, starting ${shortDay(t.milestones[1]?.date ?? t.closeDate)}. Functional by ${shortDay(t.liveDate)}, with Week 4 held for anything that needs more time — built with you, not for you.`
+                    ? `Welcome aboard as of ${shortDay(t.closeDate)}. Three core meetings, starting ${shortDay(t.milestones[1]?.date ?? t.closeDate)}. Functional — your team running it without us — by ${shortDay(t.liveDate)}, with Week 4 held for anything that needs more time. Built with you, not for you.`
                     : `Welcome aboard as of ${shortDay(t.closeDate)}. Kickoff ${shortDay(t.milestones[1]?.date ?? t.closeDate)}. Your first form in the field by ${shortDay(t.liveDate)} — built with you, not for you.`}
             </T>
           </p>
@@ -1186,7 +1186,7 @@ function Team({ view, page }: { view: WelcomeView; page: number }) {
   if (t.lead)
     people.push({
       name: t.lead,
-      role: `${t.leadCard?.title ?? "Onboarding lead"}, GoCanvas`,
+      role: withCompany(t.leadCard?.title ?? "Onboarding lead"),
       does:
         t.leadCard?.bio ??
         (view.timeline.training
@@ -1554,6 +1554,11 @@ function ParkingLotCard({ items }: { items: NonNullable<WelcomeView["parkingLot"
       </ul>
     </div>
   );
+}
+
+/** "Onboarding lead, GoCanvas" — the company once, whatever the title already says. */
+function withCompany(title: string): string {
+  return /gocanvas/i.test(title) ? title : `${title}, GoCanvas`;
 }
 
 /** "sixty" for the lengths a plan uses; digits for anything else. */
@@ -2329,8 +2334,8 @@ function Business({
       accent="it's yours"
       band={
         planEnd
-          ? `${t.training ? "Crew live" : view.path === "existing" ? "Form ready" : "First form live"} on ${shortDay(t.liveDate)}; everything in your plan live by ${shortDay(planEnd)}. If any of the three on the right is not true that day, we are not done — and we say so.`
-          : `${view.path === "existing" ? "Ready" : view.path === "new_logo" ? "Functional" : "Live"} on ${shortDay(t.liveDate)}. If any of the three on the right is not true that day, we are not done — and we say so.`
+          ? `${t.training ? "Crew live" : view.path === "existing" ? "Form ready" : "First form live"} on ${shortDay(t.liveDate)}; everything in your plan live by ${shortDay(planEnd)}. If any of the three checks below is not true that day, we are not done — and we say so.`
+          : `${view.path === "existing" ? "Ready" : view.path === "new_logo" ? "Functional" : "Live"} on ${shortDay(t.liveDate)}. If any of the three checks below is not true that day, we are not done — and we say so.`
       }
       bandIcon="Rocket"
     >
@@ -2456,8 +2461,9 @@ function Business({
                 <Tile name="PhoneCall" size="sm" tone="blue" />
               )}
               <span>
-                <b>{view.team.lead}</b>, your{" "}
-                {view.team.leadCard?.title?.toLowerCase() ?? "onboarding lead"}
+                <b>{view.team.lead}</b>
+                {" · "}
+                {view.team.leadCard?.title ?? "Onboarding lead"}
                 {view.team.leadEmail ? (
                   <>
                     {" · "}

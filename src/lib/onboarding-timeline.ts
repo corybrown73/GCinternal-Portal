@@ -242,7 +242,7 @@ export const BUILD_PLAN: readonly MilestoneSpec[] = [
     owner: "client",
     kind: "homework",
     detail:
-      "The three things above. Day 2 starts from two real submissions and your real list, not a blank account.",
+      "Two real jobs through the form, your client or parts list as a spreadsheet, and one field user added. Day 2 starts from two real submissions and your real list, not a blank account.",
     icon: "ClipboardCheck",
   },
   {
@@ -468,7 +468,7 @@ export const CUSTOMER_BUILD_PLAN: readonly MilestoneSpec[] = [
     owner: "client",
     kind: "homework",
     detail:
-      "The three things above, and the first version of your form. Fifteen minutes on the answers; the build has a name and a date.",
+      "Who builds the form and by when, one example of the output the office needs, who owns the field mapping — and the first version of your form. Fifteen minutes on the answers; the build has a name and a date.",
     icon: "ClipboardCheck",
   },
   {
@@ -555,7 +555,8 @@ export const DM_CONVERSION_PLAN: readonly MilestoneSpec[] = [
     label: "Your part before the next call",
     owner: "client",
     kind: "homework",
-    detail: "The three things above. Day 2 starts from your real form and your real output.",
+    detail:
+      "Your Device Magic forms list, one recent submission as the office receives it, and one field user added. Day 2 starts from your real form and your real output.",
     icon: "ClipboardCheck",
   },
   {
@@ -647,7 +648,7 @@ export const TRAINING_PLAN: readonly MilestoneSpec[] = [
     owner: "client",
     kind: "homework",
     detail:
-      "The three things above. What the crew ran into on real jobs is what session 2 starts from; the list is what it loads.",
+      "Real jobs run on the forms, the logins list, and your client or parts list. What the crew ran into on real jobs is what session 2 starts from; the list is what it loads.",
     icon: "ClipboardCheck",
   },
   {

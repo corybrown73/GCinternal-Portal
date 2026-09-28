@@ -178,7 +178,7 @@ async function viewFor(
         ? {
             // A customer reads this under the lead's name. An internal job
             // title is a fine default only when somebody has written one.
-            title: leadCard.title ?? "Onboarding lead, GoCanvas",
+            title: leadCard.title ?? "Onboarding lead",
             bookingUrl: leadCard.bookingUrl,
             photoUrl: leadCard.photoUrl,
             bio: leadCard.bio,

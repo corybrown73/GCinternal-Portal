@@ -246,3 +246,14 @@ describe("retrieval and the rules", () => {
     expect(sentenceWith(notes, "dispatch")).toBeNull();
   });
 });
+
+describe("what gets quotation marks", () => {
+  it("quotes a sentence, never a fragment or a table row", async () => {
+    const { isFullSentence, sentenceWith } = await import("../help-query");
+    expect(isFullSentence("Our parts list lives in a Google Sheet the office keeps.")).toBe(true);
+    expect(isFullSentence("Google Sheet")).toBe(false);
+    expect(isFullSentence("| Item | Qty | Price | Notes for the office |")).toBe(false);
+    expect(isFullSentence("• Reference data\n• PDF output and a long list")).toBe(false);
+    expect(sentenceWith("Parts | Sheet | Office copy | Sync nightly to it", "sheet")).toBeNull();
+  });
+});

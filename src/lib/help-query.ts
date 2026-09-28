@@ -106,7 +106,19 @@ export function sentenceWith(text: string, phrase: string): string | null {
   const start = Math.max(lower.lastIndexOf(".", at), lower.lastIndexOf("\n", at), -1) + 1;
   const endCandidates = [lower.indexOf(".", at), lower.indexOf("\n", at)].filter((i) => i >= 0);
   const end = endCandidates.length ? Math.min(...endCandidates) + 1 : text.length;
-  return text.slice(start, end).trim().replace(/\s+/g, " ").slice(0, 200) || null;
+  const sentence = text.slice(start, end).trim().replace(/\s+/g, " ").slice(0, 200);
+  // Only a sentence a person actually said gets quotation marks. A table
+  // cell, a bullet fragment or a three-word label is not a quote.
+  return isFullSentence(sentence) ? sentence : null;
+}
+
+/** A real sentence: long enough to mean something, and not a table row or a list fragment. */
+export function isFullSentence(text: string | null | undefined): boolean {
+  if (!text) return false;
+  const t = text.trim();
+  if (t.length < 30) return false;
+  if (/[|•\t]|\s{3,}|^[-*#>]/.test(t)) return false;
+  return /\s/.test(t);
 }
 
 /** The brief, flattened to the fields that carry the customer's words. */
@@ -366,7 +378,9 @@ export function enforcePickRules(
 
 function defaultWhy(f: HelpFeature | undefined): string {
   if (!f) return "One of the features that came up on your calls.";
-  if (f.quote) return `You said: "${f.quote.replace(/"/g, "'")}"`;
+  // Quoted only when it is a sentence they said; a phrase is paraphrased.
+  if (f.quote && isFullSentence(f.quote)) return `You said: "${f.quote.replace(/"/g, "'")}"`;
+  if (f.quote) return `You mentioned ${f.quote.replace(/["“”]/g, "").trim()} on the calls.`;
   return `Part of ${f.when === "before session 1" ? "getting set up before the first call" : f.when === "phase 2" ? "phase 2" : "the sessions"}: ${f.feature}.`;
 }
 
