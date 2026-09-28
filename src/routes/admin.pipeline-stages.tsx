@@ -39,6 +39,9 @@ const stagesQuery = queryOptions({
 });
 
 export const Route = createFileRoute("/admin/pipeline-stages")({
+  // Settings links here with ?from=settings so the back link returns there.
+  validateSearch: (raw: Record<string, unknown>): { from?: "settings" } =>
+    raw["from"] === "settings" ? { from: "settings" } : {},
   head: () => ({
     meta: [
       { title: "Pipeline stages — Admin | GoCanvas Handoff Hub" },
@@ -166,6 +169,11 @@ function PipelineStagesPage() {
   };
 
   const keyValid = PIPELINE_STAGE_KEY_PATTERN.test(newKey.trim().toLowerCase());
+  const { from } = Route.useSearch();
+  // The keys and the add form are developer territory: a stage's key is its
+  // identity in the database, and a new stage is not usable until that key
+  // exists there too. Both sit behind one toggle so the page reads plainly.
+  const [showKeys, setShowKeys] = useState(false);
 
   // A rename typed and not saved used to vanish on navigating away. Each row
   // reports whether it holds an unsaved change; leaving the page asks first.
@@ -198,11 +206,28 @@ function PipelineStagesPage() {
     <>
       <PageHeader
         title="Pipeline stages"
-        description="The pre-sale pipeline the board renders and every stage transition is recorded against. Rename, recolour and reorder freely; a stage's key is its identity in the stage history and never changes."
+        description="The stages deals move through on the Pipeline board. Rename, recolour or reorder them. Changes apply to everyone."
         actions={
-          <Link to="/admin" className={buttonClass}>
-            <ChevronLeft className="h-3 w-3" /> Admin
-          </Link>
+          <>
+            <label className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground">
+              <input
+                type="checkbox"
+                className="h-3.5 w-3.5"
+                checked={showKeys}
+                onChange={(e) => setShowKeys(e.target.checked)}
+              />
+              Show keys
+            </label>
+            {from === "settings" ? (
+              <Link to="/settings" className={buttonClass}>
+                <ChevronLeft className="h-3 w-3" /> Settings
+              </Link>
+            ) : (
+              <Link to="/admin" className={buttonClass}>
+                <ChevronLeft className="h-3 w-3" /> Admin
+              </Link>
+            )}
+          </>
         }
       />
       <PageBody className="max-w-3xl space-y-4">
@@ -210,10 +235,9 @@ function PipelineStagesPage() {
           <div className="rounded-md border border-dashed border-border bg-card px-4 py-3">
             <p className="text-[13px] font-medium">Showing the built-in pipeline</p>
             <p className="mt-1 text-[12px] text-muted-foreground">
-              Configurable stages are off on this deployment (<code>presale_stage_config</code>), so
-              the pipeline is the five stages compiled into the app and nothing here can be edited.
-              Turning the flag on changes nothing by itself: the stored configuration is seeded from
-              exactly this list.
+              Editable stages are switched off on this deployment, so these are the five built-in
+              stages and nothing here can be changed. An admin turns them on under Admin → Feature
+              flags.
             </p>
           </div>
         ) : null}
@@ -249,6 +273,7 @@ function PipelineStagesPage() {
                   count={data.stages.length}
                   stage={stage}
                   editable={data.flagOn && data.configured && !busy}
+                  showKey={showKeys}
                   onDirty={(isDirty) => reportDirty(stage.key, isDirty)}
                   onSave={(label, color) => editMutation.mutate({ key: stage.key, label, color })}
                   onMark={(m) => markMutation.mutate({ key: stage.key, mark: m })}
@@ -260,73 +285,76 @@ function PipelineStagesPage() {
           )}
         </Panel>
 
-        <Panel title="Add a stage">
-          <form
-            className="space-y-2.5 px-3 py-2.5"
-            onSubmit={(e) => {
-              e.preventDefault();
-              addMutation.mutate();
-            }}
-          >
-            <p className="text-[12px] text-muted-foreground">
-              A new stage is configured immediately, but a deal cannot be moved into it until its
-              key exists as an account stage in the database — see{" "}
-              <code>docs/design/presale-stages.md</code>. The board shows it as a column that
-              nothing can be dragged into until then.
-            </p>
-            <div className="grid gap-2.5 sm:grid-cols-3">
-              <div>
-                <label className={labelClass} htmlFor="stage-key">
-                  Key
-                </label>
-                <input
-                  id="stage-key"
-                  className={inputClass}
-                  value={newKey}
-                  onChange={(e) => setNewKey(e.target.value)}
-                  placeholder="discovery"
-                  disabled={!data.configured || busy}
-                />
-                <p className="mt-0.5 text-[10px] text-muted-foreground">
-                  Permanent. Lowercase letters, digits and underscores.
-                </p>
-              </div>
-              <div>
-                <label className={labelClass} htmlFor="stage-label">
-                  Label
-                </label>
-                <input
-                  id="stage-label"
-                  className={inputClass}
-                  value={newLabel}
-                  onChange={(e) => setNewLabel(e.target.value)}
-                  placeholder="Discovery"
-                  disabled={!data.configured || busy}
-                />
-                <p className="mt-0.5 text-[10px] text-muted-foreground">Changeable at any time.</p>
-              </div>
-              <div>
-                <label className={labelClass} htmlFor="stage-color">
-                  Colour
-                </label>
-                <div className="flex items-center gap-1.5">
-                  <span
-                    aria-hidden
-                    className={cn("h-2 w-2 rounded-full", STAGE_COLOR_DOT_CLASS[newColor])}
+        {showKeys ? (
+          <Panel title="Add a stage">
+            <form
+              className="space-y-2.5 px-3 py-2.5"
+              onSubmit={(e) => {
+                e.preventDefault();
+                addMutation.mutate();
+              }}
+            >
+              <p className="text-[12px] text-muted-foreground">
+                For developers. A new stage appears on the board straight away, but no deal can be
+                moved into it until its key also exists as an account stage in the database — until
+                then the column is shown as not yet in use.
+              </p>
+              <div className="grid gap-2.5 sm:grid-cols-3">
+                <div>
+                  <label className={labelClass} htmlFor="stage-key">
+                    Key
+                  </label>
+                  <input
+                    id="stage-key"
+                    className={inputClass}
+                    value={newKey}
+                    onChange={(e) => setNewKey(e.target.value)}
+                    placeholder="discovery"
+                    disabled={!data.configured || busy}
                   />
-                  <ColorPicker id="stage-color" value={newColor} onChange={setNewColor} />
+                  <p className="mt-0.5 text-[10px] text-muted-foreground">
+                    Permanent. Lowercase letters, digits and underscores.
+                  </p>
+                </div>
+                <div>
+                  <label className={labelClass} htmlFor="stage-label">
+                    Label
+                  </label>
+                  <input
+                    id="stage-label"
+                    className={inputClass}
+                    value={newLabel}
+                    onChange={(e) => setNewLabel(e.target.value)}
+                    placeholder="Discovery"
+                    disabled={!data.configured || busy}
+                  />
+                  <p className="mt-0.5 text-[10px] text-muted-foreground">
+                    Changeable at any time.
+                  </p>
+                </div>
+                <div>
+                  <label className={labelClass} htmlFor="stage-color">
+                    Colour
+                  </label>
+                  <div className="flex items-center gap-1.5">
+                    <span
+                      aria-hidden
+                      className={cn("h-2 w-2 rounded-full", STAGE_COLOR_DOT_CLASS[newColor])}
+                    />
+                    <ColorPicker id="stage-color" value={newColor} onChange={setNewColor} />
+                  </div>
                 </div>
               </div>
-            </div>
-            <button
-              type="submit"
-              className={primaryButtonClass}
-              disabled={!data.configured || busy || !keyValid || newLabel.trim().length === 0}
-            >
-              <Plus className="h-3 w-3" /> {addMutation.isPending ? "Adding…" : "Add stage"}
-            </button>
-          </form>
-        </Panel>
+              <button
+                type="submit"
+                className={primaryButtonClass}
+                disabled={!data.configured || busy || !keyValid || newLabel.trim().length === 0}
+              >
+                <Plus className="h-3 w-3" /> {addMutation.isPending ? "Adding…" : "Add stage"}
+              </button>
+            </form>
+          </Panel>
+        ) : null}
       </PageBody>
     </>
   );
@@ -337,6 +365,7 @@ function StageRow({
   index,
   count,
   editable,
+  showKey,
   onDirty,
   onSave,
   onMark,
@@ -356,6 +385,8 @@ function StageRow({
   index: number;
   count: number;
   editable: boolean;
+  /** Show the stage's database key under its row. */
+  showKey: boolean;
   onDirty: (isDirty: boolean) => void;
   onSave: (label: string, color: StageColor) => void;
   onMark: (mark: "won" | "terminal") => void;
@@ -424,7 +455,7 @@ function StageRow({
               buttonClass,
               stage.is_won && "border-status-ontrack-foreground/50 text-status-ontrack-foreground",
             )}
-            title="This stage means Closed Won. The handoff control, startOnboarding and the Salesforce bridge all read it."
+            title="Deals reaching this stage count as Closed Won (starts onboarding)."
             disabled={!editable || stage.is_won || !stage.enterable}
             onClick={() => onMark("won")}
           >
@@ -433,7 +464,7 @@ function StageRow({
           <button
             type="button"
             className={cn(buttonClass, stage.is_terminal && "border-primary/50 text-primary")}
-            title="This stage means the end of the pipeline."
+            title="The last stage in the pipeline."
             disabled={!editable || stage.is_terminal || !stage.enterable}
             onClick={() => onMark("terminal")}
           >
@@ -445,8 +476,10 @@ function StageRow({
             disabled={!editable || blockingCount > 0 || stage.is_won || stage.is_terminal}
             title={
               blockingCount > 0
-                ? `${blockingCount} account${blockingCount === 1 ? "" : "s"} in this stage`
-                : "Delete this stage"
+                ? `Move the ${blockingCount} deal${blockingCount === 1 ? "" : "s"} out of this stage before deleting it.`
+                : stage.is_won || stage.is_terminal
+                  ? "The Closed Won and final stages cannot be deleted."
+                  : "Delete this stage"
             }
             onClick={onDelete}
           >
@@ -456,16 +489,16 @@ function StageRow({
       </div>
 
       <p className="mt-1 flex flex-wrap items-center gap-x-3 text-[11px] text-muted-foreground">
-        <code className="font-mono text-[10px]">{stage.key}</code>
+        {showKey ? <code className="font-mono text-[10px]">{stage.key}</code> : null}
         <span>
           {blockingCount === 0
             ? "No deals"
             : `${blockingCount} deal${blockingCount === 1 ? "" : "s"}`}
         </span>
-        {stage.in_history ? <span>named in the stage history</span> : null}
         {!stage.enterable ? (
           <span className="text-status-risk-foreground">
-            configured, but not yet an account stage — no deal can be moved here
+            Not yet in use — deals cannot be moved here until a developer adds its key to the
+            database.
           </span>
         ) : null}
       </p>

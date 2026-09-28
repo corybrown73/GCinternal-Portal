@@ -183,9 +183,9 @@ export const STAGE_COLOR_DOT_CLASS: Record<StageColor, string> = {
 };
 
 export const STAGE_COLOR_LABELS: Record<StageColor, string> = {
-  idle: "Neutral",
+  idle: "Grey",
   ontrack: "Green",
   risk: "Amber",
   blocked: "Red",
-  primary: "Accent",
+  primary: "Blue",
 };

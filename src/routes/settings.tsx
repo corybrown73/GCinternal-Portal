@@ -95,12 +95,14 @@ function SettingsPage() {
             <div>
               <h2 className="text-[13px] font-semibold">Pre-sales</h2>
               <p className="mt-0.5 text-[11.5px] text-muted-foreground">
-                From first conversation to Closed Won. These stages are yours to name and reorder.
+                From first conversation to onboarding complete. These stages are yours to name and
+                reorder.
               </p>
             </div>
             {manage ? (
               <Link
                 to="/admin/pipeline-stages"
+                search={{ from: "settings" }}
                 className="rounded-sm border border-border px-1.5 py-0.5 text-[11px] text-muted-foreground hover:text-foreground"
               >
                 Edit
