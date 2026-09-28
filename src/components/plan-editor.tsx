@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   DndContext,
   PointerSensor,
@@ -8,7 +8,7 @@ import {
   useSensors,
   type DragEndEvent,
 } from "@dnd-kit/core";
-import { ArrowDown, ArrowDownUp, ArrowUp, GripVertical, Plus, RotateCcw, X } from "lucide-react";
+import { ArrowDownUp, GripVertical, Lock, Plus, RotateCcw, X } from "lucide-react";
 
 import {
   Dialog,
@@ -20,7 +20,14 @@ import {
 } from "@/components/ui/dialog";
 import { PlanIcon } from "@/components/plan-icon";
 import { EMPTY_PLAN_EDITS, type IntakeAnswers, type PlanEdits } from "@/lib/intake-answers";
-import { KIND_LABEL, OWNER_LABEL, PLAN_ICONS, defaultIconFor } from "@/lib/plan-icons";
+import {
+  KIND_LABEL,
+  OWNER_LABEL,
+  PLAN_ICON_LABEL,
+  PLAN_ICONS,
+  defaultIconFor,
+  type PlanIconName,
+} from "@/lib/plan-icons";
 import {
   addBusinessDays,
   businessDaysBetween,
@@ -164,21 +171,25 @@ export function PlanEditor({
       next.splice(target, 0, it!);
       return next;
     });
-  const addStep = () =>
+  // A new step is the common case — a call — on the business day after the
+  // step before the finish, and the cursor lands in its name.
+  const [justAdded, setJustAdded] = useState<string | null>(null);
+  const addStep = () => {
+    const key = `step-${Math.random().toString(36).slice(2, 8)}`;
     setRows((rs) => {
-      const key = `step-${Math.random().toString(36).slice(2, 8)}`;
       const before = rs[rs.length - 2] ?? rs[0]!;
+      const date = addBusinessDays(before.end || before.date, 1, timeline.holidays);
       const row: Row = {
         key,
         label: "New step",
-        kind: "milestone",
-        icon: defaultIconFor("milestone"),
+        kind: "call",
+        icon: defaultIconFor("call"),
         owner: "both",
-        minutes: null,
+        minutes: 60,
         detail: "",
-        date: before.date,
+        date,
         end: "",
-        day: before.day,
+        day: before.day + 1,
         time: "",
         anchor: false,
         custom: true,
@@ -188,6 +199,18 @@ export function PlanEditor({
       next.splice(Math.max(1, rs.length - 1), 0, row);
       return next;
     });
+    setJustAdded(key);
+  };
+  useEffect(() => {
+    if (!justAdded) return;
+    const el = document.querySelector<HTMLElement>(`[data-row="${justAdded}"]`);
+    const name = el?.querySelector<HTMLTextAreaElement>("textarea[name=label]");
+    el?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    name?.focus();
+    name?.select();
+    const t = setTimeout(() => setJustAdded(null), 1600);
+    return () => clearTimeout(t);
+  }, [justAdded]);
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
   const onDragEnd = (e: DragEndEvent) => {
@@ -332,26 +355,50 @@ export function PlanEditor({
         </DialogHeader>
 
         <DndContext sensors={sensors} onDragEnd={onDragEnd}>
-          <ol className="divide-y divide-border rounded-md border border-border">
-            {rows.map((r, i) => (
-              <EditorRow
-                key={r.key}
-                row={r}
-                index={i}
-                count={rows.length}
-                busy={busy}
-                inputClass={input}
-                warning={
-                  r.date < timeline.closeDate && i > 0
-                    ? `Before the close date, ${shortDay(timeline.closeDate)} — the plan cannot start before it.`
-                    : (warnings[i] ?? null)
-                }
-                onChange={(patch) => update(r.key, patch)}
-                onRemove={() => remove(r.key)}
-                onMove={(dir) => move(i, i + dir)}
-              />
-            ))}
-          </ol>
+          <div className="rounded-md border border-border">
+            {/* The header names the columns the rows line up under. Hidden on a
+                phone, where each row stacks its own labelled fields. */}
+            <div
+              className={cn(
+                ROW_GRID,
+                "sticky top-0 z-10 hidden rounded-t-md border-b border-border bg-muted/60 px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground sm:grid",
+              )}
+              aria-hidden
+            >
+              <span />
+              <span>Step</span>
+              <span>Type</span>
+              <span>Who</span>
+              <span className="grid grid-cols-[7.5rem_5.5rem_3.5rem] gap-1.5">
+                <span>Date</span>
+                <span>Time</span>
+                <span>Minutes</span>
+              </span>
+              <span />
+              <span />
+            </div>
+            <ol className="divide-y divide-border">
+              {rows.map((r, i) => (
+                <EditorRow
+                  key={r.key}
+                  row={r}
+                  index={i}
+                  count={rows.length}
+                  busy={busy}
+                  inputClass={input}
+                  flash={r.key === justAdded}
+                  warning={
+                    r.date < timeline.closeDate && i > 0
+                      ? `Before the close date, ${shortDay(timeline.closeDate)} — the plan cannot start before it.`
+                      : (warnings[i] ?? null)
+                  }
+                  onChange={(patch) => update(r.key, patch)}
+                  onRemove={() => remove(r.key)}
+                  onMove={(dir) => move(i, i + dir)}
+                />
+              ))}
+            </ol>
+          </div>
         </DndContext>
 
         <DialogFooter className="flex-wrap gap-2 sm:justify-between">
@@ -425,6 +472,14 @@ export function PlanEditor({
   );
 }
 
+/**
+ * One grid for the header and every row, so the columns line up:
+ * handle · step · type · who · date/time/minutes · icon · remove.
+ * On a phone the row stacks into one column with its own labels.
+ */
+const ROW_GRID =
+  "grid grid-cols-1 gap-1.5 sm:grid-cols-[1.5rem_minmax(11rem,1fr)_8.25rem_7rem_17.5rem_2rem_1.75rem] sm:items-start";
+
 function EditorRow({
   row,
   index,
@@ -432,6 +487,7 @@ function EditorRow({
   busy,
   inputClass,
   warning,
+  flash,
   onChange,
   onRemove,
   onMove,
@@ -443,6 +499,8 @@ function EditorRow({
   inputClass: string;
   /** Why this row's date looks wrong, when it does. */
   warning: string | null;
+  /** Just added: lit for a moment so the eye finds it. */
+  flash: boolean;
   onChange: (patch: Partial<Row>) => void;
   onRemove: () => void;
   onMove: (dir: -1 | 1) => void;
@@ -451,85 +509,108 @@ function EditorRow({
   const drop = useDroppable({ id: row.key, disabled: row.anchor || !row.shape });
   const canMoveUp = row.shape && !row.anchor && index > 1;
   const canMoveDown = row.shape && !row.anchor && index < count - 2;
+  const [picking, setPicking] = useState(false);
+  const pickerRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!picking) return;
+    const close = (e: MouseEvent) => {
+      if (!pickerRef.current?.contains(e.target as Node)) setPicking(false);
+    };
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, [picking]);
+  const cell = "flex flex-col gap-0.5";
+  const mobileLabel = "text-[10px] uppercase tracking-wider text-muted-foreground sm:hidden";
   return (
     <li
       ref={drop.setNodeRef}
+      data-row={row.key}
       className={cn(
-        "space-y-1.5 px-2 py-2",
+        ROW_GRID,
+        "px-2 py-2 transition-colors",
         drop.isOver && !row.anchor && "bg-primary/5 ring-1 ring-inset ring-primary/40",
         drag.isDragging && "opacity-50",
         warning && "bg-amber-500/5",
+        flash && "bg-primary/10",
       )}
+      // Alt+↑/↓ on a focused row moves it: the keyboard's drag.
+      onKeyDown={(e) => {
+        if (!e.altKey) return;
+        if (e.key === "ArrowUp" && canMoveUp) {
+          e.preventDefault();
+          onMove(-1);
+        } else if (e.key === "ArrowDown" && canMoveDown) {
+          e.preventDefault();
+          onMove(1);
+        }
+      }}
     >
-      <div className="flex flex-wrap items-center gap-2">
+      {/* Handle, or the lock on the two fixed rows. */}
+      {row.anchor ? (
+        <span
+          className="hidden items-center gap-1 self-center text-muted-foreground sm:flex"
+          title="Every plan starts and ends here."
+        >
+          <Lock className="h-3.5 w-3.5" aria-hidden />
+        </span>
+      ) : (
         <button
           type="button"
           ref={drag.setNodeRef}
           {...drag.listeners}
           {...drag.attributes}
           className={cn(
-            "flex h-7 w-6 shrink-0 items-center justify-center rounded-sm text-muted-foreground",
-            row.anchor
-              ? "cursor-default opacity-30"
-              : "cursor-grab hover:bg-muted active:cursor-grabbing",
+            "hidden h-7 w-6 items-center justify-center self-center rounded-sm text-muted-foreground sm:flex",
+            row.shape
+              ? "cursor-grab hover:bg-muted active:cursor-grabbing"
+              : "cursor-default opacity-30",
           )}
-          aria-label={row.anchor ? "This step stays where it is" : `Drag ${row.label}`}
+          aria-label={`Drag ${row.label} (or Alt+↑/↓ with the row focused)`}
           title={
-            row.anchor ? "The close and the finish line stay where they are" : "Drag to reorder"
+            row.shape
+              ? "Drag to reorder · Alt+↑/↓ on the keyboard"
+              : "Steps from the SOW keep their order"
           }
         >
           <GripVertical className="h-4 w-4" />
         </button>
-        <span className="flex w-16 shrink-0 flex-col">
-          <button
-            type="button"
-            className="text-muted-foreground disabled:opacity-20"
-            aria-label="Move up"
-            disabled={!canMoveUp || busy}
-            onClick={() => onMove(-1)}
-          >
-            <ArrowUp className="h-3 w-3" />
-          </button>
-          <button
-            type="button"
-            className="text-muted-foreground disabled:opacity-20"
-            aria-label="Move down"
-            disabled={!canMoveDown || busy}
-            onClick={() => onMove(1)}
-          >
-            <ArrowDown className="h-3 w-3" />
-          </button>
-        </span>
-        <label
-          className="flex items-center gap-1"
-          title="Icon — the one the customer sees on the welcome page and the deck"
-        >
-          <span className="flex h-7 w-7 items-center justify-center rounded-md bg-primary/10 text-primary">
-            <PlanIcon name={row.icon} className="h-4 w-4" />
-          </span>
-          <select
-            className={cn(inputClass, "w-32")}
-            aria-label={`${row.label} icon`}
-            value={row.icon}
+      )}
+
+      {/* Step name — the widest, first. Wraps to a second line. */}
+      <div className={cell}>
+        <span className={mobileLabel}>Step</span>
+        <div className="flex items-start gap-1.5">
+          {row.anchor ? (
+            <span
+              className="mt-1 inline-flex shrink-0 items-center gap-1 rounded-sm border border-border bg-muted px-1.5 py-px text-[10px] font-medium uppercase tracking-wider text-muted-foreground"
+              title="Every plan starts and ends here."
+            >
+              <Lock className="h-2.5 w-2.5 sm:hidden" aria-hidden /> Fixed
+            </span>
+          ) : null}
+          <textarea
+            name="label"
+            rows={1}
+            className={cn(
+              inputClass,
+              "h-auto min-h-7 w-full resize-none py-1 font-medium leading-5 [field-sizing:content]",
+            )}
+            aria-label="Step name"
+            value={row.label}
             disabled={busy || !row.shape}
-            onChange={(e) => onChange({ icon: e.target.value })}
-          >
-            {PLAN_ICONS.map((n) => (
-              <option key={n} value={n}>
-                {n.replace(/([a-z])([A-Z0-9])/g, "$1 $2")}
-              </option>
-            ))}
-          </select>
-        </label>
-        <input
-          className={cn(inputClass, "min-w-[12rem] flex-1 font-medium")}
-          aria-label="Step name"
-          value={row.label}
-          disabled={busy || !row.shape}
-          onChange={(e) => onChange({ label: e.target.value })}
-        />
+            onChange={(e) => onChange({ label: e.target.value.replace(/\n/g, " ") })}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") e.preventDefault();
+            }}
+          />
+        </div>
+      </div>
+
+      {/* Type */}
+      <div className={cell}>
+        <span className={mobileLabel}>Type</span>
         <select
-          className={cn(inputClass, "w-36")}
+          className={cn(inputClass, "w-full")}
           aria-label={`${row.label} type`}
           value={row.kind}
           disabled={busy || row.anchor || !row.shape}
@@ -538,6 +619,8 @@ function EditorRow({
             onChange({
               kind,
               minutes: kind === "call" ? (row.minutes ?? 60) : null,
+              end: kind === "build" ? row.end : "",
+              // The icon follows the type unless somebody chose one on purpose.
               icon: row.icon === defaultIconFor(row.kind) ? defaultIconFor(kind) : row.icon,
             });
           }}
@@ -548,8 +631,13 @@ function EditorRow({
             </option>
           ))}
         </select>
+      </div>
+
+      {/* Who */}
+      <div className={cell}>
+        <span className={mobileLabel}>Who</span>
         <select
-          className={cn(inputClass, "w-28")}
+          className={cn(inputClass, "w-full")}
           aria-label={`${row.label} owner`}
           value={row.owner}
           disabled={busy || !row.shape}
@@ -561,23 +649,61 @@ function EditorRow({
             </option>
           ))}
         </select>
-        <input
-          type="date"
-          className={cn(inputClass, "w-36")}
-          aria-label={row.kind === "build" ? `${row.label} start` : `${row.label} date`}
-          value={row.date}
-          disabled={busy || index === 0}
-          onChange={(e) => e.target.value && onChange({ date: e.target.value })}
-          title={index === 0 ? "The close date is set on the deal" : shortDay(row.date)}
-        />
-        {row.kind === "build" ? (
-          <label className="flex items-center gap-1 text-[11px] text-muted-foreground">
-            to
+      </div>
+
+      {/* Date · Time · Minutes — the same three cells on every row, so the
+          columns stay aligned; a step that is not a call leaves the last
+          two empty, and work between calls uses them for its end date. */}
+      <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-[7.5rem_5.5rem_3.5rem]">
+        <div className={cell}>
+          <span className={mobileLabel}>{row.kind === "build" ? "Start" : "Date"}</span>
+          <input
+            type="date"
+            className={cn(inputClass, "w-full")}
+            aria-label={row.kind === "build" ? `${row.label} start` : `${row.label} date`}
+            value={row.date}
+            disabled={busy || index === 0}
+            onChange={(e) => e.target.value && onChange({ date: e.target.value })}
+            title={index === 0 ? "The close date is set on the deal" : shortDay(row.date)}
+          />
+        </div>
+        {row.kind === "call" ? (
+          <>
+            <div className={cell}>
+              <span className={mobileLabel}>Time</span>
+              <input
+                type="time"
+                className={cn(inputClass, "w-full")}
+                aria-label={`${row.label} time`}
+                value={row.time}
+                disabled={busy}
+                onChange={(e) => onChange({ time: e.target.value })}
+                title="The call's time, in the customer's zone (Plan settings)"
+              />
+            </div>
+            <div className={cell}>
+              <span className={mobileLabel}>Minutes</span>
+              <input
+                type="number"
+                min={15}
+                max={240}
+                step={15}
+                className={cn(inputClass, "w-full")}
+                aria-label={`${row.label} minutes`}
+                value={row.minutes ?? 60}
+                disabled={busy || !row.shape}
+                onChange={(e) => onChange({ minutes: Number(e.target.value) || 60 })}
+              />
+            </div>
+          </>
+        ) : row.kind === "build" ? (
+          <div className={cn(cell, "sm:col-span-2")}>
+            <span className={mobileLabel}>End</span>
             <input
               type="date"
               className={cn(
                 inputClass,
-                "w-36",
+                "w-full",
                 row.end && row.end < row.date && "border-destructive",
               )}
               aria-label={`${row.label} end`}
@@ -587,58 +713,79 @@ function EditorRow({
               onChange={(e) => onChange({ end: e.target.value })}
               title="The last day of the work between calls"
             />
-          </label>
-        ) : null}
-        {row.kind === "call" ? (
-          <input
-            type="time"
-            className={cn(inputClass, "w-28")}
-            aria-label={`${row.label} time`}
-            value={row.time}
-            disabled={busy}
-            onChange={(e) => onChange({ time: e.target.value })}
-            title="The call's time, in the customer's zone (Plan settings)"
-          />
-        ) : null}
-        {row.kind === "call" ? (
-          <label className="flex items-center gap-1 text-[11px] text-muted-foreground">
-            <input
-              type="number"
-              min={15}
-              max={240}
-              step={15}
-              className={cn(inputClass, "w-16")}
-              aria-label={`${row.label} minutes`}
-              value={row.minutes ?? 60}
-              disabled={busy || !row.shape}
-              onChange={(e) => onChange({ minutes: Number(e.target.value) || 60 })}
-            />
-            min
-          </label>
-        ) : null}
+          </div>
+        ) : (
+          <span className="hidden sm:col-span-2 sm:block" aria-hidden />
+        )}
+      </div>
+
+      {/* Icon: a small button; the grid opens on click. Defaults follow the type. */}
+      <div ref={pickerRef} className="relative self-center">
         <button
           type="button"
-          className="ml-auto text-muted-foreground hover:text-destructive disabled:opacity-20"
-          aria-label={`Remove ${row.label}`}
-          title={
-            row.anchor
-              ? "The close and the finish line cannot be removed"
-              : "Take this step off this account's plan"
-          }
-          disabled={busy || row.anchor || !row.shape}
-          onClick={onRemove}
+          className="flex h-7 w-7 items-center justify-center rounded-md bg-primary/10 text-primary hover:bg-primary/20 disabled:opacity-40"
+          aria-label={`Icon: ${PLAN_ICON_LABEL[row.icon as PlanIconName] ?? row.icon}. Change`}
+          title={`Icon — ${PLAN_ICON_LABEL[row.icon as PlanIconName] ?? row.icon}. The customer sees it on the welcome page and the deck.`}
+          disabled={busy || !row.shape}
+          onClick={() => setPicking((v) => !v)}
         >
-          <X className="h-4 w-4" />
+          <PlanIcon name={row.icon} className="h-4 w-4" />
         </button>
+        {picking ? (
+          <div
+            role="listbox"
+            aria-label="Icon"
+            className="absolute right-0 top-8 z-20 grid w-[13.5rem] grid-cols-6 gap-1 rounded-md border border-border bg-card p-1.5 shadow-lg"
+          >
+            {PLAN_ICONS.map((n) => (
+              <button
+                key={n}
+                type="button"
+                role="option"
+                aria-selected={n === row.icon}
+                title={PLAN_ICON_LABEL[n]}
+                className={cn(
+                  "flex h-8 w-8 items-center justify-center rounded-md hover:bg-muted",
+                  n === row.icon && "bg-primary/10 text-primary ring-1 ring-primary/40",
+                )}
+                onClick={() => {
+                  onChange({ icon: n });
+                  setPicking(false);
+                }}
+              >
+                <PlanIcon name={n} className="h-4 w-4" />
+              </button>
+            ))}
+          </div>
+        ) : null}
       </div>
+
+      {/* Remove */}
+      <button
+        type="button"
+        className="self-center justify-self-end text-muted-foreground hover:text-destructive disabled:opacity-20"
+        aria-label={`Remove ${row.label}`}
+        title={
+          row.anchor
+            ? "Every plan starts and ends here."
+            : row.shape
+              ? "Take this step off this account's plan"
+              : "Steps from the SOW stay"
+        }
+        disabled={busy || row.anchor || !row.shape}
+        onClick={onRemove}
+      >
+        <X className="h-4 w-4" />
+      </button>
+
       {warning ? (
-        <p role="alert" className="text-[11px] text-amber-800 dark:text-amber-300">
+        <p role="alert" className="text-[11px] text-amber-800 dark:text-amber-300 sm:col-span-7">
           {warning}
         </p>
       ) : null}
       {row.shape ? (
         <input
-          className={cn(inputClass, "w-full text-muted-foreground")}
+          className={cn(inputClass, "w-full text-muted-foreground sm:col-span-7")}
           aria-label={`${row.label} detail`}
           placeholder="One line the customer reads under this step"
           value={row.detail}

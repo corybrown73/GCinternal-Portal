@@ -28,6 +28,28 @@ export const PLAN_ICONS = [
 ] as const;
 export type PlanIconName = (typeof PLAN_ICONS)[number];
 
+/** The icon's name as a person would say it. */
+export const PLAN_ICON_LABEL: Record<PlanIconName, string> = {
+  Flag: "Flag",
+  PhoneCall: "Phone call",
+  ClipboardCheck: "Clipboard",
+  Wrench: "Wrench",
+  HardHat: "Hard hat",
+  Target: "Target",
+  Rocket: "Rocket",
+  Workflow: "Workflow",
+  Users: "People",
+  FileText: "Document",
+  Table2: "Table",
+  Cloud: "Cloud",
+  Smartphone: "Phone",
+  BookOpen: "Book",
+  CalendarDays: "Calendar",
+  GraduationCap: "Training",
+  Search: "Search",
+  Handshake: "Handshake",
+};
+
 export function isPlanIcon(name: string): name is PlanIconName {
   return (PLAN_ICONS as readonly string[]).includes(name);
 }
