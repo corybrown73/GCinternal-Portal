@@ -96,6 +96,12 @@ export type OwnershipFacts = {
   amOwnerProfileId: string | null;
   /** portal_accounts.se_owner_id. portal_profiles. */
   seOwnerProfileId: string | null;
+  /**
+   * portal_accounts.created_by. portal_profiles. The person who entered the
+   * deal is its owner until somebody is assigned; without this, a deal you
+   * just created was not "mine" and vanished from your own board.
+   */
+  creatorProfileId?: string | null;
 };
 
 export function isOwnedBy(facts: OwnershipFacts, viewer: Viewer): boolean {
@@ -105,7 +111,11 @@ export function isOwnedBy(facts: OwnershipFacts, viewer: Viewer): boolean {
       facts.csmOwnerId === viewer.teamMemberId);
   const byProfile =
     facts.amOwnerProfileId === viewer.profileId || facts.seOwnerProfileId === viewer.profileId;
-  return byTeamMember || byProfile;
+  const byCreation =
+    facts.implementationOwnerId === null &&
+    Boolean(facts.creatorProfileId) &&
+    facts.creatorProfileId === viewer.profileId;
+  return byTeamMember || byProfile || byCreation;
 }
 
 /**

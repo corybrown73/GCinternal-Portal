@@ -1,5 +1,5 @@
 import type { BriefJson } from "./server/schemas";
-import { firstFormName, type IntakeAnswers } from "./intake-answers";
+import { firstFormName, type IntakeAnswers, type TypedDate } from "./intake-answers";
 import type { Timeline } from "./onboarding-timeline";
 import { shortDay } from "./onboarding-timeline";
 
@@ -23,6 +23,10 @@ export type WatchOut = {
   key: string;
   /** conflict — the plan contradicts it; check — a person should look; ok — the plan meets it. */
   severity: "conflict" | "check" | "ok";
+  /** What kind of thing it is, so two readings of one fact dedupe as one. */
+  type: "deadline" | "absence" | "lead_time" | "expectation" | "scope";
+  /** Who it is about, for an absence. */
+  who?: string | null;
   title: string;
   detail: string;
   /** The sentence it was read from. */
@@ -30,6 +34,55 @@ export type WatchOut = {
   /** calls — the pasted notes, verbatim; brief — the AI's reading of them; sow — the SOW reader's notes. */
   source: "calls" | "brief" | "sow";
 };
+
+/** A typed date with where it was read. */
+export type SourcedDate = TypedDate & { source: "brief" | "sow" };
+
+/**
+ * Every date a reader typed for this deal: the SOW reader's on the intake,
+ * the brief's from the calls. Null entries mean that reading predates
+ * typed dates, and the caller falls back to reading the words.
+ */
+export function typedDatesFor(args: { brief: unknown; intake: IntakeAnswers }): {
+  sow: SourcedDate[] | null;
+  brief: SourcedDate[] | null;
+} {
+  const b = (args.brief ?? null) as Partial<BriefJson> | null;
+  const sow = args.intake.timeline.sow_dates;
+  return {
+    sow: sow ? sow.map((d) => ({ ...d, source: "sow" as const })) : null,
+    brief:
+      b && Array.isArray(b.dates) ? b.dates.map((d) => ({ ...d, source: "brief" as const })) : null,
+  };
+}
+
+/**
+ * What a booked meeting on `date` runs into: a named person's absence, or a
+ * deadline it falls after. For the booking form, so the warning shows
+ * before the invite goes out.
+ */
+export function bookingWarnings(date: string, dates: ReadonlyArray<SourcedDate>): string[] {
+  const out: string[] = [];
+  for (const d of dates) {
+    if (d.type === "absence") {
+      const end = d.end ?? d.date;
+      if (date >= d.date && date <= end) {
+        out.push(
+          `${d.who ?? "Someone named on the calls"} is out ${shortDay(d.date)}${
+            end !== d.date ? ` – ${shortDay(end)}` : ""
+          }`,
+        );
+      }
+    } else if (d.type === "deadline" && date > d.date) {
+      out.push(
+        `After ${shortDay(d.date)}, the date the ${d.source === "sow" ? "SOW" : "calls"} name${
+          d.source === "sow" ? "s" : ""
+        }`,
+      );
+    }
+  }
+  return out;
+}
 
 const MONTHS: Record<string, number> = {
   jan: 1,
@@ -111,13 +164,63 @@ export function watchOutsFor(args: {
   );
   const firstForm = firstFormName(args.intake);
 
+  // Typed dates first: what a reader stated, never a day guessed from a
+  // month. A reading that carries them turns the word-reading below off
+  // for deadlines and absences; a reading from before they existed keeps it.
+  const typed = typedDatesFor({ brief: args.brief, intake: args.intake });
+  for (const d of [...(typed.sow ?? []), ...(typed.brief ?? [])]) {
+    if (d.type === "deadline") {
+      const svc = serviceNamed(t, d.quote, firstForm);
+      const planDate = svc ? svc.endsOn : fullLive;
+      const what = svc ? `${svc.name} live` : "everything live";
+      const late = planDate > d.date;
+      const named = d.source === "sow" ? "The SOW names" : "The calls name";
+      out.push({
+        key: `${d.source}-deadline-${d.date}-${svc?.name ?? "all"}`,
+        type: "deadline",
+        severity: late ? "conflict" : "ok",
+        title: late
+          ? `${named} ${shortDay(d.date)}; the plan has ${what} ${shortDay(planDate)}`
+          : `${named} ${shortDay(d.date)}: the plan has ${what} ${shortDay(planDate)}, ${daysBetween(planDate, d.date)} days ahead`,
+        detail: late
+          ? d.source === "sow"
+            ? "A contractual date the plan misses. Move the work or raise it now."
+            : `${daysBetween(d.date, planDate)} days after what they said. Move the work, or say so on Stage 1.`
+          : d.source === "sow"
+            ? "Met, as planned today. A slip past this date is a contractual one."
+            : "Met, as planned today. If a phase slips past this date, it is the date they said out loud.",
+        quote: d.quote,
+        source: d.source,
+      });
+    } else if (d.type === "absence") {
+      const end = d.end ?? d.date;
+      const hit = phaseOver(t, d.date, end);
+      if (hit) {
+        const who = d.who ?? "Someone named on the calls";
+        out.push({
+          key: `${d.source}-absence-${who}-${d.date}-${end}`,
+          type: "absence",
+          who,
+          severity: "check",
+          title: `${who} is out ${shortDay(d.date)}${end !== d.date ? ` – ${shortDay(end)}` : ""}, during ${hit}`,
+          detail: "Their steps in that window need a stand-in, or the phase moves.",
+          quote: d.quote,
+          source: d.source,
+        });
+      }
+    }
+  }
+  const readCallDates = typed.brief === null;
+  const readSowDates = typed.sow === null;
+
   for (const [i, { s, source }] of callSentences.entries()) {
-    const dates = datesIn(s, t.closeDate);
+    const dates = readCallDates ? datesIn(s, t.closeDate) : [];
     if (dates.length && DEADLINE.test(s) && !ABSENCE.test(s)) {
       const deadline = dates[0]!;
       if (fullLive > deadline.iso) {
         out.push({
           key: `deadline-${i}`,
+          type: "deadline",
           severity: "conflict",
           title: `The calls name ${shortDay(deadline.iso)}; the plan has everything live ${shortDay(fullLive)}`,
           detail: `${daysBetween(deadline.iso, fullLive)} days after what they said. Move the work, or say so on the kickoff.`,
@@ -127,6 +230,7 @@ export function watchOutsFor(args: {
       } else {
         out.push({
           key: `deadline-ok-${deadline.iso}`,
+          type: "deadline",
           severity: "ok",
           title: `The calls name ${shortDay(deadline.iso)}: the plan has everything live ${shortDay(fullLive)}, ${daysBetween(fullLive, deadline.iso)} days ahead`,
           detail:
@@ -144,6 +248,8 @@ export function watchOutsFor(args: {
         const who = names.find((n) => s.includes(n.split(" ")[0]!)) ?? "Someone named on the calls";
         out.push({
           key: `absence-${i}`,
+          type: "absence",
+          who,
           severity: "check",
           title: `${who} is out ${shortDay(from)}${to !== from ? ` – ${shortDay(to)}` : ""}, during ${hit}`,
           detail: "Their steps in that window need a stand-in, or the phase moves.",
@@ -158,6 +264,7 @@ export function watchOutsFor(args: {
       if (ready > fieldTest) {
         out.push({
           key: `lead-${i}`,
+          type: "lead_time",
           severity: "conflict",
           title: `Devices ${weeks.max} week${weeks.max === 1 ? "" : "s"} out; the field test is ${shortDay(fieldTest)}`,
           detail: `${daysBetween(t.closeDate, fieldTest)} days after close. The crew tests on something — say what, or move the test.`,
@@ -168,6 +275,7 @@ export function watchOutsFor(args: {
     } else if (!weeks && DEVICES.test(s) && NOT_YET.test(s) && fieldTest) {
       out.push({
         key: `devices-${i}`,
+        type: "lead_time",
         severity: "check",
         title: `Devices not in hand; the field test is ${shortDay(fieldTest)}`,
         detail: "Confirm what the crew tests on before the working session.",
@@ -180,6 +288,7 @@ export function watchOutsFor(args: {
       if (svc && svc.weeks > weeks.max) {
         out.push({
           key: `told-${i}`,
+          type: "expectation",
           severity: "conflict",
           title: `${svc.name}: they were told ${weeksLabel(weeks)}; the plan has ${svc.weeks}`,
           detail: `Live ${shortDay(svc.endsOn)} on the plan. Reset the expectation on the kickoff, before the deck does it for you.`,
@@ -191,6 +300,7 @@ export function watchOutsFor(args: {
         if (kind) {
           out.push({
             key: `told-none-${kind}`,
+            type: "expectation",
             severity: "check",
             title: `They were told ${weeksLabel(weeks)} for ${kind}; nothing on the plan for it yet`,
             detail:
@@ -221,6 +331,7 @@ export function watchOutsFor(args: {
       if (probe && asked.includes(probe)) {
         out.push({
           key: `scope-${stem.replace(/\W+/g, "-")}`,
+          type: "scope",
           severity: "check",
           title: `Raised on the calls, listed as out of scope: ${item}`,
           detail:
@@ -232,9 +343,10 @@ export function watchOutsFor(args: {
     }
   }
 
-  // Dates the SOW names, against the plan: met, or not.
+  // Dates the SOW names in prose, against the plan — only for a SOW read
+  // before the reader typed its dates.
   for (const [i, s] of sowSentences.entries()) {
-    const dates = datesIn(s, t.closeDate);
+    const dates = readSowDates ? datesIn(s, t.closeDate) : [];
     if (!dates.length) continue;
     const svc = serviceNamed(t, s, firstForm);
     const planDate = svc ? svc.endsOn : fullLive;
@@ -243,6 +355,7 @@ export function watchOutsFor(args: {
       const late = planDate > d.iso;
       out.push({
         key: `sow-${i}-${d.iso}`,
+        type: "deadline",
         severity: late ? "conflict" : "ok",
         title: late
           ? `The SOW names ${shortDay(d.iso)}; the plan has ${what} ${shortDay(planDate)}`
@@ -428,10 +541,21 @@ function addDays(iso: string, n: number): string {
 function daysBetween(a: string, b: string): number {
   return Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / 86_400_000);
 }
+/**
+ * One row per fact: a deadline is one row per date and item, an absence one
+ * per person and window — however many sources said it — and anything else
+ * one per title.
+ */
 function dedupe(rows: WatchOut[]): WatchOut[] {
   const seen = new Set<string>();
+  const range = (r: WatchOut) => r.title.replace(/^.*?(\w{3} \d{1,2}.*?)(,|;|:|$).*$/s, "$1");
   return rows.filter((r) => {
-    const k = `${r.severity}|${r.title}`;
+    const k =
+      r.type === "absence"
+        ? `absence|${(r.who ?? "").toLowerCase()}|${range(r)}`
+        : r.type === "deadline"
+          ? `deadline|${r.severity}|${range(r)}|${r.title.replace(/^.*?; the plan has |^.*?: the plan has /, "")}`
+          : `${r.severity}|${r.title}`;
     if (seen.has(k)) return false;
     seen.add(k);
     return true;

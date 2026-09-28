@@ -1,6 +1,27 @@
 import { z } from "zod";
 
 /**
+ * A date a source states, typed by the reader that read it — never parsed
+ * out of prose. "End of October" is not a day; a date lands here only when
+ * the document or the call names one.
+ */
+export const typedDateSchema = z.object({
+  type: z.enum(["signed", "start", "deadline", "absence"]),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  /** The last day, for an absence or a window; null for a single day. */
+  end: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .nullable()
+    .default(null),
+  /** Who it is about, for an absence. */
+  who: z.string().trim().max(120).nullable().default(null),
+  /** The words it was read from. */
+  quote: z.string().max(300),
+});
+export type TypedDate = z.infer<typeof typedDateSchema>;
+
+/**
  * The onboarding intake: what we ask a customer after the deal closes, and
  * the shape the answers are stored in (`portal_accounts.intake`).
  *
@@ -274,6 +295,16 @@ export const intakeAnswersSchema = z.object({
       sow_applied_at: z.string().nullable().default(null),
       /** What the SOW says that the plan cannot hold — named dates, exclusions — kept for the watch-outs. */
       sow_notes: z.array(z.string().max(300)).max(20).default([]),
+      /**
+       * Dates the SOW states, typed by the reader: a deadline, a start, the
+       * signing, an absence. Null on a deal read before the reader typed
+       * them (the watch-outs then fall back to reading the notes' words).
+       */
+      sow_dates: z.array(typedDateSchema).max(20).nullable().default(null),
+      /** Service keys (see normalizeServiceKey) a person removed: a re-read never puts them back. */
+      removed_services: z.array(z.string().max(160)).max(40).default([]),
+      /** The core meetings' length when the SOW states one; null for the plan's own. */
+      session_minutes: z.number().int().min(15).max(240).nullable().default(null),
       /** Everything bought beyond the first form: phase 1 runs alongside it, 2 and up wait. */
       services: z
         .array(

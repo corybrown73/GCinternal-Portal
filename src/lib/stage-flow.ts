@@ -312,7 +312,7 @@ function playbookPreKickoff(a: IntakeAnswers): FlowTask[] {
     {
       key: "kickoff",
       label: "Book all three core meetings",
-      hint: "Stage 1, 2 and 3 on the calendar now, sixty minutes each — the structure that keeps the 30 days from drifting.",
+      hint: `Stage 1, 2 and 3 on the calendar now, ${a.timeline.session_minutes ?? 60} minutes each — the structure that keeps the 30 days from drifting.`,
       done: booked === CORE_MEETINGS.length,
       summary:
         booked === CORE_MEETINGS.length

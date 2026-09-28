@@ -103,6 +103,7 @@ export function timelineFor(intake: IntakeAnswers, closeDate: string): Timeline 
     completed: t.completed,
     times: t.times,
     timezone: t.timezone,
+    sessionMinutes: t.session_minutes,
     services: [...(t.services as ServiceSpec[]), ...extraFormServices(intake)],
   });
 }

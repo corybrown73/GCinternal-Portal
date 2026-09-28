@@ -1556,9 +1556,23 @@ function ParkingLotCard({ items }: { items: NonNullable<WelcomeView["parkingLot"
   );
 }
 
+/** "sixty" for the lengths a plan uses; digits for anything else. */
+function minutesWord(n: number): string {
+  const words: Record<number, string> = {
+    15: "fifteen",
+    20: "twenty",
+    30: "thirty",
+    45: "forty-five",
+    60: "sixty",
+    90: "ninety",
+  };
+  return words[n] ?? String(n);
+}
+
 function Plan({ view, page }: { view: WelcomeView; page: number }) {
   const t = view.timeline;
   const existing = view.path === "existing";
+  const kickoff = t.milestones.find((m) => m.key === "kickoff");
   const today = useToday();
   // The step today sits on: the last one whose date is today or earlier and
   // is not yet done. Nothing is marked before the close or after live.
@@ -1601,16 +1615,16 @@ function Plan({ view, page }: { view: WelcomeView; page: number }) {
       }
       lede={
         t.training
-          ? "Three thirty-minute calls, a little to do between calls, a week of real jobs in between. Every step below has an owner."
+          ? `Three ${minutesWord(kickoff?.minutes ?? 30)}-minute sessions, a little to do between them, a week of real jobs in between. Every step below has an owner.`
           : existing
             ? t.existingBuild === "customer"
               ? "A kickoff that splits the work, your build with a date, a check-in, real jobs through it, and a freeze. Two weeks, and every step below has an owner."
               : t.existingBuild === "us"
-                ? "Three sixty-minute training calls with you driving, real jobs between them. Every step below has an owner."
+                ? `Three ${minutesWord(kickoff?.minutes ?? 60)}-minute training calls with you driving, real jobs between them. Every step below has an owner.`
                 : `Three working sessions, with real jobs through the form between them. ${["", "One", "Two", "Three", "Four", "Five", "Six", "Seven"][days] ?? days} business days, and every day below has an owner.`
             : view.path === "new_logo"
-              ? "Make It Work, Make It Work for Them, Make It Operational: three sixty-minute meetings, all booked up front, with the work between them prepared on both sides. Functional in about three weeks, and Week 4 held for anything that needs more time. Every step below has an owner."
-              : "Three sixty-minute training calls with you driving, a week of real jobs between them. We teach and build together, and by day 3 you build forms without us. Every step below has an owner."
+              ? `Make It Work, Make It Work for Them, Make It Operational: three ${minutesWord(kickoff?.minutes ?? 60)}-minute meetings, all booked up front, with the work between them prepared on both sides. Functional in about three weeks, and Week 4 held for anything that needs more time. Every step below has an owner.`
+              : `Three ${minutesWord(kickoff?.minutes ?? 60)}-minute training calls with you driving, a week of real jobs between them. We teach and build together, and by day 3 you build forms without us. Every step below has an owner.`
       }
       band={
         t.training

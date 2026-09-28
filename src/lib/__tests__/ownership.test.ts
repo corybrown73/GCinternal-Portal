@@ -209,3 +209,17 @@ describe("defaultScopeFor", () => {
     expect(defaultScopeFor({ ownsAnything: true, isAdmin: false })).toEqual(DEFAULT_SCOPE);
   });
 });
+
+describe("the deal's creator", () => {
+  it("owns it until somebody is assigned, and not after", () => {
+    expect(isOwnedBy(facts({ creatorProfileId: TEYA.profileId }), TEYA)).toBe(true);
+    expect(isOwnedBy(facts({ creatorProfileId: TEYA.profileId }), RAJ)).toBe(false);
+    expect(
+      isOwnedBy(
+        facts({ creatorProfileId: TEYA.profileId, implementationOwnerId: RAJ.teamMemberId }),
+        TEYA,
+      ),
+    ).toBe(false);
+    expect(isOwnedBy(facts({ creatorProfileId: null }), TEYA)).toBe(false);
+  });
+});

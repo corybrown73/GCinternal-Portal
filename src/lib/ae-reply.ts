@@ -20,6 +20,8 @@ export type AeReplyInput = {
   /** Today, YYYY-MM-DD. */
   today: string;
   timezone: string | null;
+  /** The core meetings' length, from the plan (the SOW's when it states one). */
+  sessionMinutes?: number | null;
 };
 
 export function kickoffOptions(plannedKickoff: string | null, today: string): [string, string] {
@@ -33,6 +35,7 @@ export function aeReplyDraft(i: AeReplyInput): { subject: string; body: string }
   const zone = i.timezone ? ` ${zoneLabel(i.timezone)}` : "";
   const [a, b] = kickoffOptions(i.plannedKickoff, i.today);
   const training = i.intake.path === "field_fusion" || i.intake.training_only;
+  const minutes = i.sessionMinutes ?? (training ? 30 : 60);
   const plan =
     i.intake.path === "existing"
       ? [
@@ -42,8 +45,8 @@ export function aeReplyDraft(i: AeReplyInput): { subject: string; body: string }
         ]
       : training
         ? [
-            "• Session 1 — the admin portal, and building a form",
-            "• Session 2 — reference data, calculations and the PDF",
+            "• Session 1 — the admin portal, and your forms as built",
+            "• Session 2 — reference data, the PDF, and dispatch",
             "• Session 3 — where the data goes and what you can do with it",
           ]
         : i.intake.path === "new_logo"
@@ -58,12 +61,12 @@ export function aeReplyDraft(i: AeReplyInput): { subject: string; body: string }
               "• Training day 3 — the back office: emails, the PDF, reports and users",
             ];
   const length = training
-    ? "Three 30-minute sessions over two weeks."
+    ? `Three ${minutes}-minute sessions over two weeks.`
     : i.intake.path === "existing"
-      ? "Three 60-minute working sessions over fifteen business days get your form ready; the integration builds on it from there."
+      ? `Three ${minutes}-minute working sessions over fifteen business days get your form ready; the integration builds on it from there.`
       : i.intake.path === "new_logo"
-        ? "A 30-day implementation built around three 60-minute meetings, which we'd like to book now — you're functional in about three weeks, with week 4 held for anything that needs more time."
-        : "Three 60-minute working sessions, and your first form is live within about three weeks.";
+        ? `A 30-day implementation built around three ${minutes}-minute meetings, which we'd like to book now — you're functional in about three weeks, with week 4 held for anything that needs more time.`
+        : `Three ${minutes}-minute working sessions, and your first form is live within about three weeks.`;
   const body = [
     `Hi ${first},`,
     "",
@@ -77,8 +80,10 @@ export function aeReplyDraft(i: AeReplyInput): { subject: string; body: string }
       : "I'll send your welcome page with the plan and the dates shortly.",
     "",
     i.intake.path === "new_logo"
-      ? "Could we hold Stage 1 for one of these (60 minutes)? I'll send Stages 2 and 3 right after."
-      : "Could we hold the kickoff for one of these (60 minutes)?",
+      ? `Could we hold Stage 1 for one of these (${minutes} minutes)? I'll send Stages 2 and 3 right after.`
+      : training
+        ? `Could we hold Session 1 for one of these (${minutes} minutes)?`
+        : `Could we hold the kickoff for one of these (${minutes} minutes)?`,
     `• ${shortDay(a)} at 10:00 am${zone}`,
     `• ${shortDay(b)} at 2:00 pm${zone}`,
     "",
@@ -89,7 +94,12 @@ export function aeReplyDraft(i: AeReplyInput): { subject: string; body: string }
     "Thanks,",
     i.ownerName ?? "[your name]",
   ].join("\n");
-  return { subject: `${i.company} × GoCanvas — booking your kickoff`, body };
+  return {
+    subject: `${i.company} × GoCanvas — booking your ${
+      i.intake.path === "new_logo" ? "Stage 1" : training ? "first session" : "kickoff"
+    }`,
+    body,
+  };
 }
 
 /** "America/Chicago" → "Central time", for a sentence a customer reads. */

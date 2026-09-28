@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { readIntake } from "../intake-answers";
 import { timelineFor } from "../onboarding-plan";
-import { datesIn, watchOutsFor } from "../watch-outs";
+import { bookingWarnings, datesIn, typedDatesFor, watchOutsFor } from "../watch-outs";
 
 // Close Mon 21 Sep 2026: the form is live Mon 12 Oct (day 15); a phase-2
 // custom PDF (6 weeks, so phase 2 runs to 24 Nov) and a Kronos integration
@@ -158,5 +158,90 @@ describe("watchOutsFor", () => {
 
   it("is empty with nothing to read", () => {
     expect(watchOutsFor({ brief: null, intake: readIntake(null), timeline })).toEqual([]);
+  });
+});
+
+describe("typed dates", () => {
+  const typedIntake = readIntake({
+    path: "new_logo",
+    wanted_forms: [{ id: "f1", name: "Storm Damage Assessment" }],
+    timeline: {
+      form_proven_on: "2026-09-30",
+      services: [{ id: "pdf", kind: "custom_pdf", name: "FEMA damage PDF", phase: 2, weeks: 6 }],
+      sow_notes: ["Named target dates (text only): SDA in production 9 Oct."],
+      sow_dates: [
+        {
+          type: "deadline",
+          date: "2026-10-30",
+          end: null,
+          who: null,
+          quote: "SDA in production by Oct 30",
+        },
+      ],
+    },
+  });
+  const typedTimeline = timelineFor(typedIntake, "2026-09-21");
+  const typedBrief = {
+    ...brief,
+    risks_open_items: ["Storm season — end of October, no later (Ray)."],
+    dates: [
+      {
+        type: "absence",
+        date: "2026-10-05",
+        end: "2026-10-16",
+        who: "Ray Okonkwo",
+        quote: "Ray is out Oct 5–16 and owns the rubric.",
+      },
+      {
+        type: "deadline",
+        date: "2026-11-07",
+        end: null,
+        who: null,
+        quote: "Storm season starts the first week of November — Nov 7 at the latest.",
+      },
+    ],
+  };
+  const rows = watchOutsFor({
+    brief: typedBrief,
+    notes,
+    intake: typedIntake,
+    timeline: typedTimeline,
+  });
+
+  it("reads the dates the readers typed, and stops guessing days from months", () => {
+    const sow = rows.filter((r) => r.source === "sow");
+    expect(sow.map((r) => r.type)).toEqual(["deadline"]);
+    expect(sow[0]!.title).toContain("Oct 30");
+    // The prose "9 Oct" in sow_notes is no longer read as a day.
+    expect(rows.some((r) => r.title.includes("Oct 9"))).toBe(false);
+    // "end of October" in the brief's risks never becomes Oct 28.
+    expect(rows.some((r) => r.title.includes("Oct 28"))).toBe(false);
+  });
+
+  it("names the absent person once, with the window, from the typed absence", () => {
+    const out = rows.filter((r) => r.type === "absence");
+    expect(out).toHaveLength(1);
+    expect(out[0]!.who).toBe("Ray Okonkwo");
+    expect(out[0]!.title).toMatch(/Ray Okonkwo is out Mon, Oct 5 – Fri, Oct 16, during phase 1/);
+  });
+
+  it("every row carries its type and quote", () => {
+    for (const r of rows) {
+      expect(r.type).toBeTruthy();
+      expect(r.quote.length).toBeGreaterThan(0);
+    }
+  });
+
+  it("warns a booking that lands in an absence or after a deadline", () => {
+    const typed = typedDatesFor({ brief: typedBrief, intake: typedIntake });
+    const all = [...(typed.sow ?? []), ...(typed.brief ?? [])];
+    expect(bookingWarnings("2026-10-07", all)).toEqual([
+      "Ray Okonkwo is out Mon, Oct 5 – Fri, Oct 16",
+    ]);
+    expect(bookingWarnings("2026-11-10", all)).toEqual([
+      "After Fri, Oct 30, the date the SOW names",
+      "After Sat, Nov 7, the date the calls name",
+    ]);
+    expect(bookingWarnings("2026-09-28", all)).toEqual([]);
   });
 });

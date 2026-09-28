@@ -61,6 +61,22 @@ export const briefJsonSchema = z4.object({
   what_we_know: z4.array(z4.object({ topic: z4.string(), detail: z4.string() })),
   stakeholders: z4.array(z4.object({ name: z4.string(), role: z4.string(), notes: z4.string() })),
   risks_open_items: z4.array(z4.string()),
+  /**
+   * Dates the calls state, typed: a deadline the customer named, a start,
+   * a stakeholder's absence. Only explicit statements; an ISO day only when
+   * a day was said. Absent on briefs read before this field existed.
+   */
+  dates: z4
+    .array(
+      z4.object({
+        type: z4.enum(["signed", "start", "deadline", "absence"]),
+        date: z4.string(),
+        end: z4.string().nullable(),
+        who: z4.string().nullable(),
+        quote: z4.string(),
+      }),
+    )
+    .optional(),
   discovery_questions: z4.array(
     z4.object({ question: z4.string(), why_it_matters: z4.string(), category: z4.string() }),
   ),

@@ -1,7 +1,9 @@
 import { z } from "zod";
 
+import { typedDateSchema, type TypedDate } from "./intake-answers";
 import {
   SERVICE_KIND_LIST,
+  normalizeServiceKey,
   normalizeServices,
   SERVICE_KINDS,
   serviceWeeks,
@@ -138,6 +140,18 @@ export const sowPlanProposalSchema = z.object({
   ),
   /** Things the SOW says that the plan cannot hold: exclusions, conditions, dates it names. */
   notes: textList(20),
+  /**
+   * Dates the SOW states, typed: a deadline the customer must hit, a start,
+   * the signing, a named absence. Only rows with a printed ISO date survive;
+   * "end of October" is a note, never a day.
+   */
+  dates: z.preprocess(
+    (v) =>
+      Array.isArray(v)
+        ? v.filter((row) => typedDateSchema.safeParse(row).success).slice(0, 20)
+        : [],
+    z.array(typedDateSchema).max(20),
+  ),
   /** What the SOW does not say that the plan needs. */
   gaps: textList(20),
 });
@@ -193,13 +207,38 @@ export function mergeProposal(
 ): ServiceSpec[] {
   const out = [...existing];
   for (const row of rows) {
-    const key = row.name.trim().toLowerCase();
-    const i = out.findIndex((s) => s.name.trim().toLowerCase() === key);
+    // Same kind, same name once case, punctuation and filler are gone: one
+    // row, however the SOW reader worded it this time.
+    const key = normalizeServiceKey(row.name, row.kind);
+    const i = out.findIndex((s) => normalizeServiceKey(s.name, s.kind) === key);
     const next = rowToService(row, i >= 0 ? out[i]!.id : makeId(row));
     if (i >= 0) out[i] = { ...out[i]!, ...next };
     else out.push(next);
   }
   return out;
+}
+
+/**
+ * A training row that describes the plan's own calls — "3 training sessions
+ * (30-minute, recorded)" — is not a block beside them: it is their length.
+ * Returns the minutes when the row names some and either names no session
+ * count or names three; null for a training block that stands on its own.
+ */
+export function trainingSessionMinutes(row: SowPlanRow): number | null {
+  if (row.kind !== "training") return null;
+  const text = `${row.name} ${row.evidence ?? ""}`;
+  const minutes = text.match(/(\d{2,3})\s*-?\s*min/i);
+  if (!minutes) return null;
+  // "Three (3) training sessions", "3 x 30-minute sessions", "two 45-minute
+  // admin sessions": the count is the number nearest the word.
+  const count = text.match(
+    /\b(\d+|one|two|three|four|five|six)\s*(?:\(\d+\)\s*)?(?:x|×)?\s*(?:[a-z0-9-]+\s+){0,3}?(?:sessions?|calls?)\b/i,
+  );
+  const words: Record<string, number> = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6 };
+  const n = count ? (words[count[1]!.toLowerCase()] ?? Number(count[1])) : null;
+  if (n !== null && n !== 3) return null;
+  const m = Number(minutes[1]);
+  return m >= 15 && m <= 240 ? m : null;
 }
 
 /** The length the plan will use for a row, for the review table. */
@@ -216,19 +255,30 @@ export function rowWeeks(row: SowPlanRow): number {
 export function sowTimelinePatch(
   intake: {
     wanted_forms: Array<{ name: string }>;
-    timeline: { services?: unknown };
+    timeline: { services?: unknown; removed_services?: string[]; session_minutes?: number | null };
   } & { timeline: Parameters<typeof normalizeServices>[1] },
-  proposal: { services: SowPlanRow[]; notes: string[] },
+  proposal: { services: SowPlanRow[]; notes: string[]; dates?: TypedDate[] },
   makeId: (row: SowPlanRow) => string,
-): { timeline: Record<string, unknown>; accepted: number } {
-  const wanted = new Set(intake.wanted_forms.map((f) => f.name.trim().toLowerCase()));
-  const accepted = proposal.services.filter(
-    (row) =>
-      row.confidence !== "uncertain" &&
-      !(row.kind === "paid_form" && wanted.has(row.name.trim().toLowerCase())),
-  );
+): { timeline: Record<string, unknown>; accepted: number; sessionMinutes: number | null } {
+  const wanted = new Set(intake.wanted_forms.map((f) => normalizeServiceKey(f.name, "paid_form")));
+  const removed = new Set(intake.timeline.removed_services ?? []);
+  // The plan's own calls, sized by the SOW: not a block beside them.
+  let sessionMinutes: number | null = null;
+  const accepted = proposal.services.filter((row) => {
+    if (row.confidence === "uncertain") return false;
+    const key = normalizeServiceKey(row.name, row.kind);
+    if (row.kind === "paid_form" && wanted.has(key)) return false;
+    if (removed.has(key)) return false;
+    const minutes = trainingSessionMinutes(row);
+    if (minutes) {
+      sessionMinutes = minutes;
+      return false;
+    }
+    return true;
+  });
   return {
     accepted: accepted.length,
+    sessionMinutes,
     timeline: {
       services: mergeProposal(
         normalizeServices((intake.timeline.services ?? []) as ServiceSpec[], intake.timeline),
@@ -239,6 +289,8 @@ export function sowTimelinePatch(
       integration_target: null,
       sow_applied_at: new Date().toISOString(),
       sow_notes: proposal.notes.map((n) => n.slice(0, 300)).slice(0, 20),
+      sow_dates: (proposal.dates ?? []).slice(0, 20),
+      ...(sessionMinutes ? { session_minutes: sessionMinutes } : {}),
     },
   };
 }

@@ -11,6 +11,7 @@ Rules:
 - current_process sections walk through how the client operates today, step by step, in the client's own vocabulary where possible.
 - one_liner is a single sentence an exec could read: who the client is and what they bought GoCanvas to do.
 - Keep bullets tight (under 20 words each). Aim for 5-12 discovery questions.
+- dates: every date the calls STATE that the plan has to respect, typed. {"type":"deadline","date":"YYYY-MM-DD","end":null,"who":null,"quote":"what was said"} for a date the customer must hit (a season start, a go-live they named); {"type":"absence","date":"YYYY-MM-DD","end":"YYYY-MM-DD","who":"Name","quote":"..."} when a named person is out for a stretch. Resolve "Oct 5–16" to days in the year of the calls; when only a month or a season is named ("end of October", "storm season"), put the sentence in risks_open_items instead — never invent a day. Empty when the calls name none.
 
 The \`account\` object is the four facts the intake asks first. industry: exactly one of Construction, Oil & Gas, Utilities, Energy, Environmental, Facilities, HVAC, Roofing, Mining, Pipeline, Field Service, Plumbing, Mechanical, Manufacturing, Logistics, Property Management — the closest fit for what the company does, or null if the notes do not say. company_size: one of "1–10", "11–50", "51–200", "201–1,000", "1,000+", from a stated headcount, else null. field_users: the number of people who will use it in the field, only if a number is stated (e.g. "140 field techs" → 140), else null. website: the company's domain if stated, else null.
 

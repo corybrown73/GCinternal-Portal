@@ -27,6 +27,8 @@ export interface Account {
   products: string[];
   am_owner_id: string | null;
   se_owner_id: string | null;
+  /** The profile that entered the deal (0066); its owner until somebody is assigned. */
+  created_by?: string | null;
   summary: string | null;
   /** The champion, carried into customer_contacts when this deal becomes a project. */
   primary_contact_name: string | null;

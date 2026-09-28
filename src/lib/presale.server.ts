@@ -269,6 +269,7 @@ export async function loadPipeline(
         csmOwnerId: null,
         amOwnerProfileId: a.am_owner_id ?? null,
         seOwnerProfileId: a.se_owner_id ?? null,
+        creatorProfileId: (a as { created_by?: string | null }).created_by ?? null,
       },
       scope.scope,
       scope.viewer,
@@ -361,6 +362,10 @@ export async function createDeal(
     }
   }
   const result = await upsertAccount(parsed, { source: "ui", actorProfileId: userId });
+  // Who entered it: their board shows it until an owner is assigned.
+  if (result.created) {
+    await db().from("portal_accounts").update({ created_by: userId }).eq("id", result.account.id);
+  }
 
   // The two facts the plan and the page read, captured while they are known.
   if (input.path || input.industry) {

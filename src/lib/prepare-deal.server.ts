@@ -122,9 +122,13 @@ export async function prepareDeal(
       finished_at: new Date().toISOString(),
       filled: filled.slice(0, 30),
       error: problems.length ? problems.join(" ").slice(0, 500) : null,
-      again,
+      again: false,
     },
   });
+  // Something arrived while this ran: read once more, here, now. The
+  // browser used to do this on load, which re-ran the reading every time
+  // the page opened while the flag was set.
+  if (again) return prepareDeal(userId, dealId);
   return { status, filled, error: problems.length ? problems.join(" ") : null };
 }
 

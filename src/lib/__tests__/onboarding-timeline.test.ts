@@ -383,14 +383,16 @@ describe("services alongside the form (phase 1)", () => {
     },
   ];
 
-  it("starts a phase-1 service on the kickoff call and never gates it", () => {
+  it("starts a phase-1 service the business day after the first call, never on a call day, and never gates it", () => {
     const t = buildTimeline({ closeDate: "2026-09-09", services });
     const kickoff = t.milestones.find((m) => m.key === "kickoff")!;
     expect(t.alongside.map((s) => s.name)).toEqual(["Chemical Delivery Ticket"]);
     const haul = t.alongside[0]!;
     expect(haul.phase).toBe(1);
-    expect(haul.startsOn).toBe(kickoff.date);
-    expect(haul.milestones[0]!.date).toBe(kickoff.date);
+    expect(haul.startsOn).toBe(addBusinessDays(kickoff.date, 1));
+    expect(haul.milestones[0]!.date).toBe(addBusinessDays(kickoff.date, 1));
+    const callDays = new Set(t.milestones.filter((m) => m.kind === "call").map((m) => m.date));
+    expect(callDays.has(haul.startsOn)).toBe(false);
     expect(haul.milestones[0]!.key).toBe("haul:kickoff");
     // Phase 1 companions are not phases: the gated list starts at 2.
     expect(t.phases.map((p) => p.phase)).toEqual([2]);
@@ -412,10 +414,10 @@ describe("services alongside the form (phase 1)", () => {
       closeDate: "2026-09-09",
       services,
       overrides: { kickoff: "2026-09-14" },
-      completed: { "haul:kickoff": "2026-09-14" },
+      completed: { "haul:kickoff": "2026-09-15" },
     });
-    expect(t.alongside[0]!.startsOn).toBe("2026-09-14");
-    expect(t.alongside[0]!.milestones[0]!.doneOn).toBe("2026-09-14");
+    expect(t.alongside[0]!.startsOn).toBe("2026-09-15");
+    expect(t.alongside[0]!.milestones[0]!.doneOn).toBe("2026-09-15");
     expect(t.progress.done).toBe(1);
     expect(t.progress.total).toBe(7 + 4 + 4);
   });
@@ -549,5 +551,26 @@ describe("service steps read like a plan", () => {
     const t = buildTimeline({ closeDate: "2026-09-09" });
     expect(dayLabel(t.milestones.find((m) => m.key === "fieldtest")!)).toBe("Day 6–10");
     expect(dayLabel(t.milestones.find((m) => m.key === "adjust")!)).toBe("Day 11");
+  });
+});
+
+describe("the core meetings' length", () => {
+  it("is the plan's own unless the SOW states one, and then every call reads it", () => {
+    const plain = buildTimeline({ closeDate: "2026-09-21", path: "new_logo" });
+    expect(plain.milestones.filter((m) => m.kind === "call").map((m) => m.minutes)).toEqual([
+      60, 60, 60,
+    ]);
+    const sized = buildTimeline({ closeDate: "2026-09-21", path: "new_logo", sessionMinutes: 30 });
+    expect(sized.milestones.filter((m) => m.kind === "call").map((m) => m.minutes)).toEqual([
+      30, 30, 30,
+    ]);
+    // Nonsense is ignored, not obeyed.
+    expect(
+      buildTimeline({
+        closeDate: "2026-09-21",
+        path: "new_logo",
+        sessionMinutes: 5,
+      }).milestones.find((m) => m.key === "kickoff")!.minutes,
+    ).toBe(60);
   });
 });

@@ -20,6 +20,7 @@ import { buildIcs } from "@/lib/ics";
 import { closeDateFor, extraFormServices, isIntakeForm, timelineFor } from "@/lib/onboarding-plan";
 import {
   belongsAfterForm,
+  normalizeServiceKey,
   normalizeServices,
   SERVICE_KIND_LIST,
   SERVICE_KINDS,
@@ -110,10 +111,15 @@ export function TimelinePanel({
   // edited on the intake, not here.
   const intakeForms = extraFormServices(answers);
   const shown = [...services, ...intakeForms];
-  const writeServices = (next: ServiceSpec[]) =>
+  const writeServices = (next: ServiceSpec[], removed?: string[]) =>
     // Editing materialises the list and retires the legacy knobs, so the two
     // can never disagree.
-    set({ services: next, integration_tier: 0, integration_target: null });
+    set({
+      services: next,
+      integration_tier: 0,
+      integration_target: null,
+      ...(removed ? { removed_services: removed } : {}),
+    });
   const addService = () => {
     const name = newName.trim();
     if (!name) return;
@@ -135,7 +141,17 @@ export function TimelinePanel({
   };
   const updateService = (id: string, patch: Partial<ServiceSpec>) =>
     writeServices(services.map((x) => (x.id === id ? { ...x, ...patch } : x)));
-  const removeService = (id: string) => writeServices(services.filter((x) => x.id !== id));
+  // Removing remembers the key, so the next SOW reading does not put the
+  // row back. The id alone would not do: a re-read mints a new id.
+  const removeService = (id: string) => {
+    const gone = services.find((x) => x.id === id);
+    writeServices(
+      services.filter((x) => x.id !== id),
+      gone
+        ? [...(knobs.removed_services ?? []), normalizeServiceKey(gone.name, gone.kind)]
+        : undefined,
+    );
+  };
 
   // Reading the SOW: the model proposes rows, a person edits and ticks them,
   // apply merges them into the list and the dates follow from the rule.

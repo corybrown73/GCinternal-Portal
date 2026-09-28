@@ -285,6 +285,20 @@ export function belongsAfterForm(kind: ServiceKind): boolean {
   return SERVICE_KINDS[kind].defaultPhase >= 2;
 }
 
+/**
+ * The key two readings of the same service share: the kind and the name
+ * with case, punctuation and spacing gone, so "QuickBooks Online" and
+ * "Quickbooks-online integration" are one row, and a row a person removed
+ * stays removed when the SOW is read again.
+ */
+export function normalizeServiceKey(name: string, kind: ServiceKind): string {
+  const bare = name
+    .toLowerCase()
+    .replace(/\b(integration|form|service|the|a|an)\b/g, " ")
+    .replace(/[^a-z0-9]+/g, "");
+  return `${kind}:${bare || name.toLowerCase().replace(/[^a-z0-9]+/g, "")}`;
+}
+
 /** Length of a service, in weeks: the tier's for an integration, else the catalogue's, unless overridden. */
 export function serviceWeeks(s: ServiceSpec): number {
   if (s.weeks && s.weeks > 0) return s.weeks;

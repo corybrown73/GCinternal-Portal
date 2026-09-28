@@ -37,13 +37,14 @@ Your job is the reading, not the calendar:
 - The SOW's OWN FACTS go in their own fields, as data: reference (the quote or SOW number as printed), signed_date, start_date (the day work begins, when the SOW names one), value (total contract value as a number), contact (the customer contact it names). ISO dates, YYYY-MM-DD. Null when the document does not say. These are the only calendar dates you output.
 - Never put a schedule in the rows: the plan computes every milestone date from the start. A duration the SOW states for one item goes in that row's weeks.
 - notes: exclusions, conditions, deadlines the customer must hit, anything the SOW says that a services list cannot hold. Do NOT repeat the reference, the signed date, the start date, the value or the contact here — they have their own fields. gaps: what the SOW leaves unsaid that the plan needs (which system, how many forms, who owns the mapping).
+- dates: every calendar date the SOW PRINTS that the plan has to respect, typed: {"type":"deadline"|"start"|"signed"|"absence","date":"YYYY-MM-DD","end":null,"who":null,"quote":"the sentence as printed"}. A go-live or production date the customer must hit is a deadline. Only when the document prints a day: "end of October" or "Q4" is a note, not a date — never turn a month or a season into a day. Empty when it prints none.
 - Never invent a service the SOW does not support. Fewer rows, well grounded, beats a full list.
 - If the document is not a SOW, is empty or unreadable, set readable=false, explain in problem, and leave services empty.
 
 ${catalogueForPrompt()}
 
 Return JSON exactly in this shape:
-{"readable":true,"problem":null,"reference":null,"signed_date":null,"start_date":null,"value":null,"contact":null,"summary":"","first_form":null,"seats":null,"services":[{"kind":"integration","name":"","tier":3,"weeks":null,"phase":2,"needs":null,"evidence":null,"confidence":"stated"}],"notes":[],"gaps":[]}`;
+{"readable":true,"problem":null,"reference":null,"signed_date":null,"start_date":null,"value":null,"contact":null,"summary":"","first_form":null,"seats":null,"services":[{"kind":"integration","name":"","tier":3,"weeks":null,"phase":2,"needs":null,"evidence":null,"confidence":"stated"}],"notes":[],"gaps":[],"dates":[]}`;
 
 /**
  * The JSON object in the model's text, wherever it sits: a model that

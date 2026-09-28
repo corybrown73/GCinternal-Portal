@@ -16,7 +16,7 @@ describe("the AE reply", () => {
 
   it("introduces the owner, lays out the three core meetings and offers two Stage 1 times", () => {
     const { subject, body } = aeReplyDraft(base);
-    expect(subject).toBe("Maverick Roofing × GoCanvas — booking your kickoff");
+    expect(subject).toBe("Maverick Roofing × GoCanvas — booking your Stage 1");
     expect(body).toMatch(/^Hi Ray,/);
     expect(body).toContain("I'm Dana Whitfield");
     expect(body).toContain("Stage 2 — Make It Work for Them");

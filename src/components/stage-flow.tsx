@@ -12,6 +12,7 @@ import { FactsStep, FlowStep, NotesIn, SowStep } from "@/components/intake-panel
 import { assignDealFn, claimDealFn, getDealAssignment } from "@/lib/assignment.functions";
 import { MemberOptions } from "@/components/member-options";
 import { useOptimisticTick } from "@/lib/use-optimistic-tick";
+import { bookingWarnings, typedDatesFor } from "@/lib/watch-outs";
 import { canEditDeal, canManage, useProfile } from "@/lib/auth";
 import { dealQuery, type DealData } from "@/lib/deal-query";
 import {
@@ -1224,6 +1225,7 @@ function InviteLinks({
   title = "kickoff and first form",
   about = "Training day 1: introductions, your process walked together, then your first form built and published.",
   label = "Send the invite:",
+  minutes = 60,
 }: {
   deal: DealData;
   date: string;
@@ -1233,6 +1235,8 @@ function InviteLinks({
   title?: string;
   about?: string;
   label?: string;
+  /** The meeting's length, from the plan's milestone. */
+  minutes?: number;
 }) {
   const share = (deal.account as { welcome_share_url?: string | null }).welcome_share_url ?? null;
   const token = share ? share.split("/").filter(Boolean).pop() : null;
@@ -1243,7 +1247,7 @@ function InviteLinks({
       date,
       time,
       timezone: zone,
-      minutes: 60,
+      minutes,
       details: `${about}${share ? `\n\nYour welcome page: ${share}` : ""}`,
       guests: deal.account.primary_contact_email ? [deal.account.primary_contact_email] : [],
     });
@@ -1387,6 +1391,13 @@ function BookCoreBody({
   });
   const booked = CORE_MEETINGS.every((c) => t.overrides[c.key] && t.times[c.key]);
   const order = rows.every((r, i) => i === 0 || r.date > rows[i - 1]!.date);
+  // What each chosen day runs into — a stakeholder's absence, a deadline it
+  // falls after — from the dates the SOW and the calls stated.
+  const latestBrief =
+    deal.briefs.find((b) => b.status === "complete" && b.generator === "llm") ?? null;
+  const typed = typedDatesFor({ brief: latestBrief?.structured_json ?? null, intake });
+  const typedAll = [...(typed.sow ?? []), ...(typed.brief ?? [])];
+  const warningsFor = (date: string) => (date ? bookingWarnings(date, typedAll) : []);
   const changed =
     rows.some((r) => r.date !== (t.overrides[r.key] ?? "") || r.time !== (t.times[r.key] ?? "")) ||
     zone !== (t.timezone ?? "");
@@ -1426,6 +1437,15 @@ function BookCoreBody({
                 </option>
               ))}
             </select>
+            {warningsFor(rows[i]!.date).map((w) => (
+              <span
+                key={w}
+                role="alert"
+                className="w-full text-[11px] text-amber-800 dark:text-amber-300"
+              >
+                {w} — check the date before it goes out.
+              </span>
+            ))}
           </div>
         ))}
       </div>
@@ -1485,6 +1505,7 @@ function BookCoreBody({
                   title={labelFor(c.key)}
                   about={plan.milestones.find((x) => x.key === c.key)?.detail ?? ""}
                   label={`${labelFor(c.key)} — ${t.overrides[c.key]} ${clock(t.times[c.key]!)}:`}
+                  minutes={plan.milestones.find((x) => x.key === c.key)?.minutes ?? 60}
                 />
               ))
             : null}

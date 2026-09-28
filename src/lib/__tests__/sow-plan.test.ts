@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { buildTimeline } from "../onboarding-timeline";
+import { addBusinessDays, buildTimeline } from "../onboarding-timeline";
 import {
   catalogueForPrompt,
   mergeProposal,
@@ -8,6 +8,8 @@ import {
   rowToService,
   rowWeeks,
   sowPlanProposalSchema,
+  sowTimelinePatch,
+  trainingSessionMinutes,
   type SowPlanRow,
 } from "../sow-plan";
 
@@ -81,7 +83,9 @@ describe("the SOW read into the plan", () => {
     const services = mergeProposal([], [qb, jsa], (r) => r.kind);
     const t = buildTimeline({ closeDate: "2026-09-09", services });
     expect(t.alongside[0]!.name).toBe("Job Safety Analysis");
-    expect(t.alongside[0]!.startsOn).toBe(t.milestones.find((m) => m.key === "kickoff")!.date);
+    expect(t.alongside[0]!.startsOn).toBe(
+      addBusinessDays(t.milestones.find((m) => m.key === "kickoff")!.date, 1),
+    );
     expect(t.phases[0]!.services[0]!.name).toBe("QuickBooks Online");
     expect(t.phases[0]!.tentative).toBe(true);
   });
@@ -192,7 +196,101 @@ describe("normalizeProposal", () => {
       ],
       notes: [],
       gaps: [],
+      dates: [],
     });
     expect(p.services.map((r) => r.phase)).toEqual([1, 1, 3]);
+  });
+});
+
+describe("reading the SOW twice", () => {
+  const existing = mergeProposal([], [qb, jsa], (r) => `${r.kind}-1`);
+
+  it("merges a reworded row onto the one it already has, never a duplicate", () => {
+    const again = mergeProposal(
+      existing,
+      [
+        { ...qb, name: "Quickbooks Online integration", tier: 4 },
+        { ...jsa, name: "Job Safety Analysis form" },
+      ],
+      (r) => `${r.kind}-2`,
+    );
+    expect(again.map((s) => s.id)).toEqual(["integration-1", "paid_form-1"]);
+    expect(again.find((s) => s.id === "integration-1")!.tier).toBe(4);
+  });
+
+  it("does not resurrect a row a person removed", () => {
+    const intake = {
+      wanted_forms: [],
+      timeline: {
+        services: existing.filter((s) => s.kind !== "integration"),
+        removed_services: ["integration:quickbooksonline"],
+      },
+    };
+    const patch = sowTimelinePatch(
+      intake as never,
+      { services: [qb, jsa], notes: [] },
+      (r) => r.kind,
+    );
+    expect((patch.timeline["services"] as Array<{ kind: string }>).map((s) => s.kind)).toEqual([
+      "paid_form",
+    ]);
+  });
+
+  it("reads a training row that describes the plan's own calls as their length, not a block", () => {
+    const training: SowPlanRow = {
+      ...jsa,
+      kind: "training",
+      name: "Field user training session (30-minute, recorded)",
+      evidence: "Three (3) training sessions, 30 minutes each, recorded",
+    };
+    expect(trainingSessionMinutes(training)).toBe(30);
+    const patch = sowTimelinePatch(
+      { wanted_forms: [], timeline: {} } as never,
+      { services: [training, qb], notes: [] },
+      (r) => r.kind,
+    );
+    expect(patch.sessionMinutes).toBe(30);
+    expect(patch.timeline["session_minutes"]).toBe(30);
+    expect((patch.timeline["services"] as Array<{ kind: string }>).map((s) => s.kind)).toEqual([
+      "integration",
+    ]);
+    // A stand-alone admin training block with its own count stays a block.
+    expect(
+      trainingSessionMinutes({
+        ...training,
+        name: "Admin training",
+        evidence: "two 45-minute admin sessions",
+      }),
+    ).toBeNull();
+  });
+
+  it("carries the SOW's typed dates onto the plan, and only printed days survive", () => {
+    const parsed = sowPlanProposalSchema.parse({
+      readable: true,
+      problem: null,
+      summary: "",
+      first_form: null,
+      seats: null,
+      services: [],
+      notes: [],
+      gaps: [],
+      dates: [
+        {
+          type: "deadline",
+          date: "2026-10-30",
+          end: null,
+          who: null,
+          quote: "In production by 30 Oct",
+        },
+        { type: "deadline", date: "end of October", end: null, who: null, quote: "nope" },
+      ],
+    });
+    expect(parsed.dates).toHaveLength(1);
+    const patch = sowTimelinePatch(
+      { wanted_forms: [], timeline: {} } as never,
+      { services: [], notes: [], dates: parsed.dates },
+      (r) => r.kind,
+    );
+    expect(patch.timeline["sow_dates"]).toEqual(parsed.dates);
   });
 });

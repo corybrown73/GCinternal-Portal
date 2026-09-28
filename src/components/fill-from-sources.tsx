@@ -1,4 +1,3 @@
-import { useEffect, useRef } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { RefreshCw, Sparkles } from "lucide-react";
@@ -33,20 +32,14 @@ export function useStartReading(dealId: string) {
 
 /**
  * Where the reading stands, from the record: reading now, what it filled,
- * or what went wrong. Also queues the extra run a mid-flight upload asked
- * for, once the first finishes.
+ * or what went wrong. The extra run a mid-flight upload asked for happens
+ * on the server at the end of the first; nothing here starts a reading.
  */
 export function ReadingStatus({ deal, editable }: { deal: DealData; editable: boolean }) {
   const intake = readIntake(deal.account.intake);
   const r = intake.ai_reading;
   const start = useStartReading(deal.account.id);
   const running = readingInFlight(r);
-  const queued = useRef<string | null>(null);
-  useEffect(() => {
-    if (!editable || !r || running || !r.again || queued.current === r.started_at) return;
-    queued.current = r.started_at;
-    start.mutate();
-  }, [editable, r, running, start]);
 
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px]">

@@ -915,6 +915,8 @@ export type TimelineOptions = {
   times?: Record<string, string>;
   /** IANA zone the times are in. */
   timezone?: string | null;
+  /** The core meetings' length when the SOW states one; the plan's own otherwise. */
+  sessionMinutes?: number | null;
   /**
    * Everything bought beyond the first form, each assigned to a phase ≥ 2.
    * See onboarding-services.ts. The legacy integrationTier/Target pair is
@@ -1134,10 +1136,19 @@ export function buildTimeline(options: TimelineOptions): Timeline {
   const training = isTrainingPlan(path, options.trainingOnly);
   const existingBuild: ExistingBuild | null =
     path === "existing" && !training ? (options.existingBuild ?? "review") : null;
+  // One length for the core meetings, from the SOW when it states one:
+  // the AE's email, the invites, the welcome page and the .ics all read
+  // the milestone, so this is the only place it is set.
+  const sessionMinutes =
+    options.sessionMinutes && options.sessionMinutes >= 15 ? options.sessionMinutes : null;
   const milestones = cascade(
     planFor(path, { trainingOnly: options.trainingOnly, existingBuild }),
     (spec) =>
       spec.day === 0 ? options.closeDate : addBusinessDays(options.closeDate, spec.day, holidays),
+  ).map((m) =>
+    sessionMinutes && m.kind === "call" && m.minutes !== undefined
+      ? { ...m, minutes: sessionMinutes }
+      : m,
   );
 
   const liveDate = milestones[milestones.length - 1]!.date;
@@ -1229,12 +1240,20 @@ export function buildTimeline(options: TimelineOptions): Timeline {
     };
   };
 
-  // Phase 1 services run alongside the form: their first step is on the
-  // kickoff call, so they start the day the form does and never wait.
+  // Phase 1 services run alongside the form from the first call — on the
+  // next free day after it, never on a day that already holds one of the
+  // plan's calls, so a customer is not booked twice in one afternoon.
   const kickoffDate = milestones.find((m) => m.key === "kickoff")?.date ?? liveDate;
+  const callDays = new Set(milestones.filter((m) => m.kind === "call").map((m) => m.date));
+  const nextFreeDay = (from: string): string => {
+    let d = from;
+    while (callDays.has(d)) d = addBusinessDays(d, 1, holidays);
+    return d;
+  };
+  const alongsideStart = nextFreeDay(addBusinessDays(kickoffDate, 1, holidays));
   const alongside: ServicePlan[] = services
     .filter((x) => x.phase <= 1)
-    .map((svc) => planService(svc, 1, kickoffDate));
+    .map((svc) => planService(svc, 1, alongsideStart));
 
   const phaseNumbers = [...new Set(services.filter((x) => x.phase >= 2).map((x) => x.phase))].sort(
     (a, b) => a - b,
