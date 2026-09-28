@@ -1,4 +1,5 @@
 import { humanize } from "@/lib/hub-format";
+import { stampDay } from "@/lib/stage-flow";
 import type { ImplHealth } from "@/lib/customer360-derive";
 
 /**
@@ -78,9 +79,7 @@ export function HealthNote({
             · signals say {humanize(computed)}
           </span>
         ) : null}
-        {recordedAt ? (
-          <span className="ml-1 font-mono">{new Date(recordedAt).toISOString().slice(0, 10)}</span>
-        ) : null}
+        {recordedAt ? <span className="ml-1 font-mono">{stampDay(recordedAt)}</span> : null}
       </span>
     );
   }

@@ -939,7 +939,7 @@ export function TimelinePanel({
           key="settings"
           chip={null}
           title="Plan settings"
-          summary={`Closed ${shortDay(close.date)}${close.source === "today" ? " (not closed yet — planned as if today)" : ""} · call times in ${tzLabel} · ${
+          summary={`Closed ${shortDay(close.date)}${close.source === "today" ? " (not closed yet — planned from today)" : ""} · call times in ${tzLabel} · ${
             knobs.holidays.length
               ? `${knobs.holidays.length} holiday${knobs.holidays.length === 1 ? "" : "s"} skipped`
               : "no holidays"

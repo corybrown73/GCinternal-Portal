@@ -1033,6 +1033,8 @@ export type Timeline = {
   training: boolean;
   /** An existing account's services with no form work: one walkthrough, then the services. */
   servicesOnly: boolean;
+  /** The days skipped besides weekends, so every counter on this plan skips the same ones. */
+  holidays: string[];
   /** On an existing account, who builds the form in phase 1. Null elsewhere. */
   existingBuild: ExistingBuild | null;
   milestones: Milestone[];
@@ -1404,6 +1406,7 @@ export function buildTimeline(options: TimelineOptions): Timeline {
     path,
     training,
     servicesOnly,
+    holidays: [...holidays],
     existingBuild,
     milestones,
     liveDate,
@@ -1467,7 +1470,7 @@ export type DayCounter = {
 export function dayCounter(
   t: Timeline,
   todayIso: string,
-  holidays: readonly string[] = [],
+  holidays: readonly string[] = t.holidays ?? [],
 ): DayCounter {
   const live = t.milestones[t.milestones.length - 1]!;
   const total = live.day;

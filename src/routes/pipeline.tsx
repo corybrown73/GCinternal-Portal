@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { dealValue } from "@/lib/deal-value";
 import { queryOptions, useMutation, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 
@@ -68,7 +69,7 @@ function PipelinePage() {
   // to add it, instead of a browser dialog.
   const gate = moveMutation.isError ? parseWonGate((moveMutation.error as Error).message) : null;
 
-  const arrTotal = data.deals.reduce((sum, d) => sum + (d.arr ?? 0), 0);
+  const arrTotal = data.deals.reduce((sum, d) => sum + (dealValue(d) ?? 0), 0);
 
   return (
     <>
@@ -78,7 +79,8 @@ function PipelinePage() {
         actions={
           <div className="flex items-center gap-2">
             <span className="font-mono text-[11px] text-muted-foreground">
-              {data.deals.length} deals · {fmtMoney(arrTotal)}
+              {data.deals.length} {data.deals.length === 1 ? "deal" : "deals"} ·{" "}
+              {fmtMoney(arrTotal)}
             </span>
             <ScopeSwitch scope={data.scope} onChange={setScope} />
             {editable ? (

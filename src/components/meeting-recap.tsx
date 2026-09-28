@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { stampDay } from "@/lib/stage-flow";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { Copy } from "lucide-react";
@@ -117,10 +118,7 @@ export function MeetingRecap({
       <p className="text-[12px] font-medium">
         {meetingLabel} — recap
         {saved ? (
-          <span className="font-normal text-muted-foreground">
-            {" "}
-            · saved {saved.at.slice(0, 10)}
-          </span>
+          <span className="font-normal text-muted-foreground"> · saved {stampDay(saved.at)}</span>
         ) : null}
       </p>
       <div className="grid gap-2 sm:grid-cols-2">

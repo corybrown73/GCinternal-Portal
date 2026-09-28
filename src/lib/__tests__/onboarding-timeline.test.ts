@@ -630,3 +630,32 @@ describe("an existing account with services and no form work", () => {
     expect(t.milestones.find((m) => m.key === "kickoff")!.minutes).toBe(45);
   });
 });
+
+describe("the day counter, at the moments that matter", () => {
+  const t = buildTimeline({ closeDate: "2026-09-21", path: "new_logo", holidays: ["2026-09-23"] });
+
+  it("two business days after the close says day 2 and counts to Functional", () => {
+    // Sep 23 is a holiday on this plan, so Thursday the 24th is day 2.
+    const c = dayCounter(t, "2026-09-24");
+    expect(c).toMatchObject({ state: "during", day: 2 });
+    expect(c.label).toBe("Day 2 of 15");
+    expect(c.detail).toMatch(/^Functional .* · in \d+ business days$/);
+    // The label's day and the detail's countdown come from the same plan and
+    // the same holidays: they add up to the plan's length.
+    expect(c.day + c.toLive).toBe(15);
+  });
+
+  it("before the close says when it begins", () => {
+    expect(dayCounter(t, "2026-09-17")).toMatchObject({
+      state: "before",
+      label: "Begins in 2 days",
+    });
+  });
+
+  it("on the planned day says Functional today", () => {
+    expect(dayCounter(t, t.liveDate)).toMatchObject({
+      state: "live_today",
+      detail: "Functional today",
+    });
+  });
+});

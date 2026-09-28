@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { dealValue } from "@/lib/deal-value";
 import { Link } from "@tanstack/react-router";
 import {
   DndContext,
@@ -72,7 +73,7 @@ function DealCard({
         overlay ? "rotate-1 shadow-md" : "hover:bg-muted/60",
       )}
     >
-      <p className="truncate text-[13px] font-medium leading-snug">{deal.name}</p>
+      <p className="break-words text-[13px] font-medium leading-snug">{deal.name}</p>
       {/* What kind of deal, and whether it is ready to close: the two things
           a manager scans the board for and could not see. */}
       <div className="mt-1 flex flex-wrap items-center gap-1 text-[10px]">
@@ -121,7 +122,7 @@ function DealCard({
         </p>
       ) : null}
       <div className="mt-1 flex items-center justify-between font-mono text-[11px] text-muted-foreground">
-        <span>{fmtArr(deal.arr)}</span>
+        <span>{fmtArr(dealValue(deal))}</span>
         {deal.business_days_in_stage !== undefined ? (
           <span
             title="Business days in this stage"
@@ -242,9 +243,9 @@ function Column({
   terminalKey: string;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: stage.key, disabled: !stage.enterable });
-  const arrTotal = deals.reduce((sum, d) => sum + (d.arr ?? 0), 0);
+  const arrTotal = deals.reduce((sum, d) => sum + (dealValue(d) ?? 0), 0);
   return (
-    <div className="flex w-60 flex-none flex-col">
+    <div className="flex w-64 flex-none flex-col">
       <ColumnHeading
         label={stage.label}
         count={deals.length}
@@ -281,11 +282,11 @@ function Column({
  */
 function OrphanColumn({ stageKey, deals }: { stageKey: string; deals: BoardDeal[] }) {
   return (
-    <div className="flex w-60 flex-none flex-col">
+    <div className="flex w-64 flex-none flex-col">
       <ColumnHeading
         label={stageKey}
         count={deals.length}
-        arrTotal={deals.reduce((sum, d) => sum + (d.arr ?? 0), 0)}
+        arrTotal={deals.reduce((sum, d) => sum + (dealValue(d) ?? 0), 0)}
         dotClass={null}
         note="Not in the configured pipeline"
       />
@@ -360,7 +361,9 @@ export function DealBoard({
       {/* w-full + min-w-0 so the strip scrolls from its own left edge: inside
           a flex parent it could size to its content, and the first column's
           left half was scrolled off where nothing could bring it back. */}
-      <div className="flex w-full min-w-0 items-start gap-3 overflow-x-auto pb-4">
+      {/* Sideways is the only way to see every stage; the scrollbar stays
+          visible so nobody has to guess there is more to the right. */}
+      <div className="flex w-full min-w-0 items-start gap-3 overflow-x-auto pb-4 [scrollbar-width:thin] [&::-webkit-scrollbar]:h-2 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border [&::-webkit-scrollbar-track]:bg-transparent">
         {stages.map((stage) => (
           <Column
             key={stage.key}

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { stampDay } from "@/lib/stage-flow";
 import { CalendarDays, CheckCircle2, Circle, Lock, MessageSquare, Paperclip } from "lucide-react";
 
 import type { SharedMessage, SharedPlan, SharedTask } from "@/lib/shared-plan";
@@ -293,7 +294,7 @@ function MessageRow({ message }: { message: SharedMessage }) {
           {mine ? "your team" : "GoCanvas"}
         </span>
         <span className="ml-auto font-mono text-[10px] text-muted-foreground">
-          {message.at.slice(0, 10)}
+          {stampDay(message.at)}
         </span>
       </p>
       {message.withdrawn ? (

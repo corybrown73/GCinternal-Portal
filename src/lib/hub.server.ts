@@ -2,6 +2,7 @@ import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { technicalSolutionNextAction } from "./customer360-derive";
 import { normalizeStage } from "./hub-format";
 import { dealStageFor } from "./deal-stage";
+import { dealValue } from "./deal-value";
 import { dealStagesFor } from "./server/deal-stage";
 import { dealFactsFor } from "./server/deal-facts";
 import { nextLifecycleStage } from "./stage-advance-input";
@@ -140,10 +141,13 @@ export async function loadImplementations(
       customer_name: c.name ? demo.org(c.name, c.id) : "Unknown customer",
       segment: c.segment ?? null,
       industry: c.industry ?? null,
-      arr: demo.arr(c.arr ?? null),
+      // The deal's own value when the project came from one; the customer's
+      // ARR otherwise. One number per card, the same one the pipeline shows.
+      arr: demo.arr(dealStages.get(i.id)?.value ?? c.arr ?? null),
       current_stage: i.current_stage,
       deal_stage:
-        dealStages.get(i.id) ?? dealStageFor({ deal_stage: null, current_stage: i.current_stage }),
+        dealStages.get(i.id)?.stage ??
+        dealStageFor({ deal_stage: null, current_stage: i.current_stage }),
       deal_id: i.deal_id ?? null,
       stage_entered_at: i.stage_entered_at,
       status: i.status,
@@ -464,7 +468,7 @@ export async function loadCustomer360(
     for (const d of (dealRows ?? []) as any[]) {
       dealNames.set(d.id, d.name);
       dealStageById.set(d.id, d.stage);
-      dealArrById.set(d.id, d.arr ?? d.sow_value ?? null);
+      dealArrById.set(d.id, dealValue(d));
     }
   }
   const dealStageOf = (i: any) =>
@@ -1375,7 +1379,7 @@ export async function loadTechnicalSolution(id: string): Promise<TechnicalSoluti
           id: impl.id,
           name: impl.name,
           current_stage: impl.current_stage,
-          deal_stage: (await dealStagesFor([impl])).get(impl.id)!,
+          deal_stage: (await dealStagesFor([impl])).get(impl.id)!.stage,
         }
       : null,
     requirement: requirement
