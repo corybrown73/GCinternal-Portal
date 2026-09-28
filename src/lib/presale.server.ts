@@ -1,6 +1,6 @@
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { firstFormName as firstFormNameOf } from "./intake-answers";
-import { nextChecklistTask } from "./stage-flow";
+import { nextChecklistTask, stageFlow } from "./stage-flow";
 import { TERM_LABELS } from "./terms";
 import { resolveAccountId, transitionStage, upsertAccount } from "./server/accounts";
 import { accountUpsertSchema } from "./server/schemas";
@@ -2374,8 +2374,7 @@ export async function loadDealInbox(scope: ResolvedScope | null): Promise<DealIn
   if (open.length === 0) return [];
   const ids = open.map((d) => d.id);
 
-  const [{ data: impls }, { data: ledger }, { data: briefs }] = await Promise.all([
-    db().from("implementations").select("deal_id").in("deal_id", ids),
+  const [{ data: ledger }, { data: briefs }] = await Promise.all([
     db()
       .from("portal_assignments")
       .select("deal_id, team_member_id, created_at, team_members(name)")
@@ -2388,9 +2387,6 @@ export async function loadDealInbox(scope: ResolvedScope | null): Promise<DealIn
       .eq("generator", "llm")
       .in("account_id", ids),
   ]);
-  const started = new Set(
-    ((impls ?? []) as Array<{ deal_id: string | null }>).map((r) => r.deal_id),
-  );
   const briefed = new Set(
     ((briefs ?? []) as Array<{ account_id: string }>).map((r) => r.account_id),
   );
@@ -2400,13 +2396,21 @@ export async function loadDealInbox(scope: ResolvedScope | null): Promise<DealIn
   const me = scope?.viewer.teamMemberId ?? null;
   const person = scope?.person?.teamMemberId ?? null;
 
+  // "Before kickoff" is a fact about the deal, not about whether a project
+  // record exists: closed, and the core meetings not yet booked. A deal
+  // whose project was created at the close used to vanish from here while
+  // nobody had booked a thing.
+  const BEFORE_KICKOFF: ReadonlyArray<string> = [
+    "closed_won",
+    "field_fusion_setup",
+    "onboarding_kickoff",
+  ];
   return open
-    .filter((d) => !started.has(d.id))
-    .map((d): DealInboxRow => {
+    .filter((d) => BEFORE_KICKOFF.includes(d.stage))
+    .flatMap((d): DealInboxRow[] => {
       const o = owner.get(d.id);
       const ownerId = o?.id ?? null;
-      // The checklist's own next task: Home says what the deal says.
-      const next = nextChecklistTask({
+      const input = {
         stage: d.stage,
         intake: d.intake,
         owner: ownerId ? (o?.name ?? "someone") : null,
@@ -2414,19 +2418,27 @@ export async function loadDealInbox(scope: ResolvedScope | null): Promise<DealIn
         hasSow: d.has_sow,
         hasBrief: briefed.has(d.id),
         hasLink: Boolean((d as { welcome_share_url?: string | null }).welcome_share_url),
-      });
-      return {
-        id: d.id,
-        name: d.name,
-        stage: d.stage,
-        stage_label: labels.get(d.stage) ?? d.stage,
-        stage_entered_at: d.stage_entered_at,
-        path: d.path,
-        owner_name: ownerId ? (o?.name ?? null) : null,
-        mine: Boolean(me) && ownerId === me,
-        unclaimed: !ownerId,
-        next_step: next,
       };
+      const booking = stageFlow(input)
+        .stages.find((s) => s.key === "pre_kickoff")
+        ?.tasks.find((t) => t.key === "book_core" || t.key === "kickoff");
+      if (booking?.done) return [];
+      // The checklist's own next task: Home says what the deal says.
+      const next = nextChecklistTask(input);
+      return [
+        {
+          id: d.id,
+          name: d.name,
+          stage: d.stage,
+          stage_label: labels.get(d.stage) ?? d.stage,
+          stage_entered_at: d.stage_entered_at,
+          path: d.path,
+          owner_name: ownerId ? (o?.name ?? null) : null,
+          mine: Boolean(me) && ownerId === me,
+          unclaimed: !ownerId,
+          next_step: next,
+        },
+      ];
     })
     .filter((row) => {
       const mode = scope?.scope.mode ?? "all";

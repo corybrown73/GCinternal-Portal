@@ -277,7 +277,7 @@ function DealInboxPanel({ scope }: { scope: string | null }) {
         </span>
       }
       count={rows.length}
-      meta="Closed or closing deals that have not started onboarding. Each one names its next step."
+      meta="Closed deals whose core meetings are not booked yet — Closed Won, Field Fusion setup or Pre-kickoff. Each one names its next step."
     >
       {q.isPending ? (
         <NoRows label="Loading deals…" />

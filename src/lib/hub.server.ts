@@ -3,6 +3,7 @@ import { technicalSolutionNextAction } from "./customer360-derive";
 import { normalizeStage } from "./hub-format";
 import { dealStageFor } from "./deal-stage";
 import { dealStagesFor } from "./server/deal-stage";
+import { dealFactsFor } from "./server/deal-facts";
 import { nextLifecycleStage } from "./stage-advance-input";
 import { LAUNCH_STAGE, launchAcceptanceGate, launchGateMessage } from "./launch-gate";
 import type {
@@ -143,6 +144,7 @@ export async function loadImplementations(
       current_stage: i.current_stage,
       deal_stage:
         dealStages.get(i.id) ?? dealStageFor({ deal_stage: null, current_stage: i.current_stage }),
+      deal_id: i.deal_id ?? null,
       stage_entered_at: i.stage_entered_at,
       status: i.status,
       health_recorded: i.health_recorded ?? null,
@@ -350,8 +352,15 @@ export async function loadHome(scope?: ResolvedScope | null): Promise<HomeData> 
   const decisionRows = allDecisions ?? [];
   const approvalRows = allApprovals ?? [];
 
+  // What the deal itself says is wrong — a missed SOW date, a call not
+  // ticked, nobody owning it — read once for every project on the page.
+  const dealFacts = await dealFactsFor(
+    implementations.map((i) => i.deal_id).filter(Boolean) as string[],
+  );
+
   const triage = implementations.map((i) => ({
     implementation_id: i.id,
+    deal: i.deal_id ? (dealFacts.get(i.deal_id) ?? null) : null,
     commitments: commitments.filter((c) => c.implementation_id === i.id),
     risks: forImpl(riskRows, i.id),
     issues: forImpl(issueRows, i.id),

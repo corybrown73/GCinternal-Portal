@@ -1,0 +1,149 @@
+import { dealStageLabel } from "./deal-stage";
+import { shortDay } from "./onboarding-timeline";
+import type { AccountStage } from "./presale-stages";
+import { stuckLevel } from "./stage-flow";
+
+/**
+ * Why a deal needs somebody today, from facts about the deal itself.
+ *
+ * Home used to say "On track — nothing open against it" for any project
+ * with no risk, issue or escalation logged, which is nearly all of them:
+ * the trouble a deal is actually in lives on the deal — a SOW go-live the
+ * plan misses, a stakeholder out during a stage, a call nobody ticked,
+ * nobody owning it since the close. The server gathers those facts once
+ * (server/deal-facts) and this turns them into ranked reasons that the
+ * triage row and the health chip both read, so a card never claims calm
+ * the deal page contradicts.
+ */
+export type DealFacts = {
+  id: string;
+  name: string;
+  stage: AccountStage;
+  /** Business days since the deal entered its stage. */
+  business_days_in_stage: number;
+  has_notes: boolean;
+  has_sow: boolean;
+  owner_name: string | null;
+  /** The pre-kickoff booking task (all core meetings, or the kickoff) is done. */
+  core_booked: boolean;
+  /** The checklist's next task, when there is one. */
+  next_step: string | null;
+  /** Plan calls past their date and not ticked, on Onboarding. */
+  overdue_calls: Array<{ label: string; date: string; businessDaysLate: number }>;
+  /** Watch-outs the plan contradicts (severity "conflict" only). */
+  watch_outs: Array<{ title: string; detail: string }>;
+};
+
+export type ActionBucket = "act_now" | "needs_attention";
+
+export type ActionReason = {
+  bucket: ActionBucket;
+  /** Lower sorts first; comparable with the triage ranks (act now < 2, attention 2–4). */
+  rank: number;
+  reason: string;
+  /** What is at stake, appended to the commercial context. */
+  impact: string;
+  tab: "overview" | "journey";
+  next?: string;
+};
+
+/** Stages where a deal is being worked by a person and can be stuck. */
+const WORKED: ReadonlyArray<AccountStage> = [
+  "closed_won",
+  "field_fusion_setup",
+  "onboarding_kickoff",
+  "in_onboarding",
+];
+
+const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
+
+/** Ranked reasons, most urgent first. Empty when the deal is fine by its own facts. */
+export function needsAction(deal: DealFacts | null | undefined): ActionReason[] {
+  if (!deal || !WORKED.includes(deal.stage)) return [];
+  const out: ActionReason[] = [];
+  const where = dealStageLabel(deal.stage);
+
+  if (deal.watch_outs.length) {
+    const titles = deal.watch_outs.map((w) => w.title);
+    out.push({
+      bucket: "act_now",
+      rank: 1.2,
+      reason:
+        titles.slice(0, 2).join(" · ") + (titles.length > 2 ? ` · +${titles.length - 2}` : ""),
+      impact: deal.watch_outs[0]!.detail,
+      tab: "overview",
+      next: "Fix the plan, or say why it stands, on the deal's Watch-outs",
+    });
+  }
+
+  if (!deal.owner_name && deal.business_days_in_stage >= 1 && deal.stage !== "in_onboarding") {
+    out.push({
+      bucket: "act_now",
+      rank: 1.6,
+      reason: `Nobody owns it · closed ${plural(deal.business_days_in_stage, "business day")} ago`,
+      impact: "the customer has no one to hear from",
+      tab: "overview",
+      next: "Assign an owner, or ask the pool to claim it",
+    });
+  }
+
+  const late = [...deal.overdue_calls].sort((a, b) => b.businessDaysLate - a.businessDaysLate)[0];
+  if (late) {
+    const days = late.businessDaysLate;
+    out.push({
+      bucket: days >= 3 ? "act_now" : "needs_attention",
+      rank: days >= 3 ? 1.8 : 2.5,
+      reason: `${late.label} was due ${shortDay(late.date)} · ${plural(days, "business day")} late`,
+      impact:
+        deal.overdue_calls.length > 1
+          ? `${plural(deal.overdue_calls.length, "plan call")} not ticked`
+          : "the plan's next date depends on it",
+      tab: "overview",
+      next: `Tick ${late.label} if it happened, or rebook it`,
+    });
+  }
+
+  const stuck = stuckLevel(deal.stage, deal.business_days_in_stage);
+  if (stuck !== "ok") {
+    out.push({
+      bucket: stuck === "escalate" ? "act_now" : "needs_attention",
+      rank: stuck === "escalate" ? 1.9 : 3.0,
+      reason: `Stuck ${plural(deal.business_days_in_stage, "business day")} in ${where}`,
+      impact: deal.next_step ? `next: ${deal.next_step}` : "nothing left on the checklist",
+      tab: "overview",
+      ...(deal.next_step ? { next: deal.next_step } : {}),
+    });
+  }
+
+  const missing = [!deal.has_notes ? "Gong brief" : null, !deal.has_sow ? "SOW" : null].filter(
+    Boolean,
+  ) as string[];
+  if (missing.length) {
+    out.push({
+      bucket: "needs_attention",
+      rank: 2.8,
+      reason: `No ${missing.join(" or ")} on the deal`,
+      impact: "the plan is built from what is here",
+      tab: "overview",
+      next: `Add the ${missing[0]}`,
+    });
+  }
+
+  if (deal.stage === "onboarding_kickoff" && !deal.core_booked) {
+    out.push({
+      bucket: "needs_attention",
+      rank: 3.3,
+      reason: "Core meetings not booked",
+      impact: "the customer's dates are not set",
+      tab: "overview",
+      next: "Book the core meetings",
+    });
+  }
+
+  return out.sort((a, b) => a.rank - b.rank);
+}
+
+/** The health an "act now" reason implies for the chip: never calmer than at risk. */
+export function healthFloor(reasons: ActionReason[]): "at_risk" | null {
+  return reasons.some((r) => r.bucket === "act_now") ? "at_risk" : null;
+}

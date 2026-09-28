@@ -1,3 +1,4 @@
+import type { DealFacts } from "./needs-action";
 import type { AccountStage } from "./presale-stages";
 
 export type ImplStatus = "on_track" | "at_risk" | "blocked" | "idle" | string;
@@ -13,6 +14,8 @@ export type ImplementationRow = {
   current_stage: string;
   /** The deal's stage — the one every deal-facing surface shows. See lib/deal-stage. */
   deal_stage: AccountStage;
+  /** The pre-sales deal this project came from, when it has one. */
+  deal_id: string | null;
   stage_entered_at: string;
   status: ImplStatus;
   /** The owner's own statement of health (0010). Null = never recorded. */
@@ -68,6 +71,8 @@ export type TriageBundle = {
   approvals: any[];
   /** Adoption areas with their observations, for adoption coverage. */
   adoption: any[];
+  /** The linked deal's own facts (checklist, plan, watch-outs); null without a deal. */
+  deal?: DealFacts | null;
 };
 
 export type HomeData = {

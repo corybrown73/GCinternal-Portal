@@ -16,6 +16,7 @@ import { launchAcceptanceGate } from "./launch-gate";
 import { nextLifecycleStage } from "./stage-advance-input";
 import { normalizeStage } from "./hub-format";
 import { dealStageLabel } from "./deal-stage";
+import { healthFloor, needsAction } from "./needs-action";
 import { daysUntilDate } from "./dates";
 import {
   STAGE_FLAG_DAYS,
@@ -80,7 +81,18 @@ export function healthByImplementation(
 ): Map<string, ReturnType<typeof deriveHealth>> {
   const byImpl = new Map(triage.map((t) => [t.implementation_id, t]));
   return new Map(
-    implementations.map((impl) => [impl.id, deriveHealth(asRecord(byImpl.get(impl.id)), impl)]),
+    implementations.map((impl) => {
+      const bundle = byImpl.get(impl.id);
+      const derived = deriveHealth(asRecord(bundle), impl);
+      // The deal's own trouble — a missed SOW date, a call nobody ticked —
+      // is never "on track", whatever the logged risks say.
+      const reasons = needsAction(bundle?.deal);
+      const floor = healthFloor(reasons);
+      if (floor && (derived.level === "on_track" || derived.level === "no_signal")) {
+        return [impl.id, { ...derived, level: floor, reason: reasons[0]!.reason }];
+      }
+      return [impl.id, derived];
+    }),
   );
 }
 
@@ -89,8 +101,47 @@ const milestoneMissed = (m: any) =>
   (["missed", "overdue", "blocked"].includes((m.status ?? "").toLowerCase()) ||
     (m.target_date != null && isOverdue(m.target_date) && m.status !== "completed"));
 
-/** One triaged row per implementation, reusing customer360-derive signal logic. */
+/**
+ * One triaged row per implementation: the logged signals (risks, issues,
+ * escalations, commitments, milestones) and the deal's own facts (watch-out
+ * conflicts, overdue plan calls, no owner, stuck, missing SOW or brief)
+ * compete, and the most urgent wins. A row with nothing at all says what
+ * comes next — never "on track", which nobody here has checked.
+ */
 export function triageRow(impl: ImplementationRow, bundle: TriageBundle | undefined): QueueRow {
+  const record = asRecord(bundle);
+  const stalledDays = daysSince(impl.stage_entered_at) ?? 0;
+  const fromSignals = signalRow(impl, bundle);
+  const reasons = needsAction(bundle?.deal);
+  const top = reasons[0];
+  const fromDeal = top
+    ? row(impl, top.bucket, top.rank, top.tab, {
+        reason: top.reason,
+        impact: impactLine(impl, top.impact),
+        record,
+        bundle,
+        ...(top.next ? { next: top.next } : {}),
+      })
+    : null;
+  if (fromSignals && fromDeal) return fromSignals.rank <= fromDeal.rank ? fromSignals : fromDeal;
+  if (fromSignals) return fromSignals;
+  if (fromDeal) return fromDeal;
+
+  // ---------- MOVING ----------
+  const next = bundle?.deal?.next_step ?? null;
+  return row(impl, "moving", 4, "overview", {
+    reason: next
+      ? `Nothing open · next: ${next}`
+      : `Nothing open against it in ${dealStageLabel(impl.deal_stage)}`,
+    impact: impactLine(impl, `${stalledDays}d in stage`),
+    record,
+    bundle,
+    ...(next ? { next } : {}),
+  });
+}
+
+/** The row the logged signals call for, or null when none of them fires. */
+function signalRow(impl: ImplementationRow, bundle: TriageBundle | undefined): QueueRow | null {
   const record = asRecord(bundle);
   const open = openItems(record);
   const stalledDays = daysSince(impl.stage_entered_at) ?? 0;
@@ -306,15 +357,7 @@ export function triageRow(impl: ImplementationRow, bundle: TriageBundle | undefi
     });
   }
 
-  // ---------- MOVING ----------
-  return row(impl, "moving", 4, "overview", {
-    reason:
-      impl.status === "idle"
-        ? `Idle in ${dealStageLabel(impl.deal_stage)} — nothing open against it`
-        : `On track in ${dealStageLabel(impl.deal_stage)} — nothing open against it`,
-    impact: impactLine(impl, `${stalledDays}d in stage`),
-    record,
-  });
+  return null;
 }
 
 function impactLine(impl: ImplementationRow, extra: string | null) {
