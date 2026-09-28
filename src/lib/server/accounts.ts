@@ -14,6 +14,8 @@ export interface ActorContext {
   source: TransitionSource;
   actorProfileId?: string | null;
   actorApiKeyId?: string | null;
+  /** A manager saw what the Closed Won gate found missing and moved it anyway. */
+  force?: boolean;
 }
 
 // Accepts a portal UUID or "sf_<salesforce_id>".
@@ -51,6 +53,32 @@ export async function transitionStage(
   occurredAt?: string,
 ): Promise<{ changed: boolean }> {
   const admin = createAdminClient();
+
+  // THE CLOSED WON GATE, for every human move out of Prospect — the board,
+  // the dropdown, the button, a deal created "in Closed Won". One place, so
+  // no surface can forget it; the database function checks the same facts
+  // again underneath. Integrations are not people and are not gated here.
+  if (ctx.source === "ui" && toStage !== "prospect") {
+    const { data: cur } = await admin
+      .from("portal_accounts")
+      .select("stage")
+      .eq("id", accountId)
+      .maybeSingle();
+    if (cur?.stage === "prospect") {
+      if (ctx.force) {
+        const { forcedNote } = await import("../won-gate");
+        note = forcedNote(note);
+      } else {
+        const { closedWonMissing } = await import("./won-gate");
+        const missing = await closedWonMissing(accountId);
+        if (missing.length) {
+          const { wonGateMessage } = await import("../won-gate");
+          throw new Error(wonGateMessage(missing));
+        }
+      }
+    }
+  }
+
   const { data, error } = await admin.rpc("portal_transition_stage", {
     p_account_id: accountId,
     p_to_stage: toStage,
@@ -60,7 +88,17 @@ export async function transitionStage(
     p_note: note ?? null,
     p_occurred_at: occurredAt ?? null,
   });
-  if (error) throw new Error(error.message);
+  if (error) {
+    // The database's own reading of the gate, in the page's words.
+    if (error.message.includes("closed_won_gate")) {
+      const { wonGateMessage } = await import("../won-gate");
+      const keys = /closed_won_gate:([a-z,]+)/.exec(error.message)?.[1] ?? "notes,sow";
+      throw new Error(
+        wonGateMessage(keys.split(",").filter((k) => k === "notes" || k === "sow") as never),
+      );
+    }
+    throw new Error(error.message);
+  }
   const changed = data !== null;
   if (changed) {
     await audit({

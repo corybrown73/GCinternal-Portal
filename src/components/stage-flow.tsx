@@ -36,7 +36,8 @@ import {
   type FlowTask,
 } from "@/lib/stage-flow";
 import { syncDealStageFn } from "@/lib/stage-flow.functions";
-import { moveWithGate } from "@/lib/stage-move";
+import { parseWonGate, type WonGateMissing } from "@/lib/won-gate";
+import { ClosedWonGateNotice } from "@/components/closed-won-gate";
 import { aeReplyDraft, googleCalendarLink } from "@/lib/ae-reply";
 import { cn } from "@/lib/utils";
 
@@ -210,7 +211,12 @@ export function StageFlow({ deal }: { deal: DealData }) {
           so, with the button that closes it; a stage whose tasks are all done
           says where the deal goes now — a folded row is not an answer. */}
       {flow.current === null && deal.account.stage === "prospect" ? (
-        <NotClosedBar deal={deal} editable={editable} ready={stage.done} />
+        <NotClosedBar
+          deal={deal}
+          editable={editable}
+          ready={stage.done}
+          onOpenTask={(k) => setManual({ key: k, wasDone: false })}
+        />
       ) : syncError && flow.advanceTo && shown === flow.current ? (
         <p className="flex flex-wrap items-center gap-2 border-b border-border bg-destructive/10 px-4 py-2 text-[12px] text-destructive">
           Everything here is done, but the deal could not be moved: {syncError}
@@ -283,49 +289,67 @@ function NotClosedBar({
   deal,
   editable,
   ready,
+  onOpenTask,
 }: {
   deal: DealData;
   editable: boolean;
   ready: boolean;
+  onOpenTask: (key: "notes" | "sow") => void;
 }) {
   const qc = useQueryClient();
+  const { profile } = useProfile();
   const move = useServerFn(moveDealStage);
   const [error, setError] = useState<string | null>(null);
+  const [missing, setMissing] = useState<WonGateMissing[] | null>(null);
   const m = useMutation({
-    mutationFn: () =>
-      moveWithGate((force) =>
-        move({
-          data: force
-            ? { dealId: deal.account.id, toStage: "closed_won", force: true }
-            : { dealId: deal.account.id, toStage: "closed_won" },
-        }),
-      ),
-    onMutate: () => setError(null),
+    mutationFn: (force: boolean) =>
+      move({
+        data: force
+          ? { dealId: deal.account.id, toStage: "closed_won", force: true }
+          : { dealId: deal.account.id, toStage: "closed_won" },
+      }),
+    onMutate: () => {
+      setError(null);
+      setMissing(null);
+    },
     onSuccess: () => void qc.invalidateQueries(),
     onError: (e) => {
-      const msg = (e as Error).message;
-      if (msg !== "Left where it was.") setError(msg);
+      const gate = parseWonGate((e as Error).message);
+      if (gate) setMissing(gate);
+      else setError((e as Error).message);
     },
   });
   return (
-    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-amber-500/30 bg-amber-500/10 px-4 py-2 text-[12px]">
-      <span className="text-amber-900 dark:text-amber-200">
-        <b>Not closed yet.</b>{" "}
-        {ready
-          ? "Everything here is ready — close it and the deal moves on straight away."
-          : "You can get ahead on these; nothing moves until the deal is Closed Won."}
-      </span>
-      {editable ? (
-        <button
-          type="button"
-          className="inline-flex h-8 items-center gap-1.5 rounded-sm bg-primary px-3 text-[12px] font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-          disabled={m.isPending}
-          onClick={() => m.mutate()}
-        >
-          {m.isPending ? "Closing…" : "Mark Closed Won"}
-        </button>
+    <div className="space-y-2 border-b border-amber-500/30 bg-amber-500/10 px-4 py-2 text-[12px]">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className="text-amber-900 dark:text-amber-200">
+          <b>Not closed yet.</b>{" "}
+          {ready
+            ? "Everything here is ready — close it and the deal moves on straight away."
+            : "You can get ahead on these; nothing moves until the deal is Closed Won."}
+        </span>
+        {editable ? (
+          <button
+            type="button"
+            className="inline-flex h-8 items-center gap-1.5 rounded-sm bg-primary px-3 text-[12px] font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+            disabled={m.isPending}
+            onClick={() => m.mutate(false)}
+          >
+            {m.isPending ? "Closing…" : "Mark Closed Won"}
+          </button>
+        ) : null}
+        {error ? <p className="w-full text-destructive">{error}</p> : null}
+      </div>
+      {missing ? (
+        <ClosedWonGateNotice
+          missing={missing}
+          dealId={deal.account.id}
+          onOpen={onOpenTask}
+          canForce={canManage(profile?.role)}
+          onForce={() => m.mutate(true)}
+          forcing={m.isPending}
+        />
       ) : null}
-      {error ? <p className="w-full text-destructive">{error}</p> : null}
     </div>
   );
 }

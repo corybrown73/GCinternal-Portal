@@ -15,7 +15,8 @@ import { INDUSTRIES } from "@/lib/intake-answers";
 import { mentionsDeviceMagic, mentionsFieldFusion } from "@/lib/intake-prefill";
 import { DEAL_TYPES } from "@/lib/stage-flow";
 import { cn } from "@/lib/utils";
-import { addDeal, addReport, importDeals, uploadSow } from "@/lib/presale.functions";
+import { addDeal, addReport, importDeals, moveDealStage, uploadSow } from "@/lib/presale.functions";
+import { parseWonGate } from "@/lib/won-gate";
 import { prepareDealFn } from "@/lib/stage-flow.functions";
 import { STAGE_LABELS, STAGES, type AccountStage } from "@/lib/presale-stages";
 
@@ -66,6 +67,7 @@ export function NewDealDialog() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const create = useServerFn(addDeal);
+  const moveStage = useServerFn(moveDealStage);
   const report = useServerFn(addReport);
   const upload = useServerFn(uploadSow);
   const prepare = useServerFn(prepareDealFn);
@@ -104,7 +106,6 @@ export function NewDealDialog() {
           summary: nullable(draft.summary),
           path: draft.path || "new_logo",
           industry: nullable(draft.industry),
-          stage: draft.stage,
         },
       });
       const dealId = result.account.id;
@@ -131,6 +132,18 @@ export function NewDealDialog() {
         await upload({
           data: { dealId, fileName: sow.name, contentType: "application/pdf", dataBase64 },
         });
+      }
+      // A deal entered in a later stage moves there now, after the notes and
+      // the SOW are on it — the same gated move a person makes from the
+      // board. Refused for a missing piece, the deal stays a Prospect and its
+      // page says what to add; that is not a failure of the creation.
+      if (draft.stage && draft.stage !== "prospect") {
+        setPhase("Moving it to its stage");
+        try {
+          await moveStage({ data: { dealId, toStage: draft.stage } });
+        } catch (e) {
+          if (!parseWonGate(e instanceof Error ? e.message : String(e))) throw e;
+        }
       }
       return result;
     },

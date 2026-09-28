@@ -374,42 +374,24 @@ export async function createDeal(
     });
     await db().from("portal_accounts").update({ intake: next }).eq("id", result.account.id);
   }
-  // A deal entered where it already is. The Closed Won check is for a move
-  // somebody makes; a fact about the past is recorded as one.
+  // A deal entered where it already is: the same move a person would make
+  // from the board — the Closed Won gate applies, and so does everything the
+  // close starts (the customer's page, the assignment). The dialog attaches
+  // the notes and the SOW first and moves the deal after, for that reason.
   if (input.stage && input.stage !== result.account.stage && result.created) {
-    await transitionStage(
-      result.account.id,
-      input.stage,
-      { source: "ui", actorProfileId: userId },
-      "Created in this stage",
-    );
+    await transitionDeal(userId, result.account.id, input.stage, "Created in this stage");
     result.account = { ...result.account, stage: input.stage };
   }
   return { account: result.account, created: result.created };
 }
 
-export const WON_GATE_PREFIX = "Not ready for Closed Won:";
+export { WON_GATE_PREFIX } from "./won-gate";
 
 /**
- * Closed Won is the trigger for everything downstream — the claim email,
- * the plan, the customer's page — so a deal does not get there without the
- * two things they all read: a call note and the signed SOW. A person may
- * still insist (`force`), and the move records that they did.
+ * A person moves a deal. The Closed Won gate lives in transitionStage (one
+ * place for every surface); `force` is a manager's call, checked by the
+ * server function, and the move records that they made it.
  */
-export async function wonGate(dealId: string): Promise<string[]> {
-  const [{ count: reports }, { data: row }] = await Promise.all([
-    db()
-      .from("portal_gong_reports")
-      .select("id", { count: "exact", head: true })
-      .eq("account_id", dealId),
-    db().from("portal_accounts").select("sow_document_path").eq("id", dealId).maybeSingle(),
-  ]);
-  const missing: string[] = [];
-  if ((reports ?? 0) === 0) missing.push("a Gong brief or call note");
-  if (!row?.sow_document_path) missing.push("the signed SOW");
-  return missing;
-}
-
 export async function transitionDeal(
   userId: string,
   dealId: string,
@@ -419,21 +401,11 @@ export async function transitionDeal(
 ): Promise<{ changed: boolean }> {
   await requireInternal(userId);
   const pipeline = await loadPipelineStages();
-  if (toStage === wonStage(pipeline).key && !force) {
-    const missing = await wonGate(dealId);
-    if (missing.length) {
-      throw new Error(`${WON_GATE_PREFIX} the deal has no ${missing.join(" and no ")}.`);
-    }
-  }
-  if (force)
-    note = note
-      ? `${note} (moved despite the Closed Won check)`
-      : "Moved despite the Closed Won check";
   // Via supabaseAdmin the RPC has no auth.uid(), so the passed actor is kept.
   const result = await transitionStage(
     dealId,
     toStage,
-    { source: "ui", actorProfileId: userId },
+    { source: "ui", actorProfileId: userId, force },
     note,
   );
   // Closing the deal creates the customer's page and the implementation on

@@ -5,11 +5,12 @@ import { useServerFn } from "@tanstack/react-start";
 import { PageBody, PageHeader } from "@/components/page";
 import { DealBoard } from "@/components/presale/deal-board";
 import { CsvImportDialog, NewDealDialog } from "@/components/presale/deal-dialogs";
-import { canEditDeal, useProfile } from "@/lib/auth";
+import { canEditDeal, canManage, useProfile } from "@/lib/auth";
 import { ScopeSwitch } from "@/components/scope-switch";
 import { useScope } from "@/lib/use-scope";
 import { getPipeline, moveDealStage } from "@/lib/presale.functions";
-import { moveWithGate } from "@/lib/stage-move";
+import { parseWonGate } from "@/lib/won-gate";
+import { ClosedWonGateNotice } from "@/components/closed-won-gate";
 import type { AccountStage } from "@/lib/presale-stages";
 import { fmtMoney } from "@/lib/hub-format";
 
@@ -55,10 +56,17 @@ function PipelinePage() {
   const editable = canEditDeal(profile?.role);
 
   const moveMutation = useMutation({
-    mutationFn: (vars: { dealId: string; toStage: AccountStage }) =>
-      moveWithGate((force) => move({ data: force ? { ...vars, force: true } : vars })),
+    mutationFn: (vars: { dealId: string; toStage: AccountStage; force?: boolean }) =>
+      move({
+        data: vars.force
+          ? { ...vars, force: true }
+          : { dealId: vars.dealId, toStage: vars.toStage },
+      }),
     onSettled: () => queryClient.invalidateQueries({ queryKey: ["pipeline"] }),
   });
+  // A refused Closed Won move: the board shows what is missing, with the way
+  // to add it, instead of a browser dialog.
+  const gate = moveMutation.isError ? parseWonGate((moveMutation.error as Error).message) : null;
 
   const arrTotal = data.deals.reduce((sum, d) => sum + (d.arr ?? 0), 0);
 
@@ -89,7 +97,17 @@ function PipelinePage() {
           canDrag={editable}
           onMove={(dealId, toStage) => moveMutation.mutateAsync({ dealId, toStage })}
         />
-        {moveMutation.isError ? (
+        {gate && moveMutation.variables ? (
+          <div className="mt-2">
+            <ClosedWonGateNotice
+              missing={gate}
+              dealId={moveMutation.variables.dealId}
+              canForce={canManage(profile?.role)}
+              onForce={() => moveMutation.mutate({ ...moveMutation.variables!, force: true })}
+              forcing={moveMutation.isPending}
+            />
+          </div>
+        ) : moveMutation.isError ? (
           <p role="alert" className="mt-2 text-[12px] text-destructive">
             The stage change was not saved: {(moveMutation.error as Error).message}
           </p>

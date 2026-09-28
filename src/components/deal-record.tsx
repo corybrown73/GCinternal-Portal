@@ -58,7 +58,8 @@ import { daysSince, fmtDate, fmtMoney } from "@/lib/hub-format";
 import { When } from "@/components/when";
 import { Working } from "@/components/working";
 import type { EditableDealField } from "@/lib/presale-fields";
-import { moveWithGate } from "@/lib/stage-move";
+import { parseWonGate, type WonGateMissing } from "@/lib/won-gate";
+import { ClosedWonGateNotice } from "@/components/closed-won-gate";
 import type { AccountStage } from "@/lib/presale-stages";
 import { cn } from "@/lib/utils";
 
@@ -99,20 +100,30 @@ function StageControl({
 }) {
   const move = useServerFn(moveDealStage);
   const queryClient = useQueryClient();
+  const { profile } = useProfile();
   const [error, setError] = useState<string | null>(null);
+  const [gate, setGate] = useState<{ toStage: AccountStage; missing: WonGateMissing[] } | null>(
+    null,
+  );
   const m = useMutation({
-    mutationFn: (toStage: AccountStage) =>
-      moveWithGate((force) =>
-        move({ data: force ? { dealId, toStage, force: true } : { dealId, toStage } }),
-      ),
-    onMutate: () => setError(null),
+    mutationFn: (v: { toStage: AccountStage; force?: boolean }) =>
+      move({
+        data: v.force
+          ? { dealId, toStage: v.toStage, force: true }
+          : { dealId, toStage: v.toStage },
+      }),
+    onMutate: () => {
+      setError(null);
+      setGate(null);
+    },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["deal", dealId] });
       void queryClient.invalidateQueries({ queryKey: ["pipeline"] });
     },
-    onError: (e) => {
-      const msg = (e as Error).message;
-      if (msg !== "Left where it was.") setError(msg);
+    onError: (e, v) => {
+      const missing = parseWonGate((e as Error).message);
+      if (missing) setGate({ toStage: v.toStage, missing });
+      else setError((e as Error).message);
     },
   });
   if (!editable) return <StageChip stage={stage} stages={stages} />;
@@ -122,7 +133,7 @@ function StageControl({
         className="h-6 rounded-sm border border-border bg-muted px-1.5 font-mono text-[11px] tracking-tight text-foreground"
         value={stage}
         disabled={m.isPending}
-        onChange={(e) => m.mutate(e.target.value as AccountStage)}
+        onChange={(e) => m.mutate({ toStage: e.target.value as AccountStage })}
         title="Move this deal to another stage. Every move is written to the stage history."
       >
         {stages
@@ -134,6 +145,17 @@ function StageControl({
           ))}
       </select>
       {error ? <span className="mt-0.5 text-[11px] text-destructive">{error}</span> : null}
+      {gate ? (
+        <span className="mt-1 block">
+          <ClosedWonGateNotice
+            missing={gate.missing}
+            dealId={dealId}
+            canForce={canManage(profile?.role)}
+            onForce={() => m.mutate({ toStage: gate.toStage, force: true })}
+            forcing={m.isPending}
+          />
+        </span>
+      ) : null}
     </span>
   );
 }

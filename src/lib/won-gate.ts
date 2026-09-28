@@ -1,0 +1,53 @@
+/**
+ * The Closed Won gate, in words both sides read.
+ *
+ * Closed Won starts everything downstream — the claim email, the plan, the
+ * customer's page — so a person cannot move a deal there without the two
+ * things they all read: a call note and the signed SOW (or contract). The
+ * server refuses the move and says which is missing; the page turns that
+ * into buttons. A manager may insist, and the move records that they did.
+ * Integrations (Zapier, the API, a CSV import) are not people: a deal they
+ * deliver in Closed Won is a fact about Salesforce, and stays.
+ */
+export const WON_GATE_PREFIX = "Not ready for Closed Won:";
+
+export type WonGateMissing = "notes" | "sow";
+
+export const WON_GATE_LABEL: Record<WonGateMissing, string> = {
+  notes: "a Gong brief or call note",
+  sow: "the signed SOW or contract",
+};
+
+/** What a deal still lacks, from the facts the record holds. */
+export function missingForClosedWon(facts: {
+  reports: number;
+  sowPath: string | null | undefined;
+  sowReference: string | null | undefined;
+}): WonGateMissing[] {
+  const missing: WonGateMissing[] = [];
+  if (facts.reports <= 0) missing.push("notes");
+  if (!facts.sowPath && !facts.sowReference?.trim()) missing.push("sow");
+  return missing;
+}
+
+/** The sentence the server throws. Stable, so the page can read it back. */
+export function wonGateMessage(missing: readonly WonGateMissing[]): string {
+  return `${WON_GATE_PREFIX} the deal has no ${missing.map((m) => WON_GATE_LABEL[m]).join(" and no ")}. [${missing.join(",")}]`;
+}
+
+/** The missing pieces named in a thrown message, or null when it is some other error. */
+export function parseWonGate(message: string): WonGateMissing[] | null {
+  if (!message.includes(WON_GATE_PREFIX)) return null;
+  const m = /\[([a-z,]+)\]\s*$/.exec(message);
+  const keys = (m?.[1] ?? "")
+    .split(",")
+    .filter((k): k is WonGateMissing => k === "notes" || k === "sow");
+  return keys.length ? keys : ["notes", "sow"];
+}
+
+/** The note a forced move carries: the database lets it through on this prefix alone. */
+export const FORCE_NOTE_PREFIX = "force:";
+export function forcedNote(note?: string | null): string {
+  const why = note?.trim() ? note.trim() : "Moved despite the Closed Won check";
+  return `${FORCE_NOTE_PREFIX} ${why}`;
+}
