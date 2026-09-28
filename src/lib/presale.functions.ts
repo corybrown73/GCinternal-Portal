@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
+import { timelinePatchSchema } from "./intake-patch";
 import { EDITABLE_DEAL_FIELDS, type EditableDealField } from "./presale-fields";
 
 import {
@@ -559,55 +560,7 @@ export const saveIntake = createServerFn({ method: "POST" })
               .optional(),
             // The seven-day plan's knobs, saved whole: the panel sends the
             // complete object so a cleared override is a cleared override.
-            timeline: z
-              .object({
-                close_date: z
-                  .string()
-                  .regex(/^\d{4}-\d{2}-\d{2}$/)
-                  .nullable(),
-                overrides: z.record(z.string(), z.string().regex(/^\d{4}-\d{2}-\d{2}$/)),
-                holidays: z.array(z.string().regex(/^\d{4}-\d{2}-\d{2}$/)).max(30),
-                integration_tier: z.number().int().min(0).max(5),
-                integration_target: z.string().trim().max(120).nullable(),
-                field_tester: z.string().trim().max(120).nullable(),
-                form_proven_on: z
-                  .string()
-                  .regex(/^\d{4}-\d{2}-\d{2}$/)
-                  .nullable()
-                  .optional(),
-                completed: z
-                  .record(z.string().max(40), z.string().regex(/^\d{4}-\d{2}-\d{2}$/))
-                  .optional(),
-                times: z.record(z.string().max(40), z.string().regex(/^\d{2}:\d{2}$/)).optional(),
-                timezone: z.string().trim().max(64).nullable().optional(),
-                sow_applied_at: z.string().nullable().optional(),
-                sow_notes: z.array(z.string().max(300)).max(20).optional(),
-                services: z
-                  .array(
-                    z.object({
-                      id: z.string().min(1).max(40),
-                      kind: z.enum([
-                        "integration",
-                        "custom_pdf",
-                        "paid_form",
-                        "analytics",
-                        "data_load",
-                        "training",
-                        "other",
-                      ]),
-                      name: z.string().trim().min(1).max(120),
-                      phase: z.number().int().min(1).max(9),
-                      tier: z.number().int().min(0).max(5).nullable().optional(),
-                      weeks: z.number().min(0.5).max(52).nullable().optional(),
-                      needs: z.string().trim().max(300).nullable().optional(),
-                      tool: z.string().trim().max(40).nullable().optional(),
-                    }),
-                  )
-                  .max(20)
-                  .optional(),
-              })
-              .strict()
-              .optional(),
+            timeline: timelinePatchSchema.optional(),
           })
           .strict(),
       })

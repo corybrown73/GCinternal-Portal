@@ -1,6 +1,34 @@
 import { describe, expect, it } from "vitest";
 
 import { EMPTY_INTAKE, claimByPerson, intakeAnswersSchema, readIntake } from "../intake-answers";
+import { timelinePatchSchema } from "../intake-patch";
+
+describe("the timeline as the save accepts it", () => {
+  it("takes the record's whole timeline back, every key the record can hold", () => {
+    // The plan panel and the booking form spread the stored timeline into
+    // the save. A key the record holds that the save refuses breaks both.
+    expect(timelinePatchSchema.safeParse(EMPTY_INTAKE.timeline).success).toBe(true);
+    const full = readIntake({
+      timeline: {
+        close_date: "2026-09-21",
+        overrides: { kickoff: "2026-10-01" },
+        times: { kickoff: "10:00" },
+        timezone: "America/New_York",
+        sow_applied_at: "2026-09-25T00:00:00Z",
+        sow_notes: ["Go-live by 30 Oct."],
+        sow_dates: [
+          { type: "deadline", date: "2026-10-30", end: null, who: null, quote: "by 30 Oct" },
+        ],
+        removed_services: ["integration:quickbooksonline"],
+        session_minutes: 30,
+        services: [{ id: "qb", kind: "integration", name: "QuickBooks Online", phase: 2, tier: 3 }],
+      },
+    }).timeline;
+    const r = timelinePatchSchema.safeParse(full);
+    expect(r.success, JSON.stringify(r.success ? null : r.error.issues)).toBe(true);
+    expect(Object.keys(full).sort()).toEqual(Object.keys(timelinePatchSchema.shape).sort());
+  });
+});
 
 /**
  * The server's save is: merge the patch over the record, spread
