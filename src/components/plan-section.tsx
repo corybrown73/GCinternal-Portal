@@ -48,6 +48,7 @@ export function PlanSection({
       <WatchOutsPanel
         rows={watchOuts}
         hasBrief={Boolean(latestBrief) || deal.gong_reports.length > 0}
+        hasSow={Boolean(deal.sow_url)}
       />
       <TimelinePanel
         dealId={deal.account.id}

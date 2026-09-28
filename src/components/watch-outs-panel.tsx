@@ -14,17 +14,23 @@ import { cn } from "@/lib/utils";
 export function WatchOutsPanel({
   rows,
   hasBrief,
+  hasSow = true,
 }: {
   rows: WatchOut[];
   /** False when no brief has been generated: then there is nothing to read yet. */
   hasBrief: boolean;
+  /** False when no SOW is attached: the comparison is the calls against the plan only. */
+  hasSow?: boolean;
 }) {
   const conflicts = rows.filter((r) => r.severity === "conflict").length;
   const checks = rows.filter((r) => r.severity === "check").length;
+  // Say what was compared. "The SOW agrees" when there is no SOW is a claim
+  // nobody checked.
+  const compared = hasSow ? "the calls, the SOW and the plan" : "the calls and the plan";
   const meta = !hasBrief
     ? "Paste the call notes first"
     : rows.length === 0
-      ? "Nothing crossed — the calls, the SOW and the plan agree"
+      ? `Nothing crossed — ${compared} agree${hasSow ? "" : " (no SOW yet)"}`
       : [
           conflicts ? `${conflicts} conflict${conflicts === 1 ? "" : "s"}` : null,
           checks ? `${checks} to check` : null,
@@ -51,7 +57,9 @@ export function WatchOutsPanel({
         </p>
       ) : rows.length === 0 ? (
         <p className="px-3 py-2.5 text-[12px] text-muted-foreground">
-          No dates, absences or promises in the call notes or the SOW disagree with the plan.
+          {hasSow
+            ? "No dates, absences or promises in the call notes or the SOW disagree with the plan."
+            : "No dates, absences or promises in the call notes disagree with the plan. There is no SOW on the deal yet; when it lands, its dates are checked here too."}
         </p>
       ) : (
         <ul className="divide-y divide-border/70">
