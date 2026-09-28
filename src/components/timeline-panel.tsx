@@ -220,6 +220,39 @@ export function TimelinePanel({
   // One door per phase: the full editor for phase 1, dates and times for a
   // phase whose steps come from the SOW.
   const [editing, setEditing] = useState<PlanEditorTarget | "phase1" | null>(null);
+  // After a save: one line that says what changed hands, and the rows that
+  // changed lit for a moment so the eye lands on them.
+  const [notice, setNotice] = useState<string | null>(null);
+  const [flash, setFlash] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    if (!notice) return;
+    const t = setTimeout(() => setNotice(null), 6000);
+    return () => clearTimeout(t);
+  }, [notice]);
+  useEffect(() => {
+    if (!flash.size) return;
+    const t = setTimeout(() => setFlash(new Set()), 2200);
+    return () => clearTimeout(t);
+  }, [flash]);
+  const savePlan = (patch: {
+    plan_edits?: IntakeAnswers["timeline"]["plan_edits"];
+    overrides: Record<string, string>;
+    times: Record<string, string>;
+    timezone: string | null;
+  }) => {
+    const changed = new Set<string>();
+    for (const k of new Set([...Object.keys(patch.overrides), ...Object.keys(knobs.overrides)]))
+      if (patch.overrides[k] !== knobs.overrides[k]) changed.add(k);
+    for (const k of new Set([...Object.keys(patch.times), ...Object.keys(knobs.times)]))
+      if (patch.times[k] !== knobs.times[k]) changed.add(k);
+    if (patch.plan_edits) {
+      for (const k of Object.keys(patch.plan_edits.steps)) changed.add(k);
+      for (const a of patch.plan_edits.added) changed.add(a.key);
+    }
+    set(patch);
+    setFlash(changed);
+    setNotice("Plan saved — the welcome page and invites now use these dates.");
+  };
   const editButton = (target: PlanEditorTarget | "phase1", label = "Edit plan") =>
     editable ? (
       <button
@@ -296,7 +329,7 @@ export function TimelinePanel({
   const tzLabel = (knobs.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone)
     .replace(/^(America|Pacific|Europe)\//, "")
     .replace("_", " ");
-  const stepHandlers = { busy, today, markDone, setTime, moveDate, downloadIcs };
+  const stepHandlers = { busy, today, markDone, setTime, moveDate, downloadIcs, flash };
   const stages = [...alongsidePhase(timeline), ...timeline.phases];
 
   return (
@@ -329,6 +362,14 @@ export function TimelinePanel({
       }
     >
       <div className="space-y-2 px-3 py-2.5">
+        {notice ? (
+          <p
+            role="status"
+            className="flex items-center gap-1.5 rounded-md border border-status-ontrack-foreground/30 bg-status-ontrack/40 px-3 py-1.5 text-[12px] text-status-ontrack-foreground"
+          >
+            <Check className="h-3.5 w-3.5" strokeWidth={3} /> {notice}
+          </p>
+        ) : null}
         {error ? (
           <p role="alert" className="text-[12px] text-destructive">
             {error}
@@ -426,7 +467,7 @@ export function TimelinePanel({
           knobs={knobs}
           busy={busy}
           target={editing === "phase1" || editing === null ? null : editing}
-          onSave={(patch) => set(patch)}
+          onSave={savePlan}
         />
 
         {/* SCOPE — what the SOW bought beyond the form. Open until there is
@@ -1225,6 +1266,7 @@ function StepList({
   steps,
   adjust,
   showDay = false,
+  flash,
   gated = null,
   busy,
   today,
@@ -1236,6 +1278,8 @@ function StepList({
   steps: Milestone[];
   adjust: boolean;
   showDay?: boolean;
+  /** Rows to light for a moment — the ones a save just changed. */
+  flash?: Set<string>;
   /** The phase's label when its dates are still "earliest", so nothing can be ticked. */
   gated?: string | null;
   busy: boolean;
@@ -1253,8 +1297,9 @@ function StepList({
         <li
           key={m.key}
           className={cn(
-            "flex flex-wrap items-center gap-x-3 gap-y-1 px-1 py-1.5",
+            "flex flex-wrap items-center gap-x-3 gap-y-1 px-1 py-1.5 transition-colors duration-700",
             m.doneOn && "text-muted-foreground",
+            flash?.has(m.key) && "bg-primary/10",
           )}
         >
           <input
