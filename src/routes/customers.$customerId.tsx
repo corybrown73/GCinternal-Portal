@@ -736,7 +736,11 @@ function OverviewTab({ record, customerId }: { record: Customer360; customerId: 
     open.commitments.length + open.risks.length + open.issues.length + open.escalations.length;
   return (
     <div className="space-y-4">
-      <StageGatesSection customerId={customerId} implementationId={impl.id} />
+      {/* A deal-linked project moves on its deal's checklist; the lifecycle
+          gates are for projects that were never a deal. */}
+      {impl.deal_id ? null : (
+        <StageGatesSection customerId={customerId} implementationId={impl.id} />
+      )}
       {impl.deal_id ? (
         <PlanFromDeal dealId={impl.deal_id} />
       ) : (
@@ -876,7 +880,9 @@ function AccountDetails({ record, customerId }: { record: Customer360; customerI
       {/* First on the page, above everything descriptive: the three things
             that have to be true before this project moves on, and the control
             that moves it. Ticking the last one IS the prompt to advance. */}
-      <StageGatesSection customerId={customerId} implementationId={impl.id} />
+      {impl.deal_id ? null : (
+        <StageGatesSection customerId={customerId} implementationId={impl.id} />
+      )}
       <Panel title="Current state" level="primary">
         {/* Stage, health, target launch and progress used to head this
               panel. They now live in the account rail, which is on screen from

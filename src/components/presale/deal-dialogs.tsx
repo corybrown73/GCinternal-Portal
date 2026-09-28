@@ -270,7 +270,11 @@ export function NewDealDialog() {
                   className={inputClass}
                   value={draft.name}
                   onChange={(e) => set({ name: e.target.value })}
-                  onBlur={() => setTouched(true)}
+                  // Autofocus then a click elsewhere is not a mistake: the
+                  // field turns red on submit, or once something was typed.
+                  onBlur={() => {
+                    if (draft.name.trim() !== "") setTouched(true);
+                  }}
                   aria-invalid={touched && draft.name.trim() === "" ? true : undefined}
                   aria-describedby="new-deal-name-hint"
                   placeholder="As the customer says it"
@@ -345,32 +349,35 @@ export function NewDealDialog() {
                     </option>
                   ))}
                 </select>
-                {suggestedFf && draft.path !== "field_fusion" ? (
-                  <p className="mt-0.5 text-[11px] text-amber-700 dark:text-amber-400">
-                    The notes mention Field Fusion —{" "}
-                    <button
-                      type="button"
-                      className="underline"
-                      onClick={() => set({ path: "field_fusion" })}
-                    >
-                      make this GoCanvas training
-                    </button>
-                    ?
-                  </p>
-                ) : null}
-                {suggestedDm && draft.path !== "dm_conversion" ? (
-                  <p className="mt-0.5 text-[11px] text-amber-700 dark:text-amber-400">
-                    The notes mention Device Magic —{" "}
-                    <button
-                      type="button"
-                      className="underline"
-                      onClick={() => set({ path: "dm_conversion" })}
-                    >
-                      make this a conversion
-                    </button>
-                    ?
-                  </p>
-                ) : null}
+                {/* The suggestion names the option it would pick, and its
+                    line is reserved so the form does not jump when it appears. */}
+                <p className="mt-0.5 min-h-[16px] text-[11px] text-amber-700 dark:text-amber-400">
+                  {suggestedFf && draft.path !== "field_fusion" ? (
+                    <>
+                      The notes mention Field Fusion —{" "}
+                      <button
+                        type="button"
+                        className="underline"
+                        onClick={() => set({ path: "field_fusion" })}
+                      >
+                        switch to “{DEAL_TYPES.find((t) => t.path === "field_fusion")!.label}”
+                      </button>
+                      ?
+                    </>
+                  ) : suggestedDm && draft.path !== "dm_conversion" ? (
+                    <>
+                      The notes mention Device Magic —{" "}
+                      <button
+                        type="button"
+                        className="underline"
+                        onClick={() => set({ path: "dm_conversion" })}
+                      >
+                        switch to “{DEAL_TYPES.find((t) => t.path === "dm_conversion")!.label}”
+                      </button>
+                      ?
+                    </>
+                  ) : null}
+                </p>
               </div>
             </div>
             <div>

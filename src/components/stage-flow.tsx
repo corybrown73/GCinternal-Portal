@@ -99,6 +99,12 @@ export function StageFlow({ deal }: { deal: DealData }) {
   // that only ever said "moving…" would be lying from the second attempt on.
   const [syncError, setSyncError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
+  // A "moved" notice is news for a moment, then clutter.
+  useEffect(() => {
+    if (!moved) return;
+    const timer = setTimeout(() => setMoved(null), 6000);
+    return () => clearTimeout(timer);
+  }, [moved]);
   useEffect(() => {
     if (!editable || !flow.advanceTo || asked.current === flow.advanceTo) return;
     asked.current = flow.advanceTo;
@@ -958,6 +964,11 @@ function ReplyBody({
       (typeof Intl !== "undefined" ? Intl.DateTimeFormat().resolvedOptions().timeZone : null),
   });
   const [copied, setCopied] = useState(false);
+  useEffect(() => {
+    if (!copied) return;
+    const timer = setTimeout(() => setCopied(false), 6000);
+    return () => clearTimeout(timer);
+  }, [copied]);
   return (
     <div className="space-y-2">
       <p className="text-[12px]">
@@ -971,7 +982,7 @@ function ReplyBody({
       <div className="flex flex-wrap items-center gap-2">
         <button
           type="button"
-          className="inline-flex h-8 items-center gap-1.5 rounded-sm bg-primary px-3 text-[12px] font-medium text-primary-foreground hover:bg-primary/90"
+          className="inline-flex h-8 min-w-[9.5rem] items-center justify-center gap-1.5 rounded-sm bg-primary px-3 text-[12px] font-medium text-primary-foreground hover:bg-primary/90"
           onClick={() => {
             void navigator.clipboard
               .writeText(`Subject: ${draft.subject}\n\n${draft.body}`)

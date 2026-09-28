@@ -304,7 +304,7 @@ export async function loadPipeline(
         se_owner_name: a.se_owner_id ? (names.get(a.se_owner_id) ?? null) : null,
         path: intake.path,
         has_notes: withNotes.has(a.id),
-        has_sow: Boolean(a.sow_document_path),
+        has_sow: Boolean(a.sow_document_path) || Boolean(a.sow_reference?.trim()),
         owner_name: ownerName,
         // The same next task the deal's checklist shows.
         next_step: nextChecklistTask({

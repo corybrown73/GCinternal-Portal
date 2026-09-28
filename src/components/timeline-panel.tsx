@@ -413,7 +413,7 @@ export function TimelinePanel({
                     .map((s) => s.name)
                     .join(" + ")}`
                 : hasSow
-                  ? "Read the SOW into the plan"
+                  ? "SOW on file — not read into the plan yet"
                   : "Nothing yet — attach the SOW, or add what it includes by hand"
           }
           defaultOpen={shown.length === 0 || proposal !== null}

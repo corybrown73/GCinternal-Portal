@@ -363,7 +363,9 @@ export function DealRecord({ deal, embedded = false }: { deal: DealData; embedde
               </div>
             </Panel>
 
-            <PlanSection deal={deal} editable={editable} />
+            {/* On the customer page the plan and the watch-outs are on
+                Overview already; the Record tab shows the record only. */}
+            {embedded ? null : <PlanSection deal={deal} editable={editable} />}
 
             <HelpPicksPanel deal={deal} editable={editable} />
 

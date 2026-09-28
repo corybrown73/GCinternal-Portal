@@ -14,8 +14,8 @@ export function MemberOptions({ members }: { members: DealAssignment["members"] 
       <optgroup label="In rotation">
         {rotation.map((p) => (
           <option key={p.teamMemberId} value={p.teamMemberId}>
-            {p.name}
-            {p.rank ? ` (#${p.rank}, carrying ${p.load})` : ""}
+            {p.name} — {p.assignments} active account{p.assignments === 1 ? "" : "s"}
+            {p.rank === 1 ? " · next up" : ""}
           </option>
         ))}
       </optgroup>

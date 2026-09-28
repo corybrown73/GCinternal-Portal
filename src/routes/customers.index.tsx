@@ -2,7 +2,6 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { queryOptions, useSuspenseQuery } from "@tanstack/react-query";
 import { ArrowDown, ArrowUp } from "lucide-react";
 
-import { NewImplementation } from "@/components/implementation-write";
 import { PageBody, PageHeader } from "@/components/page";
 import { SavedViews } from "@/components/saved-views";
 import { searchToView } from "@/lib/saved-view-input";
@@ -101,16 +100,6 @@ function CustomersPage() {
   const health = healthByImplementation(data.implementations, data.triage);
   const levelOf = (id: string) => health.get(id)?.level ?? "no_signal";
 
-  // Customer options come from the already-loaded implementations list — no new query.
-  const customerOptions = Array.from(
-    new Map(
-      data.implementations.map((r) => [
-        r.customer_id,
-        { id: r.customer_id, name: r.customer_name, hasImplementation: true },
-      ]),
-    ).values(),
-  ).sort((a, b) => a.name.localeCompare(b.name));
-
   const rows = data.implementations
     .filter((r) => (stage ? r.deal_stage === stage : true))
     .filter((r) => (status ? levelOf(r.id) === status : true))
@@ -168,7 +157,6 @@ function CustomersPage() {
               {rows.length} / {data.implementations.length}
             </span>
             <ScopeSwitch scope={data.scope} onChange={setScope} />
-            <NewImplementation customers={customerOptions} />
           </div>
         }
       />

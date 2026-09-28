@@ -47,6 +47,8 @@ export type PoolRow = PoolMember & {
   active: boolean;
   inPool: boolean;
   effectiveLoad: number;
+  /** Accounts handed to them inside the window — a count, where load is a weight. */
+  assignments: number;
   /** Position in the rotation as it stands: 1 is next. Null when not active. */
   rank: number | null;
 };
@@ -70,10 +72,12 @@ export async function loadPool(rules?: AssignmentRules): Promise<PoolRow[]> {
     ]),
   );
   const load = new Map<string, number>();
+  const count = new Map<string, number>();
   const last = new Map<string, string>();
   for (const a of (ledger ?? []) as any[]) {
     const id = String(a.team_member_id);
     load.set(id, (load.get(id) ?? 0) + Number(a.weight));
+    count.set(id, (count.get(id) ?? 0) + 1);
     const at = String(a.created_at);
     if (!last.has(id) || at > last.get(id)!) last.set(id, at);
   }
@@ -92,6 +96,7 @@ export async function loadPool(rules?: AssignmentRules): Promise<PoolRow[]> {
       inPool: Boolean(p),
       active: Boolean(p?.active),
       effectiveLoad: l / capacity,
+      assignments: count.get(String(m.id)) ?? 0,
       rank: null,
     };
   });
@@ -503,6 +508,8 @@ export type DealAssignment = {
     inPool: boolean;
     rank: number | null;
     load: number;
+    /** Accounts handed to them in the window. */
+    assignments: number;
   }>;
   steps: Array<{ key: "gong" | "sow" | "welcome"; label: string; done: boolean }>;
 };
@@ -607,6 +614,7 @@ export async function dealAssignment(dealId: string): Promise<DealAssignment> {
       inPool: p.inPool && p.active,
       rank: p.rank,
       load: p.load,
+      assignments: p.assignments,
     })),
     steps: [
       { key: "gong", label: "Gong recording on the deal", done: (reports ?? 0) > 0 },
