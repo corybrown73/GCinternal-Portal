@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 
 import { Panel } from "@/components/record";
-import { PlanEditor } from "@/components/plan-editor";
+import { PlanEditor, type PlanEditorTarget } from "@/components/plan-editor";
 import { PlanIcon } from "@/components/plan-icon";
 import { firstFormName, readIntake, type IntakeAnswers } from "@/lib/intake-answers";
 import { buildIcs } from "@/lib/ics";
@@ -217,7 +217,23 @@ export function TimelinePanel({
     mutation.mutate({ ...knobs, ...patch });
 
   const busy = !editable || mutation.isPending;
-  const [editing, setEditing] = useState(false);
+  // One door per phase: the full editor for phase 1, dates and times for a
+  // phase whose steps come from the SOW.
+  const [editing, setEditing] = useState<PlanEditorTarget | "phase1" | null>(null);
+  const editButton = (target: PlanEditorTarget | "phase1", label = "Edit plan") =>
+    editable ? (
+      <button
+        type="button"
+        className="inline-flex h-8 items-center gap-1.5 rounded-sm bg-primary px-3 text-[12px] font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+        disabled={mutation.isPending}
+        onClick={(e) => {
+          e.stopPropagation();
+          setEditing(target);
+        }}
+      >
+        <Pencil className="h-3.5 w-3.5" /> {label}
+      </button>
+    ) : undefined;
   const input =
     "rounded-sm border border-border bg-background px-2 py-1 text-[12px] focus:outline-none focus:ring-1 focus:ring-primary disabled:opacity-60";
   const moved = timeline.milestones.filter((m) => m.moved).length;
@@ -372,28 +388,11 @@ export function TimelinePanel({
             (timeline.edited ? " · edited for this account" : "")
           }
           defaultOpen={!timeline.liveDoneOn}
-          adjustable={editable}
-          right={
-            editable ? (
-              // The big, clear door: every account starts from our standard
-              // and the team changes it here, for this account only.
-              <button
-                type="button"
-                className="inline-flex h-8 items-center gap-1.5 rounded-sm bg-primary px-3 text-[12px] font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-                disabled={mutation.isPending}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setEditing(true);
-                }}
-              >
-                <Pencil className="h-3.5 w-3.5" /> Edit plan
-              </button>
-            ) : undefined
-          }
+          right={editButton("phase1")}
         >
-          {(adjust) => (
+          {() => (
             <>
-              <StepList steps={timeline.milestones} adjust={adjust} showDay {...stepHandlers} />
+              <StepList steps={timeline.milestones} adjust={false} showDay {...stepHandlers} />
               <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1.5 px-1 pt-1">
                 <label className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground">
                   Field tester
@@ -421,11 +420,12 @@ export function TimelinePanel({
         </PlanSection>
 
         <PlanEditor
-          open={editing}
-          onClose={() => setEditing(false)}
+          open={editing !== null}
+          onClose={() => setEditing(null)}
           timeline={timeline}
           knobs={knobs}
           busy={busy}
+          target={editing === "phase1" || editing === null ? null : editing}
           onSave={(patch) => set(patch)}
         />
 
@@ -901,39 +901,56 @@ export function TimelinePanel({
                     : `${shortDay(ph.startsOn!)} → ${shortDay(ph.endsOn!)}${ph.services.length > 1 ? " · at the same time" : ""}`
               }
               defaultOpen={now}
-              adjustable={editable && !ph.done}
               right={
-                ph.phase === 2 && !ph.done ? (
-                  <span className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
-                    <label className="text-[11px] text-muted-foreground">
-                      {timeline.path === "existing" ? "Form optimised on" : "Form dialed in on"}
-                      <input
-                        type="date"
-                        className={cn(input, "ml-1.5")}
-                        value={knobs.form_proven_on ?? ""}
-                        disabled={busy}
-                        min={timeline.liveDate}
-                        onChange={(e) => set({ form_proven_on: e.target.value || null })}
-                      />
-                    </label>
-                    {!knobs.form_proven_on && !timeline.liveDoneOn ? (
-                      <button
-                        type="button"
-                        className="inline-flex items-center gap-1 rounded-sm bg-primary px-2 py-1 text-[11px] font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-                        disabled={busy}
-                        onClick={() => set({ form_proven_on: today })}
-                      >
-                        {timeline.path === "existing"
-                          ? "Optimised today — start phase 2"
-                          : "Dialed in today — start phase 2"}
-                      </button>
-                    ) : null}
-                  </span>
-                ) : null
+                <span className="flex flex-wrap items-center gap-1.5">
+                  {!ph.done
+                    ? editButton(
+                        {
+                          mode: "dates",
+                          title: names,
+                          steps: ph.services.flatMap((svc) => svc.milestones),
+                        },
+                        "Edit dates",
+                      )
+                    : null}
+                  {ph.phase === 2 && !ph.done ? (
+                    <span
+                      className="flex items-center gap-1.5"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <label className="text-[11px] text-muted-foreground">
+                        {timeline.path === "existing" ? "Form optimised on" : "Form dialed in on"}
+                        <input
+                          type="date"
+                          className={cn(input, "ml-1.5")}
+                          value={knobs.form_proven_on ?? ""}
+                          disabled={busy}
+                          min={timeline.liveDate}
+                          onChange={(e) => set({ form_proven_on: e.target.value || null })}
+                        />
+                      </label>
+                      {!knobs.form_proven_on && !timeline.liveDoneOn ? (
+                        <button
+                          type="button"
+                          className="inline-flex items-center gap-1 rounded-sm bg-primary px-2 py-1 text-[11px] font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+                          disabled={busy}
+                          onClick={() => set({ form_proven_on: today })}
+                        >
+                          {timeline.path === "existing"
+                            ? "Optimised today — start phase 2"
+                            : "Dialed in today — start phase 2"}
+                        </button>
+                      ) : null}
+                    </span>
+                  ) : null}
+                </span>
               }
             >
-              {(adjust) => (
+              {() => (
                 <div className="space-y-2">
+                  <p className="px-1 text-[11px] text-muted-foreground">
+                    Steps come from the SOW — dates and times are what you can change.
+                  </p>
                   {ph.services.map((svc) => (
                     <div key={svc.id}>
                       <div className="flex items-center gap-2 px-1 pb-1 text-[11px]">
@@ -951,7 +968,7 @@ export function TimelinePanel({
                       </div>
                       <StepList
                         steps={svc.milestones}
-                        adjust={adjust}
+                        adjust={false}
                         gated={ph.tentative ? ph.label : null}
                         {...stepHandlers}
                       />
@@ -1128,7 +1145,6 @@ function PlanSection({
   summary,
   defaultOpen,
   right,
-  adjustable = false,
   children,
 }: {
   id?: string;
@@ -1137,12 +1153,9 @@ function PlanSection({
   summary: string;
   defaultOpen: boolean;
   right?: React.ReactNode;
-  /** Offer an "Adjust dates" switch that reveals the date and time inputs. */
-  adjustable?: boolean;
   children: (adjust: boolean) => React.ReactNode;
 }) {
   const [open, setOpen] = useState(defaultOpen);
-  const [adjust, setAdjust] = useState(false);
   const c = chip ? CHIP[chip] : null;
   useEffect(() => {
     if (!id) return;
@@ -1196,27 +1209,9 @@ function PlanSection({
         </span>
         <span className="min-w-0 flex-1 truncate text-[12px] text-muted-foreground">{summary}</span>
         {right}
-        {open && adjustable ? (
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              setAdjust((v) => !v);
-            }}
-            className={cn(
-              "inline-flex items-center gap-1 rounded-sm border px-1.5 py-0.5 text-[11px]",
-              adjust
-                ? "border-primary bg-primary/10 text-primary"
-                : "border-border text-muted-foreground hover:text-foreground",
-            )}
-            title="Show the date and time inputs"
-          >
-            <Pencil className="h-3 w-3" /> {adjust ? "Done adjusting" : "Adjust dates"}
-          </button>
-        ) : null}
       </div>
       {open ? (
-        <div className="space-y-2 border-t border-border px-2.5 py-2">{children(adjust)}</div>
+        <div className="space-y-2 border-t border-border px-2.5 py-2">{children(false)}</div>
       ) : null}
     </section>
   );

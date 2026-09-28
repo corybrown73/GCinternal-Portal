@@ -25,6 +25,7 @@ import {
   businessDaysBetween,
   planFor,
   shortDay,
+  type Milestone,
   type MilestoneKind,
   type MilestoneOwner,
   type Timeline,
@@ -53,10 +54,21 @@ type Row = {
   detail: string;
   /** YYYY-MM-DD as the plan shows it now. */
   date: string;
+  /** "HH:MM" for a call, when booked. */
+  time: string;
+  /** For a step that can be reshaped; false when the step comes from the SOW and only its dates move. */
+  shape: boolean;
   /** The close and the finish line stay where they are. */
   anchor: boolean;
   /** A step this account added: not in the standard. */
   custom: boolean;
+};
+
+export type PlanEditorTarget = {
+  /** "full": the account's own steps — reshape, reorder, add, remove. "dates": steps from the SOW — dates and times only. */
+  mode: "full" | "dates";
+  title: string;
+  steps: Milestone[];
 };
 
 export function PlanEditor({
@@ -65,6 +77,7 @@ export function PlanEditor({
   timeline,
   knobs,
   busy,
+  target,
   onSave,
 }: {
   open: boolean;
@@ -72,8 +85,17 @@ export function PlanEditor({
   timeline: Timeline;
   knobs: IntakeAnswers["timeline"];
   busy: boolean;
-  onSave: (patch: { plan_edits: PlanEdits; overrides: Record<string, string> }) => void;
+  /** What is being edited; phase 1 in full when absent. */
+  target?: PlanEditorTarget | null;
+  onSave: (patch: {
+    plan_edits?: PlanEdits;
+    overrides: Record<string, string>;
+    times: Record<string, string>;
+    timezone: string | null;
+  }) => void;
 }) {
+  const mode = target?.mode ?? "full";
+  const source = target?.steps ?? timeline.milestones;
   // Our standard for this kind of account: what "reset" returns to, and
   // what the saved edits are measured against.
   const standard = useMemo(
@@ -92,7 +114,7 @@ export function PlanEditor({
   );
 
   const fromTimeline = (): Row[] =>
-    timeline.milestones.map((m) => ({
+    source.map((m) => ({
       key: m.key,
       label: m.label,
       kind: m.kind,
@@ -101,8 +123,10 @@ export function PlanEditor({
       minutes: m.minutes ?? null,
       detail: m.detail,
       date: m.date,
-      anchor: anchors.has(m.key),
-      custom: !standardKeys.has(m.key),
+      time: m.time ?? "",
+      anchor: mode === "full" && anchors.has(m.key),
+      custom: mode === "full" && !standardKeys.has(m.key),
+      shape: mode === "full",
     }));
   const [rows, setRows] = useState<Row[]>(fromTimeline);
   const [seeded, setSeeded] = useState(open);
@@ -142,8 +166,10 @@ export function PlanEditor({
         minutes: null,
         detail: "",
         date: before.date,
+        time: "",
         anchor: false,
         custom: true,
+        shape: true,
       };
       const next = [...rs];
       next.splice(Math.max(1, rs.length - 1), 0, row);
@@ -158,8 +184,30 @@ export function PlanEditor({
   };
 
   const save = () => {
-    const edits: PlanEdits = { ...EMPTY_PLAN_EDITS, steps: {}, added: [], removed: [] };
     const overrides: Record<string, string> = { ...knobs.overrides };
+    const times: Record<string, string> = { ...knobs.times };
+    const timezone =
+      knobs.timezone ??
+      (typeof Intl !== "undefined" ? Intl.DateTimeFormat().resolvedOptions().timeZone : null) ??
+      null;
+    // Call times travel with the dates: one save, one place.
+    for (const r of rows) {
+      if (r.kind === "call" && r.time) times[r.key] = r.time;
+      else delete times[r.key];
+    }
+    if (mode === "dates") {
+      for (const r of rows) {
+        const shown = source.find((m) => m.key === r.key);
+        if (shown && r.date !== shown.date) {
+          if (r.date === shown.plannedDate) delete overrides[r.key];
+          else overrides[r.key] = r.date;
+        }
+      }
+      onSave({ overrides, times, timezone });
+      onClose();
+      return;
+    }
+    const edits: PlanEdits = { ...EMPTY_PLAN_EDITS, steps: {}, added: [], removed: [] };
     const present = new Set(rows.map((r) => r.key));
     edits.removed = standard.map((s) => s.key).filter((k) => !present.has(k) && !anchors.has(k));
     for (const r of rows) {
@@ -200,11 +248,16 @@ export function PlanEditor({
     ];
     const order = rows.map((r) => r.key);
     edits.order = order.join("|") === standardOrder.join("|") ? null : order;
-    onSave({ plan_edits: edits, overrides });
+    onSave({ plan_edits: edits, overrides, times, timezone });
     onClose();
   };
   const reset = () => {
-    onSave({ plan_edits: EMPTY_PLAN_EDITS, overrides: knobs.overrides });
+    onSave({
+      plan_edits: EMPTY_PLAN_EDITS,
+      overrides: knobs.overrides,
+      times: knobs.times,
+      timezone: knobs.timezone,
+    });
     onClose();
   };
 
@@ -215,11 +268,13 @@ export function PlanEditor({
     <Dialog open={open} onOpenChange={(v) => (v ? null : onClose())}>
       <DialogContent className="max-h-[92vh] w-[min(96vw,900px)] max-w-none overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="text-[15px]">Edit this account's plan</DialogTitle>
+          <DialogTitle className="text-[15px]">
+            {mode === "dates" ? `Edit dates · ${target?.title ?? ""}` : "Edit this account's plan"}
+          </DialogTitle>
           <DialogDescription className="text-[12px]">
-            Starts from our standard. Drag a step to reorder it, take one off that already happened
-            pre-sale, change what a step is, its icon, its date or its length. The customer's page,
-            the invites and the deck all read this plan. Changes here are for this account only.
+            {mode === "dates"
+              ? "Steps come from the SOW — dates and call times only. The customer's page and the invites follow."
+              : "Starts from our standard. Drag a step to reorder it, take one off that already happened pre-sale, change what a step is, its icon, its date, time or length. The customer's page, the invites and the deck all read this plan. Changes here are for this account only."}
           </DialogDescription>
         </DialogHeader>
 
@@ -243,23 +298,27 @@ export function PlanEditor({
 
         <DialogFooter className="flex-wrap gap-2 sm:justify-between">
           <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              className="inline-flex h-8 items-center gap-1.5 rounded-sm border border-border px-3 text-[12px] hover:bg-muted"
-              onClick={addStep}
-              disabled={busy}
-            >
-              <Plus className="h-3.5 w-3.5" /> Add a step
-            </button>
-            <button
-              type="button"
-              className="inline-flex h-8 items-center gap-1.5 rounded-sm border border-border px-3 text-[12px] text-muted-foreground hover:bg-muted"
-              onClick={reset}
-              disabled={busy || !timeline.edited}
-              title="Back to our standard plan for this kind of account. Dates you moved by hand stay."
-            >
-              <RotateCcw className="h-3.5 w-3.5" /> Back to the standard
-            </button>
+            {mode === "full" ? (
+              <>
+                <button
+                  type="button"
+                  className="inline-flex h-8 items-center gap-1.5 rounded-sm border border-border px-3 text-[12px] hover:bg-muted"
+                  onClick={addStep}
+                  disabled={busy}
+                >
+                  <Plus className="h-3.5 w-3.5" /> Add a step
+                </button>
+                <button
+                  type="button"
+                  className="inline-flex h-8 items-center gap-1.5 rounded-sm border border-border px-3 text-[12px] text-muted-foreground hover:bg-muted"
+                  onClick={reset}
+                  disabled={busy || !timeline.edited}
+                  title="Back to our standard plan for this kind of account. Dates you moved by hand stay."
+                >
+                  <RotateCcw className="h-3.5 w-3.5" /> Back to the standard
+                </button>
+              </>
+            ) : null}
           </div>
           <div className="flex items-center gap-2">
             <button
@@ -303,10 +362,10 @@ function EditorRow({
   onRemove: () => void;
   onMove: (dir: -1 | 1) => void;
 }) {
-  const drag = useDraggable({ id: row.key, disabled: row.anchor || busy });
-  const drop = useDroppable({ id: row.key, disabled: row.anchor });
-  const canMoveUp = !row.anchor && index > 1;
-  const canMoveDown = !row.anchor && index < count - 2;
+  const drag = useDraggable({ id: row.key, disabled: row.anchor || busy || !row.shape });
+  const drop = useDroppable({ id: row.key, disabled: row.anchor || !row.shape });
+  const canMoveUp = row.shape && !row.anchor && index > 1;
+  const canMoveDown = row.shape && !row.anchor && index < count - 2;
   return (
     <li
       ref={drop.setNodeRef}
@@ -366,7 +425,7 @@ function EditorRow({
             className={cn(inputClass, "w-32")}
             aria-label={`${row.label} icon`}
             value={row.icon}
-            disabled={busy}
+            disabled={busy || !row.shape}
             onChange={(e) => onChange({ icon: e.target.value })}
           >
             {PLAN_ICONS.map((n) => (
@@ -380,14 +439,14 @@ function EditorRow({
           className={cn(inputClass, "min-w-[12rem] flex-1 font-medium")}
           aria-label="Step name"
           value={row.label}
-          disabled={busy}
+          disabled={busy || !row.shape}
           onChange={(e) => onChange({ label: e.target.value })}
         />
         <select
           className={cn(inputClass, "w-36")}
           aria-label={`${row.label} type`}
           value={row.kind}
-          disabled={busy || row.anchor}
+          disabled={busy || row.anchor || !row.shape}
           onChange={(e) => {
             const kind = e.target.value as MilestoneKind;
             onChange({
@@ -407,7 +466,7 @@ function EditorRow({
           className={cn(inputClass, "w-28")}
           aria-label={`${row.label} owner`}
           value={row.owner}
-          disabled={busy}
+          disabled={busy || !row.shape}
           onChange={(e) => onChange({ owner: e.target.value as MilestoneOwner })}
         >
           {(Object.keys(OWNER_LABEL) as MilestoneOwner[]).map((o) => (
@@ -426,6 +485,17 @@ function EditorRow({
           title={index === 0 ? "The close date is set on the deal" : shortDay(row.date)}
         />
         {row.kind === "call" ? (
+          <input
+            type="time"
+            className={cn(inputClass, "w-28")}
+            aria-label={`${row.label} time`}
+            value={row.time}
+            disabled={busy}
+            onChange={(e) => onChange({ time: e.target.value })}
+            title="The call's time, in the customer's zone (Plan settings)"
+          />
+        ) : null}
+        {row.kind === "call" ? (
           <label className="flex items-center gap-1 text-[11px] text-muted-foreground">
             <input
               type="number"
@@ -435,7 +505,7 @@ function EditorRow({
               className={cn(inputClass, "w-16")}
               aria-label={`${row.label} minutes`}
               value={row.minutes ?? 60}
-              disabled={busy}
+              disabled={busy || !row.shape}
               onChange={(e) => onChange({ minutes: Number(e.target.value) || 60 })}
             />
             min
@@ -450,20 +520,22 @@ function EditorRow({
               ? "The close and the finish line cannot be removed"
               : "Take this step off this account's plan"
           }
-          disabled={busy || row.anchor}
+          disabled={busy || row.anchor || !row.shape}
           onClick={onRemove}
         >
           <X className="h-4 w-4" />
         </button>
       </div>
-      <input
-        className={cn(inputClass, "w-full text-muted-foreground")}
-        aria-label={`${row.label} detail`}
-        placeholder="One line the customer reads under this step"
-        value={row.detail}
-        disabled={busy}
-        onChange={(e) => onChange({ detail: e.target.value })}
-      />
+      {row.shape ? (
+        <input
+          className={cn(inputClass, "w-full text-muted-foreground")}
+          aria-label={`${row.label} detail`}
+          placeholder="One line the customer reads under this step"
+          value={row.detail}
+          disabled={busy}
+          onChange={(e) => onChange({ detail: e.target.value })}
+        />
+      ) : null}
     </li>
   );
 }
