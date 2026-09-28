@@ -90,6 +90,7 @@ import {
 
 import { getCustomer360 } from "@/lib/hub.functions";
 import type { Customer360, TraceStep } from "@/lib/hub-types";
+import { dealStageLabel, dealStageProgress } from "@/lib/deal-stage";
 import { LIFECYCLE_STAGES } from "@/lib/lifecycle";
 import {
   fmtDate,
@@ -390,7 +391,7 @@ function Customer360Page() {
               legacyStatus={impl.status}
               computed={health.level}
             />
-            <StageBadge stage={impl.current_stage} />
+            <StageBadge stage={impl.deal_stage} />
             {/* "stage 3/8", a 3/8-wide progress bar, days-in-stage and the
                 target launch date all used to sit here. Every one of them was
                 computed against the hardcoded eight-stage lifecycle, so a
@@ -743,7 +744,20 @@ function DetailsTab({ record, customerId }: { record: Customer360; customerId: s
     {
       key: "journey",
       title: "Journey",
-      body: <JourneyTab record={record} customerId={customerId} />,
+      body: (
+        <>
+          {/* The delivery lifecycle is project history: gates, journey
+              templates and the timeline follow it. The deal's stage is the
+              one the header, the lists and Home show. */}
+          <p className="px-3 pt-2 text-[12px] text-muted-foreground">
+            Project stage:{" "}
+            <b className="text-foreground">{stageLabel(record.implementation?.current_stage)}</b> —
+            the delivery lifecycle this project's gates and history follow. The deal's stage is
+            shown in the header.
+          </p>
+          <JourneyTab record={record} customerId={customerId} />
+        </>
+      ),
     },
     {
       key: "solution",
@@ -1303,22 +1317,14 @@ function AccountRail({
       >
         <Panel title="At a glance" level="supporting">
           <dl className="grid grid-cols-2 gap-x-4 gap-y-3 px-3 py-2.5">
-            <Field label="Stage" value={timeline.currentStageName} />
+            <Field label="Stage" value={dealStageLabel(impl.deal_stage)} />
             <Field label="Health" value={<StatusChip status={health.level} />} />
             <Field
               label="Progress"
               value={
-                <span
-                  title={
-                    timeline.source === "lifecycle_default"
-                      ? "No journey has been applied to this project, so this counts against the default implementation stages."
-                      : `Counted against this project's own ${timeline.total}-stage plan.`
-                  }
-                >
-                  {timeline.position} / {timeline.total} stages
-                  {timeline.source === "lifecycle_default" ? (
-                    <span className="ml-1 text-muted-foreground">(default)</span>
-                  ) : null}
+                <span title="Counted against the deal's stages: Prospect, Closed Won, Pre-kickoff, Onboarding, Complete.">
+                  {dealStageProgress(impl.deal_stage).position} /{" "}
+                  {dealStageProgress(impl.deal_stage).total} stages
                 </span>
               }
             />

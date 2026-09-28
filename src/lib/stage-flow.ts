@@ -48,15 +48,27 @@ export const DEAL_TYPES = [
 ] as const;
 
 export type FlowStageKey =
-  "closed_won" | "field_fusion" | "pre_kickoff" | "onboarding" | "complete";
+  "prospect" | "closed_won" | "field_fusion" | "pre_kickoff" | "onboarding" | "complete";
 
+/**
+ * The deal's rail, in order, with the stepper's word for each stage. One
+ * list: the checklist, the stepper and the deal's stage badge all read it,
+ * so a deal never shows one stage in the header and another on the rail.
+ * Field Fusion setup appears only for deals on that path.
+ */
 export const FLOW_STAGES: ReadonlyArray<{ key: FlowStageKey; stage: AccountStage; label: string }> =
   [
+    { key: "prospect", stage: "prospect", label: "Prospect" },
     { key: "closed_won", stage: "closed_won", label: "Closed Won" },
+    { key: "field_fusion", stage: "field_fusion_setup", label: "Field Fusion setup" },
     { key: "pre_kickoff", stage: "onboarding_kickoff", label: "Pre-kickoff" },
     { key: "onboarding", stage: "in_onboarding", label: "Onboarding" },
     { key: "complete", stage: "onboarding_complete", label: "Complete" },
   ];
+
+export function flowLabel(key: FlowStageKey): string {
+  return FLOW_STAGES.find((s) => s.key === key)!.label;
+}
 
 export type TaskAction =
   | "deal_type"
@@ -145,6 +157,8 @@ export const PRE_KICKOFF_TASKS = ["reply_ae", "cadence", "kickoff"] as const;
 
 function flowStageOf(stage: string): FlowStageKey | null {
   switch (stage) {
+    case "prospect":
+      return "prospect";
     case "closed_won":
       return "closed_won";
     case "field_fusion_setup":
@@ -587,19 +601,23 @@ function graduationChecks(a: IntakeAnswers, t: Timeline): FlowTask[] {
 export function stageFlow(input: StageFlowInput): StageFlow {
   const a = readIntake(input.intake);
   const current = flowStageOf(input.stage);
-  const cw = closedWonTasks(a, input, current !== null);
+  const closed = current !== null && current !== "prospect";
+  const cw = closedWonTasks(a, input, closed);
   const pk = preKickoffTasks(a);
   const ob = onboardingTasks(a, input.timeline);
   // Optional tasks are offered, never waited on.
   const allDone = (ts: FlowTask[]) => ts.length > 0 && ts.every((x) => x.done || x.optional);
 
   const stages: StageFlow["stages"] = [
-    { key: "closed_won", label: "Closed Won", tasks: cw, done: allDone(cw) },
+    // Prospect has no tasks of its own: the Closed Won ones can be worked
+    // ahead, and the deal moves on when it is marked won.
+    { key: "prospect", label: flowLabel("prospect"), tasks: [], done: closed },
+    { key: "closed_won", label: flowLabel("closed_won"), tasks: cw, done: allDone(cw) },
     ...(current === "field_fusion" || a.path === "field_fusion"
       ? [
           {
             key: "field_fusion" as const,
-            label: "Field Fusion setup",
+            label: flowLabel("field_fusion"),
             tasks: [
               {
                 key: "field_fusion",
@@ -615,9 +633,9 @@ export function stageFlow(input: StageFlowInput): StageFlow {
           },
         ]
       : []),
-    { key: "pre_kickoff", label: "Pre-kickoff", tasks: pk, done: allDone(pk) },
-    { key: "onboarding", label: "Onboarding", tasks: ob, done: allDone(ob) },
-    { key: "complete", label: "Complete", tasks: [], done: current === "complete" },
+    { key: "pre_kickoff", label: flowLabel("pre_kickoff"), tasks: pk, done: allDone(pk) },
+    { key: "onboarding", label: flowLabel("onboarding"), tasks: ob, done: allDone(ob) },
+    { key: "complete", label: flowLabel("complete"), tasks: [], done: current === "complete" },
   ];
 
   // Forward only, and one rule per stage. A deal that did everything for
@@ -658,7 +676,9 @@ function joinAnd(xs: string[]): string {
  */
 export function nextChecklistTask(input: StageFlowInput): string | null {
   const f = stageFlow(input);
-  const stage = f.stages.find((s) => s.key === (f.current ?? "closed_won"));
+  // A prospect's next task is the Closed Won work it can do ahead.
+  const key = f.current === null || f.current === "prospect" ? "closed_won" : f.current;
+  const stage = f.stages.find((s) => s.key === key);
   if (!stage) return null;
   const next = stage.tasks.find((t) => !t.done && !t.locked) ?? stage.tasks.find((t) => !t.done);
   return next?.label ?? null;
@@ -722,7 +742,10 @@ export function nudgesFor(args: {
   const next = current?.tasks.find((t) => !t.done)?.label ?? null;
   const unowned =
     args.stage === "closed_won" &&
-    !(args.flow.stages[0]?.tasks.find((t) => t.key === "assign")?.done ?? true);
+    !(
+      args.flow.stages.find((s) => s.key === "closed_won")?.tasks.find((t) => t.key === "assign")
+        ?.done ?? true
+    );
 
   if (unowned && args.businessDaysInStage >= 1) {
     out.push({

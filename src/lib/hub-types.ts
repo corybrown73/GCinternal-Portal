@@ -1,3 +1,5 @@
+import type { AccountStage } from "./presale-stages";
+
 export type ImplStatus = "on_track" | "at_risk" | "blocked" | "idle" | string;
 
 export type ImplementationRow = {
@@ -9,6 +11,8 @@ export type ImplementationRow = {
   industry: string | null;
   arr: number | null;
   current_stage: string;
+  /** The deal's stage — the one every deal-facing surface shows. See lib/deal-stage. */
+  deal_stage: AccountStage;
   stage_entered_at: string;
   status: ImplStatus;
   /** The owner's own statement of health (0010). Null = never recorded. */
@@ -230,6 +234,8 @@ export type Customer360 = {
     id: string;
     name: string;
     current_stage: string;
+    /** The deal's stage — the one the header and "At a glance" show. */
+    deal_stage: AccountStage;
     stage_entered_at: string;
     status: string;
     /** Recorded by a person through the editor; null = never recorded (0010). */
@@ -385,7 +391,12 @@ export type TechnicalSolutionDetail = {
     updated_at: string | null;
   };
   customer: { id: string; name: string; industry: string | null; segment: string | null };
-  implementation: { id: string; name: string; current_stage: string } | null;
+  implementation: {
+    id: string;
+    name: string;
+    current_stage: string;
+    deal_stage: AccountStage;
+  } | null;
   requirement: { id: string; title: string; status: string; priority: string } | null;
   team: TeamMemberOption[];
   notes: Array<{
@@ -420,6 +431,7 @@ export type ImplementationSummary = {
   id: string;
   name: string;
   current_stage: string;
+  deal_stage: AccountStage;
   stage_entered_at: string;
   status: string;
   owner_name: string | null;

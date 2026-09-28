@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 
 import { readIntake } from "../intake-answers";
 import { buildTimeline } from "../onboarding-timeline";
-import { stageFlow, type StageFlowInput } from "../stage-flow";
+import { stageFlow, type StageFlow, type StageFlowInput } from "../stage-flow";
+
+const cw = (f: StageFlow) => f.stages.find((s) => s.key === "closed_won")!;
 
 const ready = {
   path: "new_logo",
@@ -29,7 +31,7 @@ describe("the stage checklist", () => {
     const f = stageFlow(input({ owner: null }));
     expect(f.current).toBe("closed_won");
     expect(f.advanceTo).toBeNull();
-    expect(f.stages[0]!.tasks.find((t) => t.key === "assign")!.done).toBe(false);
+    expect(cw(f).tasks.find((t) => t.key === "assign")!.done).toBe(false);
   });
 
   it("moves to Pre-kickoff once the AI's reading is approved and the deck exists", () => {
@@ -40,18 +42,12 @@ describe("the stage checklist", () => {
 
   it("asks the type of deal first, and the review waits for it, the Gong brief and the SOW", () => {
     const f = stageFlow(input({ gongReports: 0, hasSow: false, intake: {} }));
-    expect(f.stages[0]!.tasks.map((t) => t.key)).toEqual([
-      "type",
-      "assign",
-      "notes",
-      "sow",
-      "review",
-    ]);
-    expect(f.stages[0]!.tasks[0]!.done).toBe(false);
-    const review = f.stages[0]!.tasks.find((t) => t.key === "review")!;
+    expect(cw(f).tasks.map((t) => t.key)).toEqual(["type", "assign", "notes", "sow", "review"]);
+    expect(cw(f).tasks[0]!.done).toBe(false);
+    const review = cw(f).tasks.find((t) => t.key === "review")!;
     expect(review.locked).toBe("Needs the type of deal, the Gong brief and the SOW first");
     const typed = stageFlow(input({ intake: { path: "dm_conversion" } }));
-    expect(typed.stages[0]!.tasks[0]!.summary).toBe("Device Magic → GoCanvas");
+    expect(cw(typed).tasks[0]!.summary).toBe("Device Magic → GoCanvas");
   });
 
   it("says the AI is reading while it reads", () => {
@@ -64,12 +60,12 @@ describe("the stage checklist", () => {
         },
       }),
     );
-    expect(f.stages[0]!.tasks.find((t) => t.key === "review")!.summary).toMatch(/reading/);
+    expect(cw(f).tasks.find((t) => t.key === "review")!.summary).toMatch(/reading/);
   });
 
   it("counts no SOW as answered", () => {
     const f = stageFlow(input({ hasSow: false, intake: { ...ready, has_sow: false } }));
-    expect(f.stages[0]!.tasks.find((t) => t.key === "sow")!.done).toBe(true);
+    expect(cw(f).tasks.find((t) => t.key === "sow")!.done).toBe(true);
   });
 
   it("moves Pre-kickoff to Onboarding when the AE reply, the cadence and the booked kickoff are all in", () => {
@@ -100,7 +96,7 @@ describe("the stage checklist", () => {
     expect(stageFlow(input({ stage: "prospect" })).advanceTo).toBeNull();
     // Nothing to assign before the close makes the project.
     const pre = stageFlow(input({ stage: "prospect", owner: null }));
-    expect(pre.stages[0]!.tasks.find((t) => t.key === "assign")!.locked).toMatch(/Closed Won/);
+    expect(cw(pre).tasks.find((t) => t.key === "assign")!.locked).toMatch(/Closed Won/);
     expect(stageFlow(input({ stage: "field_fusion_setup" })).advanceTo).toBeNull();
   });
 

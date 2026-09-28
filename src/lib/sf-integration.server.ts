@@ -19,7 +19,7 @@ import type {
 import { type AccountStage } from "./presale-stages";
 import { isAtOrPast, wonStage } from "./pipeline-stages";
 import { loadPipelineStages } from "./pipeline-stages.server";
-import { LIFECYCLE_STAGES } from "./lifecycle";
+import { dealStageForLifecycle, TERMINAL_LIFECYCLE_STAGE } from "./deal-stage";
 
 const db = () => supabaseAdmin as any;
 
@@ -41,7 +41,7 @@ export type Json = string | number | boolean | null | Json[] | { [key: string]: 
  * it.
  */
 
-export const TERMINAL_LIFECYCLE_STAGE = "graduate-to-cs";
+export { TERMINAL_LIFECYCLE_STAGE };
 
 export function bodyHash(body: unknown): string {
   return createHash("sha256")
@@ -397,15 +397,8 @@ export async function bridgeDealToClosedWon(accountId: string): Promise<{ change
   );
 }
 
-/** Lifecycle stage → the presale tail stage it implies. */
-export function presaleStageForLifecycle(lifecycleStage: string): AccountStage | null {
-  const ids = LIFECYCLE_STAGES.map((s) => s.id) as readonly string[];
-  const idx = ids.indexOf(lifecycleStage);
-  if (idx < 0) return null;
-  if (lifecycleStage === TERMINAL_LIFECYCLE_STAGE) return "onboarding_complete";
-  if (idx === 0) return "onboarding_kickoff";
-  return "in_onboarding";
-}
+/** Lifecycle stage → the deal stage it implies. One mapping, in lib/deal-stage. */
+export const presaleStageForLifecycle = dealStageForLifecycle;
 
 /**
  * The other half of decision 10: the presale tail
@@ -430,16 +423,24 @@ export async function syncPresaleStageFromLifecycle(
 
     const { data: impl } = await db()
       .from("implementations")
-      .select("customer_id")
+      .select("customer_id, deal_id")
       .eq("id", implementationId)
       .maybeSingle();
     if (!impl) return { synced: false, reason: "implementation not found" };
 
-    const { data: account } = await db()
-      .from("portal_accounts")
-      .select("id, stage")
-      .eq("customer_id", impl.customer_id)
-      .maybeSingle();
+    // The project's own deal. A customer with two deals (an add-on beside
+    // the original) used to make the customer lookup fail with "multiple
+    // rows"; the deal link is exact, and the customer lookup is only for
+    // legacy projects that were never linked.
+    const { data: account } = impl.deal_id
+      ? await db().from("portal_accounts").select("id, stage").eq("id", impl.deal_id).maybeSingle()
+      : await db()
+          .from("portal_accounts")
+          .select("id, stage")
+          .eq("customer_id", impl.customer_id)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
     if (!account) return { synced: false, reason: "no linked deal" };
     const stages = await loadPipelineStages();
     if (isAtOrPast(stages, account.stage, target)) {

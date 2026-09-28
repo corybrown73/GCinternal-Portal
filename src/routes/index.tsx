@@ -163,7 +163,7 @@ function ImplementationCard({
         >
           {impl.customer_name}
         </CustomerLink>
-        <StageBadge stage={impl.current_stage} />
+        <StageBadge stage={impl.deal_stage} />
         <StatusChip status={health.level} />
         <Link
           to="/customers/$customerId"

@@ -12,7 +12,8 @@ import { ChevronDown } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { PANEL_OPEN_EVENT } from "@/lib/panel-open";
-import { humanize, stageLabel } from "@/lib/hub-format";
+import { humanize } from "@/lib/hub-format";
+import { dealStageLabel } from "@/lib/deal-stage";
 import { PACE_CHIP, PACE_LABEL, PACE_TEXT, type Pace } from "@/lib/pace";
 
 const STATUS_CLASS: Record<string, string> = {
@@ -133,10 +134,11 @@ export function PaceChip({
   );
 }
 
+/** The deal's stage. Pass `deal_stage`, never the lifecycle `current_stage`. */
 export function StageBadge({ stage }: { stage: string }) {
   return (
     <span className="inline-flex items-center rounded-sm border border-border bg-muted px-1.5 py-0.5 font-mono text-[11px] tracking-tight text-foreground">
-      {stageLabel(stage)}
+      {dealStageLabel(stage)}
     </span>
   );
 }

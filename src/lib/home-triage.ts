@@ -15,6 +15,7 @@ import {
 import { launchAcceptanceGate } from "./launch-gate";
 import { nextLifecycleStage } from "./stage-advance-input";
 import { normalizeStage } from "./hub-format";
+import { dealStageLabel } from "./deal-stage";
 import { daysUntilDate } from "./dates";
 import {
   STAGE_FLAG_DAYS,
@@ -140,7 +141,7 @@ export function triageRow(impl: ImplementationRow, bundle: TriageBundle | undefi
   }
   if (impl.status === "blocked") {
     return row(impl, "act_now", 0.5, "overview", {
-      reason: `Blocked in ${stageLabel(impl.current_stage)} — ${whatMattersNow(record)}`,
+      reason: `Blocked in ${dealStageLabel(impl.deal_stage)} — ${whatMattersNow(record)}`,
       impact: impactLine(impl, `${stalledDays}d in stage`),
       record,
       bundle,
@@ -229,7 +230,7 @@ export function triageRow(impl: ImplementationRow, bundle: TriageBundle | undefi
     return row(impl, "needs_attention", 3, "journey", {
       reason: csStalled
         ? `In CS stage ${stalledDays}d — review if still needs implementation-side attention`
-        : `Stalled ${stalledDays} days in ${stageLabel(impl.current_stage)}`,
+        : `Stalled ${stalledDays} days in ${dealStageLabel(impl.deal_stage)}`,
       impact: impactLine(impl, `threshold ${STAGE_FLAG_DAYS}d`),
       record,
       bundle,
@@ -272,8 +273,8 @@ export function triageRow(impl: ImplementationRow, bundle: TriageBundle | undefi
       reason: `Value proof late — ${valueGap.reason}`,
       impact: impactLine(
         impl,
-        `${valueGap.count} success criteri${valueGap.count > 1 ? "a" : "on"} unproven in ${stageLabel(
-          impl.current_stage,
+        `${valueGap.count} success criteri${valueGap.count > 1 ? "a" : "on"} unproven in ${dealStageLabel(
+          impl.deal_stage,
         )}`,
       ),
       record,
@@ -290,7 +291,7 @@ export function triageRow(impl: ImplementationRow, bundle: TriageBundle | undefi
   if (acceptanceGate.blocked) {
     return row(impl, "needs_attention", 3.55, "solution", {
       reason: `Solution acceptance is preventing the move to Launch — ${acceptanceGate.reason}`,
-      impact: impactLine(impl, `${stalledDays}d in ${stageLabel(impl.current_stage)}`),
+      impact: impactLine(impl, `${stalledDays}d in ${dealStageLabel(impl.deal_stage)}`),
       record,
       bundle,
       next: acceptanceGate.outstanding[0] ?? "Record solution acceptance before moving to Launch",
@@ -299,7 +300,7 @@ export function triageRow(impl: ImplementationRow, bundle: TriageBundle | undefi
   if (impl.status === "at_risk") {
     return row(impl, "needs_attention", 3.6, "overview", {
       reason: `Flagged at risk — ${whatMattersNow(record)}`,
-      impact: impactLine(impl, `${stalledDays}d in ${stageLabel(impl.current_stage)}`),
+      impact: impactLine(impl, `${stalledDays}d in ${dealStageLabel(impl.deal_stage)}`),
       record,
       bundle,
     });
@@ -309,8 +310,8 @@ export function triageRow(impl: ImplementationRow, bundle: TriageBundle | undefi
   return row(impl, "moving", 4, "overview", {
     reason:
       impl.status === "idle"
-        ? `Idle in ${stageLabel(impl.current_stage)} — nothing open against it`
-        : `On track in ${stageLabel(impl.current_stage)} — nothing open against it`,
+        ? `Idle in ${dealStageLabel(impl.deal_stage)} — nothing open against it`
+        : `On track in ${dealStageLabel(impl.deal_stage)} — nothing open against it`,
     impact: impactLine(impl, `${stalledDays}d in stage`),
     record,
   });

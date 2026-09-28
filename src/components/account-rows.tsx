@@ -48,7 +48,7 @@ export function AccountRowList({
             >
               {row.impl.customer_name}
             </Link>
-            <StageBadge stage={row.impl.current_stage} />
+            <StageBadge stage={row.impl.deal_stage} />
             {showOwner ? (
               row.impl.owner_name ? (
                 <Link

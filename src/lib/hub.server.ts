@@ -1,6 +1,8 @@
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { technicalSolutionNextAction } from "./customer360-derive";
 import { normalizeStage } from "./hub-format";
+import { dealStageFor } from "./deal-stage";
+import { dealStagesFor } from "./server/deal-stage";
 import { nextLifecycleStage } from "./stage-advance-input";
 import { LAUNCH_STAGE, launchAcceptanceGate, launchGateMessage } from "./launch-gate";
 import type {
@@ -88,6 +90,7 @@ export async function loadImplementations(
     ]);
 
   const customerMap = new Map((customers ?? []).map((c: any) => [c.id, c]));
+  const dealStages = await dealStagesFor((impls ?? []) as any[]);
 
   // The pre-sale account owners (am/se) live on portal_accounts and are
   // profile ids, not team ids. Read only when a scope actually needs them.
@@ -138,6 +141,8 @@ export async function loadImplementations(
       industry: c.industry ?? null,
       arr: demo.arr(c.arr ?? null),
       current_stage: i.current_stage,
+      deal_stage:
+        dealStages.get(i.id) ?? dealStageFor({ deal_stage: null, current_stage: i.current_stage }),
       stage_entered_at: i.stage_entered_at,
       status: i.status,
       health_recorded: i.health_recorded ?? null,
@@ -440,13 +445,22 @@ export async function loadCustomer360(
     new Set(((implRes.data ?? []) as any[]).map((i) => i.deal_id).filter(Boolean)),
   ) as string[];
   const dealNames = new Map<string, string>();
+  const dealStageById = new Map<string, string>();
   if (dealIds.length) {
     const { data: dealRows } = await db()
       .from("portal_accounts")
-      .select("id,name")
+      .select("id,name,stage")
       .in("id", dealIds);
-    for (const d of (dealRows ?? []) as any[]) dealNames.set(d.id, d.name);
+    for (const d of (dealRows ?? []) as any[]) {
+      dealNames.set(d.id, d.name);
+      dealStageById.set(d.id, d.stage);
+    }
   }
+  const dealStageOf = (i: any) =>
+    dealStageFor({
+      deal_stage: i.deal_id ? (dealStageById.get(i.deal_id) ?? null) : null,
+      current_stage: i.current_stage,
+    });
 
   const teamOptions = (activeTeamRes.data ?? []).map((t: any) => ({
     id: t.id,
@@ -479,6 +493,7 @@ export async function loadCustomer360(
     id: i.id,
     name: i.name,
     current_stage: i.current_stage,
+    deal_stage: dealStageOf(i),
     stage_entered_at: i.stage_entered_at,
     status: i.status,
     health_recorded: i.health_recorded ?? null,
@@ -894,6 +909,7 @@ export async function loadCustomer360(
       id: impl.id,
       name: impl.name,
       current_stage: impl.current_stage,
+      deal_stage: dealStageOf(impl),
       stage_entered_at: impl.stage_entered_at,
       status: impl.status,
       health_recorded: impl.health_recorded ?? null,
@@ -1343,7 +1359,12 @@ export async function loadTechnicalSolution(id: string): Promise<TechnicalSoluti
       segment: customer?.segment ?? null,
     },
     implementation: impl
-      ? { id: impl.id, name: impl.name, current_stage: impl.current_stage }
+      ? {
+          id: impl.id,
+          name: impl.name,
+          current_stage: impl.current_stage,
+          deal_stage: (await dealStagesFor([impl])).get(impl.id)!,
+        }
       : null,
     requirement: requirement
       ? {

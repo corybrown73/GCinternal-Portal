@@ -144,7 +144,7 @@ function SolutionDetail() {
           <h1 className="text-[18px] font-semibold tracking-tight">{solution.title}</h1>
           <StatusChip status={solution.status} />
           <StatusEditor solutionId={solution.id} status={solution.status} />
-          {implementation ? <StageBadge stage={implementation.current_stage} /> : null}
+          {implementation ? <StageBadge stage={implementation.deal_stage} /> : null}
         </div>
 
         <div className="mt-3">

@@ -118,9 +118,14 @@ export function StageFlow({ deal }: { deal: DealData }) {
   const counter = today ? dayCounter(timeline, today) : null;
 
   const [viewing, setViewing] = useState<FlowStageKey | null>(null);
-  const shown = viewing ?? flow.current ?? "closed_won";
+  // A prospect's own stage has no tasks; its checklist is the Closed Won
+  // work that can be done ahead, so that is what opens.
+  const shown =
+    viewing ?? (flow.current === "prospect" ? "closed_won" : flow.current) ?? "closed_won";
   const stage = flow.stages.find((s) => s.key === shown) ?? flow.stages[0]!;
-  const doneCount = stage.tasks.filter((t) => t.done).length;
+  // Locked tasks (assign before the close) are not "to do" yet.
+  const openTasks = stage.tasks.filter((t) => !t.locked);
+  const doneCount = openTasks.filter((t) => t.done).length;
   const next = stage.tasks.find((t) => !t.done && !t.locked) ?? null;
   // The next task is open. One opened by hand stays open — until it is done,
   // when the next one opens; a done one reopened to change it stays open.
@@ -165,10 +170,10 @@ export function StageFlow({ deal }: { deal: DealData }) {
               : "Type of deal not set"}
           </button>
           <b className="font-semibold">{stage.label}</b>
-          {stage.tasks.length ? (
+          {openTasks.length ? (
             <span className="text-muted-foreground">
               {" "}
-              · {doneCount} of {stage.tasks.length} done
+              · {doneCount} of {openTasks.length} done
               {next ? (
                 <>
                   {" "}
@@ -211,11 +216,11 @@ export function StageFlow({ deal }: { deal: DealData }) {
       {/* WHAT HAPPENS NEXT, always in words. A deal that is not closed says
           so, with the button that closes it; a stage whose tasks are all done
           says where the deal goes now — a folded row is not an answer. */}
-      {flow.current === null && deal.account.stage === "prospect" ? (
+      {flow.current === "prospect" ? (
         <NotClosedBar
           deal={deal}
           editable={editable}
-          ready={stage.done}
+          ready={openTasks.length > 0 && openTasks.every((t) => t.done || t.optional)}
           onOpenTask={(k) => setManual({ key: k, wasDone: false })}
         />
       ) : syncError && flow.advanceTo && shown === flow.current ? (
@@ -236,7 +241,10 @@ export function StageFlow({ deal }: { deal: DealData }) {
             ? editable
               ? `Everything here is done — moving the deal to ${flow.advanceTo === "in_onboarding" ? "Onboarding" : "Pre-kickoff"}…`
               : `Everything here is done — the deal moves to ${flow.advanceTo === "in_onboarding" ? "Onboarding" : "Pre-kickoff"} when its owner opens it.`
-            : shown === "closed_won" && !flow.stages[0]!.tasks.find((x) => x.key === "assign")?.done
+            : shown === "closed_won" &&
+                !flow.stages
+                  .find((x) => x.key === "closed_won")!
+                  .tasks.find((x) => x.key === "assign")?.done
               ? "Waiting on an owner."
               : "Everything here is done."}
         </p>
@@ -249,6 +257,12 @@ export function StageFlow({ deal }: { deal: DealData }) {
           {flow.current === "complete"
             ? "Onboarding is complete."
             : "Marked from the Onboarding stage once every step there is done."}
+        </p>
+      ) : shown === "prospect" ? (
+        <p className="px-4 py-3 text-[13px] text-muted-foreground">
+          {flow.current === "prospect"
+            ? "Not closed yet. The Closed Won tasks can be worked ahead; mark the deal won when it is."
+            : "The deal was a prospect before it closed."}
         </p>
       ) : (
         <ol className="divide-y divide-border">
@@ -266,7 +280,9 @@ export function StageFlow({ deal }: { deal: DealData }) {
         </ol>
       )}
       {/* The parking lot lives beside the work from the first call on. */}
-      {(shown === "pre_kickoff" || shown === "onboarding") && flow.current !== null ? (
+      {(shown === "pre_kickoff" || shown === "onboarding") &&
+      flow.current !== null &&
+      flow.current !== "prospect" ? (
         <ParkingLot dealId={dealId} editable={editable} />
       ) : null}
     </section>
@@ -361,8 +377,12 @@ function stageFooter(
   current: FlowStageKey | null,
   path: IntakeAnswers["path"],
 ): string {
+  if (current === "prospect" && shown === "closed_won")
+    return "Moves to Closed Won when the deal is marked won; everything here can be done ahead.";
   if (shown !== current) return "Not the current stage — you can still work ahead.";
   switch (shown) {
+    case "prospect":
+      return "Moves to Closed Won when the deal is marked won.";
     case "closed_won":
       return "Moves to Pre-kickoff when the review is approved.";
     case "field_fusion":

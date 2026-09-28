@@ -12,8 +12,8 @@ import { ScopeSwitch } from "@/components/scope-switch";
 import { useScope } from "@/lib/use-scope";
 import { getHome } from "@/lib/hub.functions";
 import { healthByImplementation } from "@/lib/home-triage";
-import { LIFECYCLE_STAGES } from "@/lib/lifecycle";
-import { daysSince, fmtDate, humanize, normalizeStage, stageIndex } from "@/lib/hub-format";
+import { DEAL_STAGE_OPTIONS, dealStageIndex } from "@/lib/deal-stage";
+import { daysSince, fmtDate, humanize } from "@/lib/hub-format";
 import { datePace, dwellPace } from "@/lib/pace";
 import { cn } from "@/lib/utils";
 
@@ -112,7 +112,7 @@ function CustomersPage() {
   ).sort((a, b) => a.name.localeCompare(b.name));
 
   const rows = data.implementations
-    .filter((r) => (stage ? normalizeStage(r.current_stage) === stage : true))
+    .filter((r) => (stage ? r.deal_stage === stage : true))
     .filter((r) => (status ? levelOf(r.id) === status : true))
     .sort((a, b) => {
       const factor = dir === "asc" ? 1 : -1;
@@ -120,7 +120,7 @@ function CustomersPage() {
         case "customer":
           return factor * a.customer_name.localeCompare(b.customer_name);
         case "stage":
-          return factor * (stageIndex(a.current_stage) - stageIndex(b.current_stage));
+          return factor * (dealStageIndex(a.deal_stage) - dealStageIndex(b.deal_stage));
         case "status":
           return factor * levelOf(a.id).localeCompare(levelOf(b.id));
         case "owner":
@@ -178,7 +178,7 @@ function CustomersPage() {
           <FilterGroup
             label="Stage"
             value={stage}
-            options={LIFECYCLE_STAGES.map((s) => ({ value: s.id, label: s.label }))}
+            options={DEAL_STAGE_OPTIONS.map((s) => ({ value: s.value, label: s.label }))}
             onChange={(v) => setSearch({ stage: v })}
           />
           <FilterGroup
@@ -262,7 +262,7 @@ function CustomersPage() {
                     </Link>
                   </td>
                   <td className="px-3 py-1.5">
-                    <StageBadge stage={r.current_stage} />
+                    <StageBadge stage={r.deal_stage} />
                   </td>
                   <td className="px-3 py-1.5">
                     <StatusDot status={levelOf(r.id)} />
