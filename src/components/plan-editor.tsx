@@ -22,6 +22,7 @@ import { PlanIcon } from "@/components/plan-icon";
 import { EMPTY_PLAN_EDITS, type IntakeAnswers, type PlanEdits } from "@/lib/intake-answers";
 import { KIND_LABEL, OWNER_LABEL, PLAN_ICONS, defaultIconFor } from "@/lib/plan-icons";
 import {
+  addBusinessDays,
   businessDaysBetween,
   planFor,
   shortDay,
@@ -54,6 +55,10 @@ type Row = {
   detail: string;
   /** YYYY-MM-DD as the plan shows it now. */
   date: string;
+  /** The last day of a span (work between calls), YYYY-MM-DD; "" when it is one day. */
+  end: string;
+  /** Business days after the close the plan places this step on (its DAY label). */
+  day: number;
   /** "HH:MM" for a call, when booked. */
   time: string;
   /** For a step that can be reshaped; false when the step comes from the SOW and only its dates move. */
@@ -123,6 +128,12 @@ export function PlanEditor({
       minutes: m.minutes ?? null,
       detail: m.detail,
       date: m.date,
+      // The span's end, as a date: the plan's through-day counted from its start.
+      end:
+        m.throughDay && m.throughDay > m.day
+          ? addBusinessDays(m.date, m.throughDay - m.day, timeline.holidays)
+          : "",
+      day: m.day,
       time: m.time ?? "",
       anchor: mode === "full" && anchors.has(m.key),
       custom: mode === "full" && !standardKeys.has(m.key),
@@ -166,6 +177,8 @@ export function PlanEditor({
         minutes: null,
         detail: "",
         date: before.date,
+        end: "",
+        day: before.day,
         time: "",
         anchor: false,
         custom: true,
@@ -221,6 +234,14 @@ export function PlanEditor({
           minutes: r.kind === "call" ? (r.minutes ?? 60) : null,
           detail: r.detail.trim(),
           day: Math.max(0, businessDaysBetween(timeline.closeDate, r.date, timeline.holidays)),
+          ...(r.kind === "build" && r.end && r.end > r.date
+            ? {
+                throughDay: Math.max(
+                  0,
+                  businessDaysBetween(timeline.closeDate, r.end, timeline.holidays),
+                ),
+              }
+            : {}),
         });
         delete overrides[r.key];
         continue;
@@ -234,6 +255,13 @@ export function PlanEditor({
       if (r.detail.trim() !== base.detail) step.detail = r.detail.trim();
       if (r.kind === "call" && r.minutes !== null && r.minutes !== (base.minutes ?? null))
         step.minutes = r.minutes;
+      // The span's end, as the plan counts it: the start's day plus the
+      // business days from the start to the end date.
+      const through =
+        r.kind === "build" && r.end && r.end > r.date
+          ? r.day + businessDaysBetween(r.date, r.end, timeline.holidays)
+          : null;
+      if ((through ?? null) !== (base.throughDay ?? null)) step.throughDay = through;
       if (Object.keys(step).length) edits.steps[r.key] = step;
       // A date changed here is a moved date, like on the plan itself.
       const shown = timeline.milestones.find((m) => m.key === r.key);
@@ -268,8 +296,13 @@ export function PlanEditor({
   // gets an amber line on its row and a one-click sort. Only a date before
   // the close — before the plan exists — stops the save.
   const warnings = rows.map((r, i) =>
-    i > 0 && r.date < rows[i - 1]!.date ? "This is before the step above it." : null,
+    r.kind === "build" && r.end && r.end < r.date
+      ? "The end is before the start."
+      : i > 0 && r.date < rows[i - 1]!.date
+        ? "This is before the step above it."
+        : null,
   );
+  const endBeforeStart = rows.some((r) => r.kind === "build" && r.end && r.end < r.date);
   const outOfOrder = warnings.some(Boolean);
   const beforeClose = rows.filter((r, i) => i > 0 && r.date < timeline.closeDate);
   const sortByDate = () =>
@@ -374,11 +407,13 @@ export function PlanEditor({
               type="button"
               className="inline-flex h-8 items-center rounded-sm bg-primary px-3 text-[12px] font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
               onClick={save}
-              disabled={busy || rows.length < 2 || beforeClose.length > 0}
+              disabled={busy || rows.length < 2 || beforeClose.length > 0 || endBeforeStart}
               title={
                 beforeClose.length
                   ? "Move the steps that fall before the close date first"
-                  : undefined
+                  : endBeforeStart
+                    ? "An end date is before its start"
+                    : undefined
               }
             >
               Save the plan
@@ -529,12 +564,31 @@ function EditorRow({
         <input
           type="date"
           className={cn(inputClass, "w-36")}
-          aria-label={`${row.label} date`}
+          aria-label={row.kind === "build" ? `${row.label} start` : `${row.label} date`}
           value={row.date}
           disabled={busy || index === 0}
           onChange={(e) => e.target.value && onChange({ date: e.target.value })}
           title={index === 0 ? "The close date is set on the deal" : shortDay(row.date)}
         />
+        {row.kind === "build" ? (
+          <label className="flex items-center gap-1 text-[11px] text-muted-foreground">
+            to
+            <input
+              type="date"
+              className={cn(
+                inputClass,
+                "w-36",
+                row.end && row.end < row.date && "border-destructive",
+              )}
+              aria-label={`${row.label} end`}
+              value={row.end}
+              min={row.date}
+              disabled={busy}
+              onChange={(e) => onChange({ end: e.target.value })}
+              title="The last day of the work between calls"
+            />
+          </label>
+        ) : null}
         {row.kind === "call" ? (
           <input
             type="time"
