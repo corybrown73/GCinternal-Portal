@@ -450,6 +450,7 @@ export function CsvImportDialog() {
   const [open, setOpen] = useState(false);
   const [fileName, setFileName] = useState<string | null>(null);
   const [csvText, setCsvText] = useState<string | null>(null);
+  const [fileError, setFileError] = useState<string | null>(null);
   const [summary, setSummary] = useState<ImportSummary | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const queryClient = useQueryClient();
@@ -561,15 +562,21 @@ export function CsvImportDialog() {
                     if (file.size > 2 * 1024 * 1024) {
                       setFileName(null);
                       setCsvText(null);
-                      alert("CSV must be under 2 MB");
+                      setFileError("That file is over 2 MB. Split the CSV and import it in parts.");
                       return;
                     }
+                    setFileError(null);
                     setFileName(file.name);
                     setCsvText(await file.text());
                   }}
                 />
                 {fileName ? (
                   <p className="mt-1 font-mono text-[11px] text-muted-foreground">{fileName}</p>
+                ) : null}
+                {fileError ? (
+                  <p className="mt-1 text-[11px] text-destructive" role="alert">
+                    {fileError}
+                  </p>
                 ) : null}
               </div>
               {mutation.isError ? (

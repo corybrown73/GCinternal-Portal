@@ -40,6 +40,7 @@ import { parseWonGate, type WonGateMissing } from "@/lib/won-gate";
 import { ClosedWonGateNotice } from "@/components/closed-won-gate";
 import { aeReplyDraft, googleCalendarLink } from "@/lib/ae-reply";
 import { cn } from "@/lib/utils";
+import { ask } from "@/components/ui/ask";
 
 /**
  * The deal's stages as one checklist, at the top of the page.
@@ -807,13 +808,15 @@ function DealTypeBody({
     onError: (e) => setError((e as Error).message),
   });
   const suggested = intake.path === null ? intake.path_suggested : null;
-  const pick = (path: (typeof DEAL_TYPES)[number]["path"]) => {
+  const pick = async (path: (typeof DEAL_TYPES)[number]["path"]) => {
     if (intake.path === path) return;
     if (
       intake.path !== null &&
-      !window.confirm(
-        "Changing the type rebuilds the plan: the phases, the go-live date and what the customer's page says. Continue?",
-      )
+      !(await ask({
+        title: "Change the deal type?",
+        body: "Changing the type rebuilds the plan: the phases, the go-live date and what the customer's page says.",
+        confirmLabel: "Change type",
+      }))
     )
       return;
     m.mutate(path);
@@ -828,7 +831,7 @@ function DealTypeBody({
               key={t.path}
               type="button"
               disabled={!editable || m.isPending}
-              onClick={() => pick(t.path)}
+              onClick={() => void pick(t.path)}
               aria-pressed={active}
               className={cn(
                 "rounded-md border px-3 py-2.5 text-left transition-colors disabled:opacity-60",

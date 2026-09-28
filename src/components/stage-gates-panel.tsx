@@ -22,6 +22,7 @@ import {
 } from "@/lib/stage-gates";
 import { userMessage } from "@/lib/errors";
 import { cn } from "@/lib/utils";
+import { ask } from "@/components/ui/ask";
 
 /**
  * The three things that have to be true before this project moves on.
@@ -165,7 +166,7 @@ export function StageGatesPanel({
             // recommended path — it is the available one.
             variant={outcome === "clear" ? "default" : "outline"}
             disabled={move.isPending}
-            onClick={() => {
+            onClick={async () => {
               if (outcome === "clear") {
                 move.mutate({ reason: null });
                 return;
@@ -173,23 +174,22 @@ export function StageGatesPanel({
               // Names every unmet criterion, then asks for words. The typed
               // reason is what turns "clicked through a dialog" into
               // "somebody said why", and it is required on a blocking gate.
-              if (!window.confirm(overridePrompt(status, stageLabel(next)))) return;
-              if (!mustExplain) {
-                move.mutate({ reason: null });
-                return;
-              }
-              const reason = window.prompt(
-                `Why are you moving to ${stageLabel(next)} with ${
-                  status.remaining.length
-                } outstanding? This is recorded against your name.`,
-                "",
-              );
-              if (reason === null) return;
-              if (!reason.trim()) {
-                window.alert("A reason is required to override a blocking gate.");
-                return;
-              }
-              move.mutate({ reason: reason.trim() });
+              const answer = await ask({
+                title: `Move to ${stageLabel(next)} anyway?`,
+                body: overridePrompt(status, stageLabel(next)),
+                confirmLabel: `Move to ${stageLabel(next)}`,
+                ...(mustExplain
+                  ? {
+                      prompt: {
+                        label: "Why? This is recorded against your name.",
+                        placeholder: "The reason for moving on",
+                        required: true,
+                      },
+                    }
+                  : {}),
+              });
+              if (answer === null || answer === false) return;
+              move.mutate({ reason: typeof answer === "string" ? answer.trim() : null });
             }}
             // The reason lives on the control it applies to, not in a
             // paragraph somewhere else on the page.

@@ -15,6 +15,7 @@ import { fmtDate } from "@/lib/hub-format";
 import { cn } from "@/lib/utils";
 // Type-only import — erased at build time.
 import type { AccessCustomer } from "@/lib/access.server";
+import { ask } from "@/components/ui/ask";
 
 const accessQuery = queryOptions({
   queryKey: ["access"],
@@ -136,8 +137,14 @@ function CustomerCard({ customer }: { customer: AccessCustomer }) {
                 type="button"
                 className={cn(buttonClass, "hover:text-destructive")}
                 disabled={removeMutation.isPending}
-                onClick={() => {
-                  if (window.confirm(`Remove ${u.email}'s access to ${customer.name}?`)) {
+                onClick={async () => {
+                  if (
+                    await ask({
+                      title: `Remove ${u.email}'s access to ${customer.name}?`,
+                      confirmLabel: "Remove access",
+                      destructive: true,
+                    })
+                  ) {
                     removeMutation.mutate(u.link_id);
                   }
                 }}

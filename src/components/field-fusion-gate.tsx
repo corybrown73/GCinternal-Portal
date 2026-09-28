@@ -12,6 +12,7 @@ import { handToImplementationFn } from "@/lib/field-fusion.functions";
 import { readIntake } from "@/lib/intake-answers";
 import { saveIntake } from "@/lib/presale.functions";
 import { cn } from "@/lib/utils";
+import { ask } from "@/components/ui/ask";
 
 /**
  * The Field Fusion gate, on the deal.
@@ -180,13 +181,17 @@ export function FieldFusionGate({ deal, editable }: { deal: DealData; editable: 
                   ? "Moves the deal to Pre-kickoff and emails implementation"
                   : "Tick both boxes first"
               }
-              onClick={() => {
+              onClick={async () => {
                 if (
-                  window.confirm(
-                    pick
-                      ? "Hand this account to implementation now? They get an email with the use case, goals and your note."
-                      : "Hand this account over with nobody named? Everyone in the pool gets an email to claim it, with your note.",
-                  )
+                  await ask({
+                    title: pick
+                      ? "Hand this account to implementation now?"
+                      : "Hand this account over with nobody named?",
+                    body: pick
+                      ? "They get an email with the use case, goals and your note."
+                      : "Everyone in the pool gets an email to claim it, with your note.",
+                    confirmLabel: "Hand it over",
+                  })
                 )
                   handoff.mutate();
               }}

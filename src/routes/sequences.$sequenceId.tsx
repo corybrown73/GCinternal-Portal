@@ -19,6 +19,7 @@ import { cn } from "@/lib/utils";
 // Type-only imports — erased at build time.
 import type { SequenceDetail } from "@/lib/sequences.server";
 import { When } from "@/components/when";
+import { ask } from "@/components/ui/ask";
 
 const detailQuery = (sequenceId: string) =>
   queryOptions({
@@ -250,8 +251,14 @@ function StepsPanel({
                       type="button"
                       className={cn(buttonClass, "hover:text-destructive")}
                       disabled={removeMutation.isPending}
-                      onClick={() => {
-                        if (window.confirm(`Delete step "${step.title}"?`)) {
+                      onClick={async () => {
+                        if (
+                          await ask({
+                            title: `Delete step "${step.title}"?`,
+                            confirmLabel: "Delete",
+                            destructive: true,
+                          })
+                        ) {
                           removeMutation.mutate(step.id);
                         }
                       }}

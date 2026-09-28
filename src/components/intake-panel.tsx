@@ -30,6 +30,7 @@ import {
   uploadSow,
 } from "@/lib/presale.functions";
 import { cn } from "@/lib/utils";
+import { ask } from "@/components/ui/ask";
 
 /**
  * The onboarding intake, on the deal, as the pieces the stage checklist
@@ -229,13 +230,15 @@ export function FlowStep({ deal, editable }: { deal: DealData; editable: boolean
             <Choice
               active={training}
               disabled={!editable || busy}
-              onClick={() => {
+              onClick={async () => {
                 if (
                   !training &&
                   (answers.wanted_forms.length > 0 || answers.uploaded_forms.length > 0) &&
-                  !window.confirm(
-                    "Training only rebuilds phase 1 as two weeks of training — no first form. The forms already named stay on the record. Continue?",
-                  )
+                  !(await ask({
+                    title: "Switch to training only?",
+                    body: "Phase 1 becomes two weeks of training with no first form. The forms already named stay on the record.",
+                    confirmLabel: "Training only",
+                  }))
                 )
                   return;
                 set({ training_only: true });

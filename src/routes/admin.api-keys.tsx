@@ -16,6 +16,7 @@ import {
 } from "@/lib/presale.functions";
 import type { ApiKey } from "@/lib/presale-types";
 import { cn } from "@/lib/utils";
+import { ask } from "@/components/ui/ask";
 
 /**
  * One key per integration, least-privilege scopes.
@@ -420,11 +421,14 @@ function ApiKeysPage() {
                               type="button"
                               className="text-[11px] text-destructive hover:underline"
                               disabled={revokeMutation.isPending}
-                              onClick={() => {
+                              onClick={async () => {
                                 if (
-                                  confirm(
-                                    `Revoke “${k.name}”? Integrations using it stop working immediately.`,
-                                  )
+                                  await ask({
+                                    title: `Revoke “${k.name}”?`,
+                                    body: "Integrations using it stop working immediately.",
+                                    confirmLabel: "Revoke",
+                                    destructive: true,
+                                  })
                                 ) {
                                   revokeMutation.mutate(k.id);
                                 }

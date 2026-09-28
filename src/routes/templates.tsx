@@ -66,6 +66,7 @@ import {
 import { canManage, useProfile } from "@/lib/auth";
 import { fmtDate, formatTaskOffset, humanize } from "@/lib/hub-format";
 import { cn } from "@/lib/utils";
+import { ask } from "@/components/ui/ask";
 
 /* ------------------------------------------------------------------------- */
 /* Journey template browser and builder.                                      */
@@ -910,12 +911,19 @@ function QuestionsPanel({ detail, canEdit }: { detail: TemplateVersionDetail; ca
                             type="button"
                             className={cn(buttonClass, "hover:text-destructive")}
                             disabled={removeMutation.isPending}
-                            onClick={() => {
+                            onClick={async () => {
                               const used = q.used_by_task_keys.length;
                               const warning = used
                                 ? ` ${used} task${used === 1 ? "" : "s"} condition on it and would then never be created.`
                                 : "";
-                              if (window.confirm(`Delete question "${q.key}"?${warning}`)) {
+                              if (
+                                await ask({
+                                  title: `Delete question "${q.key}"?`,
+                                  body: warning.trim() || undefined,
+                                  confirmLabel: "Delete",
+                                  destructive: true,
+                                })
+                              ) {
                                 removeMutation.mutate(q.id);
                               }
                             }}
@@ -1146,12 +1154,19 @@ function StagesPanel({
                           type="button"
                           className={cn(buttonClass, "hover:text-destructive")}
                           disabled={removeStageMutation.isPending}
-                          onClick={() => {
+                          onClick={async () => {
                             const count = stage.tasks.length;
                             const warning = count
                               ? ` Its ${count} task${count === 1 ? "" : "s"} go with it.`
                               : "";
-                            if (window.confirm(`Delete stage "${stage.name}"?${warning}`)) {
+                            if (
+                              await ask({
+                                title: `Delete stage "${stage.name}"?`,
+                                body: warning.trim() || undefined,
+                                confirmLabel: "Delete",
+                                destructive: true,
+                              })
+                            ) {
                               removeStageMutation.mutate(stage.id);
                             }
                           }}
@@ -1411,8 +1426,15 @@ function TaskRow({
               type="button"
               className={cn(buttonClass, "hover:text-destructive")}
               disabled={removeMutation.isPending}
-              onClick={() => {
-                if (window.confirm(`Delete task "${task.title}"?`)) removeMutation.mutate();
+              onClick={async () => {
+                if (
+                  await ask({
+                    title: `Delete task "${task.title}"?`,
+                    confirmLabel: "Delete",
+                    destructive: true,
+                  })
+                )
+                  removeMutation.mutate();
               }}
             >
               <Trash2 className="h-3 w-3" /> Delete

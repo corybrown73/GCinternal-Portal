@@ -19,6 +19,7 @@ import {
 import { fmtDate, humanize } from "@/lib/hub-format";
 import { cn } from "@/lib/utils";
 import { When } from "@/components/when";
+import { ask } from "@/components/ui/ask";
 
 /**
  * Issue, revoke, rotate and watch the customer-facing links for one
@@ -268,11 +269,13 @@ export function ExternalSharePanel({ implementationId }: { implementationId: str
                           disabled={busy}
                           onClick={() =>
                             void guard(async () => {
-                              const next = window.prompt(
-                                "New passcode (leave blank to clear it):",
-                                "",
-                              );
-                              if (next === null) return;
+                              const next = await ask({
+                                title: "Set a passcode on this link",
+                                body: "Leave it blank to clear the passcode.",
+                                confirmLabel: "Save",
+                                prompt: { label: "New passcode", placeholder: "Blank clears it" },
+                              });
+                              if (typeof next !== "string") return;
                               await setPlanLinkPasscode({
                                 data: { grantId: g.id, passcode: next.trim() || null },
                               });

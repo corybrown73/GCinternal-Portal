@@ -6,6 +6,7 @@ import { ImagePlus, Trash2 } from "lucide-react";
 import { deleteFormTemplateFn, updateFormTemplateImageFn } from "@/lib/form-templates.functions";
 import type { FormTemplateCard } from "@/lib/form-templates.server";
 import { cn } from "@/lib/utils";
+import { ask } from "@/components/ui/ask";
 
 /**
  * One card in the form library: the picture, the name, a sentence.
@@ -150,8 +151,15 @@ export function TemplateCard({
           type="button"
           title="Delete template"
           disabled={remove.isPending}
-          onClick={() => {
-            if (window.confirm(`Delete "${template.name}" from the library?`)) remove.mutate();
+          onClick={async () => {
+            if (
+              await ask({
+                title: `Delete "${template.name}" from the library?`,
+                confirmLabel: "Delete",
+                destructive: true,
+              })
+            )
+              remove.mutate();
           }}
           className="absolute right-1.5 top-1.5 rounded-sm border border-border bg-background/90 p-1 text-muted-foreground opacity-0 transition-opacity hover:text-destructive group-hover:opacity-100"
         >
