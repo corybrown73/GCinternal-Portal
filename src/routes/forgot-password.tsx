@@ -35,10 +35,22 @@ function ForgotPasswordPage() {
   async function requestReset(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
-    await supabase.auth.resetPasswordForEmail(email, {
+    setError(null);
+    // The auth service refuses a request it will not send — too many emails
+    // in the hour, an address it will not deliver to — and used to be told
+    // "a reset link is on its way" regardless. Say what it said.
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
       redirectTo: `${window.location.origin}/auth/callback?next=/forgot-password`,
     });
     setBusy(false);
+    if (error) {
+      setError(
+        /rate/i.test(error.message)
+          ? "Too many reset emails have gone out in the last hour. Wait an hour, or ask a manager to hand you a reset link from Admin → Users."
+          : `The reset email was not sent: ${error.message}. Ask a manager to hand you a reset link from Admin → Users.`,
+      );
+      return;
+    }
     setSent(true);
   }
 
@@ -112,7 +124,9 @@ function ForgotPasswordPage() {
             <div className="py-3 text-center">
               <p className="text-[13px] font-medium">Check your inbox</p>
               <p className="mt-1 text-[12px] text-muted-foreground">
-                If an account exists for <b>{email}</b>, a reset link is on its way.
+                If an account exists for <b>{email}</b>, a reset link is on its way. Nothing after a
+                few minutes? Check your spam folder, then ask a manager — Admin → Users can set a
+                password or hand you a reset link directly.
               </p>
             </div>
           ) : (
