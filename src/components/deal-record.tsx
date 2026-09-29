@@ -373,7 +373,8 @@ export function DealRecord({ deal, embedded = false }: { deal: DealData; embedde
                 Overview already; the Record tab shows the record only. */}
             {embedded ? null : <PlanSection deal={deal} editable={editable} />}
 
-            <HelpPicksPanel deal={deal} editable={editable} />
+            {/* On the customer page the help picks are under Resources. */}
+            {embedded ? null : <HelpPicksPanel deal={deal} editable={editable} />}
 
             {/* EVERYTHING ELSE, FOLDED. The checklist, the deal's facts, the
             intake and the opportunity's history are all still here — a

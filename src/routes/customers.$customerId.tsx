@@ -11,6 +11,8 @@ import { PlanFromDeal } from "@/components/plan-section";
 import { CustomerLogo } from "@/components/customer-logo";
 import { PastImplementations } from "@/components/past-implementations";
 import { DealRecord } from "@/components/deal-record";
+import { HelpPicksPanel } from "@/components/help-articles-panel";
+import { canEditDeal, useProfile } from "@/lib/auth";
 import { dealQuery } from "@/lib/deal-query";
 import { useQuery } from "@tanstack/react-query";
 import { AddServicesButton } from "@/components/onboarding-pulse";
@@ -132,7 +134,7 @@ import {
 import { cn } from "@/lib/utils";
 import { When } from "@/components/when";
 
-const TABS = ["implementation", "overview", "prekickoff", "details"] as const;
+const TABS = ["implementation", "overview", "prekickoff", "resources", "details"] as const;
 export type TabId = (typeof TABS)[number];
 /** The tabs this page used to have. An old link lands on Details, where that content now lives. */
 const LEGACY_TAB_IDS = [
@@ -158,6 +160,7 @@ const TAB_LABEL: Record<TabId, string> = {
   implementation: "Implementation",
   overview: "Overview",
   prekickoff: "Record",
+  resources: "Resources",
   details: "Details",
 };
 
@@ -516,6 +519,7 @@ function Customer360Page() {
           <div className="min-w-0 space-y-3">
             <SectionControls />
             {tab === "overview" ? <OverviewTab record={record} customerId={customerId} /> : null}
+            {tab === "resources" ? <ResourcesTab record={record} /> : null}
             {tab === "details" && impl.deal_id ? (
               <HeaderTrackers record={record} customerId={customerId} tab={tab} />
             ) : null}
@@ -781,6 +785,50 @@ function OverviewTab({ record, customerId }: { record: Customer360; customerId: 
       </Link>
     </div>
   );
+}
+
+/**
+ * Resources: what the customer and the team reach for — the help articles
+ * picked for this account, the files on the project, the welcome page.
+ * Reference material, kept off the workspace and the plan.
+ */
+function ResourcesTab({ record }: { record: Customer360 }) {
+  const impl = record.implementation!;
+  return (
+    <div className="space-y-4">
+      {impl.deal_id ? <HelpPicksFromDeal dealId={impl.deal_id} /> : null}
+      <Panel
+        title="Files & links"
+        meta="Uploaded documents and links on this project"
+        level="primary"
+        collapsible
+        defaultOpen
+        collapseKey="customer:resources:files"
+      >
+        <AttachmentsPanel implementationId={impl.id} />
+      </Panel>
+      {impl.deal_id ? (
+        <Link
+          to="/onboarding-plan/$dealId"
+          params={{ dealId: impl.deal_id }}
+          className="block rounded-md border border-border bg-card px-3 py-2 text-[12px] hover:bg-muted/60"
+        >
+          <span className="font-medium">Welcome page</span>
+          <span className="text-muted-foreground">
+            {" "}
+            · the plan, the dates and their part, as the customer sees it →
+          </span>
+        </Link>
+      ) : null}
+    </div>
+  );
+}
+
+function HelpPicksFromDeal({ dealId }: { dealId: string }) {
+  const { profile } = useProfile();
+  const q = useQuery(dealQuery(dealId));
+  if (!q.data) return null;
+  return <HelpPicksPanel deal={q.data} editable={canEditDeal(profile?.role)} />;
 }
 
 /** Everything the page used to spread over eight tabs, in one place, folded. */
