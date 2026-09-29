@@ -16,7 +16,7 @@ import { launchAcceptanceGate } from "./launch-gate";
 import { nextLifecycleStage } from "./stage-advance-input";
 import { normalizeStage } from "./hub-format";
 import { dealStageLabel } from "./deal-stage";
-import { healthFloor, needsAction } from "./needs-action";
+import { healthFloor, needsAction, type DealFacts } from "./needs-action";
 import { daysUntilDate } from "./dates";
 import {
   STAGE_FLAG_DAYS,
@@ -48,6 +48,8 @@ export type QueueRow = {
   tab: "overview" | "journey" | "risks" | "requirements" | "solution" | "evidence" | "history";
   /** Lower sorts first within a section. */
   rank: number;
+  /** The deal's own facts (plan calls, close and live dates), when the row has a deal. */
+  facts: DealFacts | null;
 };
 
 const DAY = 86_400_000;
@@ -392,6 +394,7 @@ function row(
     reason: parts.reason,
     impact: parts.impact,
     next_action: parts.next ?? nextAction(parts.record, impl),
+    facts: bundle?.deal ?? null,
     // Same inputs the record was built from, so the dependency on a row can
     // never disagree with the dependency Leadership shows for that row.
     dependency: waitingOn({

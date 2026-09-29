@@ -134,6 +134,20 @@ export async function dealFactsFor(
                 businessDaysLate: businessDaysBetween(m.date, today),
               }))
           : [],
+      upcoming_calls:
+        d.stage === "in_onboarding" || d.stage === "onboarding_kickoff"
+          ? timeline.milestones
+              .filter((m) => m.kind === "call" && !m.serviceId && !m.doneOn && m.date >= today)
+              .map((m) => ({
+                key: m.key,
+                label: m.label,
+                date: m.date,
+                time: m.time,
+                minutes: m.minutes ?? null,
+              }))
+          : [],
+      close_date: timeline.closeDate,
+      live_date: timeline.liveDate,
       watch_outs: watchOutsFor({
         brief: briefByDeal.get(d.id) ?? null,
         notes: noteTexts,

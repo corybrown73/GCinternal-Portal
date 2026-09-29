@@ -32,6 +32,18 @@ export type DealFacts = {
   overdue_calls: Array<{ label: string; date: string; businessDaysLate: number }>;
   /** Watch-outs the plan contradicts (severity "conflict" only). */
   watch_outs: Array<{ title: string; detail: string }>;
+  /** Plan calls still to be held, from today on: the calendar across accounts. */
+  upcoming_calls?: Array<{
+    key: string;
+    label: string;
+    date: string;
+    /** "HH:MM" when booked, else null: a planned day, not a meeting yet. */
+    time: string | null;
+    minutes: number | null;
+  }>;
+  /** The plan's close and finish line, for time-to-value and "launching". */
+  close_date?: string | null;
+  live_date?: string | null;
 };
 
 export type ActionBucket = "act_now" | "needs_attention";

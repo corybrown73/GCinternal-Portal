@@ -80,6 +80,14 @@ export const NAV_CATALOGUE: readonly NavEntry[] = [
     primary: true,
   },
   {
+    to: "/calendar",
+    label: "Calendar",
+    hint: "Key dates & meetings",
+    audience: "everyone",
+    icon: "calendar",
+    primary: true,
+  },
+  {
     to: "/search",
     label: "Search",
     hint: "Across every surface",

@@ -1,26 +1,15 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { queryOptions, useQuery, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
-import { ArrowRight, Info } from "lucide-react";
+import { queryOptions, useQuery, useSuspenseQuery } from "@tanstack/react-query";
+import { ArrowRight, CalendarDays, Check, Clock, TriangleAlert } from "lucide-react";
 
 import { PageBody, PageHeader } from "@/components/page";
-import { Panel, StageBadge, StatusChip, StatusDot, NoRows } from "@/components/record";
-import { AddCommitment, type TeamOption } from "@/components/delivery-write";
 import { useScope } from "@/lib/use-scope";
-import { getHome, getTeamOptions } from "@/lib/hub.functions";
+import { getHome } from "@/lib/hub.functions";
 import { getDealInbox } from "@/lib/presale.functions";
-import type { DealInboxRow } from "@/lib/presale.server";
-import { fmtDate, fmtMoney } from "@/lib/hub-format";
-import { NEXT_ACTION_UNKNOWN, deriveHealth, launchStateConflict } from "@/lib/customer360-derive";
-
-type HealthResult = ReturnType<typeof deriveHealth>;
-import {
-  buildQueue,
-  healthByImplementation,
-  type QueueRow,
-  type TriageBucket,
-} from "@/lib/home-triage";
+import { buildQueue, healthByImplementation } from "@/lib/home-triage";
+import { todayFor, type NeedsMeRow, type Today, type Tone } from "@/lib/home-today";
+import { localIso } from "@/lib/onboarding-timeline";
 import { cn } from "@/lib/utils";
-import { PATH_CHIP } from "@/lib/onboarding-timeline";
 
 // The scope is part of the key: switching whose accounts you are looking at
 // has to refetch, and two scopes must never share a cache entry.
@@ -43,7 +32,7 @@ export const Route = createFileRoute("/")({
       {
         name: "description",
         content:
-          "Every implementation sorted by what needs doing: act now, needs attention, or moving — with the reason, the impact, the owner and the next action.",
+          "What needs my attention, what I am waiting on, what is coming up, and where every account sits.",
       },
       { property: "og:title", content: "Today — What needs my attention | Implementation Hub" },
       {
@@ -58,348 +47,507 @@ export const Route = createFileRoute("/")({
     typeof search["scope"] === "string" ? { scope: search["scope"] as string } : {},
   loaderDeps: ({ search }: { search: { scope?: string } }) => ({ scope: search.scope ?? null }),
   loader: ({ context, deps }) => {
-    context.queryClient.ensureQueryData(homeQuery(deps.scope));
     void context.queryClient.prefetchQuery(dealInboxQuery(deps.scope));
+    return context.queryClient.ensureQueryData(homeQuery(deps.scope));
   },
-  errorComponent: ({ error }) => (
-    <div role="alert" className="p-6 text-[13px] text-destructive">
-      We couldn't load today's list: {error.message}
-    </div>
-  ),
-  notFoundComponent: () => <div className="p-6 text-[13px]">Nothing to show.</div>,
-
   component: HomePage,
 });
 
-function CustomerLink({
-  customerId,
-  implementationId,
-  children,
-  className,
-}: {
-  customerId: string;
-  implementationId?: string | null;
-  children: React.ReactNode;
-  className?: string;
-}) {
-  return (
-    <Link
-      to="/customers/$customerId"
-      params={{ customerId }}
-      search={{ tab: "overview", ...(implementationId ? { impl: implementationId } : {}) }}
-      className={cn("hover:underline", className)}
-    >
-      {children}
-    </Link>
-  );
-}
+/* ------------------------------------------------------------------ tones */
 
-/**
- * Reword the handful of reason strings that read as a system report rather
- * than something a person would say — only the two phrasings called out
- * explicitly. Everything else in row.reason already reads as plain English
- * and is left untouched. Presentation only: never changes which bucket a
- * row lands in, only how this one card describes it.
- */
-function humanizeReason(reason: string): string {
-  const overdueLaunch = reason.match(/^Target launch passed .+\((\d+)d over\)$/);
-  if (overdueLaunch) return `Launch is ${overdueLaunch[1]} days overdue.`;
-
-  const stalled = reason.match(/^Stalled (\d+) days? in /);
-  if (stalled) return `No movement for ${stalled[1]} days.`;
-
-  return reason;
-}
-
-/** Padding and type weight per bucket — the only things that vary by bucket. */
-const CARD_DENSITY: Record<TriageBucket, { pad: string; reason: string; metaGap: string }> = {
-  act_now: { pad: "p-3", reason: "text-[13px] font-medium", metaGap: "mt-2" },
-  needs_attention: { pad: "p-2.5", reason: "text-[13px]", metaGap: "mt-1.5" },
-  moving: { pad: "p-2", reason: "text-[12px] text-muted-foreground", metaGap: "mt-1" },
+const TONE_TEXT: Record<Tone, string> = {
+  critical: "text-[#b42318]",
+  warning: "text-[#93500a]",
+  info: "text-[#1c5cab]",
+  good: "text-[#006300]",
+  muted: "text-muted-foreground",
+};
+const TONE_CHIP: Record<Tone, string> = {
+  critical: "bg-[#fde8e6] text-[#b42318]",
+  warning: "bg-[#fff1d6] text-[#93500a]",
+  info: "bg-[#e3eefc] text-[#1c5cab]",
+  good: "bg-[#e3f5e3] text-[#006300]",
+  muted: "bg-muted text-muted-foreground",
+};
+const TONE_BAR: Record<Tone, string> = {
+  critical: "bg-[#d03b3b]",
+  warning: "bg-[#fab219]",
+  info: "bg-[#2a78d6]",
+  good: "bg-[#0ca30c]",
+  muted: "bg-border",
 };
 
-/**
- * The one implementation card used everywhere on Today — Needs action, Keep
- * an eye on and On track alike. Same fields, same rules, in every bucket:
- * what changes is how much there is to say, not how it's said. No eyebrow
- * labels — position and the arrow prefix carry the meaning instead of a
- * repeated "WHAT'S HAPPENING" / "WHAT TO DO" / "OWNER" on every line.
- *
- * `bucket` decides exactly one thing beyond density: whether a missing next
- * step is worth mentioning. On "Needs action" or "Keep an eye on", nobody
- * having written down what to do is itself a gap worth surfacing. On "On
- * track" it's the ordinary case — nothing is open, so there is nothing to
- * schedule — and calling that out on every clean account would be the exact
- * "empty field forced onto an on-track row" this design is trying to avoid.
- */
-function ImplementationCard({
-  row,
-  health,
-  team,
-  bucket,
-  onNextActionSaved,
-}: {
-  row: QueueRow;
-  health: HealthResult;
-  team: TeamOption[];
-  bucket: TriageBucket;
-  onNextActionSaved: () => void;
-}) {
-  const { impl } = row;
-  const conflict = launchStateConflict(impl);
-  const waiting = row.dependency.party !== "none" ? row.dependency : null;
-  const noNextAction = row.next_action === NEXT_ACTION_UNKNOWN;
-  const showNextAction = !noNextAction || bucket !== "moving";
-  const density = CARD_DENSITY[bucket];
-
-  return (
-    <li className={cn("rounded-lg border border-border bg-card", density.pad)}>
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-        <CustomerLink
-          customerId={impl.customer_id}
-          implementationId={impl.id}
-          className="text-[14px] font-semibold"
-        >
-          {impl.customer_name}
-        </CustomerLink>
-        <StageBadge stage={impl.deal_stage} />
-        <StatusChip status={health.level} />
-        <Link
-          to="/customers/$customerId"
-          params={{ customerId: impl.customer_id }}
-          search={{ tab: row.tab, impl: impl.id }}
-          className="ml-auto flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground hover:underline"
-        >
-          Open
-          <ArrowRight className="h-3 w-3" strokeWidth={2} />
-        </Link>
-      </div>
-
-      <p className={cn("mt-1.5", density.reason)}>{humanizeReason(row.reason)}</p>
-
-      {showNextAction ? (
-        <p className={cn("mt-1 text-[13px]", noNextAction && "italic text-muted-foreground")}>
-          → {noNextAction ? "Next step hasn't been recorded yet." : row.next_action}
-        </p>
-      ) : null}
-
-      {waiting ? (
-        <p className="mt-1 text-[12px] text-muted-foreground">
-          {waiting.reason}
-          {waiting.since ? ` (since ${fmtDate(waiting.since)})` : ""}
-        </p>
-      ) : null}
-
-      {/* Data-quality note, deliberately subordinate: this is a missing-field
-          flag, not a claim that anything is actually blocked. */}
-      {conflict ? (
-        <p className="mt-1 inline-flex items-center gap-1.5 rounded-sm border border-dashed border-border px-1.5 py-0.5 text-[11px] text-muted-foreground">
-          <Info className="h-3 w-3" strokeWidth={1.75} />
-          Data quality: past the launch stage, but no actual launch date recorded.
-        </p>
-      ) : null}
-
-      <p
-        className={cn("flex flex-wrap gap-x-3 text-[11px] text-muted-foreground", density.metaGap)}
-      >
-        <span>{fmtDate(impl.target_launch_date)}</span>
-        <span>{fmtMoney(impl.arr)}</span>
-        <span>{impl.owner_name ?? "Unassigned"}</span>
-      </p>
-
-      {/* On track has nothing to act on, so there is nothing to update — the
-          action itself, not just its text, is one of the "empty action
-          areas" an on-track card should stay free of. */}
-      {bucket !== "moving" ? (
-        <div className="mt-1.5">
-          <AddCommitment
-            customerId={impl.customer_id}
-            implementationId={impl.id}
-            team={team}
-            addLabel="Update next step"
-            onSaved={onNextActionSaved}
-          />
-        </div>
-      ) : null}
-    </li>
-  );
-}
-
-const SECTIONS: Array<{
-  bucket: TriageBucket;
-  title: string;
-  accent: string;
-  empty: string;
-  level: "primary" | "default" | "supporting";
-}> = [
-  {
-    bucket: "act_now",
-    title: "Needs action",
-    accent: "bg-status-blocked-foreground",
-    empty: "Nothing needs immediate action. Everything else is in the lists below.",
-    level: "primary",
-  },
-  {
-    bucket: "needs_attention",
-    title: "Keep an eye on",
-    accent: "bg-status-risk-foreground",
-    empty: "Nothing to keep an eye on right now.",
-    level: "default",
-  },
-  {
-    bucket: "moving",
-    title: "On track",
-    accent: "bg-status-ontrack-foreground",
-    empty: "No implementations are moving cleanly — check the lists above.",
-    level: "supporting",
-  },
-];
-
-/**
- * A deal that has not started onboarding. Before this panel, Today listed
- * implementations only: a deal waiting to be claimed, or claimed and waiting
- * for its brief, appeared nowhere on the page the team opens first.
- */
-function DealInboxPanel({ scope }: { scope: string | null }) {
-  const q = useQuery(dealInboxQuery(scope));
-  const rows = q.data ?? [];
-  const urgent = rows.some((r) => r.unclaimed || r.mine);
-  return (
-    <Panel
-      level={urgent ? "primary" : "default"}
-      title={
-        <span className="flex items-center gap-2">
-          <span
-            className={cn("h-2 w-2 rounded-full", urgent ? "bg-primary" : "bg-muted-foreground/40")}
-          />
-          Deals before kickoff
-        </span>
-      }
-      count={rows.length}
-      meta="Closed deals whose core meetings are not booked yet — Closed Won, Field Fusion setup or Pre-kickoff. Each one names its next step."
-    >
-      {q.isPending ? (
-        <NoRows label="Loading deals…" />
-      ) : rows.length === 0 ? (
-        <NoRows label="No deals waiting. A new deal appears here until onboarding starts." />
-      ) : (
-        <ul className="divide-y divide-border">
-          {rows.map((r) => (
-            <DealInboxRowView key={r.id} row={r} />
-          ))}
-        </ul>
-      )}
-    </Panel>
-  );
-}
-
-function DealInboxRowView({ row }: { row: DealInboxRow }) {
-  const days = Math.max(
-    0,
-    Math.floor((Date.now() - new Date(row.stage_entered_at).getTime()) / 86400000),
-  );
-  return (
-    <li className="flex flex-wrap items-center gap-x-4 gap-y-1 px-3 py-2">
-      <Link
-        to="/deals/$dealId"
-        params={{ dealId: row.id }}
-        className="min-w-0 flex-1 truncate text-[13px] font-medium hover:underline"
-      >
-        {row.name}
-      </Link>
-      <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-        {row.stage_label} · {days}d
-      </span>
-      {row.path ? (
-        <span className="rounded-sm border border-border px-1 py-px text-[10px] uppercase tracking-wider text-muted-foreground">
-          {PATH_CHIP[row.path]}
-        </span>
-      ) : null}
-      <span
-        className={cn(
-          "text-[12px]",
-          row.unclaimed
-            ? "font-medium text-amber-800 dark:text-amber-300"
-            : "text-muted-foreground",
-        )}
-      >
-        {row.unclaimed ? "Unclaimed" : row.mine ? "Yours" : row.owner_name}
-      </span>
-      <span className="flex items-center gap-1 text-[12px] text-muted-foreground">
-        <ArrowRight className="h-3 w-3" /> {row.next_step}
-      </span>
-    </li>
-  );
-}
+/* ------------------------------------------------------------------- page */
 
 function HomePage() {
-  const { param, setScope } = useScope();
+  const { param } = useScope();
   const { data } = useSuspenseQuery(homeQuery(param));
+  const inbox = useQuery(dealInboxQuery(param));
   const queue = buildQueue(data.implementations, data.triage);
-  const healthByImpl: Map<string, HealthResult> = healthByImplementation(
-    data.implementations,
-    data.triage,
-  );
-
-  const queryClient = useQueryClient();
-  const team = useQuery({ queryKey: ["team-options"], queryFn: () => getTeamOptions() });
-  const refreshHome = () => queryClient.invalidateQueries({ queryKey: ["home", param] });
+  const health = healthByImplementation(data.implementations, data.triage);
+  const today = todayFor({
+    queue,
+    health,
+    dealInbox: inbox.data ?? [],
+    commitments: data.commitments,
+    today: localIso(),
+  });
 
   return (
     <>
       <PageHeader
+        size="lg"
         title="Today"
-        description="Your accounts, each with its stage and the one thing to do next."
+        description="What needs my attention, and what's coming up."
+        hero={{ tagline: "Progress builds momentum." }}
       />
       <PageBody className="space-y-4">
-        <DealInboxPanel scope={param} />
-        {/* ONE LIST. It used to be three panels by urgency; the urgency is
-            now the dot on each card, and the order is the same — needs
-            action first, then keep an eye on, then on track. */}
-        {(() => {
-          const rows = SECTIONS.flatMap((section) =>
-            queue[section.bucket].map((row) => ({ row, section })),
-          );
-          return (
-            <Panel
-              level="primary"
-              title="Your accounts"
-              count={rows.length}
-              meta="Needs action first, then keep an eye on, then on track"
-            >
-              {rows.length === 0 ? (
-                <NoRows label="No implementations in this scope. Widen it with the control above." />
-              ) : (
-                <ul className="space-y-2 p-2">
-                  {rows.map(({ row, section }) => (
-                    <ImplementationCard
-                      key={row.impl.id}
-                      row={row}
-                      health={healthByImpl.get(row.impl.id)!}
-                      team={team.data ?? []}
-                      bucket={section.bucket}
-                      onNextActionSaved={refreshHome}
-                    />
-                  ))}
-                </ul>
-              )}
-            </Panel>
-          );
-        })()}
-
-        {/* This used to claim "sign-in isn't set up yet, so this shows every
-            implementation regardless of who owns it". Sign-in has been set up
-            for a long time and the page was in fact showing the viewer's own
-            book — which for an admin who owns nothing meant zero of everything,
-            under a footer insisting it was showing all of it. A caption that
-            contradicts the numbers above it costs more trust than no caption. */}
+        <Tiles t={today} />
+        <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
+          <div className="min-w-0 space-y-4">
+            <NeedsMe rows={today.needsMe} />
+            <ComingUp t={today} />
+          </div>
+          <div className="space-y-4">
+            <MyBook t={today} />
+            <Stages t={today} />
+          </div>
+        </div>
         <p className="text-[11px] text-muted-foreground">
-          <StatusDot status="idle" className="mr-1 align-middle" />{" "}
           {data.scope.mode === "all"
-            ? "Showing every project. Use the scope control above to narrow to one person's accounts."
-            : "Showing a subset. Use the scope control above to see every project."}
+            ? "Showing every account. Use the scope control in the top bar to narrow to one person's."
+            : "Showing a subset. Use the scope control in the top bar to see every account."}
         </p>
       </PageBody>
     </>
+  );
+}
+
+/* ------------------------------------------------------------------ tiles */
+
+function Tiles({ t }: { t: Today }) {
+  const tiles: Array<{
+    label: string;
+    sub: string;
+    value: number;
+    tone: Tone;
+    icon: typeof TriangleAlert;
+  }> = [
+    {
+      label: "Need attention",
+      sub: "Action required",
+      value: t.tiles.needAttention,
+      tone: "critical",
+      icon: TriangleAlert,
+    },
+    {
+      label: "Waiting on",
+      sub: "Customer or internal",
+      value: t.tiles.waitingOn,
+      tone: "warning",
+      icon: Clock,
+    },
+    {
+      label: "Upcoming",
+      sub: "Next 7 days",
+      value: t.tiles.upcoming,
+      tone: "info",
+      icon: CalendarDays,
+    },
+    {
+      label: "On track",
+      sub: "No immediate action",
+      value: t.tiles.onTrack,
+      tone: "good",
+      icon: Check,
+    },
+  ];
+  const wash: Record<Tone, string> = {
+    critical: "bg-[#fdeceb]",
+    warning: "bg-[#fff6e5]",
+    info: "bg-[#eaf2fc]",
+    good: "bg-[#f1f7f1]",
+    muted: "bg-muted",
+  };
+  return (
+    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      {tiles.map((tile) => {
+        const Icon = tile.icon;
+        return (
+          <div
+            key={tile.label}
+            className={cn("flex items-center gap-3 rounded-lg px-4 py-3.5", wash[tile.tone])}
+          >
+            <span
+              className={cn(
+                "flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/80",
+                TONE_TEXT[tile.tone],
+              )}
+            >
+              <Icon className="h-5 w-5" />
+            </span>
+            <div className="min-w-0">
+              <p className="text-[26px] font-semibold leading-none tracking-tight">{tile.value}</p>
+              <p className="mt-1 text-[13px] font-medium leading-tight">{tile.label}</p>
+              <p className="text-[11px] text-muted-foreground">{tile.sub}</p>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/* --------------------------------------------------------------- needs me */
+
+function NeedsMe({ rows }: { rows: NeedsMeRow[] }) {
+  return (
+    <section className="rounded-lg border border-border bg-card" aria-label="What needs me">
+      <div className="flex flex-wrap items-baseline justify-between gap-2 px-4 pt-3.5">
+        <div>
+          <h2 className="flex items-center gap-2 text-[16px] font-semibold">
+            What needs me
+            <span className="rounded-full bg-[#fde8e6] px-2 py-px text-[11px] font-semibold text-[#b42318]">
+              {rows.length}
+            </span>
+          </h2>
+          <p className="text-[12px] text-muted-foreground">
+            Accounts that need my attention right now.
+          </p>
+        </div>
+        <Link
+          to="/customers"
+          search={{ sort: "days", dir: "desc" }}
+          className="inline-flex items-center gap-1 rounded-md border border-border px-2.5 py-1 text-[12px] hover:bg-muted"
+        >
+          View all <ArrowRight className="h-3.5 w-3.5" />
+        </Link>
+      </div>
+      {rows.length === 0 ? (
+        <p className="px-4 py-6 text-[13px] text-muted-foreground">
+          Nothing needs you right now. The accounts on the right are moving.
+        </p>
+      ) : (
+        <ul className="space-y-2 p-3">
+          {rows.map((r) => (
+            <li
+              key={`${r.kind}:${r.id}`}
+              className="grid grid-cols-1 items-center gap-x-4 gap-y-2 rounded-md border border-border px-3 py-2.5 md:grid-cols-[minmax(0,1.4fr)_minmax(0,1.6fr)_minmax(0,1fr)_auto_auto]"
+              style={{
+                boxShadow: `inset 3px 0 0 0 ${r.chip.tone === "critical" ? "#d03b3b" : r.chip.tone === "warning" ? "#fab219" : "#2a78d6"}`,
+              }}
+            >
+              <div className="flex min-w-0 items-center gap-3">
+                <span
+                  className={cn(
+                    "flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[12px] font-semibold",
+                    TONE_CHIP[r.chip.tone],
+                  )}
+                >
+                  {r.initials}
+                </span>
+                <div className="min-w-0">
+                  <p className="truncate text-[14px] font-semibold">{r.name}</p>
+                  <p className="truncate text-[12px] text-muted-foreground">{r.sub}</p>
+                  {r.meta ? (
+                    <p className="truncate text-[11px] text-muted-foreground">{r.meta}</p>
+                  ) : null}
+                </div>
+              </div>
+              <div className="min-w-0">
+                <span
+                  className={cn(
+                    "inline-block rounded-sm px-1.5 py-px text-[11px] font-medium",
+                    TONE_CHIP[r.chip.tone],
+                  )}
+                >
+                  {r.chip.label}
+                </span>
+                <p className="mt-1 text-[13px]">{r.reason}</p>
+                {r.detail ? <p className="text-[12px] text-muted-foreground">{r.detail}</p> : null}
+              </div>
+              <div className="min-w-0 md:border-l md:border-border md:pl-4">
+                <p className="text-[11px] text-muted-foreground">Next step</p>
+                <p className="text-[13px]">{r.nextStep ?? "—"}</p>
+              </div>
+              <div className="md:border-l md:border-border md:pl-4">
+                <p className="text-[11px] text-muted-foreground">Due</p>
+                {r.due ? (
+                  <span
+                    className={cn(
+                      "inline-block rounded-sm px-1.5 py-px text-[12px] font-medium",
+                      TONE_CHIP[r.due.tone],
+                    )}
+                  >
+                    {r.due.label}
+                  </span>
+                ) : (
+                  <span className="text-[12px] text-muted-foreground">—</span>
+                )}
+              </div>
+              {"customerId" in r.link ? (
+                <Link
+                  to="/customers/$customerId"
+                  params={{ customerId: r.link.customerId }}
+                  className="inline-flex items-center gap-1 justify-self-end rounded-md border border-border px-3 py-1.5 text-[12px] font-medium hover:bg-muted"
+                >
+                  Open <ArrowRight className="h-3.5 w-3.5" />
+                </Link>
+              ) : (
+                <Link
+                  to="/deals/$dealId"
+                  params={{ dealId: r.link.dealId }}
+                  className="inline-flex items-center gap-1 justify-self-end rounded-md border border-border px-3 py-1.5 text-[12px] font-medium hover:bg-muted"
+                >
+                  Open <ArrowRight className="h-3.5 w-3.5" />
+                </Link>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+/* -------------------------------------------------------------- coming up */
+
+const KIND_DOT: Record<"meeting" | "commitment" | "launch", string> = {
+  meeting: "bg-[#2a78d6]",
+  commitment: "bg-[#eda100]",
+  launch: "bg-[#4a3aa7]",
+};
+
+function ComingUp({ t }: { t: Today }) {
+  const total = t.comingUp.reduce((n, g) => n + g.events.length, 0);
+  return (
+    <section className="rounded-lg border border-border bg-card" aria-label="Coming up">
+      <div className="flex flex-wrap items-baseline justify-between gap-2 px-4 pt-3.5">
+        <div>
+          <h2 className="flex items-center gap-2 text-[16px] font-semibold">
+            Coming up
+            <span className="rounded-full bg-muted px-2 py-px text-[11px] font-semibold text-muted-foreground">
+              {total}
+            </span>
+          </h2>
+          <p className="text-[12px] text-muted-foreground">Key dates this week and next.</p>
+        </div>
+        <Link
+          to="/calendar"
+          className="inline-flex items-center gap-1 text-[12px] text-primary hover:underline"
+        >
+          View full calendar <ArrowRight className="h-3.5 w-3.5" />
+        </Link>
+      </div>
+      <div className="grid gap-2 p-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+        {t.comingUp.map((g) => (
+          <div key={g.key} className="min-h-[120px] rounded-md border border-border px-3 py-2.5">
+            <div className="flex items-baseline justify-between gap-2">
+              <div>
+                <p className="text-[13px] font-semibold">{g.title}</p>
+                {g.sub ? <p className="text-[11px] text-muted-foreground">{g.sub}</p> : null}
+              </div>
+              <span className="rounded-full bg-muted px-1.5 py-px text-[10px] font-semibold text-muted-foreground">
+                {g.events.length}
+              </span>
+            </div>
+            <ul className="mt-2 space-y-2">
+              {g.events.slice(0, 3).map((e) => (
+                <li key={e.key} className="flex items-start gap-2 text-[12px]">
+                  <span className={cn("mt-1.5 h-2 w-2 shrink-0 rounded-full", KIND_DOT[e.kind])} />
+                  <span className="min-w-0">
+                    {"customerId" in e.link ? (
+                      <Link
+                        to="/customers/$customerId"
+                        params={{ customerId: e.link.customerId }}
+                        className="block truncate font-medium hover:underline"
+                      >
+                        {e.label}
+                      </Link>
+                    ) : (
+                      <span className="block truncate font-medium">{e.label}</span>
+                    )}
+                    <span className="block truncate text-muted-foreground">
+                      {e.account}
+                      {e.time ? ` · ${e.time}` : ""}
+                      {g.key === "next-week"
+                        ? ` · ${new Date(`${e.date}T12:00:00Z`).toLocaleDateString("en-GB", { weekday: "short", timeZone: "UTC" })}`
+                        : ""}
+                    </span>
+                  </span>
+                </li>
+              ))}
+              {g.events.length > 3 ? (
+                <li className="text-[11px] text-primary">+{g.events.length - 3} more</li>
+              ) : null}
+              {g.events.length === 0 ? (
+                <li className="text-[11px] text-muted-foreground">Nothing scheduled</li>
+              ) : null}
+            </ul>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+/* ---------------------------------------------------------------- my book */
+
+function MyBook({ t }: { t: Today }) {
+  const parts: Array<{ label: string; value: number; color: string }> = [
+    { label: "Need attention", value: t.book.needAttention, color: "#d03b3b" },
+    { label: "Waiting on", value: t.book.waitingOn, color: "#fab219" },
+    { label: "Moving", value: t.book.moving, color: "#2a78d6" },
+    { label: "Launching", value: t.book.launching, color: "#4a3aa7" },
+  ];
+  return (
+    <section className="rounded-lg border border-border bg-card px-4 py-3.5" aria-label="My book">
+      <div className="flex items-baseline justify-between">
+        <h2 className="flex items-center gap-2 text-[16px] font-semibold">
+          My book
+          <span className="rounded-full bg-muted px-2 py-px text-[11px] font-semibold text-muted-foreground">
+            {t.book.total}
+          </span>
+        </h2>
+        <Link
+          to="/customers"
+          search={{ sort: "days", dir: "desc" }}
+          className="inline-flex items-center gap-1 text-[12px] text-primary hover:underline"
+        >
+          View all <ArrowRight className="h-3.5 w-3.5" />
+        </Link>
+      </div>
+      <div className="mt-3 flex items-center gap-4">
+        <Donut parts={parts} total={t.book.total} />
+        <ul className="min-w-0 flex-1 space-y-1.5">
+          {parts.map((p) => (
+            <li key={p.label} className="flex items-center gap-2 text-[12px]">
+              <span
+                className="h-2.5 w-2.5 shrink-0 rounded-full"
+                style={{ backgroundColor: p.color }}
+              />
+              <span className="w-5 text-right font-semibold tabular-nums">{p.value}</span>
+              <span className="text-muted-foreground">{p.label}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </section>
+  );
+}
+
+/**
+ * A donut: one ring, a 2px surface gap between segments, the total in the
+ * middle. The legend beside it carries the counts, so the colour never
+ * carries the meaning alone.
+ */
+function Donut({
+  parts,
+  total,
+}: {
+  parts: Array<{ label: string; value: number; color: string }>;
+  total: number;
+}) {
+  const size = 132;
+  const r = 50;
+  const c = 2 * Math.PI * r;
+  const gap = total > 1 ? 3 : 0;
+  let offset = 0;
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox={`0 0 ${size} ${size}`}
+      role="img"
+      aria-label={`${total} accounts`}
+    >
+      <circle
+        cx={size / 2}
+        cy={size / 2}
+        r={r}
+        fill="none"
+        stroke="var(--color-muted)"
+        strokeWidth={14}
+      />
+      {total > 0
+        ? parts
+            .filter((p) => p.value > 0)
+            .map((p) => {
+              const len = (p.value / total) * c;
+              const el = (
+                <circle
+                  key={p.label}
+                  cx={size / 2}
+                  cy={size / 2}
+                  r={r}
+                  fill="none"
+                  stroke={p.color}
+                  strokeWidth={14}
+                  strokeDasharray={`${Math.max(0, len - gap)} ${c - Math.max(0, len - gap)}`}
+                  strokeDashoffset={-offset}
+                  transform={`rotate(-90 ${size / 2} ${size / 2})`}
+                >
+                  <title>
+                    {p.label}: {p.value}
+                  </title>
+                </circle>
+              );
+              offset += len;
+              return el;
+            })
+        : null}
+      <text
+        x="50%"
+        y="47%"
+        textAnchor="middle"
+        className="fill-foreground"
+        fontSize="26"
+        fontWeight="600"
+      >
+        {total}
+      </text>
+      <text x="50%" y="62%" textAnchor="middle" className="fill-muted-foreground" fontSize="11">
+        Accounts
+      </text>
+    </svg>
+  );
+}
+
+/* ----------------------------------------------------------------- stages */
+
+const STAGE_TONE: Record<string, Tone> = {
+  closed_won: "muted",
+  field_fusion_setup: "info",
+  onboarding_kickoff: "info",
+  in_onboarding: "warning",
+  onboarding_complete: "good",
+};
+
+function Stages({ t }: { t: Today }) {
+  return (
+    <section
+      className="rounded-lg border border-border bg-card px-4 py-3.5"
+      aria-label="Implementation stages"
+    >
+      <h2 className="text-[16px] font-semibold">Implementation stages</h2>
+      <ul className="mt-3 space-y-2.5">
+        {t.stages.map((s) => (
+          <li
+            key={s.key}
+            className="grid grid-cols-[92px_minmax(0,1fr)_28px_36px] items-center gap-2 text-[12px]"
+          >
+            <span className="truncate">{s.label}</span>
+            <span className="h-2.5 overflow-hidden rounded-full bg-muted">
+              <span
+                className={cn("block h-full rounded-full", TONE_BAR[STAGE_TONE[s.key] ?? "info"])}
+                style={{ width: `${Math.max(s.pct, s.count ? 4 : 0)}%` }}
+              />
+            </span>
+            <span className="text-right font-semibold tabular-nums">{s.count}</span>
+            <span className="text-right text-muted-foreground tabular-nums">{s.pct}%</span>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }

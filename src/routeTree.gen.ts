@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from "./routes/index";
 import { Route as AccessRouteImport } from "./routes/access";
 import { Route as AdminRouteImport } from "./routes/admin";
 import { Route as AlertsRouteImport } from "./routes/alerts";
+import { Route as CalendarRouteImport } from "./routes/calendar";
 import { Route as CustomersRouteImport } from "./routes/customers";
 import { Route as ForgotPasswordRouteImport } from "./routes/forgot-password";
 import { Route as FormTemplatesRouteImport } from "./routes/form-templates";
@@ -110,6 +111,11 @@ const AdminRoute = AdminRouteImport.update({
 const AlertsRoute = AlertsRouteImport.update({
   id: "/alerts",
   path: "/alerts",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const CalendarRoute = CalendarRouteImport.update({
+  id: "/calendar",
+  path: "/calendar",
   getParentRoute: () => rootRouteImport,
 } as any);
 const CustomersRoute = CustomersRouteImport.update({
@@ -508,6 +514,7 @@ export interface FileRoutesByFullPath {
   "/access": typeof AccessRoute;
   "/admin": typeof AdminRouteWithChildren;
   "/alerts": typeof AlertsRoute;
+  "/calendar": typeof CalendarRoute;
   "/customers": typeof CustomersRouteWithChildren;
   "/forgot-password": typeof ForgotPasswordRoute;
   "/form-templates": typeof FormTemplatesRoute;
@@ -591,6 +598,7 @@ export interface FileRoutesByTo {
   "/": typeof IndexRoute;
   "/access": typeof AccessRoute;
   "/alerts": typeof AlertsRoute;
+  "/calendar": typeof CalendarRoute;
   "/forgot-password": typeof ForgotPasswordRoute;
   "/form-templates": typeof FormTemplatesRoute;
   "/how-it-works": typeof HowItWorksRoute;
@@ -671,6 +679,7 @@ export interface FileRoutesById {
   "/access": typeof AccessRoute;
   "/admin": typeof AdminRouteWithChildren;
   "/alerts": typeof AlertsRoute;
+  "/calendar": typeof CalendarRoute;
   "/customers": typeof CustomersRouteWithChildren;
   "/forgot-password": typeof ForgotPasswordRoute;
   "/form-templates": typeof FormTemplatesRoute;
@@ -757,6 +766,7 @@ export interface FileRouteTypes {
     | "/access"
     | "/admin"
     | "/alerts"
+    | "/calendar"
     | "/customers"
     | "/forgot-password"
     | "/form-templates"
@@ -840,6 +850,7 @@ export interface FileRouteTypes {
     | "/"
     | "/access"
     | "/alerts"
+    | "/calendar"
     | "/forgot-password"
     | "/form-templates"
     | "/how-it-works"
@@ -919,6 +930,7 @@ export interface FileRouteTypes {
     | "/access"
     | "/admin"
     | "/alerts"
+    | "/calendar"
     | "/customers"
     | "/forgot-password"
     | "/form-templates"
@@ -1004,6 +1016,7 @@ export interface RootRouteChildren {
   AccessRoute: typeof AccessRoute;
   AdminRoute: typeof AdminRouteWithChildren;
   AlertsRoute: typeof AlertsRoute;
+  CalendarRoute: typeof CalendarRoute;
   CustomersRoute: typeof CustomersRouteWithChildren;
   ForgotPasswordRoute: typeof ForgotPasswordRoute;
   FormTemplatesRoute: typeof FormTemplatesRoute;
@@ -1084,6 +1097,13 @@ declare module "@tanstack/react-router" {
       path: "/alerts";
       fullPath: "/alerts";
       preLoaderRoute: typeof AlertsRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/calendar": {
+      id: "/calendar";
+      path: "/calendar";
+      fullPath: "/calendar";
+      preLoaderRoute: typeof CalendarRouteImport;
       parentRoute: typeof rootRouteImport;
     };
     "/customers": {
@@ -1774,6 +1794,7 @@ const rootRouteChildren: RootRouteChildren = {
   AccessRoute: AccessRoute,
   AdminRoute: AdminRouteWithChildren,
   AlertsRoute: AlertsRoute,
+  CalendarRoute: CalendarRoute,
   CustomersRoute: CustomersRouteWithChildren,
   ForgotPasswordRoute: ForgotPasswordRoute,
   FormTemplatesRoute: FormTemplatesRoute,
