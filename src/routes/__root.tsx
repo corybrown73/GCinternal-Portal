@@ -16,6 +16,7 @@ import { useEffect, type ReactNode } from "react";
 import appCss from "../styles.css?url";
 import { reportClientError } from "../lib/error-reporting";
 import { AppSidebar } from "@/components/app-sidebar";
+import { TopBar } from "@/components/top-bar";
 import { useOrgBranding } from "@/lib/use-branding";
 import { useApplyTheme } from "@/lib/use-theme";
 import { useNavVisibility } from "@/lib/use-nav-visibility";
@@ -263,6 +264,7 @@ function ShellWithSidebar() {
     <div className="flex min-h-screen w-full bg-background text-foreground">
       <AppSidebar profile={profile ?? null} branding={branding} visibility={visibility} />
       <div className="flex min-w-0 flex-1 flex-col">
+        <TopBar profile={profile ?? null} />
         <main className="min-w-0 flex-1">
           {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
           <Outlet />

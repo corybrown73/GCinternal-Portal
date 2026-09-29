@@ -22,43 +22,126 @@ export type NavEntry = {
   label: string;
   hint: string;
   exact?: boolean;
+  /** The lucide icon drawn beside it. */
+  icon: NavIcon;
+  /** In the main group of the sidebar; everything else folds under "More". */
+  primary?: boolean;
   /** Who sees it at all, before visibility is applied. */
   audience: "everyone" | "managers" | "super_admins";
   /** Cannot be switched off. See above. */
   locked?: boolean;
 };
 
+/** The icons the sidebar can draw, by name, so the catalogue stays plain data. */
+export type NavIcon =
+  | "home"
+  | "customers"
+  | "pipeline"
+  | "calendar"
+  | "reports"
+  | "search"
+  | "forms"
+  | "solutions"
+  | "tickets"
+  | "sequences"
+  | "templates"
+  | "access"
+  | "leadership"
+  | "signals"
+  | "settings"
+  | "admin";
+
 /** Every section, in nav order. The one list the sidebar and the admin screen share. */
 export const NAV_CATALOGUE: readonly NavEntry[] = [
   {
     to: "/",
     label: "Home",
-    hint: "What needs attention",
+    hint: "What needs my attention",
     exact: true,
     audience: "everyone",
     locked: true,
+    icon: "home",
+    primary: true,
   },
-  { to: "/search", label: "Search", hint: "Across every surface", audience: "everyone" },
-  { to: "/pipeline", label: "Pipeline", hint: "Deals & handoff", audience: "everyone" },
-  { to: "/customers", label: "Customers", hint: "All implementations", audience: "everyone" },
+  {
+    to: "/customers",
+    label: "Customers",
+    hint: "All implementations",
+    audience: "everyone",
+    icon: "customers",
+    primary: true,
+  },
+  {
+    to: "/pipeline",
+    label: "Pipeline",
+    hint: "Deals & handoff",
+    audience: "everyone",
+    icon: "pipeline",
+    primary: true,
+  },
+  {
+    to: "/search",
+    label: "Search",
+    hint: "Across every surface",
+    audience: "everyone",
+    icon: "search",
+  },
   {
     to: "/form-templates",
     label: "Form library",
     hint: "Starting points by industry",
     audience: "everyone",
+    icon: "forms",
   },
-  { to: "/technical-solutions", label: "Solutions", hint: "Technical work", audience: "everyone" },
-  { to: "/tickets", label: "Tickets", hint: "Requests & SLA", audience: "everyone" },
-  { to: "/sequences", label: "Sequences", hint: "Automated onboarding", audience: "everyone" },
+  {
+    to: "/technical-solutions",
+    label: "Solutions",
+    hint: "Technical work",
+    audience: "everyone",
+    icon: "solutions",
+  },
+  {
+    to: "/tickets",
+    label: "Tickets",
+    hint: "Requests & SLA",
+    audience: "everyone",
+    icon: "tickets",
+  },
+  {
+    to: "/sequences",
+    label: "Sequences",
+    hint: "Automated onboarding",
+    audience: "everyone",
+    icon: "sequences",
+  },
   {
     to: "/templates",
     label: "Journey templates",
     hint: "How onboarding runs",
     audience: "everyone",
+    icon: "templates",
   },
-  { to: "/access", label: "Customer access", hint: "Portal invites", audience: "everyone" },
-  { to: "/portfolio", label: "Leadership", hint: "Team overview", audience: "managers" },
-  { to: "/signals", label: "Signals", hint: "Velocity, dwell & waiting on", audience: "everyone" },
+  {
+    to: "/access",
+    label: "Customer access",
+    hint: "Portal invites",
+    audience: "everyone",
+    icon: "access",
+  },
+  {
+    to: "/portfolio",
+    label: "Leadership",
+    hint: "Team overview",
+    audience: "managers",
+    icon: "leadership",
+  },
+  {
+    to: "/signals",
+    label: "Signals",
+    hint: "Velocity, dwell & waiting on",
+    audience: "everyone",
+    icon: "signals",
+  },
   {
     // Everyone: the profile photo, title and booking link on it are what the
     // customer's welcome page shows for the onboarding lead, and the lead is
@@ -68,6 +151,7 @@ export const NAV_CATALOGUE: readonly NavEntry[] = [
     label: "Settings",
     hint: "Your profile, the look, the stages",
     audience: "everyone",
+    icon: "settings",
   },
   {
     to: "/admin",
@@ -75,6 +159,7 @@ export const NAV_CATALOGUE: readonly NavEntry[] = [
     hint: "Keys, users, routing",
     audience: "super_admins",
     locked: true,
+    icon: "admin",
   },
 ];
 

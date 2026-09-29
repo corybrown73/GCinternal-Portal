@@ -7,7 +7,6 @@ import { AccountRowList } from "@/components/account-rows";
 
 import { PageBody, PageHeader } from "@/components/page";
 import { NoRows, Panel, SeverityChip, StageBadge } from "@/components/record";
-import { ScopeSwitch } from "@/components/scope-switch";
 import { useScope } from "@/lib/use-scope";
 import { getLeadership } from "@/lib/hub.functions";
 import { fmtDate, fmtMoney, humanize, stageLabel } from "@/lib/hub-format";
@@ -249,7 +248,6 @@ function LeadershipPage() {
             <span className="font-mono text-[11px] text-muted-foreground">
               {rollup.total} implementations · {rollup.owners} owners
             </span>
-            <ScopeSwitch scope={data.scope} onChange={setScope} />
           </div>
         }
       />

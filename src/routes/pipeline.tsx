@@ -7,7 +7,6 @@ import { PageBody, PageHeader } from "@/components/page";
 import { DealBoard } from "@/components/presale/deal-board";
 import { CsvImportDialog, NewDealDialog } from "@/components/presale/deal-dialogs";
 import { canEditDeal, canManage, useProfile } from "@/lib/auth";
-import { ScopeSwitch } from "@/components/scope-switch";
 import { useScope } from "@/lib/use-scope";
 import { getPipeline, moveDealStage } from "@/lib/presale.functions";
 import { parseWonGate } from "@/lib/won-gate";
@@ -84,7 +83,6 @@ function PipelinePage() {
               {fmtMoney(arrTotal)}
               {pocCount ? ` · ${pocCount} Field Fusion POC${pocCount === 1 ? "" : "s"}` : ""}
             </span>
-            <ScopeSwitch scope={data.scope} onChange={setScope} />
             {editable ? (
               <>
                 <CsvImportDialog />

@@ -4,7 +4,6 @@ import { ArrowRight, Info } from "lucide-react";
 
 import { PageBody, PageHeader } from "@/components/page";
 import { Panel, StageBadge, StatusChip, StatusDot, NoRows } from "@/components/record";
-import { ScopeSwitch } from "@/components/scope-switch";
 import { AddCommitment, type TeamOption } from "@/components/delivery-write";
 import { useScope } from "@/lib/use-scope";
 import { getHome, getTeamOptions } from "@/lib/hub.functions";
@@ -351,7 +350,6 @@ function HomePage() {
       <PageHeader
         title="Today"
         description="Your accounts, each with its stage and the one thing to do next."
-        actions={<ScopeSwitch scope={data.scope} onChange={setScope} />}
       />
       <PageBody className="space-y-4">
         <DealInboxPanel scope={param} />

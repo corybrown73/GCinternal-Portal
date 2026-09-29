@@ -7,7 +7,6 @@ import { SavedViews } from "@/components/saved-views";
 import { searchToView } from "@/lib/saved-view-input";
 import { HealthNote } from "@/components/health-note";
 import { PaceChip, StageBadge, StatusDot, NoRows } from "@/components/record";
-import { ScopeSwitch } from "@/components/scope-switch";
 import { useScope } from "@/lib/use-scope";
 import { getHome } from "@/lib/hub.functions";
 import { healthByImplementation } from "@/lib/home-triage";
@@ -156,7 +155,6 @@ function CustomersPage() {
             <span className="font-mono text-[11px] text-muted-foreground">
               {rows.length} / {data.implementations.length}
             </span>
-            <ScopeSwitch scope={data.scope} onChange={setScope} />
           </div>
         }
       />
