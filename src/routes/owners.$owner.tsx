@@ -81,7 +81,7 @@ function Metric({
           "mt-0.5 font-mono text-[18px] font-semibold leading-none",
           tone === "bad" && "text-status-blocked-foreground",
           tone === "warn" && "text-status-risk-foreground",
-          tone === "good" && "text-status-on-track-foreground",
+          tone === "good" && "text-status-ontrack-foreground",
           tone === "muted" && "text-muted-foreground",
         )}
       >

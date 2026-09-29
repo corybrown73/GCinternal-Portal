@@ -3,7 +3,7 @@ import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { Suspense } from "react";
 import { queryOptions, useMutation, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { ChevronRight, ArrowRight } from "lucide-react";
+import { ChevronRight, Pencil, UserRound, ArrowRight } from "lucide-react";
 
 import { DeleteCustomerButton } from "@/components/delete-customer-button";
 import { PlanFromDeal } from "@/components/plan-section";
@@ -134,7 +134,7 @@ import {
 import { cn } from "@/lib/utils";
 import { When } from "@/components/when";
 
-const TABS = ["implementation", "overview", "prekickoff", "resources", "details"] as const;
+const TABS = ["overview", "plan", "prekickoff", "resources", "details"] as const;
 export type TabId = (typeof TABS)[number];
 /** The tabs this page used to have. An old link lands on Details, where that content now lives. */
 const LEGACY_TAB_IDS = [
@@ -151,14 +151,16 @@ const LEGACY_TABS = new Set<string>(LEGACY_TAB_IDS);
 /** Any tab a link may still name; the page itself only ever shows a TabId. */
 export type AnyTabId = TabId | LegacyTabId;
 function resolveTab(raw: string | undefined): TabId {
-  if (!raw) return "implementation";
+  if (!raw) return "overview";
   if (TABS.includes(raw as TabId)) return raw as TabId;
-  return LEGACY_TABS.has(raw) ? "details" : "implementation";
+  // The workspace was briefly its own tab; it is the overview now.
+  if (raw === "implementation") return "overview";
+  return LEGACY_TABS.has(raw) ? "details" : "overview";
 }
 
 const TAB_LABEL: Record<TabId, string> = {
-  implementation: "Implementation",
   overview: "Overview",
+  plan: "Plan",
   prekickoff: "Record",
   resources: "Resources",
   details: "Details",
@@ -175,7 +177,7 @@ const customerQuery = (customerId: string, implementationId?: string | null) =>
 
 export const Route = createFileRoute("/customers/$customerId")({
   validateSearch: (search: Record<string, unknown>): { tab?: AnyTabId; impl?: string } => {
-    const raw = String(search["tab"] ?? "implementation");
+    const raw = String(search["tab"] ?? "overview");
     const impl = typeof search["impl"] === "string" ? (search["impl"] as string) : undefined;
     return { tab: resolveTab(raw), ...(impl ? { impl } : {}) };
   },
@@ -373,18 +375,33 @@ function Customer360Page() {
                   ))}
               </div>
             ) : null}
-            <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] text-muted-foreground">
-              <span>
-                {[
-                  impl.name && impl.name !== customer.name ? impl.name : null,
-                  customer.industry,
-                  impl.tier,
-                  customer.segment,
-                  `Owner ${impl.owner_name ?? "Unassigned"}`,
-                ]
-                  .filter(Boolean)
-                  .join(" · ")}
+            <p className="mt-2 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[12px] text-muted-foreground">
+              <StageBadge stage={impl.deal_stage} />
+              <StatusChip status={health.level} />
+              <HealthNote
+                recorded={impl.health_recorded}
+                recordedReason={impl.health_recorded_reason}
+                recordedAt={impl.health_recorded_at}
+                legacyStatus={impl.status}
+                computed={health.level}
+              />
+              <span className="inline-flex items-center gap-1 rounded-full border border-border bg-card px-2 py-0.5 text-[11px]">
+                <UserRound className="h-3 w-3" /> {impl.owner_name ?? "Unassigned"}
               </span>
+              {[
+                impl.name && impl.name !== customer.name ? impl.name : null,
+                customer.industry,
+                impl.tier ? `Tier ${impl.tier}` : null,
+              ]
+                .filter(Boolean)
+                .map((x) => (
+                  <span
+                    key={String(x)}
+                    className="rounded-full border border-border bg-card px-2 py-0.5 text-[11px]"
+                  >
+                    {x}
+                  </span>
+                ))}
               {/* Provenance, one click away and always in the same place.
                   Everything a deal knows — the goal, the named contact, who
                   sold it, what was said on the calls — was a join away and
@@ -412,22 +429,21 @@ function Customer360Page() {
               ) : null}
             </p>
           </div>
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2">
             <AddServicesButton customerId={customer.id} />
+            <Link
+              to="/customers/$customerId"
+              params={{ customerId }}
+              search={{ tab: "details", ...(selectedImplId ? { impl: selectedImplId } : {}) }}
+              className="inline-flex items-center gap-1 rounded-md border border-border bg-card px-2.5 py-1 text-[12px] hover:bg-muted"
+            >
+              <Pencil className="h-3 w-3" /> Edit customer
+            </Link>
             <DeleteCustomerButton
               customerId={customer.id}
               customerName={customer.name}
               implementations={record.implementations.length}
             />
-            <StatusChip status={health.level} />
-            <HealthNote
-              recorded={impl.health_recorded}
-              recordedReason={impl.health_recorded_reason}
-              recordedAt={impl.health_recorded_at}
-              legacyStatus={impl.status}
-              computed={health.level}
-            />
-            <StageBadge stage={impl.deal_stage} />
             {/* "stage 3/8", a 3/8-wide progress bar, days-in-stage and the
                 target launch date all used to sit here. Every one of them was
                 computed against the hardcoded eight-stage lifecycle, so a
@@ -451,7 +467,7 @@ function Customer360Page() {
         {/* On the Implementation tab the workspace IS the checklist, cut to
             the window before the next stage; the full one stays on the
             other tabs. */}
-        {impl.deal_id && tab !== "implementation" ? (
+        {impl.deal_id && tab !== "overview" ? (
           <div className="px-6 pt-2.5">
             <DealStageFlow dealId={impl.deal_id} />
           </div>
@@ -464,7 +480,7 @@ function Customer360Page() {
         {impl.deal_id ? null : <HeaderTrackers record={record} customerId={customerId} tab={tab} />}
 
         <nav className="flex flex-wrap gap-px border-t border-border px-4">
-          {TABS.filter((t) => t !== "implementation" || impl.deal_id).map((t) => (
+          {TABS.filter((t) => t !== "plan" || impl.deal_id).map((t) => (
             <Link
               key={t}
               to="/customers/$customerId"
@@ -483,15 +499,11 @@ function Customer360Page() {
         </nav>
       </header>
 
-      {tab === "implementation" ? (
-        impl.deal_id ? (
-          <ImplementationWorkspace record={record} customerId={customerId} />
-        ) : (
-          <p className="px-6 py-4 text-[13px] text-muted-foreground">
-            This project was not started from a deal, so it has no implementation workspace. Its
-            stages are above; the plan is under Overview and the rest under Details.
-          </p>
-        )
+      {/* The overview of a deal-linked project IS the owner's workspace:
+          where we are, what to do now, what we wait on, the next meeting,
+          the notes. A project with no deal keeps the older overview. */}
+      {tab === "overview" && impl.deal_id ? (
+        <ImplementationWorkspace record={record} customerId={customerId} />
       ) : null}
       {tab === "prekickoff" ? (
         <div className="px-6 py-4">
@@ -513,12 +525,15 @@ function Customer360Page() {
         <div
           className={cn(
             "grid items-start gap-4 px-6 py-4 lg:grid-cols-[minmax(0,1fr)_320px]",
-            (tab === "prekickoff" || tab === "implementation") && "hidden",
+            (tab === "prekickoff" || (tab === "overview" && impl.deal_id)) && "hidden",
           )}
         >
           <div className="min-w-0 space-y-3">
             <SectionControls />
-            {tab === "overview" ? <OverviewTab record={record} customerId={customerId} /> : null}
+            {tab === "overview" && !impl.deal_id ? (
+              <OverviewTab record={record} customerId={customerId} />
+            ) : null}
+            {tab === "plan" ? <OverviewTab record={record} customerId={customerId} /> : null}
             {tab === "resources" ? <ResourcesTab record={record} /> : null}
             {tab === "details" && impl.deal_id ? (
               <HeaderTrackers record={record} customerId={customerId} tab={tab} />

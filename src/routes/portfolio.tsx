@@ -168,7 +168,7 @@ function Metric({
           "mt-0.5 font-mono text-[18px] font-semibold leading-none",
           tone === "bad" && "text-status-blocked-foreground",
           tone === "warn" && "text-status-risk-foreground",
-          tone === "good" && "text-status-on-track-foreground",
+          tone === "good" && "text-status-ontrack-foreground",
           tone === "muted" && "text-muted-foreground",
         )}
       >
@@ -689,7 +689,7 @@ function LeadershipPage() {
                       "ml-auto font-mono text-[11px]",
                       g.summary.attention
                         ? "text-status-risk-foreground"
-                        : "text-status-on-track-foreground",
+                        : "text-status-ontrack-foreground",
                     )}
                   >
                     {g.summary.attention} attention · {g.summary.ready} ready

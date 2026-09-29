@@ -138,7 +138,7 @@ its project.
 
 Assign yourself an account that is past Closed Won and open it from Home.
 
-1. It opens on the **Implementation** tab. The top line says the stage, the day
+1. It opens on the **Overview** tab, which is the workspace. The progress card says the stage, the day
    of the plan, "Target: Functional by …" and the owner. Nothing else is in the
    header — no full checklist.
 2. **Now** shows one window only. Before Stage 1: reply to the AE, the cadence

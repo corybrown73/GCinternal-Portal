@@ -3,6 +3,7 @@ import { Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import {
+  ArrowRight,
   CalendarDays,
   Check,
   ChevronDown,
@@ -12,6 +13,7 @@ import {
   ListChecks,
   Lock,
   ShieldCheck,
+  TriangleAlert,
   X,
 } from "lucide-react";
 
@@ -20,6 +22,12 @@ import { ParkingLot } from "@/components/parking-lot";
 import { TaskBody, useHandoffTick, useStageSync } from "@/components/stage-flow";
 import { When } from "@/components/when";
 import { canEditDeal, useProfile } from "@/lib/auth";
+import { StatusChip } from "@/components/record";
+import { deriveHealth } from "@/lib/customer360-derive";
+import { dealStageProgress } from "@/lib/deal-stage";
+import { dealValue } from "@/lib/deal-value";
+import { fmtMoney } from "@/lib/hub-format";
+import { watchOutsFor } from "@/lib/watch-outs";
 import { dealQuery, type DealData } from "@/lib/deal-query";
 import { addJournalEntry } from "@/lib/hub.functions";
 import type { Customer360 } from "@/lib/hub-types";
@@ -123,6 +131,16 @@ function WorkspaceBody({
     refetchInterval: 10_000,
   });
 
+  // The watch-outs the plan contradicts: a count here, the detail on the Plan tab.
+  const latestBrief =
+    deal.briefs.find((b) => b.status === "complete" && b.generator === "llm") ?? null;
+  const watchOuts = watchOutsFor({
+    brief: latestBrief?.structured_json ?? null,
+    notes: deal.gong_reports.map((r) => r.content_md),
+    intake,
+    timeline,
+  });
+
   const ws = workspaceFor({
     flow,
     intake,
@@ -137,7 +155,17 @@ function WorkspaceBody({
 
   return (
     <div className="space-y-4 px-6 py-4">
-      <WhereBar ws={ws} owner={impl.owner_name} moved={moved} syncError={syncError} retry={retry} />
+      <WhereBar
+        ws={ws}
+        flow={flow}
+        deal={deal}
+        record={record}
+        customerId={customerId}
+        watchOuts={watchOuts.filter((w) => w.severity === "conflict").length}
+        moved={moved}
+        syncError={syncError}
+        retry={retry}
+      />
 
       <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
         <div className="min-w-0 space-y-4">
@@ -162,55 +190,123 @@ function WorkspaceBody({
 
 /* ------------------------------------------------------------- where */
 
+/**
+ * Where we are: the rail with the stage we are in, the day of the plan, the
+ * target said as a target, and the four facts a person glances at — health,
+ * progress, this deal's value, the owner. The watch-outs count sits beside
+ * it because a plan that contradicts what the calls said is the first thing
+ * to know.
+ */
 function WhereBar({
   ws,
-  owner,
+  flow,
+  deal,
+  record,
+  customerId,
+  watchOuts,
   moved,
   syncError,
   retry,
 }: {
   ws: Workspace;
-  owner: string | null;
+  flow: ReturnType<typeof stageFlow>;
+  deal: DealData;
+  record: Customer360;
+  customerId: string;
+  watchOuts: number;
   moved: string | null;
   syncError: string | null;
   retry: () => void;
 }) {
+  const impl = record.implementation!;
+  const health = deriveHealth(record, impl);
+  const progress = dealStageProgress(impl.deal_stage);
+  const at = flow.stages.findIndex((s) => s.key === flow.current);
+  const value = dealValue(deal.account);
   return (
-    <section
-      className="rounded-md border border-border bg-card px-4 py-3"
-      aria-label="Where we are"
-    >
-      <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
-        <p className="text-[15px] font-semibold">{ws.where.stageLabel}</p>
+    <section className="rounded-lg border border-border bg-card" aria-label="Where we are">
+      <div className="flex flex-wrap items-center justify-between gap-3 px-4 pt-3.5">
+        <h2 className="text-[15px] font-semibold">Implementation progress</h2>
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[12px]">
+          <span className="inline-flex items-center gap-1.5">
+            <span className="text-muted-foreground">Health</span>
+            <StatusChip status={health.level} />
+          </span>
+          <span>
+            <span className="text-muted-foreground">Progress</span> {progress.position} /{" "}
+            {progress.total} stages
+          </span>
+          <span>
+            <span className="text-muted-foreground">This deal</span> {fmtMoney(value)}
+          </span>
+          <span>
+            <span className="text-muted-foreground">Owner</span> {impl.owner_name ?? "Nobody yet"}
+          </span>
+        </div>
+      </div>
+      <ol className="flex flex-wrap items-center gap-1 px-4 pt-3">
+        {flow.stages.map((s, i) => {
+          const past = at >= 0 && i < at;
+          const isCurrent = s.key === flow.current;
+          return (
+            <li key={s.key} className="flex items-center gap-1">
+              <span
+                aria-current={isCurrent ? "step" : undefined}
+                className={cn(
+                  "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[12px] font-medium",
+                  isCurrent
+                    ? "border-primary bg-primary text-primary-foreground"
+                    : past
+                      ? "border-status-ontrack-foreground/40 bg-status-ontrack/60 text-status-ontrack-foreground"
+                      : "border-border text-muted-foreground",
+                )}
+              >
+                {past ? <Check className="h-3 w-3" strokeWidth={3} /> : null}
+                {s.label}
+              </span>
+              {i < flow.stages.length - 1 ? (
+                <ArrowRight className="h-3 w-3 text-muted-foreground" />
+              ) : null}
+            </li>
+          );
+        })}
+      </ol>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-3 text-[12px]">
         {ws.where.day ? (
-          <p
+          <span
             className={cn(
-              "text-[12px]",
-              ws.where.day.state === "past_due"
-                ? "text-amber-800 dark:text-amber-300"
-                : "text-muted-foreground",
+              "font-medium",
+              ws.where.day.state === "past_due" ? "text-amber-800 dark:text-amber-300" : "",
             )}
           >
             {ws.where.day.label} · {ws.where.day.detail}
-          </p>
+          </span>
         ) : null}
         {ws.where.target ? (
-          <p className="text-[12px] text-muted-foreground">
+          <span className="text-muted-foreground">
             Target: {ws.where.target.word} by {shortDay(ws.where.target.date)}
-          </p>
+          </span>
         ) : null}
-        <p className="ml-auto text-[12px] text-muted-foreground">
-          {owner ? `Owner: ${owner}` : "Nobody owns this yet"}
-        </p>
+        {watchOuts > 0 ? (
+          <Link
+            to="/customers/$customerId"
+            params={{ customerId }}
+            search={{ tab: "plan", impl: impl.id }}
+            className="ml-auto inline-flex items-center gap-1.5 rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-1 text-[12px] font-medium text-amber-800 hover:bg-amber-500/15 dark:text-amber-300"
+          >
+            <TriangleAlert className="h-3.5 w-3.5" />
+            {watchOuts} watch-out{watchOuts === 1 ? "" : "s"} the plan contradicts · view
+          </Link>
+        ) : null}
       </div>
       {moved ? (
-        <p className="mt-2 text-[12px] text-status-ontrack-foreground">
+        <p className="border-t border-border px-4 py-2 text-[12px] text-status-ontrack-foreground">
           <Check className="mr-1 inline h-3.5 w-3.5" strokeWidth={3} />
           Moved to {moved}.
         </p>
       ) : null}
       {syncError ? (
-        <p className="mt-2 flex flex-wrap items-center gap-2 text-[12px] text-destructive">
+        <p className="flex flex-wrap items-center gap-2 border-t border-border px-4 py-2 text-[12px] text-destructive">
           Everything here is done, but the deal could not be moved: {syncError}
           <button
             type="button"

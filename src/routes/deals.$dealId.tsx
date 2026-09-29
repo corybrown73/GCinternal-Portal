@@ -60,7 +60,7 @@ function DealPage() {
         to="/customers/$customerId"
         params={{ customerId: data.account.customer_id }}
         search={{
-          tab: "implementation",
+          tab: "overview",
           ...(data.implementation_id ? { impl: data.implementation_id } : {}),
         }}
         replace
