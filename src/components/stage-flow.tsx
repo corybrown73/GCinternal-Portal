@@ -30,7 +30,7 @@ import { moveDealStage, saveIntake } from "@/lib/presale.functions";
 import {
   CORE_MEETINGS,
   DEAL_TYPES,
-  FUNCTIONAL,
+  completedAfterTick,
   KICKOFF_CADENCE,
   PREP_ITEMS,
   readingInFlight,
@@ -56,10 +56,49 @@ import { ask } from "@/components/ui/ask";
  * The rules live in stage-flow.ts; the server checks them again before it
  * moves anything.
  */
+/**
+ * The page saw a stage finish: ask the server to move it. Once per target,
+ * so a slow refetch cannot send the same move twice. Shared by the checklist
+ * and the workspace, so the deal moves on whichever screen the owner works
+ * from.
+ */
+export function useStageSync(dealId: string, advanceTo: string | null, editable: boolean) {
+  const qc = useQueryClient();
+  const sync = useServerFn(syncDealStageFn);
+  const asked = useRef<string | null>(null);
+  const [moved, setMoved] = useState<string | null>(null);
+  // A move that failed says so, with the button that tries again; a page
+  // that only ever said "moving…" would be lying from the second attempt on.
+  const [syncError, setSyncError] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
+  // A "moved" notice is news for a moment, then clutter.
+  useEffect(() => {
+    if (!moved) return;
+    const timer = setTimeout(() => setMoved(null), 6000);
+    return () => clearTimeout(timer);
+  }, [moved]);
+  useEffect(() => {
+    if (!editable || !advanceTo || asked.current === advanceTo) return;
+    asked.current = advanceTo;
+    setSyncError(null);
+    void sync({ data: { dealId } })
+      .then((r) => {
+        if (r.moved) {
+          setMoved(r.moved === "onboarding_kickoff" ? "Pre-kickoff" : "Onboarding");
+          void qc.invalidateQueries();
+        }
+      })
+      .catch((e: unknown) => {
+        asked.current = null;
+        setSyncError(e instanceof Error ? e.message : "The deal could not be moved.");
+      });
+  }, [editable, advanceTo, dealId, sync, qc, attempt]);
+  return { moved, syncError, retry: () => setAttempt((n) => n + 1) };
+}
+
 export function StageFlow({ deal }: { deal: DealData }) {
   const { profile } = useProfile();
   const editable = canEditDeal(profile?.role);
-  const qc = useQueryClient();
   const dealId = deal.account.id;
   const intake = readIntake(deal.account.intake);
 
@@ -90,37 +129,7 @@ export function StageFlow({ deal }: { deal: DealData }) {
     timeline,
   });
 
-  // The page saw a stage finish: ask the server to move it. Once per target,
-  // so a slow refetch cannot send the same move twice.
-  const sync = useServerFn(syncDealStageFn);
-  const asked = useRef<string | null>(null);
-  const [moved, setMoved] = useState<string | null>(null);
-  // A move that failed says so, with the button that tries again; a page
-  // that only ever said "moving…" would be lying from the second attempt on.
-  const [syncError, setSyncError] = useState<string | null>(null);
-  const [attempt, setAttempt] = useState(0);
-  // A "moved" notice is news for a moment, then clutter.
-  useEffect(() => {
-    if (!moved) return;
-    const timer = setTimeout(() => setMoved(null), 6000);
-    return () => clearTimeout(timer);
-  }, [moved]);
-  useEffect(() => {
-    if (!editable || !flow.advanceTo || asked.current === flow.advanceTo) return;
-    asked.current = flow.advanceTo;
-    setSyncError(null);
-    void sync({ data: { dealId } })
-      .then((r) => {
-        if (r.moved) {
-          setMoved(r.moved === "onboarding_kickoff" ? "Pre-kickoff" : "Onboarding");
-          void qc.invalidateQueries();
-        }
-      })
-      .catch((e: unknown) => {
-        asked.current = null;
-        setSyncError(e instanceof Error ? e.message : "The deal could not be moved.");
-      });
-  }, [editable, flow.advanceTo, dealId, sync, qc, attempt]);
+  const { moved, syncError, retry } = useStageSync(dealId, flow.advanceTo, editable);
 
   const [today, setToday] = useState<string | null>(null);
   useEffect(() => setToday(localIso()), []);
@@ -238,7 +247,7 @@ export function StageFlow({ deal }: { deal: DealData }) {
           <button
             type="button"
             className="rounded-sm border border-destructive/40 px-2 py-0.5 font-medium hover:bg-destructive/10"
-            onClick={() => setAttempt((n) => n + 1)}
+            onClick={retry}
           >
             Try again
           </button>
@@ -524,7 +533,7 @@ function TaskRow({
   );
 }
 
-function TaskBody({
+export function TaskBody({
   task,
   deal,
   intake,
@@ -888,7 +897,7 @@ function DealTypeBody({
 
 /** Tick one of the pre-kickoff tasks that live nowhere else. */
 /** The handoff tasks' ticks: the box changes at once, the save follows. */
-function useHandoffTick(dealId: string) {
+export function useHandoffTick(dealId: string) {
   return useOptimisticTick({ dealId, section: "handoff_tasks" });
 }
 
@@ -1562,19 +1571,16 @@ function OnboardingList({
     t.doneKey && optimistic[t.doneKey] !== undefined ? Boolean(optimistic[t.doneKey]) : t.done;
   const tick = (v: { doneKey: string; on: boolean; hasLaterPhases: boolean }) => {
     const t = intake.timeline;
-    const completed = { ...(latest.current ?? t.completed) };
-    if (v.on) completed[v.doneKey] = localIso();
-    else delete completed[v.doneKey];
-    // Functional IS the first form live: the last of the eight ticks marks
-    // it, so nobody ticks the same fact twice.
-    if (
-      v.on &&
-      !completed["live"] &&
-      FUNCTIONAL.some((f) => f.key === v.doneKey) &&
-      FUNCTIONAL.every((f) => completed[f.key])
-    ) {
-      completed["live"] = localIso();
-    }
+    // Functional IS the first form live: the last readiness tick marks it,
+    // so nobody ticks the same fact twice (the rule is shared with the
+    // workspace).
+    const completed = completedAfterTick(
+      intake,
+      latest.current ?? t.completed,
+      v.doneKey,
+      v.on,
+      localIso(),
+    );
     // The first process live IS the form proven: phase 2 opens from it,
     // unless somebody already recorded an earlier day.
     const provenOn =
@@ -1647,8 +1653,8 @@ function OnboardingList({
                   {heading.startsWith("Functional") ? (
                     <span className="ml-2 font-normal normal-case tracking-normal">
                       {tasks.filter((x) => x.group === heading && isDone(x)).length} of{" "}
-                      {tasks.filter((x) => x.group === heading).length} — all eight marks the first
-                      form live
+                      {tasks.filter((x) => x.group === heading).length} — the last one marks the
+                      first form live
                     </span>
                   ) : null}
                 </li>

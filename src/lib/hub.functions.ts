@@ -632,9 +632,11 @@ export const setApproval = createServerFn({ method: "POST" })
 export const addJournalEntry = createServerFn({ method: "POST" })
   .middleware([requireInternalAuth])
   .inputValidator((data: unknown) => createJournalEntryInput.parse(data))
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
     const { createJournalEntry } = await import("./hub.server");
-    return createJournalEntry(data);
+    // A note with no named author is the signed-in person's: the workspace
+    // never asks who is typing.
+    return createJournalEntry({ ...data, authorId: data.authorId ?? context.profile.id });
   });
 
 export const uploadAttachment = createServerFn({ method: "POST" })

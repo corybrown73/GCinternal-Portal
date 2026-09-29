@@ -442,15 +442,88 @@ function classicPreKickoff(a: IntakeAnswers): FlowTask[] {
  */
 /** What "Functional" means: the minimum they can do without us, checked on a call. */
 export const FUNCTIONAL = [
-  { key: "func_web_login", label: "Logs into the web portal" },
-  { key: "func_mobile_login", label: "Logs into the mobile app" },
-  { key: "func_submit", label: "Opens, completes and submits the main workflow" },
-  { key: "func_output", label: "Gets the output — the PDF, the email" },
-  { key: "func_users", label: "Adds users and updates roles and access" },
-  { key: "func_edit", label: "Makes a basic form edit and republishes" },
-  { key: "func_data_open", label: "Opens the datasets that power the form" },
-  { key: "func_data_update", label: "Updates those datasets when things change" },
+  { key: "func_web_login", label: "Logs into the web portal", needs: null },
+  { key: "func_mobile_login", label: "Logs into the mobile app", needs: null },
+  { key: "func_submit", label: "Opens, completes and submits the main workflow", needs: null },
+  { key: "func_output", label: "Gets the output — the PDF, the email", needs: null },
+  { key: "func_users", label: "Adds users and updates roles and access", needs: null },
+  { key: "func_edit", label: "Makes a basic form edit and republishes", needs: null },
+  { key: "func_data_open", label: "Opens the datasets that power the form", needs: "data" },
+  { key: "func_data_update", label: "Updates those datasets when things change", needs: "data" },
 ] as const;
+export type FunctionalItem = (typeof FUNCTIONAL)[number];
+
+/**
+ * Whether this implementation puts datasets behind the form: a data load in
+ * the plan, or a Field Fusion request that named the data sets. Without
+ * one, "updates the datasets" is not something they need to be able to do.
+ */
+export function usesDatasets(a: IntakeAnswers): boolean {
+  if (a.timeline.services.some((s) => s.kind === "data_load")) return true;
+  if ((a.field_fusion.request?.data_sets.length ?? 0) > 0) return true;
+  return false;
+}
+
+/**
+ * The readiness list for THIS customer: what "without us" means for what we
+ * are actually implementing. The data items need datasets; anything the
+ * owner took off (`readiness_off`) stays off. Never empty — the core four
+ * (log in, submit, get the output, add users) are what every account needs.
+ */
+export function readinessFor(a: IntakeAnswers): FunctionalItem[] {
+  const off = new Set(a.readiness_off);
+  const data = usesDatasets(a);
+  return FUNCTIONAL.filter((f) => {
+    if (f.needs === "data" && !data && !off.has(`+${f.key}`)) return false;
+    return !off.has(f.key);
+  });
+}
+
+/** What kind of thing a task is — a meeting held, something someone does, a handoff, or proof they can run it. */
+export type TaskKind = "meeting" | "action" | "gate" | "readiness";
+
+export function taskKind(t: FlowTask): TaskKind {
+  if (t.action === "kickoff" || t.action === "book_core") return "meeting";
+  if (t.key === "kickoff" || t.key === "working" || t.key === "adjust") return "meeting";
+  if (t.key.startsWith("func_") || t.key.startsWith("grad_") || t.action === "graduate")
+    return "readiness";
+  if (
+    t.key === "closeout" ||
+    t.action === "review" ||
+    t.action === "deal_type" ||
+    t.action === "assign" ||
+    t.action === "field_fusion"
+  )
+    return "gate";
+  return "action";
+}
+
+/**
+ * The completed map after one tick, with the rule the checklist and the
+ * workspace share: the last readiness tick marks the first form live, so
+ * nobody ticks the same fact twice.
+ */
+export function completedAfterTick(
+  a: IntakeAnswers,
+  current: Record<string, string>,
+  doneKey: string,
+  on: boolean,
+  today: string,
+): Record<string, string> {
+  const completed = { ...current };
+  if (on) completed[doneKey] = today;
+  else delete completed[doneKey];
+  const readiness = readinessFor(a);
+  if (
+    on &&
+    !completed["live"] &&
+    readiness.some((f) => f.key === doneKey) &&
+    readiness.every((f) => completed[f.key])
+  ) {
+    completed["live"] = today;
+  }
+  return completed;
+}
 
 /**
  * Onboarding on the playbook: each stage held, the work between them done,
@@ -501,7 +574,7 @@ function playbookOnboarding(a: IntakeAnswers, t: Timeline): FlowTask[] {
       { date: at("fieldtest")?.date ?? null },
     ),
     stage("adjust"),
-    ...FUNCTIONAL.map((f) =>
+    ...readinessFor(a).map((f) =>
       tick(f.key, f.label, "Checked with them, on their account.", {
         group: "Functional — what they can do without us",
         date: at("live")?.date ?? null,

@@ -513,6 +513,7 @@ export const saveIntake = createServerFn({ method: "POST" })
               .optional(),
             chosen_templates: z.array(z.string().uuid()).optional(),
             welcome_hidden_screens: z.array(z.string().max(40)).max(20).optional(),
+            readiness_off: z.array(z.string().max(40)).max(20).optional(),
             welcome_shared_at: z.string().nullable().optional(),
             // One meeting's recap at a time, merged on the server.
             recaps: z

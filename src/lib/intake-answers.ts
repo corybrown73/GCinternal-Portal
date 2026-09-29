@@ -263,6 +263,13 @@ export const intakeAnswersSchema = z.object({
    */
   /** Welcome-page screens the presenter has switched off for this customer, by key. */
   welcome_hidden_screens: z.array(z.string().max(40)).max(20).default([]),
+  /**
+   * Readiness items that are not part of this implementation — "Updates the
+   * datasets" for a customer with no datasets. The owner takes them off; the
+   * plan's own signals (a data load, the Field Fusion request) put the data
+   * items on to begin with.
+   */
+  readiness_off: z.array(z.string().max(40)).max(20).default([]),
   /** When a person copied the customer's link to send it. Set by that click only. */
   welcome_shared_at: z.string().nullable().default(null),
   /**

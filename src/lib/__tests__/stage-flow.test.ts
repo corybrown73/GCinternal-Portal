@@ -196,11 +196,15 @@ describe("the new-logo plan: the Implementation Playbook", () => {
   });
 
   it("runs Onboarding as the three stages, the work between them, Functional, the SOW, and a close-out", () => {
+    // A data load in the plan: the readiness list includes the dataset items.
     const intake = readIntake({
       ...ready,
       timeline: {
         completed: { kickoff: "2026-09-25" },
-        services: [{ id: "qb", kind: "integration", name: "QuickBooks Online", phase: 2, tier: 3 }],
+        services: [
+          { id: "qb", kind: "integration", name: "QuickBooks Online", phase: 2, tier: 3 },
+          { id: "cl", kind: "data_load", name: "Customer list", phase: 1 },
+        ],
       },
     });
     const t = buildTimeline({
@@ -225,6 +229,7 @@ describe("the new-logo plan: the Implementation Playbook", () => {
       "func_edit",
       "func_data_open",
       "func_data_update",
+      "svc:cl",
       "svc:qb",
       "activate",
       "closeout",

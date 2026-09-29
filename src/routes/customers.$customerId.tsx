@@ -15,6 +15,7 @@ import { dealQuery } from "@/lib/deal-query";
 import { useQuery } from "@tanstack/react-query";
 import { AddServicesButton } from "@/components/onboarding-pulse";
 import { DealStageFlow } from "@/components/stage-flow";
+import { ImplementationWorkspace } from "@/components/implementation-workspace";
 import { HealthNote } from "@/components/health-note";
 import { PlanPanel } from "@/components/plan-panel";
 import { HandoffPanel } from "@/components/handoff-panel";
@@ -131,7 +132,7 @@ import {
 import { cn } from "@/lib/utils";
 import { When } from "@/components/when";
 
-const TABS = ["overview", "prekickoff", "details"] as const;
+const TABS = ["implementation", "overview", "prekickoff", "details"] as const;
 export type TabId = (typeof TABS)[number];
 /** The tabs this page used to have. An old link lands on Details, where that content now lives. */
 const LEGACY_TAB_IDS = [
@@ -148,12 +149,13 @@ const LEGACY_TABS = new Set<string>(LEGACY_TAB_IDS);
 /** Any tab a link may still name; the page itself only ever shows a TabId. */
 export type AnyTabId = TabId | LegacyTabId;
 function resolveTab(raw: string | undefined): TabId {
-  if (!raw) return "overview";
+  if (!raw) return "implementation";
   if (TABS.includes(raw as TabId)) return raw as TabId;
-  return LEGACY_TABS.has(raw) ? "details" : "overview";
+  return LEGACY_TABS.has(raw) ? "details" : "implementation";
 }
 
 const TAB_LABEL: Record<TabId, string> = {
+  implementation: "Implementation",
   overview: "Overview",
   prekickoff: "Record",
   details: "Details",
@@ -170,7 +172,7 @@ const customerQuery = (customerId: string, implementationId?: string | null) =>
 
 export const Route = createFileRoute("/customers/$customerId")({
   validateSearch: (search: Record<string, unknown>): { tab?: AnyTabId; impl?: string } => {
-    const raw = String(search["tab"] ?? "overview");
+    const raw = String(search["tab"] ?? "implementation");
     const impl = typeof search["impl"] === "string" ? (search["impl"] as string) : undefined;
     return { tab: resolveTab(raw), ...(impl ? { impl } : {}) };
   },
@@ -443,7 +445,10 @@ function Customer360Page() {
         {/* The deal's stages as one checklist: only the stage it is in, only
             the next task open. It replaced the pulse strip, whose "next"
             came from an older list and disagreed with this one. */}
-        {impl.deal_id ? (
+        {/* On the Implementation tab the workspace IS the checklist, cut to
+            the window before the next stage; the full one stays on the
+            other tabs. */}
+        {impl.deal_id && tab !== "implementation" ? (
           <div className="px-6 pt-2.5">
             <DealStageFlow dealId={impl.deal_id} />
           </div>
@@ -456,7 +461,7 @@ function Customer360Page() {
         {impl.deal_id ? null : <HeaderTrackers record={record} customerId={customerId} tab={tab} />}
 
         <nav className="flex flex-wrap gap-px border-t border-border px-4">
-          {TABS.map((t) => (
+          {TABS.filter((t) => t !== "implementation" || impl.deal_id).map((t) => (
             <Link
               key={t}
               to="/customers/$customerId"
@@ -475,6 +480,16 @@ function Customer360Page() {
         </nav>
       </header>
 
+      {tab === "implementation" ? (
+        impl.deal_id ? (
+          <ImplementationWorkspace record={record} customerId={customerId} />
+        ) : (
+          <p className="px-6 py-4 text-[13px] text-muted-foreground">
+            This project was not started from a deal, so it has no implementation workspace. Its
+            stages are above; the plan is under Overview and the rest under Details.
+          </p>
+        )
+      ) : null}
       {tab === "prekickoff" ? (
         <div className="px-6 py-4">
           {impl.deal_id ? (
@@ -495,7 +510,7 @@ function Customer360Page() {
         <div
           className={cn(
             "grid items-start gap-4 px-6 py-4 lg:grid-cols-[minmax(0,1fr)_320px]",
-            tab === "prekickoff" && "hidden",
+            (tab === "prekickoff" || tab === "implementation") && "hidden",
           )}
         >
           <div className="min-w-0 space-y-3">
