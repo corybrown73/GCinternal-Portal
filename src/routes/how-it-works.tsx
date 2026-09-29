@@ -58,7 +58,7 @@ const ROLES: Array<{ key: string; who: string; when: string; steps: Step[] }> = 
       },
       {
         title: "Fill your profile once",
-        body: "Photo, title and booking link. The team screen shows your face; the closing screen shows your link. The guide warns you on every deal until it is done.",
+        body: "Photo and title. The team screen shows your face. A booking link is optional: it goes on a welcome page only when you switch it on for that customer, from the Screens list.",
         to: "/settings",
         label: "Settings → My profile",
       },

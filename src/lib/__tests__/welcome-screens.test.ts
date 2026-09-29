@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { isScreenShown, toggleScreen } from "../welcome";
+import { bookingShown, isScreenShown, toggleScreen } from "../welcome";
 
 describe("deck screens — five by default, the rest on request", () => {
   it("shows the core screens unless hidden, and the optional ones only when switched on", () => {
@@ -9,6 +9,14 @@ describe("deck screens — five by default, the rest on request", () => {
     expect(isScreenShown("overview", [])).toBe(false);
     expect(isScreenShown("overview", ["+overview"])).toBe(true);
     expect(isScreenShown("form", ["form"])).toBe(false);
+  });
+
+  it("keeps the lead's booking link off until it is switched on for the customer", () => {
+    expect(bookingShown([])).toBe(false);
+    expect(bookingShown(["plan"])).toBe(false);
+    expect(bookingShown(["+booking"])).toBe(true);
+    expect(toggleScreen([], "booking", true)).toEqual(["+booking"]);
+    expect(toggleScreen(["+booking"], "booking", false)).toEqual([]);
   });
 
   it("toggles both kinds through one list", () => {

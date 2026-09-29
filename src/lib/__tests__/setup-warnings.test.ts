@@ -14,6 +14,8 @@ describe("setupWarnings", () => {
   it("is silent when everything is set up", () => {
     expect(setupWarnings(ok, true)).toEqual([]);
     expect(setupWarnings(null, true)).toEqual([]);
+    // The booking link is optional: no nag for a profile without one.
+    expect(setupWarnings({ ...ok, me: { ...ok.me, booking: false } }, true)).toEqual([]);
   });
 
   it("tells everyone about their own profile, and only managers about the deployment", () => {

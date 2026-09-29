@@ -88,6 +88,8 @@ async function viewFor(
   );
   const leadName = leadCard?.name ?? input.lead;
   if (leadCard?.email) leadEmail = leadCard.email;
+  const { bookingShown } = await import("./welcome");
+  const bookingOn = bookingShown(readIntake(deal.intake).welcome_hidden_screens);
 
   const readiness: WelcomeView["readiness"] = [];
   if (opts.internal) {
@@ -133,11 +135,19 @@ async function viewFor(
         label: "Our onboarding lead",
         hint: "Deal → SE or AM owner, or the project's lead once it exists.",
       });
-    if (leadName && (!leadCard?.photoUrl || !leadCard?.bookingUrl))
+    if (leadName && !leadCard?.photoUrl)
       readiness.push({
         key: "leadcard",
-        label: `${leadName}'s photo and booking link`,
-        hint: "Settings → My profile. The team screen shows the face; the closing screen shows the link.",
+        label: `${leadName}'s photo`,
+        hint: "Settings → My profile. The team screen shows the face.",
+      });
+    // The booking link is asked for only when it is switched on for this
+    // customer; off is the default, and off is not a gap.
+    if (leadName && bookingOn && !leadCard?.bookingUrl)
+      readiness.push({
+        key: "booking",
+        label: `${leadName}'s booking link`,
+        hint: "Settings → My profile, or switch the booking link off in the Screens list.",
       });
     if (!photoUrl)
       readiness.push({
@@ -179,7 +189,8 @@ async function viewFor(
             // A customer reads this under the lead's name. An internal job
             // title is a fine default only when somebody has written one.
             title: leadCard.title ?? "Onboarding lead",
-            bookingUrl: leadCard.bookingUrl,
+            // Off unless switched on for this customer.
+            bookingUrl: bookingOn ? leadCard.bookingUrl : null,
             photoUrl: leadCard.photoUrl,
             bio: leadCard.bio,
           }

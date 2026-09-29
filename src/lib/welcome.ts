@@ -90,13 +90,26 @@ export type WelcomeView = {
 };
 
 /**
+ * The lead's booking link is OFF unless it is switched on for this customer.
+ * It is not a screen — it is the "Book time with …" link on the team and
+ * closing screens — but it lives in the same list, under the same rule, so
+ * one switch in the sidebar governs it and nothing about the record changes.
+ */
+export const BOOKING_KEY = "booking";
+
+/** Whether the lead's booking link is on the page for this customer. */
+export function bookingShown(hidden: ReadonlyArray<string>): boolean {
+  return isScreenShown(BOOKING_KEY, hidden);
+}
+
+/**
  * Screens that are OFF unless the presenter switches them on for this
  * customer: the "at a glance" phase cards and the "today → live" story. Both
  * say things the timeline and the plan already say; five screens is the deck,
  * seven is the long version. They are stored in the same hidden list as a
  * "+key" entry, so nothing about the record's shape changes.
  */
-export const OPTIONAL_SCREENS: ReadonlySet<string> = new Set(["overview", "form"]);
+export const OPTIONAL_SCREENS: ReadonlySet<string> = new Set(["overview", "form", BOOKING_KEY]);
 
 export function isScreenShown(key: string, hidden: ReadonlyArray<string>): boolean {
   return OPTIONAL_SCREENS.has(key) ? hidden.includes(`+${key}`) : !hidden.includes(key);

@@ -3579,6 +3579,9 @@ body.gc-presenting {
   color: var(--wp-navy);
   background: rgba(7, 43, 87, 0.06);
 }
+.gc-welcome .wp-side-title-2 {
+  margin-top: 16px;
+}
 .gc-welcome .wp-side-hint {
   margin: 10px 8px 0;
   font-size: 11px;

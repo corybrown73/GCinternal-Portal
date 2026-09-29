@@ -11,10 +11,12 @@ export type SetupWarning = { key: string; text: string; to: string; label: strin
 export function setupWarnings(setup: SetupStatus | null | undefined, manager: boolean) {
   const out: SetupWarning[] = [];
   if (!setup) return out;
-  if (!setup.me.photo || !setup.me.booking || !setup.me.title)
+  // The booking link is optional: it is on a welcome page only when switched
+  // on for that customer, so its absence is not a warning.
+  if (!setup.me.photo || !setup.me.title)
     out.push({
       key: "me",
-      text: "Your profile is missing a photo, title or booking link. The welcome page shows all three.",
+      text: "Your profile is missing a photo or title. The welcome page shows both.",
       to: "/settings",
       label: "Settings → My profile",
     });

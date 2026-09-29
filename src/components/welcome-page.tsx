@@ -68,7 +68,14 @@ import {
   type Timeline,
 } from "@/lib/onboarding-timeline";
 import { stampDay } from "@/lib/stage-flow";
-import { HOMEWORK_KEYS, isScreenShown, type HomeworkKey, type WelcomeView } from "@/lib/welcome";
+import {
+  BOOKING_KEY,
+  HOMEWORK_KEYS,
+  bookingShown,
+  isScreenShown,
+  type HomeworkKey,
+  type WelcomeView,
+} from "@/lib/welcome";
 import { whenLabel } from "@/lib/welcome-events";
 import { speakerNotes } from "@/lib/welcome-notes";
 import { exportWelcomePptx, pptxFileName } from "@/components/welcome-export";
@@ -335,7 +342,15 @@ export function WelcomePage({
         ) : (
           <div className="wp-shell">
             {mode === "internal" ? (
-              <ScreenMenu all={all} hidden={hidden} onToggle={onToggleScreen} />
+              <ScreenMenu
+                all={all}
+                hidden={hidden}
+                bookingOn={bookingShown(view.hiddenScreens)}
+                hasBooking={
+                  Boolean(view.team.leadCard?.bookingUrl) || !bookingShown(view.hiddenScreens)
+                }
+                onToggle={onToggleScreen}
+              />
             ) : null}
             <div className="wp-scroll">
               {visible.map((sc, i) => (
@@ -428,10 +443,16 @@ function screenList(view: WelcomeView): Screen[] {
 function ScreenMenu({
   all,
   hidden,
+  bookingOn,
+  hasBooking,
   onToggle,
 }: {
   all: Screen[];
   hidden: Set<string>;
+  /** The lead's "Book time with …" link: off by default, on for this customer when switched. */
+  bookingOn: boolean;
+  /** False when it is on but the lead's profile has no link to show. */
+  hasBooking: boolean;
   onToggle: ((key: string, hidden: boolean) => Promise<void> | void) | undefined;
 }) {
   const [busy, setBusy] = useState<string | null>(null);
@@ -472,6 +493,44 @@ function ScreenMenu({
         })}
       </ol>
       <p className="wp-side-hint">Hidden screens are hidden for the customer too.</p>
+      <p className="wp-side-title wp-side-title-2">Extras</p>
+      <ol className="wp-side-list">
+        <li className={cn("wp-side-item", !bookingOn && "is-off")}>
+          <span className="wp-side-link">
+            <span className="wp-side-no">{bookingOn ? "on" : "off"}</span>
+            <span className="wp-side-label">Booking link</span>
+          </span>
+          {onToggle ? (
+            <button
+              type="button"
+              className="wp-side-eye"
+              title={
+                bookingOn
+                  ? "Take the “Book time with …” link off this page"
+                  : "Show the lead's “Book time with …” link on the team and closing screens"
+              }
+              disabled={busy === BOOKING_KEY}
+              onClick={async () => {
+                setBusy(BOOKING_KEY);
+                try {
+                  await onToggle(BOOKING_KEY, bookingOn);
+                } finally {
+                  setBusy(null);
+                }
+              }}
+            >
+              {bookingOn ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
+            </button>
+          ) : null}
+        </li>
+      </ol>
+      <p className="wp-side-hint">
+        {bookingOn
+          ? hasBooking
+            ? "The lead's booking link is on the team and closing screens."
+            : "On, but the lead's profile has no booking link yet (Settings → My profile)."
+          : "Off by default. Switch it on to add “Book time with …” for this customer."}
+      </p>
     </aside>
   );
 }
