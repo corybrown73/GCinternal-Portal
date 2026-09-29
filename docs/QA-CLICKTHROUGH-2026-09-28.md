@@ -133,3 +133,42 @@ its project.
    plan. It appears on the deck's last slide and the welcome page's "Common forms in
    your industry — want them on your account?" block. Naming a form under the
    forms list is what schedules a build.
+
+## 5 · Work it as a TIS (added Sep 29)
+
+Assign yourself an account that is past Closed Won and open it from Home.
+
+1. It opens on the **Implementation** tab. The top line says the stage, the day
+   of the plan, "Target: Functional by …" and the owner. Nothing else is in the
+   header — no full checklist.
+2. **Now** shows one window only. Before Stage 1: reply to the AE, the cadence
+   (it names the Salesloft cadence set under Settings → Kickoff cadence, or says it
+   is not named yet), the Stage 1 readiness check, book the three meetings. Between
+   Stage 1 and Stage 2: Stage 1 held, "between 1 and 2", Stage 2. Readiness and the
+   close-out do not appear until Stage 3 is held.
+3. Meetings, To do, Handoffs and Readiness are separate groups. A tick on a plain
+   item lands at once; an item with a form (reply, book) opens under its row.
+4. **Readiness** lists six items for an account with no datasets, eight when the
+   plan has a data load. Press ✕ on one: it moves to "not part of this
+   implementation"; "Show" lists it with "add" to put it back.
+5. **Next customer meeting** names the next unheld meeting with its booked time, or
+   says it is not on the calendar. After a meeting is held, "Write the Stage 1
+   recap" appears under it in Now.
+6. **Waiting on** lists the customer's unticked homework after Stage 1, the last
+   recap's "their part", an unopened welcome link, and customer-owned parking-lot
+   items — each with who and since when. Our own parking-lot items are counted on
+   the Parking lot card.
+7. **Implementation notes**: type a note, press "Add implementation note" (or ⌘↵).
+   It appears at the top with your name, no author picker, no note type. The same
+   note is in Details → Journey → TIS journal.
+8. The **Resources** tab has the help picks, the project's files and a link to the
+   welcome page; Overview and Record no longer show the help picks.
+9. On a deal named like an opportunity (`… NL`, or all caps), the welcome page's
+   "Still missing" asks for a **Customer-facing name**. Set it on the Record tab →
+   Details; the welcome page, the AE reply, the invite titles and the deck use it.
+10. The AE reply says "Stage 1 — Get it working / Stage 2 — Make it yours / Stage 3 —
+    Make it run" and "aiming for … functional in about three weeks"; nowhere does it
+    say "you're functional in about three weeks". The welcome page bands read
+    "Target: …".
+11. Assign a deal to yourself again: the email is three lines — the account, the
+    first move, "Open it in the Hub".
