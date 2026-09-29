@@ -172,3 +172,30 @@ Assign yourself an account that is past Closed Won and open it from Home.
     "Target: …".
 11. Assign a deal to yourself again: the email is three lines — the account, the
     first move, "Open it in the Hub".
+
+## 6 · The overhaul (added Sep 29, later)
+
+1. **Shell.** The sidebar shows Home, Customers, Pipeline, Calendar and Reports with
+   an icon and a one-line reason each, "More" folds the rest, Settings and you sit at
+   the bottom. Every page has a top bar: search, whose accounts (on Home, Pipeline,
+   Customers, Calendar, Reports, Leadership), today's date, the bell with the open
+   alert count.
+2. **Home.** "Today" with a hero band. Four tiles: Need attention, Waiting on,
+   Upcoming (next 7 days), On track. "What needs me": each row has initials, the
+   owner, tier and time-to-value, a chip (At risk / Blocked / Launch risk / Waiting
+   on customer / Unclaimed / Needs info), the reason and its detail, the next step,
+   a due date (Today / Tomorrow / Oct 1 / Overdue) and Open. "Coming up": Today,
+   Tomorrow, the rest of this week by day, then Next week; meetings are blue,
+   commitments amber, launches violet. "My book" donut with counts; "Implementation
+   stages" bars with percentages.
+3. **Calendar.** Six weeks of the plan's calls, commitments due and target launches
+   across the accounts in scope, one row per day, each with Open.
+4. **Customer page.** Under the name: stage, health, owner, project, industry, tier
+   as chips; Add services, Edit customer and delete on the right. Tabs are Overview
+   (the workspace, opening with the Implementation progress card: the rail, the day
+   of the plan, the target, health, progress, this deal's value, the owner, the
+   watch-outs count), Plan (the onboarding plan and watch-outs), Record, Resources,
+   Details.
+5. **Reports.** Five tiles; health as one stacked bar; deals by stage with the
+   waiting and stuck share; who carries what per owner; close→onboarding and
+   close→first form live timings; stuck deals.
