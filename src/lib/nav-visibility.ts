@@ -88,6 +88,14 @@ export const NAV_CATALOGUE: readonly NavEntry[] = [
     primary: true,
   },
   {
+    to: "/reports",
+    label: "Reports",
+    hint: "Team & portfolio",
+    audience: "everyone",
+    icon: "reports",
+    primary: true,
+  },
+  {
     to: "/search",
     label: "Search",
     hint: "Across every surface",

@@ -23,6 +23,7 @@ import { Route as LoginRouteImport } from "./routes/login";
 import { Route as PipelineRouteImport } from "./routes/pipeline";
 import { Route as PortalRouteImport } from "./routes/portal";
 import { Route as PortfolioRouteImport } from "./routes/portfolio";
+import { Route as ReportsRouteImport } from "./routes/reports";
 import { Route as SearchRouteImport } from "./routes/search";
 import { Route as SequencesRouteImport } from "./routes/sequences";
 import { Route as SettingsRouteImport } from "./routes/settings";
@@ -161,6 +162,11 @@ const PortalRoute = PortalRouteImport.update({
 const PortfolioRoute = PortfolioRouteImport.update({
   id: "/portfolio",
   path: "/portfolio",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const ReportsRoute = ReportsRouteImport.update({
+  id: "/reports",
+  path: "/reports",
   getParentRoute: () => rootRouteImport,
 } as any);
 const SearchRoute = SearchRouteImport.update({
@@ -524,6 +530,7 @@ export interface FileRoutesByFullPath {
   "/pipeline": typeof PipelineRoute;
   "/portal": typeof PortalRouteWithChildren;
   "/portfolio": typeof PortfolioRoute;
+  "/reports": typeof ReportsRoute;
   "/search": typeof SearchRoute;
   "/sequences": typeof SequencesRouteWithChildren;
   "/settings": typeof SettingsRoute;
@@ -606,6 +613,7 @@ export interface FileRoutesByTo {
   "/login": typeof LoginRoute;
   "/pipeline": typeof PipelineRoute;
   "/portfolio": typeof PortfolioRoute;
+  "/reports": typeof ReportsRoute;
   "/search": typeof SearchRoute;
   "/settings": typeof SettingsRoute;
   "/signals": typeof SignalsRoute;
@@ -689,6 +697,7 @@ export interface FileRoutesById {
   "/pipeline": typeof PipelineRoute;
   "/portal": typeof PortalRouteWithChildren;
   "/portfolio": typeof PortfolioRoute;
+  "/reports": typeof ReportsRoute;
   "/search": typeof SearchRoute;
   "/sequences": typeof SequencesRouteWithChildren;
   "/settings": typeof SettingsRoute;
@@ -776,6 +785,7 @@ export interface FileRouteTypes {
     | "/pipeline"
     | "/portal"
     | "/portfolio"
+    | "/reports"
     | "/search"
     | "/sequences"
     | "/settings"
@@ -858,6 +868,7 @@ export interface FileRouteTypes {
     | "/login"
     | "/pipeline"
     | "/portfolio"
+    | "/reports"
     | "/search"
     | "/settings"
     | "/signals"
@@ -940,6 +951,7 @@ export interface FileRouteTypes {
     | "/pipeline"
     | "/portal"
     | "/portfolio"
+    | "/reports"
     | "/search"
     | "/sequences"
     | "/settings"
@@ -1026,6 +1038,7 @@ export interface RootRouteChildren {
   PipelineRoute: typeof PipelineRoute;
   PortalRoute: typeof PortalRouteWithChildren;
   PortfolioRoute: typeof PortfolioRoute;
+  ReportsRoute: typeof ReportsRoute;
   SearchRoute: typeof SearchRoute;
   SequencesRoute: typeof SequencesRouteWithChildren;
   SettingsRoute: typeof SettingsRoute;
@@ -1167,6 +1180,13 @@ declare module "@tanstack/react-router" {
       path: "/portfolio";
       fullPath: "/portfolio";
       preLoaderRoute: typeof PortfolioRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/reports": {
+      id: "/reports";
+      path: "/reports";
+      fullPath: "/reports";
+      preLoaderRoute: typeof ReportsRouteImport;
       parentRoute: typeof rootRouteImport;
     };
     "/search": {
@@ -1804,6 +1824,7 @@ const rootRouteChildren: RootRouteChildren = {
   PipelineRoute: PipelineRoute,
   PortalRoute: PortalRouteWithChildren,
   PortfolioRoute: PortfolioRoute,
+  ReportsRoute: ReportsRoute,
   SearchRoute: SearchRoute,
   SequencesRoute: SequencesRouteWithChildren,
   SettingsRoute: SettingsRoute,
