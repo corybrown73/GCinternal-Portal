@@ -1,4 +1,5 @@
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import { customerFacingNameFor } from "./server/customer-facing-name";
 import { LIFECYCLE_STAGES } from "./lifecycle";
 import { normalizeStage } from "./hub-format";
 import {
@@ -190,6 +191,14 @@ export async function loadPortalHome(userId: string): Promise<PortalHome> {
   const customerById = new Map<string, string>(
     (customers ?? []).map((c: any) => [c.id as string, c.name as string]),
   );
+  // The customer reads their own name here: the deal's customer-facing name.
+  const facingName = new Map<string, string>();
+  for (const i of (impls ?? []) as any[]) {
+    facingName.set(
+      String(i.id),
+      await customerFacingNameFor({ implementationId: String(i.id), fallback: String(i.name) }),
+    );
+  }
   const totalStages = LIFECYCLE_STAGES.length;
 
   const implementations: PortalImplementation[] = (impls ?? []).map((i: any) => {
@@ -206,7 +215,7 @@ export async function loadPortalHome(userId: string): Promise<PortalHome> {
       id: i.id,
       customer_id: i.customer_id,
       customer_name: customerById.get(i.customer_id) ?? "Customer",
-      name: i.name,
+      name: facingName.get(String(i.id)) ?? i.name,
       current_stage: i.current_stage,
       stage_entered_at: i.stage_entered_at,
       status: i.status,

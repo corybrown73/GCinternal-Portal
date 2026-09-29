@@ -42,9 +42,9 @@ export function aeReplyDraft(i: AeReplyInput): { subject: string; body: string }
   const plan =
     i.intake.path === "existing"
       ? [
-          "• Stage 1 — Make It Work: a form review with the integration in mind — the fields it needs, named the way the other system names them",
-          "• Stage 2 — Make It Work for Them: real jobs through the reviewed form, and the integration built beside it",
-          "• Stage 3 — Make It Operational: the integration live against data your crew has already produced",
+          "• Stage 1 — Get it working: a form review with the integration in mind — the fields it needs, named the way the other system names them",
+          "• Stage 2 — Make it yours: real jobs through the reviewed form, and the integration built beside it",
+          "• Stage 3 — Make it run: the integration live against data your crew has already produced",
         ]
       : training
         ? [
@@ -54,9 +54,9 @@ export function aeReplyDraft(i: AeReplyInput): { subject: string; body: string }
           ]
         : i.intake.path === "new_logo"
           ? [
-              "• Stage 1 — Make It Work: your process confirmed and your first form working end to end",
-              "• Stage 2 — Make It Work for Them: your data, your rules, and what happens after a submission",
-              "• Stage 3 — Make It Operational: how your team runs it day to day",
+              "• Stage 1 — Get it working: your process confirmed and your first form working end to end",
+              "• Stage 2 — Make it yours: your data, your rules, and what happens after a submission",
+              "• Stage 3 — Make it run: how your team runs it day to day",
             ]
           : [
               "• Training day 1 — kickoff, and your first form built with your hands on the keyboard",
@@ -68,8 +68,8 @@ export function aeReplyDraft(i: AeReplyInput): { subject: string; body: string }
     : i.intake.path === "existing"
       ? `Three ${minutes}-minute working sessions over fifteen business days get your form ready; the integration builds on it from there.`
       : i.intake.path === "new_logo"
-        ? `A 30-day implementation built around three ${minutes}-minute meetings, which we'd like to book now — you're functional in about three weeks, with week 4 held for anything that needs more time.`
-        : `Three ${minutes}-minute working sessions, and your first form is live within about three weeks.`;
+        ? `A 30-day implementation built around three ${minutes}-minute meetings, which we'd like to book now. We're aiming for your team to be functional in about three weeks, with week 4 held for anything that needs more time — the pace between meetings depends on the testing on your side.`
+        : `Three ${minutes}-minute working sessions, aiming for your first form live within about three weeks.`;
   const body = [
     `Hi ${first},`,
     "",

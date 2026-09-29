@@ -13,7 +13,9 @@
  * that really is called "Summit Line Construction" is not touched.
  */
 
-const CHANNEL_MARKER = /\s*-\s*(?:direct|partner|channel|reseller)?\s*-?\s*NL\s*-.*$/i;
+// "…-Direct NL-Demo Request", "…-DR NL", "… - NL": the channel marker, with
+// or without anything after it.
+const CHANNEL_MARKER = /\s*-\s*(?:direct|dr|partner|channel|reseller)?\s*-?\s*NL\b.*$/i;
 const NEW_LOGO = /\s*[-–—]\s*new logo\b.*$/i;
 const MONTH_YEAR =
   /\s*[-–—]\s*(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\.?\s+\d{4}\s*$/i;

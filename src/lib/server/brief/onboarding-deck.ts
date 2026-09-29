@@ -1,4 +1,5 @@
 import PptxGenJS from "pptxgenjs";
+import { customerLabel } from "@/lib/customer-labels";
 
 import { BRAND, pt } from "@/lib/brand";
 import { WORDMARK_NAVY, WORDMARK_WHITE } from "@/lib/brand-assets";
@@ -312,7 +313,7 @@ function slideCover(pptx: Pptx, d: OnboardingDeckInput) {
     fontFace: FONT,
   });
 
-  const when = `Closed ${shortDay(t.closeDate)} · Live in the field by ${shortDay(t.liveDate)}`;
+  const when = `Closed ${shortDay(t.closeDate)} · Target: live in the field by ${shortDay(t.liveDate)}`;
   s.addText(when, {
     x: PAD,
     y: 3.6,
@@ -427,7 +428,7 @@ function slidePlan(pptx: Pptx, d: OnboardingDeckInput) {
       fontFace: FONT,
     });
     chip(s, m.icon, cx - dia / 2, lineY - dia / 2, dia, isLive ? BRAND.navy700 : BRAND.blue500);
-    s.addText(m.label, {
+    s.addText(customerLabel(m.label), {
       x: cx - 0.64,
       y: lineY + 0.4,
       w: 1.28,
@@ -435,7 +436,7 @@ function slidePlan(pptx: Pptx, d: OnboardingDeckInput) {
       align: "center",
       valign: "top",
       margin: 0,
-      fontSize: pt(fitSize(m.label, 1.28, 21, 17, 2)),
+      fontSize: pt(fitSize(customerLabel(m.label), 1.28, 21, 17, 2)),
       bold: true,
       color: BRAND.fg1,
       fontFace: FONT,

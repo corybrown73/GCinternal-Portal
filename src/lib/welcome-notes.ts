@@ -1,4 +1,5 @@
 import { shortDay } from "./onboarding-timeline";
+import { customerLabel } from "./customer-labels";
 import { isScreenShown, type WelcomeView } from "./welcome";
 
 /**
@@ -120,7 +121,7 @@ export function speakerNotes(view: WelcomeView): {
       key: "plan",
       title: "Your timeline",
       say: [
-        `Walk it left to right and say the dates out loud. ${kickoff?.label ?? "Kickoff"} ${kickoff ? shortDay(kickoff.date) : ""}, ${kickoff?.minutes ?? 60} minutes. Homework due ${homework ? shortDay(homework.date) : ""}. ${working?.label ?? "Working session"} ${working ? shortDay(working.date) : ""}, ${working?.minutes ?? 30} minutes. ${fieldtest?.label ?? "Field test"} from ${fieldtest ? shortDay(fieldtest.date) : ""}. ${existing ? "Ready" : "Live"} ${live}.${phaseOneCalls(t) ? ` The services alongside add ${phaseOneCalls(t)} more call${phaseOneCalls(t) === 1 ? "" : "s"} in phase 1, so the total on the phase card is the number to say — not sixty plus thirty.` : ""}`,
+        `Walk it left to right and say the dates out loud. ${customerLabel(kickoff?.label ?? "Kickoff")} ${kickoff ? shortDay(kickoff.date) : ""}, ${kickoff?.minutes ?? 60} minutes. Homework due ${homework ? shortDay(homework.date) : ""}. ${customerLabel(working?.label ?? "Working session")} ${working ? shortDay(working.date) : ""}, ${working?.minutes ?? 30} minutes. ${fieldtest?.label ?? "Field test"} from ${fieldtest ? shortDay(fieldtest.date) : ""}. ${existing ? "Ready" : "Live"} ${live}.${phaseOneCalls(t) ? ` The services alongside add ${phaseOneCalls(t)} more call${phaseOneCalls(t) === 1 ? "" : "s"} in phase 1, so the total on the phase card is the number to say — not sixty plus thirty.` : ""}`,
         "Every step has an owner. Blue is on a call together; green is your homework; navy is ours.",
         ...t.alongside.map(
           (svc) =>
@@ -215,7 +216,7 @@ export function speakerNotes(view: WelcomeView): {
       key: "business",
       title: "Let's get into business",
       say: [
-        `Three calls: ${(kickoff?.label ?? "kickoff").toLowerCase()} ${kickoff ? shortDay(kickoff.date) : ""}, ${(working?.label ?? "working session").toLowerCase()} ${working ? shortDay(working.date) : ""}, and the third after a week of real jobs. Then it is yours.`,
+        `Three calls: ${customerLabel(kickoff?.label ?? "kickoff").toLowerCase()} ${kickoff ? shortDay(kickoff.date) : ""}, ${customerLabel(working?.label ?? "working session").toLowerCase()} ${working ? shortDay(working.date) : ""}, and the third after a week of real jobs. Then it is yours.`,
         `What good looks like on ${live}: the crew submits from the phone, the office sees it the same day, and a change the crew asked for was made the same day.`,
         `Your next step: accept the ${existing ? "Stage 1" : "kickoff"} invite for ${kickoff ? shortDay(kickoff.date) : "day one"}${existing ? " and send us the form the integration reads from" : " and download the app"}.`,
       ],

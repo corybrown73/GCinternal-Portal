@@ -1,4 +1,5 @@
 import type { IcsEvent } from "./ics";
+import { customerLabel } from "./customer-labels";
 import { addBusinessDays, shortDay, type Milestone, type Timeline } from "./onboarding-timeline";
 
 /**
@@ -47,7 +48,7 @@ export function planEvents(args: {
   return chosen.map((m) => {
     const call = isCall(m);
     const tentative = m.key.startsWith("integ_") && t.integration.tentative;
-    const summary = `${tentative ? "(Earliest) " : ""}GoCanvas · ${m.label} — ${clientName}`;
+    const summary = `${tentative ? "(Earliest) " : ""}GoCanvas · ${customerLabel(m.label)} — ${clientName}`;
     const owner = m.owner === "client" ? "Yours" : m.owner === "both" ? "Together" : "GoCanvas";
     const description = [
       m.detail,

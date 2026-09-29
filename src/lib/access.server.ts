@@ -1,4 +1,5 @@
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import { customerFacingNameFor } from "./server/customer-facing-name";
 import { sendEmail } from "./server/email";
 import { audit } from "./server/audit";
 import type { CallerProfile } from "./portal.server";
@@ -113,6 +114,10 @@ export async function inviteCustomerContact(
     .eq("id", input.customerId)
     .maybeSingle();
   if (!customer) throw new Error("Customer not found");
+  const facingName = await customerFacingNameFor({
+    customerId: input.customerId,
+    fallback: String(customer.name),
+  });
 
   // 1. Record the invite FIRST — the signup DB trigger keys off this row to
   //    assign the 'customer' role and the customer_users link.
@@ -176,7 +181,7 @@ export async function inviteCustomerContact(
         <h2 style="color:#237A4B">Your GoCanvas onboarding portal</h2>
         <p style="font-size:14px;line-height:1.6">
           <b>${escapeHtml(inviterName)}</b> invited you to follow
-          <b>${escapeHtml(customer.name)}</b>'s onboarding with GoCanvas —
+          <b>${escapeHtml(facingName)}</b>'s onboarding with GoCanvas —
           live progress, next steps and a direct line to your implementation team.
         </p>
         <div style="margin:24px 0">

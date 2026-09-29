@@ -1,4 +1,5 @@
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import { looksInternal } from "./names";
 
 import { readIntake } from "./intake-answers";
 import { appUrl } from "@/lib/app-url";
@@ -93,6 +94,14 @@ async function viewFor(
 
   const readiness: WelcomeView["readiness"] = [];
   if (opts.internal) {
+    // The name on the cover is the first thing they read. An opportunity
+    // name — "SUNSOURCEHOLDINGS-DR NL" — is ours, not theirs.
+    if (!deal.display_name && looksInternal(deal.name))
+      readiness.push({
+        key: "name",
+        label: `Customer-facing name — the deal is named "${deal.name}"`,
+        hint: "Deal → Customer-facing name. Everything the customer sees uses it.",
+      });
     if (!input.industry)
       readiness.push({
         key: "industry",
@@ -258,7 +267,7 @@ async function parkingLotFor(dealId: string): Promise<NonNullable<WelcomeView["p
 }
 
 const DEAL_COLUMNS =
-  "id,name,logo_path,se_owner_id,am_owner_id,welcome_token_hash,welcome_issued_at,welcome_opened_at,welcome_homework,welcome_share_url,intake";
+  "id,name,display_name,logo_path,se_owner_id,am_owner_id,welcome_token_hash,welcome_issued_at,welcome_opened_at,welcome_homework,welcome_share_url,intake";
 
 export async function loadWelcome(dealId: string): Promise<WelcomeView | null> {
   const { data: deal } = await db()

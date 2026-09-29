@@ -20,6 +20,8 @@ export interface Profile {
 export interface Account {
   id: string;
   name: string;
+  /** The company name as the customer says it; null = the cleaned deal name. */
+  display_name: string | null;
   domain: string | null;
   salesforce_id: string | null;
   stage: AccountStage;

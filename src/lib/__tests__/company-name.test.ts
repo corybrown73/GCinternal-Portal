@@ -10,6 +10,8 @@ describe("companyNameFrom", () => {
     );
     expect(companyNameFrom("Varley Group - GoCanvas Transition")).toBe("Varley Group");
     expect(companyNameFrom("Acme Roofing - New Logo - Sep 2026")).toBe("Acme Roofing");
+    expect(companyNameFrom("SUNSOURCEHOLDINGS-DR NL")).toBe("SUNSOURCEHOLDINGS");
+    expect(companyNameFrom("SunSource-Direct NL")).toBe("SunSource");
   });
 
   it("leaves a plain company name alone, hyphens included", () => {

@@ -7,6 +7,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { customerLabel } from "@/lib/customer-labels";
 import {
   AirVent,
   ArrowLeft,
@@ -1170,12 +1171,12 @@ function Cover({ view, qr }: { view: WelcomeView; qr?: { url: string; dataUrl: s
           <p className="wp-lede">
             <T k="cover.lede">
               {view.path === "existing"
-                ? `Welcome back as of ${shortDay(t.closeDate)}. Form review ${shortDay(t.milestones[1]?.date ?? t.closeDate)}. Your form ready for the integration by ${shortDay(t.liveDate)} — optimised with you, not for you.`
+                ? `Welcome back as of ${shortDay(t.closeDate)}. Form review ${shortDay(t.milestones[1]?.date ?? t.closeDate)}. Aiming to have your form ready for the integration by ${shortDay(t.liveDate)} — optimised with you, not for you.`
                 : t.training
-                  ? `Welcome aboard as of ${shortDay(t.closeDate)}. First training call ${shortDay(t.milestones[1]?.date ?? t.closeDate)}. Three short calls over two weeks, and your crew is live by ${shortDay(t.liveDate)} — trained on your jobs, not ours.`
+                  ? `Welcome aboard as of ${shortDay(t.closeDate)}. First training call ${shortDay(t.milestones[1]?.date ?? t.closeDate)}. Three short calls over two weeks, aiming for your crew live by ${shortDay(t.liveDate)} — trained on your jobs, not ours.`
                   : view.path === "new_logo"
-                    ? `Welcome aboard as of ${shortDay(t.closeDate)}. Three core meetings, starting ${shortDay(t.milestones[1]?.date ?? t.closeDate)}. Functional — your team running it without us — by ${shortDay(t.liveDate)}, with Week 4 held for anything that needs more time. Built with you, not for you.`
-                    : `Welcome aboard as of ${shortDay(t.closeDate)}. Kickoff ${shortDay(t.milestones[1]?.date ?? t.closeDate)}. Your first form in the field by ${shortDay(t.liveDate)} — built with you, not for you.`}
+                    ? `Welcome aboard as of ${shortDay(t.closeDate)}. Three core meetings, starting ${shortDay(t.milestones[1]?.date ?? t.closeDate)}. Our target: Functional — your team running it without us — by ${shortDay(t.liveDate)}, with Week 4 held for anything that needs more time. Built with you, not for you.`
+                    : `Welcome aboard as of ${shortDay(t.closeDate)}. Kickoff ${shortDay(t.milestones[1]?.date ?? t.closeDate)}. Aiming for your first form in the field by ${shortDay(t.liveDate)} — built with you, not for you.`}
             </T>
           </p>
           <div className="wp-pills">
@@ -1698,15 +1699,15 @@ function Plan({ view, page }: { view: WelcomeView; page: number }) {
                 ? `Three ${minutesWord(kickoff?.minutes ?? 60)}-minute training calls with you driving, real jobs between them. Every step below has an owner.`
                 : `Three working sessions, with real jobs through the form between them. ${["", "One", "Two", "Three", "Four", "Five", "Six", "Seven"][days] ?? days} business days, and every day below has an owner.`
             : view.path === "new_logo"
-              ? `Make It Work, Make It Work for Them, Make It Operational: three ${minutesWord(kickoff?.minutes ?? 60)}-minute meetings, all booked up front, with the work between them prepared on both sides. Functional in about three weeks, and Week 4 held for anything that needs more time. Every step below has an owner.`
+              ? `Get it working, make it yours, make it run: three ${minutesWord(kickoff?.minutes ?? 60)}-minute meetings, all booked up front, with the work between them prepared on both sides. The target is Functional in about three weeks, with Week 4 held for anything that needs more time. Every step below has an owner.`
               : `Three ${minutesWord(kickoff?.minutes ?? 60)}-minute training calls with you driving, a week of real jobs between them. We teach and build together, and by day 3 you build forms without us. Every step below has an owner.`
       }
       band={
         t.training
-          ? `Live on ${shortDay(t.liveDate)}. Nobody should be left guessing on a job — we drive the pace, and your crew owns the jobs.`
+          ? `Target: live on ${shortDay(t.liveDate)}. Nobody should be left guessing on a job — we drive the pace, and your crew owns the jobs.`
           : existing
-            ? `Ready on ${shortDay(t.liveDate)}. An integration reads specific fields — a form optimised for it first is what makes the mapping right, first time.`
-            : `${view.path === "new_logo" ? "Functional" : "Live"} on ${shortDay(t.liveDate)}. No account should stall waiting on a form — we drive the pace, and you own the form.`
+            ? `Target: ready on ${shortDay(t.liveDate)}. An integration reads specific fields — a form optimised for it first is what makes the mapping right, first time.`
+            : `Target: ${view.path === "new_logo" ? "Functional" : "live"} on ${shortDay(t.liveDate)}. No account should stall waiting on a form — we drive the pace, and you own the form.`
       }
       bandIcon="Rocket"
     >
@@ -1734,7 +1735,9 @@ function Plan({ view, page }: { view: WelcomeView; page: number }) {
               ) : null}
             </span>
             <span className="wp-node-label">
-              <T k={tkey("plan", m.key, "label")}>{CUSTOMER_LABEL[m.key] ?? m.label}</T>
+              <T k={tkey("plan", m.key, "label")}>
+                {CUSTOMER_LABEL[m.key] ?? customerLabel(m.label)}
+              </T>
             </span>
             <span className={cn("wp-node-date", m.moved && "is-moved", m.doneOn && "is-done")}>
               {m.doneOn ? `Done ${shortDay(m.doneOn)}` : whenLabel(m, t.timezone)}
@@ -2404,8 +2407,8 @@ function Business({
       accent="it's yours"
       band={
         planEnd
-          ? `${t.training ? "Crew live" : view.path === "existing" ? "Form ready" : "First form live"} on ${shortDay(t.liveDate)}; everything in your plan live by ${shortDay(planEnd)}. If any of the three checks below is not true that day, we are not done — and we say so.`
-          : `${view.path === "existing" ? "Ready" : view.path === "new_logo" ? "Functional" : "Live"} on ${shortDay(t.liveDate)}. If any of the three checks below is not true that day, we are not done — and we say so.`
+          ? `Target: ${t.training ? "crew live" : view.path === "existing" ? "form ready" : "first form live"} on ${shortDay(t.liveDate)}, everything in your plan live by ${shortDay(planEnd)}. If any of the three checks below is not true that day, we are not done — and we say so.`
+          : `Target: ${view.path === "existing" ? "ready" : view.path === "new_logo" ? "Functional" : "live"} on ${shortDay(t.liveDate)}. If any of the three checks below is not true that day, we are not done — and we say so.`
       }
       bandIcon="Rocket"
     >
@@ -2480,7 +2483,7 @@ function Business({
                   ) : null}
                 </p>
                 <h3>
-                  <T k="business.call3.head">{third.label}</T>
+                  <T k="business.call3.head">{customerLabel(third.label)}</T>
                 </h3>
                 <p>
                   <T k="business.call3.body">
@@ -2623,7 +2626,7 @@ function needTiming(svc: ServicePlan, homeworkDue: string | null): string {
   const first = svc.milestones.find((m) => m.kind === "call") ?? svc.milestones[0];
   if (!first) return "";
   if (homeworkDue && first.date > homeworkDue) return ` Needed by ${shortDay(first.date)}.`;
-  return ` Bring it to the ${first.label.toLowerCase()} on ${shortDay(first.date)}.`;
+  return ` Bring it to ${customerLabel(first.label)} on ${shortDay(first.date)}.`;
 }
 
 const EXEC = /vp|vice president|president|ceo|coo|cfo|owner|sponsor|director|buyer|principal/i;

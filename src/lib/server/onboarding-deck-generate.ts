@@ -1,6 +1,6 @@
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { companyNameFrom } from "@/lib/company-name";
-import { displayName as customerDisplayName } from "../names";
+import { customerFacingName } from "../names";
 import { formsOnly, readIntake, talkTrackTemplates } from "@/lib/intake-answers";
 import { synthesisFromBrief } from "@/lib/welcome-synthesis";
 import { closeDateFor, timelineFor } from "@/lib/onboarding-plan";
@@ -25,7 +25,7 @@ const db = () => supabaseAdmin as any;
 export async function buildOnboardingDeckInput(dealId: string): Promise<OnboardingDeckInput> {
   const { data: deal } = await db()
     .from("portal_accounts")
-    .select("id,name,intake,customer_id,logo_path,se_owner_id,am_owner_id")
+    .select("id,name,display_name,intake,customer_id,logo_path,se_owner_id,am_owner_id")
     .eq("id", dealId)
     .maybeSingle();
   if (!deal) throw new Error("Deal not found");
@@ -136,7 +136,7 @@ export async function buildOnboardingDeckInput(dealId: string): Promise<Onboardi
     : (synth?.nextUseCases ?? []);
 
   return {
-    clientName: customerDisplayName(String(deal.name)) || String(deal.name),
+    clientName: customerFacingName(deal) || String(deal.name),
     industry: intake.industry,
     timeline,
     lead,

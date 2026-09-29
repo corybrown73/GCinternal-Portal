@@ -26,6 +26,7 @@ import { deliverablePhases } from "@/lib/deliverables";
 import { useToolMarks } from "@/lib/use-tool-marks";
 import { readIntake } from "@/lib/intake-answers";
 import { closeDateFor, timelineFor } from "@/lib/onboarding-plan";
+import { displayName } from "@/lib/names";
 import { dayCounter, localIso } from "@/lib/onboarding-timeline";
 import { openPlanSection } from "@/components/timeline-panel";
 import { openPanel } from "@/lib/panel-open";
@@ -456,6 +457,17 @@ export function DealRecord({ deal, embedded = false }: { deal: DealData; embedde
                     onSave={set("domain")}
                     disabled={!editable}
                   />
+                  {/* What the customer reads. The deal is named the way the
+                      opportunity was; this is the name on everything they see. */}
+                  <span id="deal-display-name" className="contents">
+                    <EditableField
+                      label="Customer-facing name"
+                      value={account.display_name ?? null}
+                      placeholder={displayName(account.name) || "As the customer says it"}
+                      onSave={set("display_name")}
+                      disabled={!editable}
+                    />
+                  </span>
                   <EditableField
                     label="AM owner"
                     value={account.am_owner_id ?? null}

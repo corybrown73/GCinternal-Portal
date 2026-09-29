@@ -19,7 +19,10 @@ describe("the AE reply", () => {
     expect(subject).toBe("Maverick Roofing × GoCanvas — booking your Stage 1");
     expect(body).toMatch(/^Hi Ray,/);
     expect(body).toContain("I'm Dana Whitfield");
-    expect(body).toContain("Stage 2 — Make It Work for Them");
+    expect(body).toContain("Stage 2 — Make it yours");
+    expect(body).not.toMatch(/Make It Work/);
+    expect(body).toContain("aiming for");
+    expect(body).not.toContain("you're functional in about three weeks");
     expect(body).toContain("30-day implementation");
     expect(body).toContain("Could we hold Stage 1");
     expect(body).toContain("https://www.gcinternalportal.com/welcome/wlc_abc");
@@ -83,6 +86,6 @@ describe("an existing customer's reply", () => {
     expect(body).toContain("Varley Group's new services on GoCanvas");
     expect(body).not.toContain("Thanks for the introduction");
     expect(body).not.toContain("— services");
-    expect(body).toContain("Stage 1 — Make It Work: a form review");
+    expect(body).toContain("Stage 1 — Get it working: a form review");
   });
 });

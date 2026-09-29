@@ -1,4 +1,5 @@
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import { customerFacingNameFor } from "./server/customer-facing-name";
 import { isFlagOn } from "./app-config.server";
 import { audit } from "./server/audit";
 import { sendEmail } from "./server/email";
@@ -318,7 +319,7 @@ export async function issueGrant(
   if (input.sendEmailToContact) {
     await sendEmail({
       to: email,
-      subject: `Your onboarding plan — ${impl.name}`,
+      subject: `Your onboarding plan — ${await customerFacingNameFor({ implementationId: impl.id, fallback: impl.name })}`,
       html:
         `<p>Here is your onboarding plan with GoCanvas.</p>` +
         `<p><a href="${url}">Open your plan</a></p>` +

@@ -43,6 +43,8 @@ import { syncDealStageFn } from "@/lib/stage-flow.functions";
 import { parseWonGate, type WonGateMissing } from "@/lib/won-gate";
 import { ClosedWonGateNotice } from "@/components/closed-won-gate";
 import { aeReplyDraft, googleCalendarLink } from "@/lib/ae-reply";
+import { customerLabel } from "@/lib/customer-labels";
+import { customerFacingName } from "@/lib/names";
 import { cn } from "@/lib/utils";
 import { ask } from "@/components/ui/ask";
 
@@ -962,7 +964,7 @@ function ReplyBody({
     }).date,
   ).milestones.find((m) => m.key === "kickoff");
   const draft = aeReplyDraft({
-    company: deal.account.name,
+    company: customerFacingName(deal.account),
     contactName: deal.account.primary_contact_name ?? null,
     ownerName: assignment.data?.owner?.name ?? null,
     intake,
@@ -1296,7 +1298,7 @@ function InviteLinks({
   let google: string | null = null;
   try {
     google = googleCalendarLink({
-      title: `${deal.account.name} × GoCanvas — ${title}`,
+      title: `${customerFacingName(deal.account)} × GoCanvas — ${customerLabel(title)}`,
       date,
       time,
       timezone: zone,

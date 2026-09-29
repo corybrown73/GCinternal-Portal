@@ -1,4 +1,5 @@
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import { customerFacingNameFor } from "./customer-facing-name";
 import { isFlagOn } from "@/lib/app-config.server";
 import { LIFECYCLE_STAGE_MAP, STAGE_ALIASES, type LifecycleStageId } from "@/lib/lifecycle";
 import {
@@ -353,7 +354,13 @@ export async function loadSharedPlan(
   );
 
   const inputs: SharedPlanInputs = {
-    customer: { name: customer?.name ?? "", logo_path: customer?.logo_path ?? null },
+    customer: {
+      name: await customerFacingNameFor({
+        implementationId: impl.id,
+        fallback: customer?.name ?? "",
+      }),
+      logo_path: customer?.logo_path ?? null,
+    },
     implementation: {
       name: impl.name,
       current_stage: impl.current_stage,

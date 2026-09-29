@@ -14,6 +14,8 @@
  */
 export const EDITABLE_DEAL_FIELDS = {
   name: "text",
+  /** What the customer reads on everything they see, when the deal name is not it. */
+  display_name: "text",
   arr: "number",
   domain: "text",
   salesforce_id: "text",
