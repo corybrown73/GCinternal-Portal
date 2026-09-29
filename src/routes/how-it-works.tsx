@@ -64,7 +64,7 @@ const ROLES: Array<{ key: string; who: string; when: string; steps: Step[] }> = 
       },
       {
         title: "Review what the AI filled, then Pre-kickoff",
-        body: "Approve the review on the checklist, reply to the AE, add them to the Salesloft cadence, prepare before Stage 1 (a process map, a starting form, one real list) and book all three core meetings. The welcome page is what you present; the notes under it are what you say.",
+        body: "Approve the review on the checklist, reply to the AE, add them to the kickoff cadence in Salesloft (named under Settings), pass the Stage 1 readiness check (a process map, a starting form, one real list) and book all three core meetings. The welcome page is what you present; the notes under it are what you say.",
       },
       {
         title: "Present the welcome page, send the link",

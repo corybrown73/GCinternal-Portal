@@ -70,8 +70,8 @@ is dropped rather than failing the row.
    the pool is carrying the least over the counting window — so the person who
    just took the tier-4 integration is skipped on the next small one. If the
    row named an `implementation_owner_email`, that person gets it instead. They
-   receive an email with the three things to do first: grab the Gong recording,
-   upload the SOW, open the welcome page. The response carries `assigned_to`.
+   receive a short email — the account, the first move (add the Gong brief and the
+   SOW), and the link into the Hub. The response carries `assigned_to`.
    An empty pool never fails the row; the project is created unassigned and the
    deal page says so.
 

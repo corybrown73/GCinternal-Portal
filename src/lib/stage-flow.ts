@@ -323,11 +323,13 @@ function playbookPreKickoff(a: IntakeAnswers): FlowTask[] {
       ? [
           {
             key: "prep",
-            label: "Prepare before Stage 1",
-            hint: "Stage 1 should validate prepared work, not discover it: a process map, a starting form and one real list.",
+            label: "Stage 1 readiness check",
+            hint: "Three things in hand before the call, so Stage 1 validates prepared work instead of discovering it.",
             done: prepDone === PREP_ITEMS.length,
             summary:
-              prepDone === PREP_ITEMS.length ? "Process map, starting form and data ready" : null,
+              prepDone === PREP_ITEMS.length
+                ? "Ready: process map, starting form, one real list"
+                : `${prepDone} of ${PREP_ITEMS.length} in hand`,
             action: "prep",
             locked: null,
           },
@@ -415,8 +417,8 @@ function classicPreKickoff(a: IntakeAnswers): FlowTask[] {
     },
     {
       key: "cadence",
-      label: "Add them to the Salesloft cadence",
-      hint: "Calls and emails on a schedule until the kickoff is on the calendar, so nothing goes quiet.",
+      label: "Add them to the kickoff cadence in Salesloft",
+      hint: "Calls and emails on a schedule until the first meeting is on the calendar, so nothing goes quiet. The cadence is named below.",
       done: Boolean(t["cadence"]),
       summary: t["cadence"] ? `In the cadence since ${stampDay(t["cadence"])}` : null,
       action: "cadence",

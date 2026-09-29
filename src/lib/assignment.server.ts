@@ -221,7 +221,7 @@ export async function implementationForDeal(dealId: string, customerId: string |
  * `teamMemberId` or `ownerEmail` makes it a manual pick (a manager, or the
  * closed-won row naming its owner). Otherwise the rule decides from the
  * pool. Writes the project's owner, the ledger row, the audit entry, and
- * sends the assignee the three things to do first.
+ * sends the assignee a short email: the account, the first move, the link.
  */
 export async function assignDeal(args: {
   dealId: string;
@@ -396,7 +396,6 @@ async function notifyAssignee(a: {
 }) {
   const base = appUrl();
   const deal = `${base}/deals/${a.dealId}`;
-  const welcome = `${base}/onboarding-plan/${a.dealId}`;
   const first = a.assigneeName.split(" ")[0] ?? a.assigneeName;
 
   if (a.message === "field_fusion_setup") {
@@ -423,41 +422,32 @@ async function notifyAssignee(a: {
     return;
   }
 
-  const facts = [
-    a.seats ? `${a.seats} seats` : null,
-    a.integrationTier ? `integration tier ${a.integrationTier}` : "no integration",
-    `weight ${a.weight} (${describeBreakdown(a.breakdown)})`,
-  ]
-    .filter(Boolean)
-    .join(" · ");
+  // Short on purpose: you have a new implementation, here is your first
+  // move, go. The Hub takes it from there — the workspace answers the rest.
+  const training = a.training || a.message === "handoff";
+  const firstMove =
+    a.message === "handoff"
+      ? "Reply to the AE and book Session 1 — the email is drafted on the deal."
+      : "Add the Gong brief and the SOW; the AI reads both and fills in the rest.";
   await sendEmail({
     kind: "assignment",
     to: a.to,
     subject:
       a.message === "handoff"
-        ? `Handed to you: ${a.dealName} — Field Fusion training`
-        : `New account: ${a.dealName} — three things to do first`,
+        ? `Handed to you: ${a.dealName}`
+        : `New implementation: ${a.dealName}`,
     html: `
       <div style="font-family:sans-serif;max-width:560px;color:#0a1628">
-        <p style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#039de7;margin:0 0 6px">You're up</p>
-        <h2 style="margin:0 0 6px;color:#072b57">${esc(a.dealName)}</h2>
-        <p style="margin:0 0 16px;color:#556477">${esc(facts)}</p>
-        <p>Hi ${esc(first)} — this one is yours. The checklist at the top of the deal walks you through it; the AI does the reading. Three things:</p>
+        <p style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#039de7;margin:0 0 6px">${a.message === "handoff" ? "Handed to you" : "New implementation"}</p>
+        <h2 style="margin:0 0 14px;color:#072b57">${esc(a.dealName)}</h2>
+        <p>Hi ${esc(first)} — this one is yours.</p>
         ${handoffBlock(a.handoff)}
-        <ol style="line-height:1.7">
-          <li><b>Add the Gong brief and the SOW</b> — upload the .md and the PDF. The AI reads both and fills the flow, the forms, the process and the plan.<br/><a href="${deal}" style="color:#039de7">Open the deal's checklist</a></li>
-          <li><b>Review what it filled and approve</b> — each answer shows where it came from. Approving moves the deal to Pre-kickoff.</li>
-          <li><b>Reply to the AE</b> — the email is drafted for you with the welcome page and two kickoff times. Book the kickoff and the invite is one click.<br/><a href="${welcome}" style="color:#039de7">Open the welcome page</a></li>
-        </ol>
-        ${
-          a.shareUrl
-            ? `<p style="margin:12px 0 0;padding:10px 12px;border-radius:8px;background:#eef7fd;color:#072b57;font-size:13px"><b>The customer's link is ready:</b> <a href="${a.shareUrl}" style="color:#12509b">${a.shareUrl}</a><br/><span style="color:#556477">It goes in your reply to the AE. It shows their dates, their part and your face.</span></p>`
-            : ""
-        }
+        <p><b>First move:</b> ${esc(firstMove)}</p>
+        <p style="margin:18px 0"><a href="${deal}" style="background:#12509b;color:#fff;padding:10px 22px;border-radius:6px;text-decoration:none;font-weight:600">Open it in the Hub</a></p>
         <p style="color:#556477;font-size:13px">${
-          a.training
-            ? "Book the first training call in the first few days. Three thirty-minute calls over two weeks, and the crew is live."
-            : "Reply to the AE's email today and book the meetings. The checklist walks you through the rest — built with them, not for them."
+          training
+            ? "Three thirty-minute sessions over two weeks. The Hub shows what to do next at each step."
+            : "The Hub shows what to do next at each step — where you are, what is on you, what is on them."
         }</p>
         <p style="font-size:12px;color:#888">GoCanvas Handoff Hub</p>
       </div>`,

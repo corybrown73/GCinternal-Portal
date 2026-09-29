@@ -39,7 +39,7 @@ read as written is a bug.
    says "three 60-minute meetings" and offers Stage 1 "(60 minutes)". Press **Copy
    the email** — the button keeps its width and "Copied" clears itself after a few
    seconds.
-8. Tick **Added to the Salesloft cadence** and untick it twice quickly: the box
+8. Tick **Added to the cadence** (the task names the Salesloft cadence set under Settings) and untick it twice quickly: the box
    follows every click at once, nothing is lost after the page settles.
 9. Home. The card for Summit reads its **deal** stage (Pre-kickoff) and, if the
    plan misses the Oct 30 deadline, an act-now reason naming it, with the health
@@ -84,7 +84,7 @@ read as written is a bug.
    under the name lists Varley Group (customer) and its deal, and points at
    "Existing account".
 4. On the services deal, Review: industry and champion are already filled and are
-   not asked for again. The Salesloft cadence task shows as optional.
+   not asked for again. The kickoff cadence task shows as optional.
 5. Upload a SOW PDF that lists an integration and no form. Answer **Yes — it is
    final**. The plan becomes one **Walkthrough** on the day after the close, and the
    services start the day after it; the Pre-kickoff task is "Book the services

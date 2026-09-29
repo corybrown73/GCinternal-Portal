@@ -25,6 +25,7 @@ import {
 import { closeDateFor, timelineFor } from "@/lib/onboarding-plan";
 import { coreWindowEnd, dayCounter, localIso, shortDay } from "@/lib/onboarding-timeline";
 import { getWelcome } from "@/lib/welcome.functions";
+import { getKickoffCadence } from "@/lib/kickoff-cadence.functions";
 import { wonStage } from "@/lib/pipeline-stages";
 import { moveDealStage, saveIntake } from "@/lib/presale.functions";
 import {
@@ -1024,8 +1025,40 @@ function CadenceBody({
 }) {
   const tick = useHandoffTick(deal.account.id);
   const done = tick.isOn("cadence", Boolean(intake.handoff_tasks["cadence"]));
+  const cadence = useQuery({ queryKey: ["kickoff-cadence"], queryFn: () => getKickoffCadence() });
+  const { profile } = useProfile();
   return (
     <div className="space-y-2">
+      {/* WHICH cadence. The Hub says it; the reader never has to know. */}
+      {cadence.data?.name ? (
+        <p className="text-[13px]">
+          Cadence:{" "}
+          {cadence.data.url ? (
+            <a
+              href={cadence.data.url}
+              target="_blank"
+              rel="noreferrer"
+              className="font-medium text-primary underline"
+            >
+              {cadence.data.name}
+            </a>
+          ) : (
+            <span className="font-medium">{cadence.data.name}</span>
+          )}
+          <span className="text-muted-foreground"> in Salesloft</span>
+        </p>
+      ) : cadence.isPending ? null : (
+        <p className="text-[12px] text-amber-800 dark:text-amber-300">
+          The cadence has not been named yet.{" "}
+          {canManage(profile?.role) ? (
+            <Link to="/settings" className="underline">
+              Name it under Settings → Kickoff cadence
+            </Link>
+          ) : (
+            "Ask a manager to name it under Settings → Kickoff cadence."
+          )}
+        </p>
+      )}
       <table className="w-full max-w-xl text-[12px]">
         <tbody>
           {KICKOFF_CADENCE.map((c) => (
@@ -1039,7 +1072,7 @@ function CadenceBody({
         </tbody>
       </table>
       <p className="text-[11px] text-muted-foreground">
-        Take them out of the cadence once the kickoff is on the calendar.
+        Take them out of the cadence once the first meeting is on the calendar.
       </p>
       <DoneButton
         done={done}
@@ -1327,7 +1360,8 @@ function PrepBody({
         );
       })}
       <li className="pt-1 text-[11px] text-muted-foreground">
-        No starting form possible? Use Stage 1 to get the decisions, so Stage 2 starts prepared.
+        Not ready? Say so here rather than on the call. No starting form possible? Use Stage 1 to
+        get the decisions, so Stage 2 starts prepared.
       </li>
       {tick.error ? (
         <li role="alert" className="text-[12px] text-destructive">
