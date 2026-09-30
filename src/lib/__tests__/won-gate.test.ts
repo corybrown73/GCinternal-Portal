@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  completeGateMessage,
+  gateTarget,
   forcedNote,
   missingForClosedWon,
   parseWonGate,
@@ -32,6 +34,15 @@ describe("the Closed Won gate", () => {
     expect(parseWonGate("Deal not found")).toBeNull();
     // An older message without the key list still reads as the gate.
     expect(parseWonGate(`${WON_GATE_PREFIX} the deal has no SOW.`)).toEqual(["notes", "sow"]);
+  });
+
+  it("guards Onboarding Complete with the same shape of message", () => {
+    const msg = completeGateMessage(3);
+    expect(gateTarget(msg)).toBe("onboarding_complete");
+    expect(msg).toContain("3 checklist steps are still open");
+    expect(parseWonGate(msg)).toEqual(["checklist"]);
+    expect(gateTarget(wonGateMessage(["sow"]))).toBe("closed_won");
+    expect(gateTarget("Deal not found")).toBeNull();
   });
 
   it("records a forced move on the note the database reads", () => {

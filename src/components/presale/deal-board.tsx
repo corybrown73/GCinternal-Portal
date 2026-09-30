@@ -22,6 +22,7 @@ import {
 } from "@/lib/pipeline-stages";
 import type { Account } from "@/lib/presale-types";
 import { cn } from "@/lib/utils";
+import { ask } from "@/components/ui/ask";
 import { PATH_CHIP } from "@/lib/onboarding-timeline";
 import { fmtMoney } from "@/lib/hub-format";
 import { readIntake } from "@/lib/intake-answers";
@@ -327,7 +328,7 @@ export function DealBoard({
   deals: BoardDeal[];
   stages?: readonly PipelineStage[];
   canDrag: boolean;
-  onMove: (dealId: string, toStage: AccountStage) => Promise<unknown>;
+  onMove: (dealId: string, toStage: AccountStage, note?: string) => Promise<unknown>;
 }) {
   const [deals, setDeals] = useState(incoming);
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -348,15 +349,43 @@ export function DealBoard({
     if (!target) return;
     const deal = deals.find((d) => d.id === dealId);
     if (!deal || deal.stage === target) return;
+    void dropTo(deal, target);
+  }
 
+  // The final stage is asked about both ways: closing an account out and
+  // reopening one are decisions, not a slip of the hand. The server keeps
+  // its own gate on the way in (the checklist), and a forced move says so.
+  async function dropTo(deal: Account, target: AccountStage) {
+    const terminal = terminalStage(stages).key;
+    let note: string | undefined;
+    if (target === terminal) {
+      const ok = await ask({
+        title: `Mark ${deal.name} onboarding complete?`,
+        body: "Every onboarding checklist step should be done. If any is open the move is refused, and a manager can move it anyway.",
+        confirmLabel: "Mark complete",
+        cancelLabel: "Not yet",
+      });
+      if (!ok) return;
+      note = "Marked Onboarding Complete from the board";
+    } else if (deal.stage === terminal) {
+      const ok = await ask({
+        title: `Reopen ${deal.name}?`,
+        body: `It leaves Onboarding Complete and goes back to ${stages.find((s) => s.key === target)?.label ?? target}. The project's stage follows it.`,
+        confirmLabel: "Reopen",
+        cancelLabel: "Keep it complete",
+        destructive: true,
+      });
+      if (!ok) return;
+      note = "Reopened from the board";
+    }
     const previousStage = deal.stage;
     setDeals((prev) =>
       prev.map((d) =>
-        d.id === dealId ? { ...d, stage: target, stage_entered_at: new Date().toISOString() } : d,
+        d.id === deal.id ? { ...d, stage: target, stage_entered_at: new Date().toISOString() } : d,
       ),
     );
-    onMove(dealId, target).catch(() => {
-      setDeals((prev) => prev.map((d) => (d.id === dealId ? { ...d, stage: previousStage } : d)));
+    onMove(deal.id, target, note).catch(() => {
+      setDeals((prev) => prev.map((d) => (d.id === deal.id ? { ...d, stage: previousStage } : d)));
     });
   }
 

@@ -19,7 +19,7 @@ export async function syncDealStage(
 ): Promise<{ moved: AccountStage | null }> {
   const { data: account } = await db()
     .from("portal_accounts")
-    .select("id,stage,intake,customer_id,sow_document_path,welcome_share_url")
+    .select("id,stage")
     .eq("id", dealId)
     .maybeSingle();
   if (!account) return { moved: null };
@@ -27,6 +27,37 @@ export async function syncDealStage(
   if (account.stage !== "closed_won" && account.stage !== "onboarding_kickoff") {
     return { moved: null };
   }
+  const built = await flowForDeal(dealId);
+  if (!built) return { moved: null };
+  const { flow } = built;
+  if (!flow.advanceTo) return { moved: null };
+
+  const { transitionStage } = await import("./server/accounts");
+  const r = await transitionStage(
+    dealId,
+    flow.advanceTo,
+    { source: actorProfileId ? "ui" : "system", actorProfileId },
+    flow.advanceTo === "onboarding_kickoff"
+      ? "Welcome brief generated: ready for the kickoff call"
+      : "Kickoff call booked: onboarding has started",
+  );
+  return { moved: r.changed ? flow.advanceTo : null };
+}
+
+/**
+ * The deal's checklist, read fresh from the record — the same inputs the
+ * page gives stageFlow, so a server-side decision (an automatic move, a
+ * gate) agrees with what the person sees.
+ */
+export async function flowForDeal(
+  dealId: string,
+): Promise<{ account: { id: string; stage: string }; flow: ReturnType<typeof stageFlow> } | null> {
+  const { data: account } = await db()
+    .from("portal_accounts")
+    .select("id,stage,intake,customer_id,sow_document_path,welcome_share_url")
+    .eq("id", dealId)
+    .maybeSingle();
+  if (!account) return null;
 
   const { implementationForDeal } = await import("./assignment.server");
   const [{ count: reports }, { count: briefs }, implId] = await Promise.all([
@@ -66,6 +97,24 @@ export async function syncDealStage(
     owner = led?.team_member_id ? String(led.team_member_id) : null;
   }
 
+  // The Onboarding tasks need the plan: the same timeline the page builds.
+  const { readIntake } = await import("./intake-answers");
+  const { timelineFor, closeDateFor } = await import("./onboarding-plan");
+  const { localIso } = await import("./onboarding-timeline");
+  const intake = readIntake(account.intake);
+  const { data: history } = await db()
+    .from("portal_stage_transitions")
+    .select("to_stage,occurred_at")
+    .eq("account_id", dealId);
+  const timeline = timelineFor(
+    intake,
+    closeDateFor({
+      intake,
+      stageHistory: (history ?? []) as Array<{ to_stage: string; occurred_at: string }>,
+      wonStageKey: "closed_won",
+      today: localIso(),
+    }).date,
+  );
   const flow = stageFlow({
     stage: String(account.stage),
     intake: account.intake,
@@ -74,17 +123,7 @@ export async function syncDealStage(
     hasSow: Boolean(account.sow_document_path),
     hasBrief: (briefs ?? 0) > 0,
     hasLink: Boolean(account.welcome_share_url),
+    timeline,
   });
-  if (!flow.advanceTo) return { moved: null };
-
-  const { transitionStage } = await import("./server/accounts");
-  const r = await transitionStage(
-    dealId,
-    flow.advanceTo,
-    { source: actorProfileId ? "ui" : "system", actorProfileId },
-    flow.advanceTo === "onboarding_kickoff"
-      ? "Welcome brief generated: ready for the kickoff call"
-      : "Kickoff call booked: onboarding has started",
-  );
-  return { moved: r.changed ? flow.advanceTo : null };
+  return { account: { id: String(account.id), stage: String(account.stage) }, flow };
 }

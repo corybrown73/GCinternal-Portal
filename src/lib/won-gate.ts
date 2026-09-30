@@ -10,13 +10,28 @@
  * deliver in Closed Won is a fact about Salesforce, and stays.
  */
 export const WON_GATE_PREFIX = "Not ready for Closed Won:";
+/** The same shape at the other end: Onboarding Complete needs the checklist done. */
+export const COMPLETE_GATE_PREFIX = "Not ready for Onboarding Complete:";
 
-export type WonGateMissing = "notes" | "sow";
+export type WonGateMissing = "notes" | "sow" | "checklist";
 
 export const WON_GATE_LABEL: Record<WonGateMissing, string> = {
   notes: "a Gong brief or call note",
   sow: "the signed SOW or contract",
+  checklist: "every checklist step done",
 };
+
+/** Which gate a thrown message came from, or null for some other error. */
+export function gateTarget(message: string): "closed_won" | "onboarding_complete" | null {
+  if (message.includes(WON_GATE_PREFIX)) return "closed_won";
+  if (message.includes(COMPLETE_GATE_PREFIX)) return "onboarding_complete";
+  return null;
+}
+
+/** The sentence the server throws when the onboarding checklist is not done. */
+export function completeGateMessage(open: number): string {
+  return `${COMPLETE_GATE_PREFIX} ${open} checklist step${open === 1 ? " is" : "s are"} still open. [checklist]`;
+}
 
 /** What a deal still lacks, from the facts the record holds. */
 export function missingForClosedWon(facts: {
@@ -37,12 +52,14 @@ export function wonGateMessage(missing: readonly WonGateMissing[]): string {
 
 /** The missing pieces named in a thrown message, or null when it is some other error. */
 export function parseWonGate(message: string): WonGateMissing[] | null {
-  if (!message.includes(WON_GATE_PREFIX)) return null;
+  const target = gateTarget(message);
+  if (!target) return null;
   const m = /\[([a-z,]+)\]\s*$/.exec(message);
   const keys = (m?.[1] ?? "")
     .split(",")
-    .filter((k): k is WonGateMissing => k === "notes" || k === "sow");
-  return keys.length ? keys : ["notes", "sow"];
+    .filter((k): k is WonGateMissing => k === "notes" || k === "sow" || k === "checklist");
+  if (keys.length) return keys;
+  return target === "closed_won" ? ["notes", "sow"] : ["checklist"];
 }
 
 /** The note a forced move carries: the database lets it through on this prefix alone. */

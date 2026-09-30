@@ -152,6 +152,7 @@ function StageControl({
           <ClosedWonGateNotice
             missing={gate.missing}
             dealId={dealId}
+            toStage={gate.toStage}
             canForce={canManage(profile?.role)}
             onForce={() => m.mutate({ toStage: gate.toStage, force: true })}
             forcing={m.isPending}

@@ -56,11 +56,14 @@ function PipelinePage() {
   const editable = canEditDeal(profile?.role);
 
   const moveMutation = useMutation({
-    mutationFn: (vars: { dealId: string; toStage: AccountStage; force?: boolean }) =>
+    mutationFn: (vars: { dealId: string; toStage: AccountStage; note?: string; force?: boolean }) =>
       move({
-        data: vars.force
-          ? { ...vars, force: true }
-          : { dealId: vars.dealId, toStage: vars.toStage },
+        data: {
+          dealId: vars.dealId,
+          toStage: vars.toStage,
+          ...(vars.note ? { note: vars.note } : {}),
+          ...(vars.force ? { force: true } : {}),
+        },
       }),
     onSettled: () => queryClient.invalidateQueries({ queryKey: ["pipeline"] }),
   });
@@ -97,13 +100,16 @@ function PipelinePage() {
           deals={data.deals}
           stages={data.stages}
           canDrag={editable}
-          onMove={(dealId, toStage) => moveMutation.mutateAsync({ dealId, toStage })}
+          onMove={(dealId, toStage, note) =>
+            moveMutation.mutateAsync({ dealId, toStage, ...(note ? { note } : {}) })
+          }
         />
         {gate && moveMutation.variables ? (
           <div className="mt-2">
             <ClosedWonGateNotice
               missing={gate}
               dealId={moveMutation.variables.dealId}
+              toStage={moveMutation.variables.toStage}
               canForce={canManage(profile?.role)}
               onForce={() => moveMutation.mutate({ ...moveMutation.variables!, force: true })}
               forcing={moveMutation.isPending}

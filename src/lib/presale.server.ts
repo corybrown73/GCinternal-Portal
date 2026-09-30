@@ -410,6 +410,26 @@ export async function transitionDeal(
 ): Promise<{ changed: boolean }> {
   await requireInternal(userId);
   const pipeline = await loadPipelineStages();
+  // The far end has a gate too: Onboarding Complete needs the onboarding
+  // checklist done, whether the move comes from the button, the picker or
+  // a drag on the board. A manager may insist, and the note records it.
+  if (toStage === terminalStage(pipeline).key) {
+    const { flowForDeal } = await import("./stage-flow.server");
+    const built = await flowForDeal(dealId);
+    const onboarding = built?.flow.stages.find((s) => s.key === "onboarding");
+    const open = (onboarding?.tasks ?? []).filter((t) => !t.done && !t.optional && !t.locked);
+    if (open.length > 0) {
+      if (!force) {
+        const { completeGateMessage } = await import("./won-gate");
+        throw new Error(completeGateMessage(open.length));
+      }
+      const { forcedNote } = await import("./won-gate");
+      note = forcedNote(
+        note ??
+          `Marked Onboarding Complete with ${open.length} checklist step${open.length === 1 ? "" : "s"} open`,
+      );
+    }
+  }
   // Via supabaseAdmin the RPC has no auth.uid(), so the passed actor is kept.
   const result = await transitionStage(
     dealId,
