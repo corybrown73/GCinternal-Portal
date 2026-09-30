@@ -29,7 +29,7 @@ const detailQuery = (sequenceId: string) =>
 
 export const Route = createFileRoute("/sequences/$sequenceId")({
   head: () => ({
-    meta: [{ title: "Sequence — Implementation Hub" }],
+    meta: [{ title: "Sequence — GoCanvas Handoff Hub" }],
   }),
   loader: ({ context, params }) => {
     context.queryClient.ensureQueryData(detailQuery(params.sequenceId));

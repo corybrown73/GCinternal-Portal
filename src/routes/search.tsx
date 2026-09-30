@@ -20,7 +20,7 @@ const searchQuery = (q: string) =>
 export const Route = createFileRoute("/search")({
   head: () => ({
     meta: [
-      { title: "Search — Implementation Hub" },
+      { title: "Search — GoCanvas Handoff Hub" },
       {
         name: "description",
         content:

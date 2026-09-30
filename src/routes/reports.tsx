@@ -27,7 +27,7 @@ const reportQuery = queryOptions({
 export const Route = createFileRoute("/reports")({
   head: () => ({
     meta: [
-      { title: "Reports — Team & portfolio | Implementation Hub" },
+      { title: "Reports — Team & portfolio | GoCanvas Handoff Hub" },
       {
         name: "description",
         content:

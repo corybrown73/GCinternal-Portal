@@ -19,7 +19,7 @@ const homeQuery = (scope: string | null) =>
 export const Route = createFileRoute("/calendar")({
   head: () => ({
     meta: [
-      { title: "Calendar — Key dates & meetings | Implementation Hub" },
+      { title: "Calendar — Key dates & meetings | GoCanvas Handoff Hub" },
       {
         name: "description",
         content:

@@ -19,7 +19,7 @@ const journeysQuery = queryOptions({
 export const Route = createFileRoute("/sequences/")({
   head: () => ({
     meta: [
-      { title: "Sequences — Implementation Hub" },
+      { title: "Sequences — GoCanvas Handoff Hub" },
       {
         name: "description",
         content:

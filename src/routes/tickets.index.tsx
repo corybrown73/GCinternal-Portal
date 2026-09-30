@@ -32,7 +32,7 @@ type QueueSearch = {
 export const Route = createFileRoute("/tickets/")({
   head: () => ({
     meta: [
-      { title: "Tickets — Implementation Hub" },
+      { title: "Tickets — GoCanvas Handoff Hub" },
       {
         name: "description",
         content: "Support queue with first-response SLA countdowns, routing and breach flags.",

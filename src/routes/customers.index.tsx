@@ -35,13 +35,13 @@ type CustomerSearch = {
 export const Route = createFileRoute("/customers/")({
   head: () => ({
     meta: [
-      { title: "Customers — Implementation Hub" },
+      { title: "Customers — GoCanvas Handoff Hub" },
       {
         name: "description",
         content:
           "Every customer implementation with its stage, health, owner, tier, target launch date and time in the current stage.",
       },
-      { property: "og:title", content: "Customers — Implementation Hub" },
+      { property: "og:title", content: "Customers — GoCanvas Handoff Hub" },
       {
         property: "og:description",
         content: "The full list of customer implementations.",

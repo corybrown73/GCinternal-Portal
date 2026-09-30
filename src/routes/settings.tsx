@@ -42,13 +42,13 @@ const pipelineQuery = queryOptions({
 export const Route = createFileRoute("/settings")({
   head: () => ({
     meta: [
-      { title: "Settings — Implementation Hub" },
+      { title: "Settings — GoCanvas Handoff Hub" },
       {
         name: "description",
         content:
           "The stages an implementation moves through, what has to be true to leave each one, and team defaults.",
       },
-      { property: "og:title", content: "Settings — Implementation Hub" },
+      { property: "og:title", content: "Settings — GoCanvas Handoff Hub" },
       {
         property: "og:description",
         content: "Stages, what has to be true to leave each one, and team settings.",

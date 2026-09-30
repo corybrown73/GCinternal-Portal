@@ -45,7 +45,7 @@ const leadershipQuery = (scope: string | null) =>
 export const Route = createFileRoute("/portfolio")({
   head: () => ({
     meta: [
-      { title: "Leadership — Where the team needs me | Implementation Hub" },
+      { title: "Leadership — Where the team needs me | GoCanvas Handoff Hub" },
       {
         name: "description",
         content:
@@ -53,7 +53,7 @@ export const Route = createFileRoute("/portfolio")({
       },
       {
         property: "og:title",
-        content: "Leadership — Where the team needs me | Implementation Hub",
+        content: "Leadership — Where the team needs me | GoCanvas Handoff Hub",
       },
       {
         property: "og:description",

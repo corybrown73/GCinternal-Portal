@@ -25,7 +25,7 @@ const accessQuery = queryOptions({
 export const Route = createFileRoute("/access")({
   head: () => ({
     meta: [
-      { title: "Customer access — Implementation Hub" },
+      { title: "Customer access — GoCanvas Handoff Hub" },
       {
         name: "description",
         content: "Which customer contacts can sign in to the customer portal, and pending invites.",

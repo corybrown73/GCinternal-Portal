@@ -26,13 +26,13 @@ type SolutionSearch = {
 export const Route = createFileRoute("/technical-solutions/")({
   head: () => ({
     meta: [
-      { title: "Technical Solutions — Implementation Hub" },
+      { title: "Technical Solutions — GoCanvas Handoff Hub" },
       {
         name: "description",
         content:
           "Every technical solution across customer implementations, with owner, status, the requirement it implements and what is needed next.",
       },
-      { property: "og:title", content: "Technical Solutions — Implementation Hub" },
+      { property: "og:title", content: "Technical Solutions — GoCanvas Handoff Hub" },
       {
         property: "og:description",
         content: "Cross-customer technical solutions queue.",

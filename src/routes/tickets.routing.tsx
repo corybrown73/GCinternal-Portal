@@ -13,7 +13,7 @@ import { assigneeLabel, unlinkedStaffNote } from "@/lib/ticket-assignees";
 
 export const Route = createFileRoute("/tickets/routing")({
   head: () => ({
-    meta: [{ title: "Ticket routing — Implementation Hub" }],
+    meta: [{ title: "Ticket routing — GoCanvas Handoff Hub" }],
   }),
   component: RoutingPage,
 });

@@ -19,7 +19,7 @@ const leadershipQuery = queryOptions({
 export const Route = createFileRoute("/owners/$owner")({
   head: ({ params }) => {
     const owner = decodeURIComponent(params.owner);
-    const title = `${owner} — Owner portfolio | Implementation Hub`;
+    const title = `${owner} — Owner portfolio | GoCanvas Handoff Hub`;
     const description = `What ${owner} is carrying: active implementations, ARR represented, accounts needing intervention, blocked and at-risk work.`;
     return {
       meta: [

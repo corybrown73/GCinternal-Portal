@@ -24,7 +24,7 @@ const signalsQuery = queryOptions({
 export const Route = createFileRoute("/signals")({
   head: () => ({
     meta: [
-      { title: "Signals — velocity, dwell and what is waiting | Implementation Hub" },
+      { title: "Signals — velocity, dwell and what is waiting | GoCanvas Handoff Hub" },
       {
         name: "description",
         content:
@@ -32,7 +32,7 @@ export const Route = createFileRoute("/signals")({
       },
       {
         property: "og:title",
-        content: "Signals — velocity, dwell and what is waiting | Implementation Hub",
+        content: "Signals — velocity, dwell and what is waiting | GoCanvas Handoff Hub",
       },
       {
         property: "og:description",

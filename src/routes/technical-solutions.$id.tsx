@@ -39,13 +39,13 @@ const solutionQuery = (id: string) =>
 export const Route = createFileRoute("/technical-solutions/$id")({
   head: () => ({
     meta: [
-      { title: "Technical Solution — Implementation Hub" },
+      { title: "Technical Solution — GoCanvas Handoff Hub" },
       {
         name: "description",
         content:
           "Technical solution record: design, configuration, field mapping, journal, ownership history and traceability.",
       },
-      { property: "og:title", content: "Technical Solution — Implementation Hub" },
+      { property: "og:title", content: "Technical Solution — GoCanvas Handoff Hub" },
       {
         property: "og:description",
         content: "Current state and history for one technical solution record.",

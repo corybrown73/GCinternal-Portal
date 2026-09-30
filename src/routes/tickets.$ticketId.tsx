@@ -28,7 +28,7 @@ import { When } from "@/components/when";
 
 export const Route = createFileRoute("/tickets/$ticketId")({
   head: () => ({
-    meta: [{ title: "Ticket — Implementation Hub" }],
+    meta: [{ title: "Ticket — GoCanvas Handoff Hub" }],
   }),
   component: TicketDetailPage,
 });

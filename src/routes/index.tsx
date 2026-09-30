@@ -28,13 +28,13 @@ const dealInboxQuery = (scope: string | null) =>
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Today — What needs my attention | Implementation Hub" },
+      { title: "Today — What needs my attention | GoCanvas Handoff Hub" },
       {
         name: "description",
         content:
           "What needs my attention, what I am waiting on, what is coming up, and where every account sits.",
       },
-      { property: "og:title", content: "Today — What needs my attention | Implementation Hub" },
+      { property: "og:title", content: "Today — What needs my attention | GoCanvas Handoff Hub" },
       {
         property: "og:description",
         content: "The daily working list for the onboarding and implementation team.",
@@ -105,7 +105,7 @@ function HomePage() {
         <Tiles t={today} />
         <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
           <div className="min-w-0 space-y-4">
-            <NeedsMe rows={today.needsMe} />
+            <NeedsMe rows={today.needsMe} watch={today.watch} />
             <ComingUp t={today} />
           </div>
           <div className="space-y-4">
@@ -200,7 +200,7 @@ function Tiles({ t }: { t: Today }) {
 
 /* --------------------------------------------------------------- needs me */
 
-function NeedsMe({ rows }: { rows: NeedsMeRow[] }) {
+function NeedsMe({ rows, watch }: { rows: NeedsMeRow[]; watch: NeedsMeRow[] }) {
   return (
     <section className="rounded-lg border border-border bg-card" aria-label="What needs me">
       <div className="flex flex-wrap items-baseline justify-between gap-2 px-4 pt-3.5">
@@ -224,89 +224,109 @@ function NeedsMe({ rows }: { rows: NeedsMeRow[] }) {
         </Link>
       </div>
       {rows.length === 0 ? (
-        <p className="px-4 py-6 text-[13px] text-muted-foreground">
-          Nothing needs you right now. The accounts on the right are moving.
+        <p className="px-4 pt-4 text-[13px] text-muted-foreground">
+          Nothing needs action right now.
         </p>
       ) : (
-        <ul className="space-y-2 p-3">
-          {rows.map((r) => (
-            <li
-              key={`${r.kind}:${r.id}`}
-              className="grid grid-cols-1 items-center gap-x-4 gap-y-2 rounded-md border border-border px-3 py-2.5 md:grid-cols-[minmax(0,1.4fr)_minmax(0,1.6fr)_minmax(0,1fr)_auto_auto]"
-              style={{
-                boxShadow: `inset 3px 0 0 0 ${r.chip.tone === "critical" ? "#d03b3b" : r.chip.tone === "warning" ? "#fab219" : "#2a78d6"}`,
-              }}
-            >
-              <div className="flex min-w-0 items-center gap-3">
-                <span
-                  className={cn(
-                    "flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[12px] font-semibold",
-                    TONE_CHIP[r.chip.tone],
-                  )}
-                >
-                  {r.initials}
-                </span>
-                <div className="min-w-0">
-                  <p className="truncate text-[14px] font-semibold">{r.name}</p>
-                  <p className="truncate text-[12px] text-muted-foreground">{r.sub}</p>
-                  {r.meta ? (
-                    <p className="truncate text-[11px] text-muted-foreground">{r.meta}</p>
-                  ) : null}
-                </div>
-              </div>
-              <div className="min-w-0">
-                <span
-                  className={cn(
-                    "inline-block rounded-sm px-1.5 py-px text-[11px] font-medium",
-                    TONE_CHIP[r.chip.tone],
-                  )}
-                >
-                  {r.chip.label}
-                </span>
-                <p className="mt-1 text-[13px]">{r.reason}</p>
-                {r.detail ? <p className="text-[12px] text-muted-foreground">{r.detail}</p> : null}
-              </div>
-              <div className="min-w-0 md:border-l md:border-border md:pl-4">
-                <p className="text-[11px] text-muted-foreground">Next step</p>
-                <p className="text-[13px]">{r.nextStep ?? "—"}</p>
-              </div>
-              <div className="md:border-l md:border-border md:pl-4">
-                <p className="text-[11px] text-muted-foreground">Due</p>
-                {r.due ? (
-                  <span
-                    className={cn(
-                      "inline-block rounded-sm px-1.5 py-px text-[12px] font-medium",
-                      TONE_CHIP[r.due.tone],
-                    )}
-                  >
-                    {r.due.label}
-                  </span>
-                ) : (
-                  <span className="text-[12px] text-muted-foreground">—</span>
-                )}
-              </div>
-              {"customerId" in r.link ? (
-                <Link
-                  to="/customers/$customerId"
-                  params={{ customerId: r.link.customerId }}
-                  className="inline-flex items-center gap-1 justify-self-end rounded-md border border-border px-3 py-1.5 text-[12px] font-medium hover:bg-muted"
-                >
-                  Open <ArrowRight className="h-3.5 w-3.5" />
-                </Link>
-              ) : (
-                <Link
-                  to="/deals/$dealId"
-                  params={{ dealId: r.link.dealId }}
-                  className="inline-flex items-center gap-1 justify-self-end rounded-md border border-border px-3 py-1.5 text-[12px] font-medium hover:bg-muted"
-                >
-                  Open <ArrowRight className="h-3.5 w-3.5" />
-                </Link>
-              )}
-            </li>
-          ))}
-        </ul>
+        <Rows rows={rows} />
       )}
+      {watch.length ? (
+        <>
+          <div className="flex items-baseline gap-2 border-t border-border px-4 pt-3">
+            <h3 className="text-[13px] font-semibold">Keep an eye on</h3>
+            <span className="rounded-full bg-[#fff1d6] px-2 py-px text-[11px] font-semibold text-[#93500a]">
+              {watch.length}
+            </span>
+            <span className="text-[12px] text-muted-foreground">
+              Nothing to do today; worth a look this week.
+            </span>
+          </div>
+          <Rows rows={watch} />
+        </>
+      ) : null}
     </section>
+  );
+}
+
+function Rows({ rows }: { rows: NeedsMeRow[] }) {
+  return (
+    <ul className="space-y-2 p-3">
+      {rows.map((r) => (
+        <li
+          key={`${r.kind}:${r.id}`}
+          className="grid grid-cols-1 items-center gap-x-4 gap-y-2 rounded-md border border-border px-3 py-2.5 md:grid-cols-[minmax(0,1.4fr)_minmax(0,1.6fr)_minmax(0,1fr)_auto_auto]"
+          style={{
+            boxShadow: `inset 3px 0 0 0 ${r.chip.tone === "critical" ? "#d03b3b" : r.chip.tone === "warning" ? "#fab219" : "#2a78d6"}`,
+          }}
+        >
+          <div className="flex min-w-0 items-center gap-3">
+            <span
+              className={cn(
+                "flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[12px] font-semibold",
+                TONE_CHIP[r.chip.tone],
+              )}
+            >
+              {r.initials}
+            </span>
+            <div className="min-w-0">
+              <p className="truncate text-[14px] font-semibold">{r.name}</p>
+              <p className="truncate text-[12px] text-muted-foreground">{r.sub}</p>
+              {r.meta ? (
+                <p className="truncate text-[11px] text-muted-foreground">{r.meta}</p>
+              ) : null}
+            </div>
+          </div>
+          <div className="min-w-0">
+            <span
+              className={cn(
+                "inline-block rounded-sm px-1.5 py-px text-[11px] font-medium",
+                TONE_CHIP[r.chip.tone],
+              )}
+            >
+              {r.chip.label}
+            </span>
+            <p className="mt-1 text-[13px]">{r.reason}</p>
+            {r.detail ? <p className="text-[12px] text-muted-foreground">{r.detail}</p> : null}
+          </div>
+          <div className="min-w-0 md:border-l md:border-border md:pl-4">
+            <p className="text-[11px] text-muted-foreground">Next step</p>
+            <p className="text-[13px]">{r.nextStep ?? "—"}</p>
+          </div>
+          <div className="md:border-l md:border-border md:pl-4">
+            <p className="text-[11px] text-muted-foreground">Due</p>
+            {r.due ? (
+              <span
+                className={cn(
+                  "inline-block rounded-sm px-1.5 py-px text-[12px] font-medium",
+                  TONE_CHIP[r.due.tone],
+                )}
+              >
+                {r.due.label}
+              </span>
+            ) : (
+              <span className="text-[12px] text-muted-foreground">—</span>
+            )}
+          </div>
+          {"customerId" in r.link ? (
+            <Link
+              to="/customers/$customerId"
+              params={{ customerId: r.link.customerId }}
+              className="inline-flex items-center gap-1 justify-self-end rounded-md border border-border px-3 py-1.5 text-[12px] font-medium hover:bg-muted"
+            >
+              Open <ArrowRight className="h-3.5 w-3.5" />
+            </Link>
+          ) : (
+            <Link
+              to="/deals/$dealId"
+              params={{ dealId: r.link.dealId }}
+              className="inline-flex items-center gap-1 justify-self-end rounded-md border border-border px-3 py-1.5 text-[12px] font-medium hover:bg-muted"
+            >
+              Open <ArrowRight className="h-3.5 w-3.5" />
+            </Link>
+          )}
+        </li>
+      ))}
+    </ul>
   );
 }
 

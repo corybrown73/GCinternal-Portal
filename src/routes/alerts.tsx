@@ -12,7 +12,7 @@ import { When } from "@/components/when";
 export const Route = createFileRoute("/alerts")({
   head: () => ({
     meta: [
-      { title: "Alerts — Implementation Hub" },
+      { title: "Alerts — GoCanvas Handoff Hub" },
       {
         name: "description",
         content: "SLA breaches, stalled implementations, overdue milestones and external alerts.",
