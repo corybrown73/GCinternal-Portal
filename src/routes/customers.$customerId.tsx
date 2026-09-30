@@ -3170,7 +3170,7 @@ function EditableRecordField({
   const m = useMutation({
     mutationFn: (next: string | null) => save({ data: { implementationId, field, value: next } }),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ["customer", customerId] });
+      void queryClient.invalidateQueries({ queryKey: ["customer360", customerId] });
       // The owner and ARR are shown on the list and on Home too.
       void queryClient.invalidateQueries({ queryKey: ["home"] });
     },

@@ -548,7 +548,7 @@ export function NewSolution({
         },
       }),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ["customer", customerId] });
+      void queryClient.invalidateQueries({ queryKey: ["customer360", customerId] });
       void queryClient.invalidateQueries({ queryKey: ["technical-solutions"] });
       setOpen(false);
       setTitle("");

@@ -67,9 +67,10 @@ export function DeleteCustomerButton({
           <DialogHeader>
             <DialogTitle className="text-[14px]">Delete {customerName}?</DialogTitle>
             <DialogDescription className="text-[12px]">
-              This removes the customer, {implementations} implementation
+              This deletes the customer, {implementations} implementation
               {implementations === 1 ? "" : "s"} and everything on them — stages, plans, contacts,
-              work items. The rows are archived first, but nobody on the team will see them again.
+              work items — for good. Nothing in the app can bring them back; a copy of the main rows
+              goes to a service-only archive that an engineer can restore from SQL.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">

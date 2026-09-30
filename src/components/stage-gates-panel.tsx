@@ -62,7 +62,7 @@ export function StageGatesPanel({
 
   const refresh = () => {
     void queryClient.invalidateQueries({ queryKey: ["plan", implementationId] });
-    void queryClient.invalidateQueries({ queryKey: ["customer", customerId] });
+    void queryClient.invalidateQueries({ queryKey: ["customer360", customerId] });
   };
 
   // The row changes as it is clicked; the save follows, and a failure puts
