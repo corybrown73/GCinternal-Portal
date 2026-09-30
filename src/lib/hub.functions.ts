@@ -419,6 +419,21 @@ export const setRecordField = createServerFn({ method: "POST" })
     });
   });
 
+export const updateCustomer = createServerFn({ method: "POST" })
+  .middleware([requireInternalAuth])
+  .inputValidator((data: unknown) =>
+    z
+      .object({
+        customerId: z.string().uuid(),
+        patch: z.record(z.string(), z.union([z.string().max(300), z.number(), z.null()])),
+      })
+      .parse(data),
+  )
+  .handler(async ({ data, context }) => {
+    const { updateCustomerFields } = await import("./hub.server");
+    return updateCustomerFields(data.customerId, data.patch, context.profile.id);
+  });
+
 export const setImplementation = createServerFn({ method: "POST" })
   .middleware([requireInternalAuth])
   .inputValidator((data: unknown) => updateImplementationInputChecked.parse(data))

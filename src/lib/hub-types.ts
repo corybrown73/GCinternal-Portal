@@ -226,6 +226,8 @@ export type Customer360 = {
     segment: string | null;
     arr: number | null;
     region: string | null;
+    domain: string | null;
+    salesforce_account_id: string | null;
     /**
      * A short-lived signed URL for the customer's logo, or null.
      *

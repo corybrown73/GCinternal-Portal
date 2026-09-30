@@ -554,6 +554,8 @@ export async function loadCustomer360(
       segment: customer.segment,
       arr: demo.arr(customer.arr),
       region: customer.region,
+      domain: customer.domain ?? null,
+      salesforce_account_id: customer.salesforce_account_id ?? null,
       logo_url: logoUrl,
     },
     implementation: null,
@@ -2928,4 +2930,56 @@ export async function loadCustomerOptions(): Promise<{
       stage: String(d.stage),
     })),
   };
+}
+
+const CUSTOMER_EDIT_FIELDS = new Set([
+  "name",
+  "industry",
+  "domain",
+  "salesforce_account_id",
+  "arr",
+]);
+
+/**
+ * Edit the customer's own facts — name, industry, domain, Salesforce
+ * account id, ARR — from the Edit customer dialog. Whitelisted, one write,
+ * and every changed field lands in the activity feed.
+ */
+export async function updateCustomerFields(
+  customerId: string,
+  patch: Record<string, string | number | null>,
+  actorProfileId: string | null,
+): Promise<{ ok: true }> {
+  const next: Record<string, string | number | null> = {};
+  for (const [k, v] of Object.entries(patch)) {
+    if (!CUSTOMER_EDIT_FIELDS.has(k)) throw new Error(`${k} is not editable here`);
+    if (k === "name" && !(typeof v === "string" && v.trim())) {
+      throw new Error("The customer needs a name.");
+    }
+    next[k] = typeof v === "string" ? v.trim() || null : v;
+  }
+  if (!Object.keys(next).length) return { ok: true };
+  const { data: before } = await db()
+    .from("customers")
+    .select("name,industry,domain,salesforce_account_id,arr")
+    .eq("id", customerId)
+    .maybeSingle();
+  if (!before) throw new Error("Customer not found");
+  const { error } = await db()
+    .from("customers")
+    .update({ ...next, updated_at: new Date().toISOString() })
+    .eq("id", customerId);
+  if (error) throw new Error(`Could not save the customer: ${error.message}`);
+  const { recordActivity } = await import("./activity.server");
+  await recordActivity(
+    Object.entries(next).map(([field, value]) => ({
+      entity_type: "customer",
+      entity_id: customerId,
+      field_name: field,
+      old_value: before[field] == null ? null : String(before[field]),
+      new_value: value == null ? null : String(value),
+    })),
+    { actorProfileId },
+  );
+  return { ok: true };
 }

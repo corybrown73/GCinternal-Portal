@@ -3,7 +3,7 @@ import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { Suspense } from "react";
 import { queryOptions, useMutation, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { ChevronRight, Pencil, UserRound, ArrowRight } from "lucide-react";
+import { ChevronRight, UserRound, ArrowRight } from "lucide-react";
 
 import { DeleteCustomerButton } from "@/components/delete-customer-button";
 import { PlanFromDeal } from "@/components/plan-section";
@@ -12,6 +12,7 @@ import { CustomerLogo } from "@/components/customer-logo";
 import { PastImplementations } from "@/components/past-implementations";
 import { DealRecord } from "@/components/deal-record";
 import { HelpPicksPanel } from "@/components/help-articles-panel";
+import { EditCustomerDialog } from "@/components/edit-customer-dialog";
 import { canEditDeal, useProfile } from "@/lib/auth";
 import { dealQuery } from "@/lib/deal-query";
 import { useQuery } from "@tanstack/react-query";
@@ -433,14 +434,12 @@ function Customer360Page() {
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <AddServicesButton customerId={customer.id} />
-            <Link
-              to="/customers/$customerId"
-              params={{ customerId }}
-              search={{ tab: "details", ...(selectedImplId ? { impl: selectedImplId } : {}) }}
-              className="inline-flex items-center gap-1 rounded-md border border-border bg-card px-2.5 py-1 text-[12px] hover:bg-muted"
-            >
-              <Pencil className="h-3 w-3" /> Edit customer
-            </Link>
+            <EditCustomerDialog
+              customer={customer}
+              implementationId={impl.id}
+              ownerId={impl.owner_id}
+              team={record.team}
+            />
             <DeleteCustomerButton
               customerId={customer.id}
               customerName={customer.name}
