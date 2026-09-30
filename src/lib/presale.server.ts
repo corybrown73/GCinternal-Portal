@@ -1454,7 +1454,11 @@ export async function startOnboardingAs(
       .insert({
         name: account.name,
         arr: account.arr ?? null,
-        industry: null,
+        // The industry chosen on "New account" lives on the deal's intake;
+        // the customer is where the header, the list and the photo read it.
+        industry:
+          (await import("./intake-answers")).readIntake((account as { intake?: unknown }).intake)
+            .industry ?? null,
         // Stamp the identity so the next handoff matches instead of duplicating.
         ...(flagOn && account.salesforce_id
           ? { salesforce_account_id: sfId18(account.salesforce_id) }
