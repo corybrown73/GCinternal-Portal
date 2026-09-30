@@ -5,7 +5,8 @@ import { BookOpen, ExternalLink, RefreshCw, X } from "lucide-react";
 
 import { Panel } from "@/components/record";
 import { When } from "@/components/when";
-import type { DealData } from "@/lib/deal-query";
+import { dealQuery, type DealData } from "@/lib/deal-query";
+import { readingInFlight } from "@/lib/stage-flow";
 import {
   getHelpArticleStatus,
   repickHelpArticlesFn,
@@ -81,6 +82,13 @@ export function HelpPicksPanel({ deal, editable }: { deal: DealData; editable: b
   const opens = useQuery({
     queryKey: ["welcome", deal.account.id],
     queryFn: () => getWelcome({ data: { dealId: deal.account.id } }),
+  });
+  // The picks land at the end of the AI's reading: follow the record while
+  // it runs, wherever this panel is mounted, so "Nothing picked yet" is
+  // never stale.
+  useQuery({
+    ...dealQuery(deal.account.id),
+    refetchInterval: readingInFlight(intake.ai_reading) ? 4000 : false,
   });
   const save = useServerFn(saveIntake);
   const repick = useServerFn(repickHelpArticlesFn);
