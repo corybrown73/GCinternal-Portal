@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { dealValue } from "@/lib/deal-value";
 import { queryOptions, useMutation, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
@@ -9,7 +10,7 @@ import { CsvImportDialog, NewDealDialog } from "@/components/presale/deal-dialog
 import { canEditDeal, canManage, useProfile } from "@/lib/auth";
 import { useScope } from "@/lib/use-scope";
 import { getPipeline, moveDealStage } from "@/lib/presale.functions";
-import { parseWonGate } from "@/lib/won-gate";
+import { parseWonGate, type WonGateMissing } from "@/lib/won-gate";
 import { ClosedWonGateNotice } from "@/components/closed-won-gate";
 import type { AccountStage } from "@/lib/presale-stages";
 import { fmtMoney } from "@/lib/hub-format";
@@ -66,10 +67,19 @@ function PipelinePage() {
         },
       }),
     onSettled: () => queryClient.invalidateQueries({ queryKey: ["pipeline"] }),
+    // A refused move: the board shows what is missing, with the way to add
+    // it. The notice stays through the forced retry, so "Moving…" shows.
+    onError: (e, vars) => {
+      const missing = parseWonGate((e as Error).message);
+      setGate(missing ? { missing, dealId: vars.dealId, toStage: vars.toStage } : null);
+    },
+    onSuccess: () => setGate(null),
   });
-  // A refused Closed Won move: the board shows what is missing, with the way
-  // to add it, instead of a browser dialog.
-  const gate = moveMutation.isError ? parseWonGate((moveMutation.error as Error).message) : null;
+  const [gate, setGate] = useState<{
+    missing: WonGateMissing[];
+    dealId: string;
+    toStage: AccountStage;
+  } | null>(null);
 
   const arrTotal = data.deals.reduce((sum, d) => sum + (dealValue(d) ?? 0), 0);
   const pocCount = data.deals.filter((d) => d.ff_poc).length;
@@ -104,14 +114,16 @@ function PipelinePage() {
             moveMutation.mutateAsync({ dealId, toStage, ...(note ? { note } : {}) })
           }
         />
-        {gate && moveMutation.variables ? (
+        {gate ? (
           <div className="mt-2">
             <ClosedWonGateNotice
-              missing={gate}
-              dealId={moveMutation.variables.dealId}
-              toStage={moveMutation.variables.toStage}
+              missing={gate.missing}
+              dealId={gate.dealId}
+              toStage={gate.toStage}
               canForce={canManage(profile?.role)}
-              onForce={() => moveMutation.mutate({ ...moveMutation.variables!, force: true })}
+              onForce={() =>
+                moveMutation.mutate({ dealId: gate.dealId, toStage: gate.toStage, force: true })
+              }
               forcing={moveMutation.isPending}
             />
           </div>

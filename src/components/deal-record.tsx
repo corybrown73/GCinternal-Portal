@@ -114,11 +114,11 @@ function StageControl({
           ? { dealId, toStage: v.toStage, force: true }
           : { dealId, toStage: v.toStage },
       }),
-    onMutate: () => {
-      setError(null);
-      setGate(null);
-    },
+    // The gate notice stays up while the forced move runs, so its button
+    // can say "Moving…" instead of vanishing for seven silent seconds.
+    onMutate: () => setError(null),
     onSuccess: () => {
+      setGate(null);
       void queryClient.invalidateQueries({ queryKey: ["deal", dealId] });
       void queryClient.invalidateQueries({ queryKey: ["pipeline"] });
     },

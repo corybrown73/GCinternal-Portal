@@ -144,10 +144,12 @@ export function StageFlow({ deal }: { deal: DealData }) {
   const shown =
     viewing ?? (flow.current === "prospect" ? "closed_won" : flow.current) ?? "closed_won";
   const stage = flow.stages.find((s) => s.key === shown) ?? flow.stages[0]!;
-  // Locked tasks (assign before the close) are not "to do" yet.
-  const openTasks = stage.tasks.filter((t) => !t.locked);
+  // The count is over the required steps — every row listed, optional ones
+  // left out and said so — the same set the footer's "to go" counts.
+  const openTasks = stage.tasks.filter((t) => !t.optional);
+  const optionalCount = stage.tasks.length - openTasks.length;
   const doneCount = openTasks.filter((t) => t.done).length;
-  const next = stage.tasks.find((t) => !t.done && !t.locked) ?? null;
+  const next = stage.tasks.find((t) => !t.done && !t.locked && !t.optional) ?? null;
   // The next task is open. One opened by hand stays open — until it is done,
   // when the next one opens; a done one reopened to change it stays open.
   const [manual, setManual] = useState<{ key: string; wasDone: boolean } | null>(null);
@@ -195,6 +197,7 @@ export function StageFlow({ deal }: { deal: DealData }) {
             <span className="text-muted-foreground">
               {" "}
               · {doneCount} of {openTasks.length} done
+              {optionalCount ? ` · ${optionalCount} optional` : ""}
               {next ? (
                 <>
                   {" "}
@@ -339,6 +342,9 @@ function NotClosedBar({
   const move = useServerFn(moveDealStage);
   const [error, setError] = useState<string | null>(null);
   const [missing, setMissing] = useState<WonGateMissing[] | null>(null);
+  // Closed Won creates the customer's page, the plan and the assignment,
+  // then the page redirects: several seconds. The bar says so the whole way.
+  const [closed, setClosed] = useState(false);
   const m = useMutation({
     mutationFn: (force: boolean) =>
       move({
@@ -346,11 +352,12 @@ function NotClosedBar({
           ? { dealId: deal.account.id, toStage: "closed_won", force: true }
           : { dealId: deal.account.id, toStage: "closed_won" },
       }),
-    onMutate: () => {
-      setError(null);
+    onMutate: () => setError(null),
+    onSuccess: () => {
       setMissing(null);
+      setClosed(true);
+      void qc.invalidateQueries();
     },
-    onSuccess: () => void qc.invalidateQueries(),
     onError: (e) => {
       const gate = parseWonGate((e as Error).message);
       if (gate) setMissing(gate);
@@ -361,12 +368,21 @@ function NotClosedBar({
     <div className="space-y-2 border-b border-amber-500/30 bg-amber-500/10 px-4 py-2 text-[12px]">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <span className="text-amber-900 dark:text-amber-200">
-          <b>Not closed yet.</b>{" "}
-          {ready
-            ? "Everything here is ready — close it and the deal moves on straight away."
-            : "You can get ahead on these; nothing moves until the deal is Closed Won."}
+          {closed ? (
+            <>
+              <b>Closed Won.</b> Setting up the customer's page and the plan — this takes a few
+              seconds, then the page opens on it.
+            </>
+          ) : (
+            <>
+              <b>Not closed yet.</b>{" "}
+              {ready
+                ? "Everything here is ready — close it and the deal moves on straight away."
+                : "You can get ahead on these; nothing moves until the deal is Closed Won."}
+            </>
+          )}
         </span>
-        {editable ? (
+        {editable && !closed ? (
           <button
             type="button"
             className="inline-flex h-8 items-center gap-1.5 rounded-sm bg-primary px-3 text-[12px] font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
@@ -1737,7 +1753,7 @@ function OnboardingList({
                       {isDone(t)
                         ? t.summary
                         : t.date
-                          ? `${late ? "was due" : "due"} ${t.date}`
+                          ? `${late ? "was due" : "due"} ${shortDay(t.date)}`
                           : ""}
                     </span>
                   </div>

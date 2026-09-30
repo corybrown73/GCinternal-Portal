@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { shortDay } from "@/lib/onboarding-timeline";
 import { stampDay } from "@/lib/stage-flow";
 import { CalendarDays, CheckCircle2, Circle, Lock, MessageSquare, Paperclip } from "lucide-react";
 
@@ -147,7 +148,7 @@ export function SharedPlanView({
                 {c.description}
               </p>
               <p className="mt-0.5 font-mono text-[11px] text-muted-foreground">
-                {c.due_date ? `due ${c.due_date}` : "no date"}
+                {c.due_date ? `due ${shortDay(c.due_date)}` : "no date"}
                 {c.committed_to ? ` · to ${c.committed_to}` : ""}
               </p>
             </li>
@@ -339,7 +340,7 @@ function TaskRow({ task, actions }: { task: SharedTask; actions: PlanActions | u
             <p className="mt-0.5 text-[12px] text-muted-foreground">{task.detail}</p>
           ) : null}
           <p className="mt-0.5 font-mono text-[11px] text-muted-foreground">
-            {task.due_date ? `due ${task.due_date}` : "no date"}
+            {task.due_date ? `due ${shortDay(task.due_date)}` : "no date"}
             {done && task.completed_by ? ` · completed by ${task.completed_by}` : ""}
           </p>
           {task.blocked_by.length ? (
