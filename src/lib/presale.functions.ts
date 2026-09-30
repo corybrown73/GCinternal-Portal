@@ -69,6 +69,8 @@ export const addDeal = createServerFn({ method: "POST" })
           .optional(),
         industry: z.string().trim().max(80).nullable().optional(),
         stage: z.enum(STAGES).optional(),
+        /** The team member being covered for: the deal is theirs from the start. */
+        coverFor: z.string().uuid().optional(),
       })
       .parse(data),
   )
@@ -83,6 +85,7 @@ export const addDeal = createServerFn({ method: "POST" })
       path: data.path ?? null,
       industry: data.industry ?? null,
       stage: data.stage ?? null,
+      coverForTeamMemberId: data.coverFor ?? null,
     });
   });
 

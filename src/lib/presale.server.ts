@@ -340,6 +340,8 @@ export async function createDeal(
     industry?: string | null;
     /** Where the deal already is. A deal entered after it closed starts closed. */
     stage?: AccountStage | null;
+    /** Created while covering for this team member: the deal is theirs. */
+    coverForTeamMemberId?: string | null;
   },
 ): Promise<{ account: Account; created: boolean }> {
   await requireSalesEditor(userId);
@@ -369,6 +371,30 @@ export async function createDeal(
   // Who entered it: their board shows it until an owner is assigned.
   if (result.created) {
     await db().from("portal_accounts").update({ created_by: userId }).eq("id", result.account.id);
+  }
+  // Entered while covering for a colleague: it is their account, so it goes
+  // on their board (and their card shows their name) rather than vanishing
+  // onto the creator's. The ledger is what the pipeline reads for an owner.
+  if (result.created && input.coverForTeamMemberId) {
+    const { data: member } = await db()
+      .from("team_members")
+      .select("id,name")
+      .eq("id", input.coverForTeamMemberId)
+      .eq("active", true)
+      .maybeSingle();
+    if (member) {
+      await db()
+        .from("portal_assignments")
+        .insert({
+          deal_id: result.account.id,
+          team_member_id: member.id,
+          weight: 0,
+          breakdown: {},
+          source: "manual",
+          actor_profile_id: userId,
+          note: `Created while covering for ${member.name}`,
+        });
+    }
   }
 
   // The two facts the plan and the page read, captured while they are known.
@@ -2188,14 +2214,6 @@ export async function saveDealIntake(
     const { syncJourneyStage } = await import("./journey-sync.server");
     await syncJourneyStage(dealId, userId);
   }
-  // And the deal's own stage follows its checklist: a booked kickoff moves
-  // it to Onboarding without anybody touching the stage picker.
-  try {
-    const { syncDealStage } = await import("./stage-flow.server");
-    await syncDealStage(dealId, userId);
-  } catch (e) {
-    console.error("[stage flow] could not sync the deal's stage", e);
-  }
 
   // A re-booked meeting moves "Functional": the project's target launch,
   // which the Customers list and "At a glance" read, follows the plan.
@@ -2223,6 +2241,14 @@ export async function saveDealIntake(
       const { startFieldFusionSetup } = await import("./field-fusion.server");
       await startFieldFusionSetup(dealId, userId);
     }
+  }
+  // Then the deal's own stage follows its checklist: a booked kickoff moves
+  // it to Onboarding without anybody touching the stage picker.
+  try {
+    const { syncDealStage } = await import("./stage-flow.server");
+    await syncDealStage(dealId, userId);
+  } catch (e) {
+    console.error("[stage flow] could not sync the deal's stage", e);
   }
   return next;
 }

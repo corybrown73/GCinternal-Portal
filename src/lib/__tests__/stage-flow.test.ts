@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { shortDay } from "../onboarding-timeline";
 
 import { readIntake } from "../intake-answers";
 import { buildTimeline } from "../onboarding-timeline";
@@ -234,7 +235,7 @@ describe("the new-logo plan: the Implementation Playbook", () => {
       "activate",
       "closeout",
     ]);
-    expect(tasks[0]!.summary).toBe("Held 2026-09-25");
+    expect(tasks[0]!.summary).toBe(`Held ${shortDay("2026-09-25")}`);
     // The optional activation session never holds the stage back.
     expect(tasks.find((x) => x.key === "activate")!.optional).toBe(true);
     const all = Object.fromEntries(

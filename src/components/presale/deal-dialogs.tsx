@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { useScope } from "@/lib/use-scope";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useNavigate } from "@tanstack/react-router";
@@ -73,6 +74,9 @@ export function NewDealDialog() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const create = useServerFn(addDeal);
+  // Covering for somebody: the deal is theirs, so it lands on the board being looked at.
+  const { param: scopeParam } = useScope();
+  const coverFor = scopeParam?.startsWith("owner:") ? scopeParam.slice(6) : null;
   const moveStage = useServerFn(moveDealStage);
   const report = useServerFn(addReport);
   const upload = useServerFn(uploadSow);
@@ -143,6 +147,7 @@ export function NewDealDialog() {
             summary: nullable(draft.summary),
             path: draft.path || "new_logo",
             industry: nullable(draft.industry),
+            ...(coverFor ? { coverFor } : {}),
           },
         });
         dealId = result.account.id;

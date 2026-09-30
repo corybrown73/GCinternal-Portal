@@ -545,7 +545,7 @@ function playbookOnboarding(a: IntakeAnswers, t: Timeline): FlowTask[] {
     label,
     hint,
     done: Boolean(done[key]),
-    summary: done[key] ? `Done ${done[key]}` : null,
+    summary: done[key] ? `Done ${shortDay(done[key])}` : null,
     action: "tick",
     locked: null,
     doneKey: key,
@@ -557,7 +557,7 @@ function playbookOnboarding(a: IntakeAnswers, t: Timeline): FlowTask[] {
     return tick(k, m.label, m.detail, {
       date: m.date,
       done: Boolean(m.doneOn),
-      summary: m.doneOn ? `Held ${m.doneOn}` : null,
+      summary: m.doneOn ? `Held ${shortDay(m.doneOn)}` : null,
     });
   };
   const out: FlowTask[] = [
@@ -595,7 +595,7 @@ function playbookOnboarding(a: IntakeAnswers, t: Timeline): FlowTask[] {
           ? "Connected, tested end to end, and live."
           : "Delivered and signed off.",
       done: Boolean(s.doneOn),
-      summary: s.doneOn ? `Done ${s.doneOn}` : null,
+      summary: s.doneOn ? `Done ${shortDay(s.doneOn)}` : null,
       action: "tick",
       locked: null,
       date: s.endsOn,
@@ -631,7 +631,7 @@ function onboardingTasks(a: IntakeAnswers, t: Timeline | null | undefined): Flow
       label: m.label,
       hint: m.detail,
       done: Boolean(m.doneOn),
-      summary: m.doneOn ? `Done ${m.doneOn}` : null,
+      summary: m.doneOn ? `Done ${shortDay(m.doneOn)}` : null,
       action: "tick",
       locked: null,
       date: m.date,
@@ -650,7 +650,7 @@ function onboardingTasks(a: IntakeAnswers, t: Timeline | null | undefined): Flow
           ? "Connected, tested end to end, and live."
           : "Delivered and signed off.",
       done: Boolean(s.doneOn),
-      summary: s.doneOn ? `Done ${s.doneOn}` : null,
+      summary: s.doneOn ? `Done ${shortDay(s.doneOn)}` : null,
       action: "tick",
       locked: null,
       date: s.endsOn,
@@ -693,7 +693,7 @@ function graduationChecks(a: IntakeAnswers, t: Timeline): FlowTask[] {
       label: g.label,
       hint: g.hint,
       done: Boolean(on),
-      summary: on ? `Done ${on.slice(0, 10)}` : null,
+      summary: on ? `Done ${stampDay(on)}` : null,
       action: "graduate" as const,
       locked: null,
       date: null,
@@ -746,7 +746,10 @@ export function stageFlow(input: StageFlowInput): StageFlow {
   // step through Pre-kickoff to reach Onboarding.
   let advanceTo: AccountStage | null = null;
   if (current === "closed_won" && allDone(cw)) {
-    advanceTo = allDone(pk) ? "in_onboarding" : "onboarding_kickoff";
+    // A Field Fusion account goes to its setup stage first (the setup owner
+    // hands it on); the checklist never skips it into Pre-kickoff.
+    if (a.path === "field_fusion" && !a.field_fusion.handed_off_at) advanceTo = null;
+    else advanceTo = allDone(pk) ? "in_onboarding" : "onboarding_kickoff";
   } else if (current === "pre_kickoff" && allDone(pk)) {
     advanceTo = "in_onboarding";
   }
