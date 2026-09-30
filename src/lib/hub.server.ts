@@ -149,7 +149,9 @@ export async function loadImplementations(
         dealStages.get(i.id)?.stage ??
         dealStageFor({ deal_stage: null, current_stage: i.current_stage }),
       deal_id: i.deal_id ?? null,
-      stage_entered_at: i.stage_entered_at,
+      // The deal's clock when there is a deal: the same field the pipeline
+      // counts from, so "days in stage" is one number on every page.
+      stage_entered_at: dealStages.get(i.id)?.stage_entered_at ?? i.stage_entered_at,
       status: i.status,
       health_recorded: i.health_recorded ?? null,
       health_recorded_reason: i.health_recorded_reason ?? null,

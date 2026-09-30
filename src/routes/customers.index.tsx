@@ -11,7 +11,8 @@ import { useScope } from "@/lib/use-scope";
 import { getHome } from "@/lib/hub.functions";
 import { healthByImplementation } from "@/lib/home-triage";
 import { DEAL_STAGE_OPTIONS, dealStageIndex } from "@/lib/deal-stage";
-import { daysSince, fmtDate, humanize } from "@/lib/hub-format";
+import { fmtDate, humanize } from "@/lib/hub-format";
+import { businessDaysBetween, localIso } from "@/lib/onboarding-timeline";
 import { datePace, dwellPace } from "@/lib/pace";
 import { cn } from "@/lib/utils";
 
@@ -83,6 +84,12 @@ export const Route = createFileRoute("/customers/")({
 /** Derived health levels, matching deriveHealth output. */
 const STATUSES = ["blocked", "at_risk", "on_track", "no_signal"];
 
+/** Business days since the stage was entered — the pipeline's unit and field. */
+function businessDaysIn(enteredAt: string | null | undefined): number {
+  if (!enteredAt) return 0;
+  return Math.max(0, businessDaysBetween(String(enteredAt).slice(0, 10), localIso()));
+}
+
 function CustomersPage() {
   const { param, setScope } = useScope();
   const { data } = useSuspenseQuery(implementationsQuery(param));
@@ -120,9 +127,7 @@ function CustomersPage() {
             factor * (a.target_launch_date ?? "9999").localeCompare(b.target_launch_date ?? "9999")
           );
         default:
-          return (
-            factor * ((daysSince(a.stage_entered_at) ?? 0) - (daysSince(b.stage_entered_at) ?? 0))
-          );
+          return factor * (businessDaysIn(a.stage_entered_at) - businessDaysIn(b.stage_entered_at));
       }
     });
 
@@ -280,7 +285,7 @@ function CustomersPage() {
                     <PaceChip
                       quiet
                       pace={dwellPace(r.stage_entered_at, null)}
-                      label={`${daysSince(r.stage_entered_at) ?? 0}d`}
+                      label={`${businessDaysIn(r.stage_entered_at)}bd`}
                     />
                   </td>
                 </tr>
