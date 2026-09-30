@@ -65,7 +65,10 @@ export function TopBar({ profile }: { profile: PortalProfile | null }) {
   }, []);
 
   return (
-    <div className="flex h-14 items-center gap-3 border-b border-border bg-background/90 px-4 backdrop-blur sm:px-6">
+    // relative + z-40: the blur makes this a stacking context, and the page
+    // header below is sticky z-30 — without a z-index of its own the scope
+    // menu opened underneath the header and its top rows could not be clicked.
+    <div className="relative z-40 flex h-14 items-center gap-3 border-b border-border bg-background/90 px-4 backdrop-blur sm:px-6">
       <form
         className="min-w-0 flex-1"
         onSubmit={(e) => {
