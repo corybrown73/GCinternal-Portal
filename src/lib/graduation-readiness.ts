@@ -1,4 +1,5 @@
 import type { Customer360 } from "./hub-types";
+import { isStageHidden } from "./lifecycle";
 import { fmtDate, isOverdue, stageIndex, stageLabel } from "./hub-format";
 import {
   adoptionAreaLevel,
@@ -74,7 +75,7 @@ export function graduationReadiness(record: Customer360, impl: ReadinessImpl): R
       id: "delivery",
       label: "Delivery",
       state: "needs_attention",
-      reason: `Still at ${stageLabel(impl.current_stage)} — delivery has not reached Launch yet`,
+      reason: `Still at ${stageLabel(impl.current_stage)} — delivery has not reached ${stageLabel("launch")} yet`,
       tab: "journey",
     };
   } else if (!impl.actual_launch_date) {
@@ -125,7 +126,7 @@ export function graduationReadiness(record: Customer360, impl: ReadinessImpl): R
             id: "value",
             label: "Value",
             state: "not_applicable",
-            reason: "Success criteria are agreed at Align Externally — not expected yet",
+            reason: `Success criteria are agreed ${isStageHidden("align-external") ? `before ${stageLabel("build")}` : `at ${stageLabel("align-external")}`} — not expected yet`,
             tab: "overview",
           };
   } else {
@@ -214,7 +215,7 @@ export function graduationReadiness(record: Customer360, impl: ReadinessImpl): R
             id: "adoption",
             label: "Adoption",
             state: "not_applicable",
-            reason: "Adoption areas are expected from the Adopt stage — none recorded yet",
+            reason: `Adoption areas are expected ${isStageHidden("adopt") ? `after ${stageLabel("launch")}` : `from ${stageLabel("adopt")}`} — none recorded yet`,
             tab: "overview",
           };
   } else {

@@ -109,6 +109,12 @@ export async function transitionStage(
       entity_id: accountId,
       payload: { to_stage: toStage, source: ctx.source },
     });
+    // The implementation's journey follows the deal: one source of truth
+    // for "where are we", whichever rail a page reads. Never fails the move.
+    {
+      const { mirrorJourneyToDeal } = await import("../journey-for-deal.server");
+      await mirrorJourneyToDeal(accountId, toStage, ctx.actorProfileId ?? null);
+    }
     // Out to whoever subscribed — the Salesforce flow, a Zapier zap — so the
     // AE sees Closed Won → Pre-kickoff → Onboarding where they work.
     try {

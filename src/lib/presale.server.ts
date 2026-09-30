@@ -1559,6 +1559,13 @@ export async function startOnboardingAs(
         : null,
   });
 
+  // The journey opens where the deal already is: a deal forced straight to
+  // Onboarding gets a project at the first Onboarding stage, not at handoff.
+  {
+    const { mirrorJourneyToDeal } = await import("./journey-for-deal.server");
+    await mirrorJourneyToDeal(dealId, account.stage as AccountStage, userId);
+  }
+
   // Carry what the deal already settled onto the project, so nobody is asked
   // to redo it: the owner who claimed it, and the handoff tasks the deal's
   // record already satisfies — a call note on file, the SOW uploaded, the
