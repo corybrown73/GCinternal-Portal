@@ -969,7 +969,7 @@ function NotesPanel({ record, customerId }: { record: Customer360; customerId: s
         <Link
           to="/customers/$customerId"
           params={{ customerId }}
-          search={{ tab: "prekickoff", impl: impl.id }}
+          search={{ tab: "record", impl: impl.id }}
           className="underline"
         >
           Record

@@ -25,7 +25,7 @@ export function AddServicesButton({ customerId }: { customerId: string }) {
         to: "/customers/$customerId",
         params: { customerId },
         search: {
-          tab: "prekickoff",
+          tab: "record",
           ...(r.implementationId ? { impl: r.implementationId } : {}),
         },
       });

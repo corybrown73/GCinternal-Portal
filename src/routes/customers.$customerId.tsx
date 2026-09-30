@@ -134,7 +134,7 @@ import {
 import { cn } from "@/lib/utils";
 import { When } from "@/components/when";
 
-const TABS = ["overview", "plan", "prekickoff", "resources", "details"] as const;
+const TABS = ["overview", "plan", "record", "resources", "details"] as const;
 export type TabId = (typeof TABS)[number];
 /** The tabs this page used to have. An old link lands on Details, where that content now lives. */
 const LEGACY_TAB_IDS = [
@@ -153,15 +153,17 @@ export type AnyTabId = TabId | LegacyTabId;
 function resolveTab(raw: string | undefined): TabId {
   if (!raw) return "overview";
   if (TABS.includes(raw as TabId)) return raw as TabId;
-  // The workspace was briefly its own tab; it is the overview now.
+  // The workspace was briefly its own tab; it is the overview now. The
+  // Record tab was keyed "prekickoff" for a while; old links still land.
   if (raw === "implementation") return "overview";
+  if (raw === "prekickoff") return "record";
   return LEGACY_TABS.has(raw) ? "details" : "overview";
 }
 
 const TAB_LABEL: Record<TabId, string> = {
   overview: "Overview",
   plan: "Plan",
-  prekickoff: "Record",
+  record: "Record",
   resources: "Resources",
   details: "Details",
 };
@@ -183,13 +185,13 @@ export const Route = createFileRoute("/customers/$customerId")({
   },
   head: () => ({
     meta: [
-      { title: "Customer implementation — Implementation Hub" },
+      { title: "Customer implementation — GoCanvas Handoff Hub" },
       {
         name: "description",
         content:
           "Structured implementation record: current state, journey, solution, requirements, decisions, risks and full change history.",
       },
-      { property: "og:title", content: "Customer implementation — Implementation Hub" },
+      { property: "og:title", content: "Customer implementation — GoCanvas Handoff Hub" },
       {
         property: "og:description",
         content: "Current state and historical context for one customer implementation.",
@@ -464,14 +466,9 @@ function Customer360Page() {
         {/* The deal's stages as one checklist: only the stage it is in, only
             the next task open. It replaced the pulse strip, whose "next"
             came from an older list and disagreed with this one. */}
-        {/* On the Implementation tab the workspace IS the checklist, cut to
-            the window before the next stage; the full one stays on the
-            other tabs. */}
-        {impl.deal_id && tab !== "overview" ? (
-          <div className="px-6 pt-2.5">
-            <DealStageFlow dealId={impl.deal_id} />
-          </div>
-        ) : null}
+        {/* The full checklist is on the Record tab, under the tabs: it is
+            thirteen rows tall on Onboarding, and above the tab bar it pushed
+            the tabs a screen down on three of the five tabs. */}
 
         {/* ONE TRACKER. With a deal behind it, the checklist above is where
             this account stands; the project lanes, the earlier projects and
@@ -505,8 +502,9 @@ function Customer360Page() {
       {tab === "overview" && impl.deal_id ? (
         <ImplementationWorkspace record={record} customerId={customerId} />
       ) : null}
-      {tab === "prekickoff" ? (
-        <div className="px-6 py-4">
+      {tab === "record" ? (
+        <div className="space-y-4 px-6 py-4">
+          {impl.deal_id ? <DealStageFlow dealId={impl.deal_id} /> : null}
           {impl.deal_id ? (
             <PrekickoffTab dealId={impl.deal_id} />
           ) : (
@@ -525,7 +523,7 @@ function Customer360Page() {
         <div
           className={cn(
             "grid items-start gap-4 px-6 py-4 lg:grid-cols-[minmax(0,1fr)_320px]",
-            (tab === "prekickoff" || (tab === "overview" && impl.deal_id)) && "hidden",
+            (tab === "record" || (tab === "overview" && impl.deal_id)) && "hidden",
           )}
         >
           <div className="min-w-0 space-y-3">
