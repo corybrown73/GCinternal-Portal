@@ -564,6 +564,7 @@ export async function loadCustomer360(
     implementations: implementationSummaries,
     journal: [],
     contacts,
+    deal_transitions: [],
     milestones: [],
     commitments: [],
     decisions: [],
@@ -738,33 +739,43 @@ export async function loadCustomer360(
     "from_entity_type,from_entity_id,relationship,to_entity_type,to_entity_id,source";
   const noRows = { data: [] as any[] };
 
-  const [linksOut, linksIn, observationRes, adoptionObservationRes, auditRes] = await Promise.all([
-    entityIds.length
-      ? db().from("trace_links").select(traceLinkCols).in("from_entity_id", entityIds)
-      : Promise.resolve(noRows),
-    entityIds.length
-      ? db().from("trace_links").select(traceLinkCols).in("to_entity_id", entityIds)
-      : Promise.resolve(noRows),
-    criterionIds.length
-      ? db()
-          .from("success_criteria_observations")
-          .select("*")
-          .in("success_criteria_id", criterionIds)
-          .order("observed_at", { ascending: false })
-      : Promise.resolve({ data: [] as any[] }),
-    areaIds.length
-      ? db()
-          .from("adoption_observations")
-          .select("*")
-          .in("adoption_area_id", areaIds)
-          .order("observed_at", { ascending: false })
-      : Promise.resolve({ data: [] as any[] }),
-    db()
-      .from("audit_log")
-      .select("*")
-      .in("entity_id", auditIds)
-      .order("changed_at", { ascending: false }),
-  ]);
+  const [linksOut, linksIn, observationRes, adoptionObservationRes, auditRes, dealTransRes] =
+    await Promise.all([
+      entityIds.length
+        ? db().from("trace_links").select(traceLinkCols).in("from_entity_id", entityIds)
+        : Promise.resolve(noRows),
+      entityIds.length
+        ? db().from("trace_links").select(traceLinkCols).in("to_entity_id", entityIds)
+        : Promise.resolve(noRows),
+      criterionIds.length
+        ? db()
+            .from("success_criteria_observations")
+            .select("*")
+            .in("success_criteria_id", criterionIds)
+            .order("observed_at", { ascending: false })
+        : Promise.resolve({ data: [] as any[] }),
+      areaIds.length
+        ? db()
+            .from("adoption_observations")
+            .select("*")
+            .in("adoption_area_id", areaIds)
+            .order("observed_at", { ascending: false })
+        : Promise.resolve({ data: [] as any[] }),
+      db()
+        .from("audit_log")
+        .select("*")
+        .in("entity_id", auditIds)
+        .order("changed_at", { ascending: false }),
+      // The deal's stage moves: the pipeline promises every move is written to
+      // the stage history, and this page is where somebody reads it.
+      impl.deal_id
+        ? db()
+            .from("portal_stage_transitions")
+            .select("id,from_stage,to_stage,source,actor_profile_id,note,occurred_at")
+            .eq("account_id", impl.deal_id)
+            .order("occurred_at", { ascending: false })
+        : Promise.resolve({ data: [] as any[] }),
+    ]);
 
   // One edge can match both reads; the unique index in 0025 is on exactly this
   // tuple, so it is the right identity to de-duplicate on.
@@ -1151,7 +1162,27 @@ export async function loadCustomer360(
         changed_by_name: named(a.changed_by) ?? a.actor_label ?? null,
       }));
     })(),
+    deal_transitions: ((dealTransRes as any).data ?? []).map((t: any) => ({
+      id: t.id,
+      from_stage: t.from_stage ?? null,
+      to_stage: t.to_stage,
+      source: t.source,
+      actor_name:
+        named(t.actor_profile_id) ?? (t.source === "ui" ? null : humanizeSource(t.source)),
+      note: t.note ?? null,
+      occurred_at: t.occurred_at,
+    })),
   };
+}
+
+function humanizeSource(source: string): string {
+  return source === "api"
+    ? "API / Zapier"
+    : source === "csv_import"
+      ? "CSV import"
+      : source === "system"
+        ? "The Hub"
+        : source;
 }
 
 export async function loadTechnicalSolutions(): Promise<TechnicalSolutionRow[]> {

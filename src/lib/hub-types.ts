@@ -368,6 +368,16 @@ export type Customer360 = {
     changed_at: string;
     changed_by_name: string | null;
   }>;
+  /** The deal's own stage moves (portal_stage_transitions), newest first, with the note a forced move carries. */
+  deal_transitions: Array<{
+    id: string;
+    from_stage: string | null;
+    to_stage: string;
+    source: string;
+    actor_name: string | null;
+    note: string | null;
+    occurred_at: string;
+  }>;
 };
 
 export type TechnicalSolutionRow = {

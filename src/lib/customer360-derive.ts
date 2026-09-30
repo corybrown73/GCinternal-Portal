@@ -1,4 +1,5 @@
 import type { Customer360 } from "./hub-types";
+import { dealStageLabel } from "./deal-stage";
 import { LIFECYCLE_STAGES, LIFECYCLE_STAGE_MAP } from "./lifecycle";
 import {
   STAGE_FLAG_DAYS,
@@ -363,6 +364,14 @@ export type MeaningfulEvent = {
 /** Overview "recent activity": stage changes, decisions, escalations, approvals only. */
 export function meaningfulEvents(record: Customer360, limit = 6): MeaningfulEvent[] {
   const events: MeaningfulEvent[] = [
+    ...(record.deal_transitions ?? []).map((t) => ({
+      key: `deal-${t.id}`,
+      at: t.occurred_at,
+      kind: "Deal stage",
+      title: `${t.from_stage ? `${dealStageLabel(t.from_stage as never)} → ` : ""}${dealStageLabel(t.to_stage as never)}`,
+      detail: t.note,
+      actor: t.actor_name,
+    })),
     ...record.stage_history.map((h) => ({
       key: `stage-${h.id}`,
       at: h.entered_at,

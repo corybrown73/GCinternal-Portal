@@ -1670,12 +1670,15 @@ function AccountRail({
                         <span className="text-[12px]">
                           {e.kind === "Stage" ? stageLabel(e.detail) : e.title}
                         </span>
+                        {e.kind === "Deal stage" && e.detail ? (
+                          <span className="text-[11px] text-muted-foreground">{e.detail}</span>
+                        ) : null}
                       </div>
                       <Meta
                         items={[
                           ["When", <When key="when" value={e.at} />],
                           ["Who", dash(e.actor)],
-                          ...(e.kind === "Stage"
+                          ...(e.kind === "Stage" || e.kind === "Deal stage"
                             ? []
                             : ([["State", humanize(e.detail)]] as Array<[string, ReactNode]>)),
                         ]}
@@ -2980,6 +2983,16 @@ function EvidenceTab({ record, customerId }: { record: Customer360; customerId: 
 
 function HistoryTab({ record }: { record: Customer360 }) {
   const entries = [
+    // The deal's own moves, with the note a forced move carries.
+    ...(record.deal_transitions ?? []).map((t) => ({
+      key: `deal-${t.id}`,
+      at: t.occurred_at,
+      actor: t.actor_name,
+      entity: "Deal",
+      field: "stage",
+      change: `${t.from_stage ? dealStageLabel(t.from_stage as never) : "—"} → ${dealStageLabel(t.to_stage as never)}`,
+      reason: t.note,
+    })),
     ...record.stage_history.map((h) => ({
       key: `stage-${h.id}`,
       at: h.entered_at,
@@ -3016,7 +3029,7 @@ function HistoryTab({ record }: { record: Customer360 }) {
       title="Change history"
       count={entries.length}
       level="reference"
-      meta="Stage history + audit log"
+      meta="Deal stage moves + project stage history + audit log"
     >
       {entries.length ? (
         <div className="overflow-x-auto">
