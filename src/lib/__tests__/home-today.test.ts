@@ -126,6 +126,8 @@ describe("Today", () => {
       input({ queue: { act_now: [row()], needs_attention: [waiting], moving: [moving] } }),
     );
     expect(t.tiles.needAttention).toBe(2); // one act-now account + one unclaimed deal
+    expect(t.needsMe.length).toBe(t.tiles.needAttention);
+    expect(t.watch.map((r) => r.name)).toEqual(["Corys Oil"]);
     expect(t.tiles.waitingOn).toBe(1);
     expect(t.tiles.onTrack).toBe(1);
     expect(t.tiles.upcoming).toBeGreaterThanOrEqual(3); // three Stage 2 calls this week

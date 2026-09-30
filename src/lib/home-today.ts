@@ -47,7 +47,10 @@ export type DayGroup = { key: string; title: string; sub: string; events: Upcomi
 
 export type Today = {
   tiles: { needAttention: number; waitingOn: number; upcoming: number; onTrack: number };
+  /** Act now, and the deals nobody owns: the rows the "Need attention" tile counts. */
   needsMe: NeedsMeRow[];
+  /** Keep an eye on: not counted in the tile, listed under their own heading. */
+  watch: NeedsMeRow[];
   comingUp: DayGroup[];
   book: {
     total: number;
@@ -191,12 +194,19 @@ export function todayFor(input: TodayInput): Today {
   const all = [...queue.act_now, ...queue.needs_attention, ...queue.moving];
   const byImpl = new Map(all.map((r) => [r.impl.id, r]));
 
-  // WHAT NEEDS ME: act-now accounts, the deals nobody owns, then the watch list.
+  // WHAT NEEDS ME: act-now accounts and the deals nobody owns — exactly what
+  // the "Need attention" tile counts. The watch list is its own, so the
+  // number on the tile and the rows under the heading never disagree.
+  const bySeverity = (a: NeedsMeRow, b: NeedsMeRow) =>
+    a.rank - b.rank || a.name.localeCompare(b.name);
   const needsMe: NeedsMeRow[] = [
     ...queue.act_now.map((r) => rowFromQueue(r, health.get(r.impl.id)?.level, today)),
-    ...dealInbox.filter((d) => d.unclaimed || d.mine).map((d) => rowFromDeal(d, today)),
+    ...dealInbox.filter((d) => d.unclaimed).map((d) => rowFromDeal(d, today)),
+  ].sort(bySeverity);
+  const watch: NeedsMeRow[] = [
     ...queue.needs_attention.map((r) => rowFromQueue(r, health.get(r.impl.id)?.level, today)),
-  ].sort((a, b) => a.rank - b.rank || a.name.localeCompare(b.name));
+    ...dealInbox.filter((d) => !d.unclaimed && d.mine).map((d) => rowFromDeal(d, today)),
+  ].sort(bySeverity);
 
   // COMING UP: this week by day and next week folded — booked calls, planned
   // calls, commitments due, and target launches. The tile counts seven days.
@@ -244,6 +254,7 @@ export function todayFor(input: TodayInput): Today {
       onTrack: queue.moving.length,
     },
     needsMe,
+    watch,
     comingUp,
     book: {
       total,
