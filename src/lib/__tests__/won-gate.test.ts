@@ -28,7 +28,7 @@ describe("the Closed Won gate", () => {
   it("writes a sentence the page can read back", () => {
     const msg = wonGateMessage(["notes", "sow"]);
     expect(msg.startsWith(WON_GATE_PREFIX)).toBe(true);
-    expect(msg).toContain("no a Gong brief or call note and no the signed SOW or contract");
+    expect(msg).toContain("the deal has no Gong brief or call note and no signed SOW or contract.");
     expect(parseWonGate(msg)).toEqual(["notes", "sow"]);
     expect(parseWonGate(wonGateMessage(["sow"]))).toEqual(["sow"]);
     expect(parseWonGate("Deal not found")).toBeNull();

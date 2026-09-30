@@ -16,8 +16,8 @@ export const COMPLETE_GATE_PREFIX = "Not ready for Onboarding Complete:";
 export type WonGateMissing = "notes" | "sow" | "checklist";
 
 export const WON_GATE_LABEL: Record<WonGateMissing, string> = {
-  notes: "a Gong brief or call note",
-  sow: "the signed SOW or contract",
+  notes: "Gong brief or call note",
+  sow: "signed SOW or contract",
   checklist: "every checklist step done",
 };
 
