@@ -32,7 +32,10 @@ export async function dealFactsFor(
           "id,name,stage,stage_entered_at,intake,sow_document_path,sow_reference,welcome_share_url",
         )
         .in("id", ids),
-      db().from("portal_gong_reports").select("account_id,content_md").in("account_id", ids),
+      db()
+        .from("portal_gong_reports")
+        .select("account_id,content_md,call_date,created_at")
+        .in("account_id", ids),
       db()
         .from("portal_briefs")
         .select("account_id,structured_json,created_at")
@@ -51,10 +54,15 @@ export async function dealFactsFor(
         .in("account_id", ids),
     ]);
 
-  const notesByDeal = new Map<string, string[]>();
-  for (const n of (notes ?? []) as Array<{ account_id: string; content_md: string | null }>) {
+  const notesByDeal = new Map<string, Array<{ text: string; date: string | null }>>();
+  for (const n of (notes ?? []) as Array<{
+    account_id: string;
+    content_md: string | null;
+    call_date: string | null;
+    created_at: string | null;
+  }>) {
     const list = notesByDeal.get(n.account_id) ?? [];
-    if (n.content_md) list.push(n.content_md);
+    if (n.content_md) list.push({ text: n.content_md, date: n.call_date ?? n.created_at ?? null });
     notesByDeal.set(n.account_id, list);
   }
   const briefByDeal = new Map<string, unknown>();

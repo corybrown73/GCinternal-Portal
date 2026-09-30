@@ -124,10 +124,13 @@ const NOT_YET =
 const DEVICES = /\b(ipads?|tablets?|devices?|phones?|hardware|laptops?|handhelds?)\b/i;
 const TOLD = /\b(told|quoted|promised|said|expects?|expectation|understood|thinks?|believes?)\b/i;
 
+/** A note as pasted, and the day of the call it records (for "in two weeks"). */
+export type NoteInput = string | { text: string; date: string | null };
+
 export function watchOutsFor(args: {
   brief: unknown;
   /** The pasted call notes and account maps, verbatim. Read first: a quote is a real sentence. */
-  notes?: string[];
+  notes?: NoteInput[];
   intake: IntakeAnswers;
   timeline: Timeline;
 }): WatchOut[] {
@@ -141,8 +144,17 @@ export function watchOutsFor(args: {
   // The notes as pasted come first, so a row quotes what was actually said.
   // The brief's own sentences follow for anything only its reading caught;
   // a row already found from the notes wins the dedupe.
-  const callSentences: Array<{ s: string; source: "calls" | "brief" }> = [
-    ...sentencesFrom(args.notes ?? []).map((s) => ({ s, source: "calls" as const })),
+  const noteInputs = (args.notes ?? []).map((n) =>
+    typeof n === "string" ? { text: n, date: null } : n,
+  );
+  const callSentences: Array<{ s: string; source: "calls" | "brief"; anchor?: string }> = [
+    ...noteInputs.flatMap((n) =>
+      sentencesFrom([n.text]).map((s) => ({
+        s,
+        source: "calls" as const,
+        ...(n.date ? { anchor: n.date.slice(0, 10) } : {}),
+      })),
+    ),
     ...sentencesFrom([
       ...(b?.risks_open_items ?? []),
       ...(b?.process_gaps ?? []),
@@ -213,7 +225,34 @@ export function watchOutsFor(args: {
   const readCallDates = typed.brief === null;
   const readSowDates = typed.sow === null;
 
-  for (const [i, { s, source }] of callSentences.entries()) {
+  for (const [i, { s, source, anchor }] of callSentences.entries()) {
+    // "Go-live in two weeks", said on the call: two weeks from the call, or
+    // from the close when the note carries no date. Relative statements are
+    // never in the typed dates, so this runs whatever the brief found.
+    const rel = relativeGoLive(s, anchor ?? t.closeDate);
+    if (rel && !ABSENCE.test(s)) {
+      if (fullLive > rel.iso) {
+        out.push({
+          key: `golive-rel-${i}`,
+          type: "deadline",
+          severity: "conflict",
+          title: `The calls say live in ${rel.said} (${shortDay(rel.iso)}); the plan has everything live ${shortDay(fullLive)}`,
+          detail: `${daysBetween(rel.iso, fullLive)} days after what they said${anchor ? "" : ", counted from the close because the note has no call date"}. Move the work, or reset the expectation on the kickoff.`,
+          quote: s,
+          source,
+        });
+      } else {
+        out.push({
+          key: `golive-rel-ok-${i}`,
+          type: "deadline",
+          severity: "ok",
+          title: `The calls say live in ${rel.said}: the plan has everything live ${shortDay(fullLive)}, in time`,
+          detail: "Met, as planned today.",
+          quote: s,
+          source,
+        });
+      }
+    }
     const dates = readCallDates ? datesIn(s, t.closeDate) : [];
     if (dates.length && DEADLINE.test(s) && !ABSENCE.test(s)) {
       const deadline = dates[0]!;
@@ -449,6 +488,27 @@ export function datesIn(sentence: string, anchor: string): Found[] {
 function monthOf(word: string): number | undefined {
   const w = word.toLowerCase().replace(".", "");
   return MONTHS[w] ?? MONTHS[w.slice(0, 3)];
+}
+
+const GO_LIVE_REL =
+  /\b(go[- ]?live|be live|live|launch(?:ed|ing)?|in production|up and running|rolled? out|rollout)\b[^.;]{0,40}?\b(?:in|within)\s+(\d+|a|an|one|two|three|four|five|six|seven|eight|ten|twelve)\s*(days?|weeks?|months?)\b/i;
+
+/** "go-live in 2 weeks" → the day that is, from the anchor, and the words said. */
+export function relativeGoLive(
+  sentence: string,
+  anchor: string,
+): { iso: string; said: string } | null {
+  const m = GO_LIVE_REL.exec(sentence);
+  if (!m) return null;
+  const raw = m[2]!.toLowerCase();
+  const n = raw === "a" || raw === "an" ? 1 : num(raw);
+  if (!n) return null;
+  const unit = m[3]!.toLowerCase();
+  const days = unit.startsWith("day") ? n : unit.startsWith("week") ? n * 7 : n * 30;
+  return {
+    iso: addDays(anchor, days),
+    said: `${n} ${unit.replace(/s$/, "")}${n === 1 ? "" : "s"}`,
+  };
 }
 
 function weeksIn(s: string): { min: number; max: number } | null {

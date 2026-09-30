@@ -136,7 +136,10 @@ function WorkspaceBody({
     deal.briefs.find((b) => b.status === "complete" && b.generator === "llm") ?? null;
   const watchOuts = watchOutsFor({
     brief: latestBrief?.structured_json ?? null,
-    notes: deal.gong_reports.map((r) => r.content_md),
+    notes: deal.gong_reports.map((r) => ({
+      text: r.content_md,
+      date: r.call_date ?? r.created_at ?? null,
+    })),
     intake,
     timeline,
   });
