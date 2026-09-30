@@ -31,25 +31,28 @@ let warned = false;
  * exists to make visible — and it is invisible in every other way.
  */
 export function appUrl(): string {
-  const configured = process.env["APP_URL"];
+  // PUBLIC_APP_URL is the one setting: the domain customers know. APP_URL is
+  // its older name and still honoured. Neither ever comes from the request:
+  // a link minted while somebody browsed the deployment's vercel.app alias
+  // went out to customers on that alias for weeks.
+  const configured = process.env["PUBLIC_APP_URL"] || process.env["APP_URL"];
   if (configured) return configured.replace(/\/+$/, "");
 
-  // Inside a request, the host the person is using is the right origin: a
-  // link minted on gcinternalportal.com should not point at the deployment's
-  // vercel.app alias because the variable was never set.
-  const fromRequest = requestOrigin();
-  // A request that reached the deployment's own vercel.app alias still mints
-  // links on the production domain: Vercel names that domain itself.
+  // Vercel names the production domain itself; on any Vercel deploy that is
+  // the right origin, whatever host the request came in on.
   const production = process.env["VERCEL_PROJECT_PRODUCTION_URL"];
-  if (fromRequest && /\.vercel\.app$/i.test(new URL(fromRequest).hostname) && production) {
+  if (production) {
     return `https://${production.replace(/^https?:\/\//, "").replace(/\/+$/, "")}`;
   }
+
+  // Outside Vercel and unconfigured: the request's own host, never an alias.
+  const fromRequest = requestOrigin();
   if (fromRequest) return fromRequest;
 
   if (!warned && process.env["NODE_ENV"] === "production") {
     warned = true;
     console.error(
-      "APP_URL_UNSET every emailed and shared link will point at " +
+      "PUBLIC_APP_URL_UNSET every emailed and shared link will point at " +
         `${DEV_FALLBACK}, which works only on the machine that generated it.`,
     );
   }
