@@ -101,3 +101,18 @@ export const claimDealFn = createServerFn({ method: "POST" })
     const { claimDeal } = await import("./assignment.server");
     return claimDeal(context.profile.id, data.dealId);
   });
+
+/**
+ * Take a person off the team. Soft: `active` goes false, so every picker,
+ * the pool and the owner lists stop showing them while past assignments
+ * and history keep the name. Refused while they still own accounts or have
+ * a login — reassign, or remove the user under Admin → Users, first.
+ */
+export const removeTeamMember = createServerFn({ method: "POST" })
+  .middleware([requireInternalAuth])
+  .inputValidator((data: unknown) => z.object({ teamMemberId: z.string().uuid() }).parse(data))
+  .handler(async ({ data, context }) => {
+    assertCanManage(context.profile);
+    const { removeTeamMember: remove } = await import("./assignment.server");
+    return remove(data.teamMemberId);
+  });

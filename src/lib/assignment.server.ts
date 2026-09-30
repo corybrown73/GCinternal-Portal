@@ -702,3 +702,50 @@ async function notifyPoolToClaim(
 function escapeHtml(s: string): string {
   return s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 }
+
+/** See assignment.functions.ts removeTeamMember. */
+export async function removeTeamMember(
+  teamMemberId: string,
+): Promise<{ removed: true; name: string }> {
+  const { data: member } = await db()
+    .from("team_members")
+    .select("id,name")
+    .eq("id", teamMemberId)
+    .maybeSingle();
+  if (!member) throw new Error("That person is not on the team.");
+  const name = String(member.name);
+
+  const [{ count: owned }, { data: login }] = await Promise.all([
+    db()
+      .from("implementations")
+      .select("id", { count: "exact", head: true })
+      .eq("owner_id", teamMemberId)
+      .neq("current_stage", "graduate-to-cs"),
+    db().from("portal_profiles").select("id").eq("team_member_id", teamMemberId).maybeSingle(),
+  ]);
+  if ((owned ?? 0) > 0) {
+    throw new Error(
+      `${name} still owns ${owned} account${owned === 1 ? "" : "s"}. Reassign them first, then remove.`,
+    );
+  }
+  if (login) {
+    throw new Error(`${name} has a login. Remove the user under Admin → Users first.`);
+  }
+
+  const { error } = await db()
+    .from("team_members")
+    .update({ active: false })
+    .eq("id", teamMemberId);
+  if (error) throw new Error(`Could not remove ${name}: ${error.message}`);
+  // Out of the rotation too, so the rule never picks a name that is gone.
+  await db().from("portal_assignment_pool").delete().eq("team_member_id", teamMemberId);
+  await audit({
+    actor_type: "user",
+    actor_id: null,
+    action: "team.member_removed",
+    entity_type: "team_member",
+    entity_id: teamMemberId,
+    payload: { name },
+  });
+  return { removed: true, name };
+}

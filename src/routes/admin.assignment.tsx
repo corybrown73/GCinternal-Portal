@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
+import { Trash2 } from "lucide-react";
+import { ask } from "@/components/ui/ask";
 
 import { PageBody, PageHeader } from "@/components/page";
 import { Panel } from "@/components/record";
@@ -10,6 +12,7 @@ import {
   getAssignmentSettings,
   saveAssignmentRules,
   setAssignmentPoolMember,
+  removeTeamMember,
 } from "@/lib/assignment.functions";
 import { fmtDateTime } from "@/lib/hub-format";
 import { cn } from "@/lib/utils";
@@ -37,6 +40,7 @@ function AssignmentPage() {
   const load = useServerFn(getAssignmentSettings);
   const save = useServerFn(saveAssignmentRules);
   const setMember = useServerFn(setAssignmentPoolMember);
+  const remove = useServerFn(removeTeamMember);
   const q = useQuery({ queryKey: ["assignment-settings"], queryFn: () => load() });
   const [rules, setRules] = useState<AssignmentRules | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -58,6 +62,16 @@ function AssignmentPage() {
       setMember({ data: args }),
     onMutate: () => setError(null),
     onSuccess: () => void qc.invalidateQueries({ queryKey: ["assignment-settings"] }),
+    onError: (e) => setError((e as Error).message),
+  });
+
+  const removeM = useMutation({
+    mutationFn: (teamMemberId: string) => remove({ data: { teamMemberId } }),
+    onMutate: () => setError(null),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["assignment-settings"] });
+      void qc.invalidateQueries({ queryKey: ["team-options"] });
+    },
     onError: (e) => setError((e as Error).message),
   });
 
@@ -103,6 +117,7 @@ function AssignmentPage() {
                   <th className="px-3 py-1.5">Carrying ({rules?.window_days ?? 30}d)</th>
                   <th className="px-3 py-1.5">Last handed</th>
                   <th className="px-3 py-1.5">Order</th>
+                  <th className="px-3 py-1.5" />
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
@@ -170,6 +185,26 @@ function AssignmentPage() {
                           {p.rank === 1 ? "Next" : `#${p.rank}`}
                         </span>
                       ) : null}
+                    </td>
+                    <td className="px-3 py-1.5 text-right">
+                      <button
+                        type="button"
+                        className="inline-flex items-center gap-1 rounded-sm border border-border px-1.5 py-0.5 text-[11px] text-muted-foreground hover:border-destructive/50 hover:text-destructive disabled:opacity-50"
+                        disabled={removeM.isPending}
+                        title="Take this person off the team"
+                        onClick={async () => {
+                          const ok = await ask({
+                            title: `Remove ${p.name} from the team?`,
+                            body: "They leave every picker and the rotation. Past assignments and history keep their name. Someone who still owns accounts, or has a login, has to be reassigned or removed under Admin → Users first.",
+                            confirmLabel: "Remove",
+                            cancelLabel: "Keep",
+                            destructive: true,
+                          });
+                          if (ok) removeM.mutate(p.teamMemberId);
+                        }}
+                      >
+                        <Trash2 className="h-3 w-3" /> Remove
+                      </button>
                     </td>
                   </tr>
                 ))}
