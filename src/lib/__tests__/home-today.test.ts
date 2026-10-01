@@ -45,7 +45,7 @@ function row(over: Partial<QueueRow> = {}): QueueRow {
     reason: "Validation is 4 days behind plan. Customer feedback was due Sep 25.",
     impact: "",
     next_action: "Follow up with customer",
-    dependency: { party: "none", reason: "", since: null, source: null },
+    dependency: { party: "none", reason: "", since: null, source: null, owner: null, task: "" },
     tab: "overview",
     rank: 1.8,
     facts: {
@@ -120,6 +120,8 @@ describe("Today", () => {
         reason: "Awaiting approval",
         since: null,
         source: "approvals",
+        owner: null,
+        task: "approve",
       },
     });
     const t = todayFor(
@@ -162,6 +164,7 @@ describe("Today", () => {
             status: "open",
             committed_to: "customer",
             owner_name: null,
+            owner_role: null,
             implementation_id: "i1",
             customer_id: "c1",
             customer_name: "FGP Manufacturing",

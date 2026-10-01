@@ -36,6 +36,7 @@ export type CommitmentRow = {
   status: string;
   committed_to: string | null;
   owner_name: string | null;
+  owner_role: string | null;
   implementation_id: string;
   customer_id: string;
   customer_name: string;
@@ -418,6 +419,7 @@ export type TechnicalSolutionDetail = {
     configuration_details: string | null;
     owner_id: string | null;
     owner_name: string | null;
+    owner_role: string | null;
     created_at: string;
     updated_at: string | null;
   };

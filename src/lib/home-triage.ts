@@ -142,6 +142,68 @@ export function triageRow(impl: ImplementationRow, bundle: TriageBundle | undefi
   });
 }
 
+/**
+ * The same triage Home runs, for one implementation already loaded on its
+ * own Customer 360 page — so the two surfaces can never disagree about
+ * what's exceptional here. Pure, viewer-agnostic, exactly like `triageRow`
+ * itself: no login, role or "current user" enters this function.
+ *
+ * The one thing Home has that a single Customer 360 load doesn't: `DealFacts`
+ * (the presale checklist/watch-out layer), which needs its own query this
+ * page does not run today. Its absence only changes the *pre-kickoff*
+ * fallback reason; every signal-based branch — risks, issues, escalations,
+ * commitments, milestones, the launch date, the solution-acceptance gate —
+ * reads the exact same way either side.
+ */
+export function triageRowForCustomer360(record: Customer360): QueueRow | null {
+  const impl = record.implementation;
+  if (!impl) return null;
+
+  const implRow: ImplementationRow = {
+    id: impl.id,
+    name: impl.name,
+    customer_id: record.customer.id,
+    customer_name: record.customer.name,
+    segment: record.customer.segment,
+    industry: record.customer.industry,
+    arr: impl.deal_arr ?? record.customer.arr,
+    current_stage: impl.current_stage,
+    deal_stage: impl.deal_stage,
+    deal_id: impl.deal_id,
+    stage_entered_at: impl.stage_entered_at,
+    status: impl.status,
+    health_recorded: impl.health_recorded,
+    health_recorded_reason: impl.health_recorded_reason,
+    owner_name: impl.owner_name,
+    tier: impl.tier,
+    target_launch_date: impl.target_launch_date,
+    actual_launch_date: impl.actual_launch_date,
+    overdue_commitments: (record.commitments ?? []).filter(
+      (c: any) => c.due_date && isOverdue(c.due_date),
+    ).length,
+    open_escalations: (record.escalations ?? []).filter(
+      (e: any) => (e.status ?? "").toLowerCase() !== "resolved",
+    ).length,
+  };
+
+  const bundle: TriageBundle = {
+    implementation_id: impl.id,
+    commitments: record.commitments ?? [],
+    risks: record.risks ?? [],
+    issues: record.issues ?? [],
+    escalations: record.escalations ?? [],
+    milestones: record.milestones ?? [],
+    decisions: record.decisions ?? [],
+    success_criteria: record.success_criteria ?? [],
+    technical_solutions: record.technical_solutions ?? [],
+    approvals: record.approvals ?? [],
+    adoption: record.adoption ?? [],
+    deal: null,
+  };
+
+  return triageRow(implRow, bundle);
+}
+
 /** The row the logged signals call for, or null when none of them fires. */
 function signalRow(impl: ImplementationRow, bundle: TriageBundle | undefined): QueueRow | null {
   const record = asRecord(bundle);
@@ -190,6 +252,10 @@ function signalRow(impl: ImplementationRow, bundle: TriageBundle | undefined): Q
       impact: impactLine(impl, `escalation open ${daysSince(severeEscalation.raised_at) ?? 0}d`),
       record,
       bundle,
+      // Without this, next_action fell through to nextAction(), which never
+      // reads escalations — "Next action not recorded" next to a live
+      // escalation. Same signal driving `reason` now drives `next` too.
+      next: `Resolve the escalation — ${severeEscalation.title}`,
     });
   }
   if (impl.status === "blocked") {
@@ -198,6 +264,7 @@ function signalRow(impl: ImplementationRow, bundle: TriageBundle | undefined): Q
       impact: impactLine(impl, `${stalledDays}d in stage`),
       record,
       bundle,
+      next: `Resolve it — ${whatMattersNow(record)}`,
     });
   }
   if (criticalRisk) {
@@ -209,6 +276,7 @@ function signalRow(impl: ImplementationRow, bundle: TriageBundle | undefined): Q
       ),
       record,
       bundle,
+      next: `Mitigate the critical risk — ${criticalRisk.title}`,
     });
   }
   if (customerFacingOverdue) {
@@ -254,6 +322,7 @@ function signalRow(impl: ImplementationRow, bundle: TriageBundle | undefined): Q
       impact: impactLine(impl, midRisk.impact ?? `owner ${midRisk.owner_name ?? "unassigned"}`),
       record,
       bundle,
+      next: `Address the risk — ${midRisk.title}`,
     });
   }
   if (midIssue) {
@@ -262,6 +331,7 @@ function signalRow(impl: ImplementationRow, bundle: TriageBundle | undefined): Q
       impact: impactLine(impl, `owner ${midIssue.owner_name ?? "unassigned"}`),
       record,
       bundle,
+      next: `Resolve the issue — ${midIssue.title}`,
     });
   }
   if (overdueCommitment) {
@@ -287,6 +357,9 @@ function signalRow(impl: ImplementationRow, bundle: TriageBundle | undefined): Q
       impact: impactLine(impl, `threshold ${STAGE_FLAG_DAYS}d`),
       record,
       bundle,
+      next: csStalled
+        ? "Confirm whether implementation still needs to be involved"
+        : `Find out what's holding ${dealStageLabel(impl.deal_stage)} and unstick it`,
     });
   }
   if (missedMilestone) {
@@ -297,6 +370,7 @@ function signalRow(impl: ImplementationRow, bundle: TriageBundle | undefined): Q
       impact: impactLine(impl, `stage ${stageLabel(missedMilestone.stage ?? impl.current_stage)}`),
       record,
       bundle,
+      next: `Revisit the missed milestone — ${missedMilestone.name}`,
     });
   }
   if (soonCommitment) {
@@ -318,6 +392,7 @@ function signalRow(impl: ImplementationRow, bundle: TriageBundle | undefined): Q
       ),
       record,
       bundle,
+      next: `Check in on the at-risk milestone — ${atRiskMilestone.name}`,
     });
   }
   const valueGap = proveValueGapSummary(bundle?.success_criteria, impl.current_stage);
@@ -332,6 +407,7 @@ function signalRow(impl: ImplementationRow, bundle: TriageBundle | undefined): Q
       ),
       record,
       bundle,
+      next: "Close the value-proof gap on the unproven success criteria",
     });
   }
   // Solution acceptance is the only thing standing between this implementation
@@ -356,6 +432,7 @@ function signalRow(impl: ImplementationRow, bundle: TriageBundle | undefined): Q
       impact: impactLine(impl, `${stalledDays}d in ${dealStageLabel(impl.deal_stage)}`),
       record,
       bundle,
+      next: `Resolve it — ${whatMattersNow(record)}`,
     });
   }
 

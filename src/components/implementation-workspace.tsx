@@ -32,7 +32,9 @@ import { dealValue } from "@/lib/deal-value";
 import { fmtMoney } from "@/lib/hub-format";
 import { watchOutsFor } from "@/lib/watch-outs";
 import { dealQuery, type DealData } from "@/lib/deal-query";
+import { getDealPulseFn } from "@/lib/deal-pulse.functions";
 import { addJournalEntry } from "@/lib/hub.functions";
+import { triageRowForCustomer360 } from "@/lib/home-triage";
 import type { Customer360 } from "@/lib/hub-types";
 import { readIntake, type IntakeAnswers } from "@/lib/intake-answers";
 import { JOURNAL_KIND_LABEL, JOURNAL_KINDS, type JournalKind } from "@/lib/journal-input";
@@ -163,6 +165,7 @@ function WorkspaceBody({
 
   return (
     <div className="space-y-4 px-6 py-4">
+      <ExceptionBanner record={record} dealId={dealId} />
       <WhereBar
         ws={ws}
         flow={flow}
@@ -194,6 +197,56 @@ function WorkspaceBody({
         </div>
       </div>
     </div>
+  );
+}
+
+/**
+ * The one exceptional thing, when there is one — the same `triageRow` Home
+ * runs for this implementation, so the two surfaces can never disagree.
+ *
+ * Deliberately additive, never a second "next step": the checklist below
+ * (`NowPanel`, from `workspaceFor`) answers "what's the normal next
+ * procedural step" and keeps answering it exactly as before. This banner
+ * answers a different question — "is something exceptional happening that
+ * should interrupt that normal flow" — and says nothing when the answer is
+ * no (`bucket === "moving"`).
+ *
+ * The deal-pulse hint underneath is supporting context, not an instruction:
+ * it only ever explains the headline above it, never competes with it.
+ */
+function ExceptionBanner({ record, dealId }: { record: Customer360; dealId: string }) {
+  const row = triageRowForCustomer360(record);
+  const pulse = useQuery({
+    queryKey: ["deal-pulse", dealId],
+    queryFn: () => getDealPulseFn({ data: { dealId } }),
+  });
+
+  if (!row || row.bucket === "moving") return null;
+
+  const guide = pulse.data?.next ?? null;
+
+  return (
+    <section
+      className="rounded-lg border border-status-risk/40 bg-status-risk/5 px-4 py-3"
+      aria-label="Needs attention"
+    >
+      <p className="text-[13px] font-semibold tracking-tight text-foreground">{row.reason}</p>
+      {row.impact ? <p className="mt-0.5 text-[12px] text-muted-foreground">{row.impact}</p> : null}
+      {row.dependency.party !== "none" ? (
+        <p className="mt-1 text-[12px] text-muted-foreground">{row.dependency.reason}</p>
+      ) : null}
+      {guide ? (
+        <p className="mt-2 text-[12px] italic text-muted-foreground">
+          {guide.label}: {guide.hint}
+        </p>
+      ) : null}
+      <Link
+        to="/how-it-works"
+        className="mt-1.5 inline-flex items-center gap-1 text-[12px] font-medium text-primary hover:underline"
+      >
+        How this works <ArrowRight className="h-3 w-3" />
+      </Link>
+    </section>
   );
 }
 

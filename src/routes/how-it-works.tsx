@@ -173,7 +173,7 @@ function HowItWorksPage() {
         </Panel>
         <div className="grid gap-4 xl:grid-cols-2">
           {ROLES.map((r) => (
-            <Panel key={r.key} title={r.who} meta={r.when}>
+            <Panel key={r.key} id={`role-${r.key}`} title={r.who} meta={r.when}>
               <ol className="divide-y divide-border">
                 {r.steps.map((s, i) => (
                   <li key={s.title} className="flex gap-3 px-3 py-2.5">

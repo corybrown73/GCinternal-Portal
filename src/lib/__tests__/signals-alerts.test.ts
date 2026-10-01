@@ -23,6 +23,8 @@ const onCustomer: WaitingOn = {
   reason: "Waiting on the customer to approve the SOW (Dana Reed)",
   since: daysAgo(40),
   source: "approvals",
+  owner: { name: "Dana Reed", role: null },
+  task: "approve the SOW (Dana Reed)",
 };
 
 const staleApproval = {
@@ -63,7 +65,14 @@ describe("championGoneQuiet", () => {
     const out = championGoneQuiet(
       {
         impl,
-        dependency: { party: "tis", reason: "Waiting on TIS", since: null, source: "issues" },
+        dependency: {
+          party: "tis",
+          reason: "Waiting on TIS",
+          since: null,
+          source: "issues",
+          owner: null,
+          task: "",
+        },
         approvals: [staleApproval],
         commitments: [],
       },

@@ -205,6 +205,7 @@ export async function loadHome(scope?: ResolvedScope | null): Promise<HomeData> 
         status: c.status,
         committed_to: c.committed_to,
         owner_name: c.owner_id ? (team.get(c.owner_id)?.name ?? null) : null,
+        owner_role: c.owner_id ? (team.get(c.owner_id)?.role ?? null) : null,
         implementation_id: c.implementation_id,
         customer_id: impl?.customer_id ?? "",
         customer_name: impl?.customer_name ?? "Unknown customer",
@@ -341,6 +342,7 @@ export async function loadHome(scope?: ResolvedScope | null): Promise<HomeData> 
   const solutionRows = (allSolutions ?? []).map((s: any) => ({
     ...s,
     owner_name: s.owner_id ? (team.get(s.owner_id)?.name ?? null) : null,
+    owner_role: s.owner_id ? (team.get(s.owner_id)?.role ?? null) : null,
     field_mappings: (allMappings ?? []).filter((m: any) => m.technical_solution_id === s.id),
   }));
   const adoptionRows = (allAreas ?? []).map((a: any) => ({
@@ -351,10 +353,15 @@ export async function loadHome(scope?: ResolvedScope | null): Promise<HomeData> 
       .sort((x: any, y: any) => String(y.observed_at).localeCompare(String(x.observed_at))),
   }));
 
+  // Carries `owner_role` alongside `owner_name` wherever a row has an
+  // `owner_id` — same already-loaded `team` map, no new query, no new column.
+  // This is the one place `waitingOn()`'s owner-resolution reads from for
+  // risks/issues/escalations.
   const withOwner = (rows: any[] | null) =>
     (rows ?? []).map((r: any) => ({
       ...r,
       owner_name: r.owner_id ? (team.get(r.owner_id)?.name ?? null) : null,
+      owner_role: r.owner_id ? (team.get(r.owner_id)?.role ?? null) : null,
     }));
 
   const forImpl = (rows: any[], id: string) => rows.filter((r) => r.implementation_id === id);
@@ -1124,6 +1131,7 @@ export async function loadCustomer360(
     commitments: (commitments.data ?? []).map((c: any) => ({
       ...c,
       owner_name: named(c.owner_id),
+      owner_role: c.owner_id ? (team.get(c.owner_id)?.role ?? null) : null,
       made_by_name: named(c.made_by),
     })),
     decisions: (decisions.data ?? []).map((d: any) => ({
@@ -1137,10 +1145,24 @@ export async function loadCustomer360(
         ),
       ],
     })),
-    risks: (risks.data ?? []).map((r: any) => ({ ...r, owner_name: named(r.owner_id) })),
-    issues: (issues.data ?? []).map((r: any) => ({ ...r, owner_name: named(r.owner_id) })),
+    risks: (risks.data ?? []).map((r: any) => ({
+      ...r,
+      owner_name: named(r.owner_id),
+      owner_role: r.owner_id ? (team.get(r.owner_id)?.role ?? null) : null,
+    })),
+    issues: (issues.data ?? []).map((r: any) => ({
+      ...r,
+      owner_name: named(r.owner_id),
+      owner_role: r.owner_id ? (team.get(r.owner_id)?.role ?? null) : null,
+    })),
+    // `owner_id` is who owns RESOLVING the escalation; `raised_by` is who
+    // raised it — two different people. Only `owner_name`/`owner_role` feed
+    // waitingOn()'s "who has the ball" resolution; `raised_by_name` stays for
+    // the activity trail, unchanged.
     escalations: (escalations.data ?? []).map((r: any) => ({
       ...r,
+      owner_name: r.owner_id ? (team.get(r.owner_id)?.name ?? null) : null,
+      owner_role: r.owner_id ? (team.get(r.owner_id)?.role ?? null) : null,
       raised_by_name: named(r.raised_by),
       related_issue_title: r.related_issue_id
         ? ((issueById.get(r.related_issue_id) as any)?.title ?? null)
@@ -1152,6 +1174,7 @@ export async function loadCustomer360(
     technical_solutions: (solutions.data ?? []).map((s: any) => ({
       ...s,
       owner_name: named(s.owner_id),
+      owner_role: s.owner_id ? (team.get(s.owner_id)?.role ?? null) : null,
       requirement_title: s.requirement_id ? entityLabelFor("requirement", s.requirement_id) : null,
       field_mappings: (mappings.data ?? []).filter((m: any) => m.technical_solution_id === s.id),
     })),
@@ -1435,6 +1458,7 @@ export async function loadTechnicalSolution(id: string): Promise<TechnicalSoluti
       configuration_details: solution.configuration_details,
       owner_id: solution.owner_id ?? null,
       owner_name: named(solution.owner_id),
+      owner_role: solution.owner_id ? (team.get(solution.owner_id)?.role ?? null) : null,
       created_at: solution.created_at,
       updated_at: solution.updated_at,
     },

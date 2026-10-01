@@ -487,7 +487,31 @@ export type WaitingOn = {
   since: string | null;
   /** The table the deciding record came from, e.g. "approvals". */
   source: string | null;
+  /**
+   * The specific person who owns the next move, when the deciding record
+   * names one. Null when only the generic party label (`WAITING_ON_LABEL`)
+   * is known — never guessed, never defaulted to someone.
+   */
+  owner: { name: string; role: string | null } | null;
+  /**
+   * The action alone — "resolve the open escalation: X" — with no "Waiting
+   * on {who}" prefix. `reason` already reads as one sentence; this exists so
+   * a caller showing the owner as its own value (a label, a chip) can get
+   * the task without parsing prose apart from a name that may itself contain
+   * " — " (an owner's role). Never regex the owner back out of `reason`.
+   */
+  task: string;
 };
+
+/**
+ * "Sarah — SE" when a role is known, else just "Sarah". Role is whatever
+ * `team_members.role` (or the decision's own free-text actor) actually says,
+ * run through the existing acronym dictionary — never a label invented here.
+ */
+function formatOwner(name: string, role: string | null | undefined): string {
+  const r = (role ?? "").trim();
+  return r ? `${name} — ${humanize(r)}` : name;
+}
 
 /** Solution statuses that mean technical work is still outstanding. */
 const SOLUTION_OPEN = ["draft", "in_review", "review", "in_progress", "in_build", "build"];
@@ -535,13 +559,14 @@ export function waitingOn(input: WaitingOnInput): WaitingOn {
   );
   if (pendingApproval) {
     const who = pendingApproval.approver_name ?? pendingApproval.approver_role ?? null;
+    const task = `approve ${pendingApproval.title}${who ? ` (${who})` : ""}`;
     return {
       party: "customer",
-      reason: `Waiting on the customer to approve ${pendingApproval.title}${
-        who ? ` (${who})` : ""
-      }`,
+      reason: `Waiting on the customer to ${task}`,
       since: pendingApproval.requested_at ?? null,
       source: "approvals",
+      owner: who ? { name: who, role: null } : null,
+      task,
     };
   }
 
@@ -549,90 +574,139 @@ export function waitingOn(input: WaitingOnInput): WaitingOn {
   for (const s of solutions) {
     const status = String(s.status ?? "").toLowerCase();
     const mappings: any[] = s.field_mappings ?? [];
+    const owner = s.owner_name
+      ? { name: s.owner_name as string, role: s.owner_role ?? null }
+      : null;
+    const who = owner ? formatOwner(owner.name, owner.role) : WAITING_ON_LABEL.technical_solutions;
     const incompleteRequired = mappings.filter(
       (m: any) =>
         m.required === true && !MAPPING_COMPLETE.includes(String(m.status ?? "").toLowerCase()),
     );
     if (incompleteRequired.length) {
+      const task = `finish ${incompleteRequired.length} required field mapping(s) for ${s.title}`;
       return {
         party: "technical_solutions",
-        reason: `Waiting on Technical Solutions to finish ${incompleteRequired.length} required field mapping(s) for ${s.title}`,
+        reason: `Waiting on ${who} to ${task}`,
         since: s.updated_at ?? null,
         source: "field_mappings",
+        owner,
+        task,
       };
     }
     if (SOLUTION_OPEN.includes(status)) {
+      const task = `finish ${s.title} — still ${humanize(status)}`;
       return {
         party: "technical_solutions",
-        reason: `Waiting on Technical Solutions to finish ${s.title} — still ${humanize(status)}`,
+        reason: `Waiting on ${who} to ${task}`,
         since: s.updated_at ?? null,
         source: "technical_solutions",
+        owner,
+        task,
       };
     }
   }
 
-  // 3. Customer-facing commitment already past due.
+  // 3. Customer-facing commitment already past due. `committed_to` is a party
+  // label ("customer"), not a specific contact, so no owner is invented here.
   const customerCommitment = commitments.find(
     (c: any) => isCustomerSide(c.committed_to) && isOverdue(c.due_date),
   );
   if (customerCommitment) {
+    const task = `deliver a commitment past due ${fmtDate(customerCommitment.due_date)}: ${customerCommitment.description}`;
     return {
       party: "customer",
-      reason: `Waiting on the customer for a commitment past due ${fmtDate(customerCommitment.due_date)}: ${customerCommitment.description}`,
+      reason: `Waiting on the customer to ${task}`,
       since: customerCommitment.due_date ?? null,
       source: "commitments",
+      owner: null,
+      task,
     };
   }
 
   // 4. Implementation-side (TIS) work that is open.
   const bySeverity = (rows: any[]) =>
     [...rows].sort((a, b) => severityRank(a.severity) - severityRank(b.severity))[0];
+  const ownerOf = (row: any): { name: string; role: string | null } | null =>
+    row.owner_name ? { name: row.owner_name, role: row.owner_role ?? null } : null;
+  const who = (owner: { name: string; role: string | null } | null) =>
+    owner ? formatOwner(owner.name, owner.role) : WAITING_ON_LABEL.tis;
+
   const esc = bySeverity(escalations);
   if (esc) {
+    const owner = ownerOf(esc);
+    const task = `resolve the open escalation: ${esc.title}`;
     return {
       party: "tis",
-      reason: `Waiting on TIS to resolve the open escalation: ${esc.title}`,
+      reason: `Waiting on ${who(owner)} to ${task}`,
       since: esc.raised_at ?? null,
       source: "escalations",
+      owner,
+      task,
     };
   }
   const issue = bySeverity(issues);
   if (issue) {
+    const owner = ownerOf(issue);
+    const task = `resolve the open issue: ${issue.title}`;
     return {
       party: "tis",
-      reason: `Waiting on TIS to resolve the open issue: ${issue.title}`,
+      reason: `Waiting on ${who(owner)} to ${task}`,
       since: issue.raised_at ?? null,
       source: "issues",
+      owner,
+      task,
     };
   }
   const risk = bySeverity(risks);
   if (risk) {
+    const owner = ownerOf(risk);
+    const task = `act on the open risk: ${risk.title}`;
     return {
       party: "tis",
-      reason: `Waiting on TIS to act on the open risk: ${risk.title}`,
+      reason: `Waiting on ${who(owner)} to ${task}`,
       since: risk.identified_at ?? null,
       source: "risks",
+      owner,
+      task,
     };
   }
   const tisCommitment = commitments.find((c: any) => !isCustomerSide(c.committed_to));
   if (tisCommitment) {
+    const owner = ownerOf(tisCommitment);
+    const task = `close an open commitment: ${tisCommitment.description}`;
     return {
       party: "tis",
-      reason: `Waiting on TIS to close an open commitment: ${tisCommitment.description}`,
+      reason: `Waiting on ${who(owner)} to ${task}`,
       since: tisCommitment.due_date ?? tisCommitment.made_at ?? null,
       source: "commitments",
+      owner,
+      task,
     };
   }
   if (decisions.length) {
+    // decisions.decided_by is free text, not a team_members FK — a name when
+    // someone wrote one, never a resolvable role.
+    const decidedBy = (decisions[0].decided_by ?? "").trim() || null;
+    const owner = decidedBy ? { name: decidedBy, role: null } : null;
+    const task = `resolve an open decision: ${decisions[0].title}`;
     return {
       party: "tis",
-      reason: `Waiting on TIS to resolve an open decision: ${decisions[0].title}`,
+      reason: `Waiting on ${decidedBy ?? WAITING_ON_LABEL.tis} to ${task}`,
       since: decisions[0].decision_date ?? null,
       source: "decisions",
+      owner,
+      task,
     };
   }
 
-  return { party: "none", reason: "No current dependency.", since: null, source: null };
+  return {
+    party: "none",
+    reason: "No current dependency.",
+    since: null,
+    source: null,
+    owner: null,
+    task: "",
+  };
 }
 
 /** Customer 360 adapter — same logic, record-shaped input. */

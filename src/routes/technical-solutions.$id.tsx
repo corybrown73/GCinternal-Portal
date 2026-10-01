@@ -153,8 +153,14 @@ function SolutionDetail() {
               <PrimarySignal
                 label="Waiting on"
                 emphasis="medium"
-                value="Technical Solutions"
-                detail={waiting.reason.replace(/^Waiting on Technical Solutions — /, "")}
+                value={
+                  waiting.owner
+                    ? `${waiting.owner.name}${
+                        waiting.owner.role ? ` — ${humanize(waiting.owner.role)}` : ""
+                      }`
+                    : "Technical Solutions"
+                }
+                detail={waiting.task}
               />
             ) : null}
             <PrimarySignal label="Next action" value={next} />

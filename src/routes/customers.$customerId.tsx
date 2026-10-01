@@ -94,6 +94,7 @@ import {
 } from "@/components/record";
 
 import { getCustomer360 } from "@/lib/hub.functions";
+import { triageRowForCustomer360 } from "@/lib/home-triage";
 import type { Customer360, TraceStep } from "@/lib/hub-types";
 import { dealStageLabel, dealStageProgress } from "@/lib/deal-stage";
 import { LIFECYCLE_STAGES } from "@/lib/lifecycle";
@@ -535,7 +536,12 @@ function Customer360Page() {
             {tab === "plan" ? <OverviewTab record={record} customerId={customerId} /> : null}
             {tab === "resources" ? <ResourcesTab record={record} /> : null}
             {tab === "details" && impl.deal_id ? (
-              <HeaderTrackers record={record} customerId={customerId} tab={tab} />
+              <HeaderTrackers
+                record={record}
+                customerId={customerId}
+                tab={tab}
+                showAttention={false}
+              />
             ) : null}
             {tab === "details" ? <DetailsTab record={record} customerId={customerId} /> : null}
           </div>
@@ -551,12 +557,23 @@ function HeaderTrackers({
   record,
   customerId,
   tab,
+  showAttention = true,
 }: {
   record: Customer360;
   customerId: string;
   tab: TabId;
+  /**
+   * False on the Details tab for a deal-linked project: `ImplementationWorkspace`
+   * (Overview) already shows the same `triageRowForCustomer360` signal as an
+   * exception banner, and repeating it here would be the same fact twice on
+   * two tabs with no cue which one is current.
+   */
+  showAttention?: boolean;
 }) {
   const impl = record.implementation!;
+  // The same engine Home runs for this implementation, so the two surfaces
+  // can never disagree about what's exceptional here.
+  const row = triageRowForCustomer360(record);
   return (
     <>
       <div className="min-w-0 px-6 pt-2.5">
@@ -580,11 +597,13 @@ function HeaderTrackers({
             leading column, so the eye lands on the sentence and the label is
             available without being read. Two rows instead of four, and the
             space it gives back is space the sections below get to use. */}
-      <AttentionSummary
-        now={whatMattersNow(record)}
-        next={nextAction(record, impl)}
-        waiting={waitingOnLine(record)}
-      />
+      {showAttention ? (
+        <AttentionSummary
+          now={row?.reason ?? whatMattersNow(record)}
+          next={row?.next_action ?? nextAction(record, impl)}
+          waiting={waitingOnLine(record)}
+        />
+      ) : null}
     </>
   );
 }
@@ -971,16 +990,24 @@ function AccountDetails({ record, customerId }: { record: Customer360; customerI
             label="Waiting on"
             emphasis="medium"
             value={
-              waiting.party === "none" ? "No current dependency" : WAITING_ON_LABEL[waiting.party]
+              waiting.party === "none"
+                ? "No current dependency"
+                : // The specific person, when the record names one — the
+                  // generic party label only when it does not. Never parsed
+                  // back out of `reason`, which may itself contain " — "
+                  // (the owner's own role).
+                  waiting.owner
+                  ? `${waiting.owner.name}${
+                      waiting.owner.role ? ` — ${humanize(waiting.owner.role)}` : ""
+                    }`
+                  : WAITING_ON_LABEL[waiting.party]
             }
             detail={
               waiting.party === "none"
                 ? undefined
                 : // Phase 6: the wait is dated from the record that decided it
                   // (the approval, the commitment), never from stage entry.
-                  `${waiting.reason.replace(/^Waiting on [^—]+ — /, "")}${
-                    waiting.since ? ` · since ${fmtDate(waiting.since)}` : ""
-                  }`
+                  `${waiting.task}${waiting.since ? ` · since ${fmtDate(waiting.since)}` : ""}`
             }
           />
           {valueGaps.length ? (
