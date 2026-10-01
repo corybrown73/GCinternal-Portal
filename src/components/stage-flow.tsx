@@ -32,6 +32,7 @@ import {
   CORE_MEETINGS,
   DEAL_TYPES,
   completedAfterTick,
+  FLOW_STAGES,
   KICKOFF_CADENCE,
   PREP_ITEMS,
   readingInFlight,
@@ -87,7 +88,7 @@ export function useStageSync(dealId: string, advanceTo: string | null, editable:
     void sync({ data: { dealId } })
       .then((r) => {
         if (r.moved) {
-          setMoved(r.moved === "onboarding_kickoff" ? "Pre-kickoff" : "Onboarding");
+          setMoved(FLOW_STAGES.find((s) => s.stage === r.moved)?.label ?? r.moved);
           void qc.invalidateQueries();
         }
       })
@@ -142,7 +143,9 @@ export function StageFlow({ deal }: { deal: DealData }) {
   // A prospect's own stage has no tasks; its checklist is the Closed Won
   // work that can be done ahead, so that is what opens.
   const shown =
-    viewing ?? (flow.current === "prospect" ? "closed_won" : flow.current) ?? "closed_won";
+    viewing ??
+    (flow.current === "prospect" || flow.current === "negotiate" ? "closed_won" : flow.current) ??
+    "closed_won";
   const stage = flow.stages.find((s) => s.key === shown) ?? flow.stages[0]!;
   // The count is over the required steps — every row listed, optional ones
   // left out and said so — the same set the footer's "to go" counts.
@@ -240,7 +243,7 @@ export function StageFlow({ deal }: { deal: DealData }) {
       {/* WHAT HAPPENS NEXT, always in words. A deal that is not closed says
           so, with the button that closes it; a stage whose tasks are all done
           says where the deal goes now — a folded row is not an answer. */}
-      {flow.current === "prospect" ? (
+      {flow.current === "prospect" || flow.current === "negotiate" ? (
         <NotClosedBar
           deal={deal}
           editable={editable}
@@ -282,11 +285,13 @@ export function StageFlow({ deal }: { deal: DealData }) {
             ? "Onboarding is complete."
             : "Marked from the Onboarding stage once every step there is done."}
         </p>
-      ) : shown === "prospect" ? (
+      ) : shown === "prospect" || shown === "negotiate" ? (
         <p className="px-4 py-3 text-[13px] text-muted-foreground">
-          {flow.current === "prospect"
-            ? "Not closed yet. The Closed Won tasks can be worked ahead; mark the deal won when it is."
-            : "The deal was a prospect before it closed."}
+          {flow.current === "negotiate"
+            ? "Sales is closing. Assign the TIS under Closed Won so they can join the closing call; the other Closed Won tasks can be worked ahead."
+            : flow.current === "prospect"
+              ? "Not closed yet. The Closed Won tasks can be worked ahead; mark the deal won when it is."
+              : "The deal was a prospect before it closed."}
         </p>
       ) : (
         <ol className="divide-y divide-border">
@@ -306,7 +311,8 @@ export function StageFlow({ deal }: { deal: DealData }) {
       {/* The parking lot lives beside the work from the first call on. */}
       {(shown === "pre_kickoff" || shown === "onboarding") &&
       flow.current !== null &&
-      flow.current !== "prospect" ? (
+      flow.current !== "prospect" &&
+      flow.current !== "negotiate" ? (
         <ParkingLot dealId={dealId} editable={editable} />
       ) : null}
     </section>
@@ -416,10 +422,14 @@ function stageFooter(
 ): string {
   if (current === "prospect" && shown === "closed_won")
     return "Moves to Closed Won when the deal is marked won; everything here can be done ahead.";
+  if (current === "negotiate" && shown === "closed_won")
+    return "Assign the TIS now so they can join the closing call. Moves to Closed Won when the deal is marked won; everything else here can be done ahead.";
   if (shown !== current) return "Not the current stage — you can still work ahead.";
   switch (shown) {
     case "prospect":
       return "Moves to Closed Won when the deal is marked won.";
+    case "negotiate":
+      return "Sales is closing. Assign the TIS now; the deal moves to Closed Won when it is marked won.";
     case "closed_won":
       return "Moves to Pre-kickoff when the review is approved.";
     case "field_fusion":
@@ -1234,7 +1244,7 @@ function KickoffBody({
             ? ` (${ZONES.find((z) => z[0] === t.timezone)?.[1] ?? t.timezone})`
             : ""}.{" "}
           <span className="text-foreground">
-            {deal.account.stage === "prospect"
+            {deal.account.stage === "prospect" || deal.account.stage === "negotiate"
               ? "Next: mark the deal Closed Won at the top — it goes straight to Onboarding."
               : deal.account.stage === "closed_won"
                 ? "Next: finish the Closed Won tasks — the deal then goes straight to Onboarding."

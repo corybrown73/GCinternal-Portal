@@ -2467,6 +2467,7 @@ export async function loadDealInbox(scope: ResolvedScope | null): Promise<DealIn
   // whose project was created at the close used to vanish from here while
   // nobody had booked a thing.
   const BEFORE_KICKOFF: ReadonlyArray<string> = [
+    "negotiate",
     "closed_won",
     "field_fusion_setup",
     "onboarding_kickoff",

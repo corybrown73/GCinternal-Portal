@@ -54,7 +54,13 @@ export const DEAL_TYPES = [
 ] as const;
 
 export type FlowStageKey =
-  "prospect" | "closed_won" | "field_fusion" | "pre_kickoff" | "onboarding" | "complete";
+  | "prospect"
+  | "negotiate"
+  | "closed_won"
+  | "field_fusion"
+  | "pre_kickoff"
+  | "onboarding"
+  | "complete";
 
 /**
  * The deal's rail, in order, with the stepper's word for each stage. One
@@ -65,6 +71,7 @@ export type FlowStageKey =
 export const FLOW_STAGES: ReadonlyArray<{ key: FlowStageKey; stage: AccountStage; label: string }> =
   [
     { key: "prospect", stage: "prospect", label: "Prospect" },
+    { key: "negotiate", stage: "negotiate", label: "Negotiate & Finalize" },
     { key: "closed_won", stage: "closed_won", label: "Closed Won" },
     { key: "field_fusion", stage: "field_fusion_setup", label: "Field Fusion setup" },
     { key: "pre_kickoff", stage: "onboarding_kickoff", label: "Pre-kickoff" },
@@ -165,6 +172,8 @@ function flowStageOf(stage: string): FlowStageKey | null {
   switch (stage) {
     case "prospect":
       return "prospect";
+    case "negotiate":
+      return "negotiate";
     case "closed_won":
       return "closed_won";
     case "field_fusion_setup":
@@ -180,7 +189,12 @@ function flowStageOf(stage: string): FlowStageKey | null {
   }
 }
 
-function closedWonTasks(a: IntakeAnswers, input: StageFlowInput, closed: boolean): FlowTask[] {
+function closedWonTasks(
+  a: IntakeAnswers,
+  input: StageFlowInput,
+  /** The TIS can be assigned: the deal is closed, or at Negotiate & Finalize. */
+  assignable: boolean,
+): FlowTask[] {
   const hasNotes = input.gongReports > 0;
   const paperDone = input.hasSow || a.has_sow === false;
   const flowDone = a.path !== null && flowAnswered(a);
@@ -205,12 +219,13 @@ function closedWonTasks(a: IntakeAnswers, input: StageFlowInput, closed: boolean
     {
       key: "assign",
       label: "Assign an owner",
-      hint: "Who runs this onboarding. They get the email with everything below.",
+      hint: "Who runs this onboarding. Assigned at Negotiate & Finalize so they can join the closing call; they get the email with everything below.",
       done: Boolean(input.owner),
       summary: input.owner,
       action: "assign",
-      // The owner is the project's owner, and the project is made at the close.
-      locked: closed ? null : "Assigned once the deal is Closed Won",
+      // Sales brings the TIS in before the close: from Negotiate & Finalize
+      // on. A bare Prospect has nobody to bring in yet.
+      locked: assignable ? null : "Assigned at Negotiate & Finalize or Closed Won",
     },
     {
       key: "notes",
@@ -704,8 +719,8 @@ function graduationChecks(a: IntakeAnswers, t: Timeline): FlowTask[] {
 export function stageFlow(input: StageFlowInput): StageFlow {
   const a = readIntake(input.intake);
   const current = flowStageOf(input.stage);
-  const closed = current !== null && current !== "prospect";
-  const cw = closedWonTasks(a, input, closed);
+  const closed = current !== null && current !== "prospect" && current !== "negotiate";
+  const cw = closedWonTasks(a, input, closed || current === "negotiate");
   const pk = preKickoffTasks(a);
   const ob = onboardingTasks(a, input.timeline);
   // Optional tasks are offered, never waited on.
@@ -714,7 +729,17 @@ export function stageFlow(input: StageFlowInput): StageFlow {
   const stages: StageFlow["stages"] = [
     // Prospect has no tasks of its own: the Closed Won ones can be worked
     // ahead, and the deal moves on when it is marked won.
-    { key: "prospect", label: flowLabel("prospect"), tasks: [], done: closed },
+    {
+      key: "prospect",
+      label: flowLabel("prospect"),
+      tasks: [],
+      done: closed || current === "negotiate",
+    },
+    // Negotiate & Finalize is a pre-close wait only the deals in it pass
+    // through, so it shows on the rail only while the deal is there.
+    ...(current === "negotiate"
+      ? [{ key: "negotiate" as const, label: flowLabel("negotiate"), tasks: [], done: false }]
+      : []),
     { key: "closed_won", label: flowLabel("closed_won"), tasks: cw, done: allDone(cw) },
     ...(current === "field_fusion" || a.path === "field_fusion"
       ? [
@@ -783,7 +808,10 @@ function joinAnd(xs: string[]): string {
 export function nextChecklistTask(input: StageFlowInput): string | null {
   const f = stageFlow(input);
   // A prospect's next task is the Closed Won work it can do ahead.
-  const key = f.current === null || f.current === "prospect" ? "closed_won" : f.current;
+  const key =
+    f.current === null || f.current === "prospect" || f.current === "negotiate"
+      ? "closed_won"
+      : f.current;
   const stage = f.stages.find((s) => s.key === key);
   if (!stage) return null;
   const next = stage.tasks.find((t) => !t.done && !t.locked) ?? stage.tasks.find((t) => !t.done);
@@ -847,20 +875,33 @@ export function nudgesFor(args: {
   const current = args.flow.stages.find((s) => s.key === args.flow.current);
   const next = current?.tasks.find((t) => !t.done)?.label ?? null;
   const unowned =
-    args.stage === "closed_won" &&
+    (args.stage === "closed_won" || args.stage === "negotiate") &&
     !(
       args.flow.stages.find((s) => s.key === "closed_won")?.tasks.find((t) => t.key === "assign")
         ?.done ?? true
     );
 
   if (unowned && args.businessDaysInStage >= 1) {
-    out.push({
-      key: `${visit}:unclaimed`,
-      level: "escalate",
-      to: "managers",
-      subject: `Unclaimed: ${args.name}`,
-      line: `${args.name} closed ${args.businessDaysInStage} business day${args.businessDaysInStage === 1 ? "" : "s"} ago and nobody owns it yet. Assign it, or ask the pool to claim it.`,
-    });
+    const days = `${args.businessDaysInStage} business day${args.businessDaysInStage === 1 ? "" : "s"}`;
+    out.push(
+      args.stage === "negotiate"
+        ? {
+            // The Sales change: a TIS within 24 hours of Negotiate & Finalize,
+            // so they can join the closing call.
+            key: `${visit}:needs_tis`,
+            level: "escalate",
+            to: "managers",
+            subject: `Needs a TIS: ${args.name}`,
+            line: `${args.name} reached Negotiate & Finalize ${days} ago and no TIS is assigned yet. Assign one so they can join the closing call, or ask the pool to claim it.`,
+          }
+        : {
+            key: `${visit}:unclaimed`,
+            level: "escalate",
+            to: "managers",
+            subject: `Unclaimed: ${args.name}`,
+            line: `${args.name} closed ${days} ago and nobody owns it yet. Assign it, or ask the pool to claim it.`,
+          },
+    );
   }
   const level = stuckLevel(args.stage, args.businessDaysInStage);
   if (level !== "ok" && !unowned) {

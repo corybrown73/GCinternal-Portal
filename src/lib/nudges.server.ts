@@ -8,7 +8,13 @@ import { nudgesFor, stageFlow, type Nudge } from "./stage-flow";
 
 const db = () => supabaseAdmin as any;
 
-const WATCHED = ["closed_won", "field_fusion_setup", "onboarding_kickoff", "in_onboarding"];
+const WATCHED = [
+  "negotiate",
+  "closed_won",
+  "field_fusion_setup",
+  "onboarding_kickoff",
+  "in_onboarding",
+];
 
 /**
  * Nudges start with the checklist. A deal that entered its stage before

@@ -65,9 +65,15 @@ export const DEAL_STAGE_OPTIONS: ReadonlyArray<{ value: AccountStage; label: str
 
 /**
  * "Stage N of M" against the pipeline. Field Fusion setup only counts when
- * the deal is in it, because no other deal ever passes through it.
+ * the deal is in it, because no other deal ever passes through it; Negotiate
+ * & Finalize likewise, since it is a pre-close wait, not a step every closed
+ * deal took.
  */
 export function dealStageProgress(stage: AccountStage): { position: number; total: number } {
-  const rail = STAGES.filter((s) => s !== "field_fusion_setup" || stage === "field_fusion_setup");
+  const rail = STAGES.filter(
+    (s) =>
+      (s !== "field_fusion_setup" || stage === "field_fusion_setup") &&
+      (s !== "negotiate" || stage === "negotiate"),
+  );
   return { position: rail.indexOf(stage) + 1, total: rail.length };
 }

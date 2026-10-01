@@ -164,6 +164,7 @@ export const TOOLS: ToolDefinition[] = [
           type: "string",
           enum: [
             "prospect",
+            "negotiate",
             "closed_won",
             "field_fusion_setup",
             "onboarding_kickoff",

@@ -156,10 +156,12 @@ function DealCard({
       </div>
       <p className="mt-0.5 truncate text-[11px] text-muted-foreground/70">
         {deal.owner_name
-          ? deal.owner_name
+          ? `TIS: ${deal.owner_name}`
           : deal.customer_id
             ? "Unclaimed"
-            : (deal.am_owner_name ?? "")}
+            : deal.stage === "negotiate"
+              ? "Needs a TIS"
+              : (deal.am_owner_name ?? "")}
       </p>
     </div>
   );

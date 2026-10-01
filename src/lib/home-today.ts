@@ -237,7 +237,7 @@ export function todayFor(input: TodayInput): Today {
   const counts = new Map<string, number>();
   for (const r of all) counts.set(r.impl.deal_stage, (counts.get(r.impl.deal_stage) ?? 0) + 1);
   const total = all.length;
-  const stages = FLOW_STAGES.filter((s) => s.key !== "prospect")
+  const stages = FLOW_STAGES.filter((s) => s.key !== "prospect" && s.key !== "negotiate")
     .map((s) => ({
       key: s.stage,
       label: s.label,

@@ -309,6 +309,7 @@ function safeName(s: string): string {
 /** Stages a deal may sit in, from `portal_account_stage`. */
 const DEAL_STAGES = [
   "prospect",
+  "negotiate",
   "closed_won",
   "field_fusion_setup",
   "onboarding_kickoff",

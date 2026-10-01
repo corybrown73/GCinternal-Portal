@@ -536,6 +536,7 @@ function Donut({
 /* ----------------------------------------------------------------- stages */
 
 const STAGE_TONE: Record<string, Tone> = {
+  negotiate: "muted",
   closed_won: "muted",
   field_fusion_setup: "info",
   onboarding_kickoff: "info",

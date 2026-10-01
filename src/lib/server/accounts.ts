@@ -6,7 +6,7 @@ import { sfId18 } from "./sf-id";
 import { resolveSalesforceIdWrite } from "./sf-account-match";
 import type { AccountUpsertInput } from "./schemas";
 import type { Account, TransitionSource } from "../presale-types";
-import type { AccountStage } from "../presale-stages";
+import { isPreClose, type AccountStage } from "../presale-stages";
 import { stageOrder } from "../pipeline-stages";
 import { loadPipelineStages } from "../pipeline-stages.server";
 
@@ -54,17 +54,18 @@ export async function transitionStage(
 ): Promise<{ changed: boolean }> {
   const admin = createAdminClient();
 
-  // THE CLOSED WON GATE, for every human move out of Prospect — the board,
-  // the dropdown, the button, a deal created "in Closed Won". One place, so
-  // no surface can forget it; the database function checks the same facts
+  // THE CLOSED WON GATE, for every human move out of a pre-close stage
+  // (Prospect, Negotiate & Finalize) into a closed one — the board, the
+  // dropdown, the button, a deal created "in Closed Won". One place, so no
+  // surface can forget it; the database function checks the same facts
   // again underneath. Integrations are not people and are not gated here.
-  if (ctx.source === "ui" && toStage !== "prospect") {
+  if (ctx.source === "ui" && !isPreClose(toStage)) {
     const { data: cur } = await admin
       .from("portal_accounts")
       .select("stage")
       .eq("id", accountId)
       .maybeSingle();
-    if (cur?.stage === "prospect") {
+    if (isPreClose(cur?.stage as string | undefined)) {
       if (ctx.force) {
         const { forcedNote } = await import("../won-gate");
         note = forcedNote(note);

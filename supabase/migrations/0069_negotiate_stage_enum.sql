@@ -1,0 +1,12 @@
+-- 0069: the Negotiate & Finalize stage, as an enum value.
+--
+-- Sales brings the TIS in before Closed Won: at Salesforce's "Negotiate and
+-- Finalize" a TIS is assigned so they can join the closing call and book the
+-- first meeting. That wait is a pipeline stage of its own, between Prospect
+-- and Closed Won, so the board mirrors Salesforce and the 24-hour assign
+-- window has an anchor. Moves into it are by hand for now; Salesforce later.
+--
+-- This migration contains ONLY the ADD VALUE: a new enum value cannot be used
+-- in the transaction that adds it (see 0056 for the same rule). The pipeline
+-- row and the widened gate live in 0070.
+alter type portal_account_stage add value if not exists 'negotiate' after 'prospect';

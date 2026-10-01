@@ -12,6 +12,7 @@ import {
 } from "@/lib/assignment";
 import type { HandoffNote } from "@/lib/field-fusion";
 import { isTrainingOnly, readIntake } from "@/lib/intake-answers";
+import { isPreClose } from "@/lib/presale-stages";
 
 import { audit } from "./server/audit";
 import { sendEmail } from "./server/email";
@@ -173,7 +174,7 @@ export async function recentAssignments(limit = 30): Promise<AssignmentRow[]> {
 async function dealFacts(dealId: string) {
   const { data: deal } = await db()
     .from("portal_accounts")
-    .select("id,name,arr,intake,customer_id")
+    .select("id,name,arr,intake,customer_id,am_owner_id,stage")
     .eq("id", dealId)
     .maybeSingle();
   if (!deal) throw new Error("Deal not found");
@@ -363,6 +364,23 @@ export async function assignDeal(args: {
     }
   }
 
+  // The seller hears who their TIS is, so the pairing is one email, not a
+  // hunt through the Hub: Sales brings the TIS onto the closing call and
+  // books the first meeting for them.
+  if (deal.am_owner_id) {
+    try {
+      await notifyAe({
+        aeProfileId: String(deal.am_owner_id),
+        assigneeName: chosen.name,
+        dealId: args.dealId,
+        dealName: String(deal.name),
+        preClose: isPreClose(deal.stage as string | null),
+      });
+    } catch (e) {
+      console.error("[assignment] could not email the AE", e);
+    }
+  }
+
   return {
     assigneeName: chosen.name,
     teamMemberId: chosen.teamMemberId,
@@ -449,6 +467,51 @@ async function notifyAssignee(a: {
             ? "Three thirty-minute sessions over two weeks. The Hub shows what to do next at each step."
             : "The Hub shows what to do next at each step — where you are, what is on you, what is on them."
         }</p>
+        <p style="font-size:12px;color:#888">GoCanvas Handoff Hub</p>
+      </div>`,
+  });
+}
+
+/**
+ * Tell the seller who their TIS is. Before the close: bring them onto the
+ * closing call and book the first meeting. After: the TIS takes it from here.
+ */
+async function notifyAe(a: {
+  aeProfileId: string;
+  assigneeName: string;
+  dealId: string;
+  dealName: string;
+  preClose: boolean;
+}) {
+  const { data: ae } = await db()
+    .from("portal_profiles")
+    .select("email,full_name")
+    .eq("id", a.aeProfileId)
+    .maybeSingle();
+  const to = (ae?.email as string | null) ?? null;
+  if (!to) return;
+  const first = ((ae?.full_name as string | null) ?? "").split(" ")[0] || "there";
+  const deal = `${appUrl()}/deals/${a.dealId}`;
+  await sendEmail({
+    kind: "assignment",
+    to,
+    subject: `Your TIS for ${a.dealName}: ${a.assigneeName}`,
+    html: `
+      <div style="font-family:sans-serif;max-width:560px;color:#0a1628">
+        <p style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#039de7;margin:0 0 6px">Implementation</p>
+        <h2 style="margin:0 0 14px;color:#072b57">${esc(a.dealName)}</h2>
+        <p>Hi ${esc(first)} — <b>${esc(a.assigneeName)}</b> is the TIS for this one.</p>
+        ${
+          a.preClose
+            ? `<p>Two things from you before the close:</p>
+        <ol style="line-height:1.7">
+          <li>Bring ${esc(a.assigneeName)} onto the closing call.</li>
+          <li>Book the customer's first implementation meeting for them — ideally on that call — and note the launch date the customer wants.</li>
+        </ol>
+        <p>Then fill in the handoff on the deal: what was bought, what was promised, who the contacts are, and anything still open.</p>`
+            : `<p>They take it from here. The handoff on the deal is where what was bought, promised and left open should live — check it is complete.</p>`
+        }
+        <p style="margin:18px 0"><a href="${deal}" style="background:#12509b;color:#fff;padding:10px 22px;border-radius:6px;text-decoration:none;font-weight:600">Open the deal</a></p>
         <p style="font-size:12px;color:#888">GoCanvas Handoff Hub</p>
       </div>`,
   });
@@ -677,6 +740,10 @@ async function notifyPoolToClaim(
   for (const email of to) {
     try {
       await sendEmail({
+        // An assignment message, not a notification: the rule that holds
+        // notifications back from non-managers would have kept every pool
+        // member who is not a manager from ever seeing it.
+        kind: "assignment",
         to: email,
         subject: `New account to claim: ${deal.dealName}`,
         html: `

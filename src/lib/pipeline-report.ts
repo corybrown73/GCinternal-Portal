@@ -70,6 +70,7 @@ export type Timing = {
 /** The stages a person is working, in order. Prospect and Complete are counted, not chased. */
 const ORDER: AccountStage[] = [
   "prospect",
+  "negotiate",
   "closed_won",
   "field_fusion_setup",
   "onboarding_kickoff",

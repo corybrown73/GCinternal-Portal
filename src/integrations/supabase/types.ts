@@ -3013,6 +3013,7 @@ export type Database = {
     Enums: {
       portal_account_stage:
         | "prospect"
+        | "negotiate"
         | "closed_won"
         | "field_fusion_setup"
         | "onboarding_kickoff"
@@ -3164,6 +3165,7 @@ export const Constants = {
     Enums: {
       portal_account_stage: [
         "prospect",
+        "negotiate",
         "closed_won",
         "field_fusion_setup",
         "onboarding_kickoff",

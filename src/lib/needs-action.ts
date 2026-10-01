@@ -59,8 +59,13 @@ export type ActionReason = {
   next?: string;
 };
 
-/** Stages where a deal is being worked by a person and can be stuck. */
+/**
+ * Stages where a deal is being worked by a person and can be stuck. Negotiate
+ * & Finalize is Sales's wait, not ours: the only thing asked of us there is
+ * the TIS, so it is in the list for that one rule and has no stuck limit.
+ */
 const WORKED: ReadonlyArray<AccountStage> = [
+  "negotiate",
   "closed_won",
   "field_fusion_setup",
   "onboarding_kickoff",
@@ -88,7 +93,22 @@ export function needsAction(deal: DealFacts | null | undefined): ActionReason[] 
     });
   }
 
-  if (!deal.owner_name && deal.business_days_in_stage >= 1 && deal.stage !== "in_onboarding") {
+  if (!deal.owner_name && deal.business_days_in_stage >= 1 && deal.stage === "negotiate") {
+    // The Sales change: a TIS within 24 hours of Negotiate & Finalize.
+    out.push({
+      bucket: "act_now",
+      rank: 1.6,
+      reason: `Needs a TIS · at Negotiate & Finalize ${plural(deal.business_days_in_stage, "business day")}`,
+      impact: "nobody from implementation on the closing call",
+      tab: "overview",
+      next: "Assign a TIS, or ask the pool to claim it",
+    });
+  } else if (
+    !deal.owner_name &&
+    deal.business_days_in_stage >= 1 &&
+    deal.stage !== "in_onboarding" &&
+    deal.stage !== "prospect"
+  ) {
     out.push({
       bucket: "act_now",
       rank: 1.6,
@@ -130,7 +150,8 @@ export function needsAction(deal: DealFacts | null | undefined): ActionReason[] 
   const missing = [!deal.has_notes ? "Gong brief" : null, !deal.has_sow ? "SOW" : null].filter(
     Boolean,
   ) as string[];
-  if (missing.length) {
+  // Before the close the paperwork is still being written; it is asked for at Closed Won.
+  if (missing.length && deal.stage !== "negotiate") {
     out.push({
       bucket: "needs_attention",
       rank: 2.8,

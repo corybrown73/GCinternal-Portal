@@ -18,6 +18,7 @@ import type { AccountStage } from "./presale-stages";
 /** The least the journey can be at this deal stage. */
 const FLOOR: Record<AccountStage, string | null> = {
   prospect: null,
+  negotiate: null,
   closed_won: "handoff",
   field_fusion_setup: "handoff",
   onboarding_kickoff: "handoff",
@@ -28,6 +29,7 @@ const FLOOR: Record<AccountStage, string | null> = {
 /** The most the journey can be at this deal stage. */
 const CEILING: Record<AccountStage, string | null> = {
   prospect: null,
+  negotiate: null,
   closed_won: "handoff",
   field_fusion_setup: "handoff",
   onboarding_kickoff: "handoff",

@@ -54,6 +54,7 @@ export interface PipelineStage {
 
 const DEFAULT_COLORS: Record<AccountStage, StageColor> = {
   prospect: "idle",
+  negotiate: "idle",
   closed_won: "ontrack",
   field_fusion_setup: "risk",
   onboarding_kickoff: "primary",
