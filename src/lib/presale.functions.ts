@@ -692,3 +692,76 @@ export const finishImplementation = createServerFn({ method: "POST" })
     const { finishImplementation: finish } = await import("./presale.server");
     return finish(context.profile.id, data.dealId, data.kind, data.reason);
   });
+
+/* ---------- purchased solutions ---------- */
+
+const ballSchema = z
+  .object({
+    who: z.enum(["us", "customer", "blocked_customer", "blocked_internal"]),
+    person: z.string().trim().max(120).nullable().default(null),
+    date: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/)
+      .nullable()
+      .default(null),
+    note: z.string().trim().max(300).nullable().default(null),
+  })
+  .nullable();
+
+export const updateSolution = createServerFn({ method: "POST" })
+  .middleware([requireDealEditor])
+  .inputValidator((data: unknown) =>
+    z
+      .object({
+        dealId: z.string().uuid(),
+        id: z.string().min(1).max(40),
+        patch: z
+          .object({
+            owner_id: z.string().uuid().nullable().optional(),
+            launch_critical: z.boolean().optional(),
+            acceptance: z.string().trim().max(400).nullable().optional(),
+            due: z
+              .string()
+              .regex(/^\d{4}-\d{2}-\d{2}$/)
+              .nullable()
+              .optional(),
+            feasibility_needed: z.boolean().optional(),
+            modifies_production: z.boolean().optional(),
+            ball: ballSchema.optional(),
+            name: z.string().trim().min(1).max(120).optional(),
+            phase: z.number().int().min(1).max(9).optional(),
+          })
+          .strict(),
+      })
+      .parse(data),
+  )
+  .handler(async ({ data, context }) => {
+    const { updateSolution: update } = await import("./presale.server");
+    return update(context.profile.id, data.dealId, data.id, data.patch);
+  });
+
+export const setSolutionDisposition = createServerFn({ method: "POST" })
+  .middleware([requireDealEditor])
+  .inputValidator((data: unknown) =>
+    z
+      .object({
+        dealId: z.string().uuid(),
+        id: z.string().min(1).max(40),
+        disposition: z
+          .object({
+            kind: z.enum(["accepted", "descoped", "transferred"]),
+            reason: z.string().trim().max(400).nullable(),
+          })
+          .nullable(),
+      })
+      .parse(data),
+  )
+  .handler(async ({ data, context }) => {
+    const { setSolutionDisposition: set } = await import("./presale.server");
+    return set(
+      { profileId: context.profile.id, role: context.profile.role },
+      data.dealId,
+      data.id,
+      data.disposition,
+    );
+  });

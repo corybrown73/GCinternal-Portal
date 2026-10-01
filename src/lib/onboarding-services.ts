@@ -272,6 +272,32 @@ export type ServiceSpec = {
   needs?: string | null;
   /** A known system or product (see onboarding-tools.ts), when it is one. */
   tool?: string | null;
+  /** The person on our side who delivers it (team_members). */
+  owner_id?: string | null;
+  /** Must be Accepted before Operational Go-Live. */
+  launch_critical?: boolean;
+  /** How it will be accepted, in one sentence. */
+  acceptance?: string | null;
+  /** The customer's date for their part. */
+  due?: string | null;
+  /** We do not yet know it can be done. */
+  feasibility_needed?: boolean;
+  /** It changes something already live. */
+  modifies_production?: boolean;
+  /** Who has the ball, when a person set it. */
+  ball?: {
+    who: "us" | "customer" | "blocked_customer" | "blocked_internal";
+    person: string | null;
+    date: string | null;
+    note: string | null;
+  } | null;
+  /** How it ended. */
+  disposition?: {
+    kind: "accepted" | "descoped" | "transferred";
+    at: string;
+    by: string | null;
+    reason: string | null;
+  } | null;
 };
 
 /** What we need from the customer to start this service: theirs if written, else the catalogue's. */
@@ -336,4 +362,191 @@ export function normalizeServices(
     }
   }
   return list;
+}
+
+/* ------------------------------------------------- purchased solutions */
+
+/**
+ * THE OPERATING MODEL'S SOLUTIONS. Every purchased solution — Form Build,
+ * Custom PDF, Integration, Analytics, Other — runs Define → Build → Accept
+ * and ends Accepted, Descoped or Transferred. Each has an owner, a
+ * launch-critical flag (must be Accepted before Operational Go-Live), how it
+ * will be accepted, and who has the ball. A data load and a training block
+ * are services the plan runs, not solutions a customer signs off.
+ *
+ * The four plan steps already stored under `completed["<id>:<step>"]` are
+ * the solution's steps under their model names; nothing is rewritten.
+ */
+export const SOLUTION_KINDS: ReadonlyArray<ServiceKind> = [
+  "paid_form",
+  "custom_pdf",
+  "integration",
+  "analytics",
+  "other",
+];
+
+export function isSolutionKind(kind: ServiceKind): boolean {
+  return SOLUTION_KINDS.includes(kind);
+}
+
+/** The model's word for each kind: a paid form is a Form Build. */
+export const SOLUTION_LABEL: Record<ServiceKind, string> = {
+  paid_form: "Form Build",
+  custom_pdf: "Custom PDF",
+  integration: "Integration",
+  analytics: "Analytics",
+  other: "Other solution",
+  data_load: "Data load",
+  training: "Training",
+};
+
+/** The plan's step keys as the model names them. */
+export const SOLUTION_STEPS: ReadonlyArray<{ key: string; label: string }> = [
+  { key: "kickoff", label: "Define" },
+  { key: "build", label: "Build" },
+  { key: "review", label: "Accept" },
+  { key: "live", label: "Accepted" },
+];
+
+export type SolutionStatus =
+  "feasibility" | "define" | "build" | "accept" | "accepted" | "descoped" | "transferred";
+
+export const SOLUTION_STATUS_LABEL: Record<SolutionStatus, string> = {
+  feasibility: "Feasibility",
+  define: "Define",
+  build: "Build",
+  accept: "Accept — customer tests",
+  accepted: "Accepted",
+  descoped: "Descoped",
+  transferred: "Transferred",
+};
+
+/** Where a solution is: its disposition when it has one, else the first step not done. */
+export function solutionStatus(s: ServiceSpec, completed: Record<string, string>): SolutionStatus {
+  if (s.disposition) return s.disposition.kind;
+  const done = (step: string) => Boolean(completed[`${s.id}:${step}`]);
+  if (done("live")) return "accepted";
+  if (s.feasibility_needed && !completed[`${s.id}:feasible`]) return "feasibility";
+  if (!done("kickoff")) return "define";
+  if (!done("build")) return "build";
+  return "accept";
+}
+
+export type Ball = NonNullable<ServiceSpec["ball"]>;
+
+/**
+ * Who has the ball on a solution. A person's say-so wins; otherwise Define
+ * and Build are ours, Accept is the customer's (dated by their `due`), and
+ * a finished one has no ball to hold.
+ */
+export function solutionBall(
+  s: ServiceSpec,
+  completed: Record<string, string>,
+  ownerName: string | null = null,
+): Ball | null {
+  if (s.ball) return s.ball;
+  const status = solutionStatus(s, completed);
+  if (status === "accepted" || status === "descoped" || status === "transferred") return null;
+  if (status === "accept")
+    return { who: "customer", person: null, date: s.due ?? null, note: null };
+  return { who: "us", person: ownerName, date: null, note: null };
+}
+
+export const BALL_LABEL: Record<Ball["who"], string> = {
+  us: "With us",
+  customer: "With the customer",
+  blocked_customer: "Blocked — customer",
+  blocked_internal: "Blocked — internal",
+};
+
+/** Launch-critical solutions not yet Accepted: the Ready to run gate waits on them. */
+export function launchCriticalOpen(
+  services: ReadonlyArray<ServiceSpec>,
+  completed: Record<string, string>,
+): ServiceSpec[] {
+  return services.filter(
+    (s) =>
+      isSolutionKind(s.kind) &&
+      s.launch_critical === true &&
+      solutionStatus(s, completed) !== "accepted" &&
+      !s.disposition,
+  );
+}
+
+/** Solutions with no ending yet: Implementation Complete waits on every one. */
+export function undispositioned(
+  services: ReadonlyArray<ServiceSpec>,
+  completed: Record<string, string>,
+): ServiceSpec[] {
+  return services.filter(
+    (s) => isSolutionKind(s.kind) && !s.disposition && solutionStatus(s, completed) !== "accepted",
+  );
+}
+
+/**
+ * Foundation A is a new customer getting set up to build, test and run their
+ * first form; B is an existing customer adding something, where we check
+ * what is live first. Every implementation is one or the other.
+ */
+export type Foundation = "A" | "B";
+export function foundationFor(path: string | null | undefined): Foundation {
+  return path === "existing" || path === "dm_conversion" ? "B" : "A";
+}
+
+/**
+ * "What was bought", one line each, as the handoff records it, turned into
+ * solutions on the plan. "Form Build · Daily job report (launch-critical)"
+ * becomes a paid_form named "Daily job report" flagged launch-critical. A
+ * line that matches a solution already on the plan updates its flag and
+ * keeps everything else; nothing is removed here (a person removes).
+ */
+export function servicesFromBought(
+  lines: ReadonlyArray<string>,
+  existing: ReadonlyArray<ServiceSpec>,
+): ServiceSpec[] {
+  const out = [...existing];
+  for (const raw of lines) {
+    const line = raw.trim();
+    if (!line) continue;
+    const critical = /launch[- ]critical|\bmust\b|\*/i.test(line);
+    const text = line
+      .replace(/\(?launch[- ]critical\)?/gi, "")
+      .replace(/\*/g, "")
+      .trim();
+    const kind = kindFromWords(text);
+    const name =
+      text
+        .replace(
+          /^(form build|paid form|custom pdf|pdf|integration|analytics|dashboard|data load|training|other solution|other)\s*[:·—–-]\s*/i,
+          "",
+        )
+        .replace(/[:·—–-]\s*$/, "")
+        .trim() || SOLUTION_LABEL[kind];
+    const key = normalizeServiceKey(name, kind);
+    const i = out.findIndex((s) => normalizeServiceKey(s.name, s.kind) === key);
+    if (i >= 0) {
+      if (critical) out[i] = { ...out[i]!, launch_critical: true };
+      continue;
+    }
+    out.push({
+      id: key.replace(/[^a-z0-9]+/g, "-").slice(0, 40) || `sol-${out.length + 1}`,
+      kind,
+      name,
+      phase: SERVICE_KINDS[kind].defaultPhase,
+      ...(critical ? { launch_critical: true } : {}),
+    });
+  }
+  return out;
+}
+
+function kindFromWords(text: string): ServiceKind {
+  const t = text.toLowerCase();
+  if (/\bpdf\b/.test(t)) return "custom_pdf";
+  if (/form build|paid form|build(ing)? (the|a|their) form|we build/.test(t)) return "paid_form";
+  if (/integrat|\bapi\b|sync|connect|quickbooks|salesforce|workato|netsuite|sage|procore/.test(t))
+    return "integration";
+  if (/analytic|dashboard|report/.test(t)) return "analytics";
+  if (/data load|data import|reference data|\blists?\b/.test(t)) return "data_load";
+  if (/training|session/.test(t)) return "training";
+  return "other";
 }

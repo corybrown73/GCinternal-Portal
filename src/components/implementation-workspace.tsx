@@ -19,6 +19,7 @@ import {
 
 import { MeetingRecap } from "@/components/meeting-recap";
 import { ParkingLot } from "@/components/parking-lot";
+import { SolutionsCard } from "@/components/solutions-card";
 import { TaskBody, useHandoffTick, useStageSync } from "@/components/stage-flow";
 import { When } from "@/components/when";
 import { canEditDeal, useProfile } from "@/lib/auth";
@@ -175,6 +176,7 @@ function WorkspaceBody({
       <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
         <div className="min-w-0 space-y-4">
           <NowPanel ws={ws} deal={deal} intake={intake} editable={editable} timeline={timeline} />
+          <SolutionsCard deal={deal} editable={editable} />
           <NotesPanel record={record} customerId={customerId} />
         </div>
         <div className="space-y-4">

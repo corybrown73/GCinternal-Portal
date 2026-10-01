@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 
+import { SolutionsCard } from "@/components/solutions-card";
 import { TimelinePanel } from "@/components/timeline-panel";
 import { WatchOutsPanel } from "@/components/watch-outs-panel";
 import { canEditDeal, useProfile } from "@/lib/auth";
@@ -47,6 +48,7 @@ export function PlanSection({
   });
   return (
     <>
+      <SolutionsCard deal={deal} editable={editable} />
       <WatchOutsPanel
         rows={watchOuts}
         hasBrief={Boolean(latestBrief) || deal.gong_reports.length > 0}

@@ -47,6 +47,8 @@ export type BoardDeal = Account & {
   handoff_status?: HandoffStatus;
   /** The booked first meeting, YYYY-MM-DD. */
   first_meeting?: string | null;
+  /** Purchased solutions on the plan, and the launch-critical ones still open. */
+  solutions?: { total: number; launch_critical_open: number };
   next_step?: string | null;
   business_days_in_stage?: number;
   stuck?: "ok" | "warn" | "escalate";
@@ -136,6 +138,14 @@ function DealCard({
       {/* What they bought, as marks: the QuickBooks tile says more than
           "integration" and takes less room. */}
       {marks.length ? <MarkRow marks={marks} className="mt-1.5" overrides={toolMarks} /> : null}
+      {deal.solutions && deal.solutions.total > 0 ? (
+        <p className="mt-1 text-[10px] text-muted-foreground">
+          {deal.solutions.total} solution{deal.solutions.total === 1 ? "" : "s"}
+          {deal.solutions.launch_critical_open
+            ? ` · ${deal.solutions.launch_critical_open} launch-critical open`
+            : ""}
+        </p>
+      ) : null}
       {/* The one thing a manager scans for: what this deal is waiting on,
           and whether it has waited too long. Same next task the deal's own
           checklist shows; same limits the nudges use. */}

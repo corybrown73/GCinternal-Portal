@@ -5,6 +5,15 @@ import {
   readIntake,
   type IntakeAnswers,
 } from "./intake-answers";
+import {
+  launchCriticalOpen,
+  normalizeServices,
+  SOLUTION_LABEL,
+  SOLUTION_STATUS_LABEL,
+  solutionStatus,
+  undispositioned,
+  type ServiceSpec,
+} from "./onboarding-services";
 import type { AccountStage } from "./presale-stages";
 import { handoffChecks, missingLine } from "./sales-handoff";
 import { TEAM_ZONE, shortDay, type Timeline } from "./onboarding-timeline";
@@ -131,6 +140,7 @@ export type TaskAction =
   | "kickoff"
   | "field_fusion"
   | "handoff"
+  | "solution"
   | "tick"
   | "graduate";
 
@@ -611,6 +621,7 @@ export function taskKind(t: FlowTask): TaskKind {
     return "readiness";
   if (
     t.key === "closeout" ||
+    t.action === "solution" ||
     t.action === "review" ||
     t.action === "deal_type" ||
     t.action === "assign" ||
@@ -863,6 +874,37 @@ export function tasksByStage(a: IntakeAnswers, t: Timeline | null | undefined): 
       { group: "Operational Go-Live" },
     ),
   );
+  // Purchased solutions: Ready to run waits on every launch-critical one
+  // being Accepted; Implementation Complete waits on every one having an
+  // ending — Accepted, Descoped or Transferred. Read-only here; the work and
+  // the decision live on the Solutions card.
+  const services = normalizeServices(a.timeline.services as ServiceSpec[], a.timeline);
+  for (const s of launchCriticalOpen(services, done)) {
+    out.make_it_yours.push({
+      key: `lc:${s.id}`,
+      label: `${s.name || SOLUTION_LABEL[s.kind]} accepted (launch-critical)`,
+      hint:
+        s.acceptance?.trim() ||
+        "Must be Accepted before Operational Go-Live. Managed on the Solutions card.",
+      done: false,
+      summary: `${SOLUTION_STATUS_LABEL[solutionStatus(s, done)]}`,
+      action: "solution",
+      locked: null,
+      group: "Launch-critical solutions",
+    });
+  }
+  for (const s of undispositioned(services, done)) {
+    out.complete.push({
+      key: `disp:${s.id}`,
+      label: `${s.name || SOLUTION_LABEL[s.kind]}: Accepted, Descoped or Transferred`,
+      hint: "Every purchased solution ends one of three ways; the TIS cannot decide alone. On the Solutions card.",
+      done: false,
+      summary: SOLUTION_STATUS_LABEL[solutionStatus(s, done)],
+      action: "solution",
+      locked: null,
+      group: "Closing out solutions",
+    });
+  }
   return out;
 }
 

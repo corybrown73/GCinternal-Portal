@@ -5,6 +5,7 @@ import { TERM_LABELS } from "./terms";
 import { resolveAccountId, transitionStage, upsertAccount } from "./server/accounts";
 import { accountUpsertSchema } from "./server/schemas";
 import { isOnboardingStage, isStage, STAGE_LABELS, type AccountStage } from "./presale-stages";
+import { isSolutionKind, launchCriticalOpen, normalizeServices } from "./onboarding-services";
 import { MANAGE_ROLES } from "./roles";
 import { handoffChecks } from "./sales-handoff";
 import {
@@ -185,6 +186,8 @@ export interface PipelineDeal extends Account {
   handoff_status: import("./sales-handoff").HandoffStatus;
   /** YYYY-MM-DD of the booked first meeting, once Sales or the TIS has booked it. */
   first_meeting: string | null;
+  /** Purchased solutions on the plan, and how many launch-critical ones are still open. */
+  solutions: { total: number; launch_critical_open: number };
   /** The checklist's next task for the stage the deal is in. */
   next_step: string | null;
   /** Business days in this stage, and whether that is past its limit. */
@@ -319,6 +322,16 @@ export async function loadPipeline(
           intake.timeline.overrides["kickoff"] && intake.timeline.times["kickoff"]
             ? intake.timeline.overrides["kickoff"]!
             : null,
+        solutions: (() => {
+          const svcs = normalizeServices(
+            intake.timeline.services as import("./onboarding-services").ServiceSpec[],
+            intake.timeline,
+          ).filter((s) => isSolutionKind(s.kind));
+          return {
+            total: svcs.length,
+            launch_critical_open: launchCriticalOpen(svcs, intake.timeline.completed).length,
+          };
+        })(),
         // The same next task the deal's checklist shows.
         next_step: nextChecklistTask({
           stage: a.stage,
@@ -2733,6 +2746,25 @@ export async function saveHandoffAnswer(
     by: userId,
     at: new Date().toISOString(),
   });
+  // "What was bought" IS the plan's purchased solutions: each line becomes
+  // one, or flags the one already there.
+  if (key === "bought" && Array.isArray(value)) {
+    const { data: row } = await db()
+      .from("portal_accounts")
+      .select("intake")
+      .eq("id", dealId)
+      .maybeSingle();
+    const { readIntake } = await import("./intake-answers");
+    const { servicesFromBought } = await import("./onboarding-services");
+    const current = readIntake(row?.intake);
+    patch["timeline"] = {
+      ...current.timeline,
+      services: servicesFromBought(
+        value,
+        current.timeline.services as import("./onboarding-services").ServiceSpec[],
+      ),
+    };
+  }
   return saveDealIntake(userId, dealId, patch);
 }
 
@@ -2842,6 +2874,89 @@ export async function finishImplementation(
     entity_type: "account",
     entity_id: dealId,
     payload: { kind, reason: reason ?? null },
+  });
+  return next;
+}
+
+/* ------------------------------------------------------ purchased solutions */
+
+/** One solution's facts changed (validated upstream): merged by id into the plan's services, the rest of the timeline kept. */
+export async function updateSolution(
+  userId: string,
+  dealId: string,
+  id: string,
+  patch: Record<string, unknown>,
+) {
+  const { data: row } = await db()
+    .from("portal_accounts")
+    .select("intake")
+    .eq("id", dealId)
+    .maybeSingle();
+  if (!row) throw new Error("Deal not found");
+  const { readIntake } = await import("./intake-answers");
+  const current = readIntake(row.intake);
+  const services = current.timeline.services.map((s) => (s.id === id ? { ...s, ...patch } : s));
+  if (!services.some((s) => s.id === id)) throw new Error("That solution is not on the plan.");
+  return saveDealIntake(userId, dealId, { timeline: { ...current.timeline, services } });
+}
+
+/**
+ * How a solution ends. Accepted is the evidence it works and anyone on the
+ * team may record it; Descoped and Transferred are decisions the TIS cannot
+ * take alone — a manager or the deal's AM. Null reopens it.
+ */
+export async function setSolutionDisposition(
+  actor: { profileId: string; role: string | null | undefined },
+  dealId: string,
+  id: string,
+  disposition: { kind: "accepted" | "descoped" | "transferred"; reason: string | null } | null,
+) {
+  const { data: row } = await db()
+    .from("portal_accounts")
+    .select("intake, am_owner_id")
+    .eq("id", dealId)
+    .maybeSingle();
+  if (!row) throw new Error("Deal not found");
+  if (disposition && disposition.kind !== "accepted") {
+    const { isManagerRole } = await import("./roles");
+    const isAm = row.am_owner_id && String(row.am_owner_id) === actor.profileId;
+    if (!isManagerRole(actor.role) && !isAm) {
+      throw new Error(
+        "Descoping or transferring a solution is the AM's or a manager's call. Ask them, or record it as Accepted when it works.",
+      );
+    }
+    if (!disposition.reason?.trim())
+      throw new Error("Say why it is being descoped or transferred.");
+  }
+  const { readIntake } = await import("./intake-answers");
+  const current = readIntake(row.intake);
+  const now = new Date().toISOString();
+  const services = current.timeline.services.map((s) =>
+    s.id === id
+      ? {
+          ...s,
+          disposition: disposition
+            ? {
+                kind: disposition.kind,
+                at: now,
+                by: actor.profileId,
+                reason: disposition.reason?.trim() || null,
+              }
+            : null,
+        }
+      : s,
+  );
+  if (!services.some((s) => s.id === id)) throw new Error("That solution is not on the plan.");
+  const next = await saveDealIntake(actor.profileId, dealId, {
+    timeline: { ...current.timeline, services },
+  });
+  await audit({
+    actor_type: "user",
+    actor_id: actor.profileId,
+    action: "deal.solution_disposition",
+    entity_type: "account",
+    entity_id: dealId,
+    payload: { id, disposition },
   });
   return next;
 }

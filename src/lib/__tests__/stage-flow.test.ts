@@ -138,6 +138,8 @@ describe("the stage checklist", () => {
       "grad_admin_built",
       "grad_second",
       "grad_office",
+      // A purchased solution with no ending yet holds Implementation Complete.
+      "disp:qb",
     ]);
     expect(tasks[0]!.done).toBe(true);
     expect(tasks[0]!.label).toMatch(/Training day 1/);
@@ -260,6 +262,7 @@ describe("the new-logo plan: the Implementation Playbook", () => {
       "activate",
       "go_live",
       "closeout",
+      "disp:qb",
     ]);
     expect(f.stages.find((s) => s.key === "make_it_yours")!.tasks.map((x) => x.key)).toEqual([
       "working",

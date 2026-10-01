@@ -617,6 +617,14 @@ export function TaskBody({
       return <BookCoreBody deal={deal} intake={intake} editable={editable} />;
     case "handoff":
       return <HandoffTaskBody task={task} />;
+    case "solution":
+      return (
+        <p className="text-[12px] text-muted-foreground">
+          {task.summary ? `Now: ${task.summary}. ` : ""}
+          Managed on the Purchased solutions card — the owner, the steps, who has the ball, and how
+          it ends.
+        </p>
+      );
     default:
       return null;
   }
