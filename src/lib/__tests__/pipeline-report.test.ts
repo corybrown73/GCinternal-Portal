@@ -46,7 +46,7 @@ const deals: ReportDeal[] = [
     ...base,
     id: "3",
     name: "Miller's",
-    stage: "in_onboarding",
+    stage: "make_it_yours",
     closedAt: "2026-09-01T12:00:00Z",
     onboardingAt: "2026-09-04T12:00:00Z",
   },
@@ -93,7 +93,7 @@ describe("the pipeline report", () => {
   it("reads the same as Markdown and as an email", () => {
     const md = reportMarkdown(r);
     expect(md).toContain("| Closed Won | 1 | 1 | — |");
-    expect(md).toContain("**Kenvirons** — Pre-kickoff, 9 business days");
+    expect(md).toContain("**Kenvirons** — Pre-Kickoff, 9 business days");
     expect(reportHtml(r, "https://x/pipeline")).toContain("Unclaimed (1)");
   });
 });

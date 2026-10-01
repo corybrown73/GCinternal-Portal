@@ -441,7 +441,7 @@ describe("the existing-account path", () => {
       "live",
     ]);
     expect(t.milestones.find((m) => m.key === "kickoff")!.label).toBe(
-      "Stage 1 — Make It Work: the form the integration reads",
+      "Stage 1 — Get it working: the form the integration reads",
     );
     expect(t.milestones.find((m) => m.key === "kickoff")!.minutes).toBe(60);
     expect(t.milestones.filter((m) => m.kind === "call").map((m) => m.day)).toEqual([2, 5, 11]);

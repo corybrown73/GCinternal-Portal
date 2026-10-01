@@ -22,7 +22,7 @@ function impl(over: Partial<ImplementationRow> = {}): ImplementationRow {
     industry: null,
     arr: 24000,
     current_stage: "build",
-    deal_stage: "in_onboarding",
+    deal_stage: "make_it_yours",
     deal_id: "d1",
     stage_entered_at: "2026-09-22T10:00:00Z",
     status: "at_risk",
@@ -51,7 +51,7 @@ function row(over: Partial<QueueRow> = {}): QueueRow {
     facts: {
       id: "d1",
       name: "FGP Manufacturing",
-      stage: "in_onboarding",
+      stage: "make_it_yours",
       business_days_in_stage: 5,
       has_notes: true,
       has_sow: true,
@@ -63,7 +63,7 @@ function row(over: Partial<QueueRow> = {}): QueueRow {
       upcoming_calls: [
         {
           key: "working",
-          label: "Stage 2 — Make It Work for Them",
+          label: "Stage 2 — Make it yours",
           date: "2026-10-01",
           time: "10:00",
           minutes: 60,
@@ -187,7 +187,7 @@ describe("Today", () => {
 
   it("says where the accounts sit, in rail order", () => {
     const t = todayFor(input());
-    expect(t.stages.find((s) => s.key === "in_onboarding")).toMatchObject({ count: 1, pct: 100 });
+    expect(t.stages.find((s) => s.key === "make_it_yours")).toMatchObject({ count: 1, pct: 100 });
     expect(t.stages.find((s) => s.key === "field_fusion_setup")).toBeUndefined();
   });
 

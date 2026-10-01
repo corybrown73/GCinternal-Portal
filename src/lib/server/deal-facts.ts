@@ -4,7 +4,7 @@ import { readIntake } from "../intake-answers";
 import type { DealFacts } from "../needs-action";
 import { closeDateFor, timelineFor } from "../onboarding-plan";
 import { businessDaysBetween, localIso } from "../onboarding-timeline";
-import { isStage } from "../presale-stages";
+import { isOnboardingStage, isStage } from "../presale-stages";
 import { nextChecklistTask, stageFlow } from "../stage-flow";
 import { watchOutsFor } from "../watch-outs";
 
@@ -132,18 +132,17 @@ export async function dealFactsFor(
       owner_name: owner,
       core_booked: booking?.done ?? false,
       next_step: nextChecklistTask(input),
-      overdue_calls:
-        d.stage === "in_onboarding"
-          ? timeline.milestones
-              .filter((m) => m.kind === "call" && !m.doneOn && m.date < today)
-              .map((m) => ({
-                label: m.label,
-                date: m.date,
-                businessDaysLate: businessDaysBetween(m.date, today),
-              }))
-          : [],
+      overdue_calls: isOnboardingStage(d.stage)
+        ? timeline.milestones
+            .filter((m) => m.kind === "call" && !m.doneOn && m.date < today)
+            .map((m) => ({
+              label: m.label,
+              date: m.date,
+              businessDaysLate: businessDaysBetween(m.date, today),
+            }))
+        : [],
       upcoming_calls:
-        d.stage === "in_onboarding" || d.stage === "onboarding_kickoff"
+        isOnboardingStage(d.stage) || d.stage === "onboarding_kickoff"
           ? timeline.milestones
               .filter((m) => m.kind === "call" && !m.serviceId && !m.doneOn && m.date >= today)
               .map((m) => ({

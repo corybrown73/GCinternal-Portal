@@ -2,6 +2,7 @@ import { supabaseAdmin } from "@/integrations/supabase/client.server";
 
 import { appUrl } from "./app-url";
 import { readIntake } from "./intake-answers";
+import { isOnboardingStage } from "./presale-stages";
 import { closeDateFor, timelineFor } from "./onboarding-plan";
 import { businessDaysBetween, localIso } from "./onboarding-timeline";
 import { nudgesFor, stageFlow, type Nudge } from "./stage-flow";
@@ -13,7 +14,9 @@ const WATCHED = [
   "closed_won",
   "field_fusion_setup",
   "onboarding_kickoff",
-  "in_onboarding",
+  "get_it_working",
+  "make_it_yours",
+  "make_it_run",
 ];
 
 /**
@@ -129,17 +132,16 @@ export async function runDealNudges(): Promise<{ sent: number; skipped: number }
     const entered = String(d.stage_entered_at ?? new Date().toISOString());
     if (entered.slice(0, 10) < NUDGES_FROM) continue;
     const inStage = Math.max(0, businessDaysBetween(entered.slice(0, 10), today));
-    const overdueCalls =
-      d.stage === "in_onboarding"
-        ? timeline.milestones
-            .filter((m) => m.kind === "call" && !m.doneOn && m.date < today)
-            .map((m) => ({
-              key: m.key,
-              label: m.label,
-              date: m.date,
-              businessDaysLate: businessDaysBetween(m.date, today),
-            }))
-        : [];
+    const overdueCalls = isOnboardingStage(String(d.stage))
+      ? timeline.milestones
+          .filter((m) => m.kind === "call" && !m.doneOn && m.date < today)
+          .map((m) => ({
+            key: m.key,
+            label: m.label,
+            date: m.date,
+            businessDaysLate: businessDaysBetween(m.date, today),
+          }))
+      : [];
     const nudges = nudgesFor({
       name: String(d.name),
       stage: String(d.stage),

@@ -70,7 +70,7 @@ export const PRE_HANDOFF_STAGE_LABELS: Record<string, string> = {
 export const LIFECYCLE_STAGES: LifecycleStage[] = [
   {
     id: "handoff",
-    label: "Pre-kickoff",
+    label: "Pre-Kickoff",
     intent:
       "The deal has closed. Call notes in, brief generated, welcome deck and the customer's link ready.",
     phase: "intake",

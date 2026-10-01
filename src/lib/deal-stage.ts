@@ -1,5 +1,5 @@
 import { LIFECYCLE_STAGES } from "./lifecycle";
-import { isStage, STAGE_LABELS, STAGES, type AccountStage } from "./presale-stages";
+import { isStage, LEGACY_STAGES, STAGE_LABELS, STAGES, type AccountStage } from "./presale-stages";
 
 /**
  * One stage for a deal, everywhere it is shown.
@@ -25,7 +25,10 @@ export function dealStageForLifecycle(lifecycleStage: string): AccountStage | nu
   if (idx < 0) return null;
   if (lifecycleStage === TERMINAL_LIFECYCLE_STAGE) return "onboarding_complete";
   if (idx === 0) return "onboarding_kickoff";
-  return "in_onboarding";
+  // Kickoff, Align, Build → Get it working; Pilot → Make it yours; Launch, Adopt → Make it run.
+  if (lifecycleStage === "validate-iterate") return "make_it_yours";
+  if (lifecycleStage === "launch" || lifecycleStage === "adopt") return "make_it_run";
+  return "get_it_working";
 }
 
 /**
@@ -49,7 +52,8 @@ export function dealStageLabel(
   if (!stage) return "—";
   const named = names?.find((s) => s.key === stage);
   if (named) return named.label;
-  return isStage(stage) ? STAGE_LABELS[stage] : stage;
+  if (isStage(stage)) return STAGE_LABELS[stage];
+  return LEGACY_STAGES[stage]?.label ?? stage;
 }
 
 /** Position for sorting; unknown values sort last. */

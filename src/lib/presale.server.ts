@@ -4,7 +4,7 @@ import { nextChecklistTask, stageFlow } from "./stage-flow";
 import { TERM_LABELS } from "./terms";
 import { resolveAccountId, transitionStage, upsertAccount } from "./server/accounts";
 import { accountUpsertSchema } from "./server/schemas";
-import { isStage, type AccountStage } from "./presale-stages";
+import { isOnboardingStage, isStage, STAGE_LABELS, type AccountStage } from "./presale-stages";
 import { MANAGE_ROLES } from "./roles";
 import { handoffChecks } from "./sales-handoff";
 import {
@@ -296,13 +296,12 @@ export async function loadPipeline(
       // Onboarding's tasks are the plan's steps: the board needs the plan
       // to name the next one. Day 0 is the recorded close, else the day the
       // deal entered its stage — the label does not depend on the dates.
-      const timeline =
-        a.stage === "in_onboarding"
-          ? timelineFor(
-              intake,
-              intake.timeline.close_date ?? String(a.stage_entered_at ?? today).slice(0, 10),
-            )
-          : undefined;
+      const timeline = isOnboardingStage(a.stage)
+        ? timelineFor(
+            intake,
+            intake.timeline.close_date ?? String(a.stage_entered_at ?? today).slice(0, 10),
+          )
+        : undefined;
       return {
         ...a,
         customer_id: a.customer_id ?? null,
@@ -446,24 +445,37 @@ export async function transitionDeal(
 ): Promise<{ changed: boolean }> {
   await requireInternal(userId);
   const pipeline = await loadPipelineStages();
-  // The far end has a gate too: Onboarding Complete needs the onboarding
-  // checklist done, whether the move comes from the button, the picker or
-  // a drag on the board. A manager may insist, and the note records it.
-  if (toStage === terminalStage(pipeline).key) {
-    const { flowForDeal } = await import("./stage-flow.server");
-    const built = await flowForDeal(dealId);
-    const onboarding = built?.flow.stages.find((s) => s.key === "onboarding");
-    const open = (onboarding?.tasks ?? []).filter((t) => !t.done && !t.optional && !t.locked);
-    if (open.length > 0) {
-      if (!force) {
-        const { completeGateMessage } = await import("./won-gate");
-        throw new Error(completeGateMessage(open.length));
+  // Every stage after the close ends at a gate: a move forward past
+  // Pre-Kickoff needs the steps before the target done, whether it comes
+  // from the button, the picker or a drag on the board. A manager may
+  // insist, and the note records it.
+  {
+    const { data: cur } = await db()
+      .from("portal_accounts")
+      .select("stage")
+      .eq("id", dealId)
+      .maybeSingle();
+    const forward = cur && stageOrder(pipeline, toStage) > stageOrder(pipeline, String(cur.stage));
+    if (
+      forward &&
+      isAtOrPast(pipeline, toStage, wonStage(pipeline).key) &&
+      toStage !== wonStage(pipeline).key
+    ) {
+      const { flowForDeal } = await import("./stage-flow.server");
+      const { openStepsBefore } = await import("./stage-flow");
+      const built = await flowForDeal(dealId);
+      const open = built ? openStepsBefore(built.flow, toStage) : [];
+      if (open.length > 0) {
+        if (!force) {
+          const { completeGateMessage } = await import("./won-gate");
+          throw new Error(completeGateMessage(open.length, toStage));
+        }
+        const { forcedNote } = await import("./won-gate");
+        note = forcedNote(
+          note ??
+            `Moved to ${STAGE_LABELS[toStage]} with ${open.length} checklist step${open.length === 1 ? "" : "s"} open`,
+        );
       }
-      const { forcedNote } = await import("./won-gate");
-      note = forcedNote(
-        note ??
-          `Marked Onboarding Complete with ${open.length} checklist step${open.length === 1 ? "" : "s"} open`,
-      );
     }
   }
   // Via supabaseAdmin the RPC has no auth.uid(), so the passed actor is kept.
@@ -2793,4 +2805,43 @@ export async function sendHandoffToCustomer(
     payload: { asked },
   });
   return { url, asked };
+}
+
+/**
+ * Implementation Complete finishes one of two ways (the operating model):
+ * Proven — the agreed outcome shown in real use — or Not Proven, with the
+ * reason. Recorded on the deal at its last stage; an internal reporting
+ * status the customer never sees.
+ */
+export async function finishImplementation(
+  userId: string,
+  dealId: string,
+  kind: "proven" | "not_proven",
+  reason: string | null,
+) {
+  const { data: row } = await db()
+    .from("portal_accounts")
+    .select("stage")
+    .eq("id", dealId)
+    .maybeSingle();
+  if (!row) throw new Error("Deal not found");
+  const pipeline = await loadPipelineStages();
+  if (String(row.stage) !== terminalStage(pipeline).key) {
+    throw new Error("The deal has to reach Implementation Complete before it can be finished.");
+  }
+  if (kind === "not_proven" && !reason?.trim()) {
+    throw new Error("Not Proven needs the reason.");
+  }
+  const next = await saveDealIntake(userId, dealId, {
+    outcome: { kind, reason: reason?.trim() || null, at: new Date().toISOString(), by: userId },
+  });
+  await audit({
+    actor_type: "user",
+    actor_id: userId,
+    action: "deal.finished",
+    entity_type: "account",
+    entity_id: dealId,
+    payload: { kind, reason: reason ?? null },
+  });
+  return next;
 }

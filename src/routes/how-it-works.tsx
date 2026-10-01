@@ -63,7 +63,7 @@ const ROLES: Array<{ key: string; who: string; when: string; steps: Step[] }> = 
         label: "Settings → My profile",
       },
       {
-        title: "Review what the AI filled, then Pre-kickoff",
+        title: "Review what the AI filled, then Pre-Kickoff",
         body: "Approve the review on the checklist, reply to the AE, add them to the kickoff cadence in Salesloft (named under Settings), pass the Stage 1 readiness check (a process map, a starting form, one real list) and book all three core meetings. The welcome page is what you present; the notes under it are what you say.",
       },
       {
@@ -139,7 +139,7 @@ function HowItWorksPage() {
             belong here, where somebody looks them up. */}
         <Panel
           title="The project stages"
-          meta={`${LIFECYCLE_STAGES.length} stages the customer's record moves through · the deal itself runs Closed Won → Pre-kickoff → Onboarding → Complete`}
+          meta={`${LIFECYCLE_STAGES.length} stages the customer's record moves through · the deal itself runs Closed Won → Pre-Kickoff → Get it working → Make it yours → Make it run → Implementation Complete`}
         >
           <ol className="grid gap-x-6 divide-y divide-border md:grid-cols-2 md:divide-y-0">
             {LIFECYCLE_STAGES.map((stage, i) => (

@@ -1,6 +1,6 @@
 import { dealStageLabel } from "./deal-stage";
 import { shortDay } from "./onboarding-timeline";
-import type { AccountStage } from "./presale-stages";
+import { isOnboardingStage, type AccountStage } from "./presale-stages";
 import { stuckLevel } from "./stage-flow";
 
 /**
@@ -69,7 +69,9 @@ const WORKED: ReadonlyArray<AccountStage> = [
   "closed_won",
   "field_fusion_setup",
   "onboarding_kickoff",
-  "in_onboarding",
+  "get_it_working",
+  "make_it_yours",
+  "make_it_run",
 ];
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
@@ -106,7 +108,7 @@ export function needsAction(deal: DealFacts | null | undefined): ActionReason[] 
   } else if (
     !deal.owner_name &&
     deal.business_days_in_stage >= 1 &&
-    deal.stage !== "in_onboarding" &&
+    !isOnboardingStage(deal.stage) &&
     deal.stage !== "prospect"
   ) {
     out.push({

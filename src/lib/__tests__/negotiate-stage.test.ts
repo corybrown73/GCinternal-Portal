@@ -70,8 +70,8 @@ describe("Negotiate & Finalize", () => {
       label: "Negotiate & Finalize",
     });
     // "Stage N of M" skips it for everyone else.
-    expect(dealStageProgress("negotiate")).toEqual({ position: 2, total: 6 });
-    expect(dealStageProgress("closed_won")).toEqual({ position: 2, total: 5 });
+    expect(dealStageProgress("negotiate")).toEqual({ position: 2, total: 8 });
+    expect(dealStageProgress("closed_won")).toEqual({ position: 2, total: 7 });
   });
 
   it("asks managers for a TIS after one business day without one", () => {

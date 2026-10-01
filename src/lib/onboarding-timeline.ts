@@ -102,8 +102,8 @@ export function isTrainingPlan(
 /**
  * Phase 1 for a new logo: the Implementation Playbook.
  *
- * Three core meetings, all booked at the start — Make It Work, Make It Work
- * for Them, Make It Operational — with prepared work between them, so no
+ * Three core meetings, all booked at the start — Get it working, Get it working
+ * for Them, Make it run — with prepared work between them, so no
  * live call is spent on setup that could have been done before it. The core
  * work runs about three weeks and ends at "Functional": the minimum an
  * account needs to run it without us. Week 4 is held back for activation,
@@ -124,7 +124,7 @@ export const NEW_LOGO_PLAN: readonly MilestoneSpec[] = [
   {
     key: "kickoff",
     day: 2,
-    label: "Stage 1 — Make It Work",
+    label: "Stage 1 — Get it working",
     owner: "both",
     kind: "call",
     minutes: 60,
@@ -151,7 +151,7 @@ export const NEW_LOGO_PLAN: readonly MilestoneSpec[] = [
   {
     key: "working",
     day: 5,
-    label: "Stage 2 — Make It Work for Them",
+    label: "Stage 2 — Make it yours",
     owner: "both",
     kind: "call",
     minutes: 60,
@@ -178,7 +178,7 @@ export const NEW_LOGO_PLAN: readonly MilestoneSpec[] = [
   {
     key: "adjust",
     day: 11,
-    label: "Stage 3 — Make It Operational",
+    label: "Stage 3 — Make it run",
     owner: "both",
     kind: "call",
     minutes: 60,
@@ -360,7 +360,7 @@ export const EXISTING_PLAN: readonly MilestoneSpec[] = [
   {
     key: "kickoff",
     day: 2,
-    label: "Stage 1 — Make It Work: the form the integration reads",
+    label: "Stage 1 — Get it working: the form the integration reads",
     owner: "both",
     kind: "call",
     minutes: 60,
@@ -386,7 +386,7 @@ export const EXISTING_PLAN: readonly MilestoneSpec[] = [
   {
     key: "working",
     day: 5,
-    label: "Stage 2 — Make It Work for Them: data, rules and outputs",
+    label: "Stage 2 — Make it yours: data, rules and outputs",
     owner: "both",
     kind: "call",
     minutes: 60,
@@ -409,7 +409,7 @@ export const EXISTING_PLAN: readonly MilestoneSpec[] = [
   {
     key: "adjust",
     day: 11,
-    label: "Stage 3 — Make It Operational",
+    label: "Stage 3 — Make it run",
     owner: "both",
     kind: "call",
     minutes: 60,
@@ -449,7 +449,7 @@ export const CUSTOMER_BUILD_PLAN: readonly MilestoneSpec[] = [
   {
     key: "kickoff",
     day: 2,
-    label: "Stage 1 — Make It Work: you build the form, we build the integration",
+    label: "Stage 1 — Get it working: you build the form, we build the integration",
     owner: "both",
     kind: "call",
     minutes: 60,
@@ -475,7 +475,7 @@ export const CUSTOMER_BUILD_PLAN: readonly MilestoneSpec[] = [
   {
     key: "working",
     day: 5,
-    label: "Stage 2 — Make It Work for Them: check-in on your build",
+    label: "Stage 2 — Make it yours: check-in on your build",
     owner: "both",
     kind: "call",
     minutes: 60,
@@ -497,7 +497,7 @@ export const CUSTOMER_BUILD_PLAN: readonly MilestoneSpec[] = [
   {
     key: "adjust",
     day: 11,
-    label: "Stage 3 — Make It Operational: freeze the form together",
+    label: "Stage 3 — Make it run: freeze the form together",
     owner: "both",
     kind: "call",
     minutes: 60,

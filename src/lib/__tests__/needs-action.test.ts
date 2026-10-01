@@ -7,13 +7,13 @@ import { healthFloor, needsAction, type DealFacts } from "../needs-action";
 const deal = (over: Partial<DealFacts> = {}): DealFacts => ({
   id: "d1",
   name: "QA TEST – Summit NL",
-  stage: "in_onboarding",
+  stage: "make_it_yours",
   business_days_in_stage: 3,
   has_notes: true,
   has_sow: true,
   owner_name: "Dana",
   core_booked: true,
-  next_step: "Stage 2 — Make It Work for Them",
+  next_step: "Stage 2 — Make it yours",
   overdue_calls: [],
   watch_outs: [],
   ...over,
@@ -28,7 +28,7 @@ const impl = (over: Partial<ImplementationRow> = {}): ImplementationRow => ({
   industry: null,
   arr: 24000,
   current_stage: "build",
-  deal_stage: "in_onboarding",
+  deal_stage: "make_it_yours",
   deal_id: "d1",
   stage_entered_at: "2026-09-21T15:00:00Z",
   status: "on_track",
@@ -116,7 +116,7 @@ describe("what a deal needs, from its own facts", () => {
     );
     expect(r.map((x) => x.reason)).toEqual(["Core meetings not booked"]);
     const stuck = needsAction(deal({ stage: "onboarding_kickoff", business_days_in_stage: 30 }));
-    expect(stuck[0]!.reason).toMatch(/^Stuck 30 business days in Pre-kickoff/);
+    expect(stuck[0]!.reason).toMatch(/^Stuck 30 business days in Pre-Kickoff/);
   });
 });
 
@@ -137,10 +137,10 @@ describe("Home's triage with the deal's facts", () => {
   it("never claims on track: a clean row says what comes next", () => {
     const row = triageRow(impl(), bundle(deal()));
     expect(row.bucket).toBe("moving");
-    expect(row.reason).toBe("Nothing open · next: Stage 2 — Make It Work for Them");
+    expect(row.reason).toBe("Nothing open · next: Stage 2 — Make it yours");
     expect(row.reason).not.toMatch(/on track|idle/i);
     expect(triageRow(impl({ status: "idle" }), bundle(null)).reason).toBe(
-      "Nothing open against it in Onboarding",
+      "Nothing open against it in Make it yours",
     );
   });
 

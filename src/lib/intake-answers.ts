@@ -482,6 +482,20 @@ export const intakeAnswersSchema = z.object({
         .default(null),
     })
     .default({}),
+  /**
+   * How Implementation Complete finished (the operating model): Proven, the
+   * agreed outcome shown in real use; or Not Proven, with the reason. An
+   * internal reporting status, never shown to the customer.
+   */
+  outcome: z
+    .object({
+      kind: z.enum(["proven", "not_proven"]),
+      reason: z.string().trim().max(600).nullable().default(null),
+      at: z.string().max(40),
+      by: z.string().uuid().nullable().default(null),
+    })
+    .nullable()
+    .default(null),
   updated_at: z.string().nullable().default(null),
 });
 

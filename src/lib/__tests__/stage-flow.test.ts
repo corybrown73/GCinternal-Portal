@@ -3,9 +3,12 @@ import { shortDay } from "../onboarding-timeline";
 
 import { readIntake } from "../intake-answers";
 import { buildTimeline } from "../onboarding-timeline";
-import { stageFlow, type StageFlow, type StageFlowInput } from "../stage-flow";
+import { isWorkingStageKey, stageFlow, type StageFlow, type StageFlowInput } from "../stage-flow";
 
 const cw = (f: StageFlow) => f.stages.find((s) => s.key === "closed_won")!;
+/** The plan's steps across the working stages, in rail order. */
+const obTasks = (f: StageFlow) =>
+  f.stages.filter((s) => isWorkingStageKey(s.key)).flatMap((s) => s.tasks);
 
 const ready = {
   path: "new_logo",
@@ -91,14 +94,14 @@ describe("the stage checklist", () => {
       timeline: { overrides: { kickoff: "2026-09-25" }, times: { kickoff: "10:00" } },
     };
     expect(stageFlow(input({ stage: "onboarding_kickoff", intake: booked })).advanceTo).toBe(
-      "in_onboarding",
+      "get_it_working",
     );
     // Everything done at once skips straight through.
-    expect(stageFlow(input({ intake: booked })).advanceTo).toBe("in_onboarding");
+    expect(stageFlow(input({ intake: booked })).advanceTo).toBe("get_it_working");
   });
 
   it("never moves a deal back or on from Onboarding by itself", () => {
-    expect(stageFlow(input({ stage: "in_onboarding" })).advanceTo).toBeNull();
+    expect(stageFlow(input({ stage: "get_it_working" })).advanceTo).toBeNull();
     expect(stageFlow(input({ stage: "prospect" })).advanceTo).toBeNull();
     // Nothing to assign before the close makes the project.
     const pre = stageFlow(input({ stage: "prospect", owner: null }));
@@ -121,14 +124,17 @@ describe("the stage checklist", () => {
       completed: intake.timeline.completed,
       services: intake.timeline.services as never,
     });
-    const f = stageFlow(input({ stage: "in_onboarding", intake, timeline: t }));
-    const tasks = f.stages.find((s) => s.key === "onboarding")!.tasks;
+    const f = stageFlow(input({ stage: "get_it_working", intake, timeline: t }));
+    const tasks = obTasks(f);
     expect(tasks.map((x) => x.key)).toEqual([
       "kickoff",
+      "baseline_locked",
+      "e2e_working",
       "working",
       "adjust",
       "live",
       "svc:qb",
+      "go_live",
       "grad_admin_built",
       "grad_second",
       "grad_office",
@@ -141,8 +147,8 @@ describe("the stage checklist", () => {
   it("asks a training account for no second form", () => {
     const intake = readIntake({ path: "field_fusion" });
     const t = buildTimeline({ closeDate: "2026-09-22", path: "field_fusion" });
-    const f = stageFlow(input({ stage: "in_onboarding", intake, timeline: t }));
-    const keys = f.stages.find((s) => s.key === "onboarding")!.tasks.map((x) => x.key);
+    const f = stageFlow(input({ stage: "get_it_working", intake, timeline: t }));
+    const keys = obTasks(f).map((x) => x.key);
     expect(keys).not.toContain("grad_second");
     expect(keys).toContain("grad_admin_built");
   });
@@ -163,9 +169,9 @@ describe("the new-logo plan: the Implementation Playbook", () => {
     const calls = t.milestones.filter((m) => m.kind === "call");
     expect(calls.map((c) => c.minutes)).toEqual([60, 60, 60]);
     expect(calls.map((c) => c.label)).toEqual([
-      "Stage 1 — Make It Work",
-      "Stage 2 — Make It Work for Them",
-      "Stage 3 — Make It Operational",
+      "Stage 1 — Get it working",
+      "Stage 2 — Make it yours",
+      "Stage 3 — Make it run",
     ]);
     // Tue 22 Sep + 15 business days = Tue 13 Oct; Week 4 ends Tue 20 Oct.
     expect(t.liveDate).toBe("2026-10-13");
@@ -208,7 +214,7 @@ describe("the new-logo plan: the Implementation Playbook", () => {
       },
     };
     expect(stageFlow(input({ stage: "onboarding_kickoff", intake: ready3 })).advanceTo).toBe(
-      "in_onboarding",
+      "get_it_working",
     );
   });
 
@@ -230,14 +236,16 @@ describe("the new-logo plan: the Implementation Playbook", () => {
       completed: intake.timeline.completed,
       services: intake.timeline.services as never,
     });
-    const f = stageFlow(input({ stage: "in_onboarding", intake, timeline: t }));
-    const tasks = f.stages.find((s) => s.key === "onboarding")!.tasks;
+    const f = stageFlow(input({ stage: "get_it_working", intake, timeline: t }));
+    const tasks = obTasks(f);
+    // Dealt to the five stages: Get it working, Make it yours, Make it run, Complete.
     expect(tasks.map((x) => x.key)).toEqual([
       "kickoff",
+      "baseline_locked",
+      "e2e_working",
       "between_1",
       "working",
       "between_2",
-      "adjust",
       "func_web_login",
       "func_mobile_login",
       "func_submit",
@@ -246,10 +254,24 @@ describe("the new-logo plan: the Implementation Playbook", () => {
       "func_edit",
       "func_data_open",
       "func_data_update",
+      "adjust",
       "svc:cl",
       "svc:qb",
       "activate",
+      "go_live",
       "closeout",
+    ]);
+    expect(f.stages.find((s) => s.key === "make_it_yours")!.tasks.map((x) => x.key)).toEqual([
+      "working",
+      "between_2",
+      "func_web_login",
+      "func_mobile_login",
+      "func_submit",
+      "func_output",
+      "func_users",
+      "func_edit",
+      "func_data_open",
+      "func_data_update",
     ]);
     expect(tasks[0]!.summary).toBe(`Held ${shortDay("2026-09-25")}`);
     // The optional activation session never holds the stage back.
@@ -267,8 +289,12 @@ describe("the new-logo plan: the Implementation Playbook", () => {
       completed: all,
       services: intake.timeline.services as never,
     });
-    const done = stageFlow(input({ stage: "in_onboarding", intake: doneIntake, timeline: doneT }));
-    expect(done.stages.find((s) => s.key === "onboarding")!.done).toBe(true);
+    const done = stageFlow(input({ stage: "get_it_working", intake: doneIntake, timeline: doneT }));
+    for (const k of ["get_it_working", "make_it_yours", "make_it_run"]) {
+      expect(done.stages.find((s) => s.key === k)!.done, k).toBe(true);
+    }
+    // Every gate met: the deal walks to Implementation Complete on its own.
+    expect(done.advanceTo).toBe("onboarding_complete");
   });
 });
 
@@ -345,15 +371,15 @@ describe("nudges", () => {
     const { nudgesFor } = await import("../stage-flow");
     const n = nudgesFor({
       name: "Maverick",
-      stage: "in_onboarding",
+      stage: "make_it_yours",
       businessDaysInStage: 4,
       enteredAt: "2026-09-21T15:00:00Z",
-      flow: stageFlow(input({ stage: "in_onboarding" })),
+      flow: stageFlow(input({ stage: "make_it_yours" })),
       overdueCalls: [
         { key: "working", label: "Training day 2", date: "2026-09-24", businessDaysLate: 2 },
         { key: "adjust", label: "Training day 3", date: "2026-09-29", businessDaysLate: 1 },
       ],
     });
-    expect(n.map((x) => x.key)).toEqual(["in_onboarding@2026-09-21:overdue:working"]);
+    expect(n.map((x) => x.key)).toEqual(["make_it_yours@2026-09-21:overdue:working"]);
   });
 });

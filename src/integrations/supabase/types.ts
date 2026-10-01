@@ -3017,6 +3017,9 @@ export type Database = {
         | "closed_won"
         | "field_fusion_setup"
         | "onboarding_kickoff"
+        | "get_it_working"
+        | "make_it_yours"
+        | "make_it_run"
         | "in_onboarding"
         | "onboarding_complete"
       portal_brief_generator: "llm" | "template"
@@ -3169,6 +3172,9 @@ export const Constants = {
         "closed_won",
         "field_fusion_setup",
         "onboarding_kickoff",
+        "get_it_working",
+        "make_it_yours",
+        "make_it_run",
         "in_onboarding",
         "onboarding_complete",
       ],

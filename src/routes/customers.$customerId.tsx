@@ -1436,7 +1436,7 @@ function AccountRail({
             <Field
               label="Progress"
               value={
-                <span title="Counted against the deal's stages: Prospect, Closed Won, Pre-kickoff, Onboarding, Complete.">
+                <span title="Counted against the deal's stages: Prospect, Closed Won, Pre-Kickoff, Get it working, Make it yours, Make it run, Implementation Complete.">
                   {dealStageProgress(impl.deal_stage).position} /{" "}
                   {dealStageProgress(impl.deal_stage).total} stages
                 </span>

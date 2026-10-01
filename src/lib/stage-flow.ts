@@ -35,7 +35,7 @@ export const DEAL_TYPES = [
   {
     path: "new_logo",
     label: "New logo",
-    plan: "First GoCanvas rollout on the Implementation Playbook: three 60-minute core meetings — Make It Work, Make It Work for Them, Make It Operational — Functional by business day 15, inside a 30-day window.",
+    plan: "First GoCanvas rollout on the Implementation Playbook: three 60-minute core meetings — Get it working, Make it yours, Make it run — Functional by business day 15, inside a 30-day window.",
   },
   {
     path: "existing",
@@ -60,7 +60,9 @@ export type FlowStageKey =
   | "closed_won"
   | "field_fusion"
   | "pre_kickoff"
-  | "onboarding"
+  | "get_it_working"
+  | "make_it_yours"
+  | "make_it_run"
   | "complete";
 
 /**
@@ -75,10 +77,42 @@ export const FLOW_STAGES: ReadonlyArray<{ key: FlowStageKey; stage: AccountStage
     { key: "negotiate", stage: "negotiate", label: "Negotiate & Finalize" },
     { key: "closed_won", stage: "closed_won", label: "Closed Won" },
     { key: "field_fusion", stage: "field_fusion_setup", label: "Field Fusion setup" },
-    { key: "pre_kickoff", stage: "onboarding_kickoff", label: "Pre-kickoff" },
-    { key: "onboarding", stage: "in_onboarding", label: "Onboarding" },
-    { key: "complete", stage: "onboarding_complete", label: "Complete" },
+    { key: "pre_kickoff", stage: "onboarding_kickoff", label: "Pre-Kickoff" },
+    { key: "get_it_working", stage: "get_it_working", label: "Get it working" },
+    { key: "make_it_yours", stage: "make_it_yours", label: "Make it yours" },
+    { key: "make_it_run", stage: "make_it_run", label: "Make it run" },
+    { key: "complete", stage: "onboarding_complete", label: "Implementation Complete" },
   ];
+
+/** The three stages between Pre-Kickoff and Implementation Complete, as flow keys. */
+export const ONBOARDING_FLOW_KEYS: ReadonlyArray<FlowStageKey> = [
+  "get_it_working",
+  "make_it_yours",
+  "make_it_run",
+];
+
+/** A stage whose tasks are the plan's steps: the three middle ones and Complete. */
+export function isWorkingStageKey(key: FlowStageKey | null | undefined): boolean {
+  return (
+    key === "get_it_working" ||
+    key === "make_it_yours" ||
+    key === "make_it_run" ||
+    key === "complete"
+  );
+}
+
+/**
+ * The gate a stage ends at (the operating model): what has to be true to
+ * move on, however many sessions it takes. Shown under the stage name and
+ * named in the move's note.
+ */
+export const STAGE_GATE: Partial<Record<FlowStageKey, string>> = {
+  pre_kickoff: "Ready for Kickoff",
+  get_it_working: "Working end to end",
+  make_it_yours: "Ready to run",
+  make_it_run: "Operational Go-Live",
+  complete: "Complete — Proven or Not Proven",
+};
 
 export function flowLabel(key: FlowStageKey): string {
   return FLOW_STAGES.find((s) => s.key === key)!.label;
@@ -182,8 +216,15 @@ function flowStageOf(stage: string): FlowStageKey | null {
       return "field_fusion";
     case "onboarding_kickoff":
       return "pre_kickoff";
+    case "get_it_working":
+      return "get_it_working";
+    case "make_it_yours":
+      return "make_it_yours";
+    case "make_it_run":
+      return "make_it_run";
+    // Retired: the one Onboarding stage became three. History may still say it.
     case "in_onboarding":
-      return "onboarding";
+      return "get_it_working";
     case "onboarding_complete":
       return "complete";
     default:
@@ -287,9 +328,9 @@ export const PREP_ITEMS = [
 
 /** The three core meetings, booked at the start (the playbook's rule). */
 export const CORE_MEETINGS = [
-  { key: "kickoff", label: "Stage 1 — Make It Work" },
-  { key: "working", label: "Stage 2 — Make It Work for Them" },
-  { key: "adjust", label: "Stage 3 — Make It Operational" },
+  { key: "kickoff", label: "Stage 1 — Get it working" },
+  { key: "working", label: "Stage 2 — Make it yours" },
+  { key: "adjust", label: "Stage 3 — Make it run" },
 ] as const;
 
 function preKickoffTasks(a: IntakeAnswers): FlowTask[] {
@@ -741,6 +782,91 @@ function onboardingTasks(a: IntakeAnswers, t: Timeline | null | undefined): Flow
 }
 
 /**
+ * The plan's steps, dealt to the operating model's stages.
+ *
+ * Get it working ends at "Working end to end": Stage 1 held, the plan and
+ * dates agreed (the baseline), one submission end to end. Make it yours
+ * ends at "Ready to run": Stage 2 held, real data in, the readiness list
+ * (Functional). Make it run ends at "Operational Go-Live": Stage 3 held,
+ * what the SOW bought delivered, real users running it. Implementation
+ * Complete is the proof window: the close-out and the graduation checks,
+ * then the finish. The same keys on every plan, so one deal works for a
+ * new logo, an existing account, a conversion and training alike.
+ */
+export type TasksByStage = {
+  get_it_working: FlowTask[];
+  make_it_yours: FlowTask[];
+  make_it_run: FlowTask[];
+  complete: FlowTask[];
+};
+
+const GIW_KEYS = new Set(["kickoff", "between_1"]);
+const MIY_KEYS = new Set(["working", "between_2"]);
+const MIR_KEYS = new Set(["adjust", "live", "activate"]);
+const COMPLETE_KEYS = new Set(["closeout"]);
+
+export function tasksByStage(a: IntakeAnswers, t: Timeline | null | undefined): TasksByStage {
+  const out: TasksByStage = {
+    get_it_working: [],
+    make_it_yours: [],
+    make_it_run: [],
+    complete: [],
+  };
+  if (!t) return out;
+  const done = a.timeline.completed;
+  const tick = (
+    key: string,
+    label: string,
+    hint: string,
+    extra: Partial<FlowTask> = {},
+  ): FlowTask => ({
+    key,
+    label,
+    hint,
+    done: Boolean(done[key]),
+    summary: done[key] ? `Done ${shortDay(done[key])}` : null,
+    action: "tick",
+    locked: null,
+    doneKey: key,
+    ...extra,
+  });
+  for (const task of onboardingTasks(a, t)) {
+    if (GIW_KEYS.has(task.key)) out.get_it_working.push(task);
+    else if (MIY_KEYS.has(task.key) || task.key.startsWith("func_")) out.make_it_yours.push(task);
+    else if (MIR_KEYS.has(task.key) || task.key.startsWith("svc:")) out.make_it_run.push(task);
+    else if (COMPLETE_KEYS.has(task.key) || task.key.startsWith("grad_")) out.complete.push(task);
+    else out.make_it_run.push(task);
+  }
+  // The gates' own facts, which no meeting records on its own.
+  const afterKickoff = out.get_it_working.findIndex((x) => x.key === "kickoff") + 1;
+  out.get_it_working.splice(
+    afterKickoff,
+    0,
+    tick(
+      "baseline_locked",
+      "Plan and dates agreed with the customer — baseline locked",
+      "The go-live the customer agreed to in Stage 1. It never moves; a later change is a new target with a reason.",
+      { group: "Working end to end" },
+    ),
+    tick(
+      "e2e_working",
+      "One submission went end to end on their account",
+      "From the phone to the output, on real data, in their own account — not ours.",
+      { group: "Working end to end" },
+    ),
+  );
+  out.make_it_run.push(
+    tick(
+      "go_live",
+      "Operational Go-Live: their people are using it for real",
+      "The intended users submit real work without us. Time to value ends here.",
+      { group: "Operational Go-Live" },
+    ),
+  );
+  return out;
+}
+
+/**
  * Graduation: the proof they can run it without us. These gate "Complete",
  * so an account is never closed out while its admin still calls us to add a
  * field. Ticked by the owner; stored with the other handoff ticks.
@@ -786,9 +912,15 @@ export function stageFlow(input: StageFlowInput): StageFlow {
   const closed = current !== null && current !== "prospect" && current !== "negotiate";
   const cw = closedWonTasks(a, input, closed || current === "negotiate");
   const pk = preKickoffTasks(a);
-  const ob = onboardingTasks(a, input.timeline);
-  // Optional tasks are offered, never waited on.
-  const allDone = (ts: FlowTask[]) => ts.length > 0 && ts.every((x) => x.done || x.optional);
+  const ob = tasksByStage(a, input.timeline);
+  // Without the plan the middle stages have no tasks to judge; they are not
+  // passed through on that account.
+  const hasPlan = Boolean(input.timeline);
+  // Optional tasks are offered, never waited on. A stage with no tasks is
+  // not done unless `emptyIsDone`: Closed Won and Pre-Kickoff always have
+  // work; a middle stage with nothing for this setup is passed through.
+  const allDone = (ts: FlowTask[], emptyIsDone = false) =>
+    ts.length > 0 ? ts.every((x) => x.done || x.optional) : emptyIsDone;
 
   const stages: StageFlow["stages"] = [
     // Prospect has no tasks of its own: the Closed Won ones can be worked
@@ -826,23 +958,86 @@ export function stageFlow(input: StageFlowInput): StageFlow {
         ]
       : []),
     { key: "pre_kickoff", label: flowLabel("pre_kickoff"), tasks: pk, done: allDone(pk) },
-    { key: "onboarding", label: flowLabel("onboarding"), tasks: ob, done: allDone(ob) },
-    { key: "complete", label: flowLabel("complete"), tasks: [], done: current === "complete" },
+    // The operating model's three middle stages. A stage with nothing to do
+    // for this setup (a services-only add-on has no Stage 2) passes on its own.
+    {
+      key: "get_it_working",
+      label: flowLabel("get_it_working"),
+      tasks: ob.get_it_working,
+      done: allDone(ob.get_it_working, hasPlan),
+    },
+    {
+      key: "make_it_yours",
+      label: flowLabel("make_it_yours"),
+      tasks: ob.make_it_yours,
+      done: allDone(ob.make_it_yours, hasPlan),
+    },
+    {
+      key: "make_it_run",
+      label: flowLabel("make_it_run"),
+      tasks: ob.make_it_run,
+      done: allDone(ob.make_it_run, hasPlan),
+    },
+    // Implementation Complete is a stage, not a tick: the proof window, the
+    // close-out, then the finish — Proven or Not Proven — recorded on the deal.
+    {
+      key: "complete",
+      label: flowLabel("complete"),
+      tasks: ob.complete,
+      done: current === "complete" && a.outcome !== null,
+    },
   ];
 
-  // Forward only, and one rule per stage. A deal that did everything for
-  // two stages at once moves two stages: nobody should have to watch it
-  // step through Pre-kickoff to reach Onboarding.
+  // Forward only, one gate per stage, and as far as the gates allow: a deal
+  // that did everything for two stages at once moves two stages. Complete
+  // is the last stop; the finish is a person's call.
   let advanceTo: AccountStage | null = null;
+  const rail: FlowStageKey[] = [
+    "pre_kickoff",
+    "get_it_working",
+    "make_it_yours",
+    "make_it_run",
+    "complete",
+  ];
+  const doneAt = (k: FlowStageKey) => Boolean(stages.find((s) => s.key === k)?.done);
+  const walkFrom = (k: FlowStageKey): AccountStage | null => {
+    let i = rail.indexOf(k);
+    let target: FlowStageKey | null = null;
+    while (i < rail.length - 1 && doneAt(rail[i]!)) {
+      i += 1;
+      target = rail[i]!;
+    }
+    return target ? FLOW_STAGES.find((s) => s.key === target)!.stage : null;
+  };
   if (current === "closed_won" && allDone(cw)) {
     // A Field Fusion account goes to its setup stage first (the setup owner
-    // hands it on); the checklist never skips it into Pre-kickoff.
+    // hands it on); the checklist never skips it into Pre-Kickoff.
     if (a.path === "field_fusion" && !a.field_fusion.handed_off_at) advanceTo = null;
-    else advanceTo = allDone(pk) ? "in_onboarding" : "onboarding_kickoff";
-  } else if (current === "pre_kickoff" && allDone(pk)) {
-    advanceTo = "in_onboarding";
+    else advanceTo = walkFrom("pre_kickoff") ?? "onboarding_kickoff";
+  } else if (current && rail.includes(current) && current !== "complete") {
+    advanceTo = walkFrom(current);
   }
   return { current, stages, advanceTo };
+}
+
+/**
+ * The steps still open on the stages a move would skip past: everything
+ * from the current stage up to (not including) the target, required and
+ * not done. Empty means the move is earned. Pre-Kickoff onward only — the
+ * Closed Won work is gated by the close itself.
+ */
+export function openStepsBefore(flow: StageFlow, toStage: AccountStage): FlowTask[] {
+  const target = FLOW_STAGES.find((s) => s.stage === toStage)?.key;
+  if (!target) return [];
+  const keys = flow.stages.map((s) => s.key);
+  const to = keys.indexOf(target);
+  if (to < 0) return [];
+  const from = Math.max(keys.indexOf(flow.current ?? "prospect"), keys.indexOf("pre_kickoff"));
+  if (from < 0 || to <= from) return [];
+  return flow.stages
+    .slice(from, to)
+    .filter((s) => s.key !== "closed_won" && s.key !== "field_fusion")
+    .flatMap((s) => s.tasks.filter((t) => !t.done && !t.optional && !t.locked));
 }
 
 function flowSummary(a: IntakeAnswers): string {
@@ -893,7 +1088,11 @@ export const STAGE_LIMITS: Readonly<Record<string, { warn: number; escalate: num
   closed_won: { warn: 2, escalate: 4 },
   field_fusion_setup: { warn: 3, escalate: 5 },
   onboarding_kickoff: { warn: 3, escalate: 5 },
-  in_onboarding: { warn: 20, escalate: 30 },
+  // The three stages inside the 15-business-day plan; placeholders until the
+  // team sets them (operating model: "target durations by stage" to validate).
+  get_it_working: { warn: 5, escalate: 8 },
+  make_it_yours: { warn: 8, escalate: 12 },
+  make_it_run: { warn: 8, escalate: 12 },
 };
 
 export type StuckLevel = "ok" | "warn" | "escalate";

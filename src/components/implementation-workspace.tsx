@@ -295,6 +295,19 @@ function WhereBar({
         })}
       </ol>
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-3 text-[12px]">
+        {ws.where.gate ? (
+          <span className="inline-flex items-center gap-1.5">
+            <span className="text-muted-foreground">Gate to move on</span>
+            <span className="rounded-full border border-border px-2 py-0.5 font-medium">
+              {ws.where.gate}
+            </span>
+            {ws.now.filter((t) => !t.done && !t.optional && !t.locked).length ? (
+              <span className="text-muted-foreground">
+                · {ws.now.filter((t) => !t.done && !t.optional && !t.locked).length} to go
+              </span>
+            ) : null}
+          </span>
+        ) : null}
         {ws.where.day ? (
           <span
             className={cn(

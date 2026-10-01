@@ -11,28 +11,31 @@ import { FLOW_STAGES, stageFlow, type StageFlowInput } from "../stage-flow";
 
 describe("one stage for a deal", () => {
   it("shows the deal's stage when the project has a deal", () => {
-    expect(dealStageFor({ deal_stage: "in_onboarding", current_stage: "kickoff" })).toBe(
-      "in_onboarding",
+    expect(dealStageFor({ deal_stage: "make_it_yours", current_stage: "kickoff" })).toBe(
+      "make_it_yours",
     );
     expect(dealStageFor({ deal_stage: "prospect", current_stage: "launch" })).toBe("prospect");
   });
 
   it("maps a legacy project's lifecycle to the deal stage it implies", () => {
     expect(dealStageForLifecycle("handoff")).toBe("onboarding_kickoff");
-    expect(dealStageForLifecycle("build")).toBe("in_onboarding");
+    expect(dealStageForLifecycle("build")).toBe("get_it_working");
+    expect(dealStageForLifecycle("validate-iterate")).toBe("make_it_yours");
     expect(dealStageForLifecycle("graduate-to-cs")).toBe("onboarding_complete");
     expect(dealStageForLifecycle("closed_won")).toBeNull();
-    expect(dealStageFor({ deal_stage: null, current_stage: "launch" })).toBe("in_onboarding");
+    expect(dealStageFor({ deal_stage: null, current_stage: "launch" })).toBe("make_it_run");
     expect(dealStageFor({ deal_stage: null, current_stage: "nonsense" })).toBe(
       "onboarding_kickoff",
     );
     expect(dealStageFor({ deal_stage: "not-a-stage", current_stage: "build" })).toBe(
-      "in_onboarding",
+      "get_it_working",
     );
+    // The retired stage still has a name in history.
+    expect(dealStageLabel("in_onboarding")).toBe("Onboarding (legacy)");
   });
 
   it("labels from the pipeline's names first, then the built-in ones", () => {
-    expect(dealStageLabel("onboarding_kickoff")).toBe("Pre-kickoff");
+    expect(dealStageLabel("onboarding_kickoff")).toBe("Pre-Kickoff");
     expect(
       dealStageLabel("onboarding_kickoff", [{ key: "onboarding_kickoff", label: "Prep" }]),
     ).toBe("Prep");
@@ -46,10 +49,10 @@ describe("one stage for a deal", () => {
   });
 
   it("counts progress against the rail the deal actually walks", () => {
-    expect(dealStageProgress("prospect")).toEqual({ position: 1, total: 5 });
-    expect(dealStageProgress("in_onboarding")).toEqual({ position: 4, total: 5 });
-    expect(dealStageProgress("field_fusion_setup")).toEqual({ position: 3, total: 6 });
-    expect(dealStageProgress("onboarding_complete")).toEqual({ position: 5, total: 5 });
+    expect(dealStageProgress("prospect")).toEqual({ position: 1, total: 7 });
+    expect(dealStageProgress("make_it_yours")).toEqual({ position: 5, total: 7 });
+    expect(dealStageProgress("field_fusion_setup")).toEqual({ position: 3, total: 8 });
+    expect(dealStageProgress("onboarding_complete")).toEqual({ position: 7, total: 7 });
   });
 
   it("puts Prospect on the checklist rail with the same labels as the badge", () => {
@@ -76,7 +79,9 @@ describe("a prospect's checklist", () => {
       "prospect",
       "closed_won",
       "pre_kickoff",
-      "onboarding",
+      "get_it_working",
+      "make_it_yours",
+      "make_it_run",
       "complete",
     ]);
     expect(f.stages[0]!.done).toBe(false);

@@ -7,7 +7,15 @@ import { z } from "zod";
 import { z as z4 } from "zod/v4";
 import { STAGES } from "../presale-stages";
 
-export const stageSchema = z.enum(STAGES);
+/**
+ * A stage on the wire. The retired "in_onboarding" is accepted and read as
+ * the first of the three stages that replaced it, so a Zap built last month
+ * keeps working.
+ */
+export const stageSchema = z.preprocess(
+  (v) => (v === "in_onboarding" ? "get_it_working" : v),
+  z.enum(STAGES),
+);
 
 const isoDate = z
   .string()

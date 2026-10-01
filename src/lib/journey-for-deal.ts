@@ -22,7 +22,9 @@ const FLOOR: Record<AccountStage, string | null> = {
   closed_won: "handoff",
   field_fusion_setup: "handoff",
   onboarding_kickoff: "handoff",
-  in_onboarding: "plan-internal",
+  get_it_working: "plan-internal",
+  make_it_yours: "build",
+  make_it_run: "validate-iterate",
   onboarding_complete: "graduate-to-cs",
 };
 
@@ -33,7 +35,9 @@ const CEILING: Record<AccountStage, string | null> = {
   closed_won: "handoff",
   field_fusion_setup: "handoff",
   onboarding_kickoff: "handoff",
-  in_onboarding: "adopt",
+  get_it_working: "build",
+  make_it_yours: "validate-iterate",
+  make_it_run: "adopt",
   onboarding_complete: "graduate-to-cs",
 };
 

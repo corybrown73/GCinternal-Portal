@@ -375,17 +375,17 @@ export function DealBoard({
     let note: string | undefined;
     if (target === terminal) {
       const ok = await ask({
-        title: `Mark ${deal.name} onboarding complete?`,
-        body: "Every onboarding checklist step should be done. If any is open the move is refused, and a manager can move it anyway.",
-        confirmLabel: "Mark complete",
+        title: `Move ${deal.name} to Implementation Complete?`,
+        body: "Operational Go-Live should be recorded and the steps before it done. If any is open the move is refused, and a manager can move it anyway. The finish — Proven or Not Proven — is recorded on the deal afterwards.",
+        confirmLabel: "Move it",
         cancelLabel: "Not yet",
       });
       if (!ok) return;
-      note = "Marked Onboarding Complete from the board";
+      note = "Moved to Implementation Complete from the board";
     } else if (deal.stage === terminal) {
       const ok = await ask({
         title: `Reopen ${deal.name}?`,
-        body: `It leaves Onboarding Complete and goes back to ${stages.find((s) => s.key === target)?.label ?? target}. The project's stage follows it.`,
+        body: `It leaves Implementation Complete and goes back to ${stages.find((s) => s.key === target)?.label ?? target}. The project's stage follows it.`,
         confirmLabel: "Reopen",
         cancelLabel: "Keep it complete",
         destructive: true,

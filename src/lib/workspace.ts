@@ -9,6 +9,8 @@ import {
   type FlowTask,
   type StageFlow,
   type TaskKind,
+  ONBOARDING_FLOW_KEYS,
+  STAGE_GATE,
 } from "./stage-flow";
 
 /**
@@ -47,6 +49,8 @@ export type Workspace = {
   where: {
     stage: FlowStageKey | null;
     stageLabel: string;
+    /** The gate this stage ends at (the operating model), or null before the close. */
+    gate: string | null;
     /** "Day 6 of 15" and its second line, once the deal has closed. */
     day: { label: string; detail: string; state: string } | null;
     /** The plan's finish line: a target, said as one. */
@@ -130,7 +134,7 @@ function onboardingWindow(tasks: FlowTask[]): { items: WorkItem[]; label: string
   return { items, label };
 }
 
-/** "Stage 2 — Make It Work for Them" → "Stage 2"; "Session 1 — …" → "Session 1". */
+/** "Stage 2 — Make it yours" → "Stage 2"; "Session 1 — …" → "Session 1". */
 export function shortMeeting(label: string): string {
   const m = label.match(/^(Stage|Session|Training day)\s+\d+/i);
   return m ? m[0] : label.split(" — ")[0]!;
@@ -143,9 +147,9 @@ export function workspaceFor(input: WorkspaceInput): Workspace {
   const tasks = stage?.tasks ?? [];
 
   // WHERE ARE WE.
-  const closed = current !== null && current !== "prospect";
+  const closed = current !== null && current !== "prospect" && current !== "negotiate";
   const day =
-    timeline && closed && (current === "pre_kickoff" || current === "onboarding")
+    timeline && closed && (current === "pre_kickoff" || ONBOARDING_FLOW_KEYS.includes(current))
       ? (() => {
           const c = dayCounter(timeline, today);
           return { label: c.label, detail: c.detail, state: c.state };
@@ -159,22 +163,27 @@ export function workspaceFor(input: WorkspaceInput): Workspace {
         }
       : null;
 
-  // WHAT NOW. Closed Won, Field Fusion and Pre-kickoff are one window each;
-  // Onboarding is windowed by the next meeting.
+  // WHAT NOW. Closed Won, Field Fusion and Pre-Kickoff are one window each;
+  // the three middle stages are each their own window — the stage's work,
+  // windowed by its meeting — and Complete is the close-out.
   let now: WorkItem[];
   let windowLabel: string;
-  if (current === "onboarding") {
+  if (current && ONBOARDING_FLOW_KEYS.includes(current)) {
     const w = onboardingWindow(tasks);
     now = w.items;
-    windowLabel = w.label;
+    windowLabel = `${stage?.label ?? flowLabel(current)} · ${w.label}`;
+  } else if (current === "complete") {
+    now = tasks.map(withKind);
+    windowLabel = intake.outcome
+      ? intake.outcome.kind === "proven"
+        ? "Complete — Proven"
+        : "Complete — Not Proven"
+      : "Implementation Complete · the proof window";
   } else if (current === "pre_kickoff") {
     now = tasks.map(withKind);
     const first = calls(timeline)[0];
     windowLabel = first ? `Before ${shortMeeting(first.label)}` : "Before the first meeting";
-  } else if (current === "complete") {
-    now = [];
-    windowLabel = "Complete";
-  } else if (current === "prospect" || current === null) {
+  } else if (current === "prospect" || current === "negotiate" || current === null) {
     const cw = flow.stages.find((s) => s.key === "closed_won");
     now = (cw?.tasks ?? []).filter((t) => !t.locked).map(withKind);
     windowLabel = "Before the close";
@@ -221,7 +230,7 @@ export function workspaceFor(input: WorkspaceInput): Workspace {
     });
   }
   // Between Stage 1 and Stage 2: the homework on their page.
-  if (current === "onboarding" && timeline) {
+  if (current && ONBOARDING_FLOW_KEYS.includes(current) && timeline) {
     const held = calls(timeline).filter((m) => m.doneOn);
     const first = calls(timeline)[0];
     if (first?.doneOn && !upcoming?.doneOn && held.length === 1) {
@@ -269,6 +278,7 @@ export function workspaceFor(input: WorkspaceInput): Workspace {
     where: {
       stage: current,
       stageLabel: current ? flowLabel(current) : "—",
+      gate: current ? (STAGE_GATE[current] ?? null) : null,
       day,
       target,
     },

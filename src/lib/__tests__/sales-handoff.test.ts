@@ -290,7 +290,7 @@ describe("the Sales → TIS handoff", () => {
         },
       },
     });
-    expect(ready.advanceTo).toBe("in_onboarding");
+    expect(ready.advanceTo).toBe("get_it_working");
     // Field Fusion has its own handoff from the setup owner.
     const ff = stageFlow({ ...input, intake: { path: "field_fusion" } });
     expect(ff.stages.find((s) => s.key === "pre_kickoff")!.tasks.map((t) => t.key)).not.toContain(

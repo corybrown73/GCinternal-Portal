@@ -33,7 +33,8 @@ export function ClosedWonGateNotice({
 }) {
   const { confirm, dialog } = useConfirm();
   const label = STAGE_LABELS[toStage] ?? toStage;
-  const complete = toStage === "onboarding_complete";
+  // A checklist gate: the steps on the stages before this one are not done.
+  const complete = missing.includes("checklist");
   return (
     <div
       role="alert"
@@ -42,7 +43,7 @@ export function ClosedWonGateNotice({
       <span>
         <b>Not ready for {label}</b> —{" "}
         {complete
-          ? "the onboarding checklist still has open steps."
+          ? "the stages before it still have open steps."
           : `the deal has no ${missing
               .filter((m) => m !== "checklist")
               .map((m) => WON_GATE_LABEL[m])
@@ -87,7 +88,7 @@ export function ClosedWonGateNotice({
             const ok = await confirm({
               title: `Move it to ${label} anyway?`,
               body: complete
-                ? "Onboarding Complete closes the project out and hands it to Customer Success with steps still open. The move is recorded as made despite the check."
+                ? `${label} is reached when the steps before it are done; moving there now skips them. The move is recorded as made despite the check.`
                 : "Closed Won starts the clock, tells the team to claim it and builds the customer's plan from what is here. The move is recorded as made despite the check.",
               confirmLabel: "Move it anyway",
             });

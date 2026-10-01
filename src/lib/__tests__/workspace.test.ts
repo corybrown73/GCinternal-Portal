@@ -18,7 +18,7 @@ import { byKind, shortMeeting, workspaceFor, type WorkspaceInput } from "../work
 
 const CLOSE = "2026-09-14";
 
-function build(over: Partial<Record<string, unknown>> = {}, stage = "in_onboarding") {
+function build(over: Partial<Record<string, unknown>> = {}, stage = "get_it_working") {
   const intake = readIntake({
     path: "new_logo",
     wanted_forms: [{ id: "f1", name: "Daily job report", template_id: null }],
@@ -74,41 +74,47 @@ describe("the window of work", () => {
     expect(w.nextStep?.key).toBe("handoff");
   });
 
-  it("between Stage 1 and Stage 2: only what happens before Stage 2", () => {
+  it("Get it working, Stage 1 held: the gate's own facts, nothing from Stage 2", () => {
     const { input } = build({ timeline: { completed: { kickoff: "2026-09-17" } } });
     const w = workspaceFor(input);
-    expect(w.windowLabel).toBe("Between Stage 1 and Stage 2");
-    expect(w.now.map((t) => t.key)).toEqual(["kickoff", "between_1", "working"]);
+    expect(w.windowLabel).toMatch(/^Get it working · After Stage 1/);
+    expect(w.now.map((t) => t.key)).toEqual(["baseline_locked", "e2e_working", "between_1"]);
     expect(w.now.find((t) => t.key.startsWith("func_"))).toBeUndefined();
     expect(w.nextMeeting?.key).toBe("working");
-    expect(w.nextStep?.key).toBe("between_1");
+    expect(w.nextStep?.key).toBe("baseline_locked");
+    expect(w.where.gate).toBe("Working end to end");
   });
 
-  it("after Stage 3: readiness, what the SOW bought and the close-out", () => {
-    const { input } = build({
-      timeline: {
-        completed: { kickoff: "2026-09-17", working: "2026-09-22", adjust: "2026-09-30" },
+  it("Make it run, Stage 3 held: what the SOW bought and Operational Go-Live", () => {
+    const { input } = build(
+      {
+        timeline: {
+          completed: { kickoff: "2026-09-17", working: "2026-09-22", adjust: "2026-09-30" },
+        },
       },
-    });
+      "make_it_run",
+    );
     const w = workspaceFor(input);
-    expect(w.windowLabel).toBe("After Stage 3 — finishing");
-    expect(w.now.some((t) => t.key === "func_submit")).toBe(true);
-    expect(w.now.some((t) => t.key === "closeout")).toBe(true);
+    expect(w.windowLabel).toMatch(/^Make it run · After Stage 3/);
+    expect(w.now.some((t) => t.key === "go_live")).toBe(true);
+    expect(w.now.some((t) => t.key === "func_submit")).toBe(false);
     expect(w.now.some((t) => t.key === "kickoff")).toBe(false);
     expect(w.nextMeeting).toBeNull();
+    expect(w.where.gate).toBe("Operational Go-Live");
   });
 
   it("keeps meetings, actions, handoffs and readiness apart", () => {
-    const { input } = build({
+    const held = {
       timeline: {
         completed: { kickoff: "2026-09-17", working: "2026-09-22", adjust: "2026-09-30" },
       },
-    });
-    const groups = byKind(workspaceFor(input).now);
-    const kinds = groups.map((g) => g.kind);
-    expect(kinds).toContain("readiness");
-    expect(kinds).toContain("gate");
-    expect(groups.find((g) => g.kind === "gate")!.items.map((t) => t.key)).toContain("closeout");
+    };
+    const yours = byKind(workspaceFor(build(held, "make_it_yours").input).now);
+    expect(yours.map((g) => g.kind)).toContain("readiness");
+    expect(yours.map((g) => g.kind)).toContain("action");
+    const complete = byKind(workspaceFor(build(held, "onboarding_complete").input).now);
+    expect(complete.map((g) => g.kind)).toContain("gate");
+    expect(complete.find((g) => g.kind === "gate")!.items.map((t) => t.key)).toContain("closeout");
     expect(taskKind({ key: "working", action: "tick" } as never)).toBe("meeting");
     expect(taskKind({ key: "between_1", action: "tick" } as never)).toBe("action");
     expect(taskKind({ key: "func_users", action: "tick" } as never)).toBe("readiness");
@@ -118,7 +124,7 @@ describe("the window of work", () => {
   it("says where we are, as a target and never a promise", () => {
     const { input } = build({ timeline: { completed: { kickoff: "2026-09-17" } } });
     const w = workspaceFor(input);
-    expect(w.where.stageLabel).toBe("Onboarding");
+    expect(w.where.stageLabel).toBe("Get it working");
     expect(w.where.day?.label).toMatch(/Day \d+/);
     expect(w.where.target).toEqual({ word: "Functional", date: input.timeline!.liveDate });
   });
@@ -215,7 +221,7 @@ describe("readiness reflects what is being implemented", () => {
         completed: { kickoff: "2026-09-17", working: "2026-09-22", adjust: "2026-09-30" },
       },
     });
-    const ob = flow.stages.find((s) => s.key === "onboarding")!;
+    const ob = flow.stages.find((s) => s.key === "make_it_yours")!;
     expect(ob.tasks.filter((t) => t.key.startsWith("func_")).length).toBe(6);
   });
 });

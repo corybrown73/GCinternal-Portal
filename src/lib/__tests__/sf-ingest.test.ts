@@ -783,8 +783,8 @@ describe("guards", () => {
 describe("the presale stage seam (PLAN.md decision 10)", () => {
   it("maps a lifecycle stage to the presale tail stage it implies", () => {
     expect(presaleStageForLifecycle("handoff")).toBe("onboarding_kickoff");
-    expect(presaleStageForLifecycle("build")).toBe("in_onboarding");
-    expect(presaleStageForLifecycle("launch")).toBe("in_onboarding");
+    expect(presaleStageForLifecycle("build")).toBe("get_it_working");
+    expect(presaleStageForLifecycle("launch")).toBe("make_it_run");
     expect(presaleStageForLifecycle("graduate-to-cs")).toBe("onboarding_complete");
   });
 

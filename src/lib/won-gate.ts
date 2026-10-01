@@ -1,3 +1,5 @@
+import { STAGE_LABELS, STAGES, type AccountStage } from "./presale-stages";
+
 /**
  * The Closed Won gate, in words both sides read.
  *
@@ -9,9 +11,13 @@
  * Integrations (Zapier, the API, a CSV import) are not people: a deal they
  * deliver in Closed Won is a fact about Salesforce, and stays.
  */
-export const WON_GATE_PREFIX = "Not ready for Closed Won:";
-/** The same shape at the other end: Onboarding Complete needs the checklist done. */
-export const COMPLETE_GATE_PREFIX = "Not ready for Onboarding Complete:";
+/** The sentence a refused move starts with, for the stage it was going to. */
+export function gatePrefix(stage: AccountStage): string {
+  return `Not ready for ${STAGE_LABELS[stage]}:`;
+}
+export const WON_GATE_PREFIX = gatePrefix("closed_won");
+/** The same shape at the other end: Implementation Complete needs the steps before it done. */
+export const COMPLETE_GATE_PREFIX = gatePrefix("onboarding_complete");
 
 export type WonGateMissing = "notes" | "sow" | "checklist";
 
@@ -22,15 +28,19 @@ export const WON_GATE_LABEL: Record<WonGateMissing, string> = {
 };
 
 /** Which gate a thrown message came from, or null for some other error. */
-export function gateTarget(message: string): "closed_won" | "onboarding_complete" | null {
-  if (message.includes(WON_GATE_PREFIX)) return "closed_won";
-  if (message.includes(COMPLETE_GATE_PREFIX)) return "onboarding_complete";
-  return null;
+export function gateTarget(message: string): AccountStage | null {
+  return STAGES.find((s) => message.includes(gatePrefix(s))) ?? null;
 }
 
-/** The sentence the server throws when the onboarding checklist is not done. */
-export function completeGateMessage(open: number): string {
-  return `${COMPLETE_GATE_PREFIX} ${open} checklist step${open === 1 ? " is" : "s are"} still open. [checklist]`;
+/**
+ * The sentence the server throws when the steps before a stage are not
+ * done — Pre-Kickoff into Get it working, and every stage after, the same way.
+ */
+export function completeGateMessage(
+  open: number,
+  toStage: AccountStage = "onboarding_complete",
+): string {
+  return `${gatePrefix(toStage)} ${open} checklist step${open === 1 ? " is" : "s are"} still open. [checklist]`;
 }
 
 /** What a deal still lacks, from the facts the record holds. */

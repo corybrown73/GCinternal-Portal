@@ -1,7 +1,7 @@
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 
-import type { AccountStage } from "./presale-stages";
-import { stageFlow } from "./stage-flow";
+import { isPreClose, type AccountStage } from "./presale-stages";
+import { STAGE_GATE, stageFlow } from "./stage-flow";
 
 const db = () => supabaseAdmin as any;
 
@@ -23,8 +23,8 @@ export async function syncDealStage(
     .eq("id", dealId)
     .maybeSingle();
   if (!account) return { moved: null };
-  // Only the two automatic moves read anything; skip the reads otherwise.
-  if (account.stage !== "closed_won" && account.stage !== "onboarding_kickoff") {
+  // Before the close and at the end nothing moves on its own; skip the reads.
+  if (isPreClose(String(account.stage)) || account.stage === "onboarding_complete") {
     return { moved: null };
   }
   const built = await flowForDeal(dealId);
@@ -32,14 +32,19 @@ export async function syncDealStage(
   const { flow } = built;
   if (!flow.advanceTo) return { moved: null };
 
+  // The note names the gate the deal just passed: "Ready for Kickoff — moved
+  // on by the checklist", so the history reads as the operating model does.
+  const gate = flow.current ? STAGE_GATE[flow.current] : null;
   const { transitionStage } = await import("./server/accounts");
   const r = await transitionStage(
     dealId,
     flow.advanceTo,
     { source: actorProfileId ? "ui" : "system", actorProfileId },
-    flow.advanceTo === "onboarding_kickoff"
-      ? "Welcome brief generated: ready for the kickoff call"
-      : "Kickoff call booked: onboarding has started",
+    gate
+      ? `${gate} — moved on by the checklist`
+      : flow.advanceTo === "onboarding_kickoff"
+        ? "Welcome brief generated: ready for the kickoff call"
+        : "Moved on by the checklist",
   );
   return { moved: r.changed ? flow.advanceTo : null };
 }

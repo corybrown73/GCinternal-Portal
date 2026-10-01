@@ -28,13 +28,16 @@ import { getWelcome } from "@/lib/welcome.functions";
 import { getKickoffCadence } from "@/lib/kickoff-cadence.functions";
 import { openPanel } from "@/lib/panel-open";
 import { wonStage } from "@/lib/pipeline-stages";
-import { moveDealStage, saveIntake } from "@/lib/presale.functions";
+import type { AccountStage } from "@/lib/presale-stages";
+import { finishImplementation, moveDealStage, saveIntake } from "@/lib/presale.functions";
+import { ask } from "@/components/ui/ask";
 import {
   CORE_MEETINGS,
   DEAL_TYPES,
   bookMeetingPatch,
   completedAfterTick,
   FLOW_STAGES,
+  isWorkingStageKey,
   KICKOFF_CADENCE,
   PREP_ITEMS,
   readingInFlight,
@@ -49,7 +52,6 @@ import { aeReplyDraft, googleCalendarLink } from "@/lib/ae-reply";
 import { customerLabel } from "@/lib/customer-labels";
 import { customerFacingName } from "@/lib/names";
 import { cn } from "@/lib/utils";
-import { ask } from "@/components/ui/ask";
 
 /**
  * The deal's stages as one checklist, at the top of the page.
@@ -213,7 +215,7 @@ export function StageFlow({ deal }: { deal: DealData }) {
           ) : null}
         </p>
         <p className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
-          {counter && (flow.current === "onboarding" || flow.current === "pre_kickoff") ? (
+          {counter && (isWorkingStageKey(flow.current) || flow.current === "pre_kickoff") ? (
             <span
               className={cn(
                 "rounded-full border px-2 py-0.5 font-medium",
@@ -227,7 +229,7 @@ export function StageFlow({ deal }: { deal: DealData }) {
             </span>
           ) : null}
           {intake.path === "new_logo" &&
-          (flow.current === "onboarding" || flow.current === "pre_kickoff") ? (
+          (isWorkingStageKey(flow.current) || flow.current === "pre_kickoff") ? (
             <span className="rounded-full border border-border px-2 py-0.5">
               Functional by {shortDay(timeline.liveDate)} · 30-day window ends{" "}
               {shortDay(coreWindowEnd(timeline))}
@@ -268,8 +270,8 @@ export function StageFlow({ deal }: { deal: DealData }) {
           <Check className="mr-1 inline h-3.5 w-3.5" strokeWidth={3} />
           {flow.advanceTo
             ? editable
-              ? `Everything here is done — moving the deal to ${flow.advanceTo === "in_onboarding" ? "Onboarding" : "Pre-kickoff"}…`
-              : `Everything here is done — the deal moves to ${flow.advanceTo === "in_onboarding" ? "Onboarding" : "Pre-kickoff"} when its owner opens it.`
+              ? `Everything here is done — moving the deal to ${stageLabelFor(flow.advanceTo)}…`
+              : `Everything here is done — the deal moves to ${stageLabelFor(flow.advanceTo)} when its owner opens it.`
             : shown === "closed_won" &&
                 !flow.stages
                   .find((x) => x.key === "closed_won")!
@@ -279,14 +281,15 @@ export function StageFlow({ deal }: { deal: DealData }) {
         </p>
       ) : null}
 
-      {shown === "onboarding" ? (
-        <OnboardingList deal={deal} intake={intake} tasks={stage.tasks} editable={editable} />
-      ) : shown === "complete" ? (
-        <p className="px-4 py-3 text-[13px] text-muted-foreground">
-          {flow.current === "complete"
-            ? "Onboarding is complete."
-            : "Marked from the Onboarding stage once every step there is done."}
-        </p>
+      {isWorkingStageKey(shown) ? (
+        <OnboardingList
+          deal={deal}
+          intake={intake}
+          tasks={stage.tasks}
+          editable={editable}
+          stageKey={shown}
+          current={flow.current}
+        />
       ) : shown === "prospect" || shown === "negotiate" ? (
         <p className="px-4 py-3 text-[13px] text-muted-foreground">
           {flow.current === "negotiate"
@@ -311,7 +314,7 @@ export function StageFlow({ deal }: { deal: DealData }) {
         </ol>
       )}
       {/* The parking lot lives beside the work from the first call on. */}
-      {(shown === "pre_kickoff" || shown === "onboarding") &&
+      {(shown === "pre_kickoff" || isWorkingStageKey(shown)) &&
       flow.current !== null &&
       flow.current !== "prospect" &&
       flow.current !== "negotiate" ? (
@@ -416,6 +419,12 @@ function NotClosedBar({
   );
 }
 
+/** The deal stage's name on the rail, for "moving the deal to …". */
+function stageLabelFor(stage: AccountStage | null): string {
+  if (!stage) return "the next stage";
+  return FLOW_STAGES.find((s) => s.stage === stage)?.label ?? stage;
+}
+
 /** One line under the stage name: what moves the deal on from here. */
 function stageFooter(
   shown: FlowStageKey,
@@ -433,15 +442,21 @@ function stageFooter(
     case "negotiate":
       return "Sales is closing. Assign the TIS now; the deal moves to Closed Won when it is marked won.";
     case "closed_won":
-      return "Moves to Pre-kickoff when the review is approved.";
+      return "Moves to Pre-Kickoff when the review is approved.";
     case "field_fusion":
-      return "Moves to Pre-kickoff when the setup is handed over.";
+      return "Moves to Pre-Kickoff when the setup is handed over.";
     case "pre_kickoff":
       return path === "new_logo"
-        ? "Moves to Onboarding when the AE is answered, the prep is done and all three core meetings are booked."
-        : "Moves to Onboarding when the AE is answered, the cadence is on and the kickoff is booked.";
-    case "onboarding":
-      return "Mark it complete once every step is done.";
+        ? "Gate: Ready for Kickoff — the handoff complete, the customer ready, the AE answered, the prep done and all three meetings booked."
+        : "Gate: Ready for Kickoff — the handoff complete, the customer ready, the AE answered, the cadence on and the kickoff booked.";
+    case "get_it_working":
+      return "Gate: Working end to end — Stage 1 held, the plan and dates agreed, one submission end to end.";
+    case "make_it_yours":
+      return "Gate: Ready to run — Stage 2 held, real data in, and they can run it without us (Functional).";
+    case "make_it_run":
+      return "Gate: Operational Go-Live — Stage 3 held, what the SOW bought delivered, their people using it for real.";
+    case "complete":
+      return "The proof window: close it out, then finish as Proven or Not Proven.";
     default:
       return "";
   }
@@ -1268,11 +1283,11 @@ export function KickoffBody({
             : ""}.{" "}
           <span className="text-foreground">
             {deal.account.stage === "prospect" || deal.account.stage === "negotiate"
-              ? "Next: mark the deal Closed Won at the top — it goes straight to Onboarding."
+              ? "Next: mark the deal Closed Won at the top — it goes on to Get it working once Pre-Kickoff is done."
               : deal.account.stage === "closed_won"
-                ? "Next: finish the Closed Won tasks — the deal then goes straight to Onboarding."
+                ? "Next: finish the Closed Won tasks — the deal then moves on through Pre-Kickoff."
                 : deal.account.stage === "onboarding_kickoff"
-                  ? "Moving the deal to Onboarding…"
+                  ? "Moving the deal to Get it working once Pre-Kickoff's gate is met…"
                   : "Next: send the invite below, then run the call."}
           </span>
         </div>
@@ -1451,8 +1466,8 @@ function BookCoreBody({
     }).date,
   );
   const plannedDate = (k: string) => plan.milestones.find((m) => m.key === k)?.date ?? "";
-  // The plan's own words for each meeting: "Stage 1 — Make It Work" on a new
-  // logo, "Stage 1 — Make It Work: the form the integration reads" on an
+  // The plan's own words for each meeting: "Stage 1 — Get it working" on a new
+  // logo, "Stage 1 — Get it working: the form the integration reads" on an
   // existing account.
   const labelFor = (k: string) =>
     plan.milestones.find((m) => m.key === k)?.label ??
@@ -1622,11 +1637,16 @@ function OnboardingList({
   intake,
   tasks,
   editable,
+  stageKey,
+  current,
 }: {
   deal: DealData;
   intake: IntakeAnswers;
   tasks: FlowTask[];
   editable: boolean;
+  /** Which of the working stages this list is. */
+  stageKey: FlowStageKey;
+  current: FlowStageKey | null;
 }) {
   const qc = useQueryClient();
   const save = useServerFn(saveIntake);
@@ -1697,12 +1717,15 @@ function OnboardingList({
         },
       );
   };
+  const finish = useServerFn(finishImplementation);
   const complete = useMutation({
-    mutationFn: () => move({ data: { dealId: deal.account.id, toStage: "onboarding_complete" } }),
+    mutationFn: (v: { kind: "proven" | "not_proven"; reason: string | null }) =>
+      finish({ data: { dealId: deal.account.id, kind: v.kind, reason: v.reason } }),
     onMutate: () => setError(null),
     onSuccess: () => void qc.invalidateQueries(),
     onError: (e) => setError((e as Error).message),
   });
+  void move;
   const [recapFor, setRecapFor] = useState<string | null>(null);
   const playbook = intake.path === "new_logo";
   const meetingWhen = (k: string) => {
@@ -1820,20 +1843,68 @@ function OnboardingList({
       </ul>
       <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border px-4 py-2.5">
         <p className="text-[12px] text-muted-foreground">
-          {allDone
-            ? "Every step is done."
-            : `${tasks.filter((t) => !t.done && !t.optional).length} step${tasks.filter((t) => !t.done && !t.optional).length === 1 ? "" : "s"} to go. Dates come from the plan; move them on the plan below.`}
+          {tasks.length === 0
+            ? "Nothing to do on this stage for this setup; it is passed through."
+            : allDone
+              ? stageKey === "complete"
+                ? "Every step is done. Finish it below."
+                : `Every step is done — the gate is met; the deal moves on.`
+              : `${tasks.filter((t) => !t.done && !t.optional).length} step${tasks.filter((t) => !t.done && !t.optional).length === 1 ? "" : "s"} to go. Dates come from the plan; move them on the plan below.`}
         </p>
-        {deal.account.stage === "in_onboarding" ? (
-          <button
-            type="button"
-            className="inline-flex h-8 items-center gap-1.5 rounded-sm bg-primary px-3 text-[12px] font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-            disabled={!editable || !allDone || complete.isPending}
-            title={allDone ? "Moves the deal to Onboarding Complete" : "Tick every step first"}
-            onClick={() => complete.mutate()}
-          >
-            {complete.isPending ? "Saving…" : "Mark onboarding complete"}
-          </button>
+        {stageKey === "complete" && current === "complete" ? (
+          intake.outcome ? (
+            <span className="text-[12px] font-medium">
+              Finished: {intake.outcome.kind === "proven" ? "Proven" : "Not Proven"}
+              {intake.outcome.reason ? ` — ${intake.outcome.reason}` : ""}
+            </span>
+          ) : (
+            <span className="flex flex-wrap items-center gap-1.5">
+              <button
+                type="button"
+                className="inline-flex h-8 items-center gap-1.5 rounded-sm bg-primary px-3 text-[12px] font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+                disabled={!editable || complete.isPending}
+                title="The agreed outcome is shown in real use"
+                onClick={async () => {
+                  const why = await ask({
+                    title: "Finish as Proven?",
+                    body: "The agreed outcome happened in real use and every step is closed out. Internal status only; the customer never sees it.",
+                    confirmLabel: "Finish — Proven",
+                    prompt: { label: "What proved it (optional)", required: false },
+                  });
+                  if (why === false || why === null) return;
+                  complete.mutate({
+                    kind: "proven",
+                    reason: typeof why === "string" && why.trim() ? why.trim() : null,
+                  });
+                }}
+              >
+                {complete.isPending ? "Saving…" : "Finish — Proven"}
+              </button>
+              <button
+                type="button"
+                className="inline-flex h-8 items-center gap-1.5 rounded-sm border border-border px-3 text-[12px] font-medium hover:bg-muted disabled:opacity-50"
+                disabled={!editable || complete.isPending}
+                title="We could not prove the agreed outcome; never a way to close unfinished work"
+                onClick={async () => {
+                  const why = await ask({
+                    title: "Finish as Not Proven?",
+                    body: "Only when the outcome could not be proven — an adoption problem that now belongs to the AM or Customer Success. Delivery or capability problems stay open. Say why.",
+                    confirmLabel: "Finish — Not Proven",
+                    destructive: true,
+                    prompt: {
+                      label: "Why",
+                      placeholder: "Rolled out to one crew only; adoption with the AM",
+                      required: true,
+                    },
+                  });
+                  if (typeof why !== "string" || !why.trim()) return;
+                  complete.mutate({ kind: "not_proven", reason: why.trim() });
+                }}
+              >
+                Finish — Not Proven
+              </button>
+            </span>
+          )
         ) : null}
       </div>
       {error ? <p className="px-4 pb-2 text-[12px] text-destructive">{error}</p> : null}

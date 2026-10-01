@@ -3,6 +3,7 @@ import type { QueueRow } from "./home-triage";
 import type { CommitmentRow } from "./hub-types";
 import { initials } from "./initials";
 import type { DealInboxRow } from "./presale.server";
+import { isOnboardingStage } from "./presale-stages";
 import { FLOW_STAGES } from "./stage-flow";
 import { addBusinessDays, businessDaysBetween } from "./onboarding-timeline";
 
@@ -220,7 +221,7 @@ export function todayFor(input: TodayInput): Today {
   const launching = all.filter((r) => {
     const live = dealFactsOf(r)?.live_date ?? r.impl.target_launch_date;
     return (
-      r.impl.deal_stage === "in_onboarding" &&
+      isOnboardingStage(r.impl.deal_stage) &&
       live !== null &&
       live >= today &&
       live <= addBusinessDays(today, 10)

@@ -676,3 +676,19 @@ export const sendHandoffToCustomer = createServerFn({ method: "POST" })
     const { sendHandoffToCustomer: send } = await import("./presale.server");
     return send(context.profile.id, data.dealId, data.keys);
   });
+
+export const finishImplementation = createServerFn({ method: "POST" })
+  .middleware([requireDealEditor])
+  .inputValidator((data: unknown) =>
+    z
+      .object({
+        dealId: z.string().uuid(),
+        kind: z.enum(["proven", "not_proven"]),
+        reason: z.string().trim().max(600).nullable(),
+      })
+      .parse(data),
+  )
+  .handler(async ({ data, context }) => {
+    const { finishImplementation: finish } = await import("./presale.server");
+    return finish(context.profile.id, data.dealId, data.kind, data.reason);
+  });

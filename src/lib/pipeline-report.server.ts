@@ -67,7 +67,7 @@ export async function loadPipelineReport(
       hasSow: d.has_sow,
       hasAiBrief: briefed.has(d.id),
       closedAt: firstTo(d.id, "closed_won"),
-      onboardingAt: firstTo(d.id, "in_onboarding"),
+      onboardingAt: firstTo(d.id, "get_it_working") ?? firstTo(d.id, "in_onboarding"),
       liveOn: intake.timeline.completed["live"] ?? null,
       lastActivityAt: activity[activity.length - 1]!,
     };
