@@ -74,6 +74,11 @@ describe("the stage checklist", () => {
     const base = {
       ...ready,
       path: "dm_conversion",
+      // Pre-Kickoff's two checks: the Sales handoff and the customer's readiness.
+      handoff: {
+        completed_at: "2026-09-22T15:00:00Z",
+        customer_ready_override: { at: "2026-09-22T15:00:00Z", by: null, reason: "closing call" },
+      },
       handoff_tasks: {
         reviewed: "2026-09-22T15:00:00Z",
         reply_ae: "2026-09-22T15:00:00Z",
@@ -180,11 +185,22 @@ describe("the new-logo plan: the Implementation Playbook", () => {
     };
     const f = stageFlow(input({ stage: "onboarding_kickoff", intake: oneBooked }));
     const pk = f.stages.find((s) => s.key === "pre_kickoff")!.tasks;
-    expect(pk.map((t) => t.key)).toEqual(["reply_ae", "cadence", "prep", "kickoff"]);
+    expect(pk.map((t) => t.key)).toEqual([
+      "handoff",
+      "customer_ready",
+      "reply_ae",
+      "cadence",
+      "prep",
+      "kickoff",
+    ]);
     expect(pk.find((t) => t.key === "kickoff")!.summary).toBe("1 of 3 booked");
     expect(f.advanceTo).toBeNull();
     const ready3 = {
       ...ready,
+      handoff: {
+        completed_at: "2026-09-22T15:00:00Z",
+        customer_ready_override: { at: "2026-09-22T15:00:00Z", by: null, reason: "closing call" },
+      },
       handoff_tasks: { ...ticks, prep_process: "x", prep_form: "x", prep_data: "x" },
       timeline: {
         overrides: { kickoff: "2026-09-25", working: "2026-09-29", adjust: "2026-10-07" },
@@ -314,7 +330,7 @@ describe("nudges", () => {
       flow: stageFlow(input({ stage: "onboarding_kickoff" })),
     });
     expect(slow[0]).toMatchObject({ to: "owner", level: "warn" });
-    expect(slow[0]!.line).toMatch(/Next: Reply to the AE's email/);
+    expect(slow[0]!.line).toMatch(/Next: Sales handoff complete/);
     const stuck = nudgesFor({
       name: "Maverick",
       stage: "onboarding_kickoff",

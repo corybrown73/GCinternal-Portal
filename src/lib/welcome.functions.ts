@@ -59,3 +59,23 @@ export const tickWelcomeHomework = createServerFn({ method: "POST" })
     const { tickWelcomeHomework: tick } = await import("./welcome.server");
     return { homeworkDone: await tick(data.token, data.key, data.done) };
   });
+
+export const answerWelcomeIntakeFn = createServerFn({ method: "POST" })
+  .inputValidator((data: unknown) =>
+    z
+      .object({
+        token: z.string().trim().min(8).max(200),
+        key: z.string().max(40),
+        value: z.union([
+          z.string().max(4000),
+          z.array(z.string().max(200)).max(40),
+          z.boolean(),
+          z.null(),
+        ]),
+      })
+      .parse(data),
+  )
+  .handler(async ({ data }) => {
+    const { answerWelcomeIntake } = await import("./welcome.server");
+    return { intake: await answerWelcomeIntake(data.token, data.key, data.value) };
+  });

@@ -624,3 +624,55 @@ export const getIntakeFormLink = createServerFn({ method: "POST" })
     const { intakeFormLink } = await import("./presale.server");
     return intakeFormLink(data.dealId, data.path);
   });
+
+/* ---------- the Sales → TIS handoff ---------- */
+
+const handoffValueSchema = z.union([
+  z.string().max(4000),
+  z.array(z.string().max(200)).max(40),
+  z.boolean(),
+  z.null(),
+]);
+
+export const saveHandoffAnswer = createServerFn({ method: "POST" })
+  .middleware([requireDealEditor])
+  .inputValidator((data: unknown) =>
+    z
+      .object({ dealId: z.string().uuid(), key: z.string().max(40), value: handoffValueSchema })
+      .parse(data),
+  )
+  .handler(async ({ data, context }) => {
+    const { saveHandoffAnswer: save } = await import("./presale.server");
+    return save(context.profile.id, context.profile.role, data.dealId, data.key, data.value);
+  });
+
+export const setHandoffFlags = createServerFn({ method: "POST" })
+  .middleware([requireDealEditor])
+  .inputValidator((data: unknown) =>
+    z
+      .object({
+        dealId: z.string().uuid(),
+        commitments_none: z.boolean().optional(),
+        completed: z.boolean().optional(),
+        customer_ready_override: z
+          .object({ reason: z.string().trim().min(1).max(300) })
+          .nullable()
+          .optional(),
+      })
+      .parse(data),
+  )
+  .handler(async ({ data, context }) => {
+    const { setHandoffFlags: set } = await import("./presale.server");
+    const { dealId, ...flags } = data;
+    return set(context.profile.id, dealId, flags);
+  });
+
+export const sendHandoffToCustomer = createServerFn({ method: "POST" })
+  .middleware([requireDealEditor])
+  .inputValidator((data: unknown) =>
+    z.object({ dealId: z.string().uuid(), keys: z.array(z.string().max(40)).max(40) }).parse(data),
+  )
+  .handler(async ({ data, context }) => {
+    const { sendHandoffToCustomer: send } = await import("./presale.server");
+    return send(context.profile.id, data.dealId, data.keys);
+  });

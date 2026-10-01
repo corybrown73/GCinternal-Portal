@@ -6,6 +6,7 @@ import {
   type IntakeAnswers,
 } from "./intake-answers";
 import type { AccountStage } from "./presale-stages";
+import { handoffChecks, missingLine } from "./sales-handoff";
 import { TEAM_ZONE, shortDay, type Timeline } from "./onboarding-timeline";
 
 /**
@@ -95,6 +96,7 @@ export type TaskAction =
   | "cadence"
   | "kickoff"
   | "field_fusion"
+  | "handoff"
   | "tick"
   | "graduate";
 
@@ -294,9 +296,51 @@ function preKickoffTasks(a: IntakeAnswers): FlowTask[] {
   // The playbook's three core meetings: a new logo and an existing account
   // alike (its form plan runs the same three calls). The rest book one call
   // here and set the other times on the plan.
-  return a.path === "new_logo" || a.path === "existing"
-    ? playbookPreKickoff(a)
-    : classicPreKickoff(a);
+  const rest =
+    a.path === "new_logo" || a.path === "existing" ? playbookPreKickoff(a) : classicPreKickoff(a);
+  return [...handoffTasks(a), ...rest];
+}
+
+/**
+ * Pre-Kickoff's two checks (the operating model): the Sales handoff is
+ * complete, and the customer is ready. Different people own them and they
+ * fail for different reasons, so they are two ticks, read from the one
+ * handoff record (src/lib/sales-handoff.ts). Field Fusion has its own
+ * handoff from the setup owner and skips these.
+ */
+function handoffTasks(a: IntakeAnswers): FlowTask[] {
+  if (a.path === "field_fusion") return [];
+  const c = handoffChecks(a);
+  return [
+    {
+      key: "handoff",
+      label: "Sales handoff complete",
+      hint: "What was bought, the outcome, what was promised (or that nothing was), the contacts and the timing — on the handoff, from Sales, the AI reading or you.",
+      done: c.salesComplete.done,
+      summary: c.salesComplete.done
+        ? a.handoff.completed_at
+          ? `Marked complete ${stampDay(a.handoff.completed_at)}`
+          : "Every required answer is in"
+        : missingLine(c.salesComplete.missing),
+      action: "handoff",
+      locked: null,
+    },
+    {
+      key: "customer_ready",
+      label: "Customer ready for kickoff",
+      hint: "We have what we need from them: the process today, who is in the field, who will be in the room. Send them the questions from the handoff, or go ahead and say why.",
+      done: c.customerReady.done,
+      summary: c.customerReady.done
+        ? c.customerReady.overridden
+          ? `Going ahead: ${a.handoff.customer_ready_override!.reason}`
+          : "Their answers are in"
+        : c.status === "sent"
+          ? `With the customer since ${stampDay(a.handoff.sent_to_customer_at!)} · ${missingLine(c.customerReady.missing) ?? ""}`
+          : missingLine(c.customerReady.missing),
+      action: "handoff",
+      locked: null,
+    },
+  ];
 }
 
 /**

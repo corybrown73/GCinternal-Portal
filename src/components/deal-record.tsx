@@ -20,6 +20,7 @@ import { OwnerField } from "@/components/assignment-panel";
 import { HelpPicksPanel } from "@/components/help-articles-panel";
 import { FieldFusionRequestPanel } from "@/components/field-fusion-request-panel";
 import { StageFlow } from "@/components/stage-flow";
+import { HandoffIntakePanel } from "@/components/handoff-intake-panel";
 import { PlanSection } from "@/components/plan-section";
 import { DeliverablesStrip } from "@/components/deliverables-strip";
 import { deliverablePhases } from "@/lib/deliverables";
@@ -309,6 +310,14 @@ export function DealRecord({ deal, embedded = false }: { deal: DealData; embedde
       )}
       <PageBody className={cn("space-y-4", embedded && "px-0 py-0")}>
         {embedded ? null : <StageFlow deal={deal} />}
+        {/* THE HANDOFF FROM SALES: what was bought, promised, by whom and
+            when — and the questions the customer answers before kickoff.
+            Open while it is outstanding; folded once it is complete. */}
+        <HandoffIntakePanel
+          deal={deal}
+          editable={editable}
+          defaultOpen={!onPlan || readIntake(account.intake).handoff.completed_at === null}
+        />
         {/* THE RECORD, FOLDED. The checklist above is the work; everything
             here is what it stands on — the build, the notes and documents,
             the plan's dates, the help articles, the deal's facts and its

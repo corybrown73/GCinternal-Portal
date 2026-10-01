@@ -23,6 +23,8 @@ import { TaskBody, useHandoffTick, useStageSync } from "@/components/stage-flow"
 import { When } from "@/components/when";
 import { canEditDeal, useProfile } from "@/lib/auth";
 import { StatusChip } from "@/components/record";
+import { HandoffChip, handoffDetail } from "@/components/handoff-chip";
+import { handoffChecks } from "@/lib/sales-handoff";
 import { deriveHealth } from "@/lib/customer360-derive";
 import { dealStageProgress } from "@/lib/deal-stage";
 import { dealValue } from "@/lib/deal-value";
@@ -226,6 +228,8 @@ function WhereBar({
   const progress = dealStageProgress(impl.deal_stage);
   const at = flow.stages.findIndex((s) => s.key === flow.current);
   const value = dealValue(deal.account);
+  const dealIntake = readIntake(deal.account.intake);
+  const handoff = dealIntake.path === "field_fusion" ? null : handoffChecks(dealIntake);
   return (
     <section className="rounded-lg border border-border bg-card" aria-label="Where we are">
       <div className="flex flex-wrap items-center justify-between gap-3 px-4 pt-3.5">
@@ -245,6 +249,22 @@ function WhereBar({
           <span>
             <span className="text-muted-foreground">Owner</span> {impl.owner_name ?? "Nobody yet"}
           </span>
+          {handoff ? (
+            <Link
+              to="/customers/$customerId"
+              params={{ customerId }}
+              search={{ tab: "record", impl: impl.id }}
+              title="Open the handoff from Sales on the Record tab"
+              className="inline-flex items-center gap-1"
+            >
+              <HandoffChip status={handoff.status} detail={handoffDetail(handoff)} />
+              {handoff.status !== "complete" ? (
+                <span className="text-[11px] text-primary underline-offset-2 hover:underline">
+                  Open handoff →
+                </span>
+              ) : null}
+            </Link>
+          ) : null}
         </div>
       </div>
       <ol className="flex flex-wrap items-center gap-1 px-4 pt-3">

@@ -435,10 +435,59 @@ export const intakeAnswersSchema = z.object({
         .default([]),
     })
     .default({}),
+  /**
+   * THE SALES → TIS HANDOFF (src/lib/sales-handoff.ts). One question set,
+   * two sides: what Sales knows (what was bought, the outcome, what was
+   * promised, who the contacts are, timing) and what the customer tells us
+   * before kickoff. Each answer remembers who gave it — Sales, the AI
+   * reading, the TIS, or the customer on their welcome link — so the TIS
+   * can tell a fact from a guess. Questions that already live elsewhere on
+   * the intake (industry, field users, the process today) stay there; only
+   * the new ones store here.
+   */
+  handoff: z
+    .object({
+      answers: z
+        .record(
+          z.string().max(40),
+          z.object({
+            value: z.union([
+              z.string().max(4000),
+              z.array(z.string().max(200)).max(40),
+              z.boolean(),
+              z.null(),
+            ]),
+            source: z.enum(["sales", "ai", "tis", "customer"]),
+            at: z.string().max(40),
+            by: z.string().uuid().nullable().default(null),
+            /** The AI's source words, when the AI answered. */
+            quote: z.string().max(400).nullable().default(null),
+          }),
+        )
+        .default({}),
+      /** Nikki's rule: commitments, or an explicit "none were made". */
+      commitments_none: z.boolean().default(false),
+      /** The open questions went to the customer on their welcome link. */
+      sent_to_customer_at: z.string().nullable().default(null),
+      sent_by: z.string().uuid().nullable().default(null),
+      /** The question keys the sender chose to ask the customer. */
+      asked: z.array(z.string().max(40)).max(40).default([]),
+      /** A person said the handoff is complete, whatever the checks say. */
+      completed_at: z.string().nullable().default(null),
+      completed_by: z.string().uuid().nullable().default(null),
+      /** The TIS went ahead without the customer's answers, and said why. */
+      customer_ready_override: z
+        .object({ at: z.string(), by: z.string().uuid().nullable(), reason: z.string().max(300) })
+        .nullable()
+        .default(null),
+    })
+    .default({}),
   updated_at: z.string().nullable().default(null),
 });
 
 export type IntakeAnswers = z.infer<typeof intakeAnswersSchema>;
+export type HandoffAnswer = IntakeAnswers["handoff"]["answers"][string];
+export type HandoffSource = HandoffAnswer["source"];
 
 /** Phase 1 is training, not a form build: Field Fusion, or the person said so. */
 export function isTrainingOnly(a: Pick<IntakeAnswers, "path" | "training_only">): boolean {

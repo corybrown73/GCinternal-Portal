@@ -5,6 +5,7 @@ import { TERM_LABELS } from "./terms";
 import { resolveAccountId, transitionStage, upsertAccount } from "./server/accounts";
 import { accountUpsertSchema } from "./server/schemas";
 import { isStage, type AccountStage } from "./presale-stages";
+import { handoffChecks } from "./sales-handoff";
 import {
   findStage,
   isAtOrPast,
@@ -180,6 +181,8 @@ export interface PipelineDeal extends Account {
   ff_poc: boolean;
   /** The implementation owner, once somebody owns it. */
   owner_name: string | null;
+  /** The Sales → TIS handoff: outstanding, with the customer, or complete. */
+  handoff_status: import("./sales-handoff").HandoffStatus;
   /** The checklist's next task for the stage the deal is in. */
   next_step: string | null;
   /** Business days in this stage, and whether that is past its limit. */
@@ -310,6 +313,7 @@ export async function loadPipeline(
         // A POC until it is won: the form marks it, the close ends it.
         ff_poc: intake.field_fusion.poc && !isAtOrPast(stages, a.stage, wonStage(stages).key),
         owner_name: ownerName,
+        handoff_status: handoffChecks(intake).status,
         // The same next task the deal's checklist shows.
         next_step: nextChecklistTask({
           stage: a.stage,
@@ -1147,6 +1151,20 @@ export async function generateDealBrief(
         .map((r) => r.content_md)
         .join("\n\n");
       const result = prefillFromSynthesis(current, brief.structured_json, notesText);
+      // The Sales handoff's blanks, from the same reading. Merged in code,
+      // because the merge RPC replaces a top-level key whole.
+      {
+        const { prefillHandoffFromSynthesis } = await import("./intake-prefill");
+        const { mergeHandoffBlock } = await import("./sales-handoff");
+        const h = prefillHandoffFromSynthesis(current, brief.structured_json);
+        if (Object.keys(h.answers).length) {
+          (result.patch as Record<string, unknown>)["handoff"] = mergeHandoffBlock(
+            current.handoff,
+            { answers: h.answers },
+          );
+          result.filled.push(...h.filled);
+        }
+      }
       if (Object.keys(result.patch).length) {
         // Validated whole, written as a merge of only what changed.
         intakeAnswersSchema.parse({ ...current, ...result.patch });
@@ -2175,6 +2193,12 @@ export async function saveDealIntake(
     const { claimByPerson } = await import("./intake-answers");
     Object.assign(merged, claimByPerson(current, Object.keys(patch)));
   }
+  // The handoff: one answer at a time, a null stamp removes one, the flags
+  // take the patch's value.
+  if (patch["handoff"] && typeof patch["handoff"] === "object") {
+    const { mergeHandoffBlock } = await import("./sales-handoff");
+    merged["handoff"] = mergeHandoffBlock(current.handoff, patch["handoff"]);
+  }
   // A recap replaces only its own meeting's.
   if (patch["recaps"] && typeof patch["recaps"] === "object") {
     merged["recaps"] = { ...current.recaps, ...(patch["recaps"] as Record<string, unknown>) };
@@ -2669,4 +2693,98 @@ export function implementationNameFor(
   if (services.length)
     return services.length === 1 ? services[0]! : `${services[0]} + ${services.length - 1} more`;
   return `${accountName} onboarding`;
+}
+
+/* ------------------------------------------------- the Sales → TIS handoff */
+
+/**
+ * One handoff answer, from whoever is answering. The value lands where the
+ * question lives (an intake field, or the handoff block) with a stamp
+ * saying who gave it; the stage follows, the way every intake save does.
+ */
+export async function saveHandoffAnswer(
+  userId: string,
+  role: string | null | undefined,
+  dealId: string,
+  key: string,
+  value: import("./sales-handoff").HandoffValue,
+) {
+  const { handoffPatch, sourceForRole } = await import("./sales-handoff");
+  const patch = handoffPatch(key, value, {
+    source: sourceForRole(role),
+    by: userId,
+    at: new Date().toISOString(),
+  });
+  return saveDealIntake(userId, dealId, patch);
+}
+
+/** The handoff's own flags: "nothing was promised", "complete", "go ahead without the customer". */
+export async function setHandoffFlags(
+  userId: string,
+  dealId: string,
+  flags: {
+    commitments_none?: boolean | undefined;
+    completed?: boolean | undefined;
+    customer_ready_override?: { reason: string } | null | undefined;
+  },
+) {
+  const now = new Date().toISOString();
+  const handoff: Record<string, unknown> = {};
+  if (flags.commitments_none !== undefined) handoff["commitments_none"] = flags.commitments_none;
+  if (flags.completed !== undefined) {
+    handoff["completed_at"] = flags.completed ? now : null;
+    handoff["completed_by"] = flags.completed ? userId : null;
+  }
+  if (flags.customer_ready_override !== undefined) {
+    handoff["customer_ready_override"] = flags.customer_ready_override
+      ? { at: now, by: userId, reason: flags.customer_ready_override.reason.trim().slice(0, 300) }
+      : null;
+  }
+  const next = await saveDealIntake(userId, dealId, { handoff });
+  await audit({
+    actor_type: "user",
+    actor_id: userId,
+    action: "deal.handoff_flags",
+    entity_type: "account",
+    entity_id: dealId,
+    payload: flags,
+  });
+  return next;
+}
+
+/**
+ * "Send the rest to the customer": the chosen questions are marked as asked,
+ * the customer's link is minted if it does not exist yet, and the URL comes
+ * back for the person to send however they talk to the customer.
+ */
+export async function sendHandoffToCustomer(
+  userId: string,
+  dealId: string,
+  keys: string[],
+): Promise<{ url: string; asked: string[] }> {
+  const { HANDOFF_KEYS } = await import("./sales-handoff");
+  const asked = [...new Set(keys.filter((k) => HANDOFF_KEYS.includes(k)))];
+  if (!asked.length) throw new Error("Pick at least one question to ask the customer.");
+  await saveDealIntake(userId, dealId, {
+    handoff: { sent_to_customer_at: new Date().toISOString(), sent_by: userId, asked },
+  });
+  const { data: row } = await db()
+    .from("portal_accounts")
+    .select("welcome_share_url")
+    .eq("id", dealId)
+    .maybeSingle();
+  let url = (row?.welcome_share_url as string | null) ?? null;
+  if (!url) {
+    const { issueWelcomeLinkAs } = await import("./welcome.server");
+    url = (await issueWelcomeLinkAs(userId, dealId)).url;
+  }
+  await audit({
+    actor_type: "user",
+    actor_id: userId,
+    action: "deal.handoff_sent_to_customer",
+    entity_type: "account",
+    entity_id: dealId,
+    payload: { asked },
+  });
+  return { url, asked };
 }

@@ -1,4 +1,5 @@
 import type { Timeline } from "./onboarding-timeline";
+import type { CustomerPrompt } from "./sales-handoff";
 
 /**
  * What the welcome page renders. Built on the server from the deal, the
@@ -81,6 +82,11 @@ export type WelcomeView = {
    * The parking lot, as the customer sees it: what came up, when it will be
    * handled, where it stands. Dropped items are left off their page.
    */
+  /**
+   * "Before kickoff": what we know so far (to confirm) and what we still
+   * need (to answer). Null until the questions have been sent.
+   */
+  intake?: CustomerPrompt | null;
   parkingLot?: Array<{
     request: string;
     target: string;

@@ -60,10 +60,18 @@ describe("the window of work", () => {
     const { input } = build({}, "onboarding_kickoff");
     const w = workspaceFor(input);
     expect(w.windowLabel).toBe("Before Stage 1");
-    expect(w.now.map((t) => t.key)).toEqual(["reply_ae", "cadence", "prep", "kickoff"]);
+    expect(w.now.map((t) => t.key)).toEqual([
+      "handoff",
+      "customer_ready",
+      "reply_ae",
+      "cadence",
+      "prep",
+      "kickoff",
+    ]);
     expect(w.nextMeeting?.key).toBe("kickoff");
     expect(w.nextMeeting?.booked).toBe(true);
-    expect(w.nextStep?.key).toBe("cadence");
+    // The handoff from Sales comes before anything else before Stage 1.
+    expect(w.nextStep?.key).toBe("handoff");
   });
 
   it("between Stage 1 and Stage 2: only what happens before Stage 2", () => {

@@ -13,6 +13,7 @@ import { PastImplementations } from "@/components/past-implementations";
 import { DealRecord } from "@/components/deal-record";
 import { HelpPicksPanel } from "@/components/help-articles-panel";
 import { EditCustomerDialog } from "@/components/edit-customer-dialog";
+import { HandoffChipForDeal } from "@/components/handoff-chip";
 import { canEditDeal, useProfile } from "@/lib/auth";
 import { dealQuery } from "@/lib/deal-query";
 import { useQuery } from "@tanstack/react-query";
@@ -391,6 +392,7 @@ function Customer360Page() {
               <span className="inline-flex items-center gap-1 rounded-full border border-border bg-card px-2 py-0.5 text-[11px]">
                 <UserRound className="h-3 w-3" /> {impl.owner_name ?? "Unassigned"}
               </span>
+              {impl.deal_id ? <HandoffChipForDeal dealId={impl.deal_id} /> : null}
               {[
                 impl.name && impl.name !== customer.name ? impl.name : null,
                 customer.industry,

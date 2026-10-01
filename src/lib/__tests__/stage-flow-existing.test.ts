@@ -16,7 +16,14 @@ const input = (path: string) => ({
 describe("Pre-kickoff on an existing account", () => {
   it("books all three core meetings, like a new logo, and has no internal prep task", () => {
     const pk = stageFlow(input("existing")).stages.find((s) => s.key === "pre_kickoff")!;
-    expect(pk.tasks.map((t) => t.action)).toEqual(["reply_ae", "cadence", "book_core"]);
+    // The handoff's two checks come first, then the pre-kickoff work.
+    expect(pk.tasks.map((t) => t.action)).toEqual([
+      "handoff",
+      "handoff",
+      "reply_ae",
+      "cadence",
+      "book_core",
+    ]);
     expect(pk.tasks.find((t) => t.action === "book_core")!.label).toBe(
       "Book all three core meetings",
     );
@@ -24,9 +31,22 @@ describe("Pre-kickoff on an existing account", () => {
 
   it("a new logo also prepares before Stage 1; a Device Magic conversion books one call", () => {
     const nl = stageFlow(input("new_logo")).stages.find((s) => s.key === "pre_kickoff")!;
-    expect(nl.tasks.map((t) => t.action)).toEqual(["reply_ae", "cadence", "prep", "book_core"]);
+    expect(nl.tasks.map((t) => t.action)).toEqual([
+      "handoff",
+      "handoff",
+      "reply_ae",
+      "cadence",
+      "prep",
+      "book_core",
+    ]);
     const dm = stageFlow(input("dm_conversion")).stages.find((s) => s.key === "pre_kickoff")!;
-    expect(dm.tasks.map((t) => t.action)).toEqual(["reply_ae", "cadence", "kickoff"]);
+    expect(dm.tasks.map((t) => t.action)).toEqual([
+      "handoff",
+      "handoff",
+      "reply_ae",
+      "cadence",
+      "kickoff",
+    ]);
   });
 
   it("does not move to Onboarding until all three are booked", () => {
@@ -47,6 +67,10 @@ describe("Pre-kickoff on an existing account", () => {
       ...input("existing"),
       intake: {
         path: "existing",
+        handoff: {
+          completed_at: "2026-09-22T15:00:00Z",
+          customer_ready_override: { at: "2026-09-22T15:00:00Z", by: null, reason: "closing call" },
+        },
         handoff_tasks: { reply_ae: "2026-09-25T00:00:00Z", cadence: "2026-09-25T00:00:00Z" },
         timeline: {
           overrides: { kickoff: "2026-09-29", working: "2026-10-02", adjust: "2026-10-09" },
@@ -93,7 +117,13 @@ describe("an existing account's Pre-kickoff", () => {
       hasLink: true,
     });
     const pk = f.stages.find((s) => s.key === "pre_kickoff")!;
-    expect(pk.tasks.map((t) => t.key)).toEqual(["reply_ae", "cadence", "kickoff"]);
+    expect(pk.tasks.map((t) => t.key)).toEqual([
+      "handoff",
+      "customer_ready",
+      "reply_ae",
+      "cadence",
+      "kickoff",
+    ]);
     expect(pk.tasks.find((t) => t.key === "kickoff")!.label).toBe("Book the services walkthrough");
     // A paid form in the SOW brings the three form meetings back.
     const withForm = readIntake({

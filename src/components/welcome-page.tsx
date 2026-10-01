@@ -69,6 +69,7 @@ import {
   type Timeline,
 } from "@/lib/onboarding-timeline";
 import { stampDay } from "@/lib/stage-flow";
+import type { HandoffValue } from "@/lib/sales-handoff";
 import {
   BOOKING_KEY,
   HOMEWORK_KEYS,
@@ -155,6 +156,7 @@ export function WelcomePage({
   view,
   mode,
   onTick,
+  onAnswer,
   onCopyLink,
   onMarkSent,
   onEditText,
@@ -169,6 +171,8 @@ export function WelcomePage({
   onEditText?: ((key: string, text: string | null) => Promise<void> | void) | undefined;
   /** The customer's page ticks its homework; the internal preview shows the ticks. */
   onTick?: (key: HomeworkKey, done: boolean) => Promise<void> | void;
+  /** The customer's page answers the handoff's questions; the internal preview shows them. */
+  onAnswer?: (key: string, value: HandoffValue) => Promise<void> | void;
   /** Internal: issue or copy the customer's link. Resolves to the URL. */
   onCopyLink?: () => Promise<string>;
   /** Internal: the link went to the customer, by whatever channel. */
@@ -211,6 +215,7 @@ export function WelcomePage({
       qr: showQr ? qr : null,
       mode,
       onTick,
+      onAnswer,
       icsBase: icsBase ?? null,
     }),
   );
@@ -272,6 +277,7 @@ export function WelcomePage({
                     qr: showQr ? qr : null,
                     mode: "shared",
                     onTick: undefined,
+                    onAnswer: undefined,
                     icsBase: null,
                   }),
                 ),
@@ -372,6 +378,8 @@ type ScreenArgs = {
   qr: { url: string; dataUrl: string } | null;
   mode: WelcomeMode;
   onTick: ((key: HomeworkKey, done: boolean) => Promise<void> | void) | undefined;
+  /** The customer answers (or confirms) one of the handoff's questions. */
+  onAnswer: ((key: string, value: HandoffValue) => Promise<void> | void) | undefined;
   icsBase: string | null;
 };
 type Screen = { key: string; label: string; render: (a: ScreenArgs) => ReactNode };
@@ -414,6 +422,25 @@ function screenList(view: WelcomeView): Screen[] {
         <Together key="together" view={view} mode={a.mode} onTick={a.onTick} page={a.page} />
       ),
     },
+    // "Before kickoff": here is what we know so far, and a few things we
+    // still need. Only once the questions have been sent to the customer.
+    ...(view.intake
+      ? [
+          {
+            key: "ready",
+            label: "Before kickoff",
+            render: (a: ScreenArgs) => (
+              <ReadyScreen
+                key="ready"
+                view={view}
+                mode={a.mode}
+                onAnswer={a.onAnswer}
+                page={a.page}
+              />
+            ),
+          } satisfies Screen,
+        ]
+      : []),
     ...(view.helpPicks.length
       ? [
           {
@@ -1975,6 +2002,175 @@ function PhaseScreen({ view, phase: ph, page }: { view: WelcomeView; phase: Phas
  * calls flagged, each with why in the customer's words. On the customer's
  * page every link is tracked through /go; the internal preview links direct.
  */
+/**
+ * "Before kickoff": what we know so far, for the customer to confirm or
+ * correct, and the few things we still need from them. Answers are saved
+ * one at a time, on their link, and show up on the deal as the customer's.
+ */
+function ReadyScreen({
+  view,
+  mode,
+  onAnswer,
+  page,
+}: {
+  view: WelcomeView;
+  mode: WelcomeMode;
+  page: number;
+  onAnswer?: ((key: string, value: HandoffValue) => Promise<void> | void) | undefined;
+}) {
+  const intake = view.intake!;
+  const interactive = mode === "shared" && Boolean(onAnswer);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const asText = (v: HandoffValue) =>
+    v === null
+      ? ""
+      : Array.isArray(v)
+        ? v.join(", ")
+        : typeof v === "boolean"
+          ? v
+            ? "Yes"
+            : "No"
+          : v;
+  const send = async (key: string, value: HandoffValue) => {
+    if (!onAnswer) return;
+    setBusy(key);
+    try {
+      await onAnswer(key, value);
+    } finally {
+      setBusy(null);
+    }
+  };
+  const left = intake.needed.length;
+  return (
+    <Frame
+      k="ready"
+      page={page}
+      eyebrow="Before kickoff"
+      title="Here is what we know"
+      accent="so far"
+      lede={
+        left
+          ? `A few things would help us turn up prepared. ${left} short question${left === 1 ? "" : "s"} below — a line each is plenty.`
+          : "Everything we asked for is in. Thank you — kickoff starts from your answers."
+      }
+      band="Completing this early leaves more of the first session for the work itself."
+      bandIcon="ClipboardCheck"
+    >
+      <div className="wp-two">
+        <div className="wp-card">
+          <div className="wp-card-head">
+            <Tile name="FileCheck" tone="blue" />
+            <h3>What we know so far</h3>
+          </div>
+          {intake.known.length ? (
+            <ul className="wp-ready-list">
+              {intake.known.map((k) => (
+                <li key={k.key}>
+                  <span className="wp-ready-q">{k.ask}</span>
+                  <span className="wp-ready-a">{asText(k.value)}</span>
+                  {interactive ? (
+                    <button
+                      type="button"
+                      className={cn("wp-check wp-ready-confirm", k.confirmed && "is-done")}
+                      disabled={k.confirmed || busy === k.key}
+                      onClick={() => void send(k.key, k.value)}
+                    >
+                      <span className="wp-check-box">
+                        {k.confirmed ? <Check className="h-3.5 w-3.5" strokeWidth={3} /> : null}
+                      </span>
+                      <span>{k.confirmed ? "Confirmed" : "That's right"}</span>
+                    </button>
+                  ) : k.confirmed ? (
+                    <span className="wp-ready-confirmed">Confirmed</span>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="wp-ready-empty">Nothing yet — tell us below.</p>
+          )}
+        </div>
+        <div className="wp-card is-tint">
+          <div className="wp-card-head">
+            <Tile name="MessageCircleQuestion" tone="blue" />
+            <h3>{left ? "A few things we still need" : "All answered"}</h3>
+          </div>
+          {left ? (
+            <ul className="wp-ready-list">
+              {intake.needed.map((q) => {
+                const draft = drafts[q.key] ?? "";
+                return (
+                  <li key={q.key}>
+                    <span className="wp-ready-q">{q.ask}</span>
+                    <span className="wp-ready-hint">{q.hint}</span>
+                    {q.kind === "yesno" ? (
+                      <div className="wp-ready-yesno">
+                        {(["Yes", "No"] as const).map((label) => (
+                          <button
+                            key={label}
+                            type="button"
+                            className="wp-check"
+                            disabled={!interactive || busy === q.key}
+                            onClick={() => void send(q.key, label === "Yes")}
+                          >
+                            <span className="wp-check-box" />
+                            <span>{label}</span>
+                          </button>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="wp-ready-row">
+                        {q.kind === "long" || q.kind === "list" ? (
+                          <textarea
+                            className="wp-ready-input"
+                            rows={2}
+                            value={draft}
+                            disabled={!interactive || busy === q.key}
+                            onChange={(e) => setDrafts((d) => ({ ...d, [q.key]: e.target.value }))}
+                          />
+                        ) : (
+                          <input
+                            type={q.kind === "date" ? "date" : "text"}
+                            className="wp-ready-input"
+                            value={draft}
+                            disabled={!interactive || busy === q.key}
+                            onChange={(e) => setDrafts((d) => ({ ...d, [q.key]: e.target.value }))}
+                          />
+                        )}
+                        <button
+                          type="button"
+                          className="wp-ready-send"
+                          disabled={!interactive || busy === q.key || !draft.trim()}
+                          onClick={() =>
+                            void send(
+                              q.key,
+                              q.kind === "list"
+                                ? draft
+                                    .split(/\n|,/)
+                                    .map((x) => x.trim())
+                                    .filter(Boolean)
+                                : draft.trim(),
+                            )
+                          }
+                        >
+                          {busy === q.key ? "Saving…" : "Send"}
+                        </button>
+                      </div>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          ) : (
+            <p className="wp-ready-empty">Thank you. Nothing more to send before we meet.</p>
+          )}
+        </div>
+      </div>
+    </Frame>
+  );
+}
+
 function HelpScreen({ view, page }: { view: WelcomeView; page: number }) {
   const picks = view.helpPicks;
   return (

@@ -3,8 +3,10 @@ import {
   INDUSTRIES,
   isServiceName,
   type AiOwnedField,
+  type HandoffAnswer,
   type IntakeAnswers,
 } from "./intake-answers";
+import { answerSource, handoffQuestion, isAnswered, type HandoffValue } from "./sales-handoff";
 import type { BriefJson } from "./server/schemas";
 import { synthesisFromBrief } from "./welcome-synthesis";
 
@@ -199,4 +201,76 @@ export function mentionsDeviceMagic(text: string): boolean {
   return /\b(?:from|off|on|in|our|their|the|convert(?:ing)?|migrat(?:e|ing)|mov(?:e|ing)|replac(?:e|ing))\s+DM\b|\bDM\s+(?:forms?|to\s+(?:go\s*canvas|gc)|conversion|migration|account|users?|data|submissions?)\b/i.test(
     text,
   );
+}
+
+/* ------------------------------------------------- the handoff's blanks */
+
+/**
+ * The AI reading fills the Sales handoff's blanks the same way: an answer
+ * nobody has given, or that the AI gave last time, from what the brief
+ * says — never over a person's or the customer's words. Commitments are
+ * left alone on purpose: what was promised is for a person to say, or to
+ * say there were none.
+ */
+export function prefillHandoffFromSynthesis(
+  intake: IntakeAnswers,
+  brief: unknown,
+  at: string = new Date().toISOString(),
+): { answers: Record<string, HandoffAnswer>; filled: string[] } {
+  const answers: Record<string, HandoffAnswer> = {};
+  const filled: string[] = [];
+  const b = brief as Partial<BriefJson> | null | undefined;
+  if (!b || typeof b !== "object") return { answers, filled };
+  const may = (key: string) => {
+    const src = answerSource(intake, key);
+    return src === null || src === "ai";
+  };
+  const write = (key: string, value: HandoffValue, quote: string | null) => {
+    if (!isAnswered(value) || !may(key)) return;
+    const q = handoffQuestion(key);
+    const current = intake.handoff.answers[key];
+    if (current && JSON.stringify(current.value) === JSON.stringify(value)) return;
+    answers[key] = { value, source: "ai", at, by: null, quote: quote?.slice(0, 400) ?? null };
+    filled.push(q?.label ?? key);
+  };
+
+  const goals = (b.goals ?? []).filter(Boolean);
+  if (goals.length) write("business_outcome", goals.slice(0, 3).join("\n"), goals[0] ?? null);
+  const day90 = b.kickoff?.day_90_definition ?? null;
+  if (day90) write("success_measure", day90, day90);
+
+  // Contacts from the stakeholders, by what their role says.
+  const people = b.stakeholders ?? [];
+  const line = (p: { name: string; role: string }) =>
+    `${p.name}${p.role ? ` · ${p.role}` : ""}`.trim();
+  const decider = people.find((p) =>
+    /decision|owner|director|vp|vice|president|ceo|cfo|coo|founder|principal|head of/i.test(
+      `${p.role} ${p.notes}`,
+    ),
+  );
+  if (decider) write("contact_decision_maker", line(decider), decider.notes || null);
+  const builder = people.find(
+    (p) =>
+      p !== decider &&
+      /admin|build|office|coordinator|manager|analyst|it\b|systems|dispatcher/i.test(
+        `${p.role} ${p.notes}`,
+      ),
+  );
+  if (builder) write("contact_admin_builder", line(builder), builder.notes || null);
+
+  const deadline = (b.dates ?? []).find(
+    (d) => d.type === "deadline" && /^\d{4}-\d{2}-\d{2}$/.test(d.date),
+  );
+  if (deadline) write("desired_launch_date", deadline.date, deadline.quote);
+
+  const systems = [
+    ...(b.kickoff?.integrations ?? []),
+    ...(b.kickoff?.it_contact ? [`IT contact: ${b.kickoff.it_contact}`] : []),
+  ].filter(Boolean);
+  if (systems.length) write("system_requirements", systems.join("\n"), systems[0] ?? null);
+
+  const open = (b.risks_open_items ?? []).filter(Boolean);
+  if (open.length) write("open_questions", open.join("\n"), open[0] ?? null);
+
+  return { answers, filled };
 }

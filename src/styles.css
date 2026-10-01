@@ -3993,3 +3993,88 @@ body.gc-presenting {
     padding: 8px 12px;
   }
 }
+
+/* "Before kickoff" on the welcome page: what we know, what we still need. */
+.gc-welcome .wp-ready-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.gc-welcome .wp-ready-list li {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.gc-welcome .wp-ready-q {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--wp-blue-deep);
+}
+.gc-welcome .wp-ready-a {
+  font-size: 14px;
+  color: var(--wp-navy);
+  white-space: pre-line;
+}
+.gc-welcome .wp-ready-hint {
+  font-size: 12px;
+  color: var(--wp-muted);
+}
+.gc-welcome .wp-ready-confirm {
+  align-self: flex-start;
+  padding: 6px 10px;
+  font-size: 12px;
+}
+.gc-welcome .wp-ready-confirmed {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--wp-green);
+}
+.gc-welcome .wp-ready-row {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+}
+.gc-welcome .wp-ready-input {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  font-size: 13px;
+  color: var(--wp-navy);
+  padding: 8px 10px;
+  border: 1px solid var(--wp-blue-line);
+  border-radius: 10px;
+  background: #fff;
+  resize: vertical;
+}
+.gc-welcome .wp-ready-input:disabled {
+  opacity: 0.7;
+}
+.gc-welcome .wp-ready-send {
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  color: #fff;
+  background: var(--wp-blue-deep);
+  border: 0;
+  border-radius: 10px;
+  padding: 8px 14px;
+  cursor: pointer;
+}
+.gc-welcome .wp-ready-send:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.gc-welcome .wp-ready-yesno {
+  display: flex;
+  gap: 8px;
+}
+.gc-welcome .wp-ready-empty {
+  margin: 0;
+  font-size: 13px;
+  color: var(--wp-muted);
+}

@@ -23,6 +23,8 @@ import {
 import type { Account } from "@/lib/presale-types";
 import { cn } from "@/lib/utils";
 import { ask } from "@/components/ui/ask";
+import { HandoffChip } from "@/components/handoff-chip";
+import type { HandoffStatus } from "@/lib/sales-handoff";
 import { PATH_CHIP } from "@/lib/onboarding-timeline";
 import { fmtMoney } from "@/lib/hub-format";
 import { readIntake } from "@/lib/intake-answers";
@@ -41,6 +43,8 @@ export type BoardDeal = Account & {
   /** A Field Fusion proof of concept, from the GoCanvas request form. */
   ff_poc?: boolean;
   owner_name?: string | null;
+  /** The Sales → TIS handoff's state, from the deal's record. */
+  handoff_status?: HandoffStatus;
   next_step?: string | null;
   business_days_in_stage?: number;
   stuck?: "ok" | "warn" | "escalate";
@@ -105,6 +109,9 @@ function DealCard({
           >
             Notes
           </span>
+        ) : null}
+        {deal.handoff_status && deal.path !== "field_fusion" ? (
+          <HandoffChip status={deal.handoff_status} size="sm" />
         ) : null}
         {deal.has_sow !== undefined ? (
           <span

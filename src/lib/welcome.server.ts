@@ -246,6 +246,7 @@ async function viewFor(
         ? `${(await import("./app-url")).appUrl()}/go/${opts.token}`
         : null,
     parkingLot: await parkingLotFor(String(deal.id)),
+    intake: (await import("./sales-handoff")).customerPrompt(readIntake(deal.intake)),
   };
 }
 
@@ -374,6 +375,64 @@ export async function followHelpLink(token: string, articleId: string): Promise<
   const { recordHelpClick } = await import("./server/help/articles.server");
   await recordHelpClick(String(deal.id), articleId);
   return pick.url;
+}
+
+/**
+ * The customer answers (or confirms) one of the handoff's questions. Only a
+ * question that was sent to them, or one they can see on their page; the
+ * answer is stamped as theirs. Merged in code: the merge RPC replaces a
+ * top-level key whole, and the handoff block is a set of stamps.
+ */
+export async function answerWelcomeIntake(
+  token: string,
+  key: string,
+  value: import("./sales-handoff").HandoffValue,
+): Promise<NonNullable<WelcomeView["intake"]>> {
+  const deal = await dealForToken(token);
+  if (!deal) throw new Error("This link isn't available");
+  const { readIntake } = await import("./intake-answers");
+  const { customerPrompt, handoffPatch, handoffQuestion, mergeHandoffBlock } =
+    await import("./sales-handoff");
+  const current = readIntake(deal.intake);
+  const q = handoffQuestion(key);
+  const visible =
+    q !== null &&
+    (current.handoff.asked.includes(key) || (q.share && current.handoff.sent_to_customer_at));
+  if (!visible) throw new Error("That question isn't on your page");
+  const patch = handoffPatch(key, value, {
+    source: "customer",
+    by: null,
+    at: new Date().toISOString(),
+  });
+  const { handoff, ...fields } = patch;
+  const merged = mergeHandoffBlock(current.handoff, handoff);
+  // A field the customer answered is theirs from now on: the AI stops refreshing it.
+  const { claimByPerson } = await import("./intake-answers");
+  const owned = claimByPerson(current, Object.keys(fields));
+  const { mergeIntake } = await import("./server/intake-merge");
+  await mergeIntake(String(deal.id), { ...fields, ...owned, handoff: merged });
+  await audit({
+    actor_type: "system",
+    actor_id: null,
+    action: "welcome.intake_answered",
+    entity_type: "account",
+    entity_id: String(deal.id),
+    payload: { key },
+  });
+  // The deal's stage follows: a customer who just answered the last question
+  // may have made it Ready for Kickoff.
+  try {
+    const { syncDealStage } = await import("./stage-flow.server");
+    await syncDealStage(String(deal.id), null);
+  } catch (e) {
+    console.error("[welcome] could not sync the deal's stage", e);
+  }
+  const { data: after } = await db()
+    .from("portal_accounts")
+    .select("intake")
+    .eq("id", deal.id)
+    .maybeSingle();
+  return customerPrompt(readIntake(after?.intake)) ?? { known: [], needed: [] };
 }
 
 /** The one public write: a homework box, ticked or unticked. */

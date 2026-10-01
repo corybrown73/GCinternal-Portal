@@ -26,6 +26,7 @@ import { closeDateFor, timelineFor } from "@/lib/onboarding-plan";
 import { coreWindowEnd, dayCounter, localIso, shortDay } from "@/lib/onboarding-timeline";
 import { getWelcome } from "@/lib/welcome.functions";
 import { getKickoffCadence } from "@/lib/kickoff-cadence.functions";
+import { openPanel } from "@/lib/panel-open";
 import { wonStage } from "@/lib/pipeline-stages";
 import { moveDealStage, saveIntake } from "@/lib/presale.functions";
 import {
@@ -598,12 +599,35 @@ export function TaskBody({
       return <PrepBody deal={deal} intake={intake} editable={editable} />;
     case "book_core":
       return <BookCoreBody deal={deal} intake={intake} editable={editable} />;
+    case "handoff":
+      return <HandoffTaskBody task={task} />;
     default:
       return null;
   }
 }
 
 /* ------------------------------------------------------------ the bodies */
+
+/**
+ * The two Pre-Kickoff checks are read from the handoff record; the work
+ * happens there, not here. One line and the way to it.
+ */
+function HandoffTaskBody({ task }: { task: FlowTask }) {
+  return (
+    <div className="flex flex-wrap items-center gap-2 text-[12px]">
+      <span className="text-muted-foreground">
+        {task.done ? (task.summary ?? "Done.") : (task.summary ?? "Nothing recorded yet.")}
+      </span>
+      <button
+        type="button"
+        onClick={() => openPanel("deal:handoff", "panel-handoff")}
+        className="inline-flex items-center gap-1 rounded-md border border-border bg-card px-2 py-0.5 text-[11px] hover:bg-muted"
+      >
+        Open the handoff <ArrowRight className="h-3 w-3" />
+      </button>
+    </div>
+  );
+}
 
 function AssignBody({ dealId, editable }: { dealId: string; editable: boolean }) {
   const qc = useQueryClient();
