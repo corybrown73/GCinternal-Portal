@@ -174,6 +174,7 @@ async function viewFor(
       });
   }
 
+  const lot = await parkingLotFor(String(deal.id));
   return {
     dealId: String(deal.id),
     clientName: input.clientName,
@@ -245,8 +246,16 @@ async function viewFor(
       !opts.internal && opts.token
         ? `${(await import("./app-url")).appUrl()}/go/${opts.token}`
         : null,
-    parkingLot: await parkingLotFor(String(deal.id)),
+    parkingLot: lot,
     intake: (await import("./sales-handoff")).customerPrompt(readIntake(deal.intake)),
+    journey: (await import("./welcome-journey")).customerJourney({
+      stage: deal.stage ?? null,
+      intake: readIntake(deal.intake),
+      timeline: input.timeline,
+      homeworkDone,
+      parkingLot: lot,
+      leadName,
+    }),
   };
 }
 
@@ -261,6 +270,7 @@ async function parkingLotFor(dealId: string): Promise<NonNullable<WelcomeView["p
         target: i.target,
         status: i.status as "open" | "scheduled" | "done",
         neededForLaunch: i.needed_for_launch,
+        owner: i.owner,
       }));
   } catch {
     return [];
@@ -268,7 +278,7 @@ async function parkingLotFor(dealId: string): Promise<NonNullable<WelcomeView["p
 }
 
 const DEAL_COLUMNS =
-  "id,name,display_name,logo_path,se_owner_id,am_owner_id,welcome_token_hash,welcome_issued_at,welcome_opened_at,welcome_homework,welcome_share_url,intake";
+  "id,name,display_name,logo_path,stage,se_owner_id,am_owner_id,welcome_token_hash,welcome_issued_at,welcome_opened_at,welcome_homework,welcome_share_url,intake";
 
 export async function loadWelcome(dealId: string): Promise<WelcomeView | null> {
   const { data: deal } = await db()
@@ -433,6 +443,59 @@ export async function answerWelcomeIntake(
     .eq("id", deal.id)
     .maybeSingle();
   return customerPrompt(readIntake(after?.intake)) ?? { known: [], needed: [] };
+}
+
+/**
+ * The customer says a solution they were asked to test works. The Accept
+ * step is stamped as tested today and the ball comes back to us; Accepted
+ * itself stays the team's tick, after they have seen it. Only a solution
+ * that is actually waiting on the customer's test.
+ */
+export async function confirmSolutionTested(
+  token: string,
+  solutionId: string,
+): Promise<import("./welcome-journey").CustomerJourney | null> {
+  const deal = await dealForToken(token);
+  if (!deal) throw new Error("This link isn't available");
+  const { readIntake } = await import("./intake-answers");
+  const { solutionStatus, isSolutionKind } = await import("./onboarding-services");
+  const { localIso, shortDay } = await import("./onboarding-timeline");
+  const current = readIntake(deal.intake);
+  const s = current.timeline.services.find((x) => x.id === solutionId);
+  if (!s || !isSolutionKind(s.kind)) throw new Error("That isn't on your plan");
+  if (solutionStatus(s as never, current.timeline.completed) !== "accept") {
+    throw new Error("That one isn't ready for your test yet");
+  }
+  const today = localIso();
+  const timeline = {
+    ...current.timeline,
+    completed: { ...current.timeline.completed, [`${solutionId}:review`]: today },
+    services: current.timeline.services.map((x) =>
+      x.id === solutionId
+        ? {
+            ...x,
+            ball: {
+              who: "us" as const,
+              person: null,
+              date: null,
+              note: `The customer said it works — on their page, ${shortDay(today)}`,
+            },
+          }
+        : x,
+    ),
+  };
+  const { mergeIntake } = await import("./server/intake-merge");
+  await mergeIntake(String(deal.id), { timeline });
+  await audit({
+    actor_type: "system",
+    actor_id: null,
+    action: "welcome.solution_confirmed",
+    entity_type: "account",
+    entity_id: String(deal.id),
+    payload: { solution_id: solutionId },
+  });
+  const after = await dealForToken(token);
+  return after ? ((await viewFor(after, { internal: false, token })).journey ?? null) : null;
 }
 
 /** The one public write: a homework box, ticked or unticked. */

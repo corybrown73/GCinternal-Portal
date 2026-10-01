@@ -70,6 +70,7 @@ import {
 } from "@/lib/onboarding-timeline";
 import { stampDay } from "@/lib/stage-flow";
 import type { HandoffValue } from "@/lib/sales-handoff";
+import { byLabel } from "@/lib/welcome-journey";
 import {
   BOOKING_KEY,
   HOMEWORK_KEYS,
@@ -157,6 +158,7 @@ export function WelcomePage({
   mode,
   onTick,
   onAnswer,
+  onBall,
   onCopyLink,
   onMarkSent,
   onEditText,
@@ -173,6 +175,8 @@ export function WelcomePage({
   onTick?: (key: HomeworkKey, done: boolean) => Promise<void> | void;
   /** The customer's page answers the handoff's questions; the internal preview shows them. */
   onAnswer?: (key: string, value: HandoffValue) => Promise<void> | void;
+  /** The customer says a solution they tested works: the ball comes back to us. */
+  onBall?: (solutionId: string) => Promise<void> | void;
   /** Internal: issue or copy the customer's link. Resolves to the URL. */
   onCopyLink?: () => Promise<string>;
   /** Internal: the link went to the customer, by whatever channel. */
@@ -216,6 +220,7 @@ export function WelcomePage({
       mode,
       onTick,
       onAnswer,
+      onBall,
       icsBase: icsBase ?? null,
     }),
   );
@@ -278,6 +283,7 @@ export function WelcomePage({
                     mode: "shared",
                     onTick: undefined,
                     onAnswer: undefined,
+                    onBall: undefined,
                     icsBase: null,
                   }),
                 ),
@@ -380,6 +386,8 @@ type ScreenArgs = {
   onTick: ((key: HomeworkKey, done: boolean) => Promise<void> | void) | undefined;
   /** The customer answers (or confirms) one of the handoff's questions. */
   onAnswer: ((key: string, value: HandoffValue) => Promise<void> | void) | undefined;
+  /** The customer hands the ball back on a solution they tested. */
+  onBall: ((solutionId: string) => Promise<void> | void) | undefined;
   icsBase: string | null;
 };
 type Screen = { key: string; label: string; render: (a: ScreenArgs) => ReactNode };
@@ -394,6 +402,25 @@ function screenList(view: WelcomeView): Screen[] {
       label: "Your team",
       render: (a) => <Team key="team" view={view} page={a.page} />,
     },
+    // "Where we are": the five stages, who has the ball, what is theirs to
+    // do. From the close on.
+    ...(view.journey
+      ? [
+          {
+            key: "journey",
+            label: "Where we are",
+            render: (a: ScreenArgs) => (
+              <JourneyScreen
+                key="journey"
+                view={view}
+                mode={a.mode}
+                onBall={a.onBall}
+                page={a.page}
+              />
+            ),
+          } satisfies Screen,
+        ]
+      : []),
     {
       key: "overview",
       label: "At a glance",
@@ -2164,6 +2191,137 @@ function ReadyScreen({
             </ul>
           ) : (
             <p className="wp-ready-empty">Thank you. Nothing more to send before we meet.</p>
+          )}
+        </div>
+      </div>
+    </Frame>
+  );
+}
+
+/**
+ * Where we are: the five stages with the one we are in, who has the ball
+ * on each thing bought, and the customer's own dated list. The same deal
+ * stage, plan and solutions the team reads — in the customer's words.
+ */
+function JourneyScreen({
+  view,
+  mode,
+  onBall,
+  page,
+}: {
+  view: WelcomeView;
+  mode: WelcomeMode;
+  page: number;
+  onBall?: ((solutionId: string) => Promise<void> | void) | undefined;
+}) {
+  const j = view.journey!;
+  const interactive = mode === "shared" && Boolean(onBall);
+  const [busy, setBusy] = useState<string | null>(null);
+  const confirm = async (id: string) => {
+    if (!onBall) return;
+    setBusy(id);
+    try {
+      await onBall(id);
+    } finally {
+      setBusy(null);
+    }
+  };
+  const n = j.stages.findIndex((s) => s.state === "now") + 1;
+  return (
+    <Frame
+      k="journey"
+      page={page}
+      done={j.current.key === "complete"}
+      eyebrow="Where we are"
+      title={j.current.key === "complete" ? "Implementation" : `Stage ${n} of 5:`}
+      accent={j.current.key === "complete" ? "complete" : j.current.label.toLowerCase()}
+      lede={j.headline}
+      band={j.current.blurb}
+      bandIcon="Route"
+    >
+      <ol className="wp-journey">
+        {j.stages.map((s, i) => (
+          <li
+            key={s.key}
+            className={cn(
+              "wp-journey-step",
+              s.state === "now" && "is-now",
+              s.state === "done" && "is-done",
+            )}
+          >
+            <span className="wp-journey-num">
+              {s.state === "done" ? <Check className="h-3.5 w-3.5" strokeWidth={3} /> : i + 1}
+            </span>
+            <span className="wp-journey-label">
+              <T k={`journey.${s.key}`}>{s.label}</T>
+            </span>
+            {s.state === "now" ? <span className="wp-ov-status is-now">You are here</span> : null}
+          </li>
+        ))}
+      </ol>
+      <div className="wp-two" style={{ marginTop: 18 }}>
+        <div className="wp-card">
+          <div className="wp-card-head">
+            <Tile name="Handshake" tone="blue" />
+            <h3>Who has the ball</h3>
+          </div>
+          {j.solutions.length ? (
+            <ul className="wp-ready-list">
+              {j.solutions.map((s) => (
+                <li key={s.id}>
+                  <span className="wp-ready-q">
+                    {s.name} <small style={{ fontWeight: 500, opacity: 0.7 }}>· {s.kind}</small>
+                  </span>
+                  <span className="wp-ready-a">
+                    <span className={cn("wp-ball", `is-${s.who}`)}>
+                      {s.who === "you" ? "With you" : s.who === "us" ? "With us" : "Done"}
+                    </span>{" "}
+                    {s.status}
+                    {s.when && s.who !== "done" ? ` · ${byLabel(s.when)}` : ""}
+                  </span>
+                  {s.canConfirm ? (
+                    <button
+                      type="button"
+                      className="wp-check wp-ready-confirm"
+                      disabled={!interactive || busy === s.id}
+                      onClick={() => void confirm(s.id)}
+                    >
+                      <span className="wp-check-box" />
+                      <span>{busy === s.id ? "Saving…" : "Tested — it works"}</span>
+                    </button>
+                  ) : s.note && s.who === "us" ? (
+                    <span className="wp-ready-confirmed">{s.note}</span>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="wp-ready-empty">
+              The first form is the whole plan — nothing bought beyond it to track here.
+            </p>
+          )}
+        </div>
+        <div className="wp-card is-tint">
+          <div className="wp-card-head">
+            <Tile name="ClipboardCheck" tone="blue" />
+            <h3>{j.yours.length ? "Yours to do" : "Nothing waiting on you"}</h3>
+          </div>
+          {j.yours.length ? (
+            <ul className="wp-ready-list">
+              {j.yours.map((y, i) => (
+                <li key={i}>
+                  <span className="wp-ready-q">{y.what}</span>
+                  <span className="wp-ready-a">
+                    {byLabel(y.by) || (y.kind === "meeting" ? "date to be set" : "no date set")}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="wp-ready-empty">
+              {view.team.lead ? `${view.team.lead} has the ball.` : "We have the ball."} You will
+              hear from us before the next step.
+            </p>
           )}
         </div>
       </div>

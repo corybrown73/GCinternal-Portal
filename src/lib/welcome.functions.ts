@@ -60,6 +60,20 @@ export const tickWelcomeHomework = createServerFn({ method: "POST" })
     return { homeworkDone: await tick(data.token, data.key, data.done) };
   });
 
+export const confirmSolutionTestedFn = createServerFn({ method: "POST" })
+  .inputValidator((data: unknown) =>
+    z
+      .object({
+        token: z.string().trim().min(8).max(200),
+        solutionId: z.string().min(1).max(40),
+      })
+      .parse(data),
+  )
+  .handler(async ({ data }) => {
+    const { confirmSolutionTested } = await import("./welcome.server");
+    return { journey: await confirmSolutionTested(data.token, data.solutionId) };
+  });
+
 export const answerWelcomeIntakeFn = createServerFn({ method: "POST" })
   .inputValidator((data: unknown) =>
     z

@@ -4,7 +4,12 @@ import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 
 import { WelcomePage } from "@/components/welcome-page";
-import { answerWelcomeIntakeFn, openWelcome, tickWelcomeHomework } from "@/lib/welcome.functions";
+import {
+  answerWelcomeIntakeFn,
+  confirmSolutionTestedFn,
+  openWelcome,
+  tickWelcomeHomework,
+} from "@/lib/welcome.functions";
 import type { WelcomeView } from "@/lib/welcome";
 
 /**
@@ -37,6 +42,7 @@ function WelcomeTokenPage() {
   const initial = Route.useLoaderData();
   const tick = useServerFn(tickWelcomeHomework);
   const answer = useServerFn(answerWelcomeIntakeFn);
+  const confirm = useServerFn(confirmSolutionTestedFn);
   const open = useServerFn(openWelcome);
   const [view, setView] = useState<WelcomeView | null>(initial);
 
@@ -86,6 +92,10 @@ function WelcomeTokenPage() {
       onAnswer={async (key, value) => {
         const { intake } = await answer({ data: { token, key, value } });
         setView((v) => (v ? { ...v, intake } : v));
+      }}
+      onBall={async (solutionId) => {
+        const { journey } = await confirm({ data: { token, solutionId } });
+        setView((v) => (v ? { ...v, journey } : v));
       }}
     />
   );

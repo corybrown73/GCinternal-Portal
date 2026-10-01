@@ -1,5 +1,6 @@
 import type { Timeline } from "./onboarding-timeline";
 import type { CustomerPrompt } from "./sales-handoff";
+import type { CustomerJourney } from "./welcome-journey";
 
 /**
  * What the welcome page renders. Built on the server from the deal, the
@@ -87,11 +88,17 @@ export type WelcomeView = {
    * need (to answer). Null until the questions have been sent.
    */
   intake?: CustomerPrompt | null;
+  /**
+   * Where we are, for the customer: the five stages, who has the ball on
+   * each thing they bought, what is theirs to do. Null before the close.
+   */
+  journey?: CustomerJourney | null;
   parkingLot?: Array<{
     request: string;
     target: string;
     status: "open" | "scheduled" | "done";
     neededForLaunch: boolean;
+    owner?: "gocanvas" | "customer" | "both";
   }>;
 };
 

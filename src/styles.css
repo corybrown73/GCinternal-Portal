@@ -4078,3 +4078,74 @@ body.gc-presenting {
   font-size: 13px;
   color: var(--wp-muted);
 }
+
+/* "Where we are": the five stages as one rail. */
+.gc-welcome .wp-journey {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px;
+}
+.gc-welcome .wp-journey-step {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 12px 14px;
+  border: 1px solid #dfe5ec;
+  border-radius: 12px;
+  background: #fff;
+  min-height: 92px;
+}
+.gc-welcome .wp-journey-step.is-now {
+  border-color: var(--wp-blue);
+  box-shadow: 0 0 0 3px rgba(3, 157, 231, 0.14);
+}
+.gc-welcome .wp-journey-step.is-done {
+  background: #f6f8fa;
+  color: var(--wp-muted);
+}
+.gc-welcome .wp-journey-num {
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 800;
+  background: var(--wp-navy);
+  color: #fff;
+}
+.gc-welcome .wp-journey-step.is-done .wp-journey-num {
+  background: var(--wp-green);
+}
+.gc-welcome .wp-journey-step.is-now .wp-journey-num {
+  background: var(--wp-blue);
+}
+.gc-welcome .wp-journey-label {
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1.2;
+}
+.gc-welcome .wp-ball {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  border-radius: 999px;
+  padding: 2px 8px;
+  background: #e8f1fa;
+  color: var(--wp-navy);
+}
+.gc-welcome .wp-ball.is-you {
+  background: var(--wp-orange);
+  color: #fff;
+}
+.gc-welcome .wp-ball.is-done {
+  background: #e4f3e4;
+  color: var(--wp-green);
+}
