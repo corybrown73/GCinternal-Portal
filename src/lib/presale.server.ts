@@ -2271,8 +2271,12 @@ export async function saveDealIntake(
   }
 
   // A re-booked meeting moves "Functional": the project's target launch,
-  // which the Customers list and "At a glance" read, follows the plan.
-  if (patch["timeline"]) await syncTargetLaunch(dealId);
+  // which the Customers list and "At a glance" read, follows the plan. Then
+  // the dates the operating model keeps: a locked baseline, a Go-Live.
+  if (patch["timeline"]) {
+    await syncTargetLaunch(dealId, userId);
+    await stampDealDates(dealId, current.timeline.completed, next.timeline.completed);
+  }
 
   // The flow was set to Field Fusion on a deal that has already closed —
   // a Salesforce close, or a person who picked the flow late. The setup
@@ -2314,7 +2318,10 @@ export async function saveDealIntake(
  * in step here, so a Stage 3 moved on the checklist moves the date the
  * Customers list shows. Never throws — the plan change already succeeded.
  */
-export async function syncTargetLaunch(dealId: string): Promise<void> {
+export async function syncTargetLaunch(
+  dealId: string,
+  userId: string | null = null,
+): Promise<void> {
   try {
     const { data: account } = await db()
       .from("portal_accounts")
@@ -2325,6 +2332,11 @@ export async function syncTargetLaunch(dealId: string): Promise<void> {
     const { implementationForDeal } = await import("./assignment.server");
     const implId = await implementationForDeal(dealId, account.customer_id ?? null);
     if (!implId) return;
+    const { data: impl } = await db()
+      .from("implementations")
+      .select("target_date,target_launch_date,baseline_locked_at")
+      .eq("id", implId)
+      .maybeSingle();
     const { readIntake } = await import("./intake-answers");
     const { closeDateFor, timelineFor } = await import("./onboarding-plan");
     const [{ data: transitions }, stages] = await Promise.all([
@@ -2341,14 +2353,122 @@ export async function syncTargetLaunch(dealId: string): Promise<void> {
     const target = t.phases.length
       ? (t.phases[t.phases.length - 1]?.endsOn ?? t.liveDate)
       : t.liveDate;
+    const was: string | null = impl?.target_date ?? impl?.target_launch_date ?? null;
+    if (was === target && impl?.target_date) return;
     await db()
       .from("implementations")
-      .update({ target_launch_date: target })
-      .eq("id", implId)
-      .neq("target_launch_date", target);
+      .update({ target_launch_date: target, target_date: target })
+      .eq("id", implId);
+    // After the baseline is locked, every move of the target is a row that
+    // asks for its reason. Two nudges before anyone answers stay one row.
+    if (impl?.baseline_locked_at && was && was !== target) {
+      const { data: last } = await db()
+        .from("target_date_changes")
+        .select("id,reason_code,from_date")
+        .eq("implementation_id", implId)
+        .order("changed_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (last && !last.reason_code) {
+        await db()
+          .from("target_date_changes")
+          .update({ to_date: target, changed_at: new Date().toISOString() })
+          .eq("id", last.id);
+      } else {
+        await db().from("target_date_changes").insert({
+          implementation_id: implId,
+          from_date: was,
+          to_date: target,
+          changed_by: userId,
+        });
+      }
+    }
   } catch (e) {
     console.error("[plan] could not sync the target launch", e);
   }
+}
+
+/**
+ * The dates the operating model keeps on the project, from the ticks: the
+ * baseline is the target the day "Plan and dates agreed" was ticked, locked
+ * once; Operational Go-Live is the day the Go-Live tick carries. Unticking
+ * clears. Never throws — the tick already saved.
+ */
+async function stampDealDates(
+  dealId: string,
+  before: Record<string, string>,
+  after: Record<string, string>,
+): Promise<void> {
+  try {
+    const changed = (k: string) => (before[k] ?? null) !== (after[k] ?? null);
+    if (!changed("baseline_locked") && !changed("go_live")) return;
+    const { data: account } = await db()
+      .from("portal_accounts")
+      .select("customer_id")
+      .eq("id", dealId)
+      .maybeSingle();
+    const { implementationForDeal } = await import("./assignment.server");
+    const implId = await implementationForDeal(dealId, account?.customer_id ?? null);
+    if (!implId) return;
+    const patch: Record<string, unknown> = {};
+    if (changed("baseline_locked")) {
+      if (after["baseline_locked"]) {
+        const { data: impl } = await db()
+          .from("implementations")
+          .select("target_date,target_launch_date,baseline_locked_at")
+          .eq("id", implId)
+          .maybeSingle();
+        if (!impl?.baseline_locked_at) {
+          patch["baseline_date"] = impl?.target_date ?? impl?.target_launch_date ?? null;
+          patch["baseline_locked_at"] = new Date().toISOString();
+        }
+      } else {
+        patch["baseline_date"] = null;
+        patch["baseline_locked_at"] = null;
+      }
+    }
+    if (changed("go_live")) patch["go_live_at"] = after["go_live"] ?? null;
+    if (Object.keys(patch).length) {
+      await db().from("implementations").update(patch).eq("id", implId);
+    }
+  } catch (e) {
+    console.error("[plan] could not stamp the project's dates", e);
+  }
+}
+
+/** A target move explained: the reason code the model asks for, and a line of why. */
+export async function explainTargetChange(
+  userId: string,
+  changeId: string,
+  reasonCode: string,
+  note: string | null,
+) {
+  await requireSalesEditor(userId);
+  const { data: row } = await db()
+    .from("target_date_changes")
+    .select("id,implementation_id")
+    .eq("id", changeId)
+    .maybeSingle();
+  if (!row) throw new Error("That target move is no longer on record.");
+  const { error } = await db()
+    .from("target_date_changes")
+    .update({
+      reason_code: reasonCode,
+      note: note?.trim() ?? "",
+      explained_by: userId,
+      explained_at: new Date().toISOString(),
+    })
+    .eq("id", changeId);
+  if (error) throw new Error(`Could not save the reason: ${error.message}`);
+  await audit({
+    actor_type: "user",
+    actor_id: userId,
+    action: "implementation.target_moved_explained",
+    entity_type: "implementation",
+    entity_id: row.implementation_id,
+    payload: { change_id: changeId, reason_code: reasonCode },
+  });
+  return { ok: true };
 }
 
 /**
@@ -2665,7 +2785,16 @@ async function carryDealFacts(
     patch["target_launch_date"] = t.phases.length
       ? (t.phases[t.phases.length - 1]?.endsOn ?? t.liveDate)
       : t.liveDate;
+    patch["target_date"] = patch["target_launch_date"];
     if (integrationTier > 0) patch["tier"] = `Tier ${integrationTier}`;
+    // The Go-Live the complexity tier expects, set once at the close and
+    // never moved: what the TTV report measures the real one against.
+    {
+      const { loadComplexityTiers } = await import("./complexity-tiers.server");
+      const { tierForIntake, expectedGoLive } = await import("./complexity-tiers");
+      const tier = tierForIntake(intake, await loadComplexityTiers());
+      if (tier) patch["tier_expected_date"] = expectedGoLive(close, tier);
+    }
     if (goal) patch["customer_goals"] = goal;
     if (Object.keys(patch).length) {
       await db().from("implementations").update(patch).eq("id", implementationId);
@@ -2853,7 +2982,7 @@ export async function finishImplementation(
 ) {
   const { data: row } = await db()
     .from("portal_accounts")
-    .select("stage")
+    .select("stage,customer_id")
     .eq("id", dealId)
     .maybeSingle();
   if (!row) throw new Error("Deal not found");
@@ -2867,6 +2996,19 @@ export async function finishImplementation(
   const next = await saveDealIntake(userId, dealId, {
     outcome: { kind, reason: reason?.trim() || null, at: new Date().toISOString(), by: userId },
   });
+  // The same fact on the project row, where the report reads it.
+  try {
+    const { implementationForDeal } = await import("./assignment.server");
+    const implId = await implementationForDeal(dealId, row.customer_id ?? null);
+    if (implId) {
+      await db()
+        .from("implementations")
+        .update({ complete_outcome: kind, complete_reason: reason?.trim() || null })
+        .eq("id", implId);
+    }
+  } catch (e) {
+    console.error("[finish] could not stamp the outcome on the project", e);
+  }
   await audit({
     actor_type: "user",
     actor_id: userId,

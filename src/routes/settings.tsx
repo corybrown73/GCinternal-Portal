@@ -1,5 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { CadenceSettings } from "@/components/cadence-settings";
+import { ComplexityTiersPanel } from "@/components/complexity-tiers-panel";
 import { queryOptions, useSuspenseQuery } from "@tanstack/react-query";
 import { PageBody, PageHeader, EmptyState } from "@/components/page";
 import { AppearanceSettings } from "@/components/appearance-settings";
@@ -91,6 +92,7 @@ function SettingsPage() {
         <AppearanceSettings canManage={canManage(profile?.role)} />
         <HelpArticlesSettings canManage={manage} />
         <CadenceSettings canManage={manage} />
+        <ComplexityTiersPanel canManage={manage} />
 
         <section className="overflow-hidden rounded-md border border-border bg-card">
           <header className="flex flex-wrap items-baseline justify-between gap-2 border-b border-border px-4 py-2.5">

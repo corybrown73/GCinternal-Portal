@@ -5,6 +5,9 @@ import { z } from "zod";
  * server stamps whichever stage the implementation is in when the note is
  * written, so historical notes stay attached to the stage they belong to.
  */
+export const JOURNAL_KINDS = ["note", "scope", "customer", "internal_delivery"] as const;
+export type JournalKind = (typeof JOURNAL_KINDS)[number];
+
 export const createJournalEntryInput = z.object({
   implementationId: z.string().uuid(),
   note: z.string().trim().min(1),
@@ -13,7 +16,20 @@ export const createJournalEntryInput = z.object({
   links: z.string().trim().min(1).nullable(),
   attachmentUrl: z.string().trim().min(1).nullable(),
   attachmentName: z.string().trim().min(1).nullable(),
+  /**
+   * A plain note, or an exception of the operating model's three kinds:
+   * Scope (it was sold or scoped wrong), Customer (their side is the delay),
+   * Internal delivery (ours is). Typed so the report can count them.
+   */
+  kind: z.enum(JOURNAL_KINDS).default("note"),
 });
+
+export const JOURNAL_KIND_LABEL: Record<JournalKind, string> = {
+  note: "Note",
+  scope: "Exception — Scope",
+  customer: "Exception — Customer",
+  internal_delivery: "Exception — Internal delivery",
+};
 
 export type CreateJournalEntryInput = z.infer<typeof createJournalEntryInput>;
 

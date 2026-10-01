@@ -35,11 +35,13 @@ import { dealQuery, type DealData } from "@/lib/deal-query";
 import { addJournalEntry } from "@/lib/hub.functions";
 import type { Customer360 } from "@/lib/hub-types";
 import { readIntake, type IntakeAnswers } from "@/lib/intake-answers";
+import { JOURNAL_KIND_LABEL, JOURNAL_KINDS, type JournalKind } from "@/lib/journal-input";
+import { TIER_REASON_CODES, reasonLabel, type TargetReasonCode } from "@/lib/complexity-tiers";
 import { closeDateFor, timelineFor } from "@/lib/onboarding-plan";
 import { localIso, shortDay } from "@/lib/onboarding-timeline";
 import { getParkingLot } from "@/lib/parking-lot.functions";
 import { wonStage } from "@/lib/pipeline-stages";
-import { saveIntake } from "@/lib/presale.functions";
+import { explainTargetChange, saveIntake } from "@/lib/presale.functions";
 import {
   completedAfterTick,
   readinessFor,
@@ -251,6 +253,21 @@ function WhereBar({
           <span>
             <span className="text-muted-foreground">Owner</span> {impl.owner_name ?? "Nobody yet"}
           </span>
+          {ws.ball ? (
+            <span className="inline-flex items-center gap-1.5" title={ws.ball.detail}>
+              <span className="text-muted-foreground">Ball</span>
+              <span
+                className={cn(
+                  "rounded-full px-2 py-0.5 text-[11px] font-medium",
+                  ws.ball.who === "customer"
+                    ? "bg-amber-500/15 text-amber-800 dark:text-amber-300"
+                    : "bg-primary/10 text-primary",
+                )}
+              >
+                {ws.ball.who === "customer" ? "With the customer" : "With us"}
+              </span>
+            </span>
+          ) : null}
           {handoff ? (
             <Link
               to="/customers/$customerId"
@@ -355,7 +372,138 @@ function WhereBar({
           </button>
         </p>
       ) : null}
+      <DatesLine impl={impl} />
+      <TargetMoveNotice impl={impl} customerId={customerId} />
     </section>
+  );
+}
+
+/**
+ * The operating model's dates, side by side and never merged: what the
+ * tier expected, what was agreed, where the plan points now, when it went
+ * live. A dash is honest; a date copied from another column is not.
+ */
+function DatesLine({ impl }: { impl: NonNullable<Customer360["implementation"]> }) {
+  const d = impl.dates;
+  if (!d) return null;
+  const cell = (label: string, iso: string | null, hint: string) => (
+    <span title={hint}>
+      <span className="text-muted-foreground">{label}</span>{" "}
+      <span className={cn("font-medium tabular-nums", !iso && "text-muted-foreground")}>
+        {iso ? shortDay(iso) : "—"}
+      </span>
+    </span>
+  );
+  return (
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-border px-4 py-2 text-[12px]">
+      {cell(
+        "Tier expected",
+        d.tier_expected,
+        "Go-Live the complexity tier expected, set at the close",
+      )}
+      {cell("Baseline", d.baseline, "The target the day the plan and dates were agreed")}
+      {cell("Target", d.target, "Where the plan points now")}
+      {cell("Go-Live", d.go_live, "Operational Go-Live — the day TTV ends")}
+      {impl.complete_outcome ? (
+        <span
+          className={cn(
+            "rounded-full px-2 py-0.5 text-[11px] font-medium",
+            impl.complete_outcome === "proven"
+              ? "bg-status-ontrack/60 text-status-ontrack-foreground"
+              : "bg-amber-500/15 text-amber-800 dark:text-amber-300",
+          )}
+        >
+          {impl.complete_outcome === "proven" ? "Proven" : "Not Proven"}
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * The target moved after the baseline and nobody has said why. The reason
+ * is one of the model's six codes; the line of why is optional. Once
+ * answered the move stays in the history, no longer asking.
+ */
+function TargetMoveNotice({
+  impl,
+  customerId,
+}: {
+  impl: NonNullable<Customer360["implementation"]>;
+  customerId: string;
+}) {
+  const qc = useQueryClient();
+  const explain = useServerFn(explainTargetChange);
+  const [code, setCode] = useState<TargetReasonCode | "">("");
+  const [note, setNote] = useState("");
+  const pending = (impl.target_changes ?? []).filter((c) => !c.reason_code);
+  const m = useMutation({
+    mutationFn: (changeId: string) =>
+      explain({
+        data: { changeId, reasonCode: code as TargetReasonCode, note: note.trim() || null },
+      }),
+    onSuccess: async () => {
+      setCode("");
+      setNote("");
+      await qc.invalidateQueries({ queryKey: ["customer360", customerId] });
+    },
+  });
+  const explained = (impl.target_changes ?? []).filter((c) => c.reason_code);
+  if (!pending.length && !explained.length) return null;
+  const c = pending[0];
+  return (
+    <div className="border-t border-border px-4 py-2 text-[12px]">
+      {c ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <TriangleAlert className="h-3.5 w-3.5 text-amber-700 dark:text-amber-300" />
+          <span>
+            The target moved {c.from_date ? `from ${shortDay(c.from_date)} ` : ""}to{" "}
+            <span className="font-medium">{shortDay(c.to_date)}</span> after the baseline. Why?
+          </span>
+          <select
+            className="h-7 rounded-sm border border-border bg-background px-1.5 text-[12px]"
+            aria-label="Reason the target moved"
+            value={code}
+            disabled={m.isPending}
+            onChange={(e) => setCode(e.target.value as TargetReasonCode | "")}
+          >
+            <option value="">Pick a reason…</option>
+            {TIER_REASON_CODES.map((r) => (
+              <option key={r.code} value={r.code}>
+                {r.label}
+              </option>
+            ))}
+          </select>
+          <input
+            className="h-7 min-w-[180px] flex-1 rounded-sm border border-border bg-background px-2 text-[12px]"
+            placeholder="One line of why (optional)"
+            aria-label="Why the target moved"
+            value={note}
+            disabled={m.isPending}
+            onChange={(e) => setNote(e.target.value)}
+          />
+          <button
+            type="button"
+            className="rounded-sm bg-primary px-2.5 py-1 text-[12px] font-medium text-primary-foreground disabled:opacity-50"
+            disabled={!code || m.isPending}
+            onClick={() => m.mutate(c.id)}
+          >
+            {m.isPending ? "Saving…" : "Save reason"}
+          </button>
+          {m.isError ? (
+            <span className="text-destructive">
+              {m.error instanceof Error ? m.error.message : "That did not save."}
+            </span>
+          ) : null}
+        </div>
+      ) : (
+        <p className="text-muted-foreground">
+          Target moved {explained.length} time{explained.length === 1 ? "" : "s"} since the baseline
+          · last: {reasonLabel(explained[0]!.reason_code)}
+          {explained[0]!.note ? ` — ${explained[0]!.note}` : ""}
+        </p>
+      )}
+    </div>
   );
 }
 
@@ -929,6 +1077,7 @@ function NotesPanel({ record, customerId }: { record: Customer360; customerId: s
   const qc = useQueryClient();
   const create = useServerFn(addJournalEntry);
   const [note, setNote] = useState("");
+  const [kind, setKind] = useState<JournalKind>("note");
   const m = useMutation({
     mutationFn: () =>
       create({
@@ -939,10 +1088,12 @@ function NotesPanel({ record, customerId }: { record: Customer360; customerId: s
           links: null,
           attachmentUrl: null,
           attachmentName: null,
+          kind,
         },
       }),
     onSuccess: async () => {
       setNote("");
+      setKind("note");
       await qc.invalidateQueries({ queryKey: ["customer360", customerId] });
     },
   });
@@ -973,6 +1124,20 @@ function NotesPanel({ record, customerId }: { record: Customer360; customerId: s
           >
             {m.isPending ? "Saving…" : "Add implementation note"}
           </button>
+          <select
+            className="h-7 rounded-sm border border-border bg-background px-1.5 text-[11.5px]"
+            aria-label="Kind of note"
+            title="A plain note, or an exception the operating model counts: Scope, Customer, Internal delivery"
+            value={kind}
+            disabled={m.isPending}
+            onChange={(e) => setKind(e.target.value as JournalKind)}
+          >
+            {JOURNAL_KINDS.map((k) => (
+              <option key={k} value={k}>
+                {JOURNAL_KIND_LABEL[k]}
+              </option>
+            ))}
+          </select>
           <span className="text-[11px] text-muted-foreground">⌘↵ saves</span>
           {m.isError ? (
             <span className="text-[11px] text-destructive">
@@ -989,8 +1154,15 @@ function NotesPanel({ record, customerId }: { record: Customer360; customerId: s
         <ul className="divide-y divide-border border-t border-border">
           {entries.map((e) => (
             <li key={e.id} className="px-4 py-2.5">
-              <p className="text-[11px] text-muted-foreground">
-                <When value={e.created_at} /> · {e.author_name ?? "Author not recorded"}
+              <p className="flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
+                {e.kind !== "note" ? (
+                  <span className="rounded-sm bg-amber-500/15 px-1 font-medium text-amber-800 dark:text-amber-300">
+                    {JOURNAL_KIND_LABEL[e.kind]}
+                  </span>
+                ) : null}
+                <span>
+                  <When value={e.created_at} /> · {e.author_name ?? "Author not recorded"}
+                </span>
               </p>
               <p className="mt-0.5 whitespace-pre-wrap text-[13px]">{e.note}</p>
               {e.attachment_name ? (

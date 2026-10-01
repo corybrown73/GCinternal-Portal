@@ -185,7 +185,8 @@ export function buildPipelineReport(
   };
 }
 
-function timing(rows: Array<{ name: string; days: number }>): Timing {
+/** Median, average and slowest over a set of business-day counts; shared with the TTV report. */
+export function timing(rows: Array<{ name: string; days: number }>): Timing {
   const days = rows.map((r) => Math.max(0, r.days)).sort((a, b) => a - b);
   if (!days.length) return { count: 0, median: null, average: null, slowest: null };
   const mid = Math.floor(days.length / 2);

@@ -273,6 +273,18 @@ export type Customer360 = {
     discovery_board_image_url: string | null;
     discovery_board_image_name: string | null;
     discovery_board_notes: string | null;
+    /** The operating model's dates, kept apart and never overwriting one another. */
+    dates: {
+      tier_expected: string | null;
+      baseline: string | null;
+      baseline_locked_at: string | null;
+      target: string | null;
+      go_live: string | null;
+    };
+    complete_outcome: "proven" | "not_proven" | null;
+    complete_reason: string | null;
+    /** Moves of the target after the baseline, newest first; reason_code null = not yet explained. */
+    target_changes: TargetDateChange[];
   } | null;
   requirements: Array<{
     id: string;
@@ -491,10 +503,22 @@ export type ImplementationStageInstance = {
 };
 
 /** A working note written by the team while the implementation was in a stage. */
+export type TargetDateChange = {
+  id: string;
+  from_date: string | null;
+  to_date: string;
+  reason_code: string | null;
+  note: string;
+  changed_at: string;
+  explained_at: string | null;
+};
+
 export type JournalEntry = {
   id: string;
   implementation_id: string;
   stage: string;
+  /** A plain note or one of the three exception kinds. */
+  kind: "note" | "scope" | "customer" | "internal_delivery";
   note: string;
   author_id: string | null;
   author_name: string | null;

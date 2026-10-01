@@ -195,6 +195,78 @@ describe("waiting on", () => {
   });
 });
 
+describe("who has the ball", () => {
+  it("is ours while something on the checklist is ours to do", () => {
+    const { input } = build({ timeline: { completed: { kickoff: "2026-09-17" } } });
+    const w = workspaceFor(input);
+    expect(w.ball).toEqual({
+      who: "us",
+      detail: "Plan and dates agreed with the customer — baseline locked",
+      since: null,
+    });
+  });
+
+  it("passes to the customer when only their desk holds something", () => {
+    const { input } = build(
+      {
+        timeline: {
+          completed: {
+            kickoff: "2026-09-17",
+            baseline_locked: "2026-09-18",
+            e2e_working: "2026-09-18",
+            between_1: "2026-09-18",
+          },
+        },
+      },
+      "get_it_working",
+    );
+    const w = workspaceFor({
+      ...input,
+      parkingLot: [
+        {
+          id: "p1",
+          request: "Export to QuickBooks",
+          why: "",
+          needed_for_launch: false,
+          owner: "customer",
+          target: "",
+          status: "open",
+          created_at: "2026-09-17T16:00:00Z",
+        },
+      ],
+    });
+    expect(w.ball?.who).toBe("customer");
+    // The earliest thing on their desk: the homework from Stage 1, before the parking lot.
+    expect(w.ball?.since).toBe("2026-09-17");
+    expect(w.ball?.detail).toMatch(/things on their desk$/);
+    // Something open on our side takes it back.
+    const ours = workspaceFor({
+      ...input,
+      parkingLot: [
+        {
+          id: "p2",
+          request: "Second PDF",
+          why: "",
+          needed_for_launch: false,
+          owner: "gocanvas",
+          target: "",
+          status: "open",
+          created_at: "2026-09-17T16:00:00Z",
+        },
+      ],
+    });
+    expect(ours.ball?.who).toBe("us");
+  });
+
+  it("is nobody's once the implementation has finished", () => {
+    const { input } = build(
+      { outcome: { kind: "proven", reason: null, at: "2026-10-01T10:00:00Z", by: null } },
+      "onboarding_complete",
+    );
+    expect(workspaceFor(input).ball).toBeNull();
+  });
+});
+
 describe("readiness reflects what is being implemented", () => {
   it("leaves the dataset items off when nothing puts datasets behind the form", () => {
     const { intake } = build();

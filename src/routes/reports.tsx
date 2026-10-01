@@ -6,6 +6,8 @@ import { PageBody, PageHeader } from "@/components/page";
 import { Panel, NoRows } from "@/components/record";
 import { getLeadership } from "@/lib/hub.functions";
 import { getPipelineReport } from "@/lib/pipeline-report.functions";
+import { getTtvReport } from "@/lib/ttv-report.functions";
+import { TTV_TIMINGS, type Variance } from "@/lib/ttv-report";
 import { ownerLoad, portfolioRollup } from "@/lib/leadership";
 import type { Timing } from "@/lib/pipeline-report";
 import { fmtMoney } from "@/lib/hub-format";
@@ -21,6 +23,12 @@ const leadershipQuery = (scope: string | null) =>
 const reportQuery = queryOptions({
   queryKey: ["pipeline-report"],
   queryFn: () => getPipelineReport(),
+  staleTime: 5 * 60_000,
+});
+
+const ttvQuery = queryOptions({
+  queryKey: ["ttv-report"],
+  queryFn: () => getTtvReport(),
   staleTime: 5 * 60_000,
 });
 
@@ -40,6 +48,7 @@ export const Route = createFileRoute("/reports")({
   loaderDeps: ({ search }: { search: { scope?: string } }) => ({ scope: search.scope ?? null }),
   loader: ({ context, deps }) => {
     void context.queryClient.prefetchQuery(reportQuery);
+    void context.queryClient.prefetchQuery(ttvQuery);
     return context.queryClient.ensureQueryData(leadershipQuery(deps.scope));
   },
   component: ReportsPage,
@@ -57,6 +66,7 @@ function ReportsPage() {
   const { param } = useScope();
   const { data } = useSuspenseQuery(leadershipQuery(param));
   const report = useQuery(reportQuery);
+  const ttv = useQuery(ttvQuery);
   const rollup = portfolioRollup(data);
   const owners = ownerLoad(data);
   const maxOwner = Math.max(1, ...owners.map((o) => o.implementations.length));
@@ -258,6 +268,51 @@ function ReportsPage() {
           </div>
         </div>
 
+        <Panel
+          title="Time to value"
+          level="primary"
+          meta={
+            ttv.data
+              ? `${ttv.data.live} of ${ttv.data.closed} closed deal${ttv.data.closed === 1 ? "" : "s"} live · Proven ${ttv.data.outcomes.proven} · Not Proven ${ttv.data.outcomes.notProven}`
+              : "Loading…"
+          }
+        >
+          <div className="space-y-3 px-3 py-3">
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              {TTV_TIMINGS.map((t) => (
+                <TimingTile
+                  key={t.key}
+                  label={t.label}
+                  hint={t.hint}
+                  timing={ttv.data?.[t.key] ?? null}
+                />
+              ))}
+            </div>
+            {ttv.data ? (
+              <div className="grid gap-3 sm:grid-cols-3">
+                <VarianceTile label="Go-Live vs tier expected" v={ttv.data.variance.vsTier} />
+                <VarianceTile label="Go-Live vs baseline" v={ttv.data.variance.vsBaseline} />
+                <VarianceTile label="Go-Live vs target" v={ttv.data.variance.vsTarget} />
+              </div>
+            ) : null}
+            {ttv.data ? (
+              <p className="text-[11px] text-muted-foreground">
+                Coverage after launch — named AM: {ttv.data.coverage.namedAm.count} deal
+                {ttv.data.coverage.namedAm.count === 1 ? "" : "s"}
+                {ttv.data.coverage.namedAm.ttv.median !== null
+                  ? ` (TTV median ${ttv.data.coverage.namedAm.ttv.median} bd)`
+                  : ""}{" "}
+                · Customer Success: {ttv.data.coverage.customerSuccess.count}
+                {ttv.data.coverage.customerSuccess.ttv.median !== null
+                  ? ` (TTV median ${ttv.data.coverage.customerSuccess.ttv.median} bd)`
+                  : ""}
+                . Business days, from the stage history and the project dates; a deal counts once
+                its Go-Live is ticked.
+              </p>
+            ) : null}
+          </div>
+        </Panel>
+
         <p className="text-[11px] text-muted-foreground">
           The fuller leadership view — interventions, dwell by stage, launch risk, value proof,
           adoption — is under{" "}
@@ -334,12 +389,53 @@ function StackedBar({
   );
 }
 
-function TimingTile({ label, timing }: { label: string; timing: Timing | null }) {
+function VarianceTile({ label, v }: { label: string; v: Variance }) {
+  const sign = (n: number) => (n > 0 ? `+${n}` : `${n}`);
   return (
     <div className="rounded-lg border border-border bg-card px-4 py-3">
       <p className="text-[11px] font-medium uppercase tracking-[0.1em] text-muted-foreground">
         {label}
       </p>
+      {v.count === 0 ? (
+        <p className="mt-1 text-[12px] text-muted-foreground">No live deal has that date yet.</p>
+      ) : (
+        <>
+          <p
+            className={cn(
+              "mt-1 text-[22px] font-semibold leading-none tracking-tight",
+              (v.median ?? 0) > 0 ? "text-[#93500a]" : "text-[#006300]",
+            )}
+          >
+            {sign(v.median ?? 0)}{" "}
+            <span className="text-[13px] font-normal text-muted-foreground">
+              business days median
+            </span>
+          </p>
+          <p className="mt-1 text-[11px] text-muted-foreground">
+            {v.late} of {v.count} late · average {sign(v.average ?? 0)}
+            {v.worst ? ` · latest ${v.worst.name} (+${v.worst.days})` : ""}
+          </p>
+        </>
+      )}
+    </div>
+  );
+}
+
+function TimingTile({
+  label,
+  hint,
+  timing,
+}: {
+  label: string;
+  hint?: string;
+  timing: Timing | null;
+}) {
+  return (
+    <div className="rounded-lg border border-border bg-card px-4 py-3">
+      <p className="text-[11px] font-medium uppercase tracking-[0.1em] text-muted-foreground">
+        {label}
+      </p>
+      {hint ? <p className="text-[11px] text-muted-foreground">{hint}</p> : null}
       {!timing ? (
         <p className="mt-1 text-[12px] text-muted-foreground">Loading…</p>
       ) : timing.count === 0 ? (

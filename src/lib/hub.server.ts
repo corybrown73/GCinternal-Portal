@@ -628,6 +628,7 @@ export async function loadCustomer360(
     handoffRes,
     journalRes,
     stageInstanceRes,
+    targetChangesRes,
   ] = await Promise.all([
     child("requirements", "created_at"),
     child("success_criteria", "created_at"),
@@ -686,6 +687,12 @@ export async function loadCustomer360(
         implList.map((i) => i.id),
       )
       .order("position"),
+    db()
+      .from("target_date_changes")
+      .select("id,from_date,to_date,reason_code,note,changed_at,explained_at")
+      .eq("implementation_id", impl.id)
+      .order("changed_at", { ascending: false })
+      .limit(20),
   ]);
 
   // Group the one stage_instances read by project, and hand each summary its
@@ -940,6 +947,7 @@ export async function loadCustomer360(
       links: j.links ?? null,
       attachment_url: j.attachment_url ?? null,
       attachment_name: j.attachment_name ?? null,
+      kind: (j.kind ?? "note") as import("./journal-input").JournalKind,
       created_at: j.created_at,
     })),
     implementation: {
@@ -981,6 +989,26 @@ export async function loadCustomer360(
       discovery_board_image_url: impl.discovery_board_image_url ?? null,
       discovery_board_image_name: impl.discovery_board_image_name ?? null,
       discovery_board_notes: impl.discovery_board_notes ?? null,
+      // The operating model's dates, kept apart: what the tier expected,
+      // what was agreed, where the plan points now, when it went live.
+      dates: {
+        tier_expected: impl.tier_expected_date ?? null,
+        baseline: impl.baseline_date ?? null,
+        baseline_locked_at: impl.baseline_locked_at ?? null,
+        target: impl.target_date ?? impl.target_launch_date ?? null,
+        go_live: impl.go_live_at ?? null,
+      },
+      complete_outcome: impl.complete_outcome ?? null,
+      complete_reason: impl.complete_reason ?? null,
+      target_changes: ((targetChangesRes.data ?? []) as any[]).map((c) => ({
+        id: c.id,
+        from_date: c.from_date ?? null,
+        to_date: c.to_date,
+        reason_code: c.reason_code ?? null,
+        note: c.note ?? "",
+        changed_at: c.changed_at,
+        explained_at: c.explained_at ?? null,
+      })),
     },
     requirements: (requirements.data ?? []).map((r: any) => {
       const trace = traceFor(r.id);
@@ -2712,6 +2740,7 @@ export async function createJournalEntry(args: {
   links: string | null;
   attachmentUrl: string | null;
   attachmentName: string | null;
+  kind?: import("./journal-input").JournalKind;
 }) {
   const { data: impl, error: readError } = await db()
     .from("implementations")
@@ -2720,15 +2749,18 @@ export async function createJournalEntry(args: {
     .maybeSingle();
   if (readError || !impl) throw new Error(readError?.message ?? "Implementation not found");
 
-  const { error } = await db().from("journal_entries").insert({
-    implementation_id: args.implementationId,
-    stage: impl.current_stage,
-    note: args.note,
-    author_id: args.authorId,
-    links: args.links,
-    attachment_url: args.attachmentUrl,
-    attachment_name: args.attachmentName,
-  });
+  const { error } = await db()
+    .from("journal_entries")
+    .insert({
+      implementation_id: args.implementationId,
+      stage: impl.current_stage,
+      note: args.note,
+      author_id: args.authorId,
+      links: args.links,
+      attachment_url: args.attachmentUrl,
+      attachment_name: args.attachmentName,
+      kind: args.kind ?? "note",
+    });
   if (error) throw new Error(`Could not save the note: ${error.message}`);
   return { ok: true, stage: impl.current_stage as string };
 }

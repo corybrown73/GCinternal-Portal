@@ -45,7 +45,20 @@ export type NextMeeting = {
   minutes: number | null;
 };
 
+/**
+ * Who has the ball on the whole project — the operating model's one-line
+ * answer. Derived, never typed: with the customer when something is on
+ * their desk and nothing is open on ours; otherwise ours, named by the
+ * next step. Null once the implementation has finished.
+ */
+export type Ball = {
+  who: "us" | "customer";
+  detail: string;
+  since: string | null;
+};
+
 export type Workspace = {
+  ball: Ball | null;
   where: {
     stage: FlowStageKey | null;
     stageLabel: string;
@@ -274,7 +287,40 @@ export function workspaceFor(input: WorkspaceInput): Workspace {
     (p) => (p.status === "open" || p.status === "scheduled") && p.owner !== "customer",
   ).length;
 
+  // WHO HAS THE BALL.
+  const theirs = waiting.filter((w) => w.who === "customer");
+  const oursWaiting = waiting.filter((w) => w.who === "gocanvas").length + ourOpen;
+  const nextIsOurs =
+    nextStep !== null && nextStep.kind !== "meeting" && nextStep.kind !== "readiness";
+  let ball: Ball | null;
+  if (current === "complete" && intake.outcome) {
+    ball = null;
+  } else if (theirs.length && !oursWaiting && !nextIsOurs) {
+    const since = theirs
+      .map((w) => w.since)
+      .filter((s): s is string => Boolean(s))
+      .sort()[0];
+    ball = {
+      who: "customer",
+      detail: theirs.length === 1 ? theirs[0]!.what : `${theirs.length} things on their desk`,
+      since: since ?? null,
+    };
+  } else {
+    ball = {
+      who: "us",
+      detail: nextStep
+        ? nextStep.label
+        : oursWaiting
+          ? `${oursWaiting} open on our side`
+          : closed
+            ? "Nothing open — move it on"
+            : "Before the close",
+      since: null,
+    };
+  }
+
   return {
+    ball,
     where: {
       stage: current,
       stageLabel: current ? flowLabel(current) : "—",

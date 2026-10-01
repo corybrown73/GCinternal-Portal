@@ -693,6 +693,30 @@ export const finishImplementation = createServerFn({ method: "POST" })
     return finish(context.profile.id, data.dealId, data.kind, data.reason);
   });
 
+/** Why the target moved after the baseline: the reason code and a line. */
+export const explainTargetChange = createServerFn({ method: "POST" })
+  .middleware([requireDealEditor])
+  .inputValidator((data: unknown) =>
+    z
+      .object({
+        changeId: z.string().uuid(),
+        reasonCode: z.enum([
+          "tier_mismatch",
+          "mis_scope",
+          "expansion",
+          "internal_delivery",
+          "customer",
+          "feasibility_outcome",
+        ]),
+        note: z.string().trim().max(500).nullable(),
+      })
+      .parse(data),
+  )
+  .handler(async ({ data, context }) => {
+    const { explainTargetChange: explain } = await import("./presale.server");
+    return explain(context.profile.id, data.changeId, data.reasonCode, data.note);
+  });
+
 /* ---------- purchased solutions ---------- */
 
 const ballSchema = z
