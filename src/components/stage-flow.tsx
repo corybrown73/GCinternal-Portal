@@ -32,6 +32,7 @@ import { moveDealStage, saveIntake } from "@/lib/presale.functions";
 import {
   CORE_MEETINGS,
   DEAL_TYPES,
+  bookMeetingPatch,
   completedAfterTick,
   FLOW_STAGES,
   KICKOFF_CADENCE,
@@ -1137,7 +1138,12 @@ function CadenceBody({
   );
 }
 
-function KickoffBody({
+/**
+ * The first meeting's booking: date, time, zone, then the invite. On the
+ * Pre-kickoff checklist for the TIS, and on the handoff for Sales to book it
+ * before the close — the same form, the same record.
+ */
+export function KickoffBody({
   deal,
   intake,
   editable,
@@ -1171,14 +1177,7 @@ function KickoffBody({
       save({
         data: {
           dealId: deal.account.id,
-          patch: {
-            timeline: {
-              ...t,
-              overrides: { ...t.overrides, kickoff: date },
-              times: { ...t.times, kickoff: time },
-              timezone: zone || null,
-            },
-          },
+          patch: { timeline: bookMeetingPatch(t, [{ key: "kickoff", date, time }], zone) },
         } as never,
       }),
     onMutate: () => setError(null),
@@ -1475,17 +1474,7 @@ function BookCoreBody({
       save({
         data: {
           dealId: deal.account.id,
-          patch: {
-            timeline: {
-              ...t,
-              overrides: {
-                ...t.overrides,
-                ...Object.fromEntries(rows.map((r) => [r.key, r.date])),
-              },
-              times: { ...t.times, ...Object.fromEntries(rows.map((r) => [r.key, r.time])) },
-              timezone: zone || null,
-            },
-          },
+          patch: { timeline: bookMeetingPatch(t, rows, zone) },
         } as never,
       }),
     onMutate: () => setError(null),

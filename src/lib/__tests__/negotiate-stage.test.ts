@@ -142,3 +142,44 @@ describe("Negotiate & Finalize", () => {
     expect(journeyTargetForDeal("negotiate", "handoff", FULL)).toBeNull();
   });
 });
+
+describe("Sales books the first meeting before the close", () => {
+  it("writes the booking the way the TIS's checklist reads it", async () => {
+    const { bookMeetingPatch } = await import("../stage-flow");
+    const { readIntake } = await import("../intake-answers");
+    const t = readIntake({
+      timeline: { overrides: { working: "2026-10-09" }, times: {} },
+    }).timeline;
+    const next = bookMeetingPatch(
+      t,
+      [{ key: "kickoff", date: "2026-10-06", time: "10:00" }],
+      "America/Chicago",
+    );
+    expect(next.overrides).toEqual({ working: "2026-10-09", kickoff: "2026-10-06" });
+    expect(next.times).toEqual({ kickoff: "10:00" });
+    expect(next.timezone).toBe("America/Chicago");
+    // A row without a date or a time is not a booking.
+    expect(
+      bookMeetingPatch(t, [{ key: "adjust", date: "", time: "10:00" }], null).overrides,
+    ).toEqual(t.overrides);
+  });
+
+  it("is already ticked on Pre-kickoff once the deal closes", () => {
+    const booked = {
+      path: "dm_conversion",
+      timeline: {
+        overrides: { kickoff: "2026-10-06" },
+        times: { kickoff: "10:00" },
+        timezone: "America/Chicago",
+      },
+    };
+    const before = stageFlow(input({ intake: booked }));
+    expect(before.current).toBe("negotiate");
+    const after = stageFlow(input({ stage: "onboarding_kickoff", intake: booked, owner: "Dana" }));
+    const kickoff = after.stages
+      .find((s) => s.key === "pre_kickoff")!
+      .tasks.find((t) => t.key === "kickoff")!;
+    expect(kickoff.done).toBe(true);
+    expect(kickoff.summary).toMatch(/Oct 6 at 10:00 AM/);
+  });
+});

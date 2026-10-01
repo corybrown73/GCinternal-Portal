@@ -92,7 +92,9 @@ export function HandoffChipForDeal({ dealId, size }: { dealId: string; size?: "s
     <HandoffChip
       status={c.status}
       detail={handoffDetail(c)}
-      firstMeeting={intake.timeline.overrides["kickoff"] ?? null}
+      firstMeeting={
+        intake.timeline.times["kickoff"] ? (intake.timeline.overrides["kickoff"] ?? null) : null
+      }
       {...(size ? { size } : {})}
     />
   );

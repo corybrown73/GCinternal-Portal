@@ -45,6 +45,8 @@ export type BoardDeal = Account & {
   owner_name?: string | null;
   /** The Sales → TIS handoff's state, from the deal's record. */
   handoff_status?: HandoffStatus;
+  /** The booked first meeting, YYYY-MM-DD. */
+  first_meeting?: string | null;
   next_step?: string | null;
   business_days_in_stage?: number;
   stuck?: "ok" | "warn" | "escalate";
@@ -111,7 +113,11 @@ function DealCard({
           </span>
         ) : null}
         {deal.handoff_status && deal.path !== "field_fusion" ? (
-          <HandoffChip status={deal.handoff_status} size="sm" />
+          <HandoffChip
+            status={deal.handoff_status}
+            size="sm"
+            firstMeeting={deal.stage === "negotiate" ? (deal.first_meeting ?? null) : null}
+          />
         ) : null}
         {deal.has_sow !== undefined ? (
           <span

@@ -422,6 +422,26 @@ function playbookPreKickoff(a: IntakeAnswers): FlowTask[] {
 }
 
 /**
+ * The plan's timeline after booking meetings: each key's date and time, and
+ * the zone they are in. One helper for the single kickoff, the three core
+ * meetings and Sales booking the first meeting before the close — so the
+ * TIS's checklist finds the booking wherever it was made.
+ */
+export function bookMeetingPatch(
+  t: IntakeAnswers["timeline"],
+  bookings: ReadonlyArray<{ key: string; date: string; time: string }>,
+  zone: string | null,
+): IntakeAnswers["timeline"] {
+  const real = bookings.filter((b) => b.date && b.time);
+  return {
+    ...t,
+    overrides: { ...t.overrides, ...Object.fromEntries(real.map((b) => [b.key, b.date])) },
+    times: { ...t.times, ...Object.fromEntries(real.map((b) => [b.key, b.time])) },
+    timezone: zone || null,
+  };
+}
+
+/**
  * The day a tick was made, on the team's clock. The stamp is UTC, and after
  * 8 pm Eastern that is tomorrow's date: "Replied Sep 25" for a reply sent
  * on the 24th.

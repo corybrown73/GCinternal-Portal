@@ -183,6 +183,8 @@ export interface PipelineDeal extends Account {
   owner_name: string | null;
   /** The Sales → TIS handoff: outstanding, with the customer, or complete. */
   handoff_status: import("./sales-handoff").HandoffStatus;
+  /** YYYY-MM-DD of the booked first meeting, once Sales or the TIS has booked it. */
+  first_meeting: string | null;
   /** The checklist's next task for the stage the deal is in. */
   next_step: string | null;
   /** Business days in this stage, and whether that is past its limit. */
@@ -314,6 +316,10 @@ export async function loadPipeline(
         ff_poc: intake.field_fusion.poc && !isAtOrPast(stages, a.stage, wonStage(stages).key),
         owner_name: ownerName,
         handoff_status: handoffChecks(intake).status,
+        first_meeting:
+          intake.timeline.overrides["kickoff"] && intake.timeline.times["kickoff"]
+            ? intake.timeline.overrides["kickoff"]!
+            : null,
         // The same next task the deal's checklist shows.
         next_step: nextChecklistTask({
           stage: a.stage,

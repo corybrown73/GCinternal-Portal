@@ -16,7 +16,8 @@ import {
 } from "@/components/ui/dialog";
 import type { DealData } from "@/lib/deal-query";
 import { readIntake, type HandoffSource, type IntakeAnswers } from "@/lib/intake-answers";
-import { stampDay } from "@/lib/stage-flow";
+import { stampDay, whenLabel } from "@/lib/stage-flow";
+import { KickoffBody } from "@/components/stage-flow";
 import { saveHandoffAnswer, sendHandoffToCustomer, setHandoffFlags } from "@/lib/presale.functions";
 import {
   answerSource,
@@ -89,7 +90,11 @@ export function HandoffIntakePanel({
         {groups
           .filter((g) => g !== "ready")
           .map((g) => (
-            <Group key={g} group={g} deal={deal} intake={intake} editable={editable} />
+            <Group key={g} group={g} deal={deal} intake={intake} editable={editable}>
+              {g === "timing" ? (
+                <FirstMeeting deal={deal} intake={intake} editable={editable} />
+              ) : null}
+            </Group>
           ))}
         <SourceMaterial deal={deal} intake={intake} />
         <SideHeader
@@ -149,11 +154,13 @@ function Group({
   deal,
   intake,
   editable,
+  children,
 }: {
   group: HandoffGroup;
   deal: DealData;
   intake: IntakeAnswers;
   editable: boolean;
+  children?: React.ReactNode;
 }) {
   const qs = HANDOFF_QUESTIONS.filter((q) => q.group === group);
   return (
@@ -166,6 +173,60 @@ function Group({
           <Row key={q.key} q={q} deal={deal} intake={intake} editable={editable} />
         ))}
       </div>
+      {children}
+    </div>
+  );
+}
+
+/**
+ * Sales books the first implementation meeting for the TIS, ideally on the
+ * closing call (the Sales change). The same form the TIS's Pre-kickoff
+ * checklist uses, so the booking is one record: made here, it is already
+ * ticked there after the close.
+ */
+function FirstMeeting({
+  deal,
+  intake,
+  editable,
+}: {
+  deal: DealData;
+  intake: IntakeAnswers;
+  editable: boolean;
+}) {
+  const t = intake.timeline;
+  const booked = Boolean(t.overrides["kickoff"] && t.times["kickoff"]);
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="mt-3 rounded-md border border-border bg-muted/30 px-3 py-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-[12px]">
+          <span className="font-medium">First meeting</span>{" "}
+          {booked ? (
+            <span className="text-status-ontrack-foreground">
+              <Check className="mr-0.5 inline h-3 w-3" strokeWidth={3} />
+              {whenLabel(t.overrides["kickoff"]!, t.times["kickoff"]!, t.timezone)}
+            </span>
+          ) : (
+            <span className="text-muted-foreground">
+              not booked yet — book it for the TIS, ideally on the closing call.
+            </span>
+          )}
+        </p>
+        {editable ? (
+          <button
+            type="button"
+            onClick={() => setOpen((o) => !o)}
+            className="rounded-md border border-border bg-card px-2 py-0.5 text-[11px] hover:bg-muted"
+          >
+            {open ? "Hide" : booked ? "Change or send the invite" : "Book the first meeting"}
+          </button>
+        ) : null}
+      </div>
+      {open ? (
+        <div className="mt-2">
+          <KickoffBody deal={deal} intake={intake} editable={editable} />
+        </div>
+      ) : null}
     </div>
   );
 }
