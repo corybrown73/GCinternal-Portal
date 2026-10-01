@@ -1,4 +1,5 @@
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import { MANAGE_ROLES } from "../roles";
 import type { SupabaseClient } from "@supabase/supabase-js";
 const createAdminClient = () => supabaseAdmin as unknown as SupabaseClient;
 import { signDecisionToken } from "./tokens";
@@ -57,7 +58,7 @@ async function sendApprovalEmails(request: TamRequest, account: Account) {
   const { data: admins } = await admin
     .from("portal_profiles")
     .select("email")
-    .in("role", ["admin", "super_admin", "manager"])
+    .in("role", [...MANAGE_ROLES])
     .returns<{ email: string }[]>();
   if (!admins || admins.length === 0) {
     console.warn("TAM request created but no admin profiles exist to notify");

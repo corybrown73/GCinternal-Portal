@@ -1,4 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
+import { MANAGE_ROLES } from "./roles";
 import { z } from "zod";
 
 import { requireInternalAuth } from "@/integrations/supabase/internal-middleware";
@@ -17,8 +18,6 @@ import { LIFECYCLE_STAGE_KEY_PATTERN, STAGE_COLORS } from "./lifecycle-stages";
 /* refuse with an explanation, and neither touches 0031's table. That is a     */
 /* schema-presence check, not an authorization one.                           */
 /* ------------------------------------------------------------------------- */
-
-const MANAGE_ROLES = ["admin", "super_admin", "manager"];
 
 function assertCanManage(profile: { role: string }): void {
   if (!MANAGE_ROLES.includes(profile.role)) {

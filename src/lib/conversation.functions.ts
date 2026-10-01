@@ -1,4 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
+import { MANAGE_ROLES } from "./roles";
 import { z } from "zod";
 import { requireInternalAuth } from "@/integrations/supabase/internal-middleware";
 
@@ -20,8 +21,6 @@ import { requireInternalAuth } from "@/integrations/supabase/internal-middleware
  * The server module re-checks everything here from `context.profile`. These
  * validators shape the input; they are not the authorization.
  */
-
-const MANAGE_ROLES = ["admin", "super_admin", "manager"];
 
 function assertCanManage(profile: { role: string }): void {
   if (!MANAGE_ROLES.includes(profile.role)) {

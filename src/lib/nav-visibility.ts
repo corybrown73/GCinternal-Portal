@@ -17,6 +17,8 @@
  * hiding it would be the one change nobody could undo from the screen.
  */
 
+import type { HomeVariant } from "./roles";
+
 export type NavEntry = {
   to: string;
   label: string;
@@ -26,6 +28,12 @@ export type NavEntry = {
   icon: NavIcon;
   /** In the main group of the sidebar; everything else folds under "More". */
   primary?: boolean;
+  /**
+   * The variants this entry is in the main group for. A seller's sidebar
+   * leads with the Pipeline; an implementer's with Customers and the
+   * Calendar; a manager's with all five. Absent means `primary` as given.
+   */
+  primaryFor?: ReadonlyArray<HomeVariant>;
   /** Who sees it at all, before visibility is applied. */
   audience: "everyone" | "managers" | "super_admins";
   /** Cannot be switched off. See above. */
@@ -70,6 +78,7 @@ export const NAV_CATALOGUE: readonly NavEntry[] = [
     audience: "everyone",
     icon: "customers",
     primary: true,
+    primaryFor: ["sales", "tis", "manager"],
   },
   {
     to: "/pipeline",
@@ -78,6 +87,7 @@ export const NAV_CATALOGUE: readonly NavEntry[] = [
     audience: "everyone",
     icon: "pipeline",
     primary: true,
+    primaryFor: ["sales", "tis", "manager"],
   },
   {
     to: "/calendar",
@@ -86,6 +96,7 @@ export const NAV_CATALOGUE: readonly NavEntry[] = [
     audience: "everyone",
     icon: "calendar",
     primary: true,
+    primaryFor: ["tis", "manager"],
   },
   {
     to: "/reports",
@@ -94,6 +105,7 @@ export const NAV_CATALOGUE: readonly NavEntry[] = [
     audience: "everyone",
     icon: "reports",
     primary: true,
+    primaryFor: ["manager"],
   },
   {
     to: "/search",
@@ -196,6 +208,8 @@ export function hideableKeys(): string[] {
 export function visibleNav(
   visibility: NavVisibility,
   role: { canManage: boolean; isSuperAdmin: boolean },
+  /** Which entries lead the sidebar for this login. Absent: the catalogue's own marks. */
+  variant?: HomeVariant,
 ): NavEntry[] {
   const hidden = new Set(visibility.hidden);
   return NAV_CATALOGUE.filter((e) => {
@@ -203,7 +217,7 @@ export function visibleNav(
     if (e.audience === "super_admins" && !role.isSuperAdmin) return false;
     if (e.locked) return true;
     return !hidden.has(e.to);
-  });
+  }).map((e) => (variant && e.primaryFor ? { ...e, primary: e.primaryFor.includes(variant) } : e));
 }
 
 /** Drop anything that is not a hideable key, so a bad write cannot poison the row. */

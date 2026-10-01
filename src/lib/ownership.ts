@@ -102,13 +102,19 @@ export type OwnershipFacts = {
    * just created was not "mine" and vanished from your own board.
    */
   creatorProfileId?: string | null;
+  /**
+   * customers.account_manager_id. team_members. The AM who keeps the account
+   * after implementation; their "mine" was empty without it.
+   */
+  accountManagerId?: string | null;
 };
 
 export function isOwnedBy(facts: OwnershipFacts, viewer: Viewer): boolean {
   const byTeamMember =
     viewer.teamMemberId !== null &&
     (facts.implementationOwnerId === viewer.teamMemberId ||
-      facts.csmOwnerId === viewer.teamMemberId);
+      facts.csmOwnerId === viewer.teamMemberId ||
+      (facts.accountManagerId ?? null) === viewer.teamMemberId);
   const byProfile =
     facts.amOwnerProfileId === viewer.profileId || facts.seOwnerProfileId === viewer.profileId;
   const byCreation =

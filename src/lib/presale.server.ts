@@ -5,6 +5,7 @@ import { TERM_LABELS } from "./terms";
 import { resolveAccountId, transitionStage, upsertAccount } from "./server/accounts";
 import { accountUpsertSchema } from "./server/schemas";
 import { isStage, type AccountStage } from "./presale-stages";
+import { MANAGE_ROLES } from "./roles";
 import { handoffChecks } from "./sales-handoff";
 import {
   findStage,
@@ -51,7 +52,6 @@ export interface ProfileRow {
 }
 
 const SUPER_ROLES = ["admin", "super_admin"];
-const MANAGE_ROLES = [...SUPER_ROLES, "manager"];
 
 async function profileOf(userId: string): Promise<ProfileRow> {
   const { data, error } = await db()
@@ -152,7 +152,7 @@ function roleWord(role: string): string {
 export function ownerOptionsByRole(
   people: ReadonlyArray<{ id: string; name: string; role: import("./auth").PortalRole }>,
 ): { am: Array<{ value: string; label: string }>; se: Array<{ value: string; label: string }> } {
-  const managers = new Set(["admin", "super_admin", "manager"]);
+  const managers = new Set(MANAGE_ROLES);
   const sellers = new Set(["sales", "am"]);
   const technical = new Set(["tam_se", "se", "implementation", "onboarding"]);
   const pick = (roles: Set<string>) =>

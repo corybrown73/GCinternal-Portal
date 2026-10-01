@@ -1,4 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
+import { MANAGE_ROLES } from "./roles";
 import { z } from "zod";
 import { requireInternalAuth } from "@/integrations/supabase/internal-middleware";
 import { INTERFACE_THEMES, NAV_SCHEMES, themeFor } from "./org-branding";
@@ -12,8 +13,6 @@ import { INTERFACE_THEMES, NAV_SCHEMES, themeFor } from "./org-branding";
  * against context.profile, which the middleware populates. Any client-side
  * check only hides dead buttons.
  */
-
-const MANAGE_ROLES = ["admin", "super_admin", "manager"];
 
 function assertCanManage(profile: { role: string }): void {
   if (!MANAGE_ROLES.includes(profile.role)) {

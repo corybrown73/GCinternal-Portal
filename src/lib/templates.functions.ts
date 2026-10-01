@@ -1,4 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
+import { MANAGE_ROLES } from "./roles";
 import { z } from "zod";
 import { requireInternalAuth } from "@/integrations/supabase/internal-middleware";
 import type { JsonValue } from "./journey-conditions";
@@ -28,8 +29,6 @@ import {
 /* inside templates.server.ts: with it off the reads return `flagOn: false`   */
 /* and no content instead of throwing, so the page can explain itself.        */
 /* ------------------------------------------------------------------------- */
-
-const MANAGE_ROLES = ["admin", "super_admin", "manager"];
 
 /** Every write goes through this. Reads deliberately do not. */
 function assertCanManage(profile: { role: string }): void {

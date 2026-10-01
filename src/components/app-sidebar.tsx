@@ -21,6 +21,7 @@ import {
   Wrench,
   CalendarDays,
 } from "lucide-react";
+import { homeVariantFor } from "@/lib/roles";
 import { canManage, isSuperAdmin, ROLE_LABELS, signOut, type PortalProfile } from "@/lib/auth";
 import {
   NO_HIDDEN,
@@ -80,10 +81,11 @@ export function AppSidebar({
   const appName = branding?.app_name ?? DEFAULT_BRANDING.app_name;
 
   // One catalogue, narrowed by role and then by what has been switched off.
-  const nav = visibleNav(visibility ?? NO_HIDDEN, {
-    canManage: canManage(role),
-    isSuperAdmin: isSuperAdmin(role),
-  });
+  const nav = visibleNav(
+    visibility ?? NO_HIDDEN,
+    { canManage: canManage(role), isSuperAdmin: isSuperAdmin(role) },
+    homeVariantFor(role),
+  );
   const primary = nav.filter((n) => n.primary);
   const settings = nav.find((n) => n.to === "/settings") ?? null;
   const more = nav.filter((n) => !n.primary && n.to !== "/settings" && n.to !== "/search");

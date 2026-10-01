@@ -96,16 +96,20 @@ export async function loadImplementations(
 
   // The pre-sale account owners (am/se) live on portal_accounts and are
   // profile ids, not team ids. Read only when a scope actually needs them.
-  const accountsByCustomer = new Map<string, { am: string | null; se: string | null }>();
+  const accountsByCustomer = new Map<
+    string,
+    { am: string | null; se: string | null; creator: string | null }
+  >();
   if (scope && scope.scope.mode !== "all") {
     const { data: accounts } = await db()
       .from("portal_accounts")
-      .select("customer_id, am_owner_id, se_owner_id");
+      .select("customer_id, am_owner_id, se_owner_id, created_by");
     for (const a of (accounts ?? []) as any[]) {
       if (a.customer_id) {
         accountsByCustomer.set(a.customer_id, {
           am: a.am_owner_id ?? null,
           se: a.se_owner_id ?? null,
+          creator: a.created_by ?? null,
         });
       }
     }
@@ -125,6 +129,9 @@ export async function loadImplementations(
         csmOwnerId: c.csm_owner_id ?? null,
         amOwnerProfileId: account?.am ?? null,
         seOwnerProfileId: account?.se ?? null,
+        creatorProfileId: account?.creator ?? null,
+        // The account manager who keeps the customer after implementation.
+        accountManagerId: c.account_manager_id ?? null,
       },
       scope.scope,
       scope.viewer,

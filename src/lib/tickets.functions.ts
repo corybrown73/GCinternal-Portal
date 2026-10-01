@@ -1,4 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
+import { MANAGE_ROLES } from "./roles";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
@@ -25,8 +26,6 @@ const TICKET_PRIORITIES = ["low", "normal", "high", "urgent"] as const;
 const TICKET_STATUSES = ["open", "in_progress", "waiting_customer", "resolved", "closed"] as const;
 
 type CallerProfile = { id: string; email: string; full_name: string | null; role: string };
-
-const MANAGE_ROLES = ["admin", "super_admin", "manager"];
 
 /** Load the caller's portal profile; throws when the auth user has none. */
 async function callerProfile(userId: string): Promise<CallerProfile> {

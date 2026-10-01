@@ -1,5 +1,7 @@
 import { Resend } from "resend";
 
+import { MANAGE_ROLES } from "../roles";
+
 // EMAIL_MODE=log (default when no RESEND_API_KEY): full email is written to the
 // server log so the whole approval flow is testable without an email provider.
 /**
@@ -20,7 +22,7 @@ import { Resend } from "resend";
  */
 export type EmailKind = "assignment" | "account" | "requested" | "notification";
 
-const MANAGER_ROLES = new Set(["admin", "super_admin", "manager"]);
+const MANAGER_ROLES = new Set(MANAGE_ROLES);
 
 /** The rule, on its own so it can be tested without a mail provider. */
 export function emailAllowed(

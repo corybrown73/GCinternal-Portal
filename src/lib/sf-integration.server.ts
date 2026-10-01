@@ -1,4 +1,5 @@
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import { MANAGE_ROLES } from "./roles";
 import { createHash } from "crypto";
 import { isFlagOn } from "./app-config.server";
 import { audit } from "./server/audit";
@@ -528,8 +529,6 @@ export async function emitWriteBack(implementationId: string): Promise<{ emitted
 }
 
 /* --------------------------------------------------------------- admin API */
-
-const MANAGE_ROLES = ["manager", "admin", "super_admin"];
 
 async function requireManager(userId: string): Promise<{ id: string; role: string }> {
   const { data } = await db()

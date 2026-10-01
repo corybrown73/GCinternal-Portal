@@ -3,6 +3,9 @@ import { queryOptions, useQuery, useSuspenseQuery } from "@tanstack/react-query"
 import { ArrowRight, CalendarDays, Check, Clock, TriangleAlert } from "lucide-react";
 
 import { PageBody, PageHeader } from "@/components/page";
+import { SalesHome } from "@/components/home-sales";
+import { useProfile } from "@/lib/auth";
+import { homeVariantFor } from "@/lib/roles";
 import { useScope } from "@/lib/use-scope";
 import { getHome } from "@/lib/hub.functions";
 import { getDealInbox } from "@/lib/presale.functions";
@@ -81,8 +84,12 @@ const TONE_BAR: Record<Tone, string> = {
 
 function HomePage() {
   const { param } = useScope();
+  const { profile } = useProfile();
   const { data } = useSuspenseQuery(homeQuery(param));
   const inbox = useQuery(dealInboxQuery(param));
+  // A seller's Home is their deals and their handoffs, not the
+  // implementation day. Same route, same scope; a different page.
+  if (homeVariantFor(profile?.role) === "sales") return <SalesHome />;
   const queue = buildQueue(data.implementations, data.triage);
   const health = healthByImplementation(data.implementations, data.triage);
   const today = todayFor({

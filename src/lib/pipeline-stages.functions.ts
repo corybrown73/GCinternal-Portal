@@ -1,4 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
+import { MANAGE_ROLES } from "./roles";
 import { z } from "zod";
 
 import { requireInternalAuth } from "@/integrations/supabase/internal-middleware";
@@ -20,8 +21,6 @@ import { PIPELINE_STAGE_KEY_PATTERN, STAGE_COLORS } from "./pipeline-stages";
 /* schema-presence check, not an authorization one — authorization is never   */
 /* flag-gated (0011's header).                                                */
 /* ------------------------------------------------------------------------- */
-
-const MANAGE_ROLES = ["admin", "super_admin", "manager"];
 
 function assertCanManage(profile: { role: string }): void {
   if (!MANAGE_ROLES.includes(profile.role)) {

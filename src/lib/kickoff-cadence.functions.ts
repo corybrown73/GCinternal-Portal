@@ -1,9 +1,8 @@
 import { createServerFn } from "@tanstack/react-start";
+import { MANAGE_ROLES } from "./roles";
 import { z } from "zod";
 
 import { requireInternalAuth } from "@/integrations/supabase/internal-middleware";
-
-const MANAGE_ROLES = ["admin", "super_admin", "manager"];
 
 export const getKickoffCadence = createServerFn({ method: "GET" })
   .middleware([requireInternalAuth])
