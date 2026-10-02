@@ -476,11 +476,11 @@ function MyBook({ t }: { t: Today }) {
           View all <ArrowRight className="h-3.5 w-3.5" />
         </Link>
       </div>
-      <div className="mt-3 flex items-center gap-4">
+      <div className="mt-3 flex items-center gap-3">
         <Donut parts={parts} total={t.book.total} />
         <ul className="min-w-0 flex-1 space-y-1.5">
           {parts.map((p) => (
-            <li key={p.label} className="flex items-center gap-2 text-[12px]">
+            <li key={p.label} className="flex items-center gap-1.5 text-[12px]">
               <span
                 className="h-2.5 w-2.5 shrink-0 rounded-full"
                 style={{ backgroundColor: p.color }}
@@ -490,7 +490,7 @@ function MyBook({ t }: { t: Today }) {
                 <TooltipTrigger asChild>
                   <button
                     type="button"
-                    className="text-muted-foreground underline-offset-2 hover:underline"
+                    className="whitespace-nowrap text-muted-foreground underline-offset-2 hover:underline"
                   >
                     {p.label}
                   </button>
