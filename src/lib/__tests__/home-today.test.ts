@@ -134,6 +134,58 @@ describe("Today", () => {
     expect(t.tiles.onTrack).toBe(1);
     expect(t.tiles.upcoming).toBeGreaterThanOrEqual(3); // three Stage 2 calls this week
     expect(t.book.total).toBe(3);
+    // Each tile's row population matches its own count exactly.
+    expect(t.waitingOnRows.map((r) => r.name)).toEqual(["Corys Oil"]);
+    expect(t.onTrackRows.map((r) => r.name)).toEqual(["Delta Mining"]);
+  });
+
+  it("counts Upcoming as unique accounts, not events — one account with two calls and a commitment still counts once", () => {
+    const twoCallsAndACommitment = row({
+      facts: {
+        ...row().facts!,
+        upcoming_calls: [
+          {
+            key: "working",
+            label: "Stage 2 — Make it yours",
+            date: "2026-10-01",
+            time: "10:00",
+            minutes: 60,
+          },
+          {
+            key: "second",
+            label: "Stage 2 follow-up",
+            date: "2026-10-03",
+            time: "11:00",
+            minutes: 30,
+          },
+        ],
+      },
+    });
+    const t = todayFor(
+      input({
+        queue: { act_now: [twoCallsAndACommitment], needs_attention: [], moving: [] },
+        commitments: [
+          {
+            id: "k2",
+            description: "Confirm attendees",
+            due_date: "2026-09-30",
+            status: "open",
+            committed_to: "customer",
+            owner_name: null,
+            owner_role: null,
+            implementation_id: "i1",
+            customer_id: "c1",
+            customer_name: "FGP Manufacturing",
+          },
+        ],
+      }),
+    );
+    // Three events in the window (two calls + one commitment), all on the same account.
+    expect(t.comingUp.flatMap((g) => g.events).filter((e) => e.date <= "2026-10-06")).toHaveLength(
+      3,
+    );
+    expect(t.tiles.upcoming).toBe(1);
+    expect(t.upcomingRows.map((r) => r.name)).toEqual(["FGP Manufacturing"]);
   });
 
   it("lists who needs me: the account with its chip, reason, next step and due date, and the unclaimed deal", () => {

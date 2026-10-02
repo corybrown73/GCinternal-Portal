@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { queryOptions, useQuery, useSuspenseQuery } from "@tanstack/react-query";
 import { ArrowRight, CalendarDays, Check, Clock, TriangleAlert } from "lucide-react";
@@ -83,11 +84,21 @@ const TONE_BAR: Record<Tone, string> = {
 
 /* ------------------------------------------------------------------- page */
 
+/** The four summary cards — each key names exactly the tile/row population it toggles. */
+type CardKey = "need_attention" | "waiting_on" | "upcoming" | "on_track";
+
 function HomePage() {
   const { param } = useScope();
   const { profile } = useProfile();
   const { data } = useSuspenseQuery(homeQuery(param));
   const inbox = useQuery(dealInboxQuery(param));
+  // Clicking a summary card filters the account list below; the same card
+  // again, or "Clear filter", clears it. Local UI state only — it never
+  // changes what a card counts, only which of today's already-computed
+  // rows are shown. A scope change (useScope) re-fetches `data` and rebuilds
+  // `today` from scratch; this state is untouched by that and simply
+  // re-applies to the new, re-scoped rows.
+  const [filter, setFilter] = useState<CardKey | null>(null);
   // A seller's Home is their deals and their handoffs, not the
   // implementation day. Same route, same scope; a different page.
   if (homeVariantFor(profile?.role) === "sales") return <SalesHome />;
@@ -102,6 +113,16 @@ function HomePage() {
     viewerName: profile?.full_name ?? null,
   });
 
+  // The exact rows each card's own count is made of — reused, never a
+  // second definition of any bucket.
+  const cardRows: Record<CardKey, { label: string; rows: NeedsMeRow[] }> = {
+    need_attention: { label: "Need attention", rows: today.needsMe },
+    waiting_on: { label: "Waiting on someone", rows: today.waitingOnRows },
+    upcoming: { label: "Upcoming", rows: today.upcomingRows },
+    on_track: { label: "On track", rows: today.onTrackRows },
+  };
+  const toggleFilter = (key: CardKey) => setFilter((f) => (f === key ? null : key));
+
   return (
     <>
       <PageHeader
@@ -111,10 +132,15 @@ function HomePage() {
         hero={{ tagline: "Progress builds momentum." }}
       />
       <PageBody className="space-y-4">
-        <Tiles t={today} />
+        <Tiles t={today} active={filter} onToggle={toggleFilter} />
         <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
           <div className="min-w-0 space-y-4">
-            <NeedsMe rows={today.needsMe} watch={today.watch} />
+            <NeedsMe
+              rows={today.needsMe}
+              watch={today.watch}
+              activeFilter={filter ? cardRows[filter] : null}
+              onClearFilter={() => setFilter(null)}
+            />
             <ComingUp t={today} />
           </div>
           <div className="space-y-4">
@@ -134,8 +160,17 @@ function HomePage() {
 
 /* ------------------------------------------------------------------ tiles */
 
-function Tiles({ t }: { t: Today }) {
+function Tiles({
+  t,
+  active,
+  onToggle,
+}: {
+  t: Today;
+  active: CardKey | null;
+  onToggle: (key: CardKey) => void;
+}) {
   const tiles: Array<{
+    key: CardKey;
     label: string;
     sub: string;
     value: number;
@@ -143,6 +178,7 @@ function Tiles({ t }: { t: Today }) {
     icon: typeof TriangleAlert;
   }> = [
     {
+      key: "need_attention",
       label: "Need attention",
       sub: "Action required",
       value: t.tiles.needAttention,
@@ -150,13 +186,15 @@ function Tiles({ t }: { t: Today }) {
       icon: TriangleAlert,
     },
     {
-      label: "Waiting on",
+      key: "waiting_on",
+      label: "Waiting on someone",
       sub: "Customer or internal",
       value: t.tiles.waitingOn,
       tone: "warning",
       icon: Clock,
     },
     {
+      key: "upcoming",
       label: "Upcoming",
       sub: "Next 7 days",
       value: t.tiles.upcoming,
@@ -164,6 +202,7 @@ function Tiles({ t }: { t: Today }) {
       icon: CalendarDays,
     },
     {
+      key: "on_track",
       label: "On track",
       sub: "No immediate action",
       value: t.tiles.onTrack,
@@ -182,10 +221,18 @@ function Tiles({ t }: { t: Today }) {
     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
       {tiles.map((tile) => {
         const Icon = tile.icon;
+        const isActive = active === tile.key;
         return (
-          <div
-            key={tile.label}
-            className={cn("flex items-center gap-3 rounded-lg px-4 py-3.5", wash[tile.tone])}
+          <button
+            key={tile.key}
+            type="button"
+            aria-pressed={isActive}
+            onClick={() => onToggle(tile.key)}
+            className={cn(
+              "flex items-center gap-3 rounded-lg px-4 py-3.5 text-left transition-shadow",
+              wash[tile.tone],
+              isActive ? "ring-2 ring-offset-1 ring-foreground/30" : "ring-1 ring-transparent",
+            )}
           >
             <span
               className={cn(
@@ -200,7 +247,7 @@ function Tiles({ t }: { t: Today }) {
               <p className="mt-1 text-[13px] font-medium leading-tight">{tile.label}</p>
               <p className="text-[11px] text-muted-foreground">{tile.sub}</p>
             </div>
-          </div>
+          </button>
         );
       })}
     </div>
@@ -209,7 +256,51 @@ function Tiles({ t }: { t: Today }) {
 
 /* --------------------------------------------------------------- needs me */
 
-function NeedsMe({ rows, watch }: { rows: NeedsMeRow[]; watch: NeedsMeRow[] }) {
+function NeedsMe({
+  rows,
+  watch,
+  activeFilter,
+  onClearFilter,
+}: {
+  rows: NeedsMeRow[];
+  watch: NeedsMeRow[];
+  /** Set when a summary card is selected — replaces the default view below. */
+  activeFilter: { label: string; rows: NeedsMeRow[] } | null;
+  onClearFilter: () => void;
+}) {
+  if (activeFilter) {
+    return (
+      <section className="rounded-lg border border-border bg-card" aria-label="Filtered accounts">
+        <div className="flex flex-wrap items-baseline justify-between gap-2 px-4 pt-3.5">
+          <div>
+            <h2 className="flex items-center gap-2 text-[16px] font-semibold">
+              {activeFilter.label}
+              <span className="rounded-full bg-muted px-2 py-px text-[11px] font-semibold text-muted-foreground">
+                {activeFilter.rows.length}
+              </span>
+            </h2>
+            <p className="text-[12px] text-muted-foreground">
+              Filtered from the summary cards above.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClearFilter}
+            className="inline-flex items-center gap-1 rounded-md border border-border px-2.5 py-1 text-[12px] hover:bg-muted"
+          >
+            Clear filter
+          </button>
+        </div>
+        {activeFilter.rows.length === 0 ? (
+          <p className="px-4 pb-3.5 pt-4 text-[13px] text-muted-foreground">
+            No accounts match this filter.
+          </p>
+        ) : (
+          <Rows rows={activeFilter.rows} />
+        )}
+      </section>
+    );
+  }
   return (
     <section className="rounded-lg border border-border bg-card" aria-label="What needs me">
       <div className="flex flex-wrap items-baseline justify-between gap-2 px-4 pt-3.5">
@@ -517,8 +608,8 @@ function Donut({
   parts: Array<{ label: string; value: number; color: string }>;
   total: number;
 }) {
-  const size = 132;
-  const r = 50;
+  const size = 108;
+  const r = 41;
   const c = 2 * Math.PI * r;
   const gap = total > 1 ? 3 : 0;
   let offset = 0;
@@ -536,7 +627,7 @@ function Donut({
         r={r}
         fill="none"
         stroke="var(--color-muted)"
-        strokeWidth={14}
+        strokeWidth={12}
       />
       {total > 0
         ? parts
@@ -551,7 +642,7 @@ function Donut({
                   r={r}
                   fill="none"
                   stroke={p.color}
-                  strokeWidth={14}
+                  strokeWidth={12}
                   strokeDasharray={`${Math.max(0, len - gap)} ${c - Math.max(0, len - gap)}`}
                   strokeDashoffset={-offset}
                   transform={`rotate(-90 ${size / 2} ${size / 2})`}

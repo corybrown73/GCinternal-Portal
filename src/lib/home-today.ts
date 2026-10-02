@@ -60,6 +60,17 @@ export type Today = {
   needsMe: NeedsMeRow[];
   /** Keep an eye on: not counted in the tile, listed under their own heading. */
   watch: NeedsMeRow[];
+  /** The exact accounts the "Waiting on someone" tile counts. */
+  waitingOnRows: NeedsMeRow[];
+  /** The exact accounts the "On track" tile counts. */
+  onTrackRows: NeedsMeRow[];
+  /**
+   * The exact accounts the "Upcoming" tile counts — unique accounts with at
+   * least one event in the next 7 days, NOT one row per event. `comingUp`
+   * above still lists every event undeduplicated; this is the account
+   * population behind the tile/filter only.
+   */
+  upcomingRows: NeedsMeRow[];
   comingUp: DayGroup[];
   book: {
     total: number;
@@ -241,11 +252,27 @@ export function todayFor(input: TodayInput): Today {
   ].sort(bySeverity);
 
   // COMING UP: this week by day and next week folded — booked calls, planned
-  // calls, commitments due, and target launches. The tile counts seven days.
+  // calls, commitments due, and target launches. `comingUp` lists every
+  // event, undeduplicated — unchanged.
   const horizon = endOfNextWeek(today);
   const sevenDays = addDays(today, 7);
   const events = collectEvents(all, commitments, today, horizon);
   const comingUp = groupByDay(events, today);
+
+  // The "Upcoming" tile/filter population is unique ACCOUNTS with at least
+  // one event in the next 7 days — not one count per event. Each event's key
+  // already encodes which account it came from (`${implId}:...` for a
+  // row-sourced event, `commitment:${id}` for one sourced from a
+  // commitment), so no new attribution logic is invented here.
+  const commitmentImplById = new Map(commitments.map((c) => [c.id, c.implementation_id]));
+  const upcomingImplIds = new Set<string>();
+  for (const e of events) {
+    if (e.date > sevenDays) continue;
+    const implId = e.key.startsWith("commitment:")
+      ? commitmentImplById.get(e.key.slice("commitment:".length))
+      : e.key.split(":")[0];
+    if (implId) upcomingImplIds.add(implId);
+  }
 
   // WAITING ON: somebody else's move, on any account.
   const waiting = all.filter((r) => r.dependency.party !== "none");
@@ -259,11 +286,26 @@ export function todayFor(input: TodayInput): Today {
     );
   });
   const needAttention = queue.act_now.length + dealInbox.filter((d) => d.unclaimed).length;
-  const waitingOn = waiting.filter((r) => r.bucket !== "act_now").length;
+  const waitingOnQueueRows = waiting.filter((r) => r.bucket !== "act_now");
+  const waitingOn = waitingOnQueueRows.length;
   const launchingIds = new Set(launching.map((r) => r.impl.id));
   const moving = all.filter(
     (r) => r.bucket !== "act_now" && r.dependency.party === "none" && !launchingIds.has(r.impl.id),
   ).length;
+
+  // The same QueueRow-to-NeedsMeRow conversion and ordering `needsMe`/`watch`
+  // already use, reused for the other three tiles' filter populations —
+  // never a second definition of "waiting on", "on track" or "upcoming".
+  const waitingOnRows = waitingOnQueueRows
+    .map((r) => rowFromQueue(r, health.get(r.impl.id)?.level, today, viewerName))
+    .sort(bySeverity);
+  const onTrackRows = queue.moving
+    .map((r) => rowFromQueue(r, health.get(r.impl.id)?.level, today, viewerName))
+    .sort(bySeverity);
+  const upcomingRows = all
+    .filter((r) => upcomingImplIds.has(r.impl.id))
+    .map((r) => rowFromQueue(r, health.get(r.impl.id)?.level, today, viewerName))
+    .sort(bySeverity);
 
   // WHERE THEY SIT: by the deal's stage, in rail order.
   const counts = new Map<string, number>();
@@ -282,11 +324,14 @@ export function todayFor(input: TodayInput): Today {
     tiles: {
       needAttention,
       waitingOn,
-      upcoming: events.filter((e) => e.date <= sevenDays).length,
+      upcoming: upcomingImplIds.size,
       onTrack: queue.moving.length,
     },
     needsMe,
     watch,
+    waitingOnRows,
+    onTrackRows,
+    upcomingRows,
     comingUp,
     book: {
       total,
