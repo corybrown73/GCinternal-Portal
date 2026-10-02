@@ -67,6 +67,7 @@ import { canManage, useProfile } from "@/lib/auth";
 import { fmtDate, formatTaskOffset, humanize } from "@/lib/hub-format";
 import { cn } from "@/lib/utils";
 import { ask } from "@/components/ui/ask";
+import { errorMessage } from "@/lib/error-message";
 
 /* ------------------------------------------------------------------------- */
 /* Journey template browser and builder.                                      */
@@ -125,7 +126,7 @@ export const Route = createFileRoute("/templates")({
   },
   errorComponent: ({ error }) => (
     <div role="alert" className="p-6 text-[13px] text-destructive">
-      Could not load journey templates: {error.message}
+      Could not load journey templates: {errorMessage(error)}
     </div>
   ),
   component: TemplatesPage,

@@ -9,6 +9,7 @@ import { Panel } from "@/components/record";
 import { NAV_CATALOGUE } from "@/lib/nav-visibility";
 import { getNavVisibility, setNavVisibility } from "@/lib/nav-visibility.functions";
 import { cn } from "@/lib/utils";
+import { errorMessage } from "@/lib/error-message";
 
 /**
  * Which sections are on the screen, for everyone.
@@ -32,7 +33,7 @@ export const Route = createFileRoute("/admin/navigation")({
   },
   errorComponent: ({ error }) => (
     <div role="alert" className="p-6 text-[13px] text-destructive">
-      Could not load the navigation: {error.message}
+      Could not load the navigation: {errorMessage(error)}
     </div>
   ),
   component: NavigationPage,

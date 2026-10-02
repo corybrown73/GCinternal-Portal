@@ -136,6 +136,7 @@ import {
 } from "@/lib/graduation-readiness";
 import { cn } from "@/lib/utils";
 import { When } from "@/components/when";
+import { errorMessage } from "@/lib/error-message";
 
 const TABS = ["overview", "plan", "record", "resources", "details"] as const;
 export type TabId = (typeof TABS)[number];
@@ -232,7 +233,7 @@ export const Route = createFileRoute("/customers/$customerId")({
   errorComponent: ({ error }) => (
     <div role="alert" className="space-y-2 p-6 text-[13px]">
       <p className="font-medium text-destructive">Could not load this implementation.</p>
-      <p className="text-muted-foreground">{error.message}</p>
+      <p className="text-muted-foreground">{errorMessage(error)}</p>
       <Link
         to="/customers"
         search={{ sort: "days", dir: "desc" }}

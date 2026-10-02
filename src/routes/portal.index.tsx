@@ -7,6 +7,7 @@ import { ProgressBar, StageTracker } from "@/components/portal/stage-tracker";
 import { fmtDate, stageLabel } from "@/lib/hub-format";
 import { cn } from "@/lib/utils";
 import { When } from "@/components/when";
+import { errorMessage } from "@/lib/error-message";
 
 export const Route = createFileRoute("/portal/")({
   loader: ({ context }) => {
@@ -15,7 +16,7 @@ export const Route = createFileRoute("/portal/")({
   errorComponent: ({ error }) => (
     <div role="alert" className="rounded-md border border-border bg-card p-6 text-[13px]">
       <p className="font-medium">We couldn&apos;t load your onboarding view.</p>
-      <p className="mt-1 text-muted-foreground">{error.message}</p>
+      <p className="mt-1 text-muted-foreground">{errorMessage(error)}</p>
     </div>
   ),
   component: PortalHomePage,

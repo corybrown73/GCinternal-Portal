@@ -8,6 +8,7 @@ import { NoRows, Panel } from "@/components/record";
 import { SavedViews } from "@/components/saved-views";
 import { search } from "@/lib/search.functions";
 import { searchToView } from "@/lib/saved-view-input";
+import { errorMessage } from "@/lib/error-message";
 
 type SearchParams = { q: string };
 
@@ -37,7 +38,7 @@ export const Route = createFileRoute("/search")({
   },
   errorComponent: ({ error }) => (
     <div role="alert" className="p-6 text-[13px] text-destructive">
-      Could not search: {error.message}
+      Could not search: {errorMessage(error)}
     </div>
   ),
   component: SearchPage,

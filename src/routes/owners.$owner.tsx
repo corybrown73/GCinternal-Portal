@@ -10,6 +10,7 @@ import { getLeadership } from "@/lib/hub.functions";
 import { fmtMoney } from "@/lib/hub-format";
 import { ownerPortfolio, type OwnerAccountRow } from "@/lib/leadership";
 import { cn } from "@/lib/utils";
+import { errorMessage } from "@/lib/error-message";
 
 const leadershipQuery = queryOptions({
   queryKey: ["leadership"],
@@ -37,7 +38,7 @@ export const Route = createFileRoute("/owners/$owner")({
   },
   errorComponent: ({ error }) => (
     <div role="alert" className="p-6 text-[13px] text-destructive">
-      Could not load this owner portfolio: {error.message}
+      Could not load this owner portfolio: {errorMessage(error)}
     </div>
   ),
   notFoundComponent: () => (

@@ -17,6 +17,7 @@ import {
 import type { ApiKey } from "@/lib/presale-types";
 import { cn } from "@/lib/utils";
 import { ask } from "@/components/ui/ask";
+import { errorMessage } from "@/lib/error-message";
 
 /**
  * One key per integration, least-privilege scopes.
@@ -40,7 +41,7 @@ export const Route = createFileRoute("/admin/api-keys")({
   },
   errorComponent: ({ error }) => (
     <div role="alert" className="p-6 text-[13px] text-destructive">
-      Could not load API keys: {error.message}
+      Could not load API keys: {errorMessage(error)}
     </div>
   ),
   component: ApiKeysPage,

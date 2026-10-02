@@ -14,6 +14,7 @@ import { parseWonGate, type WonGateMissing } from "@/lib/won-gate";
 import { ClosedWonGateNotice } from "@/components/closed-won-gate";
 import type { AccountStage } from "@/lib/presale-stages";
 import { fmtMoney } from "@/lib/hub-format";
+import { errorMessage } from "@/lib/error-message";
 
 const pipelineQuery = (scope: string | null) =>
   queryOptions({
@@ -42,7 +43,7 @@ export const Route = createFileRoute("/pipeline")({
   },
   errorComponent: ({ error }) => (
     <div role="alert" className="p-6 text-[13px] text-destructive">
-      Could not load the pipeline: {error.message}
+      Could not load the pipeline: {errorMessage(error)}
     </div>
   ),
   component: PipelinePage,

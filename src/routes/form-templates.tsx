@@ -11,6 +11,7 @@ import { canEditSales, useProfile } from "@/lib/auth";
 import { createFormTemplateFn, listFormTemplatesFn } from "@/lib/form-templates.functions";
 import type { FormTemplateCard } from "@/lib/form-templates.server";
 import { INDUSTRIES } from "@/lib/intake-answers";
+import { errorMessage } from "@/lib/error-message";
 
 /**
  * The form library.
@@ -33,7 +34,7 @@ export const Route = createFileRoute("/form-templates")({
   },
   errorComponent: ({ error }) => (
     <div role="alert" className="p-6 text-[13px] text-destructive">
-      Could not load the form library: {error.message}
+      Could not load the form library: {errorMessage(error)}
     </div>
   ),
   component: FormLibraryPage,

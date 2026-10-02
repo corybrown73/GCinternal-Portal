@@ -10,6 +10,7 @@ import { addSequence, getSequences } from "@/lib/sequences.functions";
 import { canManage, useProfile } from "@/lib/auth";
 import { humanize } from "@/lib/hub-format";
 import { cn } from "@/lib/utils";
+import { errorMessage } from "@/lib/error-message";
 
 const journeysQuery = queryOptions({
   queryKey: ["sequences"],
@@ -32,7 +33,7 @@ export const Route = createFileRoute("/sequences/")({
   },
   errorComponent: ({ error }) => (
     <div role="alert" className="p-6 text-[13px] text-destructive">
-      Could not load sequences: {error.message}
+      Could not load sequences: {errorMessage(error)}
     </div>
   ),
   component: SequencesPage,

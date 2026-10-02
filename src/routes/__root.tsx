@@ -25,6 +25,7 @@ import { useReaderZone } from "@/components/when";
 import { AuthGate } from "@/components/auth-gate";
 import { useProfile } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
+import { asError } from "@/lib/error-message";
 
 /**
  * What a mistyped URL shows.
@@ -65,7 +66,8 @@ function NotFoundComponent() {
   );
 }
 
-function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
+function ErrorComponent({ error: thrown, reset }: { error: unknown; reset: () => void }) {
+  const error = asError(thrown);
   console.error(error);
   const router = useRouter();
   useEffect(() => {

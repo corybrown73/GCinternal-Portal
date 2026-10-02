@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils";
 // Type-only import: erased at build time, never pulls server code client-side.
 import type { PortalTicket as Ticket } from "@/lib/portal.server";
 import { When } from "@/components/when";
+import { errorMessage } from "@/lib/error-message";
 
 export const Route = createFileRoute("/portal/tickets")({
   loader: ({ context }) => {
@@ -19,7 +20,7 @@ export const Route = createFileRoute("/portal/tickets")({
   errorComponent: ({ error }) => (
     <div role="alert" className="rounded-md border border-border bg-card p-6 text-[13px]">
       <p className="font-medium">We couldn&apos;t load your requests.</p>
-      <p className="mt-1 text-muted-foreground">{error.message}</p>
+      <p className="mt-1 text-muted-foreground">{errorMessage(error)}</p>
     </div>
   ),
   component: PortalTicketsPage,

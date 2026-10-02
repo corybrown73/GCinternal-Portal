@@ -25,6 +25,7 @@ import {
   upsertFieldMap,
 } from "@/lib/sf-integration.functions";
 import { When } from "@/components/when";
+import { errorMessage } from "@/lib/error-message";
 
 /**
  * /admin/integrations — the operator's window onto the Salesforce integration.
@@ -69,7 +70,7 @@ export const Route = createFileRoute("/admin/integrations")({
   },
   errorComponent: ({ error }) => (
     <div role="alert" className="p-6 text-[13px] text-destructive">
-      Could not load integrations: {error.message}
+      Could not load integrations: {errorMessage(error)}
     </div>
   ),
   component: IntegrationsPage,

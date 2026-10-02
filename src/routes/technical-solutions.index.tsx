@@ -7,6 +7,7 @@ import { StatusChip } from "@/components/record";
 import { getTechnicalSolutions } from "@/lib/hub.functions";
 import { humanize } from "@/lib/hub-format";
 import { cn } from "@/lib/utils";
+import { errorMessage } from "@/lib/error-message";
 
 const solutionsQuery = queryOptions({
   queryKey: ["technical-solutions"],
@@ -58,7 +59,7 @@ export const Route = createFileRoute("/technical-solutions/")({
   },
   errorComponent: ({ error }) => (
     <div role="alert" className="p-6 text-[13px] text-destructive">
-      Could not load technical solutions: {error.message}
+      Could not load technical solutions: {errorMessage(error)}
     </div>
   ),
   notFoundComponent: () => <div className="p-6 text-[13px]">No technical solutions found.</div>,

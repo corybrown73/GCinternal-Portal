@@ -15,6 +15,7 @@ import { fmtDate, humanize } from "@/lib/hub-format";
 import { businessDaysBetween, localIso } from "@/lib/onboarding-timeline";
 import { datePace, dwellPace } from "@/lib/pace";
 import { cn } from "@/lib/utils";
+import { errorMessage } from "@/lib/error-message";
 
 const implementationsQuery = (scope: string | null) =>
   queryOptions({
@@ -74,7 +75,7 @@ export const Route = createFileRoute("/customers/")({
   },
   errorComponent: ({ error }) => (
     <div role="alert" className="p-6 text-[13px] text-destructive">
-      Could not load customers: {error.message}
+      Could not load customers: {errorMessage(error)}
     </div>
   ),
   notFoundComponent: () => <div className="p-6 text-[13px]">No customers found.</div>,

@@ -35,6 +35,7 @@ import {
 } from "@/lib/leadership";
 import type { ImplementationRow } from "@/lib/hub-types";
 import { cn } from "@/lib/utils";
+import { errorMessage } from "@/lib/error-message";
 
 const leadershipQuery = (scope: string | null) =>
   queryOptions({
@@ -72,7 +73,7 @@ export const Route = createFileRoute("/portfolio")({
   },
   errorComponent: ({ error }) => (
     <div role="alert" className="p-6 text-[13px] text-destructive">
-      Could not load the leadership view: {error.message}
+      Could not load the leadership view: {errorMessage(error)}
     </div>
   ),
   component: LeadershipPage,

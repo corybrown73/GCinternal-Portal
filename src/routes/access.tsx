@@ -16,6 +16,7 @@ import { cn } from "@/lib/utils";
 // Type-only import — erased at build time.
 import type { AccessCustomer } from "@/lib/access.server";
 import { ask } from "@/components/ui/ask";
+import { errorMessage } from "@/lib/error-message";
 
 const accessQuery = queryOptions({
   queryKey: ["access"],
@@ -37,7 +38,7 @@ export const Route = createFileRoute("/access")({
   },
   errorComponent: ({ error }) => (
     <div role="alert" className="p-6 text-[13px] text-destructive">
-      Could not load customer access: {error.message}
+      Could not load customer access: {errorMessage(error)}
     </div>
   ),
   component: AccessPage,

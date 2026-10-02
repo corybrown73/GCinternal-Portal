@@ -3,6 +3,7 @@ import { useSuspenseQuery } from "@tanstack/react-query";
 
 import { DealRecord } from "@/components/deal-record";
 import { dealQuery } from "@/lib/deal-query";
+import { errorMessage } from "@/lib/error-message";
 
 /**
  * A deal that has not closed yet. Once it closes, the customer's page is the
@@ -41,7 +42,7 @@ export const Route = createFileRoute("/deals/$dealId")({
   ),
   errorComponent: ({ error }) => (
     <div role="alert" className="p-6 text-[13px] text-destructive">
-      Could not load this deal: {error.message}
+      Could not load this deal: {errorMessage(error)}
     </div>
   ),
   component: DealPage,

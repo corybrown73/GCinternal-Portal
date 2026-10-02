@@ -20,6 +20,7 @@ import { cn } from "@/lib/utils";
 import type { SequenceDetail } from "@/lib/sequences.server";
 import { When } from "@/components/when";
 import { ask } from "@/components/ui/ask";
+import { errorMessage } from "@/lib/error-message";
 
 const detailQuery = (sequenceId: string) =>
   queryOptions({
@@ -36,7 +37,7 @@ export const Route = createFileRoute("/sequences/$sequenceId")({
   },
   errorComponent: ({ error }) => (
     <div role="alert" className="p-6 text-[13px] text-destructive">
-      Could not load this sequence: {error.message}
+      Could not load this sequence: {errorMessage(error)}
     </div>
   ),
   component: SequenceDetailPage,

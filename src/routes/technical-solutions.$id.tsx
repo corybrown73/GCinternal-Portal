@@ -29,6 +29,7 @@ import { SolutionDecisionLinks } from "@/components/trace-link-write";
 import { OpenAttachment } from "@/components/sow-write";
 import { splitLinks } from "@/lib/journal-input";
 import { When } from "@/components/when";
+import { errorMessage } from "@/lib/error-message";
 
 const solutionQuery = (id: string) =>
   queryOptions({
@@ -60,7 +61,7 @@ export const Route = createFileRoute("/technical-solutions/$id")({
   },
   errorComponent: ({ error }) => (
     <div role="alert" className="p-6 text-[13px] text-destructive">
-      Could not load this technical solution: {error.message}
+      Could not load this technical solution: {errorMessage(error)}
     </div>
   ),
   notFoundComponent: () => (

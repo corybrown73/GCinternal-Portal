@@ -23,6 +23,7 @@ import {
 } from "@/lib/pipeline-stages";
 import { ask } from "@/components/ui/ask";
 import { cn } from "@/lib/utils";
+import { errorMessage } from "@/lib/error-message";
 
 /**
  * Pipeline stage configuration. Design: docs/design/presale-stages.md.
@@ -57,7 +58,7 @@ export const Route = createFileRoute("/admin/pipeline-stages")({
   },
   errorComponent: ({ error }) => (
     <div role="alert" className="p-6 text-[13px] text-destructive">
-      Could not load the pipeline stages: {error.message}
+      Could not load the pipeline stages: {errorMessage(error)}
     </div>
   ),
   component: PipelineStagesPage,

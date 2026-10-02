@@ -17,6 +17,7 @@ import {
   setUserRole,
 } from "@/lib/presale.functions";
 import { fmtDate } from "@/lib/hub-format";
+import { errorMessage } from "@/lib/error-message";
 
 /** Roles that can be assigned. Legacy roles (admin/am/se/onboarding) are shown
  *  on existing rows but no longer offered. */
@@ -56,7 +57,7 @@ export const Route = createFileRoute("/admin/users")({
   },
   errorComponent: ({ error }) => (
     <div role="alert" className="p-6 text-[13px] text-destructive">
-      Could not load users: {error.message}
+      Could not load users: {errorMessage(error)}
     </div>
   ),
   component: UsersPage,

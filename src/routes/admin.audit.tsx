@@ -7,6 +7,7 @@ import { Field, NoRows, Panel } from "@/components/record";
 import { getAuditHealth } from "@/lib/hygiene.functions";
 import { fmtDateTime } from "@/lib/hub-format";
 import { When } from "@/components/when";
+import { errorMessage } from "@/lib/error-message";
 
 const healthQuery = queryOptions({
   queryKey: ["admin", "audit-health"],
@@ -20,7 +21,7 @@ export const Route = createFileRoute("/admin/audit")({
   },
   errorComponent: ({ error }) => (
     <div role="alert" className="p-6 text-[13px] text-destructive">
-      Could not load audit health: {error.message}
+      Could not load audit health: {errorMessage(error)}
     </div>
   ),
   component: AuditHealthPage,

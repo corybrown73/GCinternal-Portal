@@ -17,6 +17,7 @@ import { LIFECYCLE_PHASE_LABELS, STAGE_COLORS, type StageColor } from "@/lib/lif
 import { STAGE_COLOR_CLASS, STAGE_COLOR_LABELS } from "@/lib/pipeline-stages";
 import type { LifecyclePhase } from "@/lib/lifecycle";
 import { cn } from "@/lib/utils";
+import { errorMessage } from "@/lib/error-message";
 
 /**
  * Editing the post-sale stages.
@@ -41,7 +42,7 @@ export const Route = createFileRoute("/admin/lifecycle-stages")({
   },
   errorComponent: ({ error }) => (
     <div role="alert" className="p-6 text-[13px] text-destructive">
-      Could not load the post-sale stages: {error.message}
+      Could not load the post-sale stages: {errorMessage(error)}
     </div>
   ),
   component: LifecycleStagesPage,

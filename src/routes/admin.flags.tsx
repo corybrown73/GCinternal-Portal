@@ -16,6 +16,7 @@ import {
   type FlagInfo,
 } from "@/lib/feature-flags";
 import { cn } from "@/lib/utils";
+import { errorMessage } from "@/lib/error-message";
 
 /**
  * Turning features on and off.
@@ -46,7 +47,7 @@ export const Route = createFileRoute("/admin/flags")({
   },
   errorComponent: ({ error }) => (
     <div role="alert" className="p-6 text-[13px] text-destructive">
-      Could not load the feature list: {error.message}
+      Could not load the feature list: {errorMessage(error)}
     </div>
   ),
   component: FlagsPage,

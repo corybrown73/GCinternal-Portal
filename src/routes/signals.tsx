@@ -15,6 +15,7 @@ import {
 } from "@/lib/signals/alert-rules";
 import { cn } from "@/lib/utils";
 import { When } from "@/components/when";
+import { errorMessage } from "@/lib/error-message";
 
 const signalsQuery = queryOptions({
   queryKey: ["signals"],
@@ -48,7 +49,7 @@ export const Route = createFileRoute("/signals")({
   },
   errorComponent: ({ error }) => (
     <div role="alert" className="p-6 text-[13px] text-destructive">
-      Could not load signals: {error.message}
+      Could not load signals: {errorMessage(error)}
     </div>
   ),
   component: SignalsPage,
