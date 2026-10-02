@@ -98,6 +98,7 @@ function HomePage() {
     dealInbox: inbox.data ?? [],
     commitments: data.commitments,
     today: localIso(),
+    viewerName: profile?.full_name ?? null,
   });
 
   return (

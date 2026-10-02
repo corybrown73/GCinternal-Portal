@@ -6,6 +6,7 @@ import type { DealInboxRow } from "./presale.server";
 import { isOnboardingStage } from "./presale-stages";
 import { FLOW_STAGES } from "./stage-flow";
 import { addBusinessDays, businessDaysBetween } from "./onboarding-timeline";
+import { doINeedToAct } from "./relevance";
 
 /**
  * Today, as the mockup lays it out: four numbers, the accounts that need me,
@@ -32,6 +33,13 @@ export type NeedsMeRow = {
   due: { label: string; tone: Tone } | null;
   link: { customerId: string } | { dealId: string };
   rank: number;
+  /**
+   * Phase 2: does the viewer personally own the next move here, per
+   * `doINeedToAct` — distinct from being in-book-and-urgent, which every row
+   * in `needsMe`/`watch` already is. Never set for a deal row (no
+   * `WaitingOn` to check); always `false` there, not guessed.
+   */
+  needsMe: boolean;
 };
 
 export type UpcomingEvent = {
@@ -70,6 +78,12 @@ export type TodayInput = {
   commitments: CommitmentRow[];
   /** ISO date. */
   today: string;
+  /**
+   * Phase 2: the signed-in viewer's display name, for `needsMe` tagging
+   * only. Never changes which rows appear or how they're counted — only
+   * whether a row is additionally marked "needs you". Null skips the tag.
+   */
+  viewerName?: string | null;
 };
 
 const MS_DAY = 86_400_000;
@@ -105,7 +119,12 @@ export function dueLabel(iso: string, today: string): { label: string; tone: Ton
   return { label, tone: businessDaysBetween(today, iso) <= 3 ? "warning" : "muted" };
 }
 
-function chipFor(row: QueueRow, level: ImplHealth | undefined): { label: string; tone: Tone } {
+function chipFor(
+  row: QueueRow,
+  level: ImplHealth | undefined,
+  needsMe: boolean,
+): { label: string; tone: Tone } {
+  if (needsMe) return { label: "Needs you", tone: "critical" };
   const r = row.reason.toLowerCase();
   if (level === "blocked") return { label: "Blocked", tone: "critical" };
   if (/launch|overdue|past/.test(r) && row.bucket === "act_now")
@@ -122,7 +141,13 @@ function splitReason(reason: string): { head: string; detail: string | null } {
   return m ? { head: m[1]!, detail: m[2]! } : { head: reason, detail: null };
 }
 
-function rowFromQueue(row: QueueRow, level: ImplHealth | undefined, today: string): NeedsMeRow {
+function rowFromQueue(
+  row: QueueRow,
+  level: ImplHealth | undefined,
+  today: string,
+  viewerName: string | null,
+): NeedsMeRow {
+  const needsMe = doINeedToAct(row.dependency, viewerName);
   const facts = row.facts;
   const { head, detail } = splitReason(row.reason);
   // The date this row turns on: an overdue call, else the next call, else
@@ -149,13 +174,14 @@ function rowFromQueue(row: QueueRow, level: ImplHealth | undefined, today: strin
     initials: initials(row.impl.customer_name),
     sub: `Implementation · ${row.impl.owner_name ?? "Unassigned"}`,
     meta: meta || null,
-    chip: chipFor(row, level),
+    chip: chipFor(row, level, needsMe),
     reason: head,
     detail,
     nextStep: next && !/hasn't been recorded/i.test(next) ? next : null,
     due: dueIso ? dueLabel(dueIso, today) : null,
     link: { customerId: row.impl.customer_id },
     rank: row.rank,
+    needsMe,
   };
 }
 
@@ -180,6 +206,7 @@ function rowFromDeal(d: DealInboxRow, today: string): NeedsMeRow {
     due: unclaimed && days >= 1 ? { label: "Today", tone: "critical" } : null,
     link: { dealId: d.id },
     rank: unclaimed ? 0.5 : 2.2,
+    needsMe: false,
   };
 }
 
@@ -191,21 +218,25 @@ const PATH_LABEL: Record<string, string> = {
 };
 
 export function todayFor(input: TodayInput): Today {
-  const { queue, health, dealInbox, commitments, today } = input;
+  const { queue, health, dealInbox, commitments, today, viewerName = null } = input;
   const all = [...queue.act_now, ...queue.needs_attention, ...queue.moving];
   const byImpl = new Map(all.map((r) => [r.impl.id, r]));
 
   // WHAT NEEDS ME: act-now accounts and the deals nobody owns — exactly what
   // the "Need attention" tile counts. The watch list is its own, so the
   // number on the tile and the rows under the heading never disagree.
+  // (List membership and counts are unchanged from Phase 1 — `needsMe` per
+  // row below is an additional tag, not a filter.)
   const bySeverity = (a: NeedsMeRow, b: NeedsMeRow) =>
     a.rank - b.rank || a.name.localeCompare(b.name);
   const needsMe: NeedsMeRow[] = [
-    ...queue.act_now.map((r) => rowFromQueue(r, health.get(r.impl.id)?.level, today)),
+    ...queue.act_now.map((r) => rowFromQueue(r, health.get(r.impl.id)?.level, today, viewerName)),
     ...dealInbox.filter((d) => d.unclaimed).map((d) => rowFromDeal(d, today)),
   ].sort(bySeverity);
   const watch: NeedsMeRow[] = [
-    ...queue.needs_attention.map((r) => rowFromQueue(r, health.get(r.impl.id)?.level, today)),
+    ...queue.needs_attention.map((r) =>
+      rowFromQueue(r, health.get(r.impl.id)?.level, today, viewerName),
+    ),
     ...dealInbox.filter((d) => !d.unclaimed && d.mine).map((d) => rowFromDeal(d, today)),
   ].sort(bySeverity);
 
