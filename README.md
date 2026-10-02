@@ -93,3 +93,13 @@ npm run dev            # http://localhost:3000
 ```
 
 > The Supabase project is shared with an unrelated prototype: presale tables are `portal_`-prefixed, hub tables are unprefixed (collision-checked), and the app has Supabase Auth + Storage to itself.
+
+## How we ship
+
+`main` is production. Every merge into `main` deploys www.gcinternalportal.com through Vercel; every other branch gets a preview URL only.
+
+1. Branch off `main` (`git checkout -b yourname/what-it-does main`). A Claude Code web session does this for you and always lands on its own branch — that is expected, not a mistake.
+2. Commit and push to your branch. CI (lint, typecheck, tests, build, migrations up → down → up) runs on every push.
+3. Open a pull request into `main` on GitHub. Merge it once CI is green. That merge is the production deploy — nothing else is needed.
+
+Do not push straight to `main`, and do not expect a preview URL to be the live site. If a migration is part of the change, apply it to the Supabase project before the merge, with its `down` and probe files beside it (see `supabase/`).
