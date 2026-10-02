@@ -13,6 +13,7 @@ import { buildQueue, healthByImplementation } from "@/lib/home-triage";
 import { todayFor, type NeedsMeRow, type Today, type Tone } from "@/lib/home-today";
 import { localIso } from "@/lib/onboarding-timeline";
 import { cn } from "@/lib/utils";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 // The scope is part of the key: switching whose accounts you are looking at
 // has to refetch, and two scopes must never share a cache entry.
@@ -98,6 +99,7 @@ function HomePage() {
     dealInbox: inbox.data ?? [],
     commitments: data.commitments,
     today: localIso(),
+    viewerName: profile?.full_name ?? null,
   });
 
   return (
@@ -420,18 +422,48 @@ function ComingUp({ t }: { t: Today }) {
 
 /* ---------------------------------------------------------------- my book */
 
+/** Plain-language label + a one-line definition, display only — no bucket, count or data-source change. */
+const MY_BOOK_HELP = "Your book includes the implementations you own or are actively involved in.";
+
 function MyBook({ t }: { t: Today }) {
-  const parts: Array<{ label: string; value: number; color: string }> = [
-    { label: "Need attention", value: t.book.needAttention, color: "#d03b3b" },
-    { label: "Waiting on", value: t.book.waitingOn, color: "#fab219" },
-    { label: "Moving", value: t.book.moving, color: "#2a78d6" },
-    { label: "Launching", value: t.book.launching, color: "#4a3aa7" },
+  const parts: Array<{ label: string; value: number; color: string; help: string }> = [
+    {
+      label: "Needs attention",
+      value: t.book.needAttention,
+      color: "#d03b3b",
+      help: "Something needs action or is off track.",
+    },
+    {
+      label: "Waiting on someone",
+      value: t.book.waitingOn,
+      color: "#fab219",
+      help: "Someone else needs to do something before work can move forward.",
+    },
+    {
+      label: "On track",
+      value: t.book.moving,
+      color: "#2a78d6",
+      help: "Nothing needs attention right now.",
+    },
+    {
+      label: "Going live",
+      value: t.book.launching,
+      color: "#4a3aa7",
+      help: "The customer is at or approaching go-live.",
+    },
   ];
   return (
     <section className="rounded-lg border border-border bg-card px-4 py-3.5" aria-label="My book">
       <div className="flex items-baseline justify-between">
         <h2 className="flex items-center gap-2 text-[16px] font-semibold">
-          My book
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button type="button" className="underline-offset-2 hover:underline">
+                My book
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>{MY_BOOK_HELP}</TooltipContent>
+          </Tooltip>
           <span className="rounded-full bg-muted px-2 py-px text-[11px] font-semibold text-muted-foreground">
             {t.book.total}
           </span>
@@ -454,7 +486,17 @@ function MyBook({ t }: { t: Today }) {
                 style={{ backgroundColor: p.color }}
               />
               <span className="w-5 text-right font-semibold tabular-nums">{p.value}</span>
-              <span className="text-muted-foreground">{p.label}</span>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    className="text-muted-foreground underline-offset-2 hover:underline"
+                  >
+                    {p.label}
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent>{p.help}</TooltipContent>
+              </Tooltip>
             </li>
           ))}
         </ul>

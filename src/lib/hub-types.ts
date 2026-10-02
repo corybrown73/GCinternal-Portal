@@ -342,6 +342,13 @@ export type Customer360 = {
   team: Array<{ id: string; name: string; role: string }>;
   /** Every implementation this customer has, newest first — drives the selector. */
   implementations: ImplementationSummary[];
+  /**
+   * The selected implementation's deal facts (watch-outs, checklist next
+   * step) — the same layer `dealFactsFor()` gives Home's triage, so
+   * `triageRowForCustomer360` sees what `buildQueue` sees. Null without a
+   * linked deal.
+   */
+  deal_facts: DealFacts | null;
   /** Working notes for the selected implementation, newest first. */
   journal: JournalEntry[];
   /** Structured customer-side contacts, used by the confirmation selector. */

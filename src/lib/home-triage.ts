@@ -148,12 +148,14 @@ export function triageRow(impl: ImplementationRow, bundle: TriageBundle | undefi
  * what's exceptional here. Pure, viewer-agnostic, exactly like `triageRow`
  * itself: no login, role or "current user" enters this function.
  *
- * The one thing Home has that a single Customer 360 load doesn't: `DealFacts`
- * (the presale checklist/watch-out layer), which needs its own query this
- * page does not run today. Its absence only changes the *pre-kickoff*
- * fallback reason; every signal-based branch — risks, issues, escalations,
- * commitments, milestones, the launch date, the solution-acceptance gate —
- * reads the exact same way either side.
+ * `record.deal_facts` carries the same `DealFacts` (watch-outs, the
+ * checklist's next step) Home's `dealFactsFor()` computes for this
+ * implementation's deal — loaded once by `loadCustomer360`, not refetched
+ * here. Without it this function could not see a watch-out-only reason
+ * (nothing in risks/issues/escalations/commitments) that `needsAction()`
+ * would rank above every signal branch except a severe escalation, a
+ * blocked status or a critical risk — exactly the gap a prior version of
+ * this comment understated.
  */
 export function triageRowForCustomer360(record: Customer360): QueueRow | null {
   const impl = record.implementation;
@@ -198,7 +200,7 @@ export function triageRowForCustomer360(record: Customer360): QueueRow | null {
     technical_solutions: record.technical_solutions ?? [],
     approvals: record.approvals ?? [],
     adoption: record.adoption ?? [],
-    deal: null,
+    deal: record.deal_facts ?? null,
   };
 
   return triageRow(implRow, bundle);
