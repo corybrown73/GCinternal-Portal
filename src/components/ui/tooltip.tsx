@@ -7,7 +7,22 @@ import { cn } from "@/lib/utils";
 
 const TooltipProvider = TooltipPrimitive.Provider;
 
-const Tooltip = TooltipPrimitive.Root;
+/**
+ * A tooltip that works wherever it is dropped. Radix requires a Provider
+ * above every Root and the app never mounted one, so the first Tooltip
+ * added to a page (Home, Oct 2) took the whole route down with
+ * "`Tooltip` must be used within `TooltipProvider`". Each Tooltip now
+ * carries its own Provider; an outer TooltipProvider still works and
+ * shares its delay settings.
+ */
+const Tooltip = ({
+  delayDuration = 300,
+  ...props
+}: React.ComponentProps<typeof TooltipPrimitive.Root>) => (
+  <TooltipPrimitive.Provider delayDuration={delayDuration}>
+    <TooltipPrimitive.Root delayDuration={delayDuration} {...props} />
+  </TooltipPrimitive.Provider>
+);
 
 const TooltipTrigger = TooltipPrimitive.Trigger;
 
