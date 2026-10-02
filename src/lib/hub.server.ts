@@ -18,6 +18,7 @@ import type {
   TechnicalSolutionRow,
   TraceStep,
 } from "./hub-types";
+import type { DealFacts } from "./needs-action";
 import { matchesScope } from "./ownership";
 import type { ResolvedScope } from "./ownership.server";
 
@@ -517,6 +518,22 @@ export async function loadCustomer360(
   // without a pick we show the newest, and an unknown id falls back the same way.
   const impl =
     (implementationId ? implList.find((i) => i.id === implementationId) : null) ?? implList[0];
+
+  // The same deal-facts layer Home's triage reads for this implementation's
+  // deal — watch-outs, the checklist's next step — so triageRowForCustomer360
+  // sees exactly what buildQueue sees. One query, skipped without a deal.
+  // Without this, a watch-out-only reason (nothing in risks/issues/
+  // escalations/commitments) was invisible on Customer 360 while Home
+  // correctly surfaced it.
+  let dealFacts: DealFacts | null = null;
+  if (impl?.deal_id) {
+    try {
+      dealFacts = (await dealFactsFor([impl.deal_id])).get(impl.deal_id) ?? null;
+    } catch (e) {
+      console.error("[360] could not read deal facts", e);
+    }
+  }
+
   // Every project this customer runs, with the dates each one needs to draw
   // its own lane in the header. `stages` is filled in below, once wave B has
   // read them for all of these implementations in a single query.
@@ -580,6 +597,7 @@ export async function loadCustomer360(
     cs_handoff: null,
     team: teamOptions,
     implementations: implementationSummaries,
+    deal_facts: dealFacts,
     journal: [],
     contacts,
     deal_transitions: [],
