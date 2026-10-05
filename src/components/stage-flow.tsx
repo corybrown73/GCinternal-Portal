@@ -598,24 +598,18 @@ export function CurrentImplementationTab({
         <h2 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
           Next customer meeting
         </h2>
-        {m ? (
+        {m?.booked && m.time ? (
           <>
             <p className="mt-1.5 text-[14px] font-semibold">{m.label}</p>
-            {m.booked && m.time ? (
-              <p className="text-[13px]">
-                {whenLabel(m.date, m.time, intake.timeline.timezone)}
-                {m.minutes ? (
-                  <span className="text-muted-foreground"> · {m.minutes} min</span>
-                ) : null}
-              </p>
-            ) : (
-              <p className="text-[12px] text-amber-800 dark:text-amber-300">
-                Not on the calendar yet · the plan says {shortDay(m.date)}.
-              </p>
-            )}
+            <p className="text-[13px]">
+              {whenLabel(m.date, m.time, intake.timeline.timezone)}
+              {m.minutes ? <span className="text-muted-foreground"> · {m.minutes} min</span> : null}
+            </p>
           </>
         ) : (
-          <p className="mt-1.5 text-[13px] text-muted-foreground">No meetings on the plan yet.</p>
+          <p className="mt-1.5 text-[13px] text-muted-foreground">
+            No upcoming customer meeting scheduled
+          </p>
         )}
       </section>
 
