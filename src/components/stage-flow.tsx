@@ -8,6 +8,7 @@ import { FieldFusionGate } from "@/components/field-fusion-gate";
 import { AiSource, ReadingStatus } from "@/components/fill-from-sources";
 import { MeetingRecap } from "@/components/meeting-recap";
 import { ParkingLot } from "@/components/parking-lot";
+import { Field } from "@/components/record";
 import { SolutionsCard } from "@/components/solutions-card";
 import { FactsStep, FlowStep, NotesIn, SowStep } from "@/components/intake-panel";
 import { assignDealFn, claimDealFn, getDealAssignment } from "@/lib/assignment.functions";
@@ -452,6 +453,80 @@ export function DealStageFlow({ dealId }: { dealId: string }) {
   const q = useQuery(dealQuery(dealId));
   if (!q.data) return null;
   return <StageFlow deal={q.data} />;
+}
+
+/**
+ * Overview's two live-computed facts about a deal-linked implementation —
+ * the current target date and the ball — read off the exact same
+ * `workspaceFor()` computation Current Implementation uses, so the two tabs
+ * never disagree. Everything else about that computation (tasks, guidance,
+ * meetings, waiting-on) stays on Current Implementation; this renders
+ * nothing but the two `Field`s, as children of Overview's own `<dl>`.
+ */
+export function ImplementationStatusFacts({
+  dealId,
+  ownerName,
+}: {
+  dealId: string;
+  ownerName: string | null;
+}) {
+  const q = useQuery(dealQuery(dealId));
+  const parking = useQuery({
+    queryKey: ["parking-lot", dealId],
+    queryFn: () => getParkingLot({ data: { dealId } }),
+  });
+  const welcome = useQuery({
+    queryKey: ["welcome", dealId],
+    queryFn: () => getWelcome({ data: { dealId } }),
+  });
+  const [today, setToday] = useState<string | null>(null);
+  useEffect(() => setToday(localIso()), []);
+
+  if (!q.data) return <Field label="Target" value={null} />;
+  const deal = q.data;
+  const intake = readIntake(deal.account.intake);
+  const nowIso = today ?? localIso();
+  const close = closeDateFor({
+    intake,
+    stageHistory: deal.stage_history,
+    wonStageKey: wonStage(deal.stages).key,
+    today: nowIso,
+  });
+  const timeline = timelineFor(intake, close.date);
+  const flow = stageFlow({
+    stage: deal.account.stage,
+    intake,
+    owner: ownerName,
+    gongReports: deal.gong_reports.length,
+    hasSow: Boolean(deal.sow_url),
+    hasBrief: deal.briefs.some((b) => b.status === "complete" && b.generator === "llm"),
+    hasLink: Boolean((deal.account as { welcome_share_url?: string | null }).welcome_share_url),
+    timeline,
+  });
+  const ws = workspaceFor({
+    flow,
+    intake,
+    timeline,
+    today: nowIso,
+    parkingLot: parking.data ?? [],
+    homeworkDone: welcome.data?.homeworkDone ?? {},
+    link: welcome.data
+      ? { sharedAt: welcome.data.sharedAt ?? null, openedAt: welcome.data.openedAt ?? null }
+      : null,
+  });
+
+  return (
+    <>
+      <Field
+        label="Target"
+        value={ws.where.target ? `${ws.where.target.word} ${shortDay(ws.where.target.date)}` : null}
+      />
+      <Field
+        label="Ball"
+        value={ws.ball ? (ws.ball.who === "customer" ? "With the customer" : "With us") : null}
+      />
+    </>
+  );
 }
 
 /**
