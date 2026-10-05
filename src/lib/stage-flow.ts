@@ -15,6 +15,7 @@ import {
   type ServiceSpec,
 } from "./onboarding-services";
 import type { AccountStage } from "./presale-stages";
+import { handoffChecks, missingLine } from "./sales-handoff";
 import { TEAM_ZONE, shortDay, type Timeline } from "./onboarding-timeline";
 
 /**
@@ -342,7 +343,31 @@ function closedWonTasks(
       action: "review",
       locked: before.length ? `Needs ${joinAnd(before)} first` : null,
     },
+    // The Sales handoff is Closed Won's boundary (the operating model): what
+    // was bought, the outcome, what was promised, the contacts, the timing —
+    // complete before the deal leaves Sales. Anyone fills it (AE, AM, TIS or
+    // the AI reading); the chip on the board, the record and the workspace
+    // reads the same record (src/lib/sales-handoff.ts). Field Fusion has its
+    // own handoff from the setup owner.
+    ...(a.path === "field_fusion" ? [] : [salesHandoffTask(a)]),
   ];
+}
+
+function salesHandoffTask(a: IntakeAnswers): FlowTask {
+  const c = handoffChecks(a);
+  return {
+    key: "handoff",
+    label: "Sales handoff complete",
+    hint: "What was bought, the outcome, what was promised (or that nothing was), the contacts and the timing — on the handoff, from Sales, the AI reading or you.",
+    done: c.salesComplete.done,
+    summary: c.salesComplete.done
+      ? a.handoff.completed_at
+        ? `Marked complete ${stampDay(a.handoff.completed_at)}`
+        : "Every required answer is in"
+      : missingLine(c.salesComplete.missing),
+    action: "handoff",
+    locked: null,
+  };
 }
 
 /** The starting solution, prepared from the Gong brief, the SOW and the customer's intake. */
@@ -387,6 +412,7 @@ export const CORE_MEETINGS = [
 function preKickoffTasks(a: IntakeAnswers): FlowTask[] {
   if (a.path === "field_fusion") return [kickoffBookingTask(a)];
   const t = a.handoff_tasks;
+  const customerIntake = handoffChecks(a);
   const prepDone = PREP_ITEMS.filter((p) => t[p.key]).length;
   // Services and nothing to build: one walkthrough, not a solution to prepare.
   const booking = isServicesOnly(a)
@@ -400,9 +426,19 @@ function preKickoffTasks(a: IntakeAnswers): FlowTask[] {
     {
       key: "intake_complete",
       label: "Customer Pre-Kickoff Intake completed",
-      hint: "Their answers in GoCanvas: the process today, who is in the field, who will be in the room.",
-      done: Boolean(t["intake_complete"]),
-      summary: t["intake_complete"] ? `Done ${stampDay(t["intake_complete"])}` : null,
+      hint: "Their answers — on their welcome page, or in GoCanvas: the process today, who is in the field, who will be in the room. Tick it if they answered elsewhere.",
+      // Their answers on the welcome page (src/lib/sales-handoff.ts) count
+      // without a tick; a tick records an intake that came in another way.
+      done: Boolean(t["intake_complete"]) || customerIntake.customerReady.done,
+      summary: t["intake_complete"]
+        ? `Done ${stampDay(t["intake_complete"])}`
+        : customerIntake.customerReady.done
+          ? customerIntake.customerReady.overridden
+            ? `Going ahead: ${a.handoff.customer_ready_override!.reason}`
+            : "Their answers are in"
+          : customerIntake.status === "sent"
+            ? `With the customer since ${stampDay(a.handoff.sent_to_customer_at!)}`
+            : null,
       action: "intake",
       locked: null,
     },

@@ -93,6 +93,8 @@ const STAGE_TO_KEY: Partial<Record<AccountStage, JourneyStageKey>> = {
   closed_won: "pre_kickoff",
   field_fusion_setup: "pre_kickoff",
   onboarding_kickoff: "pre_kickoff",
+  // Kickoff booked, not yet held: still "before we meet" to the customer.
+  kickoff: "pre_kickoff",
   get_it_working: "get_it_working",
   make_it_yours: "make_it_yours",
   make_it_run: "make_it_run",

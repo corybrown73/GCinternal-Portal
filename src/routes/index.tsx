@@ -759,6 +759,7 @@ const STAGE_TONE: Record<string, Tone> = {
   closed_won: "muted",
   field_fusion_setup: "info",
   onboarding_kickoff: "info",
+  kickoff: "info",
   get_it_working: "warning",
   make_it_yours: "warning",
   make_it_run: "warning",
