@@ -634,27 +634,22 @@ export function CurrentImplementationTab({
       >
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[12px]">
           <span>
-            <span className="text-muted-foreground">Stage</span>{" "}
-            <b className="font-semibold">{ws.where.stageLabel}</b>
+            <span className="text-muted-foreground">Target</span>{" "}
+            {ws.where.target ? (
+              <span className="text-foreground">
+                {shortDay(ws.where.target.date)}
+                {ws.where.day?.state === "past_due" ? (
+                  <span className="text-amber-800 dark:text-amber-300"> — overdue</span>
+                ) : null}
+              </span>
+            ) : (
+              <span className="text-foreground">—</span>
+            )}
           </span>
-          {ws.where.day ? (
-            <span title={ws.where.day.detail} className="text-foreground">
-              {ws.where.day.label}
-            </span>
-          ) : null}
-          {ws.where.target ? (
-            <span className="text-muted-foreground">
-              Target: {ws.where.target.word} {shortDay(ws.where.target.date)}
-            </span>
-          ) : null}
-          {ws.where.gate ? (
-            <span className="text-muted-foreground">Gate: {ws.where.gate}</span>
-          ) : null}
-          {ownerName ? (
-            <span>
-              <span className="text-muted-foreground">Owner</span> {ownerName}
-            </span>
-          ) : null}
+          <span>
+            <span className="text-muted-foreground">Owner</span>{" "}
+            <span className="text-foreground">{ownerName ?? "Nobody yet"}</span>
+          </span>
           {ws.ball ? (
             <span className="inline-flex items-center gap-1.5" title={ws.ball.detail}>
               <span className="text-muted-foreground">Ball</span>
@@ -670,6 +665,22 @@ export function CurrentImplementationTab({
               </span>
             </span>
           ) : null}
+          <span>
+            <span className="text-muted-foreground">Next action</span>{" "}
+            <span className="text-foreground">
+              {ws.nextStep ? ws.nextStep.label : "Nothing open"}
+            </span>
+          </span>
+          <span>
+            <span className="text-muted-foreground">Waiting on</span>{" "}
+            <span className="text-foreground">
+              {ws.waiting.length === 0
+                ? "Nothing on anyone's desk"
+                : ws.waiting.length === 1
+                  ? ws.waiting[0]!.what
+                  : `${ws.waiting[0]!.what} (+${ws.waiting.length - 1} more)`}
+            </span>
+          </span>
         </div>
       </section>
 
