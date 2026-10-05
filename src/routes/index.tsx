@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { queryOptions, useQuery, useSuspenseQuery } from "@tanstack/react-query";
-import { ArrowRight, CalendarDays, Check, Clock, TriangleAlert } from "lucide-react";
+import { ArrowRight, CalendarDays, Check, ChevronRight, Clock, TriangleAlert } from "lucide-react";
 
 import { PageBody, PageHeader } from "@/components/page";
 import { SalesHome } from "@/components/home-sales";
@@ -264,25 +264,57 @@ function NeedsMe({
 }: {
   rows: NeedsMeRow[];
   watch: NeedsMeRow[];
-  /** Set when a summary card is selected — replaces the default view below. */
+  /** Set when a summary card is selected — shown inside the same "Needs
+   * attention" section, in place of its default rows. */
   activeFilter: { label: string; rows: NeedsMeRow[] } | null;
   onClearFilter: () => void;
 }) {
-  if (activeFilter) {
-    return (
-      <section className="rounded-lg border border-border bg-card" aria-label="Filtered accounts">
-        <div className="flex flex-wrap items-baseline justify-between gap-2 px-4 pt-3.5">
-          <div>
-            <h2 className="flex items-center gap-2 text-[16px] font-semibold">
-              {activeFilter.label}
-              <span className="rounded-full bg-muted px-2 py-px text-[11px] font-semibold text-muted-foreground">
-                {activeFilter.rows.length}
-              </span>
-            </h2>
-            <p className="text-[12px] text-muted-foreground">
-              Filtered from the summary cards above.
-            </p>
-          </div>
+  // Default expanded; a filter always forces it open (results must stay
+  // immediately visible), overriding a prior manual collapse. The toggle
+  // itself is hidden while filtered so clicking it can't silently flip the
+  // underlying state and surprise-collapse the section once the filter clears.
+  const [needsAttentionOpen, setNeedsAttentionOpen] = useState(true);
+  const [watchOpen, setWatchOpen] = useState(false);
+  const isOpen = activeFilter ? true : needsAttentionOpen;
+
+  const heading = activeFilter ? activeFilter.label : "Needs attention";
+  const count = activeFilter ? activeFilter.rows.length : rows.length;
+  const bodyRows = activeFilter ? activeFilter.rows : rows;
+  const emptyMessage = activeFilter
+    ? "No accounts match this filter."
+    : "Nothing needs action right now.";
+
+  return (
+    <section
+      className="rounded-lg border border-border bg-card"
+      aria-label={activeFilter ? "Filtered accounts" : "What needs me"}
+    >
+      <div className="flex flex-wrap items-baseline justify-between gap-2 px-4 pt-3.5">
+        {activeFilter ? (
+          <h2 className="flex items-center gap-2 text-[16px] font-semibold">
+            {heading}
+            <span className="rounded-full bg-muted px-2 py-px text-[11px] font-semibold text-muted-foreground">
+              {count}
+            </span>
+          </h2>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setNeedsAttentionOpen((o) => !o)}
+            aria-expanded={isOpen}
+            aria-controls="needs-attention-panel"
+            className="flex items-center gap-2 text-left text-[16px] font-semibold"
+          >
+            <ChevronRight
+              className={cn("h-4 w-4 shrink-0 text-muted-foreground", isOpen && "rotate-90")}
+            />
+            {heading}
+            <span className="rounded-full bg-[#fde8e6] px-2 py-px text-[11px] font-semibold text-[#b42318]">
+              {count}
+            </span>
+          </button>
+        )}
+        {activeFilter ? (
           <button
             type="button"
             onClick={onClearFilter}
@@ -290,49 +322,46 @@ function NeedsMe({
           >
             Clear filter
           </button>
-        </div>
-        {activeFilter.rows.length === 0 ? (
-          <p className="px-4 pb-3.5 pt-4 text-[13px] text-muted-foreground">
-            No accounts match this filter.
-          </p>
         ) : (
-          <Rows rows={activeFilter.rows} />
+          <Link
+            to="/customers"
+            search={{ sort: "days", dir: "desc" }}
+            className="inline-flex items-center gap-1 rounded-md border border-border px-2.5 py-1 text-[12px] hover:bg-muted"
+          >
+            View all <ArrowRight className="h-3.5 w-3.5" />
+          </Link>
         )}
-      </section>
-    );
-  }
-  return (
-    <section className="rounded-lg border border-border bg-card" aria-label="What needs me">
-      <div className="flex flex-wrap items-baseline justify-between gap-2 px-4 pt-3.5">
-        <div>
-          <h2 className="flex items-center gap-2 text-[16px] font-semibold">
-            What needs me
-            <span className="rounded-full bg-[#fde8e6] px-2 py-px text-[11px] font-semibold text-[#b42318]">
-              {rows.length}
-            </span>
-          </h2>
-          <p className="text-[12px] text-muted-foreground">
-            Accounts that need my attention right now.
-          </p>
-        </div>
-        <Link
-          to="/customers"
-          search={{ sort: "days", dir: "desc" }}
-          className="inline-flex items-center gap-1 rounded-md border border-border px-2.5 py-1 text-[12px] hover:bg-muted"
-        >
-          View all <ArrowRight className="h-3.5 w-3.5" />
-        </Link>
       </div>
-      {rows.length === 0 ? (
-        <p className="px-4 pt-4 text-[13px] text-muted-foreground">
-          Nothing needs action right now.
+      {!activeFilter ? (
+        <p className="px-4 pb-1 text-[12px] text-muted-foreground">
+          Accounts that need my attention right now.
         </p>
       ) : (
-        <Rows rows={rows} />
+        <p className="px-4 pb-1 text-[12px] text-muted-foreground">
+          Filtered from the summary cards above.
+        </p>
       )}
-      {watch.length ? (
-        <>
-          <div className="flex items-baseline gap-2 border-t border-border px-4 pt-3">
+      {isOpen ? (
+        <div id="needs-attention-panel">
+          {bodyRows.length === 0 ? (
+            <p className="px-4 pb-3.5 pt-3 text-[13px] text-muted-foreground">{emptyMessage}</p>
+          ) : (
+            <Rows rows={bodyRows} />
+          )}
+        </div>
+      ) : null}
+      {!activeFilter && watch.length ? (
+        <div className="border-t border-border">
+          <button
+            type="button"
+            onClick={() => setWatchOpen((o) => !o)}
+            aria-expanded={watchOpen}
+            aria-controls="keep-an-eye-on-panel"
+            className="flex w-full items-baseline gap-2 px-4 py-3 text-left"
+          >
+            <ChevronRight
+              className={cn("h-3.5 w-3.5 shrink-0 text-muted-foreground", watchOpen && "rotate-90")}
+            />
             <h3 className="text-[13px] font-semibold">Keep an eye on</h3>
             <span className="rounded-full bg-[#fff1d6] px-2 py-px text-[11px] font-semibold text-[#93500a]">
               {watch.length}
@@ -340,9 +369,13 @@ function NeedsMe({
             <span className="text-[12px] text-muted-foreground">
               Nothing to do today; worth a look this week.
             </span>
-          </div>
-          <Rows rows={watch} />
-        </>
+          </button>
+          {watchOpen ? (
+            <div id="keep-an-eye-on-panel">
+              <Rows rows={watch} />
+            </div>
+          ) : null}
+        </div>
       ) : null}
     </section>
   );
