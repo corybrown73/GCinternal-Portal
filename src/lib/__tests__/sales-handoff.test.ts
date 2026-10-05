@@ -250,17 +250,17 @@ describe("the Sales → TIS handoff", () => {
     expect(sourceForRole("manager")).toBe("tis");
   });
 
-  it("is the first two checks of Pre-Kickoff, and holds the stage until both are met", () => {
+  it("no longer gates Pre-Kickoff on the Sales handoff — that boundary is Closed Won's", () => {
     const input = {
       stage: "onboarding_kickoff",
       intake: {
         path: "new_logo",
         handoff_tasks: {
-          reply_ae: at,
-          cadence: at,
+          intake_complete: at,
           prep_process: at,
           prep_form: at,
           prep_data: at,
+          process_understanding: "yes",
         },
         timeline: {
           overrides: { kickoff: "2026-10-06", working: "2026-10-09", adjust: "2026-10-16" },
@@ -275,27 +275,15 @@ describe("the Sales → TIS handoff", () => {
     };
     const f = stageFlow(input);
     const pk = f.stages.find((s) => s.key === "pre_kickoff")!;
-    expect(pk.tasks.slice(0, 2).map((t) => [t.key, t.done])).toEqual([
-      ["handoff", false],
-      ["customer_ready", false],
-    ]);
-    expect(f.advanceTo).toBeNull();
-    const ready = stageFlow({
-      ...input,
-      intake: {
-        ...input.intake,
-        handoff: {
-          completed_at: at,
-          customer_ready_override: { at, by: null, reason: "Covered on the closing call" },
-        },
-      },
-    });
-    expect(ready.advanceTo).toBe("kickoff");
-    // Field Fusion has its own handoff from the setup owner.
+    expect(pk.tasks.map((t) => t.key)).not.toContain("handoff");
+    expect(pk.done).toBe(true);
+    expect(f.advanceTo).toBe("kickoff");
+    // Field Fusion has its own handoff from the setup owner, and skips
+    // straight to booking Kickoff.
     const ff = stageFlow({ ...input, intake: { path: "field_fusion" } });
-    expect(ff.stages.find((s) => s.key === "pre_kickoff")!.tasks.map((t) => t.key)).not.toContain(
-      "handoff",
-    );
+    expect(ff.stages.find((s) => s.key === "pre_kickoff")!.tasks.map((t) => t.key)).toEqual([
+      "kickoff",
+    ]);
   });
 
   it("lets the AI fill the handoff's blanks, never a person's or the customer's words", () => {

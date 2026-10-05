@@ -619,6 +619,12 @@ export function TaskBody({
       return <BookCoreBody deal={deal} intake={intake} editable={editable} />;
     case "handoff":
       return <HandoffTaskBody task={task} />;
+    case "intake":
+      return <IntakeCompleteBody deal={deal} intake={intake} editable={editable} />;
+    case "process_understanding":
+      return <ProcessUnderstandingBody deal={deal} intake={intake} editable={editable} />;
+    case "process_call":
+      return <ProcessCallBody deal={deal} intake={intake} editable={editable} />;
     case "solution":
       return (
         <p className="text-[12px] text-muted-foreground">
@@ -651,6 +657,133 @@ function HandoffTaskBody({ task }: { task: FlowTask }) {
       >
         Open the handoff <ArrowRight className="h-3 w-3" />
       </button>
+    </div>
+  );
+}
+
+function IntakeCompleteBody({
+  deal,
+  intake,
+  editable,
+}: {
+  deal: DealData;
+  intake: IntakeAnswers;
+  editable: boolean;
+}) {
+  const tick = useHandoffTick(deal.account.id);
+  const done = tick.isOn("intake_complete", Boolean(intake.handoff_tasks["intake_complete"]));
+  return (
+    <div className="space-y-2">
+      <DoneButton
+        done={done}
+        label="Mark the intake complete"
+        pending={tick.isPending}
+        disabled={!editable}
+        onClick={() => tick.mutate({ key: "intake_complete", on: !done })}
+      />
+      {tick.error ? (
+        <p role="alert" className="text-[12px] text-destructive">
+          {tick.error}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * The TIS's own call, captured either way so how often the intake is enough
+ * is reportable later. Yes needs no more; No adds the Process Call task.
+ */
+function ProcessUnderstandingBody({
+  deal,
+  intake,
+  editable,
+}: {
+  deal: DealData;
+  intake: IntakeAnswers;
+  editable: boolean;
+}) {
+  const qc = useQueryClient();
+  const save = useServerFn(saveIntake);
+  const value = intake.handoff_tasks["process_understanding"] ?? null;
+  const m = useMutation({
+    mutationFn: (v: "yes" | "no") =>
+      save({
+        data: {
+          dealId: deal.account.id,
+          patch: { handoff_tasks: { process_understanding: v } },
+        } as never,
+      }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["deal", deal.account.id] });
+    },
+  });
+  return (
+    <div className="space-y-2">
+      <div className="flex flex-wrap gap-2">
+        <button
+          type="button"
+          disabled={!editable || m.isPending}
+          onClick={() => m.mutate("yes")}
+          className={cn(
+            "inline-flex h-8 items-center gap-1.5 rounded-sm px-3 text-[12px] font-medium disabled:opacity-50",
+            value === "yes"
+              ? "bg-primary text-primary-foreground"
+              : "border border-border hover:bg-muted",
+          )}
+        >
+          {value === "yes" ? <Check className="h-3.5 w-3.5" strokeWidth={3} /> : null}
+          Yes — enough to prepare
+        </button>
+        <button
+          type="button"
+          disabled={!editable || m.isPending}
+          onClick={() => m.mutate("no")}
+          className={cn(
+            "inline-flex h-8 items-center gap-1.5 rounded-sm px-3 text-[12px] font-medium disabled:opacity-50",
+            value === "no"
+              ? "bg-primary text-primary-foreground"
+              : "border border-border hover:bg-muted",
+          )}
+        >
+          {value === "no" ? <Check className="h-3.5 w-3.5" strokeWidth={3} /> : null}
+          No — hold a Process Call
+        </button>
+      </div>
+      {m.isError ? (
+        <p role="alert" className="text-[12px] text-destructive">
+          {(m.error as Error).message}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+function ProcessCallBody({
+  deal,
+  intake,
+  editable,
+}: {
+  deal: DealData;
+  intake: IntakeAnswers;
+  editable: boolean;
+}) {
+  const tick = useHandoffTick(deal.account.id);
+  const done = tick.isOn("process_call_held", Boolean(intake.handoff_tasks["process_call_held"]));
+  return (
+    <div className="space-y-2">
+      <DoneButton
+        done={done}
+        label="Mark the Process Call held"
+        pending={tick.isPending}
+        disabled={!editable}
+        onClick={() => tick.mutate({ key: "process_call_held", on: !done })}
+      />
+      {tick.error ? (
+        <p role="alert" className="text-[12px] text-destructive">
+          {tick.error}
+        </p>
+      ) : null}
     </div>
   );
 }

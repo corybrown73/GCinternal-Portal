@@ -36,23 +36,106 @@ function input(over: Partial<StageFlowInput> = {}): StageFlowInput {
 
 const bookedIntake = {
   ...ready,
-  handoff: {
-    completed_at: "2026-09-22T15:00:00Z",
-    customer_ready_override: { at: "2026-09-22T15:00:00Z", by: null, reason: "closing call" },
-  },
   handoff_tasks: {
     reviewed: "2026-09-22T15:00:00Z",
-    reply_ae: "2026-09-22T15:00:00Z",
-    cadence: "2026-09-22T15:05:00Z",
+    intake_complete: "2026-09-22T15:00:00Z",
     prep_process: "x",
     prep_form: "x",
     prep_data: "x",
+    process_understanding: "yes",
   },
   timeline: {
     overrides: { kickoff: "2026-09-25", working: "2026-09-29", adjust: "2026-10-07" },
     times: { kickoff: "10:00", working: "10:00", adjust: "14:00" },
   },
 };
+
+describe("Intake & Process (Pre-Kickoff) gate", () => {
+  const base = {
+    ...ready,
+    timeline: { overrides: { kickoff: "2026-09-25" }, times: { kickoff: "10:00" } },
+  };
+
+  it("holds the gate on intake and the starting solution alone, with no Process Call decided yet", () => {
+    const f = stageFlow(input({ stage: "onboarding_kickoff", intake: base }));
+    const pk = f.stages.find((s) => s.key === "pre_kickoff")!;
+    expect(pk.tasks.map((t) => t.key)).toEqual([
+      "intake_complete",
+      "prep",
+      "process_understanding",
+      "kickoff",
+    ]);
+    expect(pk.done).toBe(false);
+    expect(f.advanceTo).toBeNull();
+  });
+
+  it("needs no Process Call when the TIS says the intake was enough", () => {
+    const intake = {
+      ...base,
+      handoff_tasks: {
+        intake_complete: "2026-09-22T15:00:00Z",
+        prep_process: "x",
+        prep_form: "x",
+        prep_data: "x",
+        process_understanding: "yes",
+      },
+    };
+    const f = stageFlow(input({ stage: "onboarding_kickoff", intake }));
+    const pk = f.stages.find((s) => s.key === "pre_kickoff")!;
+    expect(pk.tasks.map((t) => t.key)).not.toContain("process_call_held");
+    expect(pk.done).toBe(true);
+    expect(f.advanceTo).toBe("kickoff");
+  });
+
+  it("requires the Process Call, and holds the gate on it, when the TIS says the intake was not enough", () => {
+    const undecided = {
+      ...base,
+      handoff_tasks: {
+        intake_complete: "2026-09-22T15:00:00Z",
+        prep_process: "x",
+        prep_form: "x",
+        prep_data: "x",
+        process_understanding: "no",
+      },
+    };
+    const notHeld = stageFlow(input({ stage: "onboarding_kickoff", intake: undecided }));
+    const pk = notHeld.stages.find((s) => s.key === "pre_kickoff")!;
+    expect(pk.tasks.map((t) => t.key)).toEqual([
+      "intake_complete",
+      "prep",
+      "process_understanding",
+      "process_call_held",
+      "kickoff",
+    ]);
+    expect(pk.done).toBe(false);
+    expect(notHeld.advanceTo).toBeNull();
+
+    const held = stageFlow(
+      input({
+        stage: "onboarding_kickoff",
+        intake: {
+          ...undecided,
+          handoff_tasks: { ...undecided.handoff_tasks, process_call_held: "2026-09-23T10:00:00Z" },
+        },
+      }),
+    );
+    expect(held.stages.find((s) => s.key === "pre_kickoff")!.done).toBe(true);
+    expect(held.advanceTo).toBe("kickoff");
+  });
+
+  it("captures the decision either way, so how often the intake is enough is reportable later", () => {
+    const yes = { ...base, handoff_tasks: { process_understanding: "yes" } };
+    const no = { ...base, handoff_tasks: { process_understanding: "no" } };
+    const task = (intake: typeof yes) =>
+      stageFlow(input({ stage: "onboarding_kickoff", intake }))
+        .stages.find((s) => s.key === "pre_kickoff")!
+        .tasks.find((t) => t.key === "process_understanding")!;
+    expect(task(yes).done).toBe(true);
+    expect(task(yes).summary).toMatch(/Yes/);
+    expect(task(no).done).toBe(true);
+    expect(task(no).summary).toMatch(/No/);
+  });
+});
 
 describe("Kickoff as its own stage", () => {
   it("keeps a deal at Pre-Kickoff until the call is booked", () => {
