@@ -6,7 +6,6 @@ import { useServerFn } from "@tanstack/react-start";
 import { ChevronRight, UserRound, ArrowRight } from "lucide-react";
 
 import { DeleteCustomerButton } from "@/components/delete-customer-button";
-import { PlanFromDeal } from "@/components/plan-section";
 
 import { CustomerLogo } from "@/components/customer-logo";
 import { PastImplementations } from "@/components/past-implementations";
@@ -17,8 +16,7 @@ import { canEditDeal, useProfile } from "@/lib/auth";
 import { dealQuery } from "@/lib/deal-query";
 import { useQuery } from "@tanstack/react-query";
 import { AddServicesButton } from "@/components/onboarding-pulse";
-import { CurrentImplementationTab } from "@/components/stage-flow";
-import { ImplementationWorkspace } from "@/components/implementation-workspace";
+import { CurrentImplementationTab, ImplementationStatusFacts } from "@/components/stage-flow";
 import { HealthNote } from "@/components/health-note";
 import { PlanPanel } from "@/components/plan-panel";
 import { HandoffPanel } from "@/components/handoff-panel";
@@ -97,6 +95,9 @@ import { triageRowForCustomer360 } from "@/lib/home-triage";
 import type { Customer360, TraceStep } from "@/lib/hub-types";
 import { dealStageLabel, dealStageProgress } from "@/lib/deal-stage";
 import { LIFECYCLE_STAGES } from "@/lib/lifecycle";
+import { FLOW_STAGES } from "@/lib/stage-flow";
+import { readIntake } from "@/lib/intake-answers";
+import { normalizeServices, SOLUTION_LABEL, type ServiceSpec } from "@/lib/onboarding-services";
 import {
   fmtDate,
   fmtDateTime,
@@ -496,16 +497,15 @@ function Customer360Page() {
         </nav>
       </header>
 
-      {/* The overview of a deal-linked project IS the owner's workspace:
-          where we are, what to do now, what we wait on, the next meeting,
-          the notes. A project with no deal keeps the older overview. */}
-      {tab === "overview" && impl.deal_id ? (
-        <ImplementationWorkspace record={record} customerId={customerId} />
-      ) : null}
       {tab === "implementation" ? (
         <div className="px-6 py-4">
           {impl.deal_id ? (
-            <CurrentImplementationTab dealId={impl.deal_id} ownerName={impl.owner_name} />
+            <CurrentImplementationTab
+              customerId={customerId}
+              implementationId={impl.id}
+              dealId={impl.deal_id}
+              ownerName={impl.owner_name}
+            />
           ) : (
             <p className="text-[13px] text-muted-foreground">
               This implementation was not started from a deal, so it has no implementation journey
@@ -522,14 +522,12 @@ function Customer360Page() {
         <div
           className={cn(
             "grid items-start gap-4 px-6 py-4 lg:grid-cols-[minmax(0,1fr)_320px]",
-            (tab === "implementation" || (tab === "overview" && impl.deal_id)) && "hidden",
+            tab === "implementation" && "hidden",
           )}
         >
           <div className="min-w-0 space-y-3">
             <SectionControls />
-            {tab === "overview" && !impl.deal_id ? (
-              <OverviewTab record={record} customerId={customerId} />
-            ) : null}
+            {tab === "overview" ? <OverviewTab record={record} customerId={customerId} /> : null}
             {tab === "resources" ? <ResourcesTab record={record} /> : null}
             {tab === "details" && impl.deal_id ? (
               <HeaderTrackers
@@ -752,47 +750,122 @@ function projectInput(
 /* ---------------- 1. OVERVIEW ---------------- */
 
 /**
- * THE OVERVIEW: three things. Where the project is and what moves it on;
- * the plan, with its watch-outs; and how many items are open. Everything
- * descriptive — goals, success criteria, the SOW, the handover — is one tab
- * over, under Details, folded.
+ * THE OVERVIEW: tell me about this account. Who they are, who to talk to,
+ * what they bought, and a pointer to the implementation in progress — not a
+ * second place to run it from. Where the project actually stands, its tasks,
+ * its guidance, its meetings and what it's waiting on all live on Current
+ * Implementation now; this tab never duplicates them.
  */
 function OverviewTab({ record, customerId }: { record: Customer360; customerId: string }) {
+  const { customer } = record;
   const impl = record.implementation!;
-  const open = openItems(record);
-  const openCount =
-    open.commitments.length + open.risks.length + open.issues.length + open.escalations.length;
+  const stageLabel = FLOW_STAGES.find((s) => s.stage === impl.deal_stage)?.label ?? impl.deal_stage;
   return (
     <div className="space-y-4">
-      {/* A deal-linked project moves on its deal's checklist; the lifecycle
-          gates are for projects that were never a deal. */}
-      {impl.deal_id ? null : (
-        <StageGatesSection customerId={customerId} implementationId={impl.id} />
-      )}
-      {impl.deal_id ? (
-        <PlanFromDeal dealId={impl.deal_id} />
-      ) : (
-        <p className="rounded-md border border-border bg-card px-3 py-2 text-[12px] text-muted-foreground">
-          This project was not started from a deal, so it has no onboarding plan. Its stages are
-          above; the rest is under Details.
-        </p>
-      )}
-      <Link
-        to="/customers/$customerId"
-        params={{ customerId }}
-        search={{ tab: "details", impl: impl.id }}
-        className="block rounded-md border border-border bg-card px-3 py-2 text-[12px] hover:bg-muted/60"
+      <section className="rounded-md border border-border bg-card p-4" aria-label="Account summary">
+        <h2 className="text-[13px] font-semibold">Account summary</h2>
+        <dl className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <Field label="Industry" value={dash(customer.industry)} />
+          <Field label="ARR" value={customer.arr == null ? dash(null) : fmtMoney(customer.arr)} />
+          <Field label="Sales owner" value={dash(impl.sales_owner)} />
+          <Field
+            label="Current SOW"
+            value={
+              impl.sow_document_url ? (
+                <a
+                  href={impl.sow_document_url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="underline"
+                >
+                  {impl.sow_document_name ?? "View SOW"}
+                </a>
+              ) : (
+                dash(null)
+              )
+            }
+          />
+        </dl>
+      </section>
+
+      <section className="rounded-md border border-border bg-card p-4" aria-label="Key contacts">
+        <h2 className="text-[13px] font-semibold">Key contacts</h2>
+        {record.contacts.length === 0 ? (
+          <p className="mt-1.5 text-[12px] text-muted-foreground">No contacts on file.</p>
+        ) : (
+          <ul className="mt-2 space-y-1">
+            {record.contacts.map((c) => (
+              <li key={c.id} className="text-[12px]">
+                <span className="font-medium">{c.name}</span>{" "}
+                <span className="text-muted-foreground">
+                  {c.role}
+                  {c.email ? ` · ${c.email}` : ""}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      {impl.deal_id ? <ProductsAndServices dealId={impl.deal_id} /> : null}
+
+      <section
+        className="rounded-md border border-border bg-card p-4"
+        aria-label="Current implementation summary"
       >
-        <span className="font-medium">
-          {openCount === 0 ? "Nothing open" : `${openCount} open item${openCount === 1 ? "" : "s"}`}
-        </span>
-        <span className="text-muted-foreground">
-          {" "}
-          · {open.commitments.length} commitments · {open.risks.length} risks · {open.issues.length}{" "}
-          issues · {open.escalations.length} escalations · everything else under Details →
-        </span>
-      </Link>
+        <h2 className="text-[13px] font-semibold">Current implementation</h2>
+        <dl className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <Field label="Name" value={impl.name} />
+          <Field label="Stage" value={stageLabel} />
+          <Field label="Owner" value={dash(impl.owner_name)} />
+          {impl.deal_id ? (
+            <ImplementationStatusFacts dealId={impl.deal_id} ownerName={impl.owner_name} />
+          ) : (
+            <Field
+              label="Target"
+              value={impl.target_launch_date ? fmtDate(impl.target_launch_date) : dash(null)}
+            />
+          )}
+        </dl>
+        <Link
+          to="/customers/$customerId"
+          params={{ customerId }}
+          search={{ tab: "implementation", impl: impl.id }}
+          className="mt-3 inline-block text-[12px] font-medium text-primary hover:underline"
+        >
+          View Current Implementation →
+        </Link>
+      </section>
     </div>
+  );
+}
+
+/**
+ * What was purchased, as an account-level list — not the Technical Solutions
+ * workflow (ownership, acceptance, the ball) that `SolutionsCard` runs on the
+ * Current Implementation tab.
+ */
+function ProductsAndServices({ dealId }: { dealId: string }) {
+  const q = useQuery(dealQuery(dealId));
+  if (!q.data) return null;
+  const intake = readIntake(q.data.account.intake);
+  const services = normalizeServices(intake.timeline.services as ServiceSpec[], intake.timeline);
+  if (!services.length) return null;
+  return (
+    <section
+      className="rounded-md border border-border bg-card p-4"
+      aria-label="Products and services"
+    >
+      <h2 className="text-[13px] font-semibold">Products &amp; services</h2>
+      <ul className="mt-2 space-y-1">
+        {services.map((s) => (
+          <li key={s.id} className="text-[12px]">
+            <span className="font-medium">{s.name}</span>{" "}
+            <span className="text-muted-foreground">· {SOLUTION_LABEL[s.kind]}</span>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 

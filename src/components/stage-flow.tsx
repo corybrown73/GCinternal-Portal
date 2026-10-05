@@ -8,7 +8,9 @@ import { FieldFusionGate } from "@/components/field-fusion-gate";
 import { AiSource, ReadingStatus } from "@/components/fill-from-sources";
 import { MeetingRecap } from "@/components/meeting-recap";
 import { ParkingLot } from "@/components/parking-lot";
+import { Field } from "@/components/record";
 import { SolutionsCard } from "@/components/solutions-card";
+import { TranscriptUpdatePanel } from "@/components/transcript-update-panel";
 import { FactsStep, FlowStep, NotesIn, SowStep } from "@/components/intake-panel";
 import { assignDealFn, claimDealFn, getDealAssignment } from "@/lib/assignment.functions";
 import { MemberOptions } from "@/components/member-options";
@@ -455,6 +457,80 @@ export function DealStageFlow({ dealId }: { dealId: string }) {
 }
 
 /**
+ * Overview's two live-computed facts about a deal-linked implementation —
+ * the current target date and the ball — read off the exact same
+ * `workspaceFor()` computation Current Implementation uses, so the two tabs
+ * never disagree. Everything else about that computation (tasks, guidance,
+ * meetings, waiting-on) stays on Current Implementation; this renders
+ * nothing but the two `Field`s, as children of Overview's own `<dl>`.
+ */
+export function ImplementationStatusFacts({
+  dealId,
+  ownerName,
+}: {
+  dealId: string;
+  ownerName: string | null;
+}) {
+  const q = useQuery(dealQuery(dealId));
+  const parking = useQuery({
+    queryKey: ["parking-lot", dealId],
+    queryFn: () => getParkingLot({ data: { dealId } }),
+  });
+  const welcome = useQuery({
+    queryKey: ["welcome", dealId],
+    queryFn: () => getWelcome({ data: { dealId } }),
+  });
+  const [today, setToday] = useState<string | null>(null);
+  useEffect(() => setToday(localIso()), []);
+
+  if (!q.data) return <Field label="Target" value={null} />;
+  const deal = q.data;
+  const intake = readIntake(deal.account.intake);
+  const nowIso = today ?? localIso();
+  const close = closeDateFor({
+    intake,
+    stageHistory: deal.stage_history,
+    wonStageKey: wonStage(deal.stages).key,
+    today: nowIso,
+  });
+  const timeline = timelineFor(intake, close.date);
+  const flow = stageFlow({
+    stage: deal.account.stage,
+    intake,
+    owner: ownerName,
+    gongReports: deal.gong_reports.length,
+    hasSow: Boolean(deal.sow_url),
+    hasBrief: deal.briefs.some((b) => b.status === "complete" && b.generator === "llm"),
+    hasLink: Boolean((deal.account as { welcome_share_url?: string | null }).welcome_share_url),
+    timeline,
+  });
+  const ws = workspaceFor({
+    flow,
+    intake,
+    timeline,
+    today: nowIso,
+    parkingLot: parking.data ?? [],
+    homeworkDone: welcome.data?.homeworkDone ?? {},
+    link: welcome.data
+      ? { sharedAt: welcome.data.sharedAt ?? null, openedAt: welcome.data.openedAt ?? null }
+      : null,
+  });
+
+  return (
+    <>
+      <Field
+        label="Target"
+        value={ws.where.target ? `${ws.where.target.word} ${shortDay(ws.where.target.date)}` : null}
+      />
+      <Field
+        label="Ball"
+        value={ws.ball ? (ws.ball.who === "customer" ? "With the customer" : "With us") : null}
+      />
+    </>
+  );
+}
+
+/**
  * Customer 360's Current Implementation tab: the canonical journey Intake &
  * Process → Kickoff → Get It Working → Make It Yours → Make It Run →
  * Implementation Complete, the current stage's tasks and Navigator
@@ -464,9 +540,13 @@ export function DealStageFlow({ dealId }: { dealId: string }) {
  * Sales/handoff stages) shows on this rail.
  */
 export function CurrentImplementationTab({
+  customerId,
+  implementationId,
   dealId,
   ownerName,
 }: {
+  customerId: string;
+  implementationId: string;
   dealId: string;
   ownerName: string | null;
 }) {
@@ -531,35 +611,45 @@ export function CurrentImplementationTab({
 
   const m = ws.nextMeeting;
 
+  // Viewing a stage other than the actual current one: say so plainly, with
+  // its position relative to current (completed/upcoming), and a way back.
+  // Only when there IS an actual current stage on this rail to contrast
+  // against — otherwise nothing is highlighted as "current" to confuse.
+  const viewingOther = viewing !== null && currentInCanon !== null && viewing !== currentInCanon;
+  const viewingPosition =
+    viewingOther && currentInCanon
+      ? canonicalStages.findIndex((s) => s.key === shown) <
+        canonicalStages.findIndex((s) => s.key === currentInCanon)
+        ? "Completed stage"
+        : "Upcoming stage"
+      : null;
+
   return (
     <div className="space-y-4">
+      <TranscriptUpdatePanel customerId={customerId} implementationId={implementationId} />
+
       <section
         className="rounded-md border border-border bg-card px-4 py-3"
         aria-label="Implementation status"
       >
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[12px]">
           <span>
-            <span className="text-muted-foreground">Stage</span>{" "}
-            <b className="font-semibold">{ws.where.stageLabel}</b>
+            <span className="text-muted-foreground">Target</span>{" "}
+            {ws.where.target ? (
+              <span className="text-foreground">
+                {shortDay(ws.where.target.date)}
+                {ws.where.day?.state === "past_due" ? (
+                  <span className="text-amber-800 dark:text-amber-300"> — overdue</span>
+                ) : null}
+              </span>
+            ) : (
+              <span className="text-foreground">—</span>
+            )}
           </span>
-          {ws.where.day ? (
-            <span title={ws.where.day.detail} className="text-foreground">
-              {ws.where.day.label}
-            </span>
-          ) : null}
-          {ws.where.target ? (
-            <span className="text-muted-foreground">
-              Target: {ws.where.target.word} {shortDay(ws.where.target.date)}
-            </span>
-          ) : null}
-          {ws.where.gate ? (
-            <span className="text-muted-foreground">Gate: {ws.where.gate}</span>
-          ) : null}
-          {ownerName ? (
-            <span>
-              <span className="text-muted-foreground">Owner</span> {ownerName}
-            </span>
-          ) : null}
+          <span>
+            <span className="text-muted-foreground">Owner</span>{" "}
+            <span className="text-foreground">{ownerName ?? "Nobody yet"}</span>
+          </span>
           {ws.ball ? (
             <span className="inline-flex items-center gap-1.5" title={ws.ball.detail}>
               <span className="text-muted-foreground">Ball</span>
@@ -575,6 +665,22 @@ export function CurrentImplementationTab({
               </span>
             </span>
           ) : null}
+          <span>
+            <span className="text-muted-foreground">Next action</span>{" "}
+            <span className="text-foreground">
+              {ws.nextStep ? ws.nextStep.label : "Nothing open"}
+            </span>
+          </span>
+          <span>
+            <span className="text-muted-foreground">Waiting on</span>{" "}
+            <span className="text-foreground">
+              {ws.waiting.length === 0
+                ? "Nothing on anyone's desk"
+                : ws.waiting.length === 1
+                  ? ws.waiting[0]!.what
+                  : `${ws.waiting[0]!.what} (+${ws.waiting.length - 1} more)`}
+            </span>
+          </span>
         </div>
       </section>
 
@@ -585,24 +691,18 @@ export function CurrentImplementationTab({
         <h2 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
           Next customer meeting
         </h2>
-        {m ? (
+        {m?.booked && m.time ? (
           <>
             <p className="mt-1.5 text-[14px] font-semibold">{m.label}</p>
-            {m.booked && m.time ? (
-              <p className="text-[13px]">
-                {whenLabel(m.date, m.time, intake.timeline.timezone)}
-                {m.minutes ? (
-                  <span className="text-muted-foreground"> · {m.minutes} min</span>
-                ) : null}
-              </p>
-            ) : (
-              <p className="text-[12px] text-amber-800 dark:text-amber-300">
-                Not on the calendar yet · the plan says {shortDay(m.date)}.
-              </p>
-            )}
+            <p className="text-[13px]">
+              {whenLabel(m.date, m.time, intake.timeline.timezone)}
+              {m.minutes ? <span className="text-muted-foreground"> · {m.minutes} min</span> : null}
+            </p>
           </>
         ) : (
-          <p className="mt-1.5 text-[13px] text-muted-foreground">No meetings on the plan yet.</p>
+          <p className="mt-1.5 text-[13px] text-muted-foreground">
+            No upcoming customer meeting scheduled
+          </p>
         )}
       </section>
 
@@ -620,6 +720,26 @@ export function CurrentImplementationTab({
             setManual(null);
           }}
         />
+        {viewingOther ? (
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-amber-500/10 px-4 py-1.5 text-[12px]">
+            <span>
+              <span className="font-medium text-foreground">Viewing: {stage.label}</span>
+              {viewingPosition ? (
+                <span className="text-muted-foreground"> · {viewingPosition}</span>
+              ) : null}
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                setViewing(null);
+                setManual(null);
+              }}
+              className="font-medium text-primary underline-offset-2 hover:underline"
+            >
+              Back to current stage
+            </button>
+          </div>
+        ) : null}
         <StageHistory shown={shown} history={deal.stage_history} />
         {stage.tasks.length > 0 ? (
           <ol className="divide-y divide-border">
