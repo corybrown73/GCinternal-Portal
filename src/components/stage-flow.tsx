@@ -2,7 +2,7 @@ import { Fragment, useEffect, useRef, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { ArrowRight, Check, Copy, Lock, UserRoundCheck } from "lucide-react";
+import { ArrowRight, Check, Copy, Lock, Send, UserRoundCheck } from "lucide-react";
 
 import { FieldFusionGate } from "@/components/field-fusion-gate";
 import { AiSource, ReadingStatus } from "@/components/fill-from-sources";
@@ -14,6 +14,8 @@ import { TranscriptUpdatePanel } from "@/components/transcript-update-panel";
 import { FactsStep, FlowStep, NotesIn, SowStep } from "@/components/intake-panel";
 import { assignDealFn, claimDealFn, getDealAssignment } from "@/lib/assignment.functions";
 import { MemberOptions } from "@/components/member-options";
+import { fieldFusionChecklist } from "@/lib/field-fusion";
+import { handToImplementationFn } from "@/lib/field-fusion.functions";
 import { useOptimisticTick } from "@/lib/use-optimistic-tick";
 import { bookingWarnings, typedDatesFor } from "@/lib/watch-outs";
 import { canEditDeal, canManage, useProfile } from "@/lib/auth";
@@ -531,6 +533,196 @@ export function ImplementationStatusFacts({
 }
 
 /**
+ * Current Implementation, while the account is still with a Partner
+ * Implementation Lead — today, the Field Fusion setup stage — before the
+ * handoff into the GoCanvas implementation team. This is the existing
+ * handoff `FieldFusionGate` already runs on the deal page (the same two
+ * checks, the same `handToImplementationFn`, the same stamp and stage
+ * transition into Intake & Process): that page is simply unreachable once
+ * the account has a Customer 360 of its own, which is immediately at Closed
+ * Won. This panel just makes the same handoff reachable from there, in
+ * copy written for a generic reader rather than a Field-Fusion-specific
+ * one. FieldFusion is the first case this covers, not a second
+ * implementation journey — nothing here runs after the handoff.
+ */
+function PartnerHandoffPanel({ deal, editable }: { deal: DealData; editable: boolean }) {
+  const intake = readIntake(deal.account.intake);
+  const ff = intake.field_fusion;
+  const qc = useQueryClient();
+  const save = useServerFn(saveIntake);
+  const hand = useServerFn(handToImplementationFn);
+  const assignment = useQuery({
+    queryKey: ["assignment", deal.account.id],
+    queryFn: () => getDealAssignment({ data: { dealId: deal.account.id } }),
+  });
+  // The saved note only refreshes the box when the box is not being typed
+  // in — same guard as FieldFusionGate, for the same reason.
+  const [notes, setNotes] = useState(ff.notes);
+  const notesRef = useRef<HTMLTextAreaElement | null>(null);
+  const dirty = useRef(false);
+  useEffect(() => {
+    if (dirty.current || document.activeElement === notesRef.current) return;
+    setNotes(ff.notes);
+  }, [ff.notes]);
+  const [pick, setPick] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [done, setDone] = useState<string | null>(null);
+
+  const check = useOptimisticTick({
+    dealId: deal.account.id,
+    section: "field_fusion",
+    encode: (on) => on,
+  });
+  const patch = useMutation({
+    mutationFn: (p: Record<string, unknown>) =>
+      save({ data: { dealId: deal.account.id, patch: { field_fusion: p } } as never }),
+    onMutate: () => setError(null),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ["deal", deal.account.id] }),
+    onError: (e) => setError((e as Error).message),
+  });
+  const handoff = useMutation({
+    mutationFn: () => hand({ data: { dealId: deal.account.id, teamMemberId: pick || null } }),
+    onMutate: () => setError(null),
+    onSuccess: (r) => {
+      setDone(
+        r.assigneeName
+          ? `Handed to ${r.assigneeName}. They have the context you entered.`
+          : "Handed over. Nobody was named, so the implementation team has been told to claim it.",
+      );
+      // Everything: the status strip and journey rail above pick up the move too.
+      void qc.invalidateQueries();
+    },
+    onError: (e) => setError((e as Error).message),
+  });
+
+  const checks = fieldFusionChecklist(intake).map((c) => ({
+    ...c,
+    done: check.isOn(c.key, c.done),
+  }));
+  const ready = checks.every((c) => c.done);
+  const busy = patch.isPending || handoff.isPending;
+  const ownerName = assignment.data?.owner?.name ?? null;
+  const members = assignment.data?.members ?? [];
+
+  return (
+    <section
+      className="overflow-hidden rounded-md border border-border bg-card"
+      aria-label="Partner implementation handoff"
+    >
+      <div className="border-b border-border bg-amber-500/10 px-4 py-2.5">
+        <p className="text-[13px] font-semibold text-foreground">Being prepared for handoff</p>
+        <p className="mt-0.5 text-[12px] text-muted-foreground">
+          {assignment.isPending
+            ? "Checking who owns this…"
+            : ownerName
+              ? `With the partner implementation lead (${ownerName}) until handed to the GoCanvas implementation team.`
+              : "With the partner implementation lead until handed to the GoCanvas implementation team — nobody is assigned yet."}
+        </p>
+      </div>
+      <div className="space-y-3 px-4 py-3">
+        <p className="text-[12px] text-muted-foreground">
+          Confirm the two things below, note anything the implementation team should know, then hand
+          it over to start the GoCanvas implementation.
+        </p>
+        <ul className="space-y-1.5">
+          {checks.map((c) => (
+            <li key={c.key}>
+              <label
+                className={cn(
+                  "flex items-center gap-2 text-[13px]",
+                  editable ? "cursor-pointer" : "cursor-default",
+                )}
+              >
+                <input
+                  type="checkbox"
+                  className="h-4 w-4"
+                  checked={c.done}
+                  disabled={!editable}
+                  onChange={(e) => check.mutate({ key: c.key, on: e.target.checked })}
+                />
+                <span className={cn(c.done && "text-muted-foreground line-through")}>
+                  {c.label}
+                </span>
+              </label>
+            </li>
+          ))}
+        </ul>
+        <div>
+          <label
+            htmlFor="partner-handoff-notes"
+            className="block text-[10px] uppercase tracking-[0.1em] text-muted-foreground"
+          >
+            What the implementation team should know
+          </label>
+          <textarea
+            id="partner-handoff-notes"
+            className="mt-1 min-h-[72px] w-full rounded-sm border border-border bg-background px-2 py-1.5 text-[13px]"
+            placeholder="Anything the calls did not say: who to train first, what they care about, what was awkward in setup."
+            ref={notesRef}
+            value={notes}
+            disabled={!editable}
+            onChange={(e) => {
+              dirty.current = true;
+              setNotes(e.target.value);
+            }}
+            onBlur={() => {
+              dirty.current = false;
+              if (notes.trim() !== ff.notes) patch.mutate({ notes: notes.trim() });
+            }}
+          />
+        </div>
+        {done ? (
+          <p className="text-[12px] text-status-ontrack-foreground">{done}</p>
+        ) : (
+          <div className="flex flex-wrap items-center gap-2">
+            <select
+              className="h-7 rounded-sm border border-border bg-background px-1.5 text-[12px]"
+              value={pick}
+              onChange={(e) => setPick(e.target.value)}
+              disabled={!editable || busy}
+            >
+              <option value="">Let the implementation team claim it</option>
+              <MemberOptions members={members} />
+            </select>
+            <button
+              type="button"
+              className="inline-flex items-center gap-1.5 rounded-sm bg-primary px-3 py-1.5 text-[12px] font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+              disabled={!editable || busy || !ready}
+              title={ready ? "Starts the GoCanvas implementation" : "Tick both boxes first"}
+              onClick={async () => {
+                if (
+                  await ask({
+                    title: pick
+                      ? "Hand this account to the implementation team now?"
+                      : "Hand this account over with nobody named?",
+                    body: pick
+                      ? "They get the use case, goals and your note, and the GoCanvas implementation journey starts."
+                      : "Everyone on the implementation team gets told to claim it, with your note.",
+                    confirmLabel: "Hand it over",
+                  })
+                )
+                  handoff.mutate();
+              }}
+            >
+              <Send className="h-3.5 w-3.5" />
+              {handoff.isPending ? "Handing over…" : "Hand to GoCanvas implementation"}
+            </button>
+            {!ready ? (
+              <span className="text-[11px] text-muted-foreground">Tick both boxes first.</span>
+            ) : null}
+          </div>
+        )}
+        {error || check.error ? (
+          <p role="alert" className="text-[12px] text-destructive">
+            {error ?? check.error}
+          </p>
+        ) : null}
+      </div>
+    </section>
+  );
+}
+
+/**
  * Customer 360's Current Implementation tab: the canonical journey Intake &
  * Process → Kickoff → Get It Working → Make It Yours → Make It Run →
  * Implementation Complete, the current stage's tasks and Navigator
@@ -706,62 +898,66 @@ export function CurrentImplementationTab({
         )}
       </section>
 
-      <section
-        id="current-implementation-journey"
-        className="overflow-hidden rounded-md border border-border bg-card"
-        aria-label="Implementation journey"
-      >
-        <Stepper
-          stages={canonicalStages}
-          current={currentInCanon}
-          shown={shown}
-          onShow={(k) => {
-            setViewing(k === currentInCanon ? null : k);
-            setManual(null);
-          }}
-        />
-        {viewingOther ? (
-          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-amber-500/10 px-4 py-1.5 text-[12px]">
-            <span>
-              <span className="font-medium text-foreground">Viewing: {stage.label}</span>
-              {viewingPosition ? (
-                <span className="text-muted-foreground"> · {viewingPosition}</span>
-              ) : null}
-            </span>
-            <button
-              type="button"
-              onClick={() => {
-                setViewing(null);
-                setManual(null);
-              }}
-              className="font-medium text-primary underline-offset-2 hover:underline"
-            >
-              Back to current stage
-            </button>
-          </div>
-        ) : null}
-        <StageHistory shown={shown} history={deal.stage_history} />
-        {stage.tasks.length > 0 ? (
-          <ol className="divide-y divide-border">
-            {stage.tasks.map((t, i) => (
-              <TaskRow
-                key={t.key}
-                n={i + 1}
-                task={t}
-                open={openTask?.key === t.key}
-                onOpen={() => setManual({ key: t.key, wasDone: t.done })}
+      {flow.current === "field_fusion" ? (
+        <PartnerHandoffPanel deal={deal} editable={editable} />
+      ) : (
+        <section
+          id="current-implementation-journey"
+          className="overflow-hidden rounded-md border border-border bg-card"
+          aria-label="Implementation journey"
+        >
+          <Stepper
+            stages={canonicalStages}
+            current={currentInCanon}
+            shown={shown}
+            onShow={(k) => {
+              setViewing(k === currentInCanon ? null : k);
+              setManual(null);
+            }}
+          />
+          {viewingOther ? (
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-amber-500/10 px-4 py-1.5 text-[12px]">
+              <span>
+                <span className="font-medium text-foreground">Viewing: {stage.label}</span>
+                {viewingPosition ? (
+                  <span className="text-muted-foreground"> · {viewingPosition}</span>
+                ) : null}
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  setViewing(null);
+                  setManual(null);
+                }}
+                className="font-medium text-primary underline-offset-2 hover:underline"
               >
-                <TaskBody task={t} deal={deal} intake={intake} editable={editable} />
-              </TaskRow>
-            ))}
-          </ol>
-        ) : (
-          <p className="px-4 py-3 text-[13px] text-muted-foreground">
-            Nothing to do yet at this stage.
-          </p>
-        )}
-        <StageGuidancePanel shown={shown} />
-      </section>
+                Back to current stage
+              </button>
+            </div>
+          ) : null}
+          <StageHistory shown={shown} history={deal.stage_history} />
+          {stage.tasks.length > 0 ? (
+            <ol className="divide-y divide-border">
+              {stage.tasks.map((t, i) => (
+                <TaskRow
+                  key={t.key}
+                  n={i + 1}
+                  task={t}
+                  open={openTask?.key === t.key}
+                  onOpen={() => setManual({ key: t.key, wasDone: t.done })}
+                >
+                  <TaskBody task={t} deal={deal} intake={intake} editable={editable} />
+                </TaskRow>
+              ))}
+            </ol>
+          ) : (
+            <p className="px-4 py-3 text-[13px] text-muted-foreground">
+              Nothing to do yet at this stage.
+            </p>
+          )}
+          <StageGuidancePanel shown={shown} />
+        </section>
+      )}
 
       <SolutionsCard deal={deal} editable={editable} />
     </div>
