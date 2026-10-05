@@ -531,6 +531,19 @@ export function CurrentImplementationTab({
 
   const m = ws.nextMeeting;
 
+  // Viewing a stage other than the actual current one: say so plainly, with
+  // its position relative to current (completed/upcoming), and a way back.
+  // Only when there IS an actual current stage on this rail to contrast
+  // against — otherwise nothing is highlighted as "current" to confuse.
+  const viewingOther = viewing !== null && currentInCanon !== null && viewing !== currentInCanon;
+  const viewingPosition =
+    viewingOther && currentInCanon
+      ? canonicalStages.findIndex((s) => s.key === shown) <
+        canonicalStages.findIndex((s) => s.key === currentInCanon)
+        ? "Completed stage"
+        : "Upcoming stage"
+      : null;
+
   return (
     <div className="space-y-4">
       <section
@@ -620,6 +633,26 @@ export function CurrentImplementationTab({
             setManual(null);
           }}
         />
+        {viewingOther ? (
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-amber-500/10 px-4 py-1.5 text-[12px]">
+            <span>
+              <span className="font-medium text-foreground">Viewing: {stage.label}</span>
+              {viewingPosition ? (
+                <span className="text-muted-foreground"> · {viewingPosition}</span>
+              ) : null}
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                setViewing(null);
+                setManual(null);
+              }}
+              className="font-medium text-primary underline-offset-2 hover:underline"
+            >
+              Back to current stage
+            </button>
+          </div>
+        ) : null}
         <StageHistory shown={shown} history={deal.stage_history} />
         {stage.tasks.length > 0 ? (
           <ol className="divide-y divide-border">
