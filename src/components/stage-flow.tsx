@@ -449,6 +449,8 @@ function stageFooter(
       return path === "new_logo"
         ? "Gate: Ready for Kickoff — the handoff complete, the customer ready, the AE answered, the prep done and all three meetings booked."
         : "Gate: Ready for Kickoff — the handoff complete, the customer ready, the AE answered, the cadence on and the kickoff booked.";
+    case "kickoff":
+      return "Gate: Kickoff held — the kickoff call happened.";
     case "get_it_working":
       return "Gate: Working end to end — Stage 1 held, the plan and dates agreed, one submission end to end.";
     case "make_it_yours":
@@ -1291,11 +1293,11 @@ export function KickoffBody({
             : ""}.{" "}
           <span className="text-foreground">
             {deal.account.stage === "prospect" || deal.account.stage === "negotiate"
-              ? "Next: mark the deal Closed Won at the top — it goes on to Get it working once Pre-Kickoff is done."
+              ? "Next: mark the deal Closed Won at the top — it goes on to Kickoff once Pre-Kickoff is done."
               : deal.account.stage === "closed_won"
                 ? "Next: finish the Closed Won tasks — the deal then moves on through Pre-Kickoff."
                 : deal.account.stage === "onboarding_kickoff"
-                  ? "Moving the deal to Get it working once Pre-Kickoff's gate is met…"
+                  ? "Moving the deal to Kickoff once Pre-Kickoff's gate is met…"
                   : "Next: send the invite below, then run the call."}
           </span>
         </div>

@@ -79,7 +79,7 @@ describe("Pre-kickoff on an existing account", () => {
         },
       },
     });
-    expect(all.advanceTo).toBe("get_it_working");
+    expect(all.advanceTo).toBe("kickoff");
   });
 });
 

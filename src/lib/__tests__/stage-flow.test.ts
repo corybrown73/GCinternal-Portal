@@ -72,7 +72,7 @@ describe("the stage checklist", () => {
     expect(cw(f).tasks.find((t) => t.key === "sow")!.done).toBe(true);
   });
 
-  it("moves Pre-kickoff to Onboarding when the AE reply, the cadence and the booked kickoff are all in", () => {
+  it("moves Pre-kickoff to Kickoff when the AE reply, the cadence and the booked kickoff are all in", () => {
     // The classic Pre-kickoff: every type but a new logo.
     const base = {
       ...ready,
@@ -94,10 +94,11 @@ describe("the stage checklist", () => {
       timeline: { overrides: { kickoff: "2026-09-25" }, times: { kickoff: "10:00" } },
     };
     expect(stageFlow(input({ stage: "onboarding_kickoff", intake: booked })).advanceTo).toBe(
-      "get_it_working",
+      "kickoff",
     );
-    // Everything done at once skips straight through.
-    expect(stageFlow(input({ intake: booked })).advanceTo).toBe("get_it_working");
+    // Everything done at once skips straight through, to Kickoff — the call
+    // itself still has to happen before the deal reaches Onboarding.
+    expect(stageFlow(input({ intake: booked })).advanceTo).toBe("kickoff");
   });
 
   it("never moves a deal back or on from Onboarding by itself", () => {
@@ -127,7 +128,6 @@ describe("the stage checklist", () => {
     const f = stageFlow(input({ stage: "get_it_working", intake, timeline: t }));
     const tasks = obTasks(f);
     expect(tasks.map((x) => x.key)).toEqual([
-      "kickoff",
       "baseline_locked",
       "e2e_working",
       "working",
@@ -141,8 +141,10 @@ describe("the stage checklist", () => {
       // A purchased solution with no ending yet holds Implementation Complete.
       "disp:qb",
     ]);
-    expect(tasks[0]!.done).toBe(true);
-    expect(tasks[0]!.label).toMatch(/Training day 1/);
+    // The kickoff call itself is Kickoff's own task now, not Get it working's.
+    const kickoffTask = f.stages.find((s) => s.key === "kickoff")!.tasks[0]!;
+    expect(kickoffTask.done).toBe(true);
+    expect(kickoffTask.label).toMatch(/Training day 1/);
     expect(tasks.find((x) => x.key === "svc:qb")!.label).toBe("QuickBooks Online complete");
   });
 
@@ -216,7 +218,7 @@ describe("the new-logo plan: the Implementation Playbook", () => {
       },
     };
     expect(stageFlow(input({ stage: "onboarding_kickoff", intake: ready3 })).advanceTo).toBe(
-      "get_it_working",
+      "kickoff",
     );
   });
 
@@ -242,7 +244,6 @@ describe("the new-logo plan: the Implementation Playbook", () => {
     const tasks = obTasks(f);
     // Dealt to the five stages: Get it working, Make it yours, Make it run, Complete.
     expect(tasks.map((x) => x.key)).toEqual([
-      "kickoff",
       "baseline_locked",
       "e2e_working",
       "between_1",
@@ -276,7 +277,9 @@ describe("the new-logo plan: the Implementation Playbook", () => {
       "func_data_open",
       "func_data_update",
     ]);
-    expect(tasks[0]!.summary).toBe(`Held ${shortDay("2026-09-25")}`);
+    expect(f.stages.find((s) => s.key === "kickoff")!.tasks[0]!.summary).toBe(
+      `Held ${shortDay("2026-09-25")}`,
+    );
     // The optional activation session never holds the stage back.
     expect(tasks.find((x) => x.key === "activate")!.optional).toBe(true);
     const all = Object.fromEntries(

@@ -15,13 +15,25 @@ import type { AccountStage } from "./presale-stages";
  * its own signals (kickoff held → build, and so on).
  */
 
-/** The least the journey can be at this deal stage. */
+/**
+ * The least the journey can be at this deal stage.
+ *
+ * `kickoff` (the deal's own Kickoff stage, src/lib/stage-flow.ts) shares
+ * `onboarding_kickoff`'s band rather than claiming the lifecycle's own
+ * "plan-internal" ("Kickoff" in its labels): the lifecycle's order already
+ * disagrees with the operating model's (its Pilot sits before Launch/Adopt),
+ * and deciding how its stages now map to the deal's new Kickoff stage is a
+ * separate decision. This keeps the two disagreeing exactly as much as they
+ * already did — the journey still only moves once the deal reaches Get it
+ * working.
+ */
 const FLOOR: Record<AccountStage, string | null> = {
   prospect: null,
   negotiate: null,
   closed_won: "handoff",
   field_fusion_setup: "handoff",
   onboarding_kickoff: "handoff",
+  kickoff: "handoff",
   get_it_working: "plan-internal",
   make_it_yours: "build",
   make_it_run: "validate-iterate",
@@ -35,6 +47,7 @@ const CEILING: Record<AccountStage, string | null> = {
   closed_won: "handoff",
   field_fusion_setup: "handoff",
   onboarding_kickoff: "handoff",
+  kickoff: "handoff",
   get_it_working: "build",
   make_it_yours: "validate-iterate",
   make_it_run: "adopt",

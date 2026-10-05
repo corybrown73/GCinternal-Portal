@@ -69,6 +69,7 @@ export type FlowStageKey =
   | "closed_won"
   | "field_fusion"
   | "pre_kickoff"
+  | "kickoff"
   | "get_it_working"
   | "make_it_yours"
   | "make_it_run"
@@ -87,6 +88,7 @@ export const FLOW_STAGES: ReadonlyArray<{ key: FlowStageKey; stage: AccountStage
     { key: "closed_won", stage: "closed_won", label: "Closed Won" },
     { key: "field_fusion", stage: "field_fusion_setup", label: "Field Fusion setup" },
     { key: "pre_kickoff", stage: "onboarding_kickoff", label: "Pre-Kickoff" },
+    { key: "kickoff", stage: "kickoff", label: "Kickoff" },
     { key: "get_it_working", stage: "get_it_working", label: "Get it working" },
     { key: "make_it_yours", stage: "make_it_yours", label: "Make it yours" },
     { key: "make_it_run", stage: "make_it_run", label: "Make it run" },
@@ -117,6 +119,7 @@ export function isWorkingStageKey(key: FlowStageKey | null | undefined): boolean
  */
 export const STAGE_GATE: Partial<Record<FlowStageKey, string>> = {
   pre_kickoff: "Ready for Kickoff",
+  kickoff: "Kickoff held",
   get_it_working: "Working end to end",
   make_it_yours: "Ready to run",
   make_it_run: "Operational Go-Live",
@@ -226,6 +229,8 @@ function flowStageOf(stage: string): FlowStageKey | null {
       return "field_fusion";
     case "onboarding_kickoff":
       return "pre_kickoff";
+    case "kickoff":
+      return "kickoff";
     case "get_it_working":
       return "get_it_working";
     case "make_it_yours":
@@ -805,19 +810,21 @@ function onboardingTasks(a: IntakeAnswers, t: Timeline | null | undefined): Flow
  * new logo, an existing account, a conversion and training alike.
  */
 export type TasksByStage = {
+  kickoff: FlowTask[];
   get_it_working: FlowTask[];
   make_it_yours: FlowTask[];
   make_it_run: FlowTask[];
   complete: FlowTask[];
 };
 
-const GIW_KEYS = new Set(["kickoff", "between_1"]);
+const GIW_KEYS = new Set(["between_1"]);
 const MIY_KEYS = new Set(["working", "between_2"]);
 const MIR_KEYS = new Set(["adjust", "live", "activate"]);
 const COMPLETE_KEYS = new Set(["closeout"]);
 
 export function tasksByStage(a: IntakeAnswers, t: Timeline | null | undefined): TasksByStage {
   const out: TasksByStage = {
+    kickoff: [],
     get_it_working: [],
     make_it_yours: [],
     make_it_run: [],
@@ -842,7 +849,8 @@ export function tasksByStage(a: IntakeAnswers, t: Timeline | null | undefined): 
     ...extra,
   });
   for (const task of onboardingTasks(a, t)) {
-    if (GIW_KEYS.has(task.key)) out.get_it_working.push(task);
+    if (task.key === "kickoff") out.kickoff.push(task);
+    else if (GIW_KEYS.has(task.key)) out.get_it_working.push(task);
     else if (MIY_KEYS.has(task.key) || task.key.startsWith("func_")) out.make_it_yours.push(task);
     else if (MIR_KEYS.has(task.key) || task.key.startsWith("svc:")) out.make_it_run.push(task);
     else if (COMPLETE_KEYS.has(task.key) || task.key.startsWith("grad_")) out.complete.push(task);
@@ -1000,6 +1008,15 @@ export function stageFlow(input: StageFlowInput): StageFlow {
         ]
       : []),
     { key: "pre_kickoff", label: flowLabel("pre_kickoff"), tasks: pk, done: allDone(pk) },
+    // Kickoff: the call itself, booked by Pre-Kickoff and held here. Without
+    // a plan there is nothing to judge it by, so — like the three middle
+    // stages below — it is not passed through on that account.
+    {
+      key: "kickoff",
+      label: flowLabel("kickoff"),
+      tasks: ob.kickoff,
+      done: allDone(ob.kickoff, hasPlan),
+    },
     // The operating model's three middle stages. A stage with nothing to do
     // for this setup (a services-only add-on has no Stage 2) passes on its own.
     {
@@ -1036,6 +1053,7 @@ export function stageFlow(input: StageFlowInput): StageFlow {
   let advanceTo: AccountStage | null = null;
   const rail: FlowStageKey[] = [
     "pre_kickoff",
+    "kickoff",
     "get_it_working",
     "make_it_yours",
     "make_it_run",
@@ -1130,6 +1148,8 @@ export const STAGE_LIMITS: Readonly<Record<string, { warn: number; escalate: num
   closed_won: { warn: 2, escalate: 4 },
   field_fusion_setup: { warn: 3, escalate: 5 },
   onboarding_kickoff: { warn: 3, escalate: 5 },
+  // Kickoff itself should be brief: booked and held within days.
+  kickoff: { warn: 3, escalate: 5 },
   // The three stages inside the 15-business-day plan; placeholders until the
   // team sets them (operating model: "target durations by stage" to validate).
   get_it_working: { warn: 5, escalate: 8 },

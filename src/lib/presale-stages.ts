@@ -1,8 +1,8 @@
 /**
  * The deal's stages, in order. After the close they are the operating
- * model's five: Pre-Kickoff, Get it working, Make it yours, Make it run,
- * Implementation Complete — the same names the team, the customer and the
- * Hub use. Each ends at a gate (src/lib/won-gate.ts), not after a number
+ * model's six: Pre-Kickoff, Kickoff, Get it working, Make it yours, Make it
+ * run, Implementation Complete — the same names the team, the customer and
+ * the Hub use. Each ends at a gate (src/lib/won-gate.ts), not after a number
  * of meetings.
  */
 export const STAGES = [
@@ -11,6 +11,7 @@ export const STAGES = [
   "closed_won",
   "field_fusion_setup",
   "onboarding_kickoff",
+  "kickoff",
   "get_it_working",
   "make_it_yours",
   "make_it_run",
@@ -25,6 +26,7 @@ export const STAGE_LABELS: Record<AccountStage, string> = {
   closed_won: "Closed Won",
   field_fusion_setup: "Field Fusion setup",
   onboarding_kickoff: "Pre-Kickoff",
+  kickoff: "Kickoff",
   get_it_working: "Get it working",
   make_it_yours: "Make it yours",
   make_it_run: "Make it run",
@@ -39,14 +41,15 @@ export const LEGACY_STAGES: Readonly<Record<string, { label: string; now: Accoun
   in_onboarding: { label: "Onboarding (legacy)", now: "get_it_working" },
 };
 
-/** The three stages between Pre-Kickoff and Implementation Complete. */
+/** The four stages between Pre-Kickoff and Implementation Complete. */
 export const ONBOARDING_STAGES: ReadonlyArray<AccountStage> = [
+  "kickoff",
   "get_it_working",
   "make_it_yours",
   "make_it_run",
 ];
 
-/** The deal is being implemented: one of the three middle stages (or the legacy one). */
+/** The deal is being implemented: Kickoff, one of the three middle stages, or the legacy one. */
 export function isOnboardingStage(stage: string | null | undefined): boolean {
   if (!stage) return false;
   return (ONBOARDING_STAGES as readonly string[]).includes(stage) || stage === "in_onboarding";

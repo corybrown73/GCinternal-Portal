@@ -77,7 +77,9 @@ describe("the window of work", () => {
   it("Get it working, Stage 1 held: the gate's own facts, nothing from Stage 2", () => {
     const { input } = build({ timeline: { completed: { kickoff: "2026-09-17" } } });
     const w = workspaceFor(input);
-    expect(w.windowLabel).toMatch(/^Get it working · After Stage 1/);
+    // Stage 1 (Kickoff) is its own stage now, so Get it working's own window
+    // no longer straddles it — there is nothing left to be "after".
+    expect(w.windowLabel).toBe("Get it working · Finishing");
     expect(w.now.map((t) => t.key)).toEqual(["baseline_locked", "e2e_working", "between_1"]);
     expect(w.now.find((t) => t.key.startsWith("func_"))).toBeUndefined();
     expect(w.nextMeeting?.key).toBe("working");
