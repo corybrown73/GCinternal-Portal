@@ -42,6 +42,7 @@ import {
   PREP_ITEMS,
   readingInFlight,
   stageFlow,
+  stampDay,
   type FlowStageKey,
   type FlowTask,
 } from "@/lib/stage-flow";
@@ -102,6 +103,39 @@ export function useStageSync(dealId: string, advanceTo: string | null, editable:
       });
   }, [editable, advanceTo, dealId, sync, qc, attempt]);
   return { moved, syncError, retry: () => setAttempt((n) => n + 1) };
+}
+
+/**
+ * When the shown stage was entered, from the deal's own stage history — the
+ * record a move already writes, never a second one. Nothing renders for a
+ * stage never entered (prospect, usually: a deal starts there without a
+ * transition row) or one the history has not caught up to yet.
+ */
+function StageHistory({
+  shown,
+  history,
+}: {
+  shown: FlowStageKey;
+  history: DealData["stage_history"];
+}) {
+  const accountStage = FLOW_STAGES.find((s) => s.key === shown)?.stage;
+  const entries = accountStage
+    ? history
+        .filter((t) => t.to_stage === accountStage)
+        .sort((a, b) => b.occurred_at.localeCompare(a.occurred_at))
+    : [];
+  if (entries.length === 0) return null;
+  return (
+    <ul className="space-y-0.5 border-b border-border bg-muted/20 px-4 py-2 text-[11px] text-muted-foreground">
+      {entries.map((t) => (
+        <li key={t.id}>
+          Entered {stampDay(t.occurred_at)}
+          {t.actor_name ? ` · ${t.actor_name}` : ""}
+          {t.note ? ` — ${t.note}` : ""}
+        </li>
+      ))}
+    </ul>
+  );
 }
 
 export function StageFlow({ deal }: { deal: DealData }) {
@@ -280,6 +314,8 @@ export function StageFlow({ deal }: { deal: DealData }) {
               : "Everything here is done."}
         </p>
       ) : null}
+
+      <StageHistory shown={shown} history={deal.stage_history} />
 
       {isWorkingStageKey(shown) ? (
         <OnboardingList

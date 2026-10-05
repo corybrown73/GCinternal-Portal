@@ -488,6 +488,7 @@ function Rows({ rows }: { rows: NeedsMeRow[] }) {
             <Link
               to="/customers/$customerId"
               params={{ customerId: r.link.customerId }}
+              search={r.link.implementationId ? { impl: r.link.implementationId } : {}}
               className="inline-flex items-center gap-1 justify-self-end rounded-md border border-border px-3 py-1.5 text-[12px] font-medium hover:bg-muted"
             >
               Open <ArrowRight className="h-3.5 w-3.5" />
@@ -557,6 +558,7 @@ function ComingUp({ t }: { t: Today }) {
                       <Link
                         to="/customers/$customerId"
                         params={{ customerId: e.link.customerId }}
+                        search={e.link.implementationId ? { impl: e.link.implementationId } : {}}
                         className="block truncate font-medium hover:underline"
                       >
                         {e.label}

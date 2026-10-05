@@ -31,7 +31,7 @@ export type NeedsMeRow = {
   detail: string | null;
   nextStep: string | null;
   due: { label: string; tone: Tone } | null;
-  link: { customerId: string } | { dealId: string };
+  link: { customerId: string; implementationId?: string } | { dealId: string };
   rank: number;
   /**
    * Phase 2: does the viewer personally own the next move here, per
@@ -49,7 +49,7 @@ export type UpcomingEvent = {
   label: string;
   account: string;
   kind: "meeting" | "commitment" | "launch";
-  link: { customerId: string } | { dealId: string };
+  link: { customerId: string; implementationId?: string } | { dealId: string };
 };
 
 export type DayGroup = { key: string; title: string; sub: string; events: UpcomingEvent[] };
@@ -190,7 +190,7 @@ function rowFromQueue(
     detail,
     nextStep: next && !/hasn't been recorded/i.test(next) ? next : null,
     due: dueIso ? dueLabel(dueIso, today) : null,
-    link: { customerId: row.impl.customer_id },
+    link: { customerId: row.impl.customer_id, implementationId: row.impl.id },
     rank: row.rank,
     needsMe,
   };
@@ -373,7 +373,7 @@ export function collectEvents(
         label: c.label,
         account: r.impl.customer_name,
         kind: "meeting",
-        link: { customerId: r.impl.customer_id },
+        link: { customerId: r.impl.customer_id, implementationId: r.impl.id },
       });
     }
     const live = facts?.live_date ?? r.impl.target_launch_date;
@@ -385,7 +385,7 @@ export function collectEvents(
         label: "Target launch",
         account: r.impl.customer_name,
         kind: "launch",
-        link: { customerId: r.impl.customer_id },
+        link: { customerId: r.impl.customer_id, implementationId: r.impl.id },
       });
     }
   }
@@ -399,7 +399,7 @@ export function collectEvents(
       label: c.description,
       account: c.customer_name,
       kind: "commitment",
-      link: { customerId: c.customer_id },
+      link: { customerId: c.customer_id, implementationId: c.implementation_id },
     });
   }
   events.sort((a, b) => a.date.localeCompare(b.date) || (a.time ?? "").localeCompare(b.time ?? ""));
