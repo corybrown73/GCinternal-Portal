@@ -325,8 +325,8 @@ function WhereBar({
             <Link
               to="/customers/$customerId"
               params={{ customerId }}
-              search={{ tab: "record", impl: impl.id }}
-              title="Open the handoff from Sales on the Record tab"
+              search={{ tab: "implementation", impl: impl.id }}
+              title="Open the handoff from Sales on the Current Implementation tab"
               className="inline-flex items-center gap-1"
             >
               <HandoffChip status={handoff.status} detail={handoffDetail(handoff)} />
@@ -399,7 +399,7 @@ function WhereBar({
           <Link
             to="/customers/$customerId"
             params={{ customerId }}
-            search={{ tab: "plan", impl: impl.id }}
+            search={{ tab: "implementation", impl: impl.id }}
             className="ml-auto inline-flex items-center gap-1.5 rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-1 text-[12px] font-medium text-amber-800 hover:bg-amber-500/15 dark:text-amber-300"
           >
             <TriangleAlert className="h-3.5 w-3.5" />
@@ -1232,10 +1232,10 @@ function NotesPanel({ record, customerId }: { record: Customer360; customerId: s
         <Link
           to="/customers/$customerId"
           params={{ customerId }}
-          search={{ tab: "record", impl: impl.id }}
+          search={{ tab: "implementation", impl: impl.id }}
           className="underline"
         >
-          Record
+          Current Implementation
         </Link>{" "}
         tab.
       </p>

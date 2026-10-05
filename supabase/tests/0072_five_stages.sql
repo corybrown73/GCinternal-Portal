@@ -13,7 +13,11 @@ begin
   select sort_order into v_b from public.portal_pipeline_stages where key = 'make_it_yours';
   select sort_order into v_c from public.portal_pipeline_stages where key = 'make_it_run';
   if v_a is null or v_b is null or v_c is null then raise exception '0072: a stage row is missing'; end if;
-  if not (v_a = v_pk + 1 and v_b = v_a + 1 and v_c = v_b + 1) then
+  -- 0075 later puts Kickoff between Pre-Kickoff and Get it working, so the
+  -- three stages follow Pre-Kickoff directly, or with Kickoff in between.
+  if not ((v_a = v_pk + 1 or (v_a = v_pk + 2 and exists (
+            select 1 from public.portal_pipeline_stages where key = 'kickoff' and sort_order = v_pk + 1)))
+          and v_b = v_a + 1 and v_c = v_b + 1) then
     raise exception '0072: the three stages are not in order after Pre-Kickoff (% % % %)', v_pk, v_a, v_b, v_c;
   end if;
   if exists (select 1 from public.portal_pipeline_stages where key = 'in_onboarding') then

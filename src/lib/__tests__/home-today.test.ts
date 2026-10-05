@@ -205,6 +205,51 @@ describe("Today", () => {
     expect(win.due?.label).toBe("Today");
   });
 
+  it("links an implementation row to the implementation it is about, not just the customer", () => {
+    // A customer with more than one implementation must not send a click
+    // from here to the customer's newest project instead of this one.
+    const t = todayFor(input());
+    const fgp = t.needsMe.find((r) => r.name === "FGP Manufacturing")!;
+    expect(fgp.link).toEqual({ customerId: "c1", implementationId: "i1" });
+    // The unclaimed deal row has no implementation yet — it still links by deal.
+    const win = t.needsMe.find((r) => r.name === "Windows USA")!;
+    expect(win.link).toEqual({ dealId: "d9" });
+  });
+
+  it("links upcoming calls, launches and commitments to their own implementation", () => {
+    const t = todayFor(
+      input({
+        commitments: [
+          {
+            id: "k1",
+            description: "Send the customer list",
+            due_date: "2026-09-30",
+            status: "open",
+            committed_to: "customer",
+            owner_name: null,
+            owner_role: null,
+            implementation_id: "i1",
+            customer_id: "c1",
+            customer_name: "FGP Manufacturing",
+          },
+        ],
+      }),
+    );
+    const events = t.comingUp.flatMap((g) => g.events);
+    expect(events.find((e) => e.kind === "meeting")?.link).toEqual({
+      customerId: "c1",
+      implementationId: "i1",
+    });
+    expect(events.find((e) => e.kind === "launch")?.link).toEqual({
+      customerId: "c1",
+      implementationId: "i1",
+    });
+    expect(events.find((e) => e.kind === "commitment")?.link).toEqual({
+      customerId: "c1",
+      implementationId: "i1",
+    });
+  });
+
   it("groups the next seven days by day, then folds next week", () => {
     const t = todayFor(
       input({

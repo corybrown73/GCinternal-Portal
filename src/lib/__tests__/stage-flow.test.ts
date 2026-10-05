@@ -15,6 +15,8 @@ const ready = {
   forms_built: false,
   wanted_forms: [{ id: "f1", name: "Daily job report", template_id: null }],
   handoff_tasks: { reviewed: "2026-09-22T15:00:00Z" },
+  // The Sales handoff is Closed Won's boundary: marked complete here.
+  handoff: { completed_at: "2026-09-22T16:00:00Z" },
 };
 
 function input(over: Partial<StageFlowInput> = {}): StageFlowInput {
@@ -46,12 +48,31 @@ describe("the stage checklist", () => {
 
   it("asks the type of deal first, and the review waits for it, the Gong brief and the SOW", () => {
     const f = stageFlow(input({ gongReports: 0, hasSow: false, intake: {} }));
-    expect(cw(f).tasks.map((t) => t.key)).toEqual(["type", "assign", "notes", "sow", "review"]);
+    expect(cw(f).tasks.map((t) => t.key)).toEqual([
+      "type",
+      "assign",
+      "notes",
+      "sow",
+      "review",
+      "handoff",
+    ]);
     expect(cw(f).tasks[0]!.done).toBe(false);
     const review = cw(f).tasks.find((t) => t.key === "review")!;
     expect(review.locked).toBe("Needs the type of deal, the Gong brief and the SOW first");
     const typed = stageFlow(input({ intake: { path: "dm_conversion" } }));
     expect(cw(typed).tasks[0]!.summary).toBe("Device Magic → GoCanvas");
+  });
+
+  it("holds a closed deal at Closed Won until the Sales handoff is complete", () => {
+    const { handoff: _done, ...noHandoff } = ready;
+    const f = stageFlow(input({ intake: noHandoff }));
+    expect(f.advanceTo).toBeNull();
+    const task = cw(f).tasks.find((t) => t.key === "handoff")!;
+    expect(task.done).toBe(false);
+    expect(task.summary).toMatch(/^Missing/);
+    // Field Fusion has its own handoff from the setup owner.
+    const ff = stageFlow(input({ intake: { ...noHandoff, path: "field_fusion" } }));
+    expect(cw(ff).tasks.find((t) => t.key === "handoff")).toBeUndefined();
   });
 
   it("says the AI is reading while it reads", () => {
@@ -72,20 +93,18 @@ describe("the stage checklist", () => {
     expect(cw(f).tasks.find((t) => t.key === "sow")!.done).toBe(true);
   });
 
-  it("moves Pre-kickoff to Onboarding when the AE reply, the cadence and the booked kickoff are all in", () => {
-    // The classic Pre-kickoff: every type but a new logo.
+  it("moves Pre-kickoff to Kickoff when intake, the starting solution, the process-call decision and the booked kickoff are all in", () => {
+    // Device Magic conversion: Intake & Process applies the same as a new logo.
     const base = {
       ...ready,
       path: "dm_conversion",
-      // Pre-Kickoff's two checks: the Sales handoff and the customer's readiness.
-      handoff: {
-        completed_at: "2026-09-22T15:00:00Z",
-        customer_ready_override: { at: "2026-09-22T15:00:00Z", by: null, reason: "closing call" },
-      },
       handoff_tasks: {
         reviewed: "2026-09-22T15:00:00Z",
-        reply_ae: "2026-09-22T15:00:00Z",
-        cadence: "2026-09-22T15:05:00Z",
+        intake_complete: "2026-09-22T15:00:00Z",
+        prep_process: "x",
+        prep_form: "x",
+        prep_data: "x",
+        process_understanding: "yes",
       },
     };
     expect(stageFlow(input({ stage: "onboarding_kickoff", intake: base })).advanceTo).toBeNull();
@@ -94,10 +113,11 @@ describe("the stage checklist", () => {
       timeline: { overrides: { kickoff: "2026-09-25" }, times: { kickoff: "10:00" } },
     };
     expect(stageFlow(input({ stage: "onboarding_kickoff", intake: booked })).advanceTo).toBe(
-      "get_it_working",
+      "kickoff",
     );
-    // Everything done at once skips straight through.
-    expect(stageFlow(input({ intake: booked })).advanceTo).toBe("get_it_working");
+    // Everything done at once skips straight through, to Kickoff — the call
+    // itself still has to happen before the deal reaches Onboarding.
+    expect(stageFlow(input({ intake: booked })).advanceTo).toBe("kickoff");
   });
 
   it("never moves a deal back or on from Onboarding by itself", () => {
@@ -127,7 +147,6 @@ describe("the stage checklist", () => {
     const f = stageFlow(input({ stage: "get_it_working", intake, timeline: t }));
     const tasks = obTasks(f);
     expect(tasks.map((x) => x.key)).toEqual([
-      "kickoff",
       "baseline_locked",
       "e2e_working",
       "working",
@@ -141,8 +160,10 @@ describe("the stage checklist", () => {
       // A purchased solution with no ending yet holds Implementation Complete.
       "disp:qb",
     ]);
-    expect(tasks[0]!.done).toBe(true);
-    expect(tasks[0]!.label).toMatch(/Training day 1/);
+    // The kickoff call itself is Kickoff's own task now, not Get it working's.
+    const kickoffTask = f.stages.find((s) => s.key === "kickoff")!.tasks[0]!;
+    expect(kickoffTask.done).toBe(true);
+    expect(kickoffTask.label).toMatch(/Training day 1/);
     expect(tasks.find((x) => x.key === "svc:qb")!.label).toBe("QuickBooks Online complete");
   });
 
@@ -180,43 +201,40 @@ describe("the new-logo plan: the Implementation Playbook", () => {
     expect(coreWindowEnd(t)).toBe("2026-10-20");
   });
 
-  it("asks for prep and all three meetings booked before Onboarding", () => {
-    const ticks = {
-      reviewed: "2026-09-22T15:00:00Z",
-      reply_ae: "2026-09-22T15:00:00Z",
-      cadence: "2026-09-22T15:05:00Z",
-    };
-    const oneBooked = {
+  it("asks for intake, a starting solution and the process-call decision before Kickoff is booked", () => {
+    const ticks = { reviewed: "2026-09-22T15:00:00Z" };
+    const unprepared = {
       ...ready,
       handoff_tasks: ticks,
       timeline: { overrides: { kickoff: "2026-09-25" }, times: { kickoff: "10:00" } },
     };
-    const f = stageFlow(input({ stage: "onboarding_kickoff", intake: oneBooked }));
+    const f = stageFlow(input({ stage: "onboarding_kickoff", intake: unprepared }));
     const pk = f.stages.find((s) => s.key === "pre_kickoff")!.tasks;
     expect(pk.map((t) => t.key)).toEqual([
-      "handoff",
-      "customer_ready",
-      "reply_ae",
-      "cadence",
+      "intake_complete",
       "prep",
+      "process_understanding",
       "kickoff",
     ]);
-    expect(pk.find((t) => t.key === "kickoff")!.summary).toBe("1 of 3 booked");
+    expect(pk.find((t) => t.key === "prep")!.summary).toBeNull();
     expect(f.advanceTo).toBeNull();
     const ready3 = {
       ...ready,
-      handoff: {
-        completed_at: "2026-09-22T15:00:00Z",
-        customer_ready_override: { at: "2026-09-22T15:00:00Z", by: null, reason: "closing call" },
+      handoff_tasks: {
+        ...ticks,
+        intake_complete: "2026-09-22T15:00:00Z",
+        prep_process: "x",
+        prep_form: "x",
+        prep_data: "x",
+        process_understanding: "yes",
       },
-      handoff_tasks: { ...ticks, prep_process: "x", prep_form: "x", prep_data: "x" },
       timeline: {
         overrides: { kickoff: "2026-09-25", working: "2026-09-29", adjust: "2026-10-07" },
         times: { kickoff: "10:00", working: "10:00", adjust: "14:00" },
       },
     };
     expect(stageFlow(input({ stage: "onboarding_kickoff", intake: ready3 })).advanceTo).toBe(
-      "get_it_working",
+      "kickoff",
     );
   });
 
@@ -242,7 +260,6 @@ describe("the new-logo plan: the Implementation Playbook", () => {
     const tasks = obTasks(f);
     // Dealt to the five stages: Get it working, Make it yours, Make it run, Complete.
     expect(tasks.map((x) => x.key)).toEqual([
-      "kickoff",
       "baseline_locked",
       "e2e_working",
       "between_1",
@@ -276,7 +293,9 @@ describe("the new-logo plan: the Implementation Playbook", () => {
       "func_data_open",
       "func_data_update",
     ]);
-    expect(tasks[0]!.summary).toBe(`Held ${shortDay("2026-09-25")}`);
+    expect(f.stages.find((s) => s.key === "kickoff")!.tasks[0]!.summary).toBe(
+      `Held ${shortDay("2026-09-25")}`,
+    );
     // The optional activation session never holds the stage back.
     expect(tasks.find((x) => x.key === "activate")!.optional).toBe(true);
     const all = Object.fromEntries(
@@ -359,7 +378,7 @@ describe("nudges", () => {
       flow: stageFlow(input({ stage: "onboarding_kickoff" })),
     });
     expect(slow[0]).toMatchObject({ to: "owner", level: "warn" });
-    expect(slow[0]!.line).toMatch(/Next: Sales handoff complete/);
+    expect(slow[0]!.line).toMatch(/Next: Customer Pre-Kickoff Intake completed/);
     const stuck = nudgesFor({
       name: "Maverick",
       stage: "onboarding_kickoff",

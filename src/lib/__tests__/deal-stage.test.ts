@@ -49,10 +49,10 @@ describe("one stage for a deal", () => {
   });
 
   it("counts progress against the rail the deal actually walks", () => {
-    expect(dealStageProgress("prospect")).toEqual({ position: 1, total: 7 });
-    expect(dealStageProgress("make_it_yours")).toEqual({ position: 5, total: 7 });
-    expect(dealStageProgress("field_fusion_setup")).toEqual({ position: 3, total: 8 });
-    expect(dealStageProgress("onboarding_complete")).toEqual({ position: 7, total: 7 });
+    expect(dealStageProgress("prospect")).toEqual({ position: 1, total: 8 });
+    expect(dealStageProgress("make_it_yours")).toEqual({ position: 6, total: 8 });
+    expect(dealStageProgress("field_fusion_setup")).toEqual({ position: 3, total: 9 });
+    expect(dealStageProgress("onboarding_complete")).toEqual({ position: 8, total: 8 });
   });
 
   it("puts Prospect on the checklist rail with the same labels as the badge", () => {
@@ -79,6 +79,7 @@ describe("a prospect's checklist", () => {
       "prospect",
       "closed_won",
       "pre_kickoff",
+      "kickoff",
       "get_it_working",
       "make_it_yours",
       "make_it_run",

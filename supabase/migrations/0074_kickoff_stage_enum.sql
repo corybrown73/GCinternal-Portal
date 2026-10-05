@@ -1,0 +1,12 @@
+-- 0074: Kickoff, as an enum value.
+--
+-- A booked kickoff call used to read as "Get it working" before it was ever
+-- held. Kickoff is now its own stage between Pre-Kickoff and Get it working
+-- (src/lib/stage-flow.ts): booking the call enters it, holding it exits
+-- into Get it working.
+--
+-- This migration contains ONLY the ADD VALUE: a new enum value cannot be
+-- used in the transaction that adds it (see 0056 for the same rule). The
+-- portal_pipeline_stages row that makes the stage visible on a configured
+-- board, and any in-flight backfill, are not part of this migration.
+alter type portal_account_stage add value if not exists 'kickoff' after 'onboarding_kickoff';

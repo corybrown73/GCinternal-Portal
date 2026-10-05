@@ -58,6 +58,7 @@ const DEFAULT_COLORS: Record<AccountStage, StageColor> = {
   closed_won: "ontrack",
   field_fusion_setup: "risk",
   onboarding_kickoff: "primary",
+  kickoff: "primary",
   get_it_working: "primary",
   make_it_yours: "primary",
   make_it_run: "primary",

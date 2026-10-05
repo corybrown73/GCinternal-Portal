@@ -8,6 +8,7 @@ import { FieldFusionGate } from "@/components/field-fusion-gate";
 import { AiSource, ReadingStatus } from "@/components/fill-from-sources";
 import { MeetingRecap } from "@/components/meeting-recap";
 import { ParkingLot } from "@/components/parking-lot";
+import { SolutionsCard } from "@/components/solutions-card";
 import { FactsStep, FlowStep, NotesIn, SowStep } from "@/components/intake-panel";
 import { assignDealFn, claimDealFn, getDealAssignment } from "@/lib/assignment.functions";
 import { MemberOptions } from "@/components/member-options";
@@ -24,6 +25,7 @@ import {
 } from "@/lib/intake-answers";
 import { closeDateFor, timelineFor } from "@/lib/onboarding-plan";
 import { coreWindowEnd, dayCounter, localIso, shortDay } from "@/lib/onboarding-timeline";
+import { getParkingLot } from "@/lib/parking-lot.functions";
 import { getWelcome } from "@/lib/welcome.functions";
 import { getKickoffCadence } from "@/lib/kickoff-cadence.functions";
 import { openPanel } from "@/lib/panel-open";
@@ -32,6 +34,7 @@ import type { AccountStage } from "@/lib/presale-stages";
 import { finishImplementation, moveDealStage, saveIntake } from "@/lib/presale.functions";
 import { ask } from "@/components/ui/ask";
 import {
+  CANONICAL_JOURNEY_KEYS,
   CORE_MEETINGS,
   DEAL_TYPES,
   bookMeetingPatch,
@@ -42,16 +45,20 @@ import {
   PREP_ITEMS,
   readingInFlight,
   stageFlow,
+  stampDay,
+  whenLabel,
   type FlowStageKey,
   type FlowTask,
 } from "@/lib/stage-flow";
 import { syncDealStageFn } from "@/lib/stage-flow.functions";
+import { stageGuidanceFor } from "@/lib/stage-guidance";
 import { parseWonGate, type WonGateMissing } from "@/lib/won-gate";
 import { ClosedWonGateNotice } from "@/components/closed-won-gate";
 import { aeReplyDraft, googleCalendarLink } from "@/lib/ae-reply";
 import { customerLabel } from "@/lib/customer-labels";
 import { customerFacingName } from "@/lib/names";
 import { cn } from "@/lib/utils";
+import { shortMeeting, workspaceFor } from "@/lib/workspace";
 
 /**
  * The deal's stages as one checklist, at the top of the page.
@@ -102,6 +109,119 @@ export function useStageSync(dealId: string, advanceTo: string | null, editable:
       });
   }, [editable, advanceTo, dealId, sync, qc, attempt]);
   return { moved, syncError, retry: () => setAttempt((n) => n + 1) };
+}
+
+/**
+ * When the shown stage was entered, from the deal's own stage history — the
+ * record a move already writes, never a second one. Nothing renders for a
+ * stage never entered (prospect, usually: a deal starts there without a
+ * transition row) or one the history has not caught up to yet.
+ */
+function StageHistory({
+  shown,
+  history,
+}: {
+  shown: FlowStageKey;
+  history: DealData["stage_history"];
+}) {
+  const accountStage = FLOW_STAGES.find((s) => s.key === shown)?.stage;
+  const entries = accountStage
+    ? history
+        .filter((t) => t.to_stage === accountStage)
+        .sort((a, b) => b.occurred_at.localeCompare(a.occurred_at))
+    : [];
+  if (entries.length === 0) return null;
+  return (
+    <ul className="space-y-0.5 border-b border-border bg-muted/20 px-4 py-2 text-[11px] text-muted-foreground">
+      {entries.map((t) => (
+        <li key={t.id}>
+          Entered {stampDay(t.occurred_at)}
+          {t.actor_name ? ` · ${t.actor_name}` : ""}
+          {t.note ? ` — ${t.note}` : ""}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/**
+ * The TIS Project Navigator's guidance for the shown stage — read-only
+ * reference material, not a second checklist. The Hub's own tasks above
+ * stay the source of truth for what is actually done; nothing here is
+ * tracked or saved. Renders nothing for a stage the Navigator does not
+ * cover yet (Prospect, Closed Won, Intake & Process).
+ */
+function StageGuidancePanel({ shown }: { shown: FlowStageKey }) {
+  const [openIssue, setOpenIssue] = useState<string | null>(null);
+  const guidance = stageGuidanceFor(shown);
+  if (!guidance) return null;
+  return (
+    <div
+      className="border-t border-border bg-card px-4 py-3 text-[12.5px]"
+      aria-label="Navigator guidance"
+    >
+      <p className="text-muted-foreground">{guidance.purpose}</p>
+
+      <div className="mt-3">
+        <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+          Check what's true
+        </div>
+        <ul className="mt-1.5 space-y-1 text-foreground">
+          {guidance.checks.map((c) => (
+            <li key={c} className="flex items-start gap-2">
+              <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full border border-border" />
+              {c}
+            </li>
+          ))}
+        </ul>
+      </div>
+
+      <div className="mt-3">
+        <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+          Something's stuck?
+        </div>
+        <div className="mt-1.5 grid gap-1.5 sm:grid-cols-2">
+          {guidance.stuck.map((s) => (
+            <button
+              key={s.key}
+              type="button"
+              onClick={() => setOpenIssue(openIssue === s.key ? null : s.key)}
+              aria-expanded={openIssue === s.key}
+              className="rounded-sm border border-border px-2.5 py-1.5 text-left text-[12px] font-medium hover:border-primary/40 hover:bg-muted"
+            >
+              {s.label} →
+            </button>
+          ))}
+        </div>
+        {guidance.stuck
+          .filter((s) => s.key === openIssue)
+          .map((s) => (
+            <div key={s.key} className="mt-2 rounded-md border border-border bg-muted/30 p-3">
+              <p className="font-medium text-foreground">{s.title}</p>
+              <p className="mt-1 text-muted-foreground">{s.why}</p>
+              <p className="mt-2 rounded-sm bg-status-ontrack/15 p-2 text-foreground">{s.action}</p>
+            </div>
+          ))}
+      </div>
+
+      <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1">
+        <p>
+          <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+            Ready to move on when
+          </span>{" "}
+          <span className="text-foreground">{guidance.readyWhen}</span>
+        </p>
+        <p>
+          <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+            Next
+          </span>{" "}
+          <span className="text-foreground">{guidance.next}</span>
+        </p>
+      </div>
+
+      <p className="mt-3 text-muted-foreground">{guidance.remember}</p>
+    </div>
+  );
 }
 
 export function StageFlow({ deal }: { deal: DealData }) {
@@ -281,6 +401,8 @@ export function StageFlow({ deal }: { deal: DealData }) {
         </p>
       ) : null}
 
+      <StageHistory shown={shown} history={deal.stage_history} />
+
       {isWorkingStageKey(shown) ? (
         <OnboardingList
           deal={deal}
@@ -320,6 +442,7 @@ export function StageFlow({ deal }: { deal: DealData }) {
       flow.current !== "negotiate" ? (
         <ParkingLot dealId={dealId} editable={editable} />
       ) : null}
+      <StageGuidancePanel shown={shown} />
     </section>
   );
 }
@@ -329,6 +452,200 @@ export function DealStageFlow({ dealId }: { dealId: string }) {
   const q = useQuery(dealQuery(dealId));
   if (!q.data) return null;
   return <StageFlow deal={q.data} />;
+}
+
+/**
+ * Customer 360's Current Implementation tab: the canonical journey Intake &
+ * Process → Kickoff → Get It Working → Make It Yours → Make It Run →
+ * Implementation Complete, the current stage's tasks and Navigator
+ * guidance, the next customer meeting, and Technical Solutions running in
+ * parallel. Reads the same deal the full checklist and workspace read —
+ * nothing here is a second model, and nothing before Intake & Process (the
+ * Sales/handoff stages) shows on this rail.
+ */
+export function CurrentImplementationTab({
+  dealId,
+  ownerName,
+}: {
+  dealId: string;
+  ownerName: string | null;
+}) {
+  const { profile } = useProfile();
+  const editable = canEditDeal(profile?.role);
+  const q = useQuery(dealQuery(dealId));
+  const parking = useQuery({
+    queryKey: ["parking-lot", dealId],
+    queryFn: () => getParkingLot({ data: { dealId } }),
+  });
+  const welcome = useQuery({
+    queryKey: ["welcome", dealId],
+    queryFn: () => getWelcome({ data: { dealId } }),
+  });
+  const [today, setToday] = useState<string | null>(null);
+  useEffect(() => setToday(localIso()), []);
+  const [viewing, setViewing] = useState<FlowStageKey | null>(null);
+  const [manual, setManual] = useState<{ key: string; wasDone: boolean } | null>(null);
+
+  if (!q.data) return null;
+  const deal = q.data;
+  const intake = readIntake(deal.account.intake);
+  const nowIso = today ?? localIso();
+  const close = closeDateFor({
+    intake,
+    stageHistory: deal.stage_history,
+    wonStageKey: wonStage(deal.stages).key,
+    today: nowIso,
+  });
+  const timeline = timelineFor(intake, close.date);
+  const flow = stageFlow({
+    stage: deal.account.stage,
+    intake,
+    owner: ownerName,
+    gongReports: deal.gong_reports.length,
+    hasSow: Boolean(deal.sow_url),
+    hasBrief: deal.briefs.some((b) => b.status === "complete" && b.generator === "llm"),
+    hasLink: Boolean((deal.account as { welcome_share_url?: string | null }).welcome_share_url),
+    timeline,
+  });
+  const ws = workspaceFor({
+    flow,
+    intake,
+    timeline,
+    today: nowIso,
+    parkingLot: parking.data ?? [],
+    homeworkDone: welcome.data?.homeworkDone ?? {},
+    link: welcome.data
+      ? { sharedAt: welcome.data.sharedAt ?? null, openedAt: welcome.data.openedAt ?? null }
+      : null,
+  });
+
+  const canonicalStages = flow.stages.filter((s) => CANONICAL_JOURNEY_KEYS.includes(s.key));
+  const currentInCanon =
+    flow.current && CANONICAL_JOURNEY_KEYS.includes(flow.current) ? flow.current : null;
+
+  const shown = viewing ?? currentInCanon ?? "pre_kickoff";
+  const stage = canonicalStages.find((s) => s.key === shown) ?? canonicalStages[0]!;
+  const next = stage.tasks.find((t) => !t.done && !t.locked && !t.optional) ?? null;
+  const manualTask = manual ? stage.tasks.find((t) => t.key === manual.key) : undefined;
+  const openTask = manualTask && (manual!.wasDone || !manualTask.done) ? manualTask : next;
+
+  const m = ws.nextMeeting;
+
+  return (
+    <div className="space-y-4">
+      <section
+        className="rounded-md border border-border bg-card px-4 py-3"
+        aria-label="Implementation status"
+      >
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[12px]">
+          <span>
+            <span className="text-muted-foreground">Stage</span>{" "}
+            <b className="font-semibold">{ws.where.stageLabel}</b>
+          </span>
+          {ws.where.day ? (
+            <span title={ws.where.day.detail} className="text-foreground">
+              {ws.where.day.label}
+            </span>
+          ) : null}
+          {ws.where.target ? (
+            <span className="text-muted-foreground">
+              Target: {ws.where.target.word} {shortDay(ws.where.target.date)}
+            </span>
+          ) : null}
+          {ws.where.gate ? (
+            <span className="text-muted-foreground">Gate: {ws.where.gate}</span>
+          ) : null}
+          {ownerName ? (
+            <span>
+              <span className="text-muted-foreground">Owner</span> {ownerName}
+            </span>
+          ) : null}
+          {ws.ball ? (
+            <span className="inline-flex items-center gap-1.5" title={ws.ball.detail}>
+              <span className="text-muted-foreground">Ball</span>
+              <span
+                className={cn(
+                  "rounded-full px-2 py-0.5 text-[11px] font-medium",
+                  ws.ball.who === "customer"
+                    ? "bg-amber-500/15 text-amber-800 dark:text-amber-300"
+                    : "bg-primary/10 text-primary",
+                )}
+              >
+                {ws.ball.who === "customer" ? "With the customer" : "With us"}
+              </span>
+            </span>
+          ) : null}
+        </div>
+      </section>
+
+      <section
+        className="rounded-md border border-border bg-card px-4 py-3"
+        aria-label="Next customer meeting"
+      >
+        <h2 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+          Next customer meeting
+        </h2>
+        {m ? (
+          <>
+            <p className="mt-1.5 text-[14px] font-semibold">{m.label}</p>
+            {m.booked && m.time ? (
+              <p className="text-[13px]">
+                {whenLabel(m.date, m.time, intake.timeline.timezone)}
+                {m.minutes ? (
+                  <span className="text-muted-foreground"> · {m.minutes} min</span>
+                ) : null}
+              </p>
+            ) : (
+              <p className="text-[12px] text-amber-800 dark:text-amber-300">
+                Not on the calendar yet · the plan says {shortDay(m.date)}.
+              </p>
+            )}
+          </>
+        ) : (
+          <p className="mt-1.5 text-[13px] text-muted-foreground">No meetings on the plan yet.</p>
+        )}
+      </section>
+
+      <section
+        id="current-implementation-journey"
+        className="overflow-hidden rounded-md border border-border bg-card"
+        aria-label="Implementation journey"
+      >
+        <Stepper
+          stages={canonicalStages}
+          current={currentInCanon}
+          shown={shown}
+          onShow={(k) => {
+            setViewing(k === currentInCanon ? null : k);
+            setManual(null);
+          }}
+        />
+        <StageHistory shown={shown} history={deal.stage_history} />
+        {stage.tasks.length > 0 ? (
+          <ol className="divide-y divide-border">
+            {stage.tasks.map((t, i) => (
+              <TaskRow
+                key={t.key}
+                n={i + 1}
+                task={t}
+                open={openTask?.key === t.key}
+                onOpen={() => setManual({ key: t.key, wasDone: t.done })}
+              >
+                <TaskBody task={t} deal={deal} intake={intake} editable={editable} />
+              </TaskRow>
+            ))}
+          </ol>
+        ) : (
+          <p className="px-4 py-3 text-[13px] text-muted-foreground">
+            Nothing to do yet at this stage.
+          </p>
+        )}
+        <StageGuidancePanel shown={shown} />
+      </section>
+
+      <SolutionsCard deal={deal} editable={editable} />
+    </div>
+  );
 }
 
 /**
@@ -449,6 +766,8 @@ function stageFooter(
       return path === "new_logo"
         ? "Gate: Ready for Kickoff — the handoff complete, the customer ready, the AE answered, the prep done and all three meetings booked."
         : "Gate: Ready for Kickoff — the handoff complete, the customer ready, the AE answered, the cadence on and the kickoff booked.";
+    case "kickoff":
+      return "Gate: Kickoff held — the kickoff call happened.";
     case "get_it_working":
       return "Gate: Working end to end — Stage 1 held, the plan and dates agreed, one submission end to end.";
     case "make_it_yours":
@@ -617,6 +936,12 @@ export function TaskBody({
       return <BookCoreBody deal={deal} intake={intake} editable={editable} />;
     case "handoff":
       return <HandoffTaskBody task={task} />;
+    case "intake":
+      return <IntakeCompleteBody deal={deal} intake={intake} editable={editable} />;
+    case "process_understanding":
+      return <ProcessUnderstandingBody deal={deal} intake={intake} editable={editable} />;
+    case "process_call":
+      return <ProcessCallBody deal={deal} intake={intake} editable={editable} />;
     case "solution":
       return (
         <p className="text-[12px] text-muted-foreground">
@@ -649,6 +974,133 @@ function HandoffTaskBody({ task }: { task: FlowTask }) {
       >
         Open the handoff <ArrowRight className="h-3 w-3" />
       </button>
+    </div>
+  );
+}
+
+function IntakeCompleteBody({
+  deal,
+  intake,
+  editable,
+}: {
+  deal: DealData;
+  intake: IntakeAnswers;
+  editable: boolean;
+}) {
+  const tick = useHandoffTick(deal.account.id);
+  const done = tick.isOn("intake_complete", Boolean(intake.handoff_tasks["intake_complete"]));
+  return (
+    <div className="space-y-2">
+      <DoneButton
+        done={done}
+        label="Mark the intake complete"
+        pending={tick.isPending}
+        disabled={!editable}
+        onClick={() => tick.mutate({ key: "intake_complete", on: !done })}
+      />
+      {tick.error ? (
+        <p role="alert" className="text-[12px] text-destructive">
+          {tick.error}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * The TIS's own call, captured either way so how often the intake is enough
+ * is reportable later. Yes needs no more; No adds the Process Call task.
+ */
+function ProcessUnderstandingBody({
+  deal,
+  intake,
+  editable,
+}: {
+  deal: DealData;
+  intake: IntakeAnswers;
+  editable: boolean;
+}) {
+  const qc = useQueryClient();
+  const save = useServerFn(saveIntake);
+  const value = intake.handoff_tasks["process_understanding"] ?? null;
+  const m = useMutation({
+    mutationFn: (v: "yes" | "no") =>
+      save({
+        data: {
+          dealId: deal.account.id,
+          patch: { handoff_tasks: { process_understanding: v } },
+        } as never,
+      }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["deal", deal.account.id] });
+    },
+  });
+  return (
+    <div className="space-y-2">
+      <div className="flex flex-wrap gap-2">
+        <button
+          type="button"
+          disabled={!editable || m.isPending}
+          onClick={() => m.mutate("yes")}
+          className={cn(
+            "inline-flex h-8 items-center gap-1.5 rounded-sm px-3 text-[12px] font-medium disabled:opacity-50",
+            value === "yes"
+              ? "bg-primary text-primary-foreground"
+              : "border border-border hover:bg-muted",
+          )}
+        >
+          {value === "yes" ? <Check className="h-3.5 w-3.5" strokeWidth={3} /> : null}
+          Yes — enough to prepare
+        </button>
+        <button
+          type="button"
+          disabled={!editable || m.isPending}
+          onClick={() => m.mutate("no")}
+          className={cn(
+            "inline-flex h-8 items-center gap-1.5 rounded-sm px-3 text-[12px] font-medium disabled:opacity-50",
+            value === "no"
+              ? "bg-primary text-primary-foreground"
+              : "border border-border hover:bg-muted",
+          )}
+        >
+          {value === "no" ? <Check className="h-3.5 w-3.5" strokeWidth={3} /> : null}
+          No — hold a Process Call
+        </button>
+      </div>
+      {m.isError ? (
+        <p role="alert" className="text-[12px] text-destructive">
+          {(m.error as Error).message}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+function ProcessCallBody({
+  deal,
+  intake,
+  editable,
+}: {
+  deal: DealData;
+  intake: IntakeAnswers;
+  editable: boolean;
+}) {
+  const tick = useHandoffTick(deal.account.id);
+  const done = tick.isOn("process_call_held", Boolean(intake.handoff_tasks["process_call_held"]));
+  return (
+    <div className="space-y-2">
+      <DoneButton
+        done={done}
+        label="Mark the Process Call held"
+        pending={tick.isPending}
+        disabled={!editable}
+        onClick={() => tick.mutate({ key: "process_call_held", on: !done })}
+      />
+      {tick.error ? (
+        <p role="alert" className="text-[12px] text-destructive">
+          {tick.error}
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -1291,11 +1743,11 @@ export function KickoffBody({
             : ""}.{" "}
           <span className="text-foreground">
             {deal.account.stage === "prospect" || deal.account.stage === "negotiate"
-              ? "Next: mark the deal Closed Won at the top — it goes on to Get it working once Pre-Kickoff is done."
+              ? "Next: mark the deal Closed Won at the top — it goes on to Kickoff once Pre-Kickoff is done."
               : deal.account.stage === "closed_won"
                 ? "Next: finish the Closed Won tasks — the deal then moves on through Pre-Kickoff."
                 : deal.account.stage === "onboarding_kickoff"
-                  ? "Moving the deal to Get it working once Pre-Kickoff's gate is met…"
+                  ? "Moving the deal to Kickoff once Pre-Kickoff's gate is met…"
                   : "Next: send the invite below, then run the call."}
           </span>
         </div>

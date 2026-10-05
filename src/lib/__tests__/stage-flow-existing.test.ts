@@ -14,47 +14,39 @@ const input = (path: string) => ({
 });
 
 describe("Pre-kickoff on an existing account", () => {
-  it("books all three core meetings, like a new logo, and has no internal prep task", () => {
+  it("has the same Intake & Process tasks as a new logo: intake, a starting solution, the process-call decision, then Kickoff only", () => {
     const pk = stageFlow(input("existing")).stages.find((s) => s.key === "pre_kickoff")!;
-    // The handoff's two checks come first, then the pre-kickoff work.
     expect(pk.tasks.map((t) => t.action)).toEqual([
-      "handoff",
-      "handoff",
-      "reply_ae",
-      "cadence",
-      "book_core",
-    ]);
-    expect(pk.tasks.find((t) => t.action === "book_core")!.label).toBe(
-      "Book all three core meetings",
-    );
-  });
-
-  it("a new logo also prepares before Stage 1; a Device Magic conversion books one call", () => {
-    const nl = stageFlow(input("new_logo")).stages.find((s) => s.key === "pre_kickoff")!;
-    expect(nl.tasks.map((t) => t.action)).toEqual([
-      "handoff",
-      "handoff",
-      "reply_ae",
-      "cadence",
+      "intake",
       "prep",
-      "book_core",
-    ]);
-    const dm = stageFlow(input("dm_conversion")).stages.find((s) => s.key === "pre_kickoff")!;
-    expect(dm.tasks.map((t) => t.action)).toEqual([
-      "handoff",
-      "handoff",
-      "reply_ae",
-      "cadence",
+      "process_understanding",
       "kickoff",
     ]);
   });
 
-  it("does not move to Onboarding until all three are booked", () => {
+  it("applies the same Intake & Process gate to a new logo and a Device Magic conversion alike", () => {
+    const nl = stageFlow(input("new_logo")).stages.find((s) => s.key === "pre_kickoff")!;
+    expect(nl.tasks.map((t) => t.action)).toEqual([
+      "intake",
+      "prep",
+      "process_understanding",
+      "kickoff",
+    ]);
+    const dm = stageFlow(input("dm_conversion")).stages.find((s) => s.key === "pre_kickoff")!;
+    expect(dm.tasks.map((t) => t.action)).toEqual([
+      "intake",
+      "prep",
+      "process_understanding",
+      "kickoff",
+    ]);
+  });
+
+  it("does not move to Kickoff until intake, the starting solution and the process-call decision are all in, on top of the booking", () => {
     const partly = stageFlow({
       ...input("existing"),
       intake: {
         path: "existing",
-        handoff_tasks: { reply_ae: "2026-09-25T00:00:00Z", cadence: "2026-09-25T00:00:00Z" },
+        handoff_tasks: { intake_complete: "2026-09-25T00:00:00Z" },
         timeline: {
           overrides: { kickoff: "2026-09-29" },
           times: { kickoff: "10:00" },
@@ -67,27 +59,33 @@ describe("Pre-kickoff on an existing account", () => {
       ...input("existing"),
       intake: {
         path: "existing",
-        handoff: {
-          completed_at: "2026-09-22T15:00:00Z",
-          customer_ready_override: { at: "2026-09-22T15:00:00Z", by: null, reason: "closing call" },
+        handoff_tasks: {
+          intake_complete: "2026-09-25T00:00:00Z",
+          prep_process: "x",
+          prep_form: "x",
+          prep_data: "x",
+          process_understanding: "yes",
         },
-        handoff_tasks: { reply_ae: "2026-09-25T00:00:00Z", cadence: "2026-09-25T00:00:00Z" },
         timeline: {
-          overrides: { kickoff: "2026-09-29", working: "2026-10-02", adjust: "2026-10-09" },
-          times: { kickoff: "10:00", working: "10:00", adjust: "10:00" },
+          overrides: { kickoff: "2026-09-29" },
+          times: { kickoff: "10:00" },
           timezone: "America/Chicago",
         },
       },
     });
-    expect(all.advanceTo).toBe("get_it_working");
+    expect(all.advanceTo).toBe("kickoff");
   });
 });
 
 describe("an existing account's Pre-kickoff", () => {
-  it("keeps the cadence optional: it never holds the plan", () => {
+  it("requires the Process Call, not just the decision, once the TIS says the intake was not enough", () => {
     const f = stageFlow({
       stage: "onboarding_kickoff",
-      intake: { path: "existing", existing: { form_final: false, builder: "us" } },
+      intake: {
+        path: "existing",
+        existing: { form_final: false, builder: "us" },
+        handoff_tasks: { process_understanding: "no" },
+      },
       owner: "Dana",
       gongReports: 1,
       hasSow: true,
@@ -95,7 +93,8 @@ describe("an existing account's Pre-kickoff", () => {
       hasLink: true,
     });
     const pk = f.stages.find((s) => s.key === "pre_kickoff")!;
-    expect(pk.tasks.find((t) => t.key === "cadence")!.optional).toBe(true);
+    expect(pk.tasks.map((t) => t.key)).toContain("process_call_held");
+    expect(pk.tasks.find((t) => t.key === "process_call_held")!.done).toBe(false);
   });
 
   it("books one walkthrough when the SOW is services only", () => {
@@ -118,10 +117,9 @@ describe("an existing account's Pre-kickoff", () => {
     });
     const pk = f.stages.find((s) => s.key === "pre_kickoff")!;
     expect(pk.tasks.map((t) => t.key)).toEqual([
-      "handoff",
-      "customer_ready",
-      "reply_ae",
-      "cadence",
+      "intake_complete",
+      "prep",
+      "process_understanding",
       "kickoff",
     ]);
     expect(pk.tasks.find((t) => t.key === "kickoff")!.label).toBe("Book the services walkthrough");

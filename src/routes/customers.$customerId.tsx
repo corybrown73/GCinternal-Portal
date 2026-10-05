@@ -10,7 +10,6 @@ import { PlanFromDeal } from "@/components/plan-section";
 
 import { CustomerLogo } from "@/components/customer-logo";
 import { PastImplementations } from "@/components/past-implementations";
-import { DealRecord } from "@/components/deal-record";
 import { HelpPicksPanel } from "@/components/help-articles-panel";
 import { EditCustomerDialog } from "@/components/edit-customer-dialog";
 import { HandoffChipForDeal } from "@/components/handoff-chip";
@@ -18,7 +17,7 @@ import { canEditDeal, useProfile } from "@/lib/auth";
 import { dealQuery } from "@/lib/deal-query";
 import { useQuery } from "@tanstack/react-query";
 import { AddServicesButton } from "@/components/onboarding-pulse";
-import { DealStageFlow } from "@/components/stage-flow";
+import { CurrentImplementationTab } from "@/components/stage-flow";
 import { ImplementationWorkspace } from "@/components/implementation-workspace";
 import { HealthNote } from "@/components/health-note";
 import { PlanPanel } from "@/components/plan-panel";
@@ -138,7 +137,7 @@ import { cn } from "@/lib/utils";
 import { When } from "@/components/when";
 import { errorMessage } from "@/lib/error-message";
 
-const TABS = ["overview", "plan", "record", "resources", "details"] as const;
+const TABS = ["overview", "implementation", "resources", "details"] as const;
 export type TabId = (typeof TABS)[number];
 /** The tabs this page used to have. An old link lands on Details, where that content now lives. */
 const LEGACY_TAB_IDS = [
@@ -157,17 +156,15 @@ export type AnyTabId = TabId | LegacyTabId;
 function resolveTab(raw: string | undefined): TabId {
   if (!raw) return "overview";
   if (TABS.includes(raw as TabId)) return raw as TabId;
-  // The workspace was briefly its own tab; it is the overview now. The
-  // Record tab was keyed "prekickoff" for a while; old links still land.
-  if (raw === "implementation") return "overview";
-  if (raw === "prekickoff") return "record";
+  // Plan and Record were folded into Current Implementation. The Record
+  // tab was keyed "prekickoff" for a while before that; old links still land.
+  if (raw === "plan" || raw === "record" || raw === "prekickoff") return "implementation";
   return LEGACY_TABS.has(raw) ? "details" : "overview";
 }
 
 const TAB_LABEL: Record<TabId, string> = {
   overview: "Overview",
-  plan: "Plan",
-  record: "Record",
+  implementation: "Current Implementation",
   resources: "Resources",
   details: "Details",
 };
@@ -480,7 +477,7 @@ function Customer360Page() {
         {impl.deal_id ? null : <HeaderTrackers record={record} customerId={customerId} tab={tab} />}
 
         <nav className="flex flex-wrap gap-px border-t border-border px-4">
-          {TABS.filter((t) => t !== "plan" || impl.deal_id).map((t) => (
+          {TABS.map((t) => (
             <Link
               key={t}
               to="/customers/$customerId"
@@ -505,15 +502,14 @@ function Customer360Page() {
       {tab === "overview" && impl.deal_id ? (
         <ImplementationWorkspace record={record} customerId={customerId} />
       ) : null}
-      {tab === "record" ? (
-        <div className="space-y-4 px-6 py-4">
-          {impl.deal_id ? <DealStageFlow dealId={impl.deal_id} /> : null}
+      {tab === "implementation" ? (
+        <div className="px-6 py-4">
           {impl.deal_id ? (
-            <PrekickoffTab dealId={impl.deal_id} />
+            <CurrentImplementationTab dealId={impl.deal_id} ownerName={impl.owner_name} />
           ) : (
             <p className="text-[13px] text-muted-foreground">
-              This implementation was not started from a deal, so there is no pre-kickoff record for
-              it.
+              This implementation was not started from a deal, so it has no implementation journey
+              to show here.
             </p>
           )}
         </div>
@@ -526,7 +522,7 @@ function Customer360Page() {
         <div
           className={cn(
             "grid items-start gap-4 px-6 py-4 lg:grid-cols-[minmax(0,1fr)_320px]",
-            (tab === "record" || (tab === "overview" && impl.deal_id)) && "hidden",
+            (tab === "implementation" || (tab === "overview" && impl.deal_id)) && "hidden",
           )}
         >
           <div className="min-w-0 space-y-3">
@@ -534,7 +530,6 @@ function Customer360Page() {
             {tab === "overview" && !impl.deal_id ? (
               <OverviewTab record={record} customerId={customerId} />
             ) : null}
-            {tab === "plan" ? <OverviewTab record={record} customerId={customerId} /> : null}
             {tab === "resources" ? <ResourcesTab record={record} /> : null}
             {tab === "details" && impl.deal_id ? (
               <HeaderTrackers
@@ -607,26 +602,6 @@ function HeaderTrackers({
       ) : null}
     </>
   );
-}
-
-/**
- * The deal, inside the customer's page. The brief, the intake, what we are
- * building and the welcome deck are the first tab of the account, not a
- * separate screen somebody has to find their way back from.
- */
-function PrekickoffTab({ dealId }: { dealId: string }) {
-  const q = useQuery(dealQuery(dealId));
-  if (q.isPending) {
-    return <p className="text-[13px] text-muted-foreground">Loading the pre-kickoff record…</p>;
-  }
-  if (!q.data) {
-    return (
-      <p className="text-[13px] text-muted-foreground">
-        The deal behind this implementation is gone.
-      </p>
-    );
-  }
-  return <DealRecord deal={q.data} embedded />;
 }
 
 /**

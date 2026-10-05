@@ -3017,6 +3017,7 @@ export type Database = {
         | "closed_won"
         | "field_fusion_setup"
         | "onboarding_kickoff"
+        | "kickoff"
         | "get_it_working"
         | "make_it_yours"
         | "make_it_run"
@@ -3172,6 +3173,7 @@ export const Constants = {
         "closed_won",
         "field_fusion_setup",
         "onboarding_kickoff",
+        "kickoff",
         "get_it_working",
         "make_it_yours",
         "make_it_run",

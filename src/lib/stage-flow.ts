@@ -69,6 +69,7 @@ export type FlowStageKey =
   | "closed_won"
   | "field_fusion"
   | "pre_kickoff"
+  | "kickoff"
   | "get_it_working"
   | "make_it_yours"
   | "make_it_run"
@@ -86,7 +87,8 @@ export const FLOW_STAGES: ReadonlyArray<{ key: FlowStageKey; stage: AccountStage
     { key: "negotiate", stage: "negotiate", label: "Negotiate & Finalize" },
     { key: "closed_won", stage: "closed_won", label: "Closed Won" },
     { key: "field_fusion", stage: "field_fusion_setup", label: "Field Fusion setup" },
-    { key: "pre_kickoff", stage: "onboarding_kickoff", label: "Pre-Kickoff" },
+    { key: "pre_kickoff", stage: "onboarding_kickoff", label: "Intake & Process" },
+    { key: "kickoff", stage: "kickoff", label: "Kickoff" },
     { key: "get_it_working", stage: "get_it_working", label: "Get it working" },
     { key: "make_it_yours", stage: "make_it_yours", label: "Make it yours" },
     { key: "make_it_run", stage: "make_it_run", label: "Make it run" },
@@ -98,6 +100,21 @@ export const ONBOARDING_FLOW_KEYS: ReadonlyArray<FlowStageKey> = [
   "get_it_working",
   "make_it_yours",
   "make_it_run",
+];
+
+/**
+ * The six-stage canonical journey Customer 360's Current Implementation tab
+ * shows: Intake & Process through Implementation Complete. Prospect,
+ * Negotiate & Finalize, Closed Won and Field Fusion setup precede it and are
+ * Sales' and the handoff's stages, not the implementation's.
+ */
+export const CANONICAL_JOURNEY_KEYS: ReadonlyArray<FlowStageKey> = [
+  "pre_kickoff",
+  "kickoff",
+  "get_it_working",
+  "make_it_yours",
+  "make_it_run",
+  "complete",
 ];
 
 /** A stage whose tasks are the plan's steps: the three middle ones and Complete. */
@@ -117,6 +134,7 @@ export function isWorkingStageKey(key: FlowStageKey | null | undefined): boolean
  */
 export const STAGE_GATE: Partial<Record<FlowStageKey, string>> = {
   pre_kickoff: "Ready for Kickoff",
+  kickoff: "Kickoff held",
   get_it_working: "Working end to end",
   make_it_yours: "Ready to run",
   make_it_run: "Operational Go-Live",
@@ -140,6 +158,9 @@ export type TaskAction =
   | "kickoff"
   | "field_fusion"
   | "handoff"
+  | "intake"
+  | "process_understanding"
+  | "process_call"
   | "solution"
   | "tick"
   | "graduate";
@@ -212,7 +233,13 @@ export function readingInFlight(r: IntakeAnswers["ai_reading"], now = Date.now()
   return r?.status === "running" && now - Date.parse(r.started_at) < READING_STALE_MS;
 }
 
-export const PRE_KICKOFF_TASKS = ["reply_ae", "cadence", "kickoff"] as const;
+/** The tasks always present in Intake & Process; a Process Call is added only when needed. */
+export const PRE_KICKOFF_TASKS = [
+  "intake_complete",
+  "prep",
+  "process_understanding",
+  "kickoff",
+] as const;
 
 function flowStageOf(stage: string): FlowStageKey | null {
   switch (stage) {
@@ -226,6 +253,8 @@ function flowStageOf(stage: string): FlowStageKey | null {
       return "field_fusion";
     case "onboarding_kickoff":
       return "pre_kickoff";
+    case "kickoff":
+      return "kickoff";
     case "get_it_working":
       return "get_it_working";
     case "make_it_yours":
@@ -314,10 +343,34 @@ function closedWonTasks(
       action: "review",
       locked: before.length ? `Needs ${joinAnd(before)} first` : null,
     },
+    // The Sales handoff is Closed Won's boundary (the operating model): what
+    // was bought, the outcome, what was promised, the contacts, the timing —
+    // complete before the deal leaves Sales. Anyone fills it (AE, AM, TIS or
+    // the AI reading); the chip on the board, the record and the workspace
+    // reads the same record (src/lib/sales-handoff.ts). Field Fusion has its
+    // own handoff from the setup owner.
+    ...(a.path === "field_fusion" ? [] : [salesHandoffTask(a)]),
   ];
 }
 
-/** The internal prep before Stage 1 (the playbook's "come prepared"). */
+function salesHandoffTask(a: IntakeAnswers): FlowTask {
+  const c = handoffChecks(a);
+  return {
+    key: "handoff",
+    label: "Sales handoff complete",
+    hint: "What was bought, the outcome, what was promised (or that nothing was), the contacts and the timing — on the handoff, from Sales, the AI reading or you.",
+    done: c.salesComplete.done,
+    summary: c.salesComplete.done
+      ? a.handoff.completed_at
+        ? `Marked complete ${stampDay(a.handoff.completed_at)}`
+        : "Every required answer is in"
+      : missingLine(c.salesComplete.missing),
+    action: "handoff",
+    locked: null,
+  };
+}
+
+/** The starting solution, prepared from the Gong brief, the SOW and the customer's intake. */
 export const PREP_ITEMS = [
   {
     key: "prep_process",
@@ -327,7 +380,7 @@ export const PREP_ITEMS = [
   {
     key: "prep_form",
     label: "Starting form (POC)",
-    hint: "A first version of their form built from the calls, so Stage 1 validates instead of starting blank.",
+    hint: "A first version of their form built from the brief, the SOW and their intake, so Kickoff validates instead of starting blank.",
   },
   {
     key: "prep_data",
@@ -336,140 +389,115 @@ export const PREP_ITEMS = [
   },
 ] as const;
 
-/** The three core meetings, booked at the start (the playbook's rule). */
+/**
+ * The three core meetings. No longer booked together here — Pre-Kickoff
+ * books only Kickoff — but the plan still names them, and the booking
+ * history for an account that booked all three before this change still
+ * reads by these labels.
+ */
 export const CORE_MEETINGS = [
   { key: "kickoff", label: "Stage 1 — Get it working" },
   { key: "working", label: "Stage 2 — Make it yours" },
   { key: "adjust", label: "Stage 3 — Make it run" },
 ] as const;
 
+/**
+ * Intake & Process: the TIS prepares for Kickoff from what is already known
+ * — the Gong brief and the SOW (both from Closed Won, read as context, not
+ * re-checked here), and the customer's own GoCanvas-native Pre-Kickoff
+ * Intake. A Process Call is booked only when that is not enough. Field
+ * Fusion has its own handoff from the setup owner and skips straight to
+ * booking Kickoff.
+ */
 function preKickoffTasks(a: IntakeAnswers): FlowTask[] {
-  // The playbook's three core meetings: a new logo and an existing account
-  // alike (its form plan runs the same three calls). The rest book one call
-  // here and set the other times on the plan.
-  const rest =
-    a.path === "new_logo" || a.path === "existing" ? playbookPreKickoff(a) : classicPreKickoff(a);
-  return [...handoffTasks(a), ...rest];
-}
-
-/**
- * Pre-Kickoff's two checks (the operating model): the Sales handoff is
- * complete, and the customer is ready. Different people own them and they
- * fail for different reasons, so they are two ticks, read from the one
- * handoff record (src/lib/sales-handoff.ts). Field Fusion has its own
- * handoff from the setup owner and skips these.
- */
-function handoffTasks(a: IntakeAnswers): FlowTask[] {
-  if (a.path === "field_fusion") return [];
-  const c = handoffChecks(a);
-  return [
-    {
-      key: "handoff",
-      label: "Sales handoff complete",
-      hint: "What was bought, the outcome, what was promised (or that nothing was), the contacts and the timing — on the handoff, from Sales, the AI reading or you.",
-      done: c.salesComplete.done,
-      summary: c.salesComplete.done
-        ? a.handoff.completed_at
-          ? `Marked complete ${stampDay(a.handoff.completed_at)}`
-          : "Every required answer is in"
-        : missingLine(c.salesComplete.missing),
-      action: "handoff",
-      locked: null,
-    },
-    {
-      key: "customer_ready",
-      label: "Customer ready for kickoff",
-      hint: "We have what we need from them: the process today, who is in the field, who will be in the room. Send them the questions from the handoff, or go ahead and say why.",
-      done: c.customerReady.done,
-      summary: c.customerReady.done
-        ? c.customerReady.overridden
-          ? `Going ahead: ${a.handoff.customer_ready_override!.reason}`
-          : "Their answers are in"
-        : c.status === "sent"
-          ? `With the customer since ${stampDay(a.handoff.sent_to_customer_at!)} · ${missingLine(c.customerReady.missing) ?? ""}`
-          : missingLine(c.customerReady.missing),
-      action: "handoff",
-      locked: null,
-    },
-  ];
-}
-
-/**
- * Pre-kickoff on the playbook: the AE, the cadence, prep (a new logo — an
- * existing account's preparation is the customer's homework), all three
- * meetings booked.
- */
-function playbookPreKickoff(a: IntakeAnswers): FlowTask[] {
-  const [reply, cadenceTask, oneCall] = classicPreKickoff(a);
-  // An existing customer already talks to us: the cadence is there if the
-  // reply goes quiet, never a gate on their plan.
-  const cadence: FlowTask =
-    a.path === "existing"
-      ? {
-          ...cadenceTask!,
-          optional: true,
-          hint: "Optional for an existing customer — use it only if the reply goes quiet.",
-        }
-      : cadenceTask!;
-  // Services and nothing to build: one walkthrough, not three form meetings.
-  if (isServicesOnly(a)) {
-    return [
-      reply!,
-      cadence,
-      {
-        ...oneCall!,
+  if (a.path === "field_fusion") return [kickoffBookingTask(a)];
+  const t = a.handoff_tasks;
+  const customerIntake = handoffChecks(a);
+  const prepDone = PREP_ITEMS.filter((p) => t[p.key]).length;
+  // Services and nothing to build: one walkthrough, not a solution to prepare.
+  const booking = isServicesOnly(a)
+    ? {
+        ...kickoffBookingTask(a),
         label: "Book the services walkthrough",
         hint: "One call: what was bought, who does what, and the dates. Every service starts the day after it.",
-      },
-    ];
-  }
-  const t = a.handoff_tasks;
-  const prepDone = PREP_ITEMS.filter((p) => t[p.key]).length;
-  const booked = CORE_MEETINGS.filter(
-    (m) => a.timeline.overrides[m.key] && a.timeline.times[m.key],
-  ).length;
-  const prep: FlowTask[] =
-    a.path === "new_logo"
-      ? [
-          {
-            key: "prep",
-            label: "Stage 1 readiness check",
-            hint: "Three things in hand before the call, so Stage 1 validates prepared work instead of discovering it.",
-            done: prepDone === PREP_ITEMS.length,
-            summary:
-              prepDone === PREP_ITEMS.length
-                ? "Ready: process map, starting form, one real list"
-                : `${prepDone} of ${PREP_ITEMS.length} in hand`,
-            action: "prep",
-            locked: null,
-          },
-        ]
-      : [];
+      }
+    : kickoffBookingTask(a);
   return [
-    reply!,
-    cadence,
-    ...prep,
     {
-      key: "kickoff",
-      label: "Book all three core meetings",
-      hint: `Stage 1, 2 and 3 on the calendar now, ${a.timeline.session_minutes ?? 60} minutes each — the structure that keeps the 30 days from drifting.`,
-      done: booked === CORE_MEETINGS.length,
-      summary:
-        booked === CORE_MEETINGS.length
-          ? CORE_MEETINGS.map((m) =>
-              whenLabel(
-                a.timeline.overrides[m.key]!,
-                a.timeline.times[m.key]!,
-                a.timeline.timezone,
-              ),
-            ).join(" · ")
-          : booked
-            ? `${booked} of 3 booked`
+      key: "intake_complete",
+      label: "Customer Pre-Kickoff Intake completed",
+      hint: "Their answers — on their welcome page, or in GoCanvas: the process today, who is in the field, who will be in the room. Tick it if they answered elsewhere.",
+      // Their answers on the welcome page (src/lib/sales-handoff.ts) count
+      // without a tick; a tick records an intake that came in another way.
+      done: Boolean(t["intake_complete"]) || customerIntake.customerReady.done,
+      summary: t["intake_complete"]
+        ? `Done ${stampDay(t["intake_complete"])}`
+        : customerIntake.customerReady.done
+          ? customerIntake.customerReady.overridden
+            ? `Going ahead: ${a.handoff.customer_ready_override!.reason}`
+            : "Their answers are in"
+          : customerIntake.status === "sent"
+            ? `With the customer since ${stampDay(a.handoff.sent_to_customer_at!)}`
             : null,
-      action: "book_core",
+      action: "intake",
+      locked: null,
+    },
+    {
+      key: "prep",
+      label: "Starting solution prepared",
+      hint: "A first version built from the brief, the SOW and their intake, so Kickoff validates instead of starting blank.",
+      done: prepDone === PREP_ITEMS.length,
+      summary:
+        prepDone === PREP_ITEMS.length
+          ? "Ready: process map, starting form, one real list"
+          : prepDone
+            ? `${prepDone} of ${PREP_ITEMS.length} in hand`
+            : null,
+      action: "prep",
+      locked: null,
+    },
+    ...processCallTasks(a),
+    booking,
+  ];
+}
+
+/**
+ * "Do you have enough process understanding to prepare for Kickoff?" — the
+ * TIS's own call, captured either way (so how often the intake is enough is
+ * reportable later). Yes needs no more; No adds the Process Call itself,
+ * required before the gate clears.
+ */
+function processCallTasks(a: IntakeAnswers): FlowTask[] {
+  const t = a.handoff_tasks;
+  const decision = t["process_understanding"];
+  const out: FlowTask[] = [
+    {
+      key: "process_understanding",
+      label: "Enough process understanding to prepare for Kickoff?",
+      hint: "From the brief, the SOW and their intake. Yes moves on; No books a Process Call first.",
+      done: decision === "yes" || decision === "no",
+      summary:
+        decision === "yes"
+          ? "Yes — no Process Call needed"
+          : decision === "no"
+            ? "No — Process Call required"
+            : null,
+      action: "process_understanding",
       locked: null,
     },
   ];
+  if (decision === "no") {
+    out.push({
+      key: "process_call_held",
+      label: "Hold the Process Call",
+      hint: "The call that fills in what the intake did not answer.",
+      done: Boolean(t["process_call_held"]),
+      summary: t["process_call_held"] ? `Done ${stampDay(t["process_call_held"])}` : null,
+      action: "process_call",
+      locked: null,
+    });
+  }
+  return out;
 }
 
 /**
@@ -530,40 +558,20 @@ export function zoneShort(zone: string, isoDate: string): string {
   }
 }
 
-function classicPreKickoff(a: IntakeAnswers): FlowTask[] {
-  const t = a.handoff_tasks;
+/** Only Kickoff gets booked here — no fixed number of meetings. */
+function kickoffBookingTask(a: IntakeAnswers): FlowTask {
   const kickoffDate = a.timeline.overrides["kickoff"] ?? null;
   const kickoffTime = a.timeline.times["kickoff"] ?? null;
   const booked = Boolean(kickoffDate && kickoffTime);
-  return [
-    {
-      key: "reply_ae",
-      label: "Reply to the AE's email",
-      hint: "Reply-all: introduce yourself, share the welcome page, offer two kickoff times.",
-      done: Boolean(t["reply_ae"]),
-      summary: t["reply_ae"] ? `Replied ${stampDay(t["reply_ae"])}` : null,
-      action: "reply_ae",
-      locked: null,
-    },
-    {
-      key: "cadence",
-      label: "Add them to the kickoff cadence in Salesloft",
-      hint: "Calls and emails on a schedule until the first meeting is on the calendar, so nothing goes quiet. The cadence is named below.",
-      done: Boolean(t["cadence"]),
-      summary: t["cadence"] ? `In the cadence since ${stampDay(t["cadence"])}` : null,
-      action: "cadence",
-      locked: null,
-    },
-    {
-      key: "kickoff",
-      label: "Book the kickoff call",
-      hint: "The first call. The date and time go on the plan and every date after it follows.",
-      done: booked,
-      summary: booked ? whenLabel(kickoffDate!, kickoffTime!, a.timeline.timezone) : null,
-      action: "kickoff",
-      locked: null,
-    },
-  ];
+  return {
+    key: "kickoff",
+    label: "Book the kickoff call",
+    hint: "The first call. The date and time go on the plan and every date after it follows.",
+    done: booked,
+    summary: booked ? whenLabel(kickoffDate!, kickoffTime!, a.timeline.timezone) : null,
+    action: "kickoff",
+    locked: null,
+  };
 }
 
 /**
@@ -805,19 +813,21 @@ function onboardingTasks(a: IntakeAnswers, t: Timeline | null | undefined): Flow
  * new logo, an existing account, a conversion and training alike.
  */
 export type TasksByStage = {
+  kickoff: FlowTask[];
   get_it_working: FlowTask[];
   make_it_yours: FlowTask[];
   make_it_run: FlowTask[];
   complete: FlowTask[];
 };
 
-const GIW_KEYS = new Set(["kickoff", "between_1"]);
+const GIW_KEYS = new Set(["between_1"]);
 const MIY_KEYS = new Set(["working", "between_2"]);
 const MIR_KEYS = new Set(["adjust", "live", "activate"]);
 const COMPLETE_KEYS = new Set(["closeout"]);
 
 export function tasksByStage(a: IntakeAnswers, t: Timeline | null | undefined): TasksByStage {
   const out: TasksByStage = {
+    kickoff: [],
     get_it_working: [],
     make_it_yours: [],
     make_it_run: [],
@@ -842,7 +852,8 @@ export function tasksByStage(a: IntakeAnswers, t: Timeline | null | undefined): 
     ...extra,
   });
   for (const task of onboardingTasks(a, t)) {
-    if (GIW_KEYS.has(task.key)) out.get_it_working.push(task);
+    if (task.key === "kickoff") out.kickoff.push(task);
+    else if (GIW_KEYS.has(task.key)) out.get_it_working.push(task);
     else if (MIY_KEYS.has(task.key) || task.key.startsWith("func_")) out.make_it_yours.push(task);
     else if (MIR_KEYS.has(task.key) || task.key.startsWith("svc:")) out.make_it_run.push(task);
     else if (COMPLETE_KEYS.has(task.key) || task.key.startsWith("grad_")) out.complete.push(task);
@@ -1000,6 +1011,15 @@ export function stageFlow(input: StageFlowInput): StageFlow {
         ]
       : []),
     { key: "pre_kickoff", label: flowLabel("pre_kickoff"), tasks: pk, done: allDone(pk) },
+    // Kickoff: the call itself, booked by Pre-Kickoff and held here. Without
+    // a plan there is nothing to judge it by, so — like the three middle
+    // stages below — it is not passed through on that account.
+    {
+      key: "kickoff",
+      label: flowLabel("kickoff"),
+      tasks: ob.kickoff,
+      done: allDone(ob.kickoff, hasPlan),
+    },
     // The operating model's three middle stages. A stage with nothing to do
     // for this setup (a services-only add-on has no Stage 2) passes on its own.
     {
@@ -1036,6 +1056,7 @@ export function stageFlow(input: StageFlowInput): StageFlow {
   let advanceTo: AccountStage | null = null;
   const rail: FlowStageKey[] = [
     "pre_kickoff",
+    "kickoff",
     "get_it_working",
     "make_it_yours",
     "make_it_run",
@@ -1130,6 +1151,8 @@ export const STAGE_LIMITS: Readonly<Record<string, { warn: number; escalate: num
   closed_won: { warn: 2, escalate: 4 },
   field_fusion_setup: { warn: 3, escalate: 5 },
   onboarding_kickoff: { warn: 3, escalate: 5 },
+  // Kickoff itself should be brief: booked and held within days.
+  kickoff: { warn: 3, escalate: 5 },
   // The three stages inside the 15-business-day plan; placeholders until the
   // team sets them (operating model: "target durations by stage" to validate).
   get_it_working: { warn: 5, escalate: 8 },

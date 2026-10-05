@@ -162,7 +162,9 @@ export function workspaceFor(input: WorkspaceInput): Workspace {
   // WHERE ARE WE.
   const closed = current !== null && current !== "prospect" && current !== "negotiate";
   const day =
-    timeline && closed && (current === "pre_kickoff" || ONBOARDING_FLOW_KEYS.includes(current))
+    timeline &&
+    closed &&
+    (current === "pre_kickoff" || current === "kickoff" || ONBOARDING_FLOW_KEYS.includes(current))
       ? (() => {
           const c = dayCounter(timeline, today);
           return { label: c.label, detail: c.detail, state: c.state };
