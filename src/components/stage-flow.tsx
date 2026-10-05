@@ -8,6 +8,7 @@ import { FieldFusionGate } from "@/components/field-fusion-gate";
 import { AiSource, ReadingStatus } from "@/components/fill-from-sources";
 import { MeetingRecap } from "@/components/meeting-recap";
 import { ParkingLot } from "@/components/parking-lot";
+import { SolutionsCard } from "@/components/solutions-card";
 import { FactsStep, FlowStep, NotesIn, SowStep } from "@/components/intake-panel";
 import { assignDealFn, claimDealFn, getDealAssignment } from "@/lib/assignment.functions";
 import { MemberOptions } from "@/components/member-options";
@@ -24,6 +25,7 @@ import {
 } from "@/lib/intake-answers";
 import { closeDateFor, timelineFor } from "@/lib/onboarding-plan";
 import { coreWindowEnd, dayCounter, localIso, shortDay } from "@/lib/onboarding-timeline";
+import { getParkingLot } from "@/lib/parking-lot.functions";
 import { getWelcome } from "@/lib/welcome.functions";
 import { getKickoffCadence } from "@/lib/kickoff-cadence.functions";
 import { openPanel } from "@/lib/panel-open";
@@ -32,6 +34,7 @@ import type { AccountStage } from "@/lib/presale-stages";
 import { finishImplementation, moveDealStage, saveIntake } from "@/lib/presale.functions";
 import { ask } from "@/components/ui/ask";
 import {
+  CANONICAL_JOURNEY_KEYS,
   CORE_MEETINGS,
   DEAL_TYPES,
   bookMeetingPatch,
@@ -43,6 +46,7 @@ import {
   readingInFlight,
   stageFlow,
   stampDay,
+  whenLabel,
   type FlowStageKey,
   type FlowTask,
 } from "@/lib/stage-flow";
@@ -54,6 +58,7 @@ import { aeReplyDraft, googleCalendarLink } from "@/lib/ae-reply";
 import { customerLabel } from "@/lib/customer-labels";
 import { customerFacingName } from "@/lib/names";
 import { cn } from "@/lib/utils";
+import { shortMeeting, workspaceFor } from "@/lib/workspace";
 
 /**
  * The deal's stages as one checklist, at the top of the page.
@@ -447,6 +452,200 @@ export function DealStageFlow({ dealId }: { dealId: string }) {
   const q = useQuery(dealQuery(dealId));
   if (!q.data) return null;
   return <StageFlow deal={q.data} />;
+}
+
+/**
+ * Customer 360's Current Implementation tab: the canonical journey Intake &
+ * Process → Kickoff → Get It Working → Make It Yours → Make It Run →
+ * Implementation Complete, the current stage's tasks and Navigator
+ * guidance, the next customer meeting, and Technical Solutions running in
+ * parallel. Reads the same deal the full checklist and workspace read —
+ * nothing here is a second model, and nothing before Intake & Process (the
+ * Sales/handoff stages) shows on this rail.
+ */
+export function CurrentImplementationTab({
+  dealId,
+  ownerName,
+}: {
+  dealId: string;
+  ownerName: string | null;
+}) {
+  const { profile } = useProfile();
+  const editable = canEditDeal(profile?.role);
+  const q = useQuery(dealQuery(dealId));
+  const parking = useQuery({
+    queryKey: ["parking-lot", dealId],
+    queryFn: () => getParkingLot({ data: { dealId } }),
+  });
+  const welcome = useQuery({
+    queryKey: ["welcome", dealId],
+    queryFn: () => getWelcome({ data: { dealId } }),
+  });
+  const [today, setToday] = useState<string | null>(null);
+  useEffect(() => setToday(localIso()), []);
+  const [viewing, setViewing] = useState<FlowStageKey | null>(null);
+  const [manual, setManual] = useState<{ key: string; wasDone: boolean } | null>(null);
+
+  if (!q.data) return null;
+  const deal = q.data;
+  const intake = readIntake(deal.account.intake);
+  const nowIso = today ?? localIso();
+  const close = closeDateFor({
+    intake,
+    stageHistory: deal.stage_history,
+    wonStageKey: wonStage(deal.stages).key,
+    today: nowIso,
+  });
+  const timeline = timelineFor(intake, close.date);
+  const flow = stageFlow({
+    stage: deal.account.stage,
+    intake,
+    owner: ownerName,
+    gongReports: deal.gong_reports.length,
+    hasSow: Boolean(deal.sow_url),
+    hasBrief: deal.briefs.some((b) => b.status === "complete" && b.generator === "llm"),
+    hasLink: Boolean((deal.account as { welcome_share_url?: string | null }).welcome_share_url),
+    timeline,
+  });
+  const ws = workspaceFor({
+    flow,
+    intake,
+    timeline,
+    today: nowIso,
+    parkingLot: parking.data ?? [],
+    homeworkDone: welcome.data?.homeworkDone ?? {},
+    link: welcome.data
+      ? { sharedAt: welcome.data.sharedAt ?? null, openedAt: welcome.data.openedAt ?? null }
+      : null,
+  });
+
+  const canonicalStages = flow.stages.filter((s) => CANONICAL_JOURNEY_KEYS.includes(s.key));
+  const currentInCanon =
+    flow.current && CANONICAL_JOURNEY_KEYS.includes(flow.current) ? flow.current : null;
+
+  const shown = viewing ?? currentInCanon ?? "pre_kickoff";
+  const stage = canonicalStages.find((s) => s.key === shown) ?? canonicalStages[0]!;
+  const next = stage.tasks.find((t) => !t.done && !t.locked && !t.optional) ?? null;
+  const manualTask = manual ? stage.tasks.find((t) => t.key === manual.key) : undefined;
+  const openTask = manualTask && (manual!.wasDone || !manualTask.done) ? manualTask : next;
+
+  const m = ws.nextMeeting;
+
+  return (
+    <div className="space-y-4">
+      <section
+        className="rounded-md border border-border bg-card px-4 py-3"
+        aria-label="Implementation status"
+      >
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[12px]">
+          <span>
+            <span className="text-muted-foreground">Stage</span>{" "}
+            <b className="font-semibold">{ws.where.stageLabel}</b>
+          </span>
+          {ws.where.day ? (
+            <span title={ws.where.day.detail} className="text-foreground">
+              {ws.where.day.label}
+            </span>
+          ) : null}
+          {ws.where.target ? (
+            <span className="text-muted-foreground">
+              Target: {ws.where.target.word} {shortDay(ws.where.target.date)}
+            </span>
+          ) : null}
+          {ws.where.gate ? (
+            <span className="text-muted-foreground">Gate: {ws.where.gate}</span>
+          ) : null}
+          {ownerName ? (
+            <span>
+              <span className="text-muted-foreground">Owner</span> {ownerName}
+            </span>
+          ) : null}
+          {ws.ball ? (
+            <span className="inline-flex items-center gap-1.5" title={ws.ball.detail}>
+              <span className="text-muted-foreground">Ball</span>
+              <span
+                className={cn(
+                  "rounded-full px-2 py-0.5 text-[11px] font-medium",
+                  ws.ball.who === "customer"
+                    ? "bg-amber-500/15 text-amber-800 dark:text-amber-300"
+                    : "bg-primary/10 text-primary",
+                )}
+              >
+                {ws.ball.who === "customer" ? "With the customer" : "With us"}
+              </span>
+            </span>
+          ) : null}
+        </div>
+      </section>
+
+      <section
+        className="rounded-md border border-border bg-card px-4 py-3"
+        aria-label="Next customer meeting"
+      >
+        <h2 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+          Next customer meeting
+        </h2>
+        {m ? (
+          <>
+            <p className="mt-1.5 text-[14px] font-semibold">{m.label}</p>
+            {m.booked && m.time ? (
+              <p className="text-[13px]">
+                {whenLabel(m.date, m.time, intake.timeline.timezone)}
+                {m.minutes ? (
+                  <span className="text-muted-foreground"> · {m.minutes} min</span>
+                ) : null}
+              </p>
+            ) : (
+              <p className="text-[12px] text-amber-800 dark:text-amber-300">
+                Not on the calendar yet · the plan says {shortDay(m.date)}.
+              </p>
+            )}
+          </>
+        ) : (
+          <p className="mt-1.5 text-[13px] text-muted-foreground">No meetings on the plan yet.</p>
+        )}
+      </section>
+
+      <section
+        id="current-implementation-journey"
+        className="overflow-hidden rounded-md border border-border bg-card"
+        aria-label="Implementation journey"
+      >
+        <Stepper
+          stages={canonicalStages}
+          current={currentInCanon}
+          shown={shown}
+          onShow={(k) => {
+            setViewing(k === currentInCanon ? null : k);
+            setManual(null);
+          }}
+        />
+        <StageHistory shown={shown} history={deal.stage_history} />
+        {stage.tasks.length > 0 ? (
+          <ol className="divide-y divide-border">
+            {stage.tasks.map((t, i) => (
+              <TaskRow
+                key={t.key}
+                n={i + 1}
+                task={t}
+                open={openTask?.key === t.key}
+                onOpen={() => setManual({ key: t.key, wasDone: t.done })}
+              >
+                <TaskBody task={t} deal={deal} intake={intake} editable={editable} />
+              </TaskRow>
+            ))}
+          </ol>
+        ) : (
+          <p className="px-4 py-3 text-[13px] text-muted-foreground">
+            Nothing to do yet at this stage.
+          </p>
+        )}
+        <StageGuidancePanel shown={shown} />
+      </section>
+
+      <SolutionsCard deal={deal} editable={editable} />
+    </div>
+  );
 }
 
 /**

@@ -86,7 +86,7 @@ export const FLOW_STAGES: ReadonlyArray<{ key: FlowStageKey; stage: AccountStage
     { key: "negotiate", stage: "negotiate", label: "Negotiate & Finalize" },
     { key: "closed_won", stage: "closed_won", label: "Closed Won" },
     { key: "field_fusion", stage: "field_fusion_setup", label: "Field Fusion setup" },
-    { key: "pre_kickoff", stage: "onboarding_kickoff", label: "Pre-Kickoff" },
+    { key: "pre_kickoff", stage: "onboarding_kickoff", label: "Intake & Process" },
     { key: "kickoff", stage: "kickoff", label: "Kickoff" },
     { key: "get_it_working", stage: "get_it_working", label: "Get it working" },
     { key: "make_it_yours", stage: "make_it_yours", label: "Make it yours" },
@@ -99,6 +99,21 @@ export const ONBOARDING_FLOW_KEYS: ReadonlyArray<FlowStageKey> = [
   "get_it_working",
   "make_it_yours",
   "make_it_run",
+];
+
+/**
+ * The six-stage canonical journey Customer 360's Current Implementation tab
+ * shows: Intake & Process through Implementation Complete. Prospect,
+ * Negotiate & Finalize, Closed Won and Field Fusion setup precede it and are
+ * Sales' and the handoff's stages, not the implementation's.
+ */
+export const CANONICAL_JOURNEY_KEYS: ReadonlyArray<FlowStageKey> = [
+  "pre_kickoff",
+  "kickoff",
+  "get_it_working",
+  "make_it_yours",
+  "make_it_run",
+  "complete",
 ];
 
 /** A stage whose tasks are the plan's steps: the three middle ones and Complete. */

@@ -19,13 +19,13 @@ export function AddServicesButton({ customerId }: { customerId: string }) {
     mutationFn: () => start({ data: { customerId } }),
     onSuccess: (r) => {
       // Straight to the services plan on this customer's page — the
-      // Pre-kickoff tab of the implementation the deal just made — rather
-      // than the deal URL, which only redirected back here.
+      // Current Implementation tab of the implementation the deal just
+      // made — rather than the deal URL, which only redirected back here.
       void navigate({
         to: "/customers/$customerId",
         params: { customerId },
         search: {
-          tab: "record",
+          tab: "implementation",
           ...(r.implementationId ? { impl: r.implementationId } : {}),
         },
       });
