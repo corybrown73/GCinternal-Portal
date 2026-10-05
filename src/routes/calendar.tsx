@@ -8,6 +8,7 @@ import { getHome } from "@/lib/hub.functions";
 import { buildQueue } from "@/lib/home-triage";
 import { addDaysIso, collectEvents, type UpcomingEvent } from "@/lib/home-today";
 import { localIso } from "@/lib/onboarding-timeline";
+import { shortMeeting } from "@/lib/workspace";
 import { useScope } from "@/lib/use-scope";
 import { cn } from "@/lib/utils";
 
@@ -40,6 +41,17 @@ const KIND: Record<UpcomingEvent["kind"], { label: string; dot: string }> = {
   commitment: { label: "Due", dot: "bg-[#eda100]" },
   launch: { label: "Launch", dot: "bg-[#4a3aa7]" },
 };
+
+/** The shortest existing label that still means something, for the compact
+ * grid cell: "Stage 1 — Get it working" → "Stage 1" (via the same
+ * `shortMeeting` the workspace page already uses), "Target launch" → the
+ * kind's own short word, "Launch" — a commitment's description is already
+ * short. Never a new label, only a shorter cut of the existing one. */
+function shortEventLabel(e: UpcomingEvent): string {
+  if (e.kind === "meeting") return shortMeeting(e.label);
+  if (e.kind === "launch") return KIND.launch.label;
+  return e.label;
+}
 
 const WEEKDAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
@@ -198,7 +210,7 @@ function CalendarPage() {
                               className={cn("h-1.5 w-1.5 shrink-0 rounded-full", KIND[e.kind].dot)}
                             />
                             <span className="truncate">
-                              {e.label} · {e.account}
+                              {e.account} · {shortEventLabel(e)}
                             </span>
                           </>
                         );
