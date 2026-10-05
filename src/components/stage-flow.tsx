@@ -47,6 +47,7 @@ import {
   type FlowTask,
 } from "@/lib/stage-flow";
 import { syncDealStageFn } from "@/lib/stage-flow.functions";
+import { stageGuidanceFor } from "@/lib/stage-guidance";
 import { parseWonGate, type WonGateMissing } from "@/lib/won-gate";
 import { ClosedWonGateNotice } from "@/components/closed-won-gate";
 import { aeReplyDraft, googleCalendarLink } from "@/lib/ae-reply";
@@ -135,6 +136,86 @@ function StageHistory({
         </li>
       ))}
     </ul>
+  );
+}
+
+/**
+ * The TIS Project Navigator's guidance for the shown stage — read-only
+ * reference material, not a second checklist. The Hub's own tasks above
+ * stay the source of truth for what is actually done; nothing here is
+ * tracked or saved. Renders nothing for a stage the Navigator does not
+ * cover yet (Prospect, Closed Won, Intake & Process).
+ */
+function StageGuidancePanel({ shown }: { shown: FlowStageKey }) {
+  const [openIssue, setOpenIssue] = useState<string | null>(null);
+  const guidance = stageGuidanceFor(shown);
+  if (!guidance) return null;
+  return (
+    <div
+      className="border-t border-border bg-card px-4 py-3 text-[12.5px]"
+      aria-label="Navigator guidance"
+    >
+      <p className="text-muted-foreground">{guidance.purpose}</p>
+
+      <div className="mt-3">
+        <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+          Check what's true
+        </div>
+        <ul className="mt-1.5 space-y-1 text-foreground">
+          {guidance.checks.map((c) => (
+            <li key={c} className="flex items-start gap-2">
+              <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full border border-border" />
+              {c}
+            </li>
+          ))}
+        </ul>
+      </div>
+
+      <div className="mt-3">
+        <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+          Something's stuck?
+        </div>
+        <div className="mt-1.5 grid gap-1.5 sm:grid-cols-2">
+          {guidance.stuck.map((s) => (
+            <button
+              key={s.key}
+              type="button"
+              onClick={() => setOpenIssue(openIssue === s.key ? null : s.key)}
+              aria-expanded={openIssue === s.key}
+              className="rounded-sm border border-border px-2.5 py-1.5 text-left text-[12px] font-medium hover:border-primary/40 hover:bg-muted"
+            >
+              {s.label} →
+            </button>
+          ))}
+        </div>
+        {guidance.stuck
+          .filter((s) => s.key === openIssue)
+          .map((s) => (
+            <div key={s.key} className="mt-2 rounded-md border border-border bg-muted/30 p-3">
+              <p className="font-medium text-foreground">{s.title}</p>
+              <p className="mt-1 text-muted-foreground">{s.why}</p>
+              <p className="mt-2 rounded-sm bg-status-ontrack/15 p-2 text-foreground">{s.action}</p>
+            </div>
+          ))}
+      </div>
+
+      <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1">
+        <p>
+          <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+            Ready to move on when
+          </span>{" "}
+          <span className="text-foreground">{guidance.readyWhen}</span>
+        </p>
+        <p>
+          <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+            Next
+          </span>{" "}
+          <span className="text-foreground">{guidance.next}</span>
+        </p>
+      </div>
+
+      <p className="mt-3 text-muted-foreground">{guidance.remember}</p>
+    </div>
   );
 }
 
@@ -356,6 +437,7 @@ export function StageFlow({ deal }: { deal: DealData }) {
       flow.current !== "negotiate" ? (
         <ParkingLot dealId={dealId} editable={editable} />
       ) : null}
+      <StageGuidancePanel shown={shown} />
     </section>
   );
 }
