@@ -10,6 +10,7 @@ import { MeetingRecap } from "@/components/meeting-recap";
 import { ParkingLot } from "@/components/parking-lot";
 import { Field } from "@/components/record";
 import { SolutionsCard } from "@/components/solutions-card";
+import { TranscriptUpdatePanel } from "@/components/transcript-update-panel";
 import { FactsStep, FlowStep, NotesIn, SowStep } from "@/components/intake-panel";
 import { assignDealFn, claimDealFn, getDealAssignment } from "@/lib/assignment.functions";
 import { MemberOptions } from "@/components/member-options";
@@ -539,9 +540,13 @@ export function ImplementationStatusFacts({
  * Sales/handoff stages) shows on this rail.
  */
 export function CurrentImplementationTab({
+  customerId,
+  implementationId,
   dealId,
   ownerName,
 }: {
+  customerId: string;
+  implementationId: string;
   dealId: string;
   ownerName: string | null;
 }) {
@@ -621,6 +626,8 @@ export function CurrentImplementationTab({
 
   return (
     <div className="space-y-4">
+      <TranscriptUpdatePanel customerId={customerId} implementationId={implementationId} />
+
       <section
         className="rounded-md border border-border bg-card px-4 py-3"
         aria-label="Implementation status"

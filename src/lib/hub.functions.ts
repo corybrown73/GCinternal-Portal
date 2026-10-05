@@ -5,6 +5,7 @@ import { z } from "zod";
 import { EDITABLE_RECORD_FIELD_KEYS, type EditableRecordField } from "./record-fields";
 import { advanceStageInput } from "./stage-advance-input";
 import { analyzeSowInput, applySowProposalInput, setSowDocumentInput } from "./sow-analysis";
+import { analyzeTranscriptInput } from "./transcript-analysis";
 import { SOLUTION_STATUSES } from "./solution-enums";
 import {
   createFieldMappingInput,
@@ -702,6 +703,16 @@ export const setSowDocumentForImplementation = createServerFn({ method: "POST" }
   .handler(async ({ data }) => {
     const { setSowDocument } = await import("./sow-analysis.server");
     return setSowDocument(data);
+  });
+
+/* ---------- Meeting transcript analysis (read-only proposal) ---------- */
+
+export const analyzeTranscriptDocument = createServerFn({ method: "POST" })
+  .middleware([requireInternalAuth])
+  .inputValidator((data: unknown) => analyzeTranscriptInput.parse(data))
+  .handler(async ({ data }) => {
+    const { analyzeTranscript } = await import("./transcript-analysis.server");
+    return analyzeTranscript(data.implementationId, data.attachmentId);
   });
 
 /** Customers and open deals by name, for the new-account dialog. */

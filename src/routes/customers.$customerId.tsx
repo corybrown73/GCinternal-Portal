@@ -500,7 +500,12 @@ function Customer360Page() {
       {tab === "implementation" ? (
         <div className="px-6 py-4">
           {impl.deal_id ? (
-            <CurrentImplementationTab dealId={impl.deal_id} ownerName={impl.owner_name} />
+            <CurrentImplementationTab
+              customerId={customerId}
+              implementationId={impl.id}
+              dealId={impl.deal_id}
+              ownerName={impl.owner_name}
+            />
           ) : (
             <p className="text-[13px] text-muted-foreground">
               This implementation was not started from a deal, so it has no implementation journey
