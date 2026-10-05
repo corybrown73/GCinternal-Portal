@@ -334,7 +334,7 @@ function NeedsMe({
       </div>
       {!activeFilter ? (
         <p className="px-4 pb-1 text-[12px] text-muted-foreground">
-          Accounts that need my attention right now.
+          Things that need intervention across the accounts you're viewing.
         </p>
       ) : (
         <p className="px-4 pb-1 text-[12px] text-muted-foreground">
@@ -345,6 +345,13 @@ function NeedsMe({
         <div id="needs-attention-panel">
           {bodyRows.length === 0 ? (
             <p className="px-4 pb-3.5 pt-3 text-[13px] text-muted-foreground">{emptyMessage}</p>
+          ) : activeFilter ? (
+            // Keyed by the active filter's label (unique per card) so
+            // switching cards — or clearing back to the unfiltered view,
+            // which unmounts this entirely — always starts from the
+            // collapsed, first-5 state. Same ranked/filtered `rows` either
+            // way; this only caps how many are shown at once.
+            <FilteredRows key={activeFilter.label} rows={bodyRows} />
           ) : (
             <Rows rows={bodyRows} />
           )}
@@ -378,6 +385,43 @@ function NeedsMe({
         </div>
       ) : null}
     </section>
+  );
+}
+
+const MAX_INITIAL_FILTERED_ROWS = 5;
+
+/**
+ * Caps a filtered result at 5 rows with a "Show N more" / "Show less"
+ * toggle. The caller remounts this (via `key`) whenever the active filter
+ * changes or clears, which is what resets `expanded` back to its initial
+ * state — no effect needed. Never reorders `rows`: the first 5 are simply
+ * the first 5 of the already-ranked, already-filtered list.
+ */
+function FilteredRows({ rows }: { rows: NeedsMeRow[] }) {
+  const [expanded, setExpanded] = useState(false);
+  const visible = expanded ? rows : rows.slice(0, MAX_INITIAL_FILTERED_ROWS);
+  const hiddenCount = rows.length - visible.length;
+  return (
+    <>
+      <Rows rows={visible} />
+      {hiddenCount > 0 ? (
+        <button
+          type="button"
+          onClick={() => setExpanded(true)}
+          className="block w-full px-4 py-2 text-left text-[12px] font-medium text-primary hover:underline"
+        >
+          Show {hiddenCount} more
+        </button>
+      ) : expanded && rows.length > MAX_INITIAL_FILTERED_ROWS ? (
+        <button
+          type="button"
+          onClick={() => setExpanded(false)}
+          className="block w-full px-4 py-2 text-left text-[12px] font-medium text-muted-foreground hover:underline"
+        >
+          Show less
+        </button>
+      ) : null}
+    </>
   );
 }
 
