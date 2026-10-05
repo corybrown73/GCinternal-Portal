@@ -518,10 +518,7 @@ export function ImplementationStatusFacts({
 
   return (
     <>
-      <Field
-        label="Target"
-        value={ws.where.target ? `${ws.where.target.word} ${shortDay(ws.where.target.date)}` : null}
-      />
+      <Field label="Target" value={ws.where.target ? shortDay(ws.where.target.date) : null} />
       <Field
         label="Ball"
         value={ws.ball ? (ws.ball.who === "customer" ? "With the customer" : "With us") : null}
@@ -706,62 +703,73 @@ export function CurrentImplementationTab({
         )}
       </section>
 
-      <section
-        id="current-implementation-journey"
-        className="overflow-hidden rounded-md border border-border bg-card"
-        aria-label="Implementation journey"
-      >
-        <Stepper
-          stages={canonicalStages}
-          current={currentInCanon}
-          shown={shown}
-          onShow={(k) => {
-            setViewing(k === currentInCanon ? null : k);
-            setManual(null);
-          }}
-        />
-        {viewingOther ? (
-          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-amber-500/10 px-4 py-1.5 text-[12px]">
-            <span>
-              <span className="font-medium text-foreground">Viewing: {stage.label}</span>
-              {viewingPosition ? (
-                <span className="text-muted-foreground"> · {viewingPosition}</span>
-              ) : null}
-            </span>
-            <button
-              type="button"
-              onClick={() => {
-                setViewing(null);
-                setManual(null);
-              }}
-              className="font-medium text-primary underline-offset-2 hover:underline"
-            >
-              Back to current stage
-            </button>
-          </div>
-        ) : null}
-        <StageHistory shown={shown} history={deal.stage_history} />
-        {stage.tasks.length > 0 ? (
-          <ol className="divide-y divide-border">
-            {stage.tasks.map((t, i) => (
-              <TaskRow
-                key={t.key}
-                n={i + 1}
-                task={t}
-                open={openTask?.key === t.key}
-                onOpen={() => setManual({ key: t.key, wasDone: t.done })}
+      {flow.current === "closed_won" ? (
+        // Closed Won's own gate tasks (assign an owner, the Gong brief, the
+        // SOW, the sales handoff) are outside the canonical journey below
+        // and would otherwise be unreachable from here — the same full
+        // checklist the deal page runs, so completing them is never a dead
+        // end: do it here and the canonical journey below picks up the
+        // moment the deal moves on. Field Fusion setup is deliberately not
+        // routed through this fallback — it has its own handoff surface.
+        <StageFlow deal={deal} />
+      ) : (
+        <section
+          id="current-implementation-journey"
+          className="overflow-hidden rounded-md border border-border bg-card"
+          aria-label="Implementation journey"
+        >
+          <Stepper
+            stages={canonicalStages}
+            current={currentInCanon}
+            shown={shown}
+            onShow={(k) => {
+              setViewing(k === currentInCanon ? null : k);
+              setManual(null);
+            }}
+          />
+          {viewingOther ? (
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-amber-500/10 px-4 py-1.5 text-[12px]">
+              <span>
+                <span className="font-medium text-foreground">Viewing: {stage.label}</span>
+                {viewingPosition ? (
+                  <span className="text-muted-foreground"> · {viewingPosition}</span>
+                ) : null}
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  setViewing(null);
+                  setManual(null);
+                }}
+                className="font-medium text-primary underline-offset-2 hover:underline"
               >
-                <TaskBody task={t} deal={deal} intake={intake} editable={editable} />
-              </TaskRow>
-            ))}
-          </ol>
-        ) : (
-          <p className="px-4 py-3 text-[13px] text-muted-foreground">
-            Nothing to do yet at this stage.
-          </p>
-        )}
-        <StageGuidancePanel shown={shown} />
-      </section>
+                Back to current stage
+              </button>
+            </div>
+          ) : null}
+          <StageHistory shown={shown} history={deal.stage_history} />
+          {stage.tasks.length > 0 ? (
+            <ol className="divide-y divide-border">
+              {stage.tasks.map((t, i) => (
+                <TaskRow
+                  key={t.key}
+                  n={i + 1}
+                  task={t}
+                  open={openTask?.key === t.key}
+                  onOpen={() => setManual({ key: t.key, wasDone: t.done })}
+                >
+                  <TaskBody task={t} deal={deal} intake={intake} editable={editable} />
+                </TaskRow>
+              ))}
+            </ol>
+          ) : (
+            <p className="px-4 py-3 text-[13px] text-muted-foreground">
+              Nothing to do yet at this stage.
+            </p>
+          )}
+          <StageGuidancePanel shown={shown} />
+        </section>
+      )}
 
       <SolutionsCard deal={deal} editable={editable} />
     </div>
