@@ -110,6 +110,13 @@ export async function handToImplementation(
   actorProfileId: string,
   dealId: string,
   teamMemberId: string | null,
+  /**
+   * The signed-in actor's own team_members id (from context.profile at the
+   * caller's requireInternalAuth boundary) — not looked up again here,
+   * since journal_entries.author_id needs it and presale.server.ts's
+   * requireInternal does not select it.
+   */
+  actorTeamMemberId: string | null = null,
 ): Promise<{ assigneeName: string | null; claimOffered: boolean }> {
   const { requireInternal } = await import("./presale.server");
   const actor = await requireInternal(actorProfileId);
@@ -227,7 +234,9 @@ export async function handToImplementation(
           await createJournalEntry({
             implementationId: impl.id as string,
             note: `${HANDOFF_JOURNAL_MARKER}\n${handoff.notes}`,
-            authorId: actorProfileId,
+            // journal_entries.author_id references team_members, not
+            // portal_profiles — actorProfileId is the wrong identity space.
+            authorId: actorTeamMemberId,
             links: null,
             attachmentUrl: null,
             attachmentName: null,

@@ -5,7 +5,6 @@ import { ChevronDown, ChevronRight, Sparkles, Upload } from "lucide-react";
 
 import { fileToBase64, MAX_ATTACHMENT_BYTES, textToBase64 } from "@/lib/attachment-client";
 import { uploadAttachment } from "@/lib/attachments.functions";
-import { useProfile } from "@/lib/auth";
 import type { TeamOption } from "@/components/owner-picker";
 import {
   addEvidence,
@@ -95,7 +94,6 @@ export function TranscriptUpdatePanel({
    */
   planOwnsTarget?: boolean;
 }) {
-  const { profile } = useProfile();
   const qc = useQueryClient();
   const team = useQuery({ queryKey: ["team-options"], queryFn: () => getTeamOptions() });
 
@@ -289,7 +287,10 @@ export function TranscriptUpdatePanel({
               data: {
                 implementationId,
                 note: `${p.title}\n\n${p.text}${attribution}`,
-                authorId: profile?.id ?? null,
+                // The server resolves the signed-in actor through the
+                // team_members bridge (journal_entries.author_id does not
+                // accept a portal_profiles id).
+                authorId: null,
                 links: null,
                 attachmentUrl: null,
                 attachmentName: null,
