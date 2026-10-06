@@ -114,6 +114,9 @@ function flatKey(k: string): string {
 }
 
 const blank = (v: unknown) => v === "" || v === null || v === undefined;
+/** An alias names a value, never a nested record: `Account: { Name }` is not the company. */
+const scalarish = (v: unknown) =>
+  typeof v === "string" || typeof v === "number" || typeof v === "boolean" || Array.isArray(v);
 
 export type ResolvedRow = {
   /** Canonical field → value, ready for `closedWonSchema`. */
@@ -147,7 +150,7 @@ export function resolveClosedWonRow(
   for (const [canonical, names] of Object.entries(ALIASES)) {
     for (const n of names) {
       const original = flat.get(n);
-      if (original !== undefined && !blank(src[original])) {
+      if (original !== undefined && !blank(src[original]) && scalarish(src[original])) {
         row[canonical] = src[original];
         sources[canonical] = "alias";
         consumed.add(original);

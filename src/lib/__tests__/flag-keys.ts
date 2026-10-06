@@ -16,6 +16,7 @@ export const DEFAULT_FLAGS_FOR_TEST = {
   external_plan_actions_enabled: false,
   sf_auto_create: false,
   sf_presale_bridge: false,
+  sf_pull_enabled: false,
   signals_alerts: false,
   audit_activity_feed: false,
   audit_strict: false,

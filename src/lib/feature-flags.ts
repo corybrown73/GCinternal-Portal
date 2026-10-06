@@ -153,6 +153,13 @@ export const FLAG_CATALOGUE: FlagInfo[] = [
     requires: ["sf_auto_create"],
     needsMigration: "0023",
   },
+  {
+    key: "sf_pull_enabled",
+    label: "Salesforce pull",
+    description:
+      "Every 10 minutes the Hub asks Salesforce for opportunities won since the last look and runs each through the closed-won ingest: deal, facts, project, TIS. Needs the three SALESFORCE_* variables on the deployment.",
+    group: "integrations",
+  },
 
   /* ---------------- Platform ---------------- */
   {

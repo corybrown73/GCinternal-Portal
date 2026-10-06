@@ -27,6 +27,7 @@ export const getSyncLog = createServerFn({ method: "GET" })
       .object({
         status: z.enum(["succeeded", "replayed", "rejected", "failed"]).nullable().optional(),
         externalId: z.string().trim().max(40).nullable().optional(),
+        kind: z.string().trim().max(60).nullable().optional(),
         limit: z.number().int().positive().max(200).optional(),
       })
       .parse(data ?? {}),
@@ -37,6 +38,7 @@ export const getSyncLog = createServerFn({ method: "GET" })
     return loadSyncLog(context.profile.id, {
       status: data.status ?? null,
       externalId: data.externalId ?? null,
+      kind: data.kind ?? null,
       limit: data.limit ?? 100,
     });
   });
@@ -208,7 +210,10 @@ export const sendWebhookTestEvent = createServerFn({ method: "POST" })
 export const setIntegrationFeatureFlag = createServerFn({ method: "POST" })
   .inputValidator((data: unknown) =>
     z
-      .object({ flag: z.enum(["sf_auto_create", "sf_presale_bridge"]), enabled: z.boolean() })
+      .object({
+        flag: z.enum(["sf_auto_create", "sf_presale_bridge", "sf_pull_enabled"]),
+        enabled: z.boolean(),
+      })
       .parse(data),
   )
   .middleware([requireInternalAuth])
@@ -238,5 +243,46 @@ export const createFollowOnImplementation = createServerFn({ method: "POST" })
       oldImplementationId: data.oldImplementationId,
       reason: data.reason,
       name: data.name ?? null,
+    });
+  });
+
+/* -------------------------------------------------------- Salesforce pull */
+
+export const getSalesforcePullStatus = createServerFn({ method: "GET" })
+  .middleware([requireInternalAuth])
+  .handler(async ({ context }) => {
+    const { loadSalesforcePullStatus } = await import("./sf-integration.server");
+    return loadSalesforcePullStatus(context.profile.id);
+  });
+
+export const testSalesforce = createServerFn({ method: "POST" })
+  .middleware([requireInternalAuth])
+  .handler(async ({ context }) => {
+    const { testSalesforceConnection } = await import("./sf-integration.server");
+    return testSalesforceConnection(context.profile.id);
+  });
+
+export const runSalesforcePull = createServerFn({ method: "POST" })
+  .middleware([requireInternalAuth])
+  .handler(async ({ context }) => {
+    const { runSalesforcePullNow } = await import("./sf-integration.server");
+    return runSalesforcePullNow(context.profile.id);
+  });
+
+export const updateSalesforcePullState = createServerFn({ method: "POST" })
+  .inputValidator((data: unknown) =>
+    z
+      .object({
+        backfillFrom: z.string().trim().max(40).nullable().optional(),
+        batchLimit: z.number().int().positive().max(2000).nullable().optional(),
+      })
+      .parse(data),
+  )
+  .middleware([requireInternalAuth])
+  .handler(async ({ data, context }) => {
+    const { setSalesforcePullState } = await import("./sf-integration.server");
+    return setSalesforcePullState(context.profile.id, {
+      backfillFrom: data.backfillFrom ?? null,
+      batchLimit: data.batchLimit ?? null,
     });
   });

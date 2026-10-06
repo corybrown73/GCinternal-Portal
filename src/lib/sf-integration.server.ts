@@ -552,7 +552,12 @@ async function requireAdmin(userId: string): Promise<{ id: string; role: string 
 }
 
 export type IntegrationStatus = {
-  flags: { sf_auto_create: boolean; sf_presale_bridge: boolean; journey_templates: boolean };
+  flags: {
+    sf_auto_create: boolean;
+    sf_presale_bridge: boolean;
+    sf_pull_enabled: boolean;
+    journey_templates: boolean;
+  };
   killSwitch: boolean;
   counts: {
     sync_log_24h: number;
@@ -572,6 +577,7 @@ export async function loadIntegrationStatus(userId: string): Promise<Integration
       isFlagOn("sf_auto_create"),
       isFlagOn("sf_presale_bridge"),
       isFlagOn("journey_templates"),
+      isFlagOn("sf_pull_enabled"),
     ]),
     db()
       .from("integration_sync_log")
@@ -599,6 +605,7 @@ export async function loadIntegrationStatus(userId: string): Promise<Integration
       sf_auto_create: flags[0],
       sf_presale_bridge: flags[1],
       journey_templates: flags[2],
+      sf_pull_enabled: flags[3],
     },
     killSwitch: integrationKilled(),
     counts: {
@@ -628,7 +635,12 @@ export type SyncLogEntry = {
 
 export async function loadSyncLog(
   userId: string,
-  filter: { status?: string | null; externalId?: string | null; limit?: number },
+  filter: {
+    status?: string | null;
+    externalId?: string | null;
+    kind?: string | null;
+    limit?: number;
+  },
 ): Promise<SyncLogEntry[]> {
   await requireManager(userId);
   let q = db()
@@ -639,6 +651,7 @@ export async function loadSyncLog(
     .order("created_at", { ascending: false })
     .limit(Math.min(filter.limit ?? 100, 200));
   if (filter.status) q = q.eq("status", filter.status);
+  if (filter.kind) q = q.eq("kind", filter.kind);
   if (filter.externalId) q = q.eq("external_id", sfId18(filter.externalId));
   const { data, error } = await q;
   if (error) throw new Error(error.message);
@@ -859,6 +872,259 @@ export async function previewClosedWon(
     tis: { input: owner, resolved: member?.name ?? null },
     ae: { input: parsed.data.rep_email ?? null, matched: aeMatched },
   };
+}
+
+/* -------------------------------------------------------- Salesforce pull */
+
+const PULL_STATE_KEY = "salesforce_pull";
+export const PULL_LOG_KIND = "sf_pull_closed_won";
+
+export async function loadPullState(): Promise<import("./server/salesforce-poll").PullState> {
+  const { defaultPullState } = await import("./server/salesforce-poll");
+  const fallback = defaultPullState(new Date());
+  try {
+    const { data } = await db()
+      .from("portal_app_config")
+      .select("value")
+      .eq("key", PULL_STATE_KEY)
+      .maybeSingle();
+    const v = (data?.value ?? {}) as Partial<import("./server/salesforce-poll").PullState>;
+    return {
+      watermark:
+        typeof v.watermark === "string" && !Number.isNaN(Date.parse(v.watermark))
+          ? v.watermark
+          : fallback.watermark,
+      last_run_at: typeof v.last_run_at === "string" ? v.last_run_at : null,
+      last_result: (v.last_result as import("./server/salesforce-poll").PullSummary | null) ?? null,
+      last_error: typeof v.last_error === "string" ? v.last_error : null,
+      batch_limit:
+        typeof v.batch_limit === "number" && v.batch_limit > 0
+          ? v.batch_limit
+          : fallback.batch_limit,
+    };
+  } catch (e) {
+    console.error("[salesforce pull] could not read state", e);
+    return fallback;
+  }
+}
+
+async function savePullState(next: import("./server/salesforce-poll").PullState): Promise<void> {
+  const { error } = await db()
+    .from("portal_app_config")
+    .upsert(
+      { key: PULL_STATE_KEY, value: next, updated_at: new Date().toISOString() },
+      { onConflict: "key" },
+    );
+  if (error) throw new Error(`Could not save the Salesforce pull state: ${error.message}`);
+}
+
+async function salesforceClientOrThrow() {
+  const { salesforceEnv, createSalesforceClient } = await import("./server/salesforce-client");
+  const env = salesforceEnv();
+  if (!env) {
+    throw new Error(
+      "Salesforce is not configured: set SALESFORCE_CLIENT_ID, SALESFORCE_CLIENT_SECRET and SALESFORCE_LOGIN_URL on the deployment.",
+    );
+  }
+  return createSalesforceClient(env);
+}
+
+/**
+ * The pull, with the real world plugged in: Salesforce over the client, the
+ * deal map from the table, the state row, the sync log, and the SAME ingest
+ * dependencies the closed-won webhook wires — the system actor in place of
+ * an API key.
+ */
+export async function runSalesforcePull(
+  trigger: "cron" | "manual",
+): Promise<import("./server/salesforce-poll").PullSummary> {
+  const { runPoll } = await import("./server/salesforce-poll");
+  const { upsertAccount } = await import("./server/accounts");
+  const { startOnboardingAs, saveDealIntakeFacts } = await import("./presale.server");
+  const { assignDeal } = await import("./assignment.server");
+  const { resolveTeamMember } = await import("./server/team-lookup");
+  const client = await salesforceClientOrThrow();
+  const ctx = { source: "system" as const };
+
+  return runPoll({
+    now: () => new Date(),
+    loadMaps: loadFieldMaps,
+    loadState: loadPullState,
+    saveState: savePullState,
+    query: (soql) => client.query(soql),
+    log: async (entry) => {
+      await writeSyncLog({
+        direction: "inbound",
+        kind: PULL_LOG_KIND,
+        external_id: entry.external_id,
+        implementation_id:
+          typeof entry.decision["implementation_id"] === "string"
+            ? (entry.decision["implementation_id"] as string)
+            : null,
+        customer_id:
+          typeof entry.decision["customer_id"] === "string"
+            ? (entry.decision["customer_id"] as string)
+            : null,
+        idempotency_key: null,
+        request_payload: entry.request_payload,
+        decision: { ...entry.decision, trigger },
+        response_status: entry.status === "failed" ? 500 : entry.status === "replayed" ? 200 : 201,
+        response_payload: null,
+        status: entry.status,
+        error: entry.error,
+        request_hash: bodyHash(entry.request_payload),
+      });
+    },
+    ingestDeps: {
+      upsertAccount: async (input) => {
+        const r = await upsertAccount(input, ctx);
+        return { account: r.account as any, created: r.created };
+      },
+      recordContact: async (dealId, c) => {
+        const patch: Record<string, string> = {};
+        if (c.name) patch["primary_contact_name"] = c.name;
+        if (c.email) patch["primary_contact_email"] = c.email;
+        if (c.role) patch["primary_contact_role"] = c.role;
+        if (Object.keys(patch).length === 0) return;
+        const { error } = await db().from("portal_accounts").update(patch).eq("id", dealId);
+        if (error) throw new Error(`Could not record the contact: ${error.message}`);
+      },
+      startOnboarding: (dealId) =>
+        startOnboardingAs({ kind: "system", label: "the Salesforce pull" }, dealId, {
+          createNewCustomer: true,
+        }),
+      recordFacts: async (dealId, facts) => {
+        await saveDealIntakeFacts(dealId, facts);
+      },
+      assign: async (dealId, implementationId, owner) => {
+        const member = owner ? await resolveTeamMember(owner) : null;
+        return assignDeal({
+          dealId,
+          implementationId,
+          ...(member ? { teamMemberId: member.id } : {}),
+          actorProfileId: null,
+          note: owner && !member ? `Salesforce named "${owner}", who is not on the team` : null,
+        });
+      },
+      existingImplementation: async (customerId) => {
+        const { data } = await db()
+          .from("implementations")
+          .select("id")
+          .eq("customer_id", customerId)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        return (data?.id as string | undefined) ?? null;
+      },
+    },
+  });
+}
+
+export type SalesforcePullStatus = {
+  configured: boolean;
+  enabled: boolean;
+  killSwitch: boolean;
+  state: import("./server/salesforce-poll").PullState;
+  /** The query the current map produces, so the admin sees what is fetched. */
+  soql: string;
+};
+
+export async function loadSalesforcePullStatus(userId: string): Promise<SalesforcePullStatus> {
+  await requireManager(userId);
+  const { salesforceConfigured } = await import("./server/salesforce-client");
+  const { buildSoql } = await import("./server/salesforce-poll");
+  const [state, maps, enabled] = await Promise.all([
+    loadPullState(),
+    loadFieldMaps(),
+    isFlagOn("sf_pull_enabled"),
+  ]);
+  return {
+    configured: salesforceConfigured(),
+    enabled,
+    killSwitch: integrationKilled(),
+    state,
+    soql: buildSoql(maps, state.watermark, state.batch_limit),
+  };
+}
+
+/** "Test connection": a token, who it is, and how many won opportunities it can see. */
+export async function testSalesforceConnection(userId: string): Promise<{
+  ok: boolean;
+  organizationId: string | null;
+  userName: string | null;
+  wonOpportunities: number | null;
+  error: string | null;
+}> {
+  await requireAdmin(userId);
+  try {
+    const client = await salesforceClientOrThrow();
+    const who = await client.whoAmI();
+    const rows = await client.query<{ expr0: number }>(
+      "SELECT COUNT(Id) expr0 FROM Opportunity WHERE IsWon = true",
+    );
+    return {
+      ok: true,
+      organizationId: who.organizationId,
+      userName: who.userName,
+      wonOpportunities: rows[0]?.expr0 ?? null,
+      error: null,
+    };
+  } catch (e) {
+    return {
+      ok: false,
+      organizationId: null,
+      userName: null,
+      wonOpportunities: null,
+      error: e instanceof Error ? e.message : String(e),
+    };
+  }
+}
+
+export async function runSalesforcePullNow(
+  userId: string,
+): Promise<import("./server/salesforce-poll").PullSummary> {
+  const profile = await requireAdmin(userId);
+  const summary = await runSalesforcePull("manual");
+  await audit({
+    actor_type: "user",
+    actor_id: profile.id,
+    action: "integration.salesforce_pull_run",
+    entity_type: "config",
+    payload: {
+      found: summary.found,
+      created: summary.created,
+      updated: summary.updated,
+      failed: summary.failed,
+    },
+  });
+  return summary;
+}
+
+/** The admin moves the watermark (a backfill start) or the batch size. */
+export async function setSalesforcePullState(
+  userId: string,
+  input: { backfillFrom?: string | null; batchLimit?: number | null },
+): Promise<import("./server/salesforce-poll").PullState> {
+  const profile = await requireAdmin(userId);
+  const state = await loadPullState();
+  const next = { ...state };
+  if (input.backfillFrom) {
+    const d = new Date(input.backfillFrom);
+    if (Number.isNaN(d.getTime())) throw new Error("That is not a date.");
+    next.watermark = d.toISOString();
+    next.last_error = null;
+  }
+  if (input.batchLimit)
+    next.batch_limit = Math.max(1, Math.min(2000, Math.round(input.batchLimit)));
+  await savePullState(next);
+  await audit({
+    actor_type: "user",
+    actor_id: profile.id,
+    action: "integration.salesforce_pull_state",
+    entity_type: "config",
+    payload: { backfillFrom: input.backfillFrom ?? null, batchLimit: input.batchLimit ?? null },
+  });
+  return next;
 }
 
 export type NeedsTemplateRow = {
@@ -1103,7 +1369,7 @@ export async function sendTestEvent(userId: string, endpointId: string): Promise
 
 export async function setIntegrationFlag(
   userId: string,
-  input: { flag: "sf_auto_create" | "sf_presale_bridge"; enabled: boolean },
+  input: { flag: "sf_auto_create" | "sf_presale_bridge" | "sf_pull_enabled"; enabled: boolean },
 ): Promise<{ ok: true }> {
   const profile = await requireAdmin(userId);
   const { data: row } = await db()

@@ -35,7 +35,7 @@ Then optionally run `supabase/seed_demo.sql` for walkthrough data.
 Authentication → Providers → Email: **Confirm email ON**, min password length 12, leaked-password protection ON. URL Configuration: Site URL = your deployed URL; add `https://<app>/auth/callback` to redirect URLs.
 
 ### 3. Deploy (Vercel)
-Import the repo (framework: Other; build `npm run build`; the nitro `vercel` preset emits `.vercel/output`). Set env vars from `.env.example` — minimum: the four Supabase vars, `SUPABASE_SERVICE_ROLE_KEY`, `TAM_TOKEN_SECRET`, `CRON_SECRET`, `APP_URL`. Optional: `ANTHROPIC_API_KEY` (AI briefs), `RESEND_API_KEY` + `EMAIL_FROM` (real email; otherwise emails print to the function log — do not also set `EMAIL_MODE=log`, it overrides the key). `vercel.json` schedules the SLA cron (hourly) and sequence cron (every 30 min).
+Import the repo (framework: Other; build `npm run build`; the nitro `vercel` preset emits `.vercel/output`). Set env vars from `.env.example` — minimum: the four Supabase vars, `SUPABASE_SERVICE_ROLE_KEY`, `TAM_TOKEN_SECRET`, `CRON_SECRET`, `APP_URL`. Optional: `SALESFORCE_CLIENT_ID` + `SALESFORCE_CLIENT_SECRET` + `SALESFORCE_LOGIN_URL` (the Salesforce pull), `ANTHROPIC_API_KEY` (AI briefs), `RESEND_API_KEY` + `EMAIL_FROM` (real email; otherwise emails print to the function log — do not also set `EMAIL_MODE=log`, it overrides the key). `vercel.json` schedules the SLA cron (hourly) and sequence cron (every 30 min).
 
 ### 4. First run
 Sign up with your `@gocanvas.com` email → verify → you are super admin #1. Designate #2 in **Admin → Users**.
@@ -61,6 +61,8 @@ Sign up with your `@gocanvas.com` email → verify → you are super admin #1. D
 - **/admin** — API keys (scoped, hashed, shown once), user roles.
 
 ## Open API (`/api/v1`, `Authorization: Bearer gcp_live_…`)
+
+**Salesforce without any Salesforce work:** set `SALESFORCE_CLIENT_ID`, `SALESFORCE_CLIENT_SECRET` and `SALESFORCE_LOGIN_URL` on Vercel (a Connected App with Client Credentials Flow), then Admin → Integrations → Salesforce → Test connection → turn the pull on. Every 10 minutes the Hub fetches won opportunities and runs each through the closed-won ingest; custom fields are mapped on the Field maps tab.
 
 Interactive reference at `/api/v1/docs` (spec at `/api/v1/openapi.json`, generated from the validators that run). Keys and scopes: Admin → API keys. Salesforce field mapping: Admin → Integrations → Field maps.
 

@@ -13,6 +13,7 @@ import {
   getFieldMaps,
   getIntegrationStatus,
   getNeedsTemplate,
+  getSalesforcePullStatus,
   getSyncLog,
   getWebhookDeliveries,
   getWebhookEndpoints,
@@ -21,9 +22,12 @@ import {
   redeliverWebhookDelivery,
   removeFieldMap,
   rerunSyncLogRow,
+  runSalesforcePull,
   sendWebhookTestEvent,
   setIntegrationFeatureFlag,
+  testSalesforce,
   toggleWebhookEndpoint,
+  updateSalesforcePullState,
   upsertFieldMap,
 } from "@/lib/sf-integration.functions";
 import { DEAL_FIELD_GROUP_LABEL, DEAL_FIELDS, dealField } from "@/lib/deal-field-catalog";
@@ -65,6 +69,10 @@ const needsTemplateQuery = queryOptions({
   queryKey: ["admin", "integrations", "needs-template"],
   queryFn: () => getNeedsTemplate(),
 });
+const salesforcePullQuery = queryOptions({
+  queryKey: ["admin", "integrations", "salesforce-pull"],
+  queryFn: () => getSalesforcePullStatus(),
+});
 
 export const Route = createFileRoute("/admin/integrations")({
   head: () => ({ meta: [{ title: "Integrations — Admin | GoCanvas Handoff Hub" }] }),
@@ -89,11 +97,11 @@ const inputClass =
 const labelClass = "text-[10px] uppercase tracking-[0.1em] text-muted-foreground";
 const cellClass = "px-2 py-1.5 align-top text-[12px]";
 
-const TABS = ["Zapier", "Status", "Sync log", "Field maps", "Webhooks"] as const;
+const TABS = ["Salesforce", "Field maps", "Sync log", "Status", "Zapier", "Webhooks"] as const;
 type Tab = (typeof TABS)[number];
 
 function IntegrationsPage() {
-  const [tab, setTab] = useState<Tab>("Status");
+  const [tab, setTab] = useState<Tab>("Salesforce");
 
   return (
     <>
@@ -125,6 +133,7 @@ function IntegrationsPage() {
           ))}
         </div>
 
+        {tab === "Salesforce" ? <SalesforceTab /> : null}
         {tab === "Zapier" ? <ZapierTab /> : null}
         {tab === "Status" ? <StatusTab /> : null}
         {tab === "Sync log" ? <SyncLogTab /> : null}
@@ -132,6 +141,229 @@ function IntegrationsPage() {
         {tab === "Webhooks" ? <WebhooksTab /> : null}
       </PageBody>
     </>
+  );
+}
+
+/* ----------------------------------------------------------- salesforce */
+
+/**
+ * The pull: the Hub's own Connected App key asks Salesforce for won
+ * opportunities on a schedule and runs each through the closed-won ingest.
+ * Nothing is built in Salesforce. This tab is where the admin checks the
+ * key works, sees exactly what will be fetched, starts a backfill, and reads
+ * what the last run did.
+ */
+function SalesforceTab() {
+  const { data: pull } = useSuspenseQuery(salesforcePullQuery);
+  const { data: status } = useSuspenseQuery(statusQuery);
+  const queryClient = useQueryClient();
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: ["admin", "integrations"] });
+  const test = useServerFn(testSalesforce);
+  const run = useServerFn(runSalesforcePull);
+  const setState = useServerFn(updateSalesforcePullState);
+  const setFlag = useServerFn(setIntegrationFeatureFlag);
+  const [backfill, setBackfill] = useState("");
+
+  const testIt = useMutation({ mutationFn: () => test() });
+  const runIt = useMutation({ mutationFn: () => run(), onSuccess: invalidate });
+  const flip = useMutation({
+    mutationFn: (enabled: boolean) => setFlag({ data: { flag: "sf_pull_enabled", enabled } }),
+    onSuccess: invalidate,
+  });
+  const move = useMutation({
+    mutationFn: (backfillFrom: string) => setState({ data: { backfillFrom } }),
+    onSuccess: () => {
+      setBackfill("");
+      invalidate();
+    },
+  });
+
+  const t = testIt.data;
+  const last = pull.state.last_result;
+
+  return (
+    <div className="space-y-4">
+      <Panel
+        title="Connection"
+        level="primary"
+        meta="A Connected App's Consumer Key and Secret, exchanged for a token by the Hub itself (client-credentials flow). Set as SALESFORCE_CLIENT_ID, SALESFORCE_CLIENT_SECRET and SALESFORCE_LOGIN_URL on the Vercel project; redeploy after changing them."
+      >
+        <div className="space-y-2 px-3 py-2.5 text-[12px]">
+          <p>
+            <span className="text-muted-foreground">Variables:</span>{" "}
+            {pull.configured ? (
+              <span className="text-status-ontrack-foreground">all three set</span>
+            ) : (
+              <span className="text-destructive">
+                not set — the pull reports “not configured” until they are
+              </span>
+            )}
+            {pull.killSwitch ? (
+              <span className="text-destructive">
+                {" "}
+                · SF_INTEGRATION_DISABLED=1 is set, nothing runs
+              </span>
+            ) : null}
+          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              className={primaryButtonClass}
+              disabled={!pull.configured || testIt.isPending}
+              onClick={() => testIt.mutate()}
+            >
+              {testIt.isPending ? "Testing…" : "Test connection"}
+            </button>
+            {t ? (
+              t.ok ? (
+                <span className="text-status-ontrack-foreground">
+                  Connected as {t.userName ?? "(unknown user)"} · org {t.organizationId ?? "?"} ·{" "}
+                  {t.wonOpportunities ?? "?"} won opportunities visible
+                </span>
+              ) : (
+                <span role="alert" className="text-destructive">
+                  {t.error}
+                </span>
+              )
+            ) : null}
+            {testIt.isError ? (
+              <span role="alert" className="text-destructive">
+                {errorMessage(testIt.error)}
+              </span>
+            ) : null}
+          </div>
+          <p className="text-muted-foreground">
+            On the Connected App the Salesforce admin ticks <em>Enable Client Credentials Flow</em>,
+            picks a <em>Run As</em> user who can read Opportunity, Account, Contact and User, and
+            relaxes IP restrictions. The My Domain URL looks like{" "}
+            <code className="font-mono">https://gocanvas.my.salesforce.com</code>.
+          </p>
+        </div>
+      </Panel>
+
+      <Panel
+        title="The pull"
+        meta="Every 10 minutes: opportunities with IsWon = true modified since the watermark, oldest first, each run through the closed-won ingest — deal at Closed Won, facts, project, TIS. The same record again only refreshes the deal."
+      >
+        <div className="divide-y divide-border">
+          <FlagRow
+            name="sf_pull_enabled"
+            title="Poll Salesforce for won opportunities"
+            detail="Off: the schedule runs and does nothing. On: each run creates deals for new wins and refreshes deals for modified ones. Turn on after Test connection passes and one Run now looked right."
+            enabled={status.flags.sf_pull_enabled}
+            busy={flip.isPending}
+            onToggle={(enabled) => flip.mutate(enabled)}
+          />
+        </div>
+        <div className="space-y-3 px-3 py-2.5 text-[12px]">
+          <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <Stat label="Watermark" value={<When value={pull.state.watermark} />} />
+            <Stat
+              label="Last run"
+              value={pull.state.last_run_at ? <When value={pull.state.last_run_at} /> : "never"}
+            />
+            <Stat label="Batch" value={pull.state.batch_limit} />
+            <Stat
+              label="Last result"
+              value={
+                last
+                  ? `${last.found} found · ${last.created} created · ${last.updated} refreshed · ${last.failed} failed`
+                  : "—"
+              }
+            />
+          </dl>
+          {pull.state.last_error ? (
+            <p role="alert" className="text-destructive">
+              Last error: {pull.state.last_error}
+            </p>
+          ) : null}
+          <div className="flex flex-wrap items-end gap-2">
+            <label className="flex flex-col gap-1">
+              <span className={labelClass}>Backfill from</span>
+              <input
+                type="datetime-local"
+                className={cn(inputClass, "w-auto")}
+                value={backfill}
+                onChange={(e) => setBackfill(e.target.value)}
+              />
+            </label>
+            <button
+              type="button"
+              className={buttonClass}
+              disabled={!backfill || move.isPending}
+              onClick={() => move.mutate(new Date(backfill).toISOString())}
+              title="Moves the watermark back so wins since then are fetched on the next run"
+            >
+              Set watermark
+            </button>
+            <button
+              type="button"
+              className={primaryButtonClass}
+              disabled={!pull.configured || runIt.isPending}
+              onClick={() => runIt.mutate()}
+            >
+              {runIt.isPending ? "Running…" : "Run now"}
+            </button>
+            {runIt.isError ? (
+              <span role="alert" className="text-destructive">
+                {errorMessage(runIt.error)}
+              </span>
+            ) : null}
+          </div>
+          <p className="text-muted-foreground">
+            The watermark starts one day back, so history is not imported by accident. Set it to an
+            earlier date to backfill; move it forward past a record that keeps failing to skip it. A
+            failed record stops the watermark and is retried next run.
+          </p>
+        </div>
+      </Panel>
+
+      {last && last.records.length > 0 ? (
+        <Panel title="Last run, record by record" count={last.records.length}>
+          <TableScroll>
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-border">
+                  <th className={cn(cellClass, "text-left", labelClass)}>Opportunity</th>
+                  <th className={cn(cellClass, "text-left", labelClass)}>Result</th>
+                  <th className={cn(cellClass, "text-left", labelClass)}>Note</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {last.records.map((r) => (
+                  <tr key={r.id}>
+                    <td className={cellClass}>
+                      {r.name}{" "}
+                      <span className="font-mono text-[10px] text-muted-foreground">{r.id}</span>
+                    </td>
+                    <td className={cn(cellClass, r.status === "failed" && "text-destructive")}>
+                      {r.status}
+                    </td>
+                    <td className={cn(cellClass, "text-muted-foreground")}>{r.note ?? ""}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </TableScroll>
+        </Panel>
+      ) : null}
+
+      <Panel
+        title="What is fetched"
+        meta="The query the current deal map produces: the core fields plus every mapped source path. Map a custom field on the Field maps tab and it is fetched too."
+      >
+        <pre className="overflow-x-auto px-3 py-2 font-mono text-[11px] leading-relaxed text-muted-foreground">
+          {pull.soql}
+        </pre>
+        <p className="px-3 pb-2 text-[12px] text-muted-foreground">
+          Without a map row the record still lands: Account.Name → company, Account.Id → Salesforce
+          id, Name → opportunity, Amount, CloseDate, Description → notes, Account.Website,
+          Account.Industry, Owner.Email → Account Executive. Add{" "}
+          <code className="font-mono">YourTisField__r.Email → TIS assigned</code> to assign the
+          owner.
+        </p>
+      </Panel>
+    </div>
   );
 }
 
@@ -144,8 +376,10 @@ function StatusTab() {
   const setFlag = useServerFn(setIntegrationFeatureFlag);
 
   const flip = useMutation({
-    mutationFn: (input: { flag: "sf_auto_create" | "sf_presale_bridge"; enabled: boolean }) =>
-      setFlag({ data: input }),
+    mutationFn: (input: {
+      flag: "sf_auto_create" | "sf_presale_bridge" | "sf_pull_enabled";
+      enabled: boolean;
+    }) => setFlag({ data: input }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["admin", "integrations"] }),
   });
 
@@ -235,7 +469,7 @@ function StatusTab() {
   );
 }
 
-function Stat({ label, value }: { label: string; value: number }) {
+function Stat({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div>
       <dt className={labelClass}>{label}</dt>
@@ -282,10 +516,13 @@ function FlagRow({
 /* ------------------------------------------------------------- sync log */
 
 function SyncLogTab() {
-  const { data: rows } = useSuspenseQuery(syncLogQuery);
+  const { data: allRows } = useSuspenseQuery(syncLogQuery);
   const queryClient = useQueryClient();
   const rerun = useServerFn(rerunSyncLogRow);
   const [open, setOpen] = useState<string | null>(null);
+  const [kind, setKind] = useState<string>("");
+  const kinds = Array.from(new Set(allRows.map((r) => r.kind))).sort();
+  const rows = kind ? allRows.filter((r) => r.kind === kind) : allRows;
 
   const rerunRow = useMutation({
     mutationFn: (id: string) => rerun({ data: { id } }),
@@ -296,8 +533,25 @@ function SyncLogTab() {
     <Panel
       title="Sync log"
       count={rows.length}
-      meta="Cross-system exchanges. A replay writes nothing — the drift report says what Salesforce now claims and what the hub still holds."
+      meta="Cross-system exchanges. A Salesforce pull row (sf_pull_closed_won) carries the record as fetched and what the deal map made of it; a project-route replay writes nothing and its drift report says what Salesforce now claims and what the hub still holds."
     >
+      {kinds.length > 1 ? (
+        <div className="flex items-center gap-2 px-3 py-2 text-[12px]">
+          <span className={labelClass}>Kind</span>
+          <select
+            className={cn(inputClass, "w-auto")}
+            value={kind}
+            onChange={(e) => setKind(e.target.value)}
+          >
+            <option value="">all</option>
+            {kinds.map((k) => (
+              <option key={k} value={k}>
+                {k}
+              </option>
+            ))}
+          </select>
+        </div>
+      ) : null}
       {rows.length === 0 ? (
         <NoRows label="No exchanges recorded yet." />
       ) : (

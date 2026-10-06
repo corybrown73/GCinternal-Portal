@@ -1440,7 +1440,10 @@ export interface StartOnboardingResult {
  * with the audit trail and the plan's "applied by" naming whichever it was.
  */
 export type OnboardingActor =
-  { kind: "user"; profileId: string } | { kind: "api_key"; apiKeyId: string };
+  | { kind: "user"; profileId: string }
+  | { kind: "api_key"; apiKeyId: string }
+  /** A scheduled job of the Hub's own — the Salesforce pull. `label` names it. */
+  | { kind: "system"; label: string };
 
 export async function startOnboarding(
   userId: string,
@@ -1747,10 +1750,14 @@ export async function startOnboardingAs(
       next.key as AccountStage,
       actor.kind === "user"
         ? { source: "ui", actorProfileId: actor.profileId }
-        : { source: "api", actorApiKeyId: actor.apiKeyId },
+        : actor.kind === "api_key"
+          ? { source: "api", actorApiKeyId: actor.apiKeyId }
+          : { source: "system" },
       actor.kind === "user"
         ? "Onboarding started from the deal record"
-        : "Onboarding started by the closed-won webhook",
+        : actor.kind === "api_key"
+          ? "Onboarding started by the closed-won webhook"
+          : `Onboarding started by ${actor.label}`,
     );
   }
 
@@ -1758,8 +1765,9 @@ export async function startOnboardingAs(
 
   // (d) audit.
   await audit({
-    actor_type: actor.kind === "user" ? "user" : "api_key",
-    actor_id: actor.kind === "user" ? actor.profileId : actor.apiKeyId,
+    actor_type: actor.kind === "user" ? "user" : actor.kind === "api_key" ? "api_key" : "system",
+    actor_id:
+      actor.kind === "user" ? actor.profileId : actor.kind === "api_key" ? actor.apiKeyId : null,
     action: "account.start_onboarding",
     entity_type: "account",
     entity_id: dealId,

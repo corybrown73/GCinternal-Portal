@@ -72,6 +72,7 @@ import { Route as ApiCronDailyReportRouteImport } from "./routes/api/cron/daily-
 import { Route as ApiCronDispatchRouteImport } from "./routes/api/cron/dispatch";
 import { Route as ApiCronJourneysRouteImport } from "./routes/api.cron.journeys";
 import { Route as ApiCronPlanSnapshotsRouteImport } from "./routes/api/cron/plan-snapshots";
+import { Route as ApiCronSalesforcePullRouteImport } from "./routes/api/cron/salesforce-pull";
 import { Route as ApiCronSequencesRouteImport } from "./routes/api.cron.sequences";
 import { Route as ApiCronSlaRouteImport } from "./routes/api/cron/sla";
 import { Route as ApiCronWeeklyDigestRouteImport } from "./routes/api/cron/weekly-digest";
@@ -409,6 +410,11 @@ const ApiCronPlanSnapshotsRoute = ApiCronPlanSnapshotsRouteImport.update({
   path: "/api/cron/plan-snapshots",
   getParentRoute: () => rootRouteImport,
 } as any);
+const ApiCronSalesforcePullRoute = ApiCronSalesforcePullRouteImport.update({
+  id: "/api/cron/salesforce-pull",
+  path: "/api/cron/salesforce-pull",
+  getParentRoute: () => rootRouteImport,
+} as any);
 const ApiCronSequencesRoute = ApiCronSequencesRouteImport.update({
   id: "/api/cron/sequences",
   path: "/api/cron/sequences",
@@ -579,6 +585,7 @@ export interface FileRoutesByFullPath {
   "/api/cron/dispatch": typeof ApiCronDispatchRoute;
   "/api/cron/journeys": typeof ApiCronJourneysRoute;
   "/api/cron/plan-snapshots": typeof ApiCronPlanSnapshotsRoute;
+  "/api/cron/salesforce-pull": typeof ApiCronSalesforcePullRoute;
   "/api/cron/sequences": typeof ApiCronSequencesRoute;
   "/api/cron/sla": typeof ApiCronSlaRoute;
   "/api/cron/weekly-digest": typeof ApiCronWeeklyDigestRoute;
@@ -659,6 +666,7 @@ export interface FileRoutesByTo {
   "/api/cron/dispatch": typeof ApiCronDispatchRoute;
   "/api/cron/journeys": typeof ApiCronJourneysRoute;
   "/api/cron/plan-snapshots": typeof ApiCronPlanSnapshotsRoute;
+  "/api/cron/salesforce-pull": typeof ApiCronSalesforcePullRoute;
   "/api/cron/sequences": typeof ApiCronSequencesRoute;
   "/api/cron/sla": typeof ApiCronSlaRoute;
   "/api/cron/weekly-digest": typeof ApiCronWeeklyDigestRoute;
@@ -746,6 +754,7 @@ export interface FileRoutesById {
   "/api/cron/dispatch": typeof ApiCronDispatchRoute;
   "/api/cron/journeys": typeof ApiCronJourneysRoute;
   "/api/cron/plan-snapshots": typeof ApiCronPlanSnapshotsRoute;
+  "/api/cron/salesforce-pull": typeof ApiCronSalesforcePullRoute;
   "/api/cron/sequences": typeof ApiCronSequencesRoute;
   "/api/cron/sla": typeof ApiCronSlaRoute;
   "/api/cron/weekly-digest": typeof ApiCronWeeklyDigestRoute;
@@ -834,6 +843,7 @@ export interface FileRouteTypes {
     | "/api/cron/dispatch"
     | "/api/cron/journeys"
     | "/api/cron/plan-snapshots"
+    | "/api/cron/salesforce-pull"
     | "/api/cron/sequences"
     | "/api/cron/sla"
     | "/api/cron/weekly-digest"
@@ -914,6 +924,7 @@ export interface FileRouteTypes {
     | "/api/cron/dispatch"
     | "/api/cron/journeys"
     | "/api/cron/plan-snapshots"
+    | "/api/cron/salesforce-pull"
     | "/api/cron/sequences"
     | "/api/cron/sla"
     | "/api/cron/weekly-digest"
@@ -1000,6 +1011,7 @@ export interface FileRouteTypes {
     | "/api/cron/dispatch"
     | "/api/cron/journeys"
     | "/api/cron/plan-snapshots"
+    | "/api/cron/salesforce-pull"
     | "/api/cron/sequences"
     | "/api/cron/sla"
     | "/api/cron/weekly-digest"
@@ -1062,6 +1074,7 @@ export interface RootRouteChildren {
   ApiCronDispatchRoute: typeof ApiCronDispatchRoute;
   ApiCronJourneysRoute: typeof ApiCronJourneysRoute;
   ApiCronPlanSnapshotsRoute: typeof ApiCronPlanSnapshotsRoute;
+  ApiCronSalesforcePullRoute: typeof ApiCronSalesforcePullRoute;
   ApiCronSequencesRoute: typeof ApiCronSequencesRoute;
   ApiCronSlaRoute: typeof ApiCronSlaRoute;
   ApiCronWeeklyDigestRoute: typeof ApiCronWeeklyDigestRoute;
@@ -1525,6 +1538,13 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof ApiCronPlanSnapshotsRouteImport;
       parentRoute: typeof rootRouteImport;
     };
+    "/api/cron/salesforce-pull": {
+      id: "/api/cron/salesforce-pull";
+      path: "/api/cron/salesforce-pull";
+      fullPath: "/api/cron/salesforce-pull";
+      preLoaderRoute: typeof ApiCronSalesforcePullRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
     "/api/cron/sequences": {
       id: "/api/cron/sequences";
       path: "/api/cron/sequences";
@@ -1848,6 +1868,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiCronDispatchRoute: ApiCronDispatchRoute,
   ApiCronJourneysRoute: ApiCronJourneysRoute,
   ApiCronPlanSnapshotsRoute: ApiCronPlanSnapshotsRoute,
+  ApiCronSalesforcePullRoute: ApiCronSalesforcePullRoute,
   ApiCronSequencesRoute: ApiCronSequencesRoute,
   ApiCronSlaRoute: ApiCronSlaRoute,
   ApiCronWeeklyDigestRoute: ApiCronWeeklyDigestRoute,

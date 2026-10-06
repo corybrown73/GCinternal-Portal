@@ -27,6 +27,8 @@ export type V2Flags = {
   sf_auto_create: boolean;
   /** Phase 5: the presale stage seam — the deal's stage moves, forward only. */
   sf_presale_bridge: boolean;
+  /** The Hub polls Salesforce for won opportunities on a schedule (the pull). */
+  sf_pull_enabled: boolean;
   /**
    * Phase 6: emission of the champion-gone-quiet and launch-date-at-risk
    * alerts from the hourly cron. The `/signals` surface is read-only and is
@@ -96,6 +98,7 @@ const DEFAULT_FLAGS: V2Flags = {
   /* Phase 5 */
   sf_auto_create: false,
   sf_presale_bridge: false,
+  sf_pull_enabled: false,
   /** Phase 6: see the type above. */
   signals_alerts: false,
   /* Phase 7 — platform hygiene completion. All off. */
