@@ -20,5 +20,10 @@ export const handToImplementationFn = createServerFn({ method: "POST" })
   )
   .handler(async ({ data, context }) => {
     const { handToImplementation } = await import("./field-fusion.server");
-    return handToImplementation(context.profile.id, data.dealId, data.teamMemberId ?? null);
+    return handToImplementation(
+      context.profile.id,
+      data.dealId,
+      data.teamMemberId ?? null,
+      context.profile.team_member_id ?? null,
+    );
   });

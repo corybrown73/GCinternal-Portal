@@ -657,8 +657,14 @@ export const addJournalEntry = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const { createJournalEntry } = await import("./hub.server");
     // A note with no named author is the signed-in person's: the workspace
-    // never asks who is typing.
-    return createJournalEntry({ ...data, authorId: data.authorId ?? context.profile.id });
+    // never asks who is typing. journal_entries.author_id references
+    // team_members, not portal_profiles, so the signed-in person is resolved
+    // through the same bridge used elsewhere (advanceImplementationStage,
+    // setImplementation, addEvidence) rather than their login id.
+    return createJournalEntry({
+      ...data,
+      authorId: data.authorId ?? context.profile.team_member_id ?? null,
+    });
   });
 
 export const uploadAttachment = createServerFn({ method: "POST" })
