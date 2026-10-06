@@ -2988,7 +2988,7 @@ export async function finishImplementation(
   if (!row) throw new Error("Deal not found");
   const pipeline = await loadPipelineStages();
   if (String(row.stage) !== terminalStage(pipeline).key) {
-    throw new Error("The deal has to reach Implementation Complete before it can be finished.");
+    throw new Error("The deal has to reach Graduate before it can be finished.");
   }
   if (kind === "not_proven" && !reason?.trim()) {
     throw new Error("Not Proven needs the reason.");

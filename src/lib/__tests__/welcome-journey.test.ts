@@ -43,14 +43,24 @@ function build(stage: string, over: Record<string, unknown> = {}, homework = {})
 }
 
 describe("the customer's journey", () => {
-  it("is nothing before the close, and five stages with one 'now' after it", () => {
+  it("is nothing before the close, and six stages with one 'now' after it", () => {
     expect(build("negotiate")).toBeNull();
     const j = build("make_it_yours")!;
-    expect(j.stages.map((s) => s.state)).toEqual(["done", "done", "now", "later", "later"]);
+    expect(j.stages.map((s) => s.state)).toEqual(["done", "done", "done", "now", "later", "later"]);
+    expect(j.stages.map((s) => s.label)).toEqual([
+      "Intake & Process",
+      "Kickoff",
+      "Get it working",
+      "Make it yours",
+      "Make it run",
+      "Graduate",
+    ]);
     expect(j.current.label).toBe("Make it yours");
     expect(j.headline).toMatch(/^You are in Make it yours/);
-    // Closed Won is Pre-Kickoff to the customer: the first stage is where they are.
+    // Closed Won is Intake & Process to the customer: the first stage is where they are.
     expect(build("closed_won")!.stages[0]!.state).toBe("now");
+    // Kickoff is its own stage to the customer, as it is to the team.
+    expect(build("kickoff")!.current.key).toBe("kickoff");
     expect(build("onboarding_complete")!.headline).toMatch(/complete/);
   });
 

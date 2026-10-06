@@ -1,8 +1,8 @@
 /**
  * The deal's stages, in order. After the close they are the operating
- * model's six: Pre-Kickoff, Kickoff, Get it working, Make it yours, Make it
- * run, Implementation Complete — the same names the team, the customer and
- * the Hub use. Each ends at a gate (src/lib/won-gate.ts), not after a number
+ * model's six: Intake & Process, Kickoff, Get it working, Make it yours,
+ * Make it run, Graduate — the same names the team, the customer and the Hub
+ * use. Each ends at a gate (src/lib/won-gate.ts), not after a number
  * of meetings.
  */
 export const STAGES = [
@@ -25,12 +25,12 @@ export const STAGE_LABELS: Record<AccountStage, string> = {
   negotiate: "Negotiate & Finalize",
   closed_won: "Closed Won",
   field_fusion_setup: "Field Fusion setup",
-  onboarding_kickoff: "Pre-Kickoff",
+  onboarding_kickoff: "Intake & Process",
   kickoff: "Kickoff",
   get_it_working: "Get it working",
   make_it_yours: "Make it yours",
   make_it_run: "Make it run",
-  onboarding_complete: "Implementation Complete",
+  onboarding_complete: "Graduate",
 };
 
 /**
@@ -41,7 +41,7 @@ export const LEGACY_STAGES: Readonly<Record<string, { label: string; now: Accoun
   in_onboarding: { label: "Onboarding (legacy)", now: "get_it_working" },
 };
 
-/** The four stages between Pre-Kickoff and Implementation Complete. */
+/** The four stages between Intake & Process and Graduate. */
 export const ONBOARDING_STAGES: ReadonlyArray<AccountStage> = [
   "kickoff",
   "get_it_working",

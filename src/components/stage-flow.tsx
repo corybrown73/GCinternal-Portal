@@ -1100,9 +1100,9 @@ function stageFooter(
     case "negotiate":
       return "Sales is closing. Assign the TIS now; the deal moves to Closed Won when it is marked won.";
     case "closed_won":
-      return "Moves to Pre-Kickoff when the review is approved.";
+      return "Moves to Intake & Process when the review is approved.";
     case "field_fusion":
-      return "Moves to Pre-Kickoff when the setup is handed over.";
+      return "Moves to Intake & Process when the setup is handed over.";
     case "pre_kickoff":
       return path === "new_logo"
         ? "Gate: Ready for Kickoff — the handoff complete, the customer ready, the AE answered, the prep done and all three meetings booked."
@@ -2084,11 +2084,11 @@ export function KickoffBody({
             : ""}.{" "}
           <span className="text-foreground">
             {deal.account.stage === "prospect" || deal.account.stage === "negotiate"
-              ? "Next: mark the deal Closed Won at the top — it goes on to Kickoff once Pre-Kickoff is done."
+              ? "Next: mark the deal Closed Won at the top — it goes on to Kickoff once Intake & Process is done."
               : deal.account.stage === "closed_won"
-                ? "Next: finish the Closed Won tasks — the deal then moves on through Pre-Kickoff."
+                ? "Next: finish the Closed Won tasks — the deal then moves on through Intake & Process."
                 : deal.account.stage === "onboarding_kickoff"
-                  ? "Moving the deal to Kickoff once Pre-Kickoff's gate is met…"
+                  ? "Moving the deal to Kickoff once Intake & Process's gate is met…"
                   : "Next: send the invite below, then run the call."}
           </span>
         </div>

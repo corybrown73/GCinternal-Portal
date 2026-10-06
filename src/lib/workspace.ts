@@ -193,7 +193,7 @@ export function workspaceFor(input: WorkspaceInput): Workspace {
       ? intake.outcome.kind === "proven"
         ? "Complete — Proven"
         : "Complete — Not Proven"
-      : "Implementation Complete · the proof window";
+      : "Graduate · the proof window";
   } else if (current === "pre_kickoff") {
     now = tasks.map(withKind);
     const first = calls(timeline)[0];

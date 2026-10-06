@@ -13,14 +13,14 @@ import { isPreClose, normalizeStage, type AccountStage } from "./presale-stages"
 import { HOMEWORK_KEYS, type HomeworkKey } from "./welcome";
 
 /**
- * The customer's view of where their implementation is: the five stages
+ * The customer's view of where their implementation is: the six stages
  * with the one they are in, who has the ball on each thing they bought,
  * and the dated things that are theirs to do. Read from the same deal
  * stage, plan and solutions the team works from — the customer never sees
  * a second model — said in their words.
  */
 export type JourneyStageKey =
-  "pre_kickoff" | "get_it_working" | "make_it_yours" | "make_it_run" | "complete";
+  "pre_kickoff" | "kickoff" | "get_it_working" | "make_it_yours" | "make_it_run" | "complete";
 
 export type JourneyStage = {
   key: JourneyStageKey;
@@ -64,8 +64,13 @@ export type CustomerJourney = {
 const JOURNEY: ReadonlyArray<Omit<JourneyStage, "state">> = [
   {
     key: "pre_kickoff",
-    label: "Pre-Kickoff",
+    label: "Intake & Process",
     blurb: "Before we meet: your team and ours get ready, and the first meeting is booked.",
+  },
+  {
+    key: "kickoff",
+    label: "Kickoff",
+    blurb: "The first meeting: we walk your process together and agree the plan and dates.",
   },
   {
     key: "get_it_working",
@@ -84,7 +89,7 @@ const JOURNEY: ReadonlyArray<Omit<JourneyStage, "state">> = [
   },
   {
     key: "complete",
-    label: "Implementation Complete",
+    label: "Graduate",
     blurb: "Proven in real use, and handed to the team that looks after you from here.",
   },
 ];
@@ -93,8 +98,7 @@ const STAGE_TO_KEY: Partial<Record<AccountStage, JourneyStageKey>> = {
   closed_won: "pre_kickoff",
   field_fusion_setup: "pre_kickoff",
   onboarding_kickoff: "pre_kickoff",
-  // Kickoff booked, not yet held: still "before we meet" to the customer.
-  kickoff: "pre_kickoff",
+  kickoff: "kickoff",
   get_it_working: "get_it_working",
   make_it_yours: "make_it_yours",
   make_it_run: "make_it_run",

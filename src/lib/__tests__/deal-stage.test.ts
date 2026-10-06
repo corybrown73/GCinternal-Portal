@@ -35,7 +35,7 @@ describe("one stage for a deal", () => {
   });
 
   it("labels from the pipeline's names first, then the built-in ones", () => {
-    expect(dealStageLabel("onboarding_kickoff")).toBe("Pre-Kickoff");
+    expect(dealStageLabel("onboarding_kickoff")).toBe("Intake & Process");
     expect(
       dealStageLabel("onboarding_kickoff", [{ key: "onboarding_kickoff", label: "Prep" }]),
     ).toBe("Prep");

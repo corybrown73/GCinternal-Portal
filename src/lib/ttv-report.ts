@@ -157,11 +157,11 @@ export const TTV_TIMINGS: ReadonlyArray<{
   hint: string;
 }> = [
   { key: "ttv", label: "Time to value", hint: "Close → Operational Go-Live" },
-  { key: "handoff", label: "Handoff time", hint: "Close → Pre-Kickoff" },
-  { key: "preKickoff", label: "Pre-Kickoff time", hint: "Pre-Kickoff → Get it working" },
+  { key: "handoff", label: "Handoff time", hint: "Close → Intake & Process" },
+  { key: "preKickoff", label: "Intake & Process time", hint: "Intake & Process → Get it working" },
   { key: "toWorking", label: "Time to working", hint: "Get it working → Make it yours" },
   { key: "makeItYours", label: "Make-it-yours time", hint: "Make it yours → Make it run" },
   { key: "launchLag", label: "Launch lag", hint: "Make it run → Go-Live" },
-  { key: "proof", label: "Proof time", hint: "Go-Live → Implementation Complete" },
-  { key: "total", label: "Total duration", hint: "Close → Implementation Complete" },
+  { key: "proof", label: "Proof time", hint: "Go-Live → Graduate" },
+  { key: "total", label: "Total duration", hint: "Close → Graduate" },
 ];

@@ -189,7 +189,7 @@ export function FieldFusionGate({ deal, editable }: { deal: DealData; editable: 
               disabled={!editable || busy || !ready}
               title={
                 ready
-                  ? "Moves the deal to Pre-Kickoff and emails implementation"
+                  ? "Moves the deal to Intake & Process and emails implementation"
                   : "Tick both boxes first"
               }
               onClick={async () => {

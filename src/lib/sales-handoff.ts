@@ -171,7 +171,7 @@ export const HANDOFF_QUESTIONS: ReadonlyArray<HandoffQuestion> = [
     key: "open_questions",
     label: "Open questions",
     ask: "Open questions",
-    hint: "What the calls left unanswered. The TIS picks these up in Pre-Kickoff.",
+    hint: "What the calls left unanswered. The TIS picks these up in Intake & Process.",
     side: "sales",
     kind: "long",
     required: false,

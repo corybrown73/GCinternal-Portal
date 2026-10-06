@@ -116,7 +116,7 @@ describe("what a deal needs, from its own facts", () => {
     );
     expect(r.map((x) => x.reason)).toEqual(["Core meetings not booked"]);
     const stuck = needsAction(deal({ stage: "onboarding_kickoff", business_days_in_stage: 30 }));
-    expect(stuck[0]!.reason).toMatch(/^Stuck 30 business days in Pre-Kickoff/);
+    expect(stuck[0]!.reason).toMatch(/^Stuck 30 business days in Intake & Process/);
   });
 });
 
