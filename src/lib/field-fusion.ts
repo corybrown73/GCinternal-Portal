@@ -54,3 +54,11 @@ export type HandoffNote = {
   goals: string[];
   notes: string | null;
 };
+
+/**
+ * Prefixes the journal entry a handoff snapshots its note into (see
+ * `handToImplementation` in field-fusion.server.ts). No new column: this is
+ * how the idempotency check and Implementation History both recognize the
+ * entry as the handoff snapshot rather than an ordinary note.
+ */
+export const HANDOFF_JOURNAL_MARKER = "[partner-handoff]";

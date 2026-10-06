@@ -5,6 +5,7 @@ import {
   FIELD_FUSION_STAGE,
   fieldFusionChecklist,
   fieldFusionReady,
+  HANDOFF_JOURNAL_MARKER,
   type HandoffNote,
 } from "./field-fusion";
 import { intakeAnswersSchema, readIntake } from "./intake-answers";
@@ -193,6 +194,51 @@ export async function handToImplementation(
       notes: Boolean(handoff.notes),
     },
   });
+
+  // The pre-handoff notes field stays editable and current-state-only
+  // (`FieldFusionGate`/`PartnerHandoffPanel` read it live); this is the one
+  // durable copy, so what the partner actually wrote survives the handoff
+  // into Implementation History once the field moves on and stops being
+  // read. Best-effort and last: the handoff itself has already happened by
+  // this point, so a failure here is logged, never thrown.
+  if (handoff.notes) {
+    try {
+      const { data: impl } = await db()
+        .from("implementations")
+        .select("id")
+        .eq("deal_id", dealId)
+        .is("superseded_by_implementation_id", null)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (impl?.id) {
+        // Idempotent: a retried handoff call must not double the note into
+        // history. The marker prefix is the only thing that identifies this
+        // entry — no new column for it.
+        const { data: already } = await db()
+          .from("journal_entries")
+          .select("id")
+          .eq("implementation_id", impl.id)
+          .like("note", `${HANDOFF_JOURNAL_MARKER}%`)
+          .limit(1)
+          .maybeSingle();
+        if (!already) {
+          const { createJournalEntry } = await import("./hub.server");
+          await createJournalEntry({
+            implementationId: impl.id as string,
+            note: `${HANDOFF_JOURNAL_MARKER}\n${handoff.notes}`,
+            authorId: actorProfileId,
+            links: null,
+            attachmentUrl: null,
+            attachmentName: null,
+            kind: "note",
+          });
+        }
+      }
+    } catch (e) {
+      console.error("[field fusion] could not snapshot the handoff note into history", e);
+    }
+  }
 
   return { assigneeName: result?.assigneeName ?? null, claimOffered: result === null };
 }

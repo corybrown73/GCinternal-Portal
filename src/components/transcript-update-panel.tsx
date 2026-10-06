@@ -18,6 +18,7 @@ import {
   setRecordField,
 } from "@/lib/hub.functions";
 import {
+  attachmentReferenceFor,
   CONFIDENCE_LABEL,
   isValidIsoDate,
   PROPOSAL_TYPE_LABEL,
@@ -130,13 +131,15 @@ export function TranscriptUpdatePanel({
         },
       });
       // The transcript is evidence the moment it exists, whether or not
-      // anything proposed from it is ever applied.
+      // anything proposed from it is ever applied. The description carries a
+      // durable reference back to the uploaded file (see
+      // attachmentReferenceFor) — there is no column for it.
       await recordEvidence({
         data: {
           implementationId,
           type: "communication",
           title,
-          description: null,
+          description: attachmentReferenceFor(stored.id),
           url: null,
           uploadedBy: profile?.id ?? null,
           relatedEntityType: null,

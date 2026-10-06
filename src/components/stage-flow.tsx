@@ -11,6 +11,7 @@ import { ParkingLot } from "@/components/parking-lot";
 import { Field } from "@/components/record";
 import { SolutionsCard } from "@/components/solutions-card";
 import { TranscriptUpdatePanel } from "@/components/transcript-update-panel";
+import { ImplementationHistorySection } from "@/components/implementation-history";
 import { FactsStep, FlowStep, NotesIn, SowStep } from "@/components/intake-panel";
 import { assignDealFn, claimDealFn, getDealAssignment } from "@/lib/assignment.functions";
 import { MemberOptions } from "@/components/member-options";
@@ -20,6 +21,7 @@ import { useOptimisticTick } from "@/lib/use-optimistic-tick";
 import { bookingWarnings, typedDatesFor } from "@/lib/watch-outs";
 import { canEditDeal, canManage, useProfile } from "@/lib/auth";
 import { dealQuery, type DealData } from "@/lib/deal-query";
+import type { Customer360 } from "@/lib/hub-types";
 import {
   firstFormName,
   flowAnswered,
@@ -733,11 +735,13 @@ export function CurrentImplementationTab({
   implementationId,
   dealId,
   ownerName,
+  record,
 }: {
   customerId: string;
   implementationId: string;
   dealId: string;
   ownerName: string | null;
+  record: Customer360;
 }) {
   const { profile } = useProfile();
   const editable = canEditDeal(profile?.role);
@@ -985,6 +989,15 @@ export function CurrentImplementationTab({
       )}
 
       <SolutionsCard deal={deal} editable={editable} />
+
+      <ImplementationHistorySection
+        dealStageHistory={deal.stage_history}
+        journal={record.journal}
+        risks={record.risks}
+        issues={record.issues}
+        decisions={record.decisions}
+        evidence={record.evidence}
+      />
     </div>
   );
 }

@@ -17,6 +17,27 @@ import { z } from "zod";
  * meeting/timeline model.
  */
 
+/**
+ * The evidence row created for an uploaded transcript has no column for the
+ * `account_files` id the actual bytes live under, so the upload stores a
+ * durable reference in the evidence's own (otherwise-unused) `description`
+ * field — the smallest way to keep "this evidence" linked back to "the file
+ * it came from" without a new column. Implementation History reads it back
+ * to offer an "Open source file" action via the existing attachment-link
+ * mechanism (`openAttachment` / `accountFileLink`).
+ */
+const ATTACHMENT_REFERENCE_PREFIX = "attachment:";
+
+export function attachmentReferenceFor(attachmentId: string): string {
+  return `${ATTACHMENT_REFERENCE_PREFIX}${attachmentId}`;
+}
+
+export function attachmentIdFromDescription(description: string | null): string | null {
+  if (!description || !description.startsWith(ATTACHMENT_REFERENCE_PREFIX)) return null;
+  const id = description.slice(ATTACHMENT_REFERENCE_PREFIX.length).trim();
+  return id || null;
+}
+
 export const PROPOSAL_TYPES = [
   "risk",
   "issue",
