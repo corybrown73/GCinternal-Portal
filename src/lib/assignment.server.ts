@@ -442,10 +442,13 @@ async function notifyAssignee(a: {
 
   // Short on purpose: you have a new implementation, here is your first
   // move, go. The Hub takes it from there — the workspace answers the rest.
-  const training = a.training || a.message === "handoff";
+  // A handoff is never forced into the fixed training-session copy below —
+  // its own next action is whatever the deal's checklist says, Kickoff
+  // included, not a promised number of calls.
+  const training = a.training && a.message !== "handoff";
   const firstMove =
     a.message === "handoff"
-      ? "Reply to the AE and book Session 1 — the email is drafted on the deal."
+      ? "Book the kickoff call — it's the one open step waiting on the deal."
       : "Add the Gong brief and the SOW; the AI reads both and fills in the rest.";
   await sendEmail({
     kind: "assignment",

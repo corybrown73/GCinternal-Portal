@@ -506,6 +506,7 @@ function Customer360Page() {
               implementationId={impl.id}
               dealId={impl.deal_id}
               ownerName={impl.owner_name}
+              record={record}
             />
           ) : (
             <p className="text-[13px] text-muted-foreground">
