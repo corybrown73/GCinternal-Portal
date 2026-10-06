@@ -30,7 +30,10 @@ const impl = (over: Partial<ImplementationRow> = {}): ImplementationRow => ({
   current_stage: "build",
   deal_stage: "make_it_yours",
   deal_id: "d1",
-  stage_entered_at: "2026-09-21T15:00:00Z",
+  // Two days ago, whatever today is: a fixed date here tripped the 14-day
+  // stall rule the day the calendar caught up with it, and the whole suite
+  // went red for everyone at once.
+  stage_entered_at: new Date(Date.now() - 2 * 86_400_000).toISOString(),
   status: "on_track",
   health_recorded: null,
   health_recorded_reason: null,
