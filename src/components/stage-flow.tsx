@@ -520,10 +520,7 @@ export function ImplementationStatusFacts({
 
   return (
     <>
-      <Field
-        label="Target"
-        value={ws.where.target ? `${ws.where.target.word} ${shortDay(ws.where.target.date)}` : null}
-      />
+      <Field label="Target" value={ws.where.target ? shortDay(ws.where.target.date) : null} />
       <Field
         label="Ball"
         value={ws.ball ? (ws.ball.who === "customer" ? "With the customer" : "With us") : null}
@@ -899,7 +896,17 @@ export function CurrentImplementationTab({
       </section>
 
       {flow.current === "field_fusion" ? (
+        // With a Partner Implementation Lead, before the handoff: its own
+        // surface, never the Closed Won fallback below.
         <PartnerHandoffPanel deal={deal} editable={editable} />
+      ) : flow.current === "closed_won" ? (
+        // Closed Won's own gate tasks (assign an owner, the Gong brief, the
+        // SOW, the sales handoff) are outside the canonical journey below
+        // and would otherwise be unreachable from here — the same full
+        // checklist the deal page runs, so completing them is never a dead
+        // end: do it here and the canonical journey below picks up the
+        // moment the deal moves on.
+        <StageFlow deal={deal} />
       ) : (
         <section
           id="current-implementation-journey"

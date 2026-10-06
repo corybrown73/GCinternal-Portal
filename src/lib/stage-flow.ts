@@ -92,7 +92,7 @@ export const FLOW_STAGES: ReadonlyArray<{ key: FlowStageKey; stage: AccountStage
     { key: "get_it_working", stage: "get_it_working", label: "Get it working" },
     { key: "make_it_yours", stage: "make_it_yours", label: "Make it yours" },
     { key: "make_it_run", stage: "make_it_run", label: "Make it run" },
-    { key: "complete", stage: "onboarding_complete", label: "Implementation Complete" },
+    { key: "complete", stage: "onboarding_complete", label: "Graduate" },
   ];
 
 /** The three stages between Pre-Kickoff and Implementation Complete, as flow keys. */
