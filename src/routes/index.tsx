@@ -568,7 +568,7 @@ function ComingUp({ t }: { t: Today }) {
                     )}
                     <span className="block truncate text-muted-foreground">
                       {e.account}
-                      {e.time ? ` · ${e.time}` : ""}
+                      {e.time ? ` · ${e.time}` : e.kind === "meeting" ? " · not booked yet" : ""}
                       {g.key === "next-week"
                         ? ` · ${new Date(`${e.date}T12:00:00Z`).toLocaleDateString("en-GB", { weekday: "short", timeZone: "UTC" })}`
                         : ""}

@@ -137,6 +137,15 @@ describe("the customer's journey", () => {
     expect(j.headline).toMatch(/things are yours to do/);
   });
 
+  it("gives the next meeting a date only once it is booked", () => {
+    const booked = build("get_it_working")!;
+    expect(booked.yours.find((y) => y.kind === "meeting")).toMatchObject({ by: "2026-09-17" });
+    // The plan has a day for the kickoff but nobody has booked it: no date
+    // for the customer — the page says "date to be set" instead.
+    const planned = build("get_it_working", { times: {} })!;
+    expect(planned.yours.find((y) => y.kind === "meeting")).toMatchObject({ by: null });
+  });
+
   it("says when nothing is waiting on them, and who has the ball instead", () => {
     const j = build("make_it_run", {
       completed: {

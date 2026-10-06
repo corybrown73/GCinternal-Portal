@@ -173,7 +173,9 @@ export function customerJourney(input: {
       .filter((m) => m.kind === "call" && !m.serviceId)
       .sort((a, b) => a.date.localeCompare(b.date));
     const next = calls.find((m) => !m.doneOn);
-    if (next) yours.push({ what: next.label, by: next.date, kind: "meeting" });
+    // Only a booked call carries a date: the plan's day for an unbooked one
+    // is ours to fix, and shown to the customer it reads as an appointment.
+    if (next) yours.push({ what: next.label, by: next.time ? next.date : null, kind: "meeting" });
     const first = calls[0];
     const held = calls.filter((m) => m.doneOn).length;
     if (first?.doneOn && held === 1) {
