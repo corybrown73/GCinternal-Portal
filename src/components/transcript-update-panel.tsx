@@ -76,9 +76,17 @@ function attributionFor(quote: string | null): string {
 export function TranscriptUpdatePanel({
   customerId: _customerId,
   implementationId,
+  planOwnsTarget = false,
 }: {
   customerId: string;
   implementationId: string;
+  /**
+   * True for an implementation that came from a deal: its target date is the
+   * onboarding plan's Go-Live and the implementation column is only a mirror
+   * the next plan sync overwrites. Writing it here would look applied and
+   * change nothing, so the proposal is shown but not applied.
+   */
+  planOwnsTarget?: boolean;
 }) {
   const { profile } = useProfile();
   const qc = useQueryClient();
@@ -147,7 +155,7 @@ export function TranscriptUpdatePanel({
         if (p.type === "target_date") {
           const ok = isValidIsoDate(p.text);
           dates[i] = ok ? p.text.trim() : "";
-          sel[i] = ok;
+          sel[i] = ok && !planOwnsTarget;
         } else if (p.type === "owner") {
           const match = guessOwner(team.data ?? [], p.text);
           owners[i] = match;
@@ -231,7 +239,7 @@ export function TranscriptUpdatePanel({
             break;
           case "target_date": {
             const date = resolvedDate[i];
-            if (!date || !isValidIsoDate(date)) break;
+            if (planOwnsTarget || !date || !isValidIsoDate(date)) break;
             await setField({
               data: { implementationId, field: "target_launch_date", value: date },
             });
@@ -350,6 +358,7 @@ export function TranscriptUpdatePanel({
               {active ? (
                 <RunReview
                   run={active}
+                  planOwnsTarget={planOwnsTarget}
                   team={team.data ?? []}
                   selected={selected}
                   setSelected={setSelected}
@@ -395,6 +404,7 @@ export function TranscriptUpdatePanel({
 
 function RunReview({
   run,
+  planOwnsTarget,
   team,
   selected,
   setSelected,
@@ -404,6 +414,7 @@ function RunReview({
   setResolvedOwner,
 }: {
   run: Run;
+  planOwnsTarget: boolean;
   team: TeamOption[];
   selected: Record<number, boolean>;
   setSelected: (fn: (prev: Record<number, boolean>) => Record<number, boolean>) => void;
@@ -432,6 +443,7 @@ function RunReview({
               proposal={p}
               checked={Boolean(selected[i])}
               disabled={disabled}
+              planOwnsTarget={planOwnsTarget}
               onToggle={(v) => setSelected((prev) => ({ ...prev, [i]: v }))}
               team={team}
               date={resolvedDate[i] ?? ""}
@@ -458,6 +470,7 @@ function ProposalRow({
   proposal,
   checked,
   disabled,
+  planOwnsTarget,
   onToggle,
   team,
   date,
@@ -468,6 +481,7 @@ function ProposalRow({
   proposal: TranscriptProposal;
   checked: boolean;
   disabled: boolean;
+  planOwnsTarget: boolean;
   onToggle: (v: boolean) => void;
   team: TeamOption[];
   date: string;
@@ -477,7 +491,8 @@ function ProposalRow({
 }) {
   const needsDate = proposal.type === "target_date";
   const needsOwner = proposal.type === "owner";
-  const unresolved = (needsDate && !isValidIsoDate(date)) || (needsOwner && !ownerId);
+  const planOwned = needsDate && planOwnsTarget;
+  const unresolved = planOwned || (needsDate && !isValidIsoDate(date)) || (needsOwner && !ownerId);
   return (
     <li className="rounded-md border border-border p-2.5">
       <label className="flex items-start gap-2 text-[12px]">
@@ -509,7 +524,12 @@ function ProposalRow({
               “{proposal.quote}”
             </span>
           ) : null}
-          {needsDate ? (
+          {planOwned ? (
+            <span className="mt-1.5 block text-[11px] text-muted-foreground">
+              Heard: {proposal.text}. The target date for this account comes from its onboarding
+              plan — move it there, and this page follows.
+            </span>
+          ) : needsDate ? (
             <span className="mt-1.5 flex items-center gap-1.5">
               <span className="text-[11px] text-muted-foreground">New target date</span>
               <input

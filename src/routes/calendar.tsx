@@ -220,6 +220,9 @@ function CalendarPage() {
                               <Link
                                 to="/customers/$customerId"
                                 params={{ customerId: e.link.customerId }}
+                                search={
+                                  e.link.implementationId ? { impl: e.link.implementationId } : {}
+                                }
                                 className="flex items-center gap-1 rounded px-1 py-0.5 text-[11px] hover:bg-muted"
                               >
                                 {content}

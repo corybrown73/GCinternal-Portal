@@ -170,6 +170,15 @@ const TAB_LABEL: Record<TabId, string> = {
   details: "Details",
 };
 
+/**
+ * Search for a link to another tab of this page. It carries the
+ * implementation being viewed, so on a customer with several projects the
+ * link stays on this one instead of falling back to the newest.
+ */
+function tabSearch(tab: AnyTabId, impl: { id: string } | null | undefined) {
+  return impl ? { tab, impl: impl.id } : { tab };
+}
+
 // A customer can have several implementations running at once. `implementationId`
 // picks which one this page shows; without it we show the most recent.
 const customerQuery = (customerId: string, implementationId?: string | null) =>
@@ -1292,10 +1301,10 @@ function AccountDetails({ record, customerId }: { record: Customer360; customerI
                 <Link
                   to="/customers/$customerId"
                   params={{ customerId }}
-                  search={{ tab: area.tab as TabId }}
+                  search={tabSearch(area.tab as AnyTabId, impl)}
                   className="ml-auto shrink-0 text-[11px] text-muted-foreground underline hover:text-foreground"
                 >
-                  {TAB_LABEL[area.tab as TabId]}
+                  {TAB_LABEL[resolveTab(area.tab)]}
                 </Link>
               ) : null}
             </li>
@@ -1582,7 +1591,7 @@ function AccountRail({
                     <Link
                       to="/customers/$customerId"
                       params={{ customerId }}
-                      search={{ tab }}
+                      search={tabSearch(tab, impl)}
                       className="flex items-center justify-between px-3 py-1.5 text-[12px] hover:bg-muted/60"
                     >
                       <span className={count ? "text-foreground" : "text-muted-foreground"}>
@@ -1770,7 +1779,7 @@ function AccountRail({
                 <Link
                   to="/customers/$customerId"
                   params={{ customerId }}
-                  search={{ tab: "history" }}
+                  search={tabSearch("history", impl)}
                   className="text-[11px] underline"
                 >
                   Full change history →
@@ -2503,7 +2512,7 @@ function SolutionTab({ record, customerId }: { record: Customer360; customerId: 
         <Link
           to="/customers/$customerId"
           params={{ customerId }}
-          search={{ tab: "requirements" }}
+          search={tabSearch("requirements", impl)}
           className="underline"
         >
           Open the Requirements tab →
@@ -2918,7 +2927,7 @@ function EvidenceTab({ record, customerId }: { record: Customer360; customerId: 
                         <Link
                           to="/customers/$customerId"
                           params={{ customerId }}
-                          search={{ tab: target }}
+                          search={tabSearch(target, impl)}
                           className="underline"
                         >
                           {supportLabel}
@@ -3033,7 +3042,7 @@ function EvidenceTab({ record, customerId }: { record: Customer360; customerId: 
                           <Link
                             to="/customers/$customerId"
                             params={{ customerId }}
-                            search={{ tab: "evidence" }}
+                            search={tabSearch("evidence", impl)}
                             className="underline"
                           >
                             {proof.title}

@@ -815,7 +815,12 @@ export function CurrentImplementationTab({
 
   return (
     <div className="space-y-4">
-      <TranscriptUpdatePanel customerId={customerId} implementationId={implementationId} />
+      {/* Every implementation on this tab came from a deal, so its target is the plan's. */}
+      <TranscriptUpdatePanel
+        customerId={customerId}
+        implementationId={implementationId}
+        planOwnsTarget
+      />
 
       <section
         className="rounded-md border border-border bg-card px-4 py-3"
