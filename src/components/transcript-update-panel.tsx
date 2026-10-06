@@ -165,7 +165,9 @@ export function TranscriptUpdatePanel({
           title,
           description: attachmentReferenceFor(stored.id),
           url: null,
-          uploadedBy: profile?.id ?? null,
+          // The server resolves the actor through the team_members bridge
+          // (evidence.uploaded_by does not accept a portal_profiles id).
+          uploadedBy: null,
           relatedEntityType: null,
           relatedEntityId: null,
         },
