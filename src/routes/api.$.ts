@@ -23,19 +23,31 @@ import { createFileRoute } from "@tanstack/react-router";
  */
 
 const LIVE_ENDPOINTS = [
-  "GET  /api/v1/accounts",
-  "POST /api/v1/accounts",
-  "GET  /api/v1/accounts/:id",
-  "POST /api/v1/implementations",
-  "GET  /api/v1/openapi.json",
+  "POST /api/v1/closed-won            accounts:write        — a closed deal → deal + project + TIS",
+  "POST /api/v1/accounts              accounts:write        — upsert a deal",
+  "GET  /api/v1/accounts              accounts:read",
+  "GET  /api/v1/accounts/:id          accounts:read",
+  "POST /api/v1/accounts/:id/transition  transitions:write",
+  "POST /api/v1/implementations       implementations:write — Opportunity → project (older route)",
+  "GET  /api/v1/implementations       implementations:read",
+  "POST /api/v1/field-fusion-requests accounts:write",
+  "POST /api/v1/tam-requests          tam:write",
+  "POST /api/v1/tickets               tickets:write",
+  "POST /api/v1/alerts                alerts:write",
+  "GET  /api/v1/openapi.json          (public)",
+  "GET  /api/v1/docs                  (public)",
 ];
 
 function notFound(request: Request): Response {
   const { pathname } = new URL(request.url);
+  // The same envelope every other /api/v1 error uses, so a client's error
+  // handling has one shape to learn.
   return Response.json(
     {
-      error: "not_found",
-      message: `No API endpoint matches ${request.method} ${pathname}.`,
+      error: {
+        code: "not_found",
+        message: `No API endpoint matches ${request.method} ${pathname}. Reference: /api/v1/docs`,
+      },
       endpoints: LIVE_ENDPOINTS,
     },
     {

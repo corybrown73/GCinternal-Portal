@@ -1,20 +1,14 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
 
+import { createTicketBody } from "@/lib/server/schemas";
+
 /**
  * POST /api/v1/tickets — create a ticket from an external system.
  * Auth: API key with the 'tickets:write' scope.
  */
 
-const createTicketBody = z.object({
-  customer_id: z.string().uuid().nullable().optional(),
-  implementation_id: z.string().uuid().nullable().optional(),
-  category: z.enum(["technical", "training", "billing", "data", "integration", "other"]),
-  subject: z.string().min(1).max(300),
-  body: z.string().min(1).max(20_000),
-  priority: z.enum(["low", "normal", "high", "urgent"]).optional(),
-  submitter_email: z.string().email(),
-});
+// The body lives in server/schemas.ts so the OpenAPI document is built from it.
 
 export const Route = createFileRoute("/api/v1/tickets")({
   server: {

@@ -1,6 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
 
+import { createAlertBody } from "@/lib/server/schemas";
+
 /**
  * POST /api/v1/alerts — report that something is out of spec from an external
  * system. Inserts an alerts row and emails every manager + super admin when
@@ -8,15 +10,7 @@ import { z } from "zod";
  * Auth: API key with the 'alerts:write' scope.
  */
 
-const createAlertBody = z.object({
-  kind: z.string().min(1).max(60).optional(),
-  severity: z.enum(["info", "warning", "critical"]).optional(),
-  title: z.string().min(1).max(300),
-  detail: z.string().max(20_000).nullable().optional(),
-  customer_id: z.string().uuid().nullable().optional(),
-  implementation_id: z.string().uuid().nullable().optional(),
-  payload: z.record(z.string(), z.unknown()).nullable().optional(),
-});
+// The body lives in server/schemas.ts so the OpenAPI document is built from it.
 
 export const Route = createFileRoute("/api/v1/alerts")({
   server: {

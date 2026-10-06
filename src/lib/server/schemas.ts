@@ -49,6 +49,30 @@ export const tamRequestCreateSchema = z.object({
 });
 export type TamRequestCreateInput = z.infer<typeof tamRequestCreateSchema>;
 
+/** POST /api/v1/tickets — a ticket from an external system. */
+export const createTicketBody = z.object({
+  customer_id: z.string().uuid().nullable().optional(),
+  implementation_id: z.string().uuid().nullable().optional(),
+  category: z.enum(["technical", "training", "billing", "data", "integration", "other"]),
+  subject: z.string().min(1).max(300),
+  body: z.string().min(1).max(20_000),
+  priority: z.enum(["low", "normal", "high", "urgent"]).optional(),
+  submitter_email: z.string().email(),
+});
+export type CreateTicketInput = z.infer<typeof createTicketBody>;
+
+/** POST /api/v1/alerts — something out of spec, reported from outside. */
+export const createAlertBody = z.object({
+  kind: z.string().min(1).max(60).optional(),
+  severity: z.enum(["info", "warning", "critical"]).optional(),
+  title: z.string().min(1).max(300),
+  detail: z.string().max(20_000).nullable().optional(),
+  customer_id: z.string().uuid().nullable().optional(),
+  implementation_id: z.string().uuid().nullable().optional(),
+  payload: z.record(z.string(), z.unknown()).nullable().optional(),
+});
+export type CreateAlertInput = z.infer<typeof createAlertBody>;
+
 // The contract between the LLM (or template fallback) and the deck builder.
 export const briefJsonSchema = z4.object({
   account_name: z4.string(),

@@ -27,7 +27,7 @@ const CARDS = [
     icon: KeyRound,
     title: "API keys",
     description:
-      "Create and revoke scoped keys for Salesforce, Zapier and monitoring integrations calling /api/v1/*.",
+      "Create and revoke scoped keys for Salesforce, Zapier and monitoring integrations calling /api/v1/*. Reference: /api/v1/docs.",
   },
   {
     to: "/admin/assignment",

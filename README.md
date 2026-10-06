@@ -62,9 +62,14 @@ Sign up with your `@gocanvas.com` email → verify → you are super admin #1. D
 
 ## Open API (`/api/v1`, `Authorization: Bearer gcp_live_…`)
 
+Interactive reference at `/api/v1/docs` (spec at `/api/v1/openapi.json`, generated from the validators that run). Keys and scopes: Admin → API keys. Salesforce field mapping: Admin → Integrations → Field maps.
+
 | Endpoint | Scope | Use |
 |---|---|---|
-| `POST /api/v1/accounts` | accounts:write | Upsert deal — the Zapier/Salesforce closed-won hook |
+| `POST /api/v1/closed-won` | accounts:write | **The Salesforce / Zapier closed-won hook**: deal at Closed Won + project started + TIS assigned (`implementation_owner`: email or name). Any field name — the deal map in Admin → Integrations resolves it; common names work unmapped. Idempotent on the company. |
+| `POST /api/v1/implementations`, `GET /api/v1/implementations` | implementations:write / read | Older Opportunity → project route (needs Salesforce ids); replay-safe with drift report |
+| `POST /api/v1/field-fusion-requests` | accounts:write | The GoCanvas "New FF Client Request" form → a Field Fusion deal |
+| `POST /api/v1/accounts` | accounts:write | Upsert a deal only (no project) |
 | `GET /api/v1/accounts[?stage=]`, `GET /api/v1/accounts/:id` | accounts:read | Read deals (`sf_<salesforce_id>` accepted) |
 | `POST /api/v1/accounts/:id/transition` | transitions:write | Move a deal's stage |
 | `POST /api/v1/tam-requests` | tam:write | File a TAM request (triggers approval email) |

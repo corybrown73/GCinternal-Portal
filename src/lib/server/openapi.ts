@@ -1,8 +1,16 @@
 import { z } from "zod";
 import { opportunityIngestSchema } from "./sf-schemas";
-import { accountUpsertSchema, transitionSchema } from "./schemas";
+import {
+  accountUpsertSchema,
+  createAlertBody,
+  createTicketBody,
+  tamRequestCreateSchema,
+  transitionSchema,
+} from "./schemas";
 import { API_SCOPES } from "./api-auth";
 import { EVENT_TYPES } from "./events";
+import { DEAL_FIELDS, type DealFieldKind } from "../deal-field-catalog";
+import { CLOSED_WON_FIELDS } from "./closed-won";
 
 /**
  * The OpenAPI 3.1 document for /api/v1.
@@ -11,8 +19,8 @@ import { EVENT_TYPES } from "./events";
  * by walking their shapes — not transcribed beside them. A hand-written spec
  * drifts from the code the first time someone adds a field, and then it is
  * worse than no spec at all because people believe it.
- * `src/lib/__tests__/sf-openapi.test.ts` fails if a validator grows a field the
- * document does not describe.
+ * `src/lib/__tests__/openapi.test.ts` fails if a route exists that the document
+ * does not describe, or a validator grows a field it leaves out.
  *
  * The document is public: an API description is not a secret, and every route
  * it names is still behind a scoped key.
@@ -85,6 +93,102 @@ const errorSchema: JsonSchema = {
   required: ["error"],
 };
 
+const KIND_SCHEMA: Record<DealFieldKind, JsonSchema> = {
+  text: { type: "string" },
+  long: { type: "string" },
+  number: {
+    type: ["number", "string"],
+    description: 'A number, or a string like "$48,000" or "120 users".',
+  },
+  email: { type: "string", format: "email" },
+  person: {
+    type: "string",
+    description: "An email, or a full name matched against the active team.",
+  },
+  date: {
+    type: "string",
+    description: "A date; ISO preferred, anything Date.parse reads is accepted.",
+  },
+  list: {
+    type: ["array", "string"],
+    items: { type: "string" },
+    description: "A list, or one string split on , ; |",
+  },
+  enum: { type: "string" },
+  url: { type: "string", format: "uri" },
+};
+
+/**
+ * The closed-won body: every canonical field the endpoint resolves, typed by
+ * the catalogue the admin maps onto. Other keys are allowed — they are read
+ * through the deal map in Admin → Integrations or the built-in aliases, and
+ * anything that lands nowhere comes back in `fields.unmapped_keys`.
+ */
+function closedWonSchemaJson(): JsonSchema {
+  const properties: Record<string, JsonSchema> = {};
+  for (const f of DEAL_FIELDS) {
+    properties[f.key] = {
+      ...KIND_SCHEMA[f.kind],
+      ...(f.options ? { enum: [...f.options] } : {}),
+      description: [
+        f.hint,
+        f.fillsBlankOnly ? "Written only when the deal does not have one yet." : null,
+      ]
+        .filter(Boolean)
+        .join(" "),
+    };
+  }
+  // Every canonical field the resolver knows that the catalogue does not spell out.
+  for (const key of CLOSED_WON_FIELDS) {
+    if (!(key in properties)) properties[key] = { type: "string" };
+  }
+  return {
+    type: "object",
+    properties,
+    required: ["company"],
+    additionalProperties: true,
+    description:
+      "Field names are resolved map-first, then by alias: Account Name, account, customer and name all mean company; TIS, tis_email, implementation_owner_email all mean implementation_owner. A Salesforce Flow may post the whole Opportunity and map dotted paths (Account.Name, TIS_Assigned__r.Email) in Admin → Integrations → Field maps.",
+  };
+}
+
+const closedWonResponse: JsonSchema = {
+  type: "object",
+  properties: {
+    deal_id: { type: "string", format: "uuid" },
+    deal_created: { type: "boolean" },
+    customer_id: { type: ["string", "null"], format: "uuid" },
+    implementation_id: { type: ["string", "null"], format: "uuid" },
+    kicked_off: {
+      type: "boolean",
+      description: "True when THIS call created the project; false on a replay.",
+    },
+    assigned_to: { type: ["string", "null"], description: "The TIS's name when one was assigned." },
+    note: {
+      type: ["string", "null"],
+      description: "Why nothing was kicked off or assigned, when so.",
+    },
+    deal_url: { type: "string", format: "uri" },
+    project_url: { type: ["string", "null"], format: "uri" },
+    fields: {
+      type: "object",
+      properties: {
+        set: {
+          type: "object",
+          additionalProperties: { type: "string" },
+          description: 'Canonical field → "alias" or "map:<source path>".',
+        },
+        unmapped_keys: {
+          type: "array",
+          items: { type: "string" },
+          description: "Payload keys that landed nowhere.",
+        },
+      },
+    },
+  },
+  required: ["deal_id", "deal_created", "kicked_off", "fields"],
+};
+
 function jsonBody(schema: JsonSchema) {
   return { content: { "application/json": { schema } } };
 }
@@ -108,13 +212,49 @@ export function buildOpenApiDocument(): Record<string, unknown> {
       },
       schemas: {
         Error: errorSchema,
+        ClosedWon: closedWonSchemaJson(),
+        ClosedWonResult: closedWonResponse,
         OpportunityIngest: zodToJsonSchema(opportunityIngestSchema),
         AccountUpsert: zodToJsonSchema(accountUpsertSchema),
         AccountTransition: zodToJsonSchema(transitionSchema),
+        TamRequest: zodToJsonSchema(tamRequestCreateSchema),
+        Ticket: zodToJsonSchema(createTicketBody),
+        Alert: zodToJsonSchema(createAlertBody),
       },
     },
     security: [{ apiKey: [] }],
     paths: {
+      "/closed-won": {
+        post: {
+          summary: "A closed deal → a deal at Closed Won, a started project, an assigned TIS",
+          description:
+            "The Salesforce / Zapier hook. Upserts the deal at Closed Won (matched by Salesforce " +
+            "account id, then by company name, case-insensitive; stage moves forward only), " +
+            "records the contact and the intake facts it was given (blanks only), starts the " +
+            "project exactly as the Start onboarding button does, and assigns the TIS named in " +
+            "`implementation_owner` (email or full name, matched exactly against the active team; " +
+            "nobody matched → the assignment rule picks and `note` says so). IDEMPOTENT ON THE " +
+            "COMPANY: a second delivery updates the deal's facts and returns the existing project " +
+            "with `kicked_off: false`. Field names are resolved by the deal map in Admin → " +
+            "Integrations first, then by alias.",
+          "x-required-scope": "accounts:write",
+          requestBody: { required: true, ...jsonBody({ $ref: "#/components/schemas/ClosedWon" }) },
+          responses: {
+            "201": {
+              description: "Deal created (and, unless already onboarding, project started)",
+              ...jsonBody({ $ref: "#/components/schemas/ClosedWonResult" }),
+            },
+            "200": {
+              description: "Deal already existed; facts updated; see kicked_off",
+              ...jsonBody({ $ref: "#/components/schemas/ClosedWonResult" }),
+            },
+            "422": {
+              description: "validation_failed: no company, or a required mapped field is missing",
+              ...jsonBody({ $ref: "#/components/schemas/Error" }),
+            },
+          },
+        },
+      },
       "/implementations": {
         post: {
           summary: "Create (or replay) an implementation from a closed-won Opportunity",
@@ -220,6 +360,52 @@ export function buildOpenApiDocument(): Record<string, unknown> {
             ...jsonBody({ $ref: "#/components/schemas/AccountTransition" }),
           },
           responses: { "200": { description: "OK", ...jsonBody({ type: "object" }) } },
+        },
+      },
+      "/field-fusion-requests": {
+        post: {
+          summary: 'The GoCanvas "New FF Client Request" form → a Field Fusion deal',
+          description:
+            "Forgiving field names (see server/field-fusion-request.ts). Idempotent on the " +
+            "submission. Returns the deal and its URL.",
+          "x-required-scope": "accounts:write",
+          requestBody: {
+            required: true,
+            ...jsonBody({
+              type: "object",
+              required: ["company_name"],
+              properties: { company_name: { type: "string" } },
+              additionalProperties: true,
+            }),
+          },
+          responses: {
+            "201": { description: "Deal created", ...jsonBody({ type: "object" }) },
+            "200": { description: "Already received", ...jsonBody({ type: "object" }) },
+          },
+        },
+      },
+      "/tam-requests": {
+        post: {
+          summary: "File a TAM request (triggers the approval email)",
+          "x-required-scope": "tam:write",
+          requestBody: { required: true, ...jsonBody({ $ref: "#/components/schemas/TamRequest" }) },
+          responses: { "201": { description: "Filed", ...jsonBody({ type: "object" }) } },
+        },
+      },
+      "/tickets": {
+        post: {
+          summary: "File a ticket from an external system (24h first-response SLA)",
+          "x-required-scope": "tickets:write",
+          requestBody: { required: true, ...jsonBody({ $ref: "#/components/schemas/Ticket" }) },
+          responses: { "201": { description: "Filed", ...jsonBody({ type: "object" }) } },
+        },
+      },
+      "/alerts": {
+        post: {
+          summary: "Report something out of spec (severity ≥ warning emails managers)",
+          "x-required-scope": "alerts:write",
+          requestBody: { required: true, ...jsonBody({ $ref: "#/components/schemas/Alert" }) },
+          responses: { "201": { description: "Raised", ...jsonBody({ type: "object" }) } },
         },
       },
     },
