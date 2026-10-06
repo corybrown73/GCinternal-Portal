@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { ChevronDown, ChevronRight, Sparkles, Upload } from "lucide-react";
 
-import { fileToBase64, MAX_ATTACHMENT_BYTES } from "@/lib/attachment-client";
+import { fileToBase64, MAX_ATTACHMENT_BYTES, textToBase64 } from "@/lib/attachment-client";
 import { uploadAttachment } from "@/lib/attachments.functions";
 import { useProfile } from "@/lib/auth";
 import type { TeamOption } from "@/components/owner-picker";
@@ -65,14 +65,20 @@ function attributionFor(quote: string | null): string {
 /**
  * Update from customer meeting — V1.
  *
- * Transcript = evidence. Human-confirmed updates = implementation truth. An
- * uploaded transcript is read once by the model, which proposes risks,
- * issues, decisions, a target-date change, an owner change, or a follow-up
- * note — each with a confidence and a supporting quote. Nothing here writes
- * anything until the reviewer ticks the items they want and clicks Apply;
- * applying runs through the Hub's existing risk/issue/decision/record-field/
- * journal write paths, exactly as if entered by hand. The stage, the
- * checklist, intake and purchased services are never touched from here.
+ * Transcript = evidence. Human-confirmed updates = implementation truth. A
+ * transcript — pasted directly, or uploaded as a file — is read once by the
+ * model, which proposes risks, issues, decisions, a target-date change, an
+ * owner change, or a follow-up note — each with a confidence and a
+ * supporting quote. Nothing here writes anything until the reviewer ticks
+ * the items they want and clicks Apply; applying runs through the Hub's
+ * existing risk/issue/decision/record-field/journal write paths, exactly as
+ * if entered by hand. The stage, the checklist, intake and purchased
+ * services are never touched from here.
+ *
+ * Paste and upload are two ways of getting to the same input, not two
+ * features: pasted text is base64-encoded into a synthetic .txt file and
+ * sent through the exact same upload → evidence → analyse pipeline a real
+ * uploaded file uses, so there is exactly one transcript-analysis path.
  */
 export function TranscriptUpdatePanel({
   customerId: _customerId,
@@ -104,6 +110,7 @@ export function TranscriptUpdatePanel({
 
   const [open, setOpen] = useState(false);
   const [file, setFile] = useState<File | null>(null);
+  const [pastedText, setPastedText] = useState("");
   const [runs, setRuns] = useState<Run[]>([]);
   const [activeId, setActiveId] = useState<number | null>(null);
   const [selected, setSelected] = useState<Record<number, boolean>>({});
@@ -112,21 +119,38 @@ export function TranscriptUpdatePanel({
 
   const active = runs.find((r) => r.id === activeId) ?? null;
 
+  type RunInput = { kind: "paste"; text: string } | { kind: "file"; file: File };
+
   const run = useMutation({
-    mutationFn: async () => {
-      if (!file) throw new Error("Choose a transcript file first.");
-      if (file.size > MAX_ATTACHMENT_BYTES) {
-        throw new Error("That file is too large for this preview — keep it under 4.5 MB.");
+    mutationFn: async (input: RunInput) => {
+      let fileName: string;
+      let contentType: string;
+      let dataBase64: string;
+
+      if (input.kind === "paste") {
+        const text = input.text.trim();
+        if (!text) throw new Error("Paste the transcript text first.");
+        fileName = `pasted-transcript-${Date.now()}.txt`;
+        contentType = "text/plain";
+        dataBase64 = textToBase64(text);
+      } else {
+        const picked = input.file;
+        if (picked.size > MAX_ATTACHMENT_BYTES) {
+          throw new Error("That file is too large for this preview — keep it under 4.5 MB.");
+        }
+        fileName = picked.name;
+        contentType = picked.type || "application/octet-stream";
+        dataBase64 = await fileToBase64(picked);
       }
-      const title = `Meeting transcript — ${file.name}`;
-      const dataBase64 = await fileToBase64(file);
+
+      const title = `Meeting transcript — ${fileName}`;
       const stored = await upload({
         data: {
           implementationId,
           title,
           kind: "other",
-          fileName: file.name,
-          contentType: file.type || "application/octet-stream",
+          fileName,
+          contentType,
           dataBase64,
         },
       });
@@ -147,7 +171,7 @@ export function TranscriptUpdatePanel({
         },
       });
       const result = await analyze({ data: { implementationId, attachmentId: stored.id } });
-      return { fileName: file.name, analysis: result.analysis };
+      return { fileName, analysis: result.analysis };
     },
     onSuccess: ({ fileName, analysis }) => {
       const id = Date.now();
@@ -173,6 +197,7 @@ export function TranscriptUpdatePanel({
       setRuns((rs) => [...rs, { id, fileName, analysis, applied: null }]);
       setActiveId(id);
       setFile(null);
+      setPastedText("");
     },
   });
 
@@ -311,30 +336,72 @@ export function TranscriptUpdatePanel({
       {open ? (
         <div className="space-y-3 border-t border-border px-4 py-3">
           <p className="text-[12px] text-muted-foreground">
-            Upload a meeting transcript. The transcript is kept as evidence either way; nothing it
-            finds is written to this implementation until you review and apply it below.
+            Add the meeting transcript. Nothing is added to the implementation until you review and
+            apply it.
           </p>
-          <div className="flex flex-wrap items-center gap-2">
-            <input
-              type="file"
-              accept=".txt,.md,.vtt,.srt,.pdf"
-              onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-              className={cn(
-                "block text-[12px] text-muted-foreground",
-                "file:mr-2 file:rounded-md file:border file:border-input file:bg-background",
-                "file:px-2 file:py-1 file:text-[12px] file:text-foreground",
-              )}
+
+          <div className="space-y-1.5">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+              Paste transcript
+            </div>
+            <textarea
+              value={pastedText}
+              onChange={(e) => setPastedText(e.target.value)}
+              placeholder="Paste the customer meeting transcript here…"
+              rows={8}
+              disabled={run.isPending}
+              className="w-full resize-y rounded-md border border-input bg-background px-2.5 py-2 text-[12px] text-foreground outline-none focus:ring-1 focus:ring-ring disabled:opacity-60"
             />
             <button
               type="button"
-              disabled={!file || run.isPending}
-              onClick={() => run.mutate()}
+              disabled={!pastedText.trim() || run.isPending}
+              onClick={() => run.mutate({ kind: "paste", text: pastedText })}
               className="inline-flex items-center gap-1.5 rounded-sm border border-primary/40 bg-primary/10 px-2.5 py-1 text-[12px] font-medium text-primary hover:bg-primary/15 disabled:opacity-50"
             >
-              <Upload className="h-3 w-3" />
-              {run.isPending ? "Reading…" : "Upload and analyse"}
+              <Sparkles className="h-3 w-3" />
+              {run.isPending && run.variables?.kind === "paste"
+                ? "Analysing…"
+                : "Analyse transcript"}
             </button>
           </div>
+
+          <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+            <span className="h-px flex-1 bg-border" aria-hidden />
+            or
+            <span className="h-px flex-1 bg-border" aria-hidden />
+          </div>
+
+          <div className="space-y-1.5">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+              Or upload a transcript file
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <input
+                type="file"
+                accept=".txt,.md,.vtt,.srt,.pdf"
+                disabled={run.isPending}
+                onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+                className={cn(
+                  "block text-[12px] text-muted-foreground",
+                  "file:mr-2 file:rounded-md file:border file:border-input file:bg-background",
+                  "file:px-2 file:py-1 file:text-[12px] file:text-foreground",
+                  "disabled:opacity-60",
+                )}
+              />
+              <button
+                type="button"
+                disabled={!file || run.isPending}
+                onClick={() => run.mutate({ kind: "file", file: file! })}
+                className="inline-flex items-center gap-1.5 rounded-sm border border-primary/40 bg-primary/10 px-2.5 py-1 text-[12px] font-medium text-primary hover:bg-primary/15 disabled:opacity-50"
+              >
+                <Upload className="h-3 w-3" />
+                {run.isPending && run.variables?.kind === "file"
+                  ? "Reading…"
+                  : "Upload and analyse"}
+              </button>
+            </div>
+          </div>
+
           {run.isError ? (
             <p className="text-[12px] text-destructive">{(run.error as Error).message}</p>
           ) : null}
