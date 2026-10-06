@@ -145,6 +145,62 @@ export function flowLabel(key: FlowStageKey): string {
   return FLOW_STAGES.find((s) => s.key === key)!.label;
 }
 
+/**
+ * The planned date a canonical stage closes on, read straight off the plan's
+ * own milestones — never a stored per-stage field, never invented. Kickoff
+ * closes at the Kickoff call itself; Make It Yours at the Stage 2 call; Make
+ * It Run at the plan's Functional/Go-Live date, since that is the milestone
+ * that actually ends it. Intake & Process ends when Kickoff is BOOKED, not
+ * when it's held — booking has no planned date of its own to be early or
+ * late against, so it gets no target here. Get It Working closes on two
+ * ticks (the baseline, one submission end to end) and Graduate on the
+ * close-out and graduation checks — neither is a scheduled date either.
+ */
+export function stageTargetDate(key: FlowStageKey, timeline: Timeline | null): string | null {
+  if (!timeline) return null;
+  const dateOf = (milestoneKey: string) =>
+    timeline.milestones.find((m) => m.key === milestoneKey)?.date ?? null;
+  switch (key) {
+    case "kickoff":
+      return dateOf("kickoff");
+    case "make_it_yours":
+      return dateOf("working");
+    case "make_it_run":
+      return dateOf("live");
+    default:
+      return null;
+  }
+}
+
+/**
+ * The most recent transition into a given account stage, from the deal's
+ * own stage history — the same record StageHistory already reads, so
+ * "when did this stage start" never disagrees with it. Null when the
+ * stage was never entered, or has no transition row yet.
+ */
+export function latestStageTransition<T extends { to_stage: string; occurred_at: string }>(
+  history: readonly T[],
+  stage: AccountStage | null | undefined,
+): T | null {
+  if (!stage) return null;
+  const entries = [...history]
+    .filter((t) => t.to_stage === stage)
+    .sort((a, b) => b.occurred_at.localeCompare(a.occurred_at));
+  return entries[0] ?? null;
+}
+
+/**
+ * Whether the implementation's target has moved from its agreed baseline —
+ * the trigger for showing "Target changed". False whenever either date is
+ * unknown: a baseline that was never locked is not a disagreement.
+ */
+export function targetDidChange(
+  baseline: string | null | undefined,
+  target: string | null | undefined,
+): boolean {
+  return Boolean(baseline && target && baseline !== target);
+}
+
 export type TaskAction =
   | "deal_type"
   | "prep"

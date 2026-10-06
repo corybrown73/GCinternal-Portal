@@ -2,12 +2,15 @@ import { describe, expect, it } from "vitest";
 import { shortDay } from "../onboarding-timeline";
 
 import { readIntake } from "../intake-answers";
-import { buildTimeline } from "../onboarding-timeline";
+import { buildTimeline, type Timeline } from "../onboarding-timeline";
 import {
   completedAfterTick,
   isWorkingStageKey,
+  latestStageTransition,
   showKickoffOutcomePrompt,
   stageFlow,
+  stageTargetDate,
+  targetDidChange,
   type StageFlow,
   type StageFlowInput,
 } from "../stage-flow";
@@ -404,6 +407,90 @@ describe("nudges", () => {
       ],
     });
     expect(n.map((x) => x.key)).toEqual(["make_it_yours@2026-09-21:overdue:working"]);
+  });
+});
+
+describe("stageTargetDate", () => {
+  const timeline = (milestones: Array<{ key: string; date: string }>) =>
+    ({ milestones }) as unknown as Timeline;
+
+  it("reads the Kickoff call's date for Kickoff", () => {
+    const t = timeline([{ key: "kickoff", date: "2026-10-05" }]);
+    expect(stageTargetDate("kickoff", t)).toBe("2026-10-05");
+  });
+
+  it("does not use the Kickoff call's date for Intake & Process — it ends when Kickoff is booked, not held", () => {
+    const t = timeline([{ key: "kickoff", date: "2026-10-05" }]);
+    expect(stageTargetDate("pre_kickoff", t)).toBeNull();
+  });
+
+  it("reads the Stage 2 call's date for Make It Yours", () => {
+    const t = timeline([{ key: "working", date: "2026-10-12" }]);
+    expect(stageTargetDate("make_it_yours", t)).toBe("2026-10-12");
+  });
+
+  it("reads the plan's live date for Make It Run", () => {
+    const t = timeline([{ key: "live", date: "2026-10-19" }]);
+    expect(stageTargetDate("make_it_run", t)).toBe("2026-10-19");
+  });
+
+  it("does not invent a target for Get It Working or Graduate", () => {
+    const t = timeline([
+      { key: "kickoff", date: "2026-10-05" },
+      { key: "working", date: "2026-10-12" },
+      { key: "live", date: "2026-10-19" },
+    ]);
+    expect(stageTargetDate("get_it_working", t)).toBeNull();
+    expect(stageTargetDate("complete", t)).toBeNull();
+  });
+
+  it("returns null when the plan never scheduled that stage's closing call", () => {
+    // A plan with no Stage 2 call (e.g. services-only) has nothing to read.
+    const t = timeline([
+      { key: "kickoff", date: "2026-10-05" },
+      { key: "live", date: "2026-10-19" },
+    ]);
+    expect(stageTargetDate("make_it_yours", t)).toBeNull();
+  });
+
+  it("returns null with no plan at all", () => {
+    expect(stageTargetDate("make_it_run", null)).toBeNull();
+  });
+});
+
+describe("latestStageTransition", () => {
+  it("picks the most recent transition into the given stage", () => {
+    const history = [
+      { to_stage: "kickoff", occurred_at: "2026-10-01T10:00:00Z" },
+      { to_stage: "get_it_working", occurred_at: "2026-10-03T10:00:00Z" },
+      { to_stage: "kickoff", occurred_at: "2026-10-02T10:00:00Z" },
+    ];
+    expect(latestStageTransition(history, "kickoff")?.occurred_at).toBe("2026-10-02T10:00:00Z");
+  });
+
+  it("is null when the stage was never entered", () => {
+    const history = [{ to_stage: "kickoff", occurred_at: "2026-10-01T10:00:00Z" }];
+    expect(latestStageTransition(history, "make_it_run")).toBeNull();
+  });
+
+  it("is null with no account stage to match", () => {
+    const history = [{ to_stage: "kickoff", occurred_at: "2026-10-01T10:00:00Z" }];
+    expect(latestStageTransition(history, null)).toBeNull();
+  });
+});
+
+describe("targetDidChange", () => {
+  it("is true once the current target has moved from the baseline", () => {
+    expect(targetDidChange("2026-10-16", "2026-10-23")).toBe(true);
+  });
+
+  it("is false when the target still matches the baseline", () => {
+    expect(targetDidChange("2026-10-16", "2026-10-16")).toBe(false);
+  });
+
+  it("is false when either date is not known yet", () => {
+    expect(targetDidChange(null, "2026-10-23")).toBe(false);
+    expect(targetDidChange("2026-10-16", null)).toBe(false);
   });
 });
 

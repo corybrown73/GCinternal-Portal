@@ -8,7 +8,7 @@ import { FieldFusionGate } from "@/components/field-fusion-gate";
 import { AiSource, ReadingStatus } from "@/components/fill-from-sources";
 import { MeetingRecap } from "@/components/meeting-recap";
 import { ParkingLot } from "@/components/parking-lot";
-import { Field } from "@/components/record";
+import { Field, StatusDot } from "@/components/record";
 import { SolutionsCard } from "@/components/solutions-card";
 import { TranscriptUpdatePanel } from "@/components/transcript-update-panel";
 import { ImplementationUpdatePanel } from "@/components/implementation-update-panel";
@@ -21,6 +21,8 @@ import { handToImplementationFn } from "@/lib/field-fusion.functions";
 import { useOptimisticTick } from "@/lib/use-optimistic-tick";
 import { bookingWarnings, typedDatesFor } from "@/lib/watch-outs";
 import { canEditDeal, canManage, useProfile } from "@/lib/auth";
+import { reasonLabel } from "@/lib/complexity-tiers";
+import { deriveHealth } from "@/lib/customer360-derive";
 import { dealQuery, type DealData } from "@/lib/deal-query";
 import type { Customer360 } from "@/lib/hub-types";
 import {
@@ -46,13 +48,17 @@ import {
   bookMeetingPatch,
   completedAfterTick,
   FLOW_STAGES,
+  flowLabel,
   isWorkingStageKey,
   KICKOFF_CADENCE,
+  latestStageTransition,
   PREP_ITEMS,
   readingInFlight,
   showKickoffOutcomePrompt,
   stageFlow,
+  stageTargetDate,
   stampDay,
+  targetDidChange,
   whenLabel,
   type FlowStageKey,
   type FlowTask,
@@ -148,6 +154,105 @@ function StageHistory({
         </li>
       ))}
     </ul>
+  );
+}
+
+/**
+ * Date accountability for the canonical stage being shown, in Current
+ * Implementation only: when it actually started (the same transition
+ * StageHistory itself reads, so the two never disagree) and, only where
+ * the plan genuinely schedules a closing date for it, when it's expected
+ * to finish. Shown in place of StageHistory there, not alongside it, so
+ * the start date is said once; StageFlow's own Closed Won fallback keeps
+ * using StageHistory exactly as before.
+ */
+function StageTiming({
+  shown,
+  history,
+  targetDate,
+}: {
+  shown: FlowStageKey;
+  history: DealData["stage_history"];
+  targetDate: string | null;
+}) {
+  const accountStage = FLOW_STAGES.find((s) => s.key === shown)?.stage;
+  const latest = latestStageTransition(history, accountStage);
+  if (!latest && !targetDate) return null;
+  return (
+    <div className="space-y-0.5 border-b border-border bg-muted/20 px-4 py-2 text-[11px]">
+      <p className="font-semibold text-foreground">{flowLabel(shown)}</p>
+      <p className="text-muted-foreground">
+        {latest ? (
+          <>
+            Started {stampDay(latest.occurred_at)}
+            {latest.actor_name ? ` · ${latest.actor_name}` : ""}
+            {latest.note ? ` — ${latest.note}` : ""}
+          </>
+        ) : (
+          "Start date not recorded"
+        )}
+        {targetDate ? ` · Target ${shortDay(targetDate)}` : ""}
+      </p>
+    </div>
+  );
+}
+
+/**
+ * The implementation's own target — the canonical date model (0073:
+ * target_date / baseline_date / target_date_changes), never timeline.liveDate.
+ * The status word reuses the exact deriveHealth() call the page header's
+ * StatusChip already makes; this is the same computation shown a second
+ * place, not a second algorithm. The baseline only appears once it has
+ * actually diverged from the current target, and the change history stays
+ * behind a toggle rather than sitting on the page by default.
+ */
+function ImplementationTargetSection({ record }: { record: Customer360 }) {
+  const impl = record.implementation;
+  const [open, setOpen] = useState(false);
+  if (!impl) return null;
+  const target = impl.dates.target;
+  const baseline = impl.dates.baseline;
+  const changed = targetDidChange(baseline, target);
+  const health = deriveHealth(record, impl);
+  return (
+    <section
+      className="rounded-md border border-border bg-card px-4 py-3"
+      aria-label="Implementation target"
+    >
+      <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+        Target graduation
+      </p>
+      <p className="mt-0.5 flex items-center gap-1.5 text-[14px] font-semibold text-foreground">
+        {target ? shortDay(target) : "Not set"}
+        {target ? <StatusDot status={health.level} className="text-[12px] font-normal" /> : null}
+      </p>
+      {changed ? (
+        <p className="mt-1 text-[11px] text-muted-foreground">
+          Originally {shortDay(baseline!)} ·{" "}
+          <button
+            type="button"
+            onClick={() => setOpen((o) => !o)}
+            aria-expanded={open}
+            className="font-medium text-primary hover:underline"
+          >
+            Target changed
+          </button>
+        </p>
+      ) : null}
+      {open && impl.target_changes.length > 0 ? (
+        <ul className="mt-2 space-y-1 border-t border-border pt-2 text-[11px] text-muted-foreground">
+          {impl.target_changes.map((c) => (
+            <li key={c.id}>
+              {c.from_date ? `${shortDay(c.from_date)} → ` : ""}
+              {shortDay(c.to_date)} —{" "}
+              {c.reason_code ? reasonLabel(c.reason_code) : "Reason not given yet"}
+              {c.note ? `: ${c.note}` : ""}
+              <span className="ml-1 font-mono">{stampDay(c.changed_at)}</span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </section>
   );
 }
 
@@ -893,24 +998,13 @@ export function CurrentImplementationTab({
         </div>
       </div>
 
+      <ImplementationTargetSection record={record} />
+
       <section
         className="rounded-md border border-border bg-card px-4 py-3"
         aria-label="Implementation status"
       >
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[12px]">
-          <span>
-            <span className="text-muted-foreground">Target</span>{" "}
-            {ws.where.target ? (
-              <span className="text-foreground">
-                {shortDay(ws.where.target.date)}
-                {ws.where.day?.state === "past_due" ? (
-                  <span className="text-amber-800 dark:text-amber-300"> — overdue</span>
-                ) : null}
-              </span>
-            ) : (
-              <span className="text-foreground">—</span>
-            )}
-          </span>
           <span>
             <span className="text-muted-foreground">Owner</span>{" "}
             <span className="text-foreground">{ownerName ?? "Nobody yet"}</span>
@@ -1018,7 +1112,11 @@ export function CurrentImplementationTab({
               </button>
             </div>
           ) : null}
-          <StageHistory shown={shown} history={deal.stage_history} />
+          <StageTiming
+            shown={shown}
+            history={deal.stage_history}
+            targetDate={stageTargetDate(shown, timeline)}
+          />
           {isWorkingStageKey(shown) ? (
             // The working stages are ticks (meetings held, the plan's steps,
             // readiness, Go-Live, graduation) — the same list the deal page
