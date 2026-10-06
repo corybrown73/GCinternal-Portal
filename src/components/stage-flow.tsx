@@ -943,7 +943,20 @@ export function CurrentImplementationTab({
             </div>
           ) : null}
           <StageHistory shown={shown} history={deal.stage_history} />
-          {stage.tasks.length > 0 ? (
+          {isWorkingStageKey(shown) ? (
+            // The working stages are ticks (meetings held, the plan's steps,
+            // readiness, Go-Live, graduation) — the same list the deal page
+            // runs, with its checkboxes. TaskBody has no body for a tick, so
+            // routing these through TaskRow left every one of them unclickable.
+            <OnboardingList
+              deal={deal}
+              intake={intake}
+              tasks={stage.tasks}
+              editable={editable}
+              stageKey={shown}
+              current={flow.current}
+            />
+          ) : stage.tasks.length > 0 ? (
             <ol className="divide-y divide-border">
               {stage.tasks.map((t, i) => (
                 <TaskRow
