@@ -610,10 +610,16 @@ export const setCommitment = createServerFn({ method: "POST" })
 export const addEvidence = createServerFn({ method: "POST" })
   .middleware([requireInternalAuth])
   .inputValidator((data: unknown) => createEvidenceInput.parse(data))
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
     const { createEvidence } = await import("./hub.server");
     const { implementationId, ...rest } = data;
-    return createEvidence(implementationId, toEvidencePatch(rest));
+    // evidence.uploaded_by references team_members, not portal_profiles — the
+    // server resolves it through the same bridge advanceImplementationStage
+    // and setImplementation use, rather than trusting the client's actor id.
+    return createEvidence(
+      implementationId,
+      toEvidencePatch({ ...rest, uploadedBy: context.profile.team_member_id ?? null }),
+    );
   });
 
 export const setEvidence = createServerFn({ method: "POST" })
