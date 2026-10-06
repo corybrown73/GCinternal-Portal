@@ -1,137 +1,258 @@
 import type { FlowStageKey } from "./stage-flow";
 
 /**
- * Static guidance from the TIS Project Navigator
- * (GoCanvas_TIS_Project_Navigator_v2.html), word for word.
+ * Stage guidance for the canonical implementation journey (Kickoff through
+ * Graduate) — read-only reference content, not tracked state. The Hub's own
+ * tasks and gates (stage-flow.ts) remain the source of truth for what is
+ * actually done; nothing here is saved, and selecting a stuck scenario never
+ * writes anything. A stage with no entry here (Prospect, Closed Won, Intake
+ * & Process) has no guidance yet.
  *
- * Read-only content: nothing here is tracked state. The Hub's own tasks and
- * gates (stage-flow.ts) remain the source of truth for what is actually
- * done. This only covers the stages the Navigator covers — Kickoff through
- * Graduate; a stage with no entry here (Prospect, Closed Won, Intake &
- * Process) simply has no Navigator guidance yet.
+ * Written for a TIS doing the work — during the implementation or on a
+ * customer call — not for someone learning an implementation methodology.
  */
 
 export type StuckPrompt = {
   key: string;
+  /** Button label: a recognizable description of the situation. */
   label: string;
-  title: string;
-  why: string;
-  action: string;
+  /** Short status heading shown once this scenario is selected. */
+  status: string;
+  /** 3-4 concrete, imperative next actions. */
+  actions: readonly string[];
+  /** Whether this stops the TIS from moving to the next stage right now. */
+  blocks: boolean;
+  /** One line stating whether/why this blocks progression. */
+  gate: string;
 };
 
 export type StageGuidance = {
-  purpose: string;
+  /** One plain-language instruction: what the TIS is trying to get done now. */
+  objective: string;
+  /** One or two concrete sentences expanding on the objective. */
+  objectiveDetail: string;
+  /** "Before you move on, confirm" — observable, yes/no facts. */
   checks: readonly string[];
   stuck: readonly StuckPrompt[];
-  remember: string;
-  readyWhen: string;
+  /** Heading for the readiness section, e.g. "Ready for Get It Working when". */
+  readyLabel: string;
+  readyWhen: readonly string[];
+  /** Short "Next" label, e.g. "Get It Working" or "TAM · AM · Scaled CSM". */
   next: string;
 };
 
-const ISSUES: Record<string, { title: string; why: string; action: string }> = {
+const ISSUES: Record<
+  string,
+  { status: string; actions: readonly string[]; blocks: boolean; gate: string }
+> = {
   process: {
-    title: "Understand the process before you build more.",
-    why: "Go back to the real work. Ask them to walk you through the last time someone did it.",
-    action:
-      "Follow how it starts, what happens, exceptions, where the information goes, and who owns the outcome.",
+    status: "BLOCKED: PROCESS UNCLEAR",
+    actions: [
+      "Go back to the real work — ask them to walk you through the last time someone did it.",
+      "Follow it step by step: trigger, steps, exceptions, where the information ends up, who owns the result.",
+      "Write down what you learn in plain language.",
+      "Confirm it with the customer before building anything.",
+    ],
+    blocks: true,
+    gate: "Don't build until the process is clear — building on a guess just creates rework.",
   },
   notready: {
-    title: "Reset before pretending you’re further along.",
-    why: "Kickoff works best when you arrive with something tangible.",
-    action:
-      "Identify the missing information, get it, then prepare the smallest useful starting point.",
+    status: "RESET: NOT ENOUGH TO SHOW",
+    actions: [
+      "Identify exactly what information is missing.",
+      "Go get it — from the AE, the SOW, or the customer directly.",
+      "Build the smallest useful starting point with what you now have.",
+      "Rebook Kickoff once you have something real to show.",
+    ],
+    blocks: true,
+    gate: "Don't run Kickoff as a blank-page meeting — get something tangible first.",
   },
   different: {
-    title: "Understand why before changing it.",
-    why: "A difference between what was prepared and what the customer needs is useful discovery.",
-    action:
-      "Ask: “What happens because of this information?” Then change the solution based on the workflow, not just the requested field.",
+    status: "CUSTOMER WANTS SOMETHING DIFFERENT",
+    actions: [
+      "Ask what happens because of the information they're asking about.",
+      "Find out what changed since the SOW was scoped.",
+      "Decide whether this is the same workflow or a new requirement.",
+      "Update the solution to match the real workflow, not just the requested field.",
+    ],
+    blocks: false,
+    gate: "Not a problem — just confirm it before you move on.",
   },
   testplan: {
-    title: "Make the test specific.",
-    why: "“Please test it” is too vague.",
-    action: "Agree: who tests + what workflow + which real example + by when.",
+    status: "MISSING: NO TEST PLAN",
+    actions: [
+      "Name who will test it.",
+      "Pick a real example for them to use — not a demo.",
+      "Agree exactly what “tested” means for this workflow.",
+      "Set a date.",
+    ],
+    blocks: true,
+    gate: "Don't leave Kickoff without this agreed — “please test it” isn't a plan.",
   },
   notesting: {
-    title: "Stop building around untested assumptions.",
-    why: "More changes may just create more rework.",
-    action: "Agree exactly who will test what, using which real example, and by what date.",
+    status: "BLOCKED: CUSTOMER HASN'T TESTED",
+    actions: [
+      "Pick one real example from their actual work.",
+      "Agree who runs it through the workflow and by when.",
+      "Walk through it together if that's what it takes to get it done.",
+      "Review the result before building anything else.",
+    ],
+    blocks: true,
+    gate: "Don't keep building until a real example has gone through the workflow.",
   },
-  changes: {
-    title: "Separate feedback from solution design.",
-    why: "A customer request is information, not automatically an instruction.",
-    action:
-      "Ask what they expected, what happened, and what needs to happen next. Then decide whether the change supports the agreed workflow.",
+  changerequest: {
+    status: "CUSTOMER IS ASKING FOR CHANGES",
+    actions: [
+      "Ask what they expected, what happened, and what they need instead.",
+      "Check whether this supports the agreed workflow or is something new.",
+      "Make the change only if it supports the agreed workflow.",
+      "Log anything else as a new request instead of quietly building it in.",
+    ],
+    blocks: false,
+    gate: "A request is information, not an automatic instruction — confirm it before you build it.",
   },
-  broken: {
-    title: "Stay in Get It Working.",
-    why: "If the core workflow does not work end to end, you are not ready to move forward.",
-    action: "Find the break, understand why it matters, refine it, then test again.",
+  workflowbroken: {
+    status: "BLOCKED: CORE WORKFLOW BROKEN",
+    actions: [
+      "Find exactly where it breaks.",
+      "Understand why it matters to the real process.",
+      "Fix it.",
+      "Run the same real example through it again.",
+    ],
+    blocks: true,
+    gate: "You're not ready for Make It Yours until the core workflow works end to end.",
   },
-  scope: {
-    title: "Pause before quietly adding it.",
-    why: "A new request may be Implementation, purchased Technical Solutions, Support, post-Implementation ownership, or new scope.",
-    action:
-      "Check the SOW/purchased scope and why the request is needed. Resolve ownership before committing.",
+  scopecheck: {
+    status: "CHECK: IS THIS IN SCOPE?",
+    actions: [
+      "Check the SOW and purchased scope.",
+      "Ask why the customer needs it and what it's for.",
+      "Decide: Implementation, Technical Solutions, Support, or new scope.",
+      "Confirm ownership before you commit to it.",
+    ],
+    blocks: false,
+    gate: "Don't commit to it until you know who owns it.",
   },
-  dependent: {
-    title: "Build customer capability, not TIS dependency.",
-    why: "If the customer needs you to operate something they should own, the implementation is not creating independence.",
-    action:
-      "Identify the exact capability gap. Teach it in their real workflow, do it together, then have them do it.",
+  stilldependent: {
+    status: "BLOCKED: CUSTOMER STILL DEPENDS ON YOU",
+    actions: [
+      "Name the exact thing they can't do without you.",
+      "Show them how to do it on their real workflow.",
+      "Do it together once.",
+      "Have them do it themselves while you watch.",
+    ],
+    blocks: true,
+    gate: "You're not ready for Make It Run until they can run this without you.",
   },
-  teach: {
-    title: "Teach only what helps them run their workflow.",
-    why: "The customer does not need a tour of GoCanvas.",
-    action:
-      "Start with what they will own after Implementation and teach those actions using their actual solution.",
+  whattoteach: {
+    status: "CLARIFY: WHAT TO TEACH",
+    actions: [
+      "List what the customer will own after Implementation.",
+      "Teach only those actions, using their actual solution.",
+      "Skip anything they won't be the one doing.",
+      "Confirm they can repeat it without you.",
+    ],
+    blocks: false,
+    gate: "Teach to what they'll own — not a tour of GoCanvas.",
   },
-  ts: {
-    title: "Check the dependency, not the calendar.",
-    why: "Technical Solutions can run in parallel, but dependent work should not start against a moving core workflow.",
-    action:
-      "Identify what the engineer needs to be stable. Finish that dependency, then bring in the appropriate Technical Solutions owner.",
+  tsdependency: {
+    status: "WAITING: TECHNICAL SOLUTIONS DEPENDENCY",
+    actions: [
+      "Identify exactly what the engineer needs to be stable first.",
+      "Finish that dependency.",
+      "Bring in the right Technical Solutions owner once it's stable.",
+      "Confirm a date for the handoff.",
+    ],
+    blocks: false,
+    gate: "Don't start the dependent work against a workflow that's still moving.",
   },
-  pilotproblem: {
-    title: "Good. The trial run found it before Graduation.",
-    why: "A problem found in the trial run tells you what still prevents the workflow from operating properly.",
-    action:
-      "Name the issue, owner and next action. Resolve or appropriately transition it, then validate again.",
+  pilotissue: {
+    status: "BLOCKED: PILOT ISSUE",
+    actions: [
+      "Write down exactly what failed.",
+      "Decide who owns the fix.",
+      "Agree when it will be fixed.",
+      "Test that part of the workflow again.",
+    ],
+    blocks: true,
+    gate: "You're not ready for Graduate yet.",
   },
   nousers: {
-    title: "You have not proven Make It Run yet.",
-    why: "Testing by the project owner does not prove the workflow works for the people who will actually use it.",
-    action:
-      "Choose real users and real work. Agree what they will run and when you will review the result.",
+    status: "BLOCKED: REAL USERS HAVEN'T TESTED IT",
+    actions: [
+      "Choose the people who will use this after implementation.",
+      "Give them a real piece of work to complete in GoCanvas.",
+      "Agree when they will do it.",
+      "Review what happened with the customer.",
+    ],
+    blocks: true,
+    gate: "You're not ready for Graduate yet.",
   },
-  waiting: {
-    title: "Make the dependency visible.",
-    why: "Waiting is sometimes legitimate. The owner, dependency and impact need to be clear.",
-    action:
-      "Record who owns the next action, what you are waiting for, and what can continue while you wait.",
+  waitingexternal: {
+    status: "WAITING: EXTERNAL DEPENDENCY",
+    actions: [
+      "Name exactly what's blocked.",
+      "Confirm who owns it.",
+      "Get a committed next date.",
+      "Decide whether the dependency prevents the customer from going live.",
+    ],
+    blocks: true,
+    gate: "Do not move on until the dependency is resolved or there is a clear owner, date and agreed path forward.",
   },
-  acceptance: {
-    title: "Make ‘working’ concrete.",
-    why: "Customers can struggle to confirm a vague sign-off.",
-    action:
-      "Return to the agreed success criteria. Confirm what works, what remains, and whether the agreed workflow is ready to operate.",
+  customernotready: {
+    status: "BLOCKED: CUSTOMER NOT READY TO ACCEPT",
+    actions: [
+      "Go back to what you agreed this implementation needed to achieve.",
+      "Ask what specifically is stopping them from saying it's ready.",
+      "Separate an implementation gap from a future enhancement.",
+      "Agree the remaining action, owner and date.",
+    ],
+    blocks: true,
+    gate: "You're not ready for Graduate until the customer agrees the implemented workflow is ready.",
+  },
+  completedependent: {
+    status: "BLOCKED: CUSTOMER STILL RELIES ON YOU",
+    actions: [
+      "Name the exact thing they can't do without you.",
+      "Decide if it's a training gap or a missing capability.",
+      "Close the gap, or agree who owns it going forward.",
+      "Confirm they can run it without you before you graduate them.",
+    ],
+    blocks: true,
+    gate: "You're not ready for Graduate until they can run this without you.",
   },
   incomplete: {
-    title: "Decide whether it blocks Graduation.",
-    why: "Not every open item should keep Implementation alive forever.",
-    action:
-      "Classify it: blocking outcome, appropriate transition, or new work. Then assign the correct owner.",
+    status: "DECIDE: DOES THIS BLOCK GRADUATE?",
+    actions: [
+      "Name exactly what's unfinished.",
+      "Decide: does it block the agreed outcome, or is it a transition or new work item?",
+      "If it blocks the outcome, finish it before graduating.",
+      "If it doesn't, assign it an owner and move on.",
+    ],
+    blocks: false,
+    gate: "Not every open item should keep Implementation open — but a blocking one does.",
   },
   handoff: {
-    title: "Choose the owner based on what happens next.",
-    why: "Graduation should not create an ownership vacuum.",
-    action: "Confirm the appropriate TAM, AM or Scaled CSM and document what they need to know.",
+    status: "BLOCKED: NO NEXT OWNER CONFIRMED",
+    actions: [
+      "Check whether this account has a TAM, AM or Scaled CSM.",
+      "Confirm who it is.",
+      "Write down what they need to know — open items, risks, context.",
+      "Hand it to them directly; don't leave it unassigned.",
+    ],
+    blocks: true,
+    gate: "Graduate shouldn't create an ownership gap — confirm the next owner first.",
   },
   timeline: {
-    title: "The date is a signal, not the definition of done.",
-    why: "Do not Graduate just because the timeline ended. Do not keep it open without a clear reason either.",
-    action:
-      "Identify exactly what prevents Graduation, who owns it, and the shortest path to the agreed outcome.",
+    status: "CHECK: IS THE DATE THE REAL BLOCKER?",
+    actions: [
+      "Name exactly what's not done yet.",
+      "Decide who owns finishing it.",
+      "Get the shortest realistic path to the agreed outcome.",
+      "Don't graduate just because the calendar says so — and don't stay open without a reason either.",
+    ],
+    blocks: false,
+    gate: "The date is a signal, not the definition of done.",
   },
 };
 
@@ -141,118 +262,138 @@ function stuck(entries: ReadonlyArray<{ key: string; label: string }>): StuckPro
 
 const STAGE_GUIDANCE: Partial<Record<FlowStageKey, StageGuidance>> = {
   kickoff: {
-    purpose:
-      "Validate the customer’s process and the solution or workflow you’re working on. The customer should leave with something real to test.",
+    objective: "Confirm the real process and leave with something to test.",
+    objectiveDetail:
+      "Walk through how the work actually happens today. Check the starting point against that, and agree who tests it, with what, and by when.",
     checks: [
-      "We understand the real process, not just the requested form.",
-      "For a new customer, we validated the prepared starting solution. For an existing customer, we understand what is changing and what should stay.",
-      "We know who will test it and what they will test.",
-      "The customer has a clear next action and date.",
+      "We walked through the real process with the customer, start to finish.",
+      "The customer confirmed the starting point fits how they work, or told us what's changing from today.",
+      "We agreed who will test it, with what, and by when.",
+      "The customer knows exactly what to do next.",
     ],
     stuck: stuck([
-      { key: "process", label: "I still don’t understand the process" },
+      { key: "process", label: "I still don't understand the process" },
       { key: "notready", label: "We arrived without enough to show" },
       { key: "different", label: "The customer wants something different" },
-      { key: "testplan", label: "I’m not sure what they should test" },
+      { key: "testplan", label: "I'm not sure what they should test" },
     ]),
-    remember:
-      "Kickoff should not become a blank-page requirements session. If you did not have enough information to prepare something tangible, that gap should have been handled before Kickoff.",
-    readyWhen:
-      "The process and starting point are agreed, and the customer has something real to test.",
-    next: "03 · Get It Working",
+    readyLabel: "Ready for Get It Working when",
+    readyWhen: [
+      "The real process is understood and agreed.",
+      "The customer confirmed the starting point, or told us what's changing.",
+      "We know who tests it, with what, and by when.",
+      "The customer has a clear next action.",
+    ],
+    next: "Get It Working",
   },
   get_it_working: {
-    purpose:
-      "Prove the core workflow works end to end using realistic examples. Understand why before you build around every request.",
+    objective: "Get the core workflow working end to end, with a real example.",
+    objectiveDetail:
+      "Run the customer's actual work through the solution from start to finish, fix what breaks, and understand why before building around every request.",
     checks: [
-      "The customer has tested using a real example.",
+      "The customer has run a real example through the workflow, not a demo.",
       "The core workflow works from start to finish.",
-      "We understand why requested changes are needed.",
-      "Important workflow decisions are documented.",
-      "The foundation is becoming stable enough to build around.",
+      "We know why each requested change is actually needed.",
+      "Important workflow decisions are written down.",
+      "The foundation is stable enough to build on.",
     ],
     stuck: stuck([
-      { key: "notesting", label: "The customer hasn’t tested" },
-      { key: "changes", label: "They keep asking for changes" },
-      { key: "broken", label: "The workflow isn’t working" },
-      { key: "scope", label: "I’m not sure if this is scope" },
+      { key: "notesting", label: "The customer hasn't tested" },
+      { key: "changerequest", label: "They keep asking for changes" },
+      { key: "workflowbroken", label: "The workflow isn't working" },
+      { key: "scopecheck", label: "I'm not sure if this is scope" },
     ]),
-    remember:
-      "More building is not always the next move. If the customer has not tested what is already there, get a real example through the workflow first.",
-    readyWhen:
-      "The customer has tested the core workflow and it works end to end. The foundation is stable enough to build around.",
-    next: "04 · Make It Yours",
+    readyLabel: "Ready for Make It Yours when",
+    readyWhen: [
+      "A real example has run through the workflow end to end.",
+      "The core workflow works, start to finish.",
+      "Requested changes are understood, not just applied.",
+      "The foundation is stable enough to build on.",
+    ],
+    next: "Make It Yours",
   },
   make_it_yours: {
-    purpose:
-      "Complete the solution around the customer’s actual workflow and purchased scope, while building the capability they need to run it.",
+    objective: "Finish fitting the solution to how the customer actually works.",
+    objectiveDetail:
+      "Build out what's left against their real process and purchased scope, and teach them the parts they'll own — show it, do it together, then have them do it.",
     checks: [
-      "The core workflow is stable.",
-      "We are only teaching capabilities relevant to their workflow.",
-      "The customer owner knows how to manage what they should own.",
-      "Purchased Technical Solutions work has started when the relevant workflow is ready.",
-      "Remaining work is tied to the agreed outcome, not an open wish list.",
+      "The core workflow is still stable.",
+      "We're only teaching what they need for their own workflow.",
+      "The customer owner can do the parts they're expected to own.",
+      "Technical Solutions work has started where its dependency is ready.",
+      "What's left is tied to the agreed outcome, not an open wish list.",
     ],
     stuck: stuck([
-      { key: "dependent", label: "They still depend on me for everything" },
-      { key: "teach", label: "I don’t know what to teach" },
-      { key: "ts", label: "Technical Solutions isn’t ready" },
-      { key: "scope", label: "A new request has appeared" },
+      { key: "stilldependent", label: "They still depend on me for everything" },
+      { key: "whattoteach", label: "I don't know what to teach" },
+      { key: "tsdependency", label: "Technical Solutions isn't ready" },
+      { key: "scopecheck", label: "A new request has appeared" },
     ]),
-    remember:
-      "This is not a feature tour. Teach against the customer’s real workflow. Show it, do it together, then have them do it.",
-    readyWhen:
-      "The solution reflects the agreed workflow and purchased scope, and the customer can operate the parts they are expected to own.",
-    next: "05 · Make It Run",
+    readyLabel: "Ready for Make It Run when",
+    readyWhen: [
+      "The solution matches the agreed workflow and purchased scope.",
+      "The customer can operate the parts they're expected to own.",
+      "Technical Solutions work is on track or complete.",
+      "Nothing left is still an open wish list.",
+    ],
+    next: "Make It Run",
   },
   make_it_run: {
-    purpose:
-      "Prove the complete workflow with real users and real work. Refine what remains and get customer acceptance.",
+    objective: "Get the customer to run the workflow for real.",
+    objectiveDetail:
+      "Pick real users and real work. Have them complete the process from start to finish, then confirm what worked and what still needs fixing.",
     checks: [
-      "Real users have used the workflow.",
-      "The trial run used realistic work, not a demo scenario.",
-      "Relevant outputs and purchased components work as expected.",
-      "Remaining issues have a clear owner and next action.",
-      "The customer can say whether the agreed outcome works.",
+      "Real users completed the workflow.",
+      "They used real work, not a demo.",
+      "Forms, integrations and outputs worked as expected.",
+      "Anything still outstanding has an owner and next step.",
+      "The customer agrees the workflow is ready to use.",
     ],
     stuck: stuck([
-      { key: "pilotproblem", label: "The trial run found a problem" },
-      { key: "nousers", label: "Users aren’t actually using it" },
-      { key: "waiting", label: "We’re waiting on another team" },
-      { key: "acceptance", label: "The customer won’t confirm acceptance" },
+      { key: "pilotissue", label: "The pilot found a problem" },
+      { key: "nousers", label: "Users aren't actually using it" },
+      { key: "waitingexternal", label: "We're waiting on another team" },
+      { key: "customernotready", label: "The customer won't confirm they're ready" },
     ]),
-    remember:
-      "A working build is not the same as an operational workflow. The trial run proves it can work outside the Implementation call.",
-    readyWhen:
-      "The complete workflow has been proven in real use, important issues are resolved or appropriately owned, and the customer accepts the outcome.",
-    next: "06 · Graduate",
+    readyLabel: "Ready for Graduate when",
+    readyWhen: [
+      "Real users have used it.",
+      "The agreed workflow works.",
+      "Remaining issues have an owner and plan.",
+      "The customer agrees they're ready.",
+    ],
+    next: "Graduate",
   },
   complete: {
-    purpose:
-      "Confirm the solution works, the customer can operate it without depending on Implementation, and ongoing ownership is clear.",
+    objective: "Confirm the implementation is actually done, and hand off ownership.",
+    objectiveDetail:
+      "Check the workflow works without you, everything purchased is finished or transitioned, and someone else knows what happens next.",
     checks: [
       "The agreed workflow works end to end.",
-      "It has been proven with real users or real work.",
-      "The customer can operate what they need without depending on Implementation.",
-      "Purchased components are complete or appropriately transitioned.",
+      "Real users or real work showed it works, not just a walkthrough.",
+      "The customer can run it without depending on Implementation.",
+      "Purchased components are finished or handed to the right owner.",
       "The customer knows where to go next.",
-      "Final status and ownership are documented.",
+      "Final status and ownership are written down.",
     ],
     stuck: stuck([
-      { key: "dependent", label: "They still rely on Implementation" },
+      { key: "completedependent", label: "They still rely on Implementation" },
       { key: "incomplete", label: "Something is still incomplete" },
-      { key: "handoff", label: "I don’t know who owns them next" },
-      { key: "timeline", label: "The timeline ended but we’re not done" },
+      { key: "handoff", label: "I don't know who owns them next" },
+      { key: "timeline", label: "The timeline ended but we're not done" },
     ]),
-    remember:
-      "Thirty days passing does not mean the implementation is complete. Equally, Implementation should not become permanent ownership once the agreed outcome is achieved.",
-    readyWhen:
-      "The customer is operational and independent enough to leave Implementation. Graduation is based on outcome, not the calendar.",
+    readyLabel: "Ready to close out when",
+    readyWhen: [
+      "The customer can run it without Implementation.",
+      "Purchased work is finished or handed off.",
+      "Nothing left blocks the agreed outcome.",
+      "The next owner is confirmed.",
+    ],
     next: "TAM · AM · Scaled CSM",
   },
 };
 
-/** Navigator guidance for a stage, or null when the Navigator does not cover it (yet). */
+/** Stage guidance for a canonical stage, or null when none exists (yet). */
 export function stageGuidanceFor(key: FlowStageKey): StageGuidance | null {
   return STAGE_GUIDANCE[key] ?? null;
 }

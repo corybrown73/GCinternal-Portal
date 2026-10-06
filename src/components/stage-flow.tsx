@@ -151,81 +151,134 @@ function StageHistory({
 }
 
 /**
- * The TIS Project Navigator's guidance for the shown stage — read-only
- * reference material, not a second checklist. The Hub's own tasks above
- * stay the source of truth for what is actually done; nothing here is
- * tracked or saved. Renders nothing for a stage the Navigator does not
- * cover yet (Prospect, Closed Won, Intake & Process).
+ * Stage guidance for the shown stage — read-only reference material, not a
+ * second checklist. The Hub's own tasks above stay the source of truth for
+ * what is actually done; nothing here is tracked or saved, selecting a
+ * stuck scenario included. Renders nothing for a stage with no guidance yet
+ * (Prospect, Closed Won, Intake & Process).
+ *
+ * Selecting a stuck scenario is an attention state, not a second-tier
+ * accordion: the result gets the strongest visual weight on the panel so a
+ * TIS mid-call can see what's wrong and what to do about it without hunting
+ * for it.
  */
 function StageGuidancePanel({ shown }: { shown: FlowStageKey }) {
   const [openIssue, setOpenIssue] = useState<string | null>(null);
   const guidance = stageGuidanceFor(shown);
   if (!guidance) return null;
+  const active = guidance.stuck.find((s) => s.key === openIssue) ?? null;
   return (
     <div
-      className="border-t border-border bg-card px-4 py-3 text-[12.5px]"
-      aria-label="Navigator guidance"
+      className="border-t border-border bg-card px-4 py-3.5 text-[12.5px]"
+      aria-label="Stage guidance"
     >
-      <p className="text-muted-foreground">{guidance.purpose}</p>
+      <p className="font-semibold text-foreground">{guidance.objective}</p>
+      <p className="mt-0.5 text-muted-foreground">{guidance.objectiveDetail}</p>
 
-      <div className="mt-3">
+      <div className="mt-3.5">
         <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-          Check what's true
+          Before you move on, confirm
         </div>
         <ul className="mt-1.5 space-y-1 text-foreground">
           {guidance.checks.map((c) => (
             <li key={c} className="flex items-start gap-2">
-              <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full border border-border" />
+              <Check className="mt-0.5 h-3 w-3 shrink-0 text-muted-foreground" aria-hidden />
               {c}
             </li>
           ))}
         </ul>
       </div>
 
-      <div className="mt-3">
+      <div className="mt-3.5">
         <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-          Something's stuck?
+          If you're stuck
         </div>
         <div className="mt-1.5 grid gap-1.5 sm:grid-cols-2">
-          {guidance.stuck.map((s) => (
-            <button
-              key={s.key}
-              type="button"
-              onClick={() => setOpenIssue(openIssue === s.key ? null : s.key)}
-              aria-expanded={openIssue === s.key}
-              className="rounded-sm border border-border px-2.5 py-1.5 text-left text-[12px] font-medium hover:border-primary/40 hover:bg-muted"
-            >
-              {s.label} →
-            </button>
-          ))}
+          {guidance.stuck.map((s) => {
+            const isOpen = s.key === openIssue;
+            return (
+              <button
+                key={s.key}
+                type="button"
+                onClick={() => setOpenIssue(isOpen ? null : s.key)}
+                aria-expanded={isOpen}
+                className={cn(
+                  "rounded-sm border px-2.5 py-1.5 text-left text-[12px] font-medium transition-colors",
+                  isOpen
+                    ? "border-primary bg-primary/10 text-foreground"
+                    : "border-border text-muted-foreground hover:border-primary/40 hover:bg-muted hover:text-foreground",
+                )}
+              >
+                {s.label} →
+              </button>
+            );
+          })}
         </div>
-        {guidance.stuck
-          .filter((s) => s.key === openIssue)
-          .map((s) => (
-            <div key={s.key} className="mt-2 rounded-md border border-border bg-muted/30 p-3">
-              <p className="font-medium text-foreground">{s.title}</p>
-              <p className="mt-1 text-muted-foreground">{s.why}</p>
-              <p className="mt-2 rounded-sm bg-status-ontrack/15 p-2 text-foreground">{s.action}</p>
+
+        {active ? (
+          <div
+            className={cn(
+              "mt-2.5 rounded-md border-l-4 p-3",
+              active.blocks
+                ? "border-l-status-blocked bg-status-blocked/15"
+                : "border-l-status-risk bg-status-risk/15",
+            )}
+            aria-label="Stuck guidance"
+          >
+            <span
+              className={cn(
+                "inline-block rounded-sm px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.08em]",
+                active.blocks
+                  ? "bg-status-blocked text-status-blocked-foreground"
+                  : "bg-status-risk text-status-risk-foreground",
+              )}
+            >
+              {active.status}
+            </span>
+
+            <div className="mt-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-foreground">
+              What to do next
             </div>
+            <ol className="mt-1.5 space-y-1.5">
+              {active.actions.map((a, i) => (
+                <li key={a} className="flex gap-2 text-foreground">
+                  <span className="font-semibold text-muted-foreground">{i + 1}.</span>
+                  <span>{a}</span>
+                </li>
+              ))}
+            </ol>
+
+            <p
+              className={cn(
+                "mt-2.5 font-semibold",
+                active.blocks ? "text-status-blocked-foreground" : "text-status-risk-foreground",
+              )}
+            >
+              {active.gate}
+            </p>
+          </div>
+        ) : null}
+      </div>
+
+      <div className="mt-3.5 border-t border-border pt-2.5">
+        <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+          {guidance.readyLabel}
+        </div>
+        <ul className="mt-1.5 space-y-1 text-foreground">
+          {guidance.readyWhen.map((r) => (
+            <li key={r} className="flex items-start gap-2">
+              <Check
+                className="mt-0.5 h-3 w-3 shrink-0 text-status-ontrack-foreground"
+                aria-hidden
+              />
+              {r}
+            </li>
           ))}
-      </div>
-
-      <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1">
-        <p>
-          <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-            Ready to move on when
-          </span>{" "}
-          <span className="text-foreground">{guidance.readyWhen}</span>
-        </p>
-        <p>
-          <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-            Next
-          </span>{" "}
-          <span className="text-foreground">{guidance.next}</span>
+        </ul>
+        <p className="mt-2 text-[11px] font-semibold text-muted-foreground">
+          Next: {guidance.next} →
         </p>
       </div>
-
-      <p className="mt-3 text-muted-foreground">{guidance.remember}</p>
     </div>
   );
 }
