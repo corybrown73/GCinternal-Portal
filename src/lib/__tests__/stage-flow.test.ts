@@ -4,8 +4,10 @@ import { shortDay } from "../onboarding-timeline";
 import { readIntake } from "../intake-answers";
 import { buildTimeline, type Timeline } from "../onboarding-timeline";
 import {
+  completedAfterTick,
   isWorkingStageKey,
   latestStageTransition,
+  showKickoffOutcomePrompt,
   stageFlow,
   stageTargetDate,
   targetDidChange,
@@ -489,5 +491,50 @@ describe("targetDidChange", () => {
   it("is false when either date is not known yet", () => {
     expect(targetDidChange(null, "2026-10-23")).toBe(false);
     expect(targetDidChange("2026-10-16", null)).toBe(false);
+  });
+});
+
+describe("showKickoffOutcomePrompt — the transcript panel's Kickoff-held confirmation", () => {
+  it("offers it while Kickoff is the deal's actual current stage and its task is not done", () => {
+    const t = buildTimeline({ closeDate: "2026-09-22", path: "new_logo" });
+    const f = stageFlow(input({ stage: "kickoff", timeline: t }));
+    expect(f.current).toBe("kickoff");
+    expect(f.stages.find((s) => s.key === "kickoff")!.done).toBe(false);
+    expect(showKickoffOutcomePrompt(f)).toBe(true);
+  });
+
+  it("never offers it outside Kickoff, whatever the actual current stage is", () => {
+    expect(showKickoffOutcomePrompt(stageFlow(input({ stage: "closed_won" })))).toBe(false);
+    expect(showKickoffOutcomePrompt(stageFlow(input({ stage: "onboarding_kickoff" })))).toBe(false);
+    expect(showKickoffOutcomePrompt(stageFlow(input({ stage: "get_it_working" })))).toBe(false);
+    expect(showKickoffOutcomePrompt(stageFlow(input({ stage: "prospect" })))).toBe(false);
+  });
+
+  it("stops offering it once the Kickoff task is already complete", () => {
+    const intake = readIntake({ ...ready, timeline: { completed: { kickoff: "2026-09-25" } } });
+    const t = buildTimeline({
+      closeDate: "2026-09-22",
+      path: "new_logo",
+      completed: intake.timeline.completed,
+    });
+    const f = stageFlow(input({ stage: "kickoff", intake, timeline: t }));
+    expect(f.stages.find((s) => s.key === "kickoff")!.done).toBe(true);
+    expect(showKickoffOutcomePrompt(f)).toBe(false);
+  });
+});
+
+describe("completedAfterTick for the Kickoff-held confirmation", () => {
+  // The transcript panel's confirmation writes through this same function —
+  // the one the Kickoff checklist checkbox already uses — never a new path.
+  it("records today's date under the kickoff key, the fact the Kickoff checklist tick writes", () => {
+    const intake = readIntake(ready);
+    const completed = completedAfterTick(intake, {}, "kickoff", true, "2026-09-25");
+    expect(completed).toEqual({ kickoff: "2026-09-25" });
+  });
+
+  it("never trips the readiness/live auto-complete — kickoff is not a Functional readiness item", () => {
+    const intake = readIntake(ready);
+    const completed = completedAfterTick(intake, {}, "kickoff", true, "2026-09-25");
+    expect(completed["live"]).toBeUndefined();
   });
 });

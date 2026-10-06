@@ -54,6 +54,7 @@ import {
   latestStageTransition,
   PREP_ITEMS,
   readingInFlight,
+  showKickoffOutcomePrompt,
   stageFlow,
   stageTargetDate,
   stampDay,
@@ -962,6 +963,10 @@ export function CurrentImplementationTab({
 
   const m = ws.nextMeeting;
 
+  // Only the implementation's actual current stage, never a historical one
+  // picked on the rail — the same stageFlow() the checklist itself reads.
+  const kickoffOutcome = showKickoffOutcomePrompt(flow) ? { dealId, intake } : null;
+
   // Viewing a stage other than the actual current one: say so plainly, with
   // its position relative to current (completed/upcoming), and a way back.
   // Only when there IS an actual current stage on this rail to contrast
@@ -987,6 +992,7 @@ export function CurrentImplementationTab({
             customerId={customerId}
             implementationId={implementationId}
             planOwnsTarget
+            kickoffOutcome={kickoffOutcome}
           />
           <ImplementationUpdatePanel implementationId={implementationId} />
         </div>
