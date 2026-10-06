@@ -1078,6 +1078,17 @@ export function openStepsBefore(flow: StageFlow, toStage: AccountStage): FlowTas
     .flatMap((s) => s.tasks.filter((t) => !t.done && !t.optional && !t.locked));
 }
 
+/**
+ * Whether the implementation's transcript panel should offer the "Meeting
+ * outcome / Kickoff held" confirmation: only while the deal's actual current
+ * stage (never a historical stage picked on the rail) is Kickoff, and the
+ * Kickoff task on that stage is not done yet.
+ */
+export function showKickoffOutcomePrompt(flow: StageFlow): boolean {
+  if (flow.current !== "kickoff") return false;
+  return !flow.stages.find((s) => s.key === "kickoff")?.done;
+}
+
 function flowSummary(a: IntakeAnswers): string {
   const head =
     a.path === "new_logo"
