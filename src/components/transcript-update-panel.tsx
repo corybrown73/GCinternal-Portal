@@ -16,6 +16,10 @@ import {
   getTeamOptions,
   setRecordField,
 } from "@/lib/hub.functions";
+import type { IntakeAnswers } from "@/lib/intake-answers";
+import { localIso } from "@/lib/onboarding-timeline";
+import { saveIntake } from "@/lib/presale.functions";
+import { completedAfterTick } from "@/lib/stage-flow";
 import {
   attachmentReferenceFor,
   CONFIDENCE_LABEL,
@@ -26,6 +30,17 @@ import {
   type TranscriptProposal,
 } from "@/lib/transcript-analysis";
 import { cn } from "@/lib/utils";
+
+/**
+ * Supplied only when the implementation's actual current canonical stage is
+ * Kickoff and the Kickoff task is not done yet (computed by the caller from
+ * the same stageFlow() the checklist itself reads — never derived here from
+ * a viewed/historical stage, and never from transcript content).
+ */
+export type KickoffOutcomePrompt = {
+  dealId: string;
+  intake: IntakeAnswers;
+};
 
 type ApplySummary = {
   risks: number;
@@ -71,8 +86,13 @@ function attributionFor(quote: string | null): string {
  * supporting quote. Nothing here writes anything until the reviewer ticks
  * the items they want and clicks Apply; applying runs through the Hub's
  * existing risk/issue/decision/record-field/journal write paths, exactly as
- * if entered by hand. The stage, the checklist, intake and purchased
- * services are never touched from here.
+ * if entered by hand. The one deliberate exception is Meeting outcome
+ * (below): while Kickoff is the actual current stage and not done yet, the
+ * TIS can explicitly confirm "Kickoff held" — never inferred from the
+ * transcript, never automatic — which sets intake.timeline.completed.kickoff
+ * through the exact same saveIntake call the Kickoff checklist tick already
+ * uses, so the existing saveIntake → syncDealStage → transitionStage
+ * machinery (not this component) performs the actual stage move.
  *
  * Paste and upload are two ways of getting to the same input, not two
  * features: pasted text is base64-encoded into a synthetic .txt file and
@@ -83,6 +103,7 @@ export function TranscriptUpdatePanel({
   customerId: _customerId,
   implementationId,
   planOwnsTarget = false,
+  kickoffOutcome = null,
 }: {
   customerId: string;
   implementationId: string;
@@ -93,9 +114,54 @@ export function TranscriptUpdatePanel({
    * change nothing, so the proposal is shown but not applied.
    */
   planOwnsTarget?: boolean;
+  /** See KickoffOutcomePrompt. Null hides the Meeting outcome control entirely. */
+  kickoffOutcome?: KickoffOutcomePrompt | null;
 }) {
   const qc = useQueryClient();
   const team = useQuery({ queryKey: ["team-options"], queryFn: () => getTeamOptions() });
+
+  const [kickoffChecked, setKickoffChecked] = useState(false);
+  const [kickoffPending, setKickoffPending] = useState(false);
+  const [kickoffError, setKickoffError] = useState<string | null>(null);
+  const saveIntakeFn = useServerFn(saveIntake);
+
+  /**
+   * The exact write the existing Kickoff checklist checkbox makes
+   * (OnboardingList's tick, in stage-flow.tsx) — same patch shape, same
+   * server fn. This component never calls transitionStage; saveIntake's own
+   * server-side syncDealStage does, if the gate is now satisfied. On
+   * success the control simply disappears once the refetched stage is no
+   * longer Kickoff — there is no local "it moved" state to reset.
+   */
+  const confirmKickoffHeld = async () => {
+    if (!kickoffOutcome || kickoffPending) return;
+    const { dealId, intake } = kickoffOutcome;
+    const t = intake.timeline;
+    const completed = completedAfterTick(intake, t.completed, "kickoff", true, localIso());
+    setKickoffChecked(true);
+    setKickoffError(null);
+    setKickoffPending(true);
+    try {
+      await saveIntakeFn({
+        data: {
+          dealId,
+          patch: { timeline: { ...t, completed, form_proven_on: t.form_proven_on } },
+        },
+      });
+      // The real transition already happened server-side inside that save
+      // (or it didn't, and the rail stays where it is) — refetch the same
+      // query Current Implementation reads rather than assuming the result.
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ["deal", dealId] }),
+        qc.invalidateQueries({ queryKey: ["welcome", dealId] }),
+      ]);
+    } catch (e) {
+      setKickoffChecked(false);
+      setKickoffError(e instanceof Error ? e.message : "Could not save. Try again.");
+    } finally {
+      setKickoffPending(false);
+    }
+  };
 
   const upload = useServerFn(uploadAttachment);
   const recordEvidence = useServerFn(addEvidence);
@@ -342,6 +408,31 @@ export function TranscriptUpdatePanel({
             Add the meeting transcript. Nothing is added to the implementation until you review and
             apply it.
           </p>
+
+          {kickoffOutcome ? (
+            <div className="space-y-1 rounded-md border border-border bg-muted/30 p-2.5">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                Meeting outcome
+              </div>
+              <label className="flex items-start gap-2 text-[12px]">
+                <input
+                  type="checkbox"
+                  className="mt-0.5 h-3 w-3"
+                  checked={kickoffChecked}
+                  disabled={kickoffPending}
+                  onChange={() => void confirmKickoffHeld()}
+                />
+                <span>
+                  <span className="font-medium text-foreground">Kickoff held</span>
+                  <span className="mt-0.5 block text-[11px] text-muted-foreground">
+                    Completing this will move the implementation to Get It Working.
+                  </span>
+                </span>
+              </label>
+              {kickoffPending ? <p className="text-[11px] text-muted-foreground">Saving…</p> : null}
+              {kickoffError ? <p className="text-[11px] text-destructive">{kickoffError}</p> : null}
+            </div>
+          ) : null}
 
           <div className="space-y-1.5">
             <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
