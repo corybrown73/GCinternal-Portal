@@ -15,7 +15,7 @@ import {
   type ServiceSpec,
 } from "./onboarding-services";
 import type { AccountStage } from "./presale-stages";
-import { handoffChecks, missingLine } from "./sales-handoff";
+import { handoffChecks } from "./sales-handoff";
 import { TEAM_ZONE, shortDay, type Timeline } from "./onboarding-timeline";
 
 /**
@@ -157,7 +157,6 @@ export type TaskAction =
   | "cadence"
   | "kickoff"
   | "field_fusion"
-  | "handoff"
   | "intake"
   | "process_understanding"
   | "process_call"
@@ -343,31 +342,7 @@ function closedWonTasks(
       action: "review",
       locked: before.length ? `Needs ${joinAnd(before)} first` : null,
     },
-    // The Sales handoff is Closed Won's boundary (the operating model): what
-    // was bought, the outcome, what was promised, the contacts, the timing —
-    // complete before the deal leaves Sales. Anyone fills it (AE, AM, TIS or
-    // the AI reading); the chip on the board, the record and the workspace
-    // reads the same record (src/lib/sales-handoff.ts). Field Fusion has its
-    // own handoff from the setup owner.
-    ...(a.path === "field_fusion" ? [] : [salesHandoffTask(a)]),
   ];
-}
-
-function salesHandoffTask(a: IntakeAnswers): FlowTask {
-  const c = handoffChecks(a);
-  return {
-    key: "handoff",
-    label: "Sales handoff complete",
-    hint: "What was bought, the outcome, what was promised (or that nothing was), the contacts and the timing — on the handoff, from Sales, the AI reading or you.",
-    done: c.salesComplete.done,
-    summary: c.salesComplete.done
-      ? a.handoff.completed_at
-        ? `Marked complete ${stampDay(a.handoff.completed_at)}`
-        : "Every required answer is in"
-      : missingLine(c.salesComplete.missing),
-    action: "handoff",
-    locked: null,
-  };
 }
 
 /** The starting solution, prepared from the Gong brief, the SOW and the customer's intake. */

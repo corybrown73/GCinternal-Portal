@@ -15,7 +15,8 @@ const ready = {
   forms_built: false,
   wanted_forms: [{ id: "f1", name: "Daily job report", template_id: null }],
   handoff_tasks: { reviewed: "2026-09-22T15:00:00Z" },
-  // The Sales handoff is Closed Won's boundary: marked complete here.
+  // Sales handoff data — still read by Pre-Kickoff's own checks and the
+  // deal record, no longer a Closed Won gate.
   handoff: { completed_at: "2026-09-22T16:00:00Z" },
 };
 
@@ -48,14 +49,7 @@ describe("the stage checklist", () => {
 
   it("asks the type of deal first, and the review waits for it, the Gong brief and the SOW", () => {
     const f = stageFlow(input({ gongReports: 0, hasSow: false, intake: {} }));
-    expect(cw(f).tasks.map((t) => t.key)).toEqual([
-      "type",
-      "assign",
-      "notes",
-      "sow",
-      "review",
-      "handoff",
-    ]);
+    expect(cw(f).tasks.map((t) => t.key)).toEqual(["type", "assign", "notes", "sow", "review"]);
     expect(cw(f).tasks[0]!.done).toBe(false);
     const review = cw(f).tasks.find((t) => t.key === "review")!;
     expect(review.locked).toBe("Needs the type of deal, the Gong brief and the SOW first");
@@ -63,14 +57,14 @@ describe("the stage checklist", () => {
     expect(cw(typed).tasks[0]!.summary).toBe("Device Magic → GoCanvas");
   });
 
-  it("holds a closed deal at Closed Won until the Sales handoff is complete", () => {
+  it("advances past Closed Won even when the Sales handoff is incomplete", () => {
+    // The Sales handoff record itself (src/lib/sales-handoff.ts) still
+    // exists and is still read elsewhere (Pre-Kickoff, the deal record) —
+    // it is simply no longer a Closed Won gate.
     const { handoff: _done, ...noHandoff } = ready;
     const f = stageFlow(input({ intake: noHandoff }));
-    expect(f.advanceTo).toBeNull();
-    const task = cw(f).tasks.find((t) => t.key === "handoff")!;
-    expect(task.done).toBe(false);
-    expect(task.summary).toMatch(/^Missing/);
-    // Field Fusion has its own handoff from the setup owner.
+    expect(f.advanceTo).toBe("onboarding_kickoff");
+    expect(cw(f).tasks.find((t) => t.key === "handoff")).toBeUndefined();
     const ff = stageFlow(input({ intake: { ...noHandoff, path: "field_fusion" } }));
     expect(cw(ff).tasks.find((t) => t.key === "handoff")).toBeUndefined();
   });
