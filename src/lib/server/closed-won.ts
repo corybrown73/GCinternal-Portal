@@ -47,12 +47,19 @@ const ALIASES: Record<string, string[]> = {
   amount: ["amount", "arr", "value", "acv", "contract_value", "deal_value"],
   products: ["products", "product", "sku", "skus"],
   rep_email: ["rep_email", "rep", "owner_email", "ae_email", "ae", "sales_rep", "closed_by"],
-  implementation_owner_email: [
-    "implementation_owner_email",
+  implementation_owner: [
     "implementation_owner",
+    "implementation_owner_email",
     "onboarding_owner",
     "specialist_email",
+    "tis",
+    "tis_email",
+    "tis_assigned",
+    "assigned_tis",
+    "tis_name",
+    "implementation_specialist",
   ],
+  se_email: ["se_email", "se", "sales_engineer", "sales_engineer_email", "se_owner_email"],
   close_date: ["close_date", "closed_date", "closed_at", "closed_won_at", "date"],
   seats: ["seats", "users", "licenses", "field_users", "user_count", "seat_count"],
   integration_tier: ["integration_tier", "integration", "tier", "complexity", "complexity_tier"],
@@ -63,36 +70,105 @@ const ALIASES: Record<string, string[]> = {
   notes: ["notes", "note", "summary", "comments", "slack_message", "message"],
   salesforce_id: ["salesforce_id", "sf_account_id", "account_id"],
   salesforce_url: ["salesforce_url", "sf_url", "salesforce_link", "sf_link", "url", "link"],
+  // Intake facts and the Sales handoff answers. Each canonical key is its own
+  // first alias, so a row that is already canonical passes through unchanged —
+  // which is what the deal map hands in.
+  industry: ["industry", "vertical", "sector"],
+  company_size: ["company_size", "employees", "employee_count", "size", "number_of_employees"],
+  current_process: ["current_process", "process_today", "process", "how_it_works_today"],
+  path: ["path", "onboarding_type", "deal_type", "implementation_type", "type"],
+  desired_launch_date: [
+    "desired_launch_date",
+    "launch_date",
+    "target_launch",
+    "go_live_date",
+    "wanted_by",
+  ],
+  business_outcome: ["business_outcome", "outcome", "desired_outcome", "goal", "goals"],
+  success_measure: ["success_measure", "success_metric", "success_criteria", "kpi"],
+  commitments: ["commitments", "promises", "promised", "commitments_made"],
+  system_requirements: ["system_requirements", "systems", "requirements", "integrations_needed"],
+  open_questions: ["open_questions", "questions", "unknowns"],
+  contact_decision_maker: ["contact_decision_maker", "decision_maker", "economic_buyer", "sponsor"],
+  contact_admin_builder: [
+    "contact_admin_builder",
+    "admin_contact",
+    "admin",
+    "builder",
+    "form_builder",
+  ],
+  contact_day_to_day: ["contact_day_to_day", "day_to_day_contact", "day_to_day", "project_contact"],
 };
 
-/** Fold the aliases onto the canonical names. Later keys never overwrite earlier. */
-export function normalizeClosedWonRow(raw: unknown): Record<string, unknown> {
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
-  const src = raw as Record<string, unknown>;
-  // Case- and separator-insensitive on the incoming key: "Account Name",
-  // "account-name" and "accountName" are all the same column.
-  const flat = new Map<string, unknown>();
-  for (const [k, v] of Object.entries(src)) {
-    // camelCase is split BEFORE lowercasing — the other order has nothing left
-    // to split, and "accountName" quietly became "accountname", matching nothing.
-    flat.set(
-      k
-        .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
-        .toLowerCase()
-        .replace(/[\s-]+/g, "_"),
-      v,
-    );
-  }
-  const out: Record<string, unknown> = {};
+/** The canonical field names, in the order the aliases declare them. */
+export const CLOSED_WON_FIELDS: ReadonlyArray<string> = Object.keys(ALIASES);
+
+/** Case- and separator-insensitive key: "Account Name", "account-name", "accountName" → account_name. */
+function flatKey(k: string): string {
+  // camelCase is split BEFORE lowercasing — the other order has nothing left
+  // to split, and "accountName" quietly became "accountname", matching nothing.
+  return k
+    .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
+    .toLowerCase()
+    .replace(/[\s-]+/g, "_");
+}
+
+const blank = (v: unknown) => v === "" || v === null || v === undefined;
+
+export type ResolvedRow = {
+  /** Canonical field → value, ready for `closedWonSchema`. */
+  row: Record<string, unknown>;
+  /** Canonical field → how it got there. */
+  sources: Record<string, "map" | "alias">;
+  /** Payload keys (as sent) that neither a map nor an alias consumed. */
+  unmappedKeys: string[];
+};
+
+/**
+ * The deal map laid over the alias matching. A mapped value always wins —
+ * an admin who mapped `TIS_Assigned__r.Email` to the TIS meant it, whatever
+ * else the payload happens to call `tis`. Aliases fill the rest, so every
+ * Zap that worked before a map existed still works. What neither consumed
+ * is reported, which is how the admin learns what is left to map.
+ */
+export function resolveClosedWonRow(
+  raw: unknown,
+  mapped: Record<string, unknown> = {},
+  mapRoots: ReadonlySet<string> = new Set(),
+): ResolvedRow {
+  const row: Record<string, unknown> = {};
+  const sources: Record<string, "map" | "alias"> = {};
+  const consumed = new Set<string>();
+  const src =
+    raw && typeof raw === "object" && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
+  const flat = new Map<string, string>();
+  for (const k of Object.keys(src)) flat.set(flatKey(k), k);
+
   for (const [canonical, names] of Object.entries(ALIASES)) {
     for (const n of names) {
-      if (flat.has(n) && flat.get(n) !== "" && flat.get(n) !== null && flat.get(n) !== undefined) {
-        out[canonical] = flat.get(n);
+      const original = flat.get(n);
+      if (original !== undefined && !blank(src[original])) {
+        row[canonical] = src[original];
+        sources[canonical] = "alias";
+        consumed.add(original);
         break;
       }
     }
   }
-  return out;
+  for (const [canonical, v] of Object.entries(mapped)) {
+    if (blank(v) || !(canonical in ALIASES)) continue;
+    row[canonical] = v;
+    sources[canonical] = "map";
+  }
+  const unmappedKeys = Object.keys(src).filter(
+    (k) => !consumed.has(k) && !mapRoots.has(k) && !blank(src[k]),
+  );
+  return { row, sources, unmappedKeys };
+}
+
+/** Fold the aliases onto the canonical names. Later keys never overwrite earlier. */
+export function normalizeClosedWonRow(raw: unknown): Record<string, unknown> {
+  return resolveClosedWonRow(raw).row;
 }
 
 /**
@@ -159,7 +235,9 @@ export const closedWonSchema = z
       amount: parseMoney(r["amount"]),
       products: parseProducts(r["products"]),
       rep_email: emailOrUndefined(r["rep_email"]),
-      implementation_owner_email: emailOrUndefined(r["implementation_owner_email"]),
+      se_email: emailOrUndefined(r["se_email"]),
+      // An email or a name: the route resolves either against the team.
+      implementation_owner: personOrUndefined(r["implementation_owner"]),
       close_date: optionalText(40).parse(r["close_date"]),
       seats: parseCount(r["seats"]),
       integration_tier: integrationTierFrom(r["integration_tier"]) ?? undefined,
@@ -173,6 +251,11 @@ export const closedWonSchema = z
         .replace(/\/.*$/, ""),
       notes: optionalText(10000).parse(r["notes"]),
       salesforce_id: salesforceAccountIdFrom(r["salesforce_id"], r["salesforce_url"]),
+      industry: optionalText(80).parse(r["industry"]),
+      company_size: optionalText(20).parse(r["company_size"]),
+      current_process: optionalText(4000).parse(r["current_process"]),
+      path: pathFrom(r["path"]),
+      handoff: handoffAnswersFrom(r),
     };
   })
   .refine((v) => v.company.length > 0, {
@@ -196,6 +279,60 @@ function emailOrUndefined(v: unknown): string | undefined {
   return z.string().email().safeParse(t).success ? t : undefined;
 }
 
+/** An email (lower-cased) or a person's name (as written). Blank is nothing. */
+function personOrUndefined(v: unknown): string | undefined {
+  if (typeof v !== "string") return undefined;
+  const t = decodeEntities(v).trim();
+  if (!t) return undefined;
+  return t.includes("@") ? emailOrUndefined(t) : t.slice(0, 200);
+}
+
+export type OnboardingPath = "new_logo" | "existing" | "dm_conversion" | "field_fusion";
+
+/**
+ * "New Logo", "new-logo", "Existing Customer", "DM Conversion", "Field
+ * Fusion" → the intake's path. Anything else is not a path and is dropped
+ * rather than guessed: the type picks the whole checklist.
+ */
+export function pathFrom(v: unknown): OnboardingPath | undefined {
+  if (typeof v !== "string") return undefined;
+  const k = v.toLowerCase().replace(/[^a-z]/g, "");
+  if (!k) return undefined;
+  if (k === "newlogo" || k === "new" || k === "newcustomer" || k === "newbusiness")
+    return "new_logo";
+  if (k === "existing" || k === "existingcustomer" || k === "expansion" || k === "upsell")
+    return "existing";
+  if (k === "dmconversion" || k === "dm" || k === "conversion" || k === "dispatchmanagerconversion")
+    return "dm_conversion";
+  if (k === "fieldfusion" || k === "ff" || k === "partner") return "field_fusion";
+  return undefined;
+}
+
+/** The handoff questions a row may answer, as the catalogue lists them. */
+export const HANDOFF_ANSWER_FIELDS = [
+  "desired_launch_date",
+  "business_outcome",
+  "success_measure",
+  "commitments",
+  "system_requirements",
+  "open_questions",
+  "contact_decision_maker",
+  "contact_admin_builder",
+  "contact_day_to_day",
+] as const;
+export type HandoffAnswerField = (typeof HANDOFF_ANSWER_FIELDS)[number];
+
+function handoffAnswersFrom(
+  r: Record<string, unknown>,
+): Partial<Record<HandoffAnswerField, string>> {
+  const out: Partial<Record<HandoffAnswerField, string>> = {};
+  for (const k of HANDOFF_ANSWER_FIELDS) {
+    const v = optionalText(4000).parse(r[k]);
+    if (v) out[k] = v;
+  }
+  return out;
+}
+
 /* ---------------------------------------------------------- the decision */
 
 export type ClosedWonDeps = {
@@ -207,6 +344,7 @@ export type ClosedWonDeps = {
     arr?: number;
     products?: string[];
     am_owner_email?: string;
+    se_owner_email?: string;
     summary?: string;
   }) => Promise<{
     account: { id: string; customer_id?: string | null; stage: string };
@@ -224,13 +362,12 @@ export type ClosedWonDeps = {
   /** The implementation a linked customer already has, if any. */
   existingImplementation: (customerId: string) => Promise<string | null>;
   /**
-   * Seats and the integration tier, onto the deal's intake, so the plan panel
-   * already knows them. Optional: a caller without the intake does nothing.
+   * What the sender knew at close time — seats, the tier, the industry, the
+   * process, the Sales handoff answers — onto the deal's intake, so the plan
+   * and the TIS already have it. Fills blanks only; never overwrites what a
+   * person typed. Optional: a caller without the intake does nothing.
    */
-  recordFacts?: (
-    dealId: string,
-    facts: { seats?: number | undefined; integrationTier?: number | undefined },
-  ) => Promise<void>;
+  recordFacts?: (dealId: string, facts: DealIntakeFacts) => Promise<void>;
   /**
    * Hand the new project to a person: the rule, or the owner the row named.
    * Optional, and never allowed to fail the ingest — an unassigned account
@@ -239,9 +376,43 @@ export type ClosedWonDeps = {
   assign?: (
     dealId: string,
     implementationId: string,
-    ownerEmail: string | undefined,
+    /** The TIS the row named: an email or a name. The route resolves it. */
+    owner: string | undefined,
   ) => Promise<{ assigneeName: string | null } | null>;
 };
+
+export type DealIntakeFacts = {
+  seats?: number | undefined;
+  integrationTier?: number | undefined;
+  industry?: string | undefined;
+  companySize?: string | undefined;
+  currentProcess?: string | undefined;
+  path?: OnboardingPath | undefined;
+  /** Handoff question key → the answer, recorded as Sales. */
+  handoff?: Partial<Record<HandoffAnswerField, string>>;
+};
+
+/** The intake facts a parsed row carries, or null when it carries none. */
+export function intakeFactsOf(input: ClosedWonInput): DealIntakeFacts | null {
+  const facts: DealIntakeFacts = {
+    seats: input.seats,
+    integrationTier: input.integration_tier,
+    industry: input.industry,
+    companySize: input.company_size,
+    currentProcess: input.current_process,
+    path: input.path,
+    handoff: input.handoff,
+  };
+  const any =
+    facts.seats !== undefined ||
+    facts.integrationTier !== undefined ||
+    facts.industry !== undefined ||
+    facts.companySize !== undefined ||
+    facts.currentProcess !== undefined ||
+    facts.path !== undefined ||
+    Object.keys(facts.handoff ?? {}).length > 0;
+  return any ? facts : null;
+}
 
 export type ClosedWonOutcome = {
   /** Who was handed the project, when somebody was. */
@@ -281,6 +452,7 @@ export async function ingestClosedWon(
     ...(input.amount !== undefined && { arr: input.amount }),
     ...(input.products && { products: input.products }),
     ...(input.rep_email && { am_owner_email: input.rep_email }),
+    ...(input.se_email && { se_owner_email: input.se_email }),
     ...(summary && { summary }),
   });
 
@@ -291,11 +463,9 @@ export async function ingestClosedWon(
       role: input.contact_role,
     });
   }
-  if (deps.recordFacts && (input.seats !== undefined || input.integration_tier !== undefined)) {
-    await deps.recordFacts(account.id, {
-      seats: input.seats,
-      integrationTier: input.integration_tier,
-    });
+  const facts = intakeFactsOf(input);
+  if (deps.recordFacts && facts) {
+    await deps.recordFacts(account.id, facts);
   }
 
   // Already onboarding: the second delivery of the same row, or a company
@@ -335,11 +505,7 @@ export async function ingestClosedWon(
   let assignedTo: string | null = null;
   if (deps.assign) {
     try {
-      const r = await deps.assign(
-        account.id,
-        started.implementationId,
-        input.implementation_owner_email,
-      );
+      const r = await deps.assign(account.id, started.implementationId, input.implementation_owner);
       assignedTo = r?.assigneeName ?? null;
     } catch (e) {
       console.error("[closed-won] assignment failed; project left unassigned", e);

@@ -255,7 +255,10 @@ describe("assignment on kickoff", () => {
     const out = await ingestClosedWon(withOwner, d);
     expect(withOwner.seats).toBe(120);
     expect(withOwner.integration_tier).toBe(3);
-    expect(recordFacts).toHaveBeenCalledWith("deal-1", { seats: 120, integrationTier: 3 });
+    expect(recordFacts).toHaveBeenCalledWith(
+      "deal-1",
+      expect.objectContaining({ seats: 120, integrationTier: 3 }),
+    );
     expect(assign).toHaveBeenCalledWith("deal-1", "impl-1", "priya.nair@gocanvas.com");
     expect(out.assigned_to).toBe("Priya Nair");
     expect(out.kicked_off).toBe(true);

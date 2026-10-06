@@ -61,7 +61,7 @@ export const upsertFieldMap = createServerFn({ method: "POST" })
     z
       .object({
         id: uuid.nullable().optional(),
-        direction: z.enum(["inbound", "outbound"]),
+        direction: z.enum(["inbound", "outbound", "inbound_deal"]),
         source_path: z.string().trim().min(1).max(200),
         target_field: z.string().trim().min(1).max(200),
         transform: z
@@ -109,6 +109,28 @@ export const previewPayload = createServerFn({ method: "POST" })
       return { mapped: {}, missingRequired: [], selection: null, errors: ["Body must be JSON"] };
     }
     return previewIngest(context.profile.id, parsed);
+  });
+
+export const previewClosedWonPayload = createServerFn({ method: "POST" })
+  .inputValidator((data: unknown) => z.object({ payload: z.string().max(50_000) }).parse(data))
+  .middleware([requireInternalAuth])
+  .handler(async ({ data, context }) => {
+    const { previewClosedWon } = await import("./sf-integration.server");
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(data.payload);
+    } catch {
+      return {
+        row: {},
+        sources: {},
+        unmapped_keys: [],
+        missing_required: [],
+        errors: ["Body must be JSON"],
+        tis: { input: null, resolved: null },
+        ae: { input: null, matched: false },
+      };
+    }
+    return previewClosedWon(context.profile.id, parsed);
   });
 
 export const getNeedsTemplate = createServerFn({ method: "GET" })

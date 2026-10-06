@@ -14,7 +14,14 @@
  *    caller so it can be audited and journalled where a person will see it.
  */
 
-export type FieldMapDirection = "inbound" | "outbound";
+/**
+ * `inbound`: Salesforce opportunity → project columns (/api/v1/implementations).
+ * `outbound`: hub field → Salesforce API name (write-back events).
+ * `inbound_deal`: any sender's field → the deal /api/v1/closed-won creates;
+ * targets are the keys in ../deal-field-catalog.ts.
+ */
+export type FieldMapDirection = "inbound" | "outbound" | "inbound_deal";
+export const FIELD_MAP_DIRECTIONS = ["inbound", "outbound", "inbound_deal"] as const;
 export type FillPolicy = "never" | "if_blank";
 
 export type FieldMap = {
@@ -95,6 +102,54 @@ export function applyInboundMaps(payload: unknown, maps: FieldMap[]): MappedInbo
     values[m.target_field] = applyTransform(raw, m.transform);
   }
   return { values, missingRequired };
+}
+
+export type MappedDeal = {
+  /** canonical deal field → transformed value. Blank sources are skipped. */
+  values: Record<string, unknown>;
+  /** canonical deal field → the source path that supplied it. */
+  sources: Record<string, string>;
+  /** Required mappings whose source path was absent in the payload. */
+  missingRequired: string[];
+};
+
+/**
+ * The deal-side map: `inbound_deal` rows over the raw body the closed-won
+ * endpoint received. The result is keyed by canonical deal field, so the
+ * endpoint lays it over its alias matching — a mapped field always wins over
+ * a guessed one. Dotted paths read into nested records, so a Salesforce Flow
+ * can post the whole Opportunity and an admin maps `Account.Name` or
+ * `TIS_Assigned__r.Email` without anyone flattening it first.
+ */
+export function applyDealMaps(payload: unknown, maps: FieldMap[]): MappedDeal {
+  const values: Record<string, unknown> = {};
+  const sources: Record<string, string> = {};
+  const missingRequired: string[] = [];
+  for (const m of maps) {
+    if (!m.active || m.direction !== "inbound_deal") continue;
+    const raw = readPath(payload, m.source_path);
+    if (raw === undefined || raw === null || raw === "") {
+      if (m.required) missingRequired.push(m.source_path);
+      continue;
+    }
+    const v = applyTransform(raw, m.transform);
+    if (v === null || v === undefined || v === "") continue;
+    // First active row for a target wins; the admin page keeps the order.
+    if (m.target_field in values) continue;
+    values[m.target_field] = v;
+    sources[m.target_field] = m.source_path;
+  }
+  return { values, sources, missingRequired };
+}
+
+/** The top-level payload keys an `inbound_deal` map reads from. */
+export function dealMapRoots(maps: FieldMap[]): Set<string> {
+  const roots = new Set<string>();
+  for (const m of maps) {
+    if (!m.active || m.direction !== "inbound_deal") continue;
+    roots.add(m.source_path.split(".")[0]!);
+  }
+  return roots;
 }
 
 export type DriftEntry = {

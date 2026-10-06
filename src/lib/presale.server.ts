@@ -2472,34 +2472,81 @@ export async function explainTargetChange(
 }
 
 /**
- * Facts an integration knows at close time — seats, the integration tier —
- * onto the intake without a person, so the plan panel and the assignment
- * weight already have them. Never overwrites what a person typed.
+ * Facts an integration knows at close time — seats, the tier, the industry,
+ * the process, the Sales handoff answers — onto the intake without a person,
+ * so the plan panel, the assignment weight and the TIS already have them.
+ * Fills blanks only. Never overwrites what a person typed: a replay months
+ * later carries whatever Salesforce said then, and the record is what the
+ * team has learned since.
  */
 export async function saveDealIntakeFacts(
   dealId: string,
-  facts: { seats?: number | undefined; integrationTier?: number | undefined },
-): Promise<void> {
+  facts: import("./server/closed-won").DealIntakeFacts,
+): Promise<{ written: string[] }> {
   const { readIntake, intakeAnswersSchema } = await import("./intake-answers");
+  const { handoffPatch, mergeHandoffBlock, isAnswered, answerValue, handoffQuestion } =
+    await import("./sales-handoff");
+  const { industryFor } = await import("./server/field-fusion-request");
   const { data: before } = await db()
     .from("portal_accounts")
     .select("intake")
     .eq("id", dealId)
     .maybeSingle();
-  if (!before) return;
+  if (!before) return { written: [] };
   const current = readIntake((before as any).intake);
-  const next = intakeAnswersSchema.parse({
-    ...current,
-    field_users: current.field_users ?? facts.seats ?? null,
-    timeline: {
-      ...current.timeline,
-      integration_tier:
-        current.timeline.integration_tier ||
-        (facts.integrationTier ?? current.timeline.integration_tier),
-    },
-    updated_at: new Date().toISOString(),
-  });
-  await db().from("portal_accounts").update({ intake: next }).eq("id", dealId);
+  const written: string[] = [];
+  const at = new Date().toISOString();
+
+  let next: Record<string, unknown> = { ...current };
+  const fill = <K extends keyof typeof current>(key: K, value: unknown, label: string) => {
+    const have = current[key];
+    if (have !== null && have !== undefined && have !== "" && have !== 0) return;
+    if (value === undefined || value === null || value === "") return;
+    next = { ...next, [key]: value };
+    written.push(label);
+  };
+  fill("field_users", facts.seats, "seats");
+  fill(
+    "industry",
+    facts.industry ? (industryFor(facts.industry) ?? facts.industry) : undefined,
+    "industry",
+  );
+  fill("company_size", facts.companySize, "company_size");
+  if (facts.currentProcess && !current.current_process) {
+    next = { ...next, current_process: facts.currentProcess, current_process_source: "person" };
+    written.push("current_process");
+  }
+  fill("path", facts.path, "path");
+  if (facts.integrationTier !== undefined && !current.timeline.integration_tier) {
+    next = {
+      ...next,
+      timeline: { ...(next["timeline"] as object), integration_tier: facts.integrationTier },
+    };
+    written.push("integration_tier");
+  }
+
+  // Handoff answers, as Sales said them. A question already answered — by a
+  // person, the AI or the customer — keeps its answer.
+  let handoff = current.handoff;
+  for (const [key, value] of Object.entries(facts.handoff ?? {})) {
+    if (!value || !handoffQuestion(key) || isAnswered(answerValue(current, key))) continue;
+    const q = handoffQuestion(key)!;
+    const v =
+      q.kind === "list"
+        ? value
+            .split(/[,;|\n]/)
+            .map((x) => x.trim())
+            .filter(Boolean)
+        : value;
+    const patch = handoffPatch(key, v, { source: "sales", by: null, at });
+    handoff = mergeHandoffBlock(handoff, patch["handoff"]);
+    written.push(`handoff.${key}`);
+  }
+  if (written.length === 0) return { written };
+
+  const parsed = intakeAnswersSchema.parse({ ...next, handoff, updated_at: at });
+  await db().from("portal_accounts").update({ intake: parsed }).eq("id", dealId);
+  return { written };
 }
 
 /**

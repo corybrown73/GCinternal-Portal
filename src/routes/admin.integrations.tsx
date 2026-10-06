@@ -2,7 +2,7 @@ import { Fragment, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { queryOptions, useMutation, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { ChevronLeft, Copy } from "lucide-react";
+import { ChevronLeft, Copy, Plus, Trash2 } from "lucide-react";
 
 import { PageBody, PageHeader } from "@/components/page";
 import { NoRows, Panel, TableScroll } from "@/components/record";
@@ -16,14 +16,18 @@ import {
   getSyncLog,
   getWebhookDeliveries,
   getWebhookEndpoints,
+  previewClosedWonPayload,
   previewPayload,
   redeliverWebhookDelivery,
+  removeFieldMap,
   rerunSyncLogRow,
   sendWebhookTestEvent,
   setIntegrationFeatureFlag,
   toggleWebhookEndpoint,
   upsertFieldMap,
 } from "@/lib/sf-integration.functions";
+import { DEAL_FIELD_GROUP_LABEL, DEAL_FIELDS, dealField } from "@/lib/deal-field-catalog";
+import { TRANSFORMS, type FieldMap, type FieldMapDirection } from "@/lib/server/sf-field-maps";
 import { When } from "@/components/when";
 import { errorMessage } from "@/lib/error-message";
 
@@ -368,129 +372,499 @@ function SyncLogTab() {
 
 /* ----------------------------------------------------------- field maps */
 
+type MapInput = {
+  id: string | null;
+  direction: FieldMapDirection;
+  source_path: string;
+  target_field: string;
+  transform: string | null;
+  fill_policy: "never" | "if_blank";
+  required: boolean;
+  active: boolean;
+};
+
+const DIRECTION_COPY: Record<
+  FieldMapDirection,
+  { title: string; meta: string; source: string; target: string }
+> = {
+  inbound_deal: {
+    title: "Closed-won deal map",
+    meta: "What POST /api/v1/closed-won reads: a sender's field → the deal, its people, its intake. The map is applied before the built-in aliases, so a mapped field always wins. Dotted paths read into a nested record (Account.Name, TIS_Assigned__r.Email).",
+    source: "Salesforce field or path",
+    target: "Deal field",
+  },
+  inbound: {
+    title: "Project map",
+    meta: "What POST /api/v1/implementations reads: an Opportunity field → a project column. Older route; the deal map above is the one Salesforce uses at close.",
+    source: "Opportunity field",
+    target: "Project column",
+  },
+  outbound: {
+    title: "Write-back to Salesforce",
+    meta: "What a salesforce.write_back webhook carries: a hub field → a Salesforce API name.",
+    source: "Hub field",
+    target: "Salesforce API name",
+  },
+};
+
 function FieldMapsTab() {
   const { data: maps } = useSuspenseQuery(fieldMapQuery);
   const queryClient = useQueryClient();
   const save = useServerFn(upsertFieldMap);
-  const preview = useServerFn(previewPayload);
-  const [sample, setSample] = useState("");
-  const [result, setResult] = useState<unknown>(null);
-
+  const remove = useServerFn(removeFieldMap);
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: ["admin", "integrations"] });
   const saveMap = useMutation({
-    mutationFn: (input: {
-      id: string | null;
-      direction: "inbound" | "outbound";
-      source_path: string;
-      target_field: string;
-      transform: string | null;
-      fill_policy: "never" | "if_blank";
-      required: boolean;
-      active: boolean;
-    }) => save({ data: input as never }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["admin", "integrations"] }),
+    mutationFn: (input: MapInput) => save({ data: input as never }),
+    onSuccess: invalidate,
   });
-  const runPreview = useMutation({
-    mutationFn: () => preview({ data: { payload: sample } }),
-    onSuccess: (r) => setResult(r),
+  const removeMap = useMutation({
+    mutationFn: (id: string) => remove({ data: { id } }),
+    onSuccess: invalidate,
   });
+  const byDirection = (d: FieldMapDirection) => maps.filter((m) => m.direction === d);
 
   return (
     <div className="space-y-4">
-      <Panel
-        title="Salesforce field mapping"
-        count={maps.length}
-        meta="Not the per-implementation customer-data mapping on the Customer 360 — this maps Salesforce payload fields to hub columns and back."
-      >
-        <TableScroll>
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-border">
-                <th className={cn(cellClass, "text-left", labelClass)}>Direction</th>
-                <th className={cn(cellClass, "text-left", labelClass)}>Source</th>
-                <th className={cn(cellClass, "text-left", labelClass)}>Target</th>
-                <th className={cn(cellClass, "text-left", labelClass)}>Transform</th>
+      {(["inbound_deal", "inbound", "outbound"] as const).map((d) => (
+        <MapPanel
+          key={d}
+          direction={d}
+          rows={byDirection(d)}
+          busy={saveMap.isPending || removeMap.isPending}
+          error={saveMap.error ?? removeMap.error}
+          onSave={(input) => saveMap.mutate(input)}
+          onRemove={(id) => removeMap.mutate(id)}
+        />
+      ))}
+
+      <ClosedWonPreviewPanel />
+      <ProjectPreviewPanel />
+    </div>
+  );
+}
+
+function MapPanel({
+  direction,
+  rows,
+  busy,
+  error,
+  onSave,
+  onRemove,
+}: {
+  direction: FieldMapDirection;
+  rows: FieldMap[];
+  busy: boolean;
+  error: unknown;
+  onSave: (input: MapInput) => void;
+  onRemove: (id: string) => void;
+}) {
+  const copy = DIRECTION_COPY[direction];
+  const isDeal = direction === "inbound_deal";
+  const [draft, setDraft] = useState<{
+    source_path: string;
+    target_field: string;
+    transform: string;
+    required: boolean;
+  }>({
+    source_path: "",
+    target_field: isDeal ? "company" : "",
+    transform: "none",
+    required: false,
+  });
+  const canAdd = draft.source_path.trim() !== "" && draft.target_field.trim() !== "";
+  const add = () => {
+    if (!canAdd) return;
+    onSave({
+      id: null,
+      direction,
+      source_path: draft.source_path.trim(),
+      target_field: draft.target_field.trim(),
+      transform: draft.transform === "none" ? null : draft.transform,
+      fill_policy: "never",
+      required: draft.required,
+      active: true,
+    });
+    setDraft({
+      source_path: "",
+      target_field: isDeal ? "company" : "",
+      transform: "none",
+      required: false,
+    });
+  };
+  const toRow = (m: FieldMap): MapInput => ({
+    id: m.id ?? null,
+    direction: m.direction,
+    source_path: m.source_path,
+    target_field: m.target_field,
+    transform: m.transform,
+    fill_policy: m.fill_policy,
+    required: m.required,
+    active: m.active,
+  });
+
+  return (
+    <Panel title={copy.title} count={rows.length} meta={copy.meta}>
+      <TableScroll>
+        <table className="w-full">
+          <thead>
+            <tr className="border-b border-border">
+              <th className={cn(cellClass, "text-left", labelClass)}>{copy.source}</th>
+              <th className={cn(cellClass, "text-left", labelClass)}>{copy.target}</th>
+              <th className={cn(cellClass, "text-left", labelClass)}>Transform</th>
+              {!isDeal ? (
                 <th className={cn(cellClass, "text-left", labelClass)}>On replay</th>
-                <th />
+              ) : null}
+              <th className={cn(cellClass, "text-left", labelClass)}>Required</th>
+              <th className={cn(cellClass, "text-left", labelClass)}>Active</th>
+              <th />
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-border">
+            {rows.length === 0 ? (
+              <tr>
+                <td colSpan={7} className={cn(cellClass, "text-muted-foreground")}>
+                  {isDeal
+                    ? "No rows yet. Without a map the endpoint still understands the common names (company, amount, rep_email, tis…); add a row for every Salesforce field that is named differently."
+                    : "No rows."}
+                </td>
               </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {maps.map((m) => (
-                <tr key={m.id}>
-                  <td className={cellClass}>{m.direction}</td>
+            ) : null}
+            {rows.map((m) => {
+              const target = isDeal ? dealField(m.target_field) : null;
+              return (
+                <tr key={m.id ?? `${m.source_path}→${m.target_field}`}>
                   <td className={cn(cellClass, "font-mono text-[11px]")}>{m.source_path}</td>
-                  <td className={cn(cellClass, "font-mono text-[11px]")}>{m.target_field}</td>
-                  <td className={cn(cellClass, "text-muted-foreground")}>
-                    {m.transform ?? "none"}
+                  <td className={cellClass}>
+                    {target ? (
+                      <span title={target.hint}>
+                        {target.label}{" "}
+                        <span className="font-mono text-[10px] text-muted-foreground">
+                          {m.target_field}
+                        </span>
+                      </span>
+                    ) : (
+                      <span className="font-mono text-[11px]">{m.target_field}</span>
+                    )}
                   </td>
                   <td className={cellClass}>
                     <select
                       className={inputClass}
-                      value={m.fill_policy}
-                      disabled={saveMap.isPending}
+                      value={m.transform ?? "none"}
+                      disabled={busy}
                       onChange={(e) =>
-                        saveMap.mutate({
-                          id: m.id ?? null,
-                          direction: m.direction,
-                          source_path: m.source_path,
-                          target_field: m.target_field,
-                          transform: m.transform,
-                          fill_policy: e.target.value as "never" | "if_blank",
-                          required: m.required,
-                          active: m.active,
+                        onSave({
+                          ...toRow(m),
+                          transform: e.target.value === "none" ? null : e.target.value,
                         })
                       }
                     >
-                      <option value="never">never fill</option>
-                      <option value="if_blank">fill if blank</option>
+                      {TRANSFORMS.map((t) => (
+                        <option key={t} value={t}>
+                          {t}
+                        </option>
+                      ))}
                     </select>
                   </td>
-                  <td className={cn(cellClass, "text-muted-foreground")}>
-                    {m.active ? "active" : "off"}
+                  {!isDeal ? (
+                    <td className={cellClass}>
+                      <select
+                        className={inputClass}
+                        value={m.fill_policy}
+                        disabled={busy}
+                        onChange={(e) =>
+                          onSave({
+                            ...toRow(m),
+                            fill_policy: e.target.value as "never" | "if_blank",
+                          })
+                        }
+                      >
+                        <option value="never">never fill</option>
+                        <option value="if_blank">fill if blank</option>
+                      </select>
+                    </td>
+                  ) : null}
+                  <td className={cellClass}>
+                    <input
+                      type="checkbox"
+                      className="h-3.5 w-3.5"
+                      checked={m.required}
+                      disabled={busy}
+                      onChange={(e) => onSave({ ...toRow(m), required: e.target.checked })}
+                    />
+                  </td>
+                  <td className={cellClass}>
+                    <input
+                      type="checkbox"
+                      className="h-3.5 w-3.5"
+                      checked={m.active}
+                      disabled={busy}
+                      onChange={(e) => onSave({ ...toRow(m), active: e.target.checked })}
+                    />
+                  </td>
+                  <td className={cn(cellClass, "text-right")}>
+                    {m.id ? (
+                      <button
+                        type="button"
+                        className={buttonClass}
+                        disabled={busy}
+                        title="Remove this row"
+                        onClick={() => onRemove(m.id!)}
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </button>
+                    ) : null}
                   </td>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </TableScroll>
+              );
+            })}
+            <tr className="bg-muted/20">
+              <td className={cellClass}>
+                <input
+                  className={cn(inputClass, "font-mono")}
+                  placeholder={isDeal ? "TIS_Assigned__r.Email" : "field"}
+                  value={draft.source_path}
+                  disabled={busy}
+                  onChange={(e) => setDraft({ ...draft, source_path: e.target.value })}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") add();
+                  }}
+                />
+              </td>
+              <td className={cellClass}>
+                {isDeal ? (
+                  <select
+                    className={inputClass}
+                    value={draft.target_field}
+                    disabled={busy}
+                    onChange={(e) => setDraft({ ...draft, target_field: e.target.value })}
+                    title={dealField(draft.target_field)?.hint}
+                  >
+                    {(["deal", "people", "facts", "handoff"] as const).map((g) => (
+                      <optgroup key={g} label={DEAL_FIELD_GROUP_LABEL[g]}>
+                        {DEAL_FIELDS.filter((f) => f.group === g).map((f) => (
+                          <option key={f.key} value={f.key}>
+                            {f.label}
+                          </option>
+                        ))}
+                      </optgroup>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    className={cn(inputClass, "font-mono")}
+                    placeholder={direction === "outbound" ? "GCHub_Field__c" : "column"}
+                    value={draft.target_field}
+                    disabled={busy}
+                    onChange={(e) => setDraft({ ...draft, target_field: e.target.value })}
+                  />
+                )}
+              </td>
+              <td className={cellClass}>
+                <select
+                  className={inputClass}
+                  value={draft.transform}
+                  disabled={busy}
+                  onChange={(e) => setDraft({ ...draft, transform: e.target.value })}
+                >
+                  {TRANSFORMS.map((t) => (
+                    <option key={t} value={t}>
+                      {t}
+                    </option>
+                  ))}
+                </select>
+              </td>
+              {!isDeal ? (
+                <td className={cn(cellClass, "text-muted-foreground")}>never fill</td>
+              ) : null}
+              <td className={cellClass}>
+                <input
+                  type="checkbox"
+                  className="h-3.5 w-3.5"
+                  checked={draft.required}
+                  disabled={busy}
+                  onChange={(e) => setDraft({ ...draft, required: e.target.checked })}
+                />
+              </td>
+              <td className={cn(cellClass, "text-muted-foreground")}>on</td>
+              <td className={cn(cellClass, "text-right")}>
+                <button
+                  type="button"
+                  className={primaryButtonClass}
+                  disabled={busy || !canAdd}
+                  onClick={add}
+                >
+                  <Plus className="h-3 w-3" /> Add
+                </button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </TableScroll>
+      {isDeal && dealField(draft.target_field) ? (
+        <p className="px-3 pb-2 text-[12px] text-muted-foreground">
+          <strong>{dealField(draft.target_field)!.label}:</strong>{" "}
+          {dealField(draft.target_field)!.hint}
+          {dealField(draft.target_field)!.fillsBlankOnly
+            ? " Written only when the deal does not have one yet."
+            : ""}
+        </p>
+      ) : null}
+      {!isDeal ? (
         <p className="px-3 py-2 text-[12px] text-muted-foreground">
           <strong>Fill if blank</strong> lets a later replay write a field a person deliberately
           left empty. Every such fill is audited and posted to the implementation&apos;s journal,
           but the safe answer is <strong>never</strong> — a blank a human left is recorded state.
         </p>
-      </Panel>
+      ) : null}
+      {error ? (
+        <p role="alert" className="px-3 pb-2 text-[12px] text-destructive">
+          {errorMessage(error)}
+        </p>
+      ) : null}
+    </Panel>
+  );
+}
 
-      <Panel
-        title="Test a payload"
-        meta="Nothing is written. Shows the mapped output and every template rule that was evaluated."
-      >
-        <div className="space-y-2 px-3 py-2">
-          <label className={labelClass} htmlFor="sample">
-            Opportunity JSON
-          </label>
-          <textarea
-            id="sample"
-            rows={8}
-            value={sample}
-            onChange={(e) => setSample(e.target.value)}
-            className="w-full rounded-sm border border-border bg-background p-2 font-mono text-[11px] outline-none focus:ring-1 focus:ring-ring"
-            placeholder='{"salesforce_opportunity_id":"0066g00000ABCDEAA5", …}'
-          />
-          <button
-            type="button"
-            className={primaryButtonClass}
-            disabled={runPreview.isPending || sample.trim() === ""}
-            onClick={() => runPreview.mutate()}
-          >
-            Evaluate
-          </button>
-          {result ? (
-            <pre className="max-h-96 overflow-auto rounded-sm border border-border bg-background p-2 text-[11px]">
-              {JSON.stringify(result, null, 2)}
-            </pre>
-          ) : null}
-        </div>
-      </Panel>
-    </div>
+function ClosedWonPreviewPanel() {
+  const preview = useServerFn(previewClosedWonPayload);
+  const [sample, setSample] = useState("");
+  const run = useMutation({ mutationFn: () => preview({ data: { payload: sample } }) });
+  const r = run.data;
+  return (
+    <Panel
+      title="Test a closed-won payload"
+      meta="Nothing is written. Paste what Salesforce or the Zap will send and see what the deal map and the aliases make of it, who the TIS and the AE resolve to, and what is still unmapped."
+    >
+      <div className="space-y-2 px-3 py-2">
+        <textarea
+          rows={8}
+          value={sample}
+          onChange={(e) => setSample(e.target.value)}
+          className="w-full rounded-sm border border-border bg-background p-2 font-mono text-[11px] outline-none focus:ring-1 focus:ring-ring"
+          placeholder='{"Name":"Acme Roofing — Forms 2026","Amount":90000,"Account":{"Name":"Acme Roofing","Id":"0016g00000XYZ12AAB"},"TIS_Assigned__r":{"Email":"priya.nair@gocanvas.com"}, …}'
+        />
+        <button
+          type="button"
+          className={primaryButtonClass}
+          disabled={run.isPending || sample.trim() === ""}
+          onClick={() => run.mutate()}
+        >
+          Evaluate
+        </button>
+        {run.isError ? (
+          <p role="alert" className="text-[12px] text-destructive">
+            {errorMessage(run.error)}
+          </p>
+        ) : null}
+        {r ? (
+          <div className="space-y-2 text-[12px]">
+            {r.errors.length > 0 ? (
+              <p className="text-destructive">Would be refused: {r.errors.join("; ")}</p>
+            ) : (
+              <p className="text-status-ontrack-foreground">Would be accepted.</p>
+            )}
+            {r.missing_required.length > 0 ? (
+              <p className="text-destructive">
+                Required mapped field(s) missing: {r.missing_required.join(", ")}
+              </p>
+            ) : null}
+            <p>
+              <span className="text-muted-foreground">TIS:</span>{" "}
+              {r.tis.input
+                ? r.tis.resolved
+                  ? `${r.tis.input} → ${r.tis.resolved}`
+                  : `${r.tis.input} — nobody on the team matches; the assignment rule would pick`
+                : "none named — the assignment rule would pick"}
+              {" · "}
+              <span className="text-muted-foreground">AE:</span>{" "}
+              {r.ae.input
+                ? r.ae.matched
+                  ? `${r.ae.input} (a Hub login)`
+                  : `${r.ae.input} — no Hub login with that email; not recorded`
+                : "none"}
+            </p>
+            <TableScroll>
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-border">
+                    <th className={cn(cellClass, "text-left", labelClass)}>Deal field</th>
+                    <th className={cn(cellClass, "text-left", labelClass)}>Value</th>
+                    <th className={cn(cellClass, "text-left", labelClass)}>From</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {Object.entries(r.row as Record<string, unknown>)
+                    .filter(([, v]) => v !== undefined && v !== null && v !== "")
+                    .map(([k, v]) => (
+                      <tr key={k}>
+                        <td className={cellClass}>{dealField(k)?.label ?? k}</td>
+                        <td className={cn(cellClass, "font-mono text-[11px]")}>
+                          {typeof v === "string" ? v : JSON.stringify(v)}
+                        </td>
+                        <td
+                          className={cn(cellClass, "font-mono text-[11px] text-muted-foreground")}
+                        >
+                          {(r.sources as Record<string, string>)[k] ?? "—"}
+                        </td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            </TableScroll>
+            {r.unmapped_keys.length > 0 ? (
+              <p className="text-muted-foreground">
+                <strong className="text-foreground">Sent but landed nowhere:</strong>{" "}
+                <span className="font-mono text-[11px]">{r.unmapped_keys.join(", ")}</span>. Add a
+                row above for any of these that should reach the deal.
+              </p>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
+    </Panel>
+  );
+}
+
+function ProjectPreviewPanel() {
+  const preview = useServerFn(previewPayload);
+  const [sample, setSample] = useState("");
+  const [result, setResult] = useState<unknown>(null);
+  const runPreview = useMutation({
+    mutationFn: () => preview({ data: { payload: sample } }),
+    onSuccess: (r) => setResult(r),
+  });
+  return (
+    <Panel
+      title="Test an Opportunity payload (project route)"
+      meta="For POST /api/v1/implementations. Nothing is written. Shows the mapped output and every template rule that was evaluated."
+    >
+      <div className="space-y-2 px-3 py-2">
+        <label className={labelClass} htmlFor="sample">
+          Opportunity JSON
+        </label>
+        <textarea
+          id="sample"
+          rows={6}
+          value={sample}
+          onChange={(e) => setSample(e.target.value)}
+          className="w-full rounded-sm border border-border bg-background p-2 font-mono text-[11px] outline-none focus:ring-1 focus:ring-ring"
+          placeholder='{"salesforce_opportunity_id":"0066g00000ABCDEAA5", …}'
+        />
+        <button
+          type="button"
+          className={primaryButtonClass}
+          disabled={runPreview.isPending || sample.trim() === ""}
+          onClick={() => runPreview.mutate()}
+        >
+          Evaluate
+        </button>
+        {result ? (
+          <pre className="max-h-96 overflow-auto rounded-sm border border-border bg-background p-2 text-[11px]">
+            {JSON.stringify(result, null, 2)}
+          </pre>
+        ) : null}
+      </div>
+    </Panel>
   );
 }
 
@@ -512,27 +886,33 @@ function ZapierTab() {
     void navigator.clipboard.writeText(text).then(() => setCopied(label));
 
   const body = `{
-  "company":       "{{Account Name}}",
-  "opportunity":   "{{Opportunity Name}}",
-  "amount":        "{{Amount}}",
-  "products":      "{{Products}}",
-  "rep_email":     "{{Rep Email}}",
-  "close_date":    "{{Close Date}}",
-  "contact_name":  "{{Contact Name}}",
-  "contact_email": "{{Contact Email}}",
-  "contact_role":  "{{Contact Title}}",
-  "salesforce_url":"{{Salesforce Link}}",
-  "notes":         "{{Slack Message}}"
+  "company":              "{{Account Name}}",
+  "opportunity":          "{{Opportunity Name}}",
+  "amount":               "{{Amount}}",
+  "products":             "{{Products}}",
+  "rep_email":            "{{Opportunity Owner Email}}",
+  "implementation_owner": "{{TIS Assigned Email}}",
+  "close_date":           "{{Close Date}}",
+  "seats":                "{{Field Users}}",
+  "integration_tier":     "{{Integration Tier}}",
+  "industry":             "{{Industry}}",
+  "path":                 "{{Onboarding Type}}",
+  "contact_name":         "{{Contact Name}}",
+  "contact_email":        "{{Contact Email}}",
+  "contact_role":         "{{Contact Title}}",
+  "salesforce_id":        "{{Account ID}}",
+  "notes":                "{{Description}}"
 }`;
 
   return (
     <div className="max-w-3xl space-y-3">
-      <Panel title="Closed won → onboarding, from a Google Sheet" level="primary">
+      <Panel title="Closed won → onboarding, through Zapier" level="primary">
         <div className="space-y-3 px-3 py-2.5 text-[12px]">
           <p className="text-muted-foreground">
-            A new row in the closed-won sheet becomes a deal at Closed Won <em>and</em> a project
-            with its plan, in one call. Delivering the same row twice updates the deal and never
-            makes a second project.
+            A Salesforce Opportunity reaching Closed Won (or a new row in the closed-won sheet)
+            becomes a deal at Closed Won <em>and</em> a project with its plan, assigned to the TIS
+            the record names, in one call. Delivering the same record twice updates the deal and
+            never makes a second project.
           </p>
 
           <ol className="list-decimal space-y-3 pl-5">
@@ -545,6 +925,7 @@ function ZapierTab() {
             </li>
             <li>
               <span className="font-medium text-foreground">The Zap.</span> Trigger:{" "}
+              <em>Salesforce → Updated Field on Record</em> (Opportunity, StageName, Closed Won), or{" "}
               <em>Google Sheets → New Spreadsheet Row</em>. Action:{" "}
               <em>Webhooks by Zapier → POST</em>, payload type <em>json</em>.
             </li>
@@ -593,7 +974,7 @@ function ZapierTab() {
           </ol>
 
           <div className="rounded-md border border-dashed border-border bg-muted/20 px-3 py-2 text-muted-foreground">
-            <p className="font-medium text-foreground">Column names are forgiving.</p>
+            <p className="font-medium text-foreground">Field names are forgiving, and mappable.</p>
             <p className="mt-0.5">
               <code className="font-mono">Account Name</code>,{" "}
               <code className="font-mono">account</code> and{" "}
@@ -601,14 +982,111 @@ function ZapierTab() {
               <code className="font-mono">Deal Value</code>, <code className="font-mono">ARR</code>{" "}
               and <code className="font-mono">amount</code> all mean amount, and “$48,000” is read
               as a number. A Salesforce link yields the account id. A bad email is dropped, not a
-              reason to reject the row.
+              reason to reject the row. Anything named differently in your org — a custom TIS field,
+              an industry pick-list — gets a row on the <em>Field maps</em> tab and lands where you
+              point it.
             </p>
           </div>
         </div>
       </Panel>
 
+      <SalesforceFlowCard url={url} copied={copied} copy={copy} />
+
       <FieldFusionRequestCard origin={origin} copied={copied} copy={copy} />
     </div>
+  );
+}
+
+/**
+ * The same endpoint, called straight from Salesforce: a record-triggered Flow
+ * with an HTTP Callout action, no Zapier in between. The Flow posts the
+ * Opportunity as Salesforce has it; the Field maps tab says which field is
+ * which. The copy here is what a Salesforce admin needs and nothing else.
+ */
+function SalesforceFlowCard({
+  url,
+  copied,
+  copy,
+}: {
+  url: string;
+  copied: string | null;
+  copy: (label: string, text: string) => void;
+}) {
+  const body = `{
+  "Id":            "{!$Record.Id}",
+  "Name":          "{!$Record.Name}",
+  "Amount":        {!$Record.Amount},
+  "CloseDate":     "{!$Record.CloseDate}",
+  "StageName":     "{!$Record.StageName}",
+  "Description":   "{!$Record.Description}",
+  "Account":       { "Id": "{!$Record.AccountId}", "Name": "{!$Record.Account.Name}", "Website": "{!$Record.Account.Website}", "Industry": "{!$Record.Account.Industry}" },
+  "Owner":         { "Email": "{!$Record.Owner.Email}" },
+  "TIS_Assigned__r": { "Email": "{!$Record.TIS_Assigned__r.Email}", "Name": "{!$Record.TIS_Assigned__r.Name}" }
+}`;
+  return (
+    <Panel title="Closed won → onboarding, straight from Salesforce (Flow)">
+      <div className="space-y-3 px-3 py-2.5 text-[12px]">
+        <p className="text-muted-foreground">
+          No Zapier: a record-triggered Flow on Opportunity, when StageName becomes Closed Won, runs
+          an HTTP Callout to the same endpoint. Field names do not have to match ours — post the
+          record as Salesforce has it and map each field on the <em>Field maps</em> tab.
+        </p>
+        <ol className="list-decimal space-y-3 pl-5">
+          <li>
+            <span className="font-medium text-foreground">A key.</span>{" "}
+            <Link to="/admin/api-keys" className="underline">
+              Admin → API keys → Add
+            </Link>{" "}
+            with the <code className="font-mono">accounts:write</code> scope. Store it in a Named
+            Credential (External Credential, custom header{" "}
+            <code className="font-mono">Authorization: Bearer gcp_live_…</code>), never in the Flow.
+          </li>
+          <li>
+            <span className="font-medium text-foreground">The callout.</span> POST, JSON,{" "}
+            <Row
+              label="URL"
+              value={url}
+              onCopy={() => copy("flow-url", url)}
+              copied={copied === "flow-url"}
+            />
+          </li>
+          <li>
+            <span className="font-medium text-foreground">The body.</span> Any shape works; this one
+            carries what the deal needs and nests the lookups so the map can read{" "}
+            <code className="font-mono">Account.Name</code> and{" "}
+            <code className="font-mono">TIS_Assigned__r.Email</code>. Rename{" "}
+            <code className="font-mono">TIS_Assigned__r</code> to your org&apos;s TIS lookup.
+            <div className="relative mt-1">
+              <pre className="overflow-x-auto rounded-md border border-border bg-muted/30 p-2.5 font-mono text-[11px] leading-relaxed">
+                {body}
+              </pre>
+              <button
+                type="button"
+                onClick={() => copy("flow-body", body)}
+                className="absolute right-2 top-2 inline-flex items-center gap-1 rounded-sm border border-border bg-background px-1.5 py-0.5 text-[11px] hover:bg-muted"
+              >
+                <Copy className="h-3 w-3" /> {copied === "flow-body" ? "Copied" : "Copy"}
+              </button>
+            </div>
+          </li>
+          <li>
+            <span className="font-medium text-foreground">The map.</span> On <em>Field maps</em>,
+            add a row per field: <code className="font-mono">Account.Name → Company</code>,{" "}
+            <code className="font-mono">Account.Id → Salesforce Account id</code>,{" "}
+            <code className="font-mono">Amount → Amount</code>,{" "}
+            <code className="font-mono">Owner.Email → Account Executive</code>,{" "}
+            <code className="font-mono">TIS_Assigned__r.Email → TIS assigned</code>. Paste one real
+            record into <em>Test a closed-won payload</em> and read the result before turning the
+            Flow on.
+          </li>
+          <li>
+            <span className="font-medium text-foreground">Responses.</span> 201 created, 200 already
+            onboarding (facts updated, nothing new made), 422 the body or map needs fixing, 401/403
+            the key. Retry 5xx only. The same record twice is safe.
+          </li>
+        </ol>
+      </div>
+    </Panel>
   );
 }
 

@@ -690,7 +690,7 @@ export async function saveFieldMap(
   userId: string,
   input: {
     id?: string | null;
-    direction: "inbound" | "outbound";
+    direction: "inbound" | "outbound" | "inbound_deal";
     source_path: string;
     target_field: string;
     transform: string | null;
@@ -700,6 +700,14 @@ export async function saveFieldMap(
   },
 ): Promise<{ ok: true }> {
   const profile = await requireAdmin(userId);
+  if (input.direction === "inbound_deal") {
+    const { isDealFieldKey } = await import("./deal-field-catalog");
+    if (!isDealFieldKey(input.target_field)) {
+      throw new Error(
+        `"${input.target_field}" is not a deal field the closed-won endpoint can write.`,
+      );
+    }
+  }
   const patch = {
     direction: input.direction,
     source_path: input.source_path,
@@ -785,6 +793,71 @@ export async function previewIngest(
       selectionInputsFrom(parsed.data),
     ) as unknown as Json,
     errors: [],
+  };
+}
+
+/**
+ * "Test a closed-won payload": what the map and the aliases make of a body,
+ * who the TIS and the AE would resolve to, and what the schema says — with
+ * nothing written. The same resolution the endpoint runs.
+ */
+export async function previewClosedWon(
+  userId: string,
+  payload: unknown,
+): Promise<{
+  row: Json;
+  sources: Record<string, string>;
+  unmapped_keys: string[];
+  missing_required: string[];
+  errors: string[];
+  tis: { input: string | null; resolved: string | null };
+  ae: { input: string | null; matched: boolean };
+}> {
+  await requireManager(userId);
+  const { applyDealMaps, dealMapRoots } = await import("./server/sf-field-maps");
+  const { resolveClosedWonRow, closedWonSchema } = await import("./server/closed-won");
+  const maps = await loadFieldMaps();
+  const mapped = applyDealMaps(payload, maps);
+  const resolved = resolveClosedWonRow(payload, mapped.values, dealMapRoots(maps));
+  const sources = Object.fromEntries(
+    Object.entries(resolved.sources).map(([k, how]) => [
+      k,
+      how === "map" ? `map:${mapped.sources[k]}` : "alias",
+    ]),
+  );
+  const parsed = closedWonSchema.safeParse(resolved.row);
+  if (!parsed.success) {
+    return {
+      row: resolved.row as Json,
+      sources,
+      unmapped_keys: resolved.unmappedKeys,
+      missing_required: mapped.missingRequired,
+      errors: parsed.error.issues.map((i) => i.message),
+      tis: { input: null, resolved: null },
+      ae: { input: null, matched: false },
+    };
+  }
+  const { resolveTeamMember } = await import("./server/team-lookup");
+  const owner = parsed.data.implementation_owner ?? null;
+  const member = owner ? await resolveTeamMember(owner) : null;
+  let aeMatched = false;
+  if (parsed.data.rep_email) {
+    const { data } = await db()
+      .from("portal_profiles")
+      .select("id")
+      .eq("email", parsed.data.rep_email)
+      .maybeSingle();
+    aeMatched = Boolean(data);
+  }
+  const { handoff, ...rest } = parsed.data;
+  return {
+    row: { ...rest, ...handoff } as Json,
+    sources,
+    unmapped_keys: resolved.unmappedKeys,
+    missing_required: mapped.missingRequired,
+    errors: [],
+    tis: { input: owner, resolved: member?.name ?? null },
+    ae: { input: parsed.data.rep_email ?? null, matched: aeMatched },
   };
 }
 
