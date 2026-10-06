@@ -7,7 +7,8 @@ import { errorMessage } from "@/lib/error-message";
 
 /**
  * A deal that has not closed yet. Once it closes, the customer's page is the
- * account page and this URL sends you to its Pre-kickoff tab.
+ * account page and this URL sends you to its Overview, on the implementation
+ * the deal started.
  */
 export const Route = createFileRoute("/deals/$dealId")({
   head: () => ({

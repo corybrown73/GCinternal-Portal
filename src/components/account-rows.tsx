@@ -79,7 +79,7 @@ export function AccountRowList({
               search={{ tab: row.tab, impl: row.impl.id }}
               className="ml-auto flex shrink-0 items-center gap-1 font-mono text-[11px] text-muted-foreground hover:text-foreground hover:underline"
             >
-              {row.tab}
+              {row.tab === "overview" ? "Overview" : "Details"}
               <ArrowRight className="h-3 w-3" strokeWidth={2} />
             </Link>
           </div>

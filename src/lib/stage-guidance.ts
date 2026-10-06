@@ -93,8 +93,8 @@ const ISSUES: Record<string, { title: string; why: string; action: string }> = {
       "Identify what the engineer needs to be stable. Finish that dependency, then bring in the appropriate Technical Solutions owner.",
   },
   pilotproblem: {
-    title: "Good. The pilot found it before Graduation.",
-    why: "A pilot problem tells you what still prevents the workflow from operating properly.",
+    title: "Good. The trial run found it before Graduation.",
+    why: "A problem found in the trial run tells you what still prevents the workflow from operating properly.",
     action:
       "Name the issue, owner and next action. Resolve or appropriately transition it, then validate again.",
   },
@@ -159,7 +159,7 @@ const STAGE_GUIDANCE: Partial<Record<FlowStageKey, StageGuidance>> = {
       "Kickoff should not become a blank-page requirements session. If you did not have enough information to prepare something tangible, that gap should have been handled before Kickoff.",
     readyWhen:
       "The process and starting point are agreed, and the customer has something real to test.",
-    next: "02 · Get It Working",
+    next: "03 · Get It Working",
   },
   get_it_working: {
     purpose:
@@ -181,7 +181,7 @@ const STAGE_GUIDANCE: Partial<Record<FlowStageKey, StageGuidance>> = {
       "More building is not always the next move. If the customer has not tested what is already there, get a real example through the workflow first.",
     readyWhen:
       "The customer has tested the core workflow and it works end to end. The foundation is stable enough to build around.",
-    next: "03 · Make It Yours",
+    next: "04 · Make It Yours",
   },
   make_it_yours: {
     purpose:
@@ -203,29 +203,29 @@ const STAGE_GUIDANCE: Partial<Record<FlowStageKey, StageGuidance>> = {
       "This is not a feature tour. Teach against the customer’s real workflow. Show it, do it together, then have them do it.",
     readyWhen:
       "The solution reflects the agreed workflow and purchased scope, and the customer can operate the parts they are expected to own.",
-    next: "04 · Make It Run",
+    next: "05 · Make It Run",
   },
   make_it_run: {
     purpose:
       "Prove the complete workflow with real users and real work. Refine what remains and get customer acceptance.",
     checks: [
       "Real users have used the workflow.",
-      "The pilot used realistic work, not a demo scenario.",
+      "The trial run used realistic work, not a demo scenario.",
       "Relevant outputs and purchased components work as expected.",
       "Remaining issues have a clear owner and next action.",
       "The customer can say whether the agreed outcome works.",
     ],
     stuck: stuck([
-      { key: "pilotproblem", label: "The pilot found a problem" },
+      { key: "pilotproblem", label: "The trial run found a problem" },
       { key: "nousers", label: "Users aren’t actually using it" },
       { key: "waiting", label: "We’re waiting on another team" },
       { key: "acceptance", label: "The customer won’t confirm acceptance" },
     ]),
     remember:
-      "A working build is not the same as an operational workflow. The pilot proves it can work outside the Implementation call.",
+      "A working build is not the same as an operational workflow. The trial run proves it can work outside the Implementation call.",
     readyWhen:
       "The complete workflow has been proven in real use, important issues are resolved or appropriately owned, and the customer accepts the outcome.",
-    next: "05 · Graduate",
+    next: "06 · Graduate",
   },
   complete: {
     purpose:

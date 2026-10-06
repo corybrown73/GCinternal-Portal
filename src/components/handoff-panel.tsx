@@ -77,15 +77,17 @@ const TABS = [
 ] as const;
 type TabId = (typeof TABS)[number];
 
+// Customer 360 folded every tab after Overview into Details; the ids still
+// resolve there, so the link says where it actually lands.
 const TAB_LABEL: Record<TabId, string> = {
   overview: "Overview",
-  journey: "Journey",
-  solution: "Solution",
-  requirements: "Requirements",
-  decisions: "Decisions",
-  risks: "Risks & Issues",
-  evidence: "Evidence",
-  history: "History",
+  journey: "Details",
+  solution: "Details",
+  requirements: "Details",
+  decisions: "Details",
+  risks: "Details",
+  evidence: "Details",
+  history: "Details",
 };
 
 /**

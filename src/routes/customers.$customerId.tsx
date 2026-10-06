@@ -421,16 +421,8 @@ function Customer360Page() {
                   sold it, what was said on the calls — was a join away and
                   unreachable from here, so it got re-gathered by asking the
                   customer questions they had already answered to sales. */}
-              {impl.deal_id ? (
-                <Link
-                  to="/deals/$dealId"
-                  params={{ dealId: impl.deal_id }}
-                  className="lift inline-flex items-center gap-1 rounded-full border border-border bg-card px-2 py-0.5 text-[11px] hover:text-foreground"
-                  title="Open the deal this project came from"
-                >
-                  From deal · {impl.deal_name ?? "Untitled deal"}
-                </Link>
-              ) : null}
+              {/* No "From deal" chip: the deal page redirects back here once
+                  a customer exists, so it only ever reloaded this page. */}
               {impl.deal_id ? (
                 <Link
                   to="/onboarding-plan/$dealId"
