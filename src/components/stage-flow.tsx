@@ -11,6 +11,7 @@ import { ParkingLot } from "@/components/parking-lot";
 import { Field } from "@/components/record";
 import { SolutionsCard } from "@/components/solutions-card";
 import { TranscriptUpdatePanel } from "@/components/transcript-update-panel";
+import { ImplementationUpdatePanel } from "@/components/implementation-update-panel";
 import { ImplementationHistorySection } from "@/components/implementation-history";
 import { FactsStep, FlowStep, NotesIn, SowStep } from "@/components/intake-panel";
 import { assignDealFn, claimDealFn, getDealAssignment } from "@/lib/assignment.functions";
@@ -872,12 +873,20 @@ export function CurrentImplementationTab({
 
   return (
     <div className="space-y-4">
-      {/* Every implementation on this tab came from a deal, so its target is the plan's. */}
-      <TranscriptUpdatePanel
-        customerId={customerId}
-        implementationId={implementationId}
-        planOwnsTarget
-      />
+      <div className="space-y-2">
+        <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+          Update the implementation
+        </div>
+        <div className="space-y-2.5">
+          {/* Every implementation on this tab came from a deal, so its target is the plan's. */}
+          <TranscriptUpdatePanel
+            customerId={customerId}
+            implementationId={implementationId}
+            planOwnsTarget
+          />
+          <ImplementationUpdatePanel implementationId={implementationId} />
+        </div>
+      </div>
 
       <section
         className="rounded-md border border-border bg-card px-4 py-3"
