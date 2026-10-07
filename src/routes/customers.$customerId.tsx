@@ -14,7 +14,7 @@ import { EditCustomerDialog } from "@/components/edit-customer-dialog";
 import { canEditDeal, useProfile } from "@/lib/auth";
 import { dealQuery } from "@/lib/deal-query";
 import { useQuery } from "@tanstack/react-query";
-import { AddServicesButton } from "@/components/onboarding-pulse";
+import { AddServicesChoice } from "@/components/add-services-choice";
 import { CurrentImplementationTab, ImplementationStatusFacts } from "@/components/stage-flow";
 import { HealthNote } from "@/components/health-note";
 import { PlanPanel } from "@/components/plan-panel";
@@ -434,7 +434,11 @@ function Customer360Page() {
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <AddServicesButton customerId={customer.id} />
+            <AddServicesChoice
+              customerId={customer.id}
+              dealId={impl.deal_id}
+              implementationId={impl.id}
+            />
             <EditCustomerDialog
               customer={customer}
               implementationId={impl.id}
