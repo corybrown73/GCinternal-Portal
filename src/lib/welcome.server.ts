@@ -6,6 +6,7 @@ import { appUrl } from "@/lib/app-url";
 import { industryIcon } from "@/lib/industry-icons";
 import {
   HOMEWORK_KEYS,
+  implementationFocusFallbackView,
   implementationFocusView,
   workflowStoryView,
   type HomeworkKey,
@@ -255,6 +256,12 @@ async function viewFor(
     parkingLot: lot,
     workflowStory: workflowStoryView(readIntake(deal.intake)),
     implementationFocus: implementationFocusView(readIntake(deal.intake)),
+    // Kickoff-only: a presentation-time proposal from existing structured
+    // evidence, read fresh on every view and never written back — see
+    // implementation-focus.ts's proposeImplementationFocus.
+    implementationFocusFallback: implementationFocusFallbackView(
+      (await import("./implementation-focus")).proposeImplementationFocus(readIntake(deal.intake)),
+    ),
     intake: (await import("./sales-handoff")).customerPrompt(readIntake(deal.intake)),
     journey: (await import("./welcome-journey")).customerJourney({
       stage: deal.stage ?? null,

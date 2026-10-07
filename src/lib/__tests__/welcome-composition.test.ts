@@ -105,6 +105,22 @@ describe("the Kickoff composition", () => {
     ]);
   });
 
+  it("includes the focus screen from a presentation-only fallback, even when nothing is saved", () => {
+    const view = baseView({
+      implementationFocus: null,
+      implementationFocusFallback: [
+        {
+          id: "focus-1",
+          text: 'Build and configure the "Daily Job Report" workflow for the field team to complete on site.',
+          status: "proposed",
+          sources: [{ type: "intake", label: "Daily Job Report", quote: null }],
+          reviewFlag: null,
+        },
+      ],
+    });
+    expect(kickoffScreenList(view).map((s) => s.key)).toContain("kickoff-focus");
+  });
+
   it("omits the focus screen rather than telling a customer prep isn't finished", () => {
     // No implementationFocus at all — nothing has been prepared yet. The
     // screen must not appear (and so can never show internal housekeeping

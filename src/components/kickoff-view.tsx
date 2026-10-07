@@ -14,6 +14,7 @@ import { byLabel } from "@/lib/welcome-journey";
 import {
   kickoffBusinessOutcome,
   kickoffFocusContent,
+  kickoffWorkflowFallback,
   kickoffWorkflowStory,
 } from "@/lib/kickoff-view";
 import { shortDay } from "@/lib/onboarding-timeline";
@@ -177,18 +178,24 @@ function KickoffUnderstanding({ view, page }: { view: WelcomeView; page: number 
 /* ------------------------------------------------------- 3. Your workflow */
 
 function KickoffWorkflow({ view, page }: { view: WelcomeView; page: number }) {
-  const story = kickoffWorkflowStory(view.workflowStory);
+  const story =
+    kickoffWorkflowStory(view.workflowStory) ??
+    kickoffWorkflowFallback({
+      currentProcess: view.currentProcess,
+      firstFormName: view.firstForm?.name ?? null,
+      businessOutcome: kickoffBusinessOutcome(view),
+    });
   return (
     <Frame
       k="kickoff-workflow"
       page={page}
       eyebrow="Your workflow"
-      title={story ? "Before, during," : "How your work"}
-      accent={story ? "and after" : "happens today"}
+      title={story ? "Before, during," : "Let's map it"}
+      accent={story ? "and after" : "together"}
       lede={
         story
           ? "How the work happens — and what changes."
-          : "The detail firms up together on the call."
+          : "There's not enough yet to sketch this out — we'll build it on the call."
       }
     >
       {story ? (
@@ -228,19 +235,9 @@ function KickoffWorkflow({ view, page }: { view: WelcomeView; page: number }) {
         </div>
       ) : (
         <div className="wp-journey-col is-now is-solo">
-          <span className="wp-journey-tag">Today</span>
-          <div className="wp-journey-art">
-            <div className="wp-paper">
-              <FileText className="h-7 w-7" />
-              <i />
-              <i />
-              <i />
-              <i />
-            </div>
-          </div>
-          <h3>How it works today</h3>
+          <h3>Let's map it together</h3>
           <p className="wp-journey-quote">
-            {view.currentProcess ?? "We'll capture this together on the call."}
+            We'll walk through how the work happens today, step by step, on the call.
           </p>
         </div>
       )}
@@ -251,7 +248,7 @@ function KickoffWorkflow({ view, page }: { view: WelcomeView; page: number }) {
 /* --------------------------------------------------- 4. What we're working on */
 
 function KickoffFocus({ view, page }: { view: WelcomeView; page: number }) {
-  const content = kickoffFocusContent(view.implementationFocus);
+  const content = kickoffFocusContent(view.implementationFocus, view.implementationFocusFallback);
   // kickoffScreenList never includes this screen when there is nothing to
   // show — see below. This guard is only a second line of defence against
   // ever rendering internal "not prepared yet" housekeeping to a customer.
@@ -430,12 +427,15 @@ function KickoffNextStep({ view, page }: { view: WelcomeView; page: number }) {
  * persisted hidden-screen preferences — those belong to the Plan
  * composition only. See WelcomePage's `experience` state.
  *
- * "What we're working on" is left out entirely when there is nothing to
- * show yet, rather than telling a customer that internal prep is
- * unfinished — the same rule the Plan's own optional screens (journey,
- * intake, help) already follow for data that may not exist yet. */
+ * "What we're working on" is left out entirely only when there is neither
+ * a saved focus nor a safe structured proposal to derive one from — never
+ * to tell a customer that internal prep is unfinished, the same rule the
+ * Plan's own optional screens (journey, intake, help) already follow for
+ * data that may not exist yet. */
 export function kickoffScreenList(view: WelcomeView): Screen[] {
-  const hasFocus = kickoffFocusContent(view.implementationFocus).state !== "empty";
+  const hasFocus =
+    kickoffFocusContent(view.implementationFocus, view.implementationFocusFallback).state !==
+    "empty";
   return [
     {
       key: "kickoff-cover",

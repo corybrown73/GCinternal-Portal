@@ -1,4 +1,4 @@
-import type { IntakeAnswers } from "./intake-answers";
+import type { ImplementationFocusItem, IntakeAnswers } from "./intake-answers";
 import type { Timeline } from "./onboarding-timeline";
 import type { CustomerPrompt } from "./sales-handoff";
 import type { CustomerJourney } from "./welcome-journey";
@@ -64,6 +64,26 @@ export function implementationFocusView(
     validatedAt: f.validated_at,
     validatedBy: f.validated_by,
   };
+}
+
+/**
+ * A presentation-only proposed Implementation Focus — proposeImplementationFocus's
+ * output (SOW/Intake/Gong evidence, never generated prose), in the same
+ * item shape implementationFocusView uses, so Kickoff View can treat a
+ * saved item and a proposed one identically once text is extracted. Used
+ * only when nothing has been saved yet; never persisted by being read.
+ */
+export function implementationFocusFallbackView(
+  items: ReadonlyArray<ImplementationFocusItem> | null,
+): ImplementationFocusView["items"] {
+  if (!items) return [];
+  return items.map((i) => ({
+    id: i.id,
+    text: i.text,
+    status: i.status,
+    sources: i.sources.map((s) => ({ type: s.type, label: s.label, quote: s.quote })),
+    reviewFlag: i.review_flag,
+  }));
 }
 
 /**
@@ -171,6 +191,13 @@ export type WelcomeView = {
    */
   workflowStory?: WorkflowStoryView | null;
   implementationFocus?: ImplementationFocusView | null;
+  /**
+   * Kickoff View only: a presentation-only proposed focus derived from SOW/
+   * Intake/Gong evidence (proposeImplementationFocus), read when
+   * implementationFocus has no saved items yet. Never agreed, never
+   * persisted — see kickoffFocusContent for the precedence rule.
+   */
+  implementationFocusFallback?: ImplementationFocusView["items"];
 };
 
 /**
