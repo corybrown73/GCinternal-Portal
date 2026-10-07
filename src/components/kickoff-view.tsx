@@ -1,3 +1,4 @@
+import { Fragment } from "react";
 import { Check, Cloud, FileText } from "lucide-react";
 
 import {
@@ -10,6 +11,12 @@ import {
   type Screen,
 } from "@/components/welcome-primitives";
 import {
+  KICKOFF_HANDOFF,
+  KICKOFF_PRINCIPLES,
+  KICKOFF_PROMISE,
+  KICKOFF_RESPONSIBILITY,
+  KICKOFF_STAGE_OUTCOME,
+  KICKOFF_WORKFLOW_PROMPTS,
   kickoffBusinessOutcome,
   kickoffFocusContent,
   kickoffFocusGroups,
@@ -21,16 +28,26 @@ import { cn } from "@/lib/utils";
 import type { WelcomeView } from "@/lib/welcome";
 
 /**
- * KICKOFF VIEW — a short TIS-led presentation for the first implementation
- * call, composed from the same WelcomeView the living Plan already reads.
- * One implementation, two views: this file adds the second composition,
- * never a second data model. Internal only — nothing here is reachable
- * from the customer's shared link.
+ * KICKOFF VIEW — a TIS-led CONVERSATION SCAFFOLD for the first
+ * implementation call, composed from the same WelcomeView the living Plan
+ * already reads. One implementation, two views: this file adds the second
+ * composition, never a second data model. Internal only — nothing here is
+ * reachable from the customer's shared link.
  *
  * FIVE FIXED SCREENS, always, for every account: Welcome, Your workflow,
- * Our focus, Your path to launch, Let's get it working. Complexity changes
- * the CONTENT within a screen (how much evidence there is to show), never
- * the number of screens — see kickoffScreenList.
+ * What we're getting working first, Your path to launch, Put it to work.
+ * Complexity changes the CONTENT within a screen, never the number of
+ * screens — see kickoffScreenList.
+ *
+ * This is not primarily a customer summary deck — it is what the TIS uses
+ * to RUN the call: it tells the customer what today accomplishes, carries
+ * the TIS's own before/during/after question framework next to whatever
+ * customer-specific evidence already exists, explains WHY we deliberately
+ * get one workflow working well before expanding, and explains how
+ * implementation actually proceeds after today. The reusable conversation
+ * prompts and framing (KICKOFF_* in @/lib/kickoff-view) are static
+ * Kickoff-methodology copy — never customer facts, never persisted, never
+ * account-specific.
  *
  * Visually, every screen reuses the Plan deck's own grammar — Frame, Tile,
  * Tick, PhoneMock, the journey-flow columns, the milestone rail, the
@@ -85,6 +102,19 @@ function KickoffCover({ view }: { view: WelcomeView }) {
               <T k="kickoff-cover.prepared">{`Prepared by ${view.lead}, GoCanvas onboarding`}</T>
             </p>
           ) : null}
+          {/* What today's call accomplishes — a light promise, not an agenda. */}
+          <div style={{ marginTop: 10 }}>
+            <p className="wp-eyebrow" style={{ marginBottom: 6 }}>
+              Today we&apos;ll
+            </p>
+            <div className="wp-pills is-compact">
+              {KICKOFF_PROMISE.map((item) => (
+                <span className="wp-pill" key={item.text}>
+                  <Tile name={item.icon} size="sm" tone="blue" /> {item.text}
+                </span>
+              ))}
+            </div>
+          </div>
         </div>
         <div className="wp-cover-art">
           {view.photoUrl ? (
@@ -131,6 +161,7 @@ function KickoffWorkflow({ view, page }: { view: WelcomeView; page: number }) {
     firstFormName: view.firstForm?.name ?? null,
     businessOutcome: kickoffBusinessOutcome(view),
   });
+  const confirm = KICKOFF_WORKFLOW_PROMPTS;
   return (
     <Frame
       k="kickoff-workflow"
@@ -140,7 +171,7 @@ function KickoffWorkflow({ view, page }: { view: WelcomeView; page: number }) {
       accent={story ? "your workflow" : "together"}
       lede={
         story
-          ? "Three moments, start to finish. Did we get it right?"
+          ? "What we think we know, and what we'll confirm together — the foundation for your first working version."
           : "There's not enough yet to sketch this out — we'll build it on the call."
       }
     >
@@ -154,7 +185,15 @@ function KickoffWorkflow({ view, page }: { view: WelcomeView; page: number }) {
               </div>
             </div>
             <h3>How it starts</h3>
-            <p className="wp-journey-quote">{story.before ?? "To confirm on the call."}</p>
+            <p className="wp-journey-quote">{story.before ?? "Let's confirm this together."}</p>
+            <div className="wp-journey-confirm">
+              <p className="wp-journey-confirm-label">We&apos;ll confirm</p>
+              <ul className="wp-journey-confirm-list">
+                {confirm.before.map((q, i) => (
+                  <li key={i}>{q}</li>
+                ))}
+              </ul>
+            </div>
           </div>
           <span className="wp-journey-arrow" />
           <div className="wp-journey-col is-then">
@@ -163,7 +202,15 @@ function KickoffWorkflow({ view, page }: { view: WelcomeView; page: number }) {
               <PhoneMock view={view} className="is-flow" />
             </div>
             <h3>Running the job</h3>
-            <p>{story.during ?? "To confirm on the call."}</p>
+            <p>{story.during ?? "Let's confirm this together."}</p>
+            <div className="wp-journey-confirm">
+              <p className="wp-journey-confirm-label">We&apos;ll confirm</p>
+              <ul className="wp-journey-confirm-list">
+                {confirm.during.map((q, i) => (
+                  <li key={i}>{q}</li>
+                ))}
+              </ul>
+            </div>
           </div>
           <span className="wp-journey-arrow" />
           <div className="wp-journey-col is-future">
@@ -176,7 +223,15 @@ function KickoffWorkflow({ view, page }: { view: WelcomeView; page: number }) {
               </div>
             </div>
             <h3>What changes</h3>
-            <p>{story.after ?? "To confirm on the call."}</p>
+            <p>{story.after ?? "Let's confirm this together."}</p>
+            <div className="wp-journey-confirm">
+              <p className="wp-journey-confirm-label">We&apos;ll confirm</p>
+              <ul className="wp-journey-confirm-list">
+                {confirm.after.map((q, i) => (
+                  <li key={i}>{q}</li>
+                ))}
+              </ul>
+            </div>
           </div>
         </div>
       ) : (
@@ -191,24 +246,35 @@ function KickoffWorkflow({ view, page }: { view: WelcomeView; page: number }) {
   );
 }
 
-/* ---------------------------------------------------------- 3. Our focus */
+/* ---------------------------------- 3. What we're getting working first */
 
 function KickoffFocus({ view, page }: { view: WelcomeView; page: number }) {
   const content = kickoffFocusContent(view.implementationFocus, view.implementationFocusFallback);
+
+  const principles = (
+    <div className="wp-pills">
+      {KICKOFF_PRINCIPLES.map((p) => (
+        <span className="wp-pill" key={p.label}>
+          <Tile name={p.icon} size="sm" tone="blue" /> {p.label}
+        </span>
+      ))}
+    </div>
+  );
 
   if (content.state === "empty") {
     return (
       <Frame
         k="kickoff-focus"
         page={page}
-        eyebrow="Our focus"
-        title="Let's shape"
-        accent="this together"
-        lede="We'll agree what we're focused on, together, right here."
+        eyebrow="What we're getting working first"
+        title="One workflow,"
+        accent="done right"
+        lede="We get one thing working well before we expand — on purpose."
       >
-        <div className="wp-journey-col is-now is-solo">
+        {principles}
+        <div className="wp-journey-col is-now is-solo" style={{ marginTop: 20 }}>
           <h3>Nothing locked in yet</h3>
-          <p className="wp-journey-quote">We'll agree the focus together on the call.</p>
+          <p className="wp-journey-quote">We'll agree the first objective together on the call.</p>
         </div>
       </Frame>
     );
@@ -220,17 +286,16 @@ function KickoffFocus({ view, page }: { view: WelcomeView; page: number }) {
     <Frame
       k="kickoff-focus"
       page={page}
-      eyebrow={agreed ? "Agreed focus" : "Proposed focus"}
-      title="What we're"
-      accent="bringing to life"
-      lede={
-        agreed
-          ? "Agreed together — here's where the implementation is focused."
-          : "What we believe we're solving first."
-      }
+      eyebrow="What we're getting working first"
+      title="One workflow,"
+      accent="done right"
+      lede="We get one thing working well before we expand — on purpose."
     >
-      <div className="wp-focus-now">
-        <p className="wp-focus-now-label">Now</p>
+      {principles}
+      <div className="wp-focus-now" style={{ marginTop: 18 }}>
+        <p className="wp-focus-now-label">
+          {agreed ? "Agreed first objective" : "First objective"}
+        </p>
         <p className="wp-focus-now-text">{groups.now[0]}</p>
       </div>
       {groups.next.length || groups.later.length ? (
@@ -309,25 +374,24 @@ function KickoffJourney({ view, page }: { view: WelcomeView; page: number }) {
                   ) : null}
                 </span>
                 <span className="wp-node-label">{s.label}</span>
+                {KICKOFF_STAGE_OUTCOME[s.key] ? (
+                  <span className="wp-node-detail">{KICKOFF_STAGE_OUTCOME[s.key]}</span>
+                ) : null}
                 {s.key === "complete" && view.timeline.liveDate ? (
                   <span className="wp-node-date">{shortDay(view.timeline.liveDate)}</span>
                 ) : null}
               </div>
             ))}
           </div>
-          <div className="wp-responsibility">
-            <div className="wp-responsibility-col">
-              <h4>
-                <Tile name="Wrench" size="sm" tone="blue" /> GoCanvas
-              </h4>
-              <p>Prepare · Recommend · Configure · Guide</p>
-            </div>
-            <div className="wp-responsibility-col">
-              <h4>
-                <Tile name="HardHat" size="sm" tone="blue" /> You
-              </h4>
-              <p>Validate · Decide · Test · Adopt</p>
-            </div>
+          <div className="wp-responsibility is-three">
+            {KICKOFF_RESPONSIBILITY.map((r) => (
+              <div className="wp-responsibility-col" key={r.label}>
+                <h4>
+                  <Tile name={r.icon} size="sm" tone="blue" /> {r.label}
+                </h4>
+                <p>{r.items}</p>
+              </div>
+            ))}
           </div>
         </>
       ) : (
@@ -343,7 +407,7 @@ function KickoffJourney({ view, page }: { view: WelcomeView; page: number }) {
   );
 }
 
-/* ----------------------------------------------- 5. Let's get it working */
+/* ----------------------------------------------- 5. Put it to work */
 
 function KickoffNextStep({ view, page }: { view: WelcomeView; page: number }) {
   const nextText = kickoffNextStepText(view.firstForm?.name ?? null);
@@ -351,10 +415,21 @@ function KickoffNextStep({ view, page }: { view: WelcomeView; page: number }) {
     <Frame
       k="kickoff-next"
       page={page}
-      eyebrow="Let's get it working"
-      title="You're ready"
-      accent="to put it to work"
+      eyebrow="Put it to work"
+      title="What happens"
+      accent="after today"
     >
+      <div className="wp-handoff">
+        {KICKOFF_HANDOFF.map((step, i) => (
+          <Fragment key={step.label}>
+            <span className="wp-handoff-step">
+              <b>{step.label}</b>
+              {step.text}
+            </span>
+            {i < KICKOFF_HANDOFF.length - 1 ? <span className="wp-handoff-arrow" /> : null}
+          </Fragment>
+        ))}
+      </div>
       <div className="wp-pills">
         <span className="wp-pill">
           <Tile name="Smartphone" size="sm" tone="blue" /> Submits from the phone, on the job
@@ -393,7 +468,7 @@ export function kickoffScreenList(view: WelcomeView): Screen[] {
     },
     {
       key: "kickoff-focus",
-      label: "Our focus",
+      label: "What we're getting working first",
       render: (a) => <KickoffFocus key="kickoff-focus" view={view} page={a.page} />,
     },
     {
@@ -403,7 +478,7 @@ export function kickoffScreenList(view: WelcomeView): Screen[] {
     },
     {
       key: "kickoff-next",
-      label: "Let's get it working",
+      label: "Put it to work",
       render: (a) => <KickoffNextStep key="kickoff-next" view={view} page={a.page} />,
     },
   ];

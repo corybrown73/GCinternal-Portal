@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  KICKOFF_HANDOFF,
+  KICKOFF_PRINCIPLES,
+  KICKOFF_PROMISE,
+  KICKOFF_RESPONSIBILITY,
+  KICKOFF_STAGE_OUTCOME,
+  KICKOFF_WORKFLOW_PROMPTS,
   kickoffBusinessOutcome,
   kickoffConcise,
   kickoffFocusContent,
@@ -352,6 +358,64 @@ describe("kickoffNextStepText — testing-oriented, never administrative", () =>
     expect(kickoffNextStepText(null)).toBe(
       "Put it to work. Test your GoCanvas workflow on a real job and see what needs to change.",
     );
+  });
+});
+
+describe("the Kickoff conversation framework — static, never account-specific", () => {
+  // These exist to prove, structurally, that none of the reusable
+  // conversation copy takes a WelcomeView or any account-shaped input at
+  // all — it is plain exported data, so there is nowhere for an
+  // account-specific branch to be added without changing the type.
+  it("KICKOFF_PROMISE is three plain icon/text entries", () => {
+    expect(KICKOFF_PROMISE).toHaveLength(3);
+    for (const item of KICKOFF_PROMISE) {
+      expect(typeof item.icon).toBe("string");
+      expect(typeof item.text).toBe("string");
+    }
+  });
+
+  it("KICKOFF_WORKFLOW_PROMPTS has before/during/after prompts, not customer facts", () => {
+    expect(KICKOFF_WORKFLOW_PROMPTS.before.length).toBeGreaterThan(0);
+    expect(KICKOFF_WORKFLOW_PROMPTS.during.length).toBeGreaterThan(0);
+    expect(KICKOFF_WORKFLOW_PROMPTS.after.length).toBeGreaterThan(0);
+    // Every prompt is a question for the call, not an assertion of fact.
+    const all = [
+      ...KICKOFF_WORKFLOW_PROMPTS.before,
+      ...KICKOFF_WORKFLOW_PROMPTS.during,
+      ...KICKOFF_WORKFLOW_PROMPTS.after,
+    ];
+    for (const prompt of all) expect(prompt.trim().endsWith("?")).toBe(true);
+  });
+
+  it("KICKOFF_PRINCIPLES explains the implementation approach, not invented scope", () => {
+    expect(KICKOFF_PRINCIPLES).toHaveLength(3);
+    expect(KICKOFF_PRINCIPLES.map((p) => p.label)).toEqual([
+      "Make the work easy",
+      "Make the information useful",
+      "Connect what matters",
+    ]);
+  });
+
+  it("KICKOFF_STAGE_OUTCOME covers exactly the six canonical stage keys", () => {
+    expect(Object.keys(KICKOFF_STAGE_OUTCOME).sort()).toEqual(
+      [
+        "complete",
+        "get_it_working",
+        "kickoff",
+        "make_it_run",
+        "make_it_yours",
+        "pre_kickoff",
+      ].sort(),
+    );
+    for (const text of Object.values(KICKOFF_STAGE_OUTCOME)) {
+      expect(text.length).toBeGreaterThan(0);
+      expect(text.length).toBeLessThan(60);
+    }
+  });
+
+  it("KICKOFF_RESPONSIBILITY and KICKOFF_HANDOFF are plain static copy", () => {
+    expect(KICKOFF_RESPONSIBILITY).toHaveLength(3);
+    expect(KICKOFF_HANDOFF.map((s) => s.label)).toEqual(["We refine", "You test", "We learn"]);
   });
 });
 
