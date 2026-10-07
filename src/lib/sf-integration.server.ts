@@ -879,6 +879,47 @@ export async function previewClosedWon(
 const PULL_STATE_KEY = "salesforce_pull";
 export const PULL_LOG_KIND = "sf_pull_closed_won";
 
+/** A stored rule, read defensively: a malformed group is dropped, a missing key keeps the default. */
+function readIncludeRule(
+  v: unknown,
+  fallback: import("./server/salesforce-poll").IncludeRule | null,
+): import("./server/salesforce-poll").IncludeRule | null {
+  if (v === undefined) return fallback;
+  if (v === null) return null;
+  if (!v || typeof v !== "object") return fallback;
+  const groups = Array.isArray((v as { groups?: unknown }).groups)
+    ? ((v as { groups: unknown[] }).groups as unknown[])
+    : [];
+  const out: import("./server/salesforce-poll").IncludeGroup[] = [];
+  for (const g of groups) {
+    if (!g || typeof g !== "object") continue;
+    const gg = g as { label?: unknown; conditions?: unknown; path?: unknown };
+    const conditions = Array.isArray(gg.conditions)
+      ? (gg.conditions as unknown[]).filter(
+          (c): c is import("./server/salesforce-poll").IncludeCondition =>
+            !!c &&
+            typeof c === "object" &&
+            ((c as { kind?: unknown }).kind === "field" ||
+              (c as { kind?: unknown }).kind === "products") &&
+            Array.isArray((c as { values?: unknown }).values),
+        )
+      : [];
+    const path = gg.path;
+    out.push({
+      label: typeof gg.label === "string" ? gg.label : "Rule",
+      conditions,
+      path:
+        path === "new_logo" ||
+        path === "existing" ||
+        path === "dm_conversion" ||
+        path === "field_fusion"
+          ? path
+          : null,
+    });
+  }
+  return { groups: out };
+}
+
 export async function loadPullState(): Promise<import("./server/salesforce-poll").PullState> {
   const { defaultPullState } = await import("./server/salesforce-poll");
   const fallback = defaultPullState(new Date());
@@ -894,6 +935,7 @@ export async function loadPullState(): Promise<import("./server/salesforce-poll"
         typeof v.watermark === "string" && !Number.isNaN(Date.parse(v.watermark))
           ? v.watermark
           : fallback.watermark,
+      include: readIncludeRule((v as { include?: unknown }).include, fallback.include),
       last_run_at: typeof v.last_run_at === "string" ? v.last_run_at : null,
       last_result: (v.last_result as import("./server/salesforce-poll").PullSummary | null) ?? null,
       last_error: typeof v.last_error === "string" ? v.last_error : null,
@@ -1025,8 +1067,9 @@ export type SalesforcePullStatus = {
   enabled: boolean;
   killSwitch: boolean;
   state: import("./server/salesforce-poll").PullState;
-  /** The query the current map produces, so the admin sees what is fetched. */
-  soql: string;
+  /** The query the current map and rule produce, or null with the reason it cannot be built. */
+  soql: string | null;
+  soqlError: string | null;
 };
 
 export async function loadSalesforcePullStatus(userId: string): Promise<SalesforcePullStatus> {
@@ -1038,13 +1081,84 @@ export async function loadSalesforcePullStatus(userId: string): Promise<Salesfor
     loadFieldMaps(),
     isFlagOn("sf_pull_enabled"),
   ]);
+  let soql: string | null = null;
+  let soqlError: string | null = null;
+  try {
+    soql = buildSoql(maps, state.watermark, state.batch_limit, state.include);
+  } catch (e) {
+    soqlError = e instanceof Error ? e.message : String(e);
+  }
   return {
     configured: salesforceConfigured(),
     enabled,
     killSwitch: integrationKilled(),
     state,
-    soql: buildSoql(maps, state.watermark, state.batch_limit),
+    soql,
+    soqlError,
   };
+}
+
+export type PullPreviewRow = {
+  id: string;
+  name: string;
+  account: string | null;
+  type: string | null;
+  amount: number | null;
+  close_date: string | null;
+  products: string[];
+  /** The rule group that lets it in, re-checked on the fetched record. */
+  group: string | null;
+  /** What the deal would be, with no map rows beyond those saved. */
+  company: string | null;
+  tis: string | null;
+};
+
+/**
+ * "Preview matches": the opportunities the current rule would pull since a
+ * date, as they would land — nothing imported, nothing written. The admin
+ * reads this before turning the pull on, and again after changing the rule.
+ */
+export async function previewSalesforcePull(
+  userId: string,
+  input: { sinceIso?: string | null; limit?: number | null },
+): Promise<{ soql: string; rows: PullPreviewRow[]; error: string | null }> {
+  await requireManager(userId);
+  const { buildSoql, recordToRow, recordProducts, matchedGroup } =
+    await import("./server/salesforce-poll");
+  const { readPath } = await import("./server/sf-field-maps");
+  const [state, maps] = await Promise.all([loadPullState(), loadFieldMaps()]);
+  const since =
+    input.sinceIso && !Number.isNaN(Date.parse(input.sinceIso)) ? input.sinceIso : state.watermark;
+  let soql: string;
+  try {
+    soql = buildSoql(maps, since, Math.min(input.limit ?? 25, 100), state.include);
+  } catch (e) {
+    return { soql: "", rows: [], error: e instanceof Error ? e.message : String(e) };
+  }
+  try {
+    const client = await salesforceClientOrThrow();
+    const records =
+      await client.query<import("./server/salesforce-poll").SalesforceOpportunity>(soql);
+    const rows: PullPreviewRow[] = records.map((r) => {
+      const { row } = recordToRow(r, maps, state.include);
+      const str = (v: unknown) => (typeof v === "string" && v.trim() ? v : null);
+      return {
+        id: String(r["Id"]),
+        name: str(r["Name"]) ?? String(r["Id"]),
+        account: str(readPath(r, "Account.Name")),
+        type: str(r["Type"]),
+        amount: typeof r["Amount"] === "number" ? r["Amount"] : null,
+        close_date: str(r["CloseDate"]),
+        products: recordProducts(r).names,
+        group: matchedGroup(r, state.include)?.label ?? null,
+        company: str(row["company"]),
+        tis: str(row["implementation_owner"]),
+      };
+    });
+    return { soql, rows, error: null };
+  } catch (e) {
+    return { soql, rows: [], error: e instanceof Error ? e.message : String(e) };
+  }
 }
 
 /** "Test connection": a token, who it is, and how many won opportunities it can see. */
@@ -1103,11 +1217,23 @@ export async function runSalesforcePullNow(
 /** The admin moves the watermark (a backfill start) or the batch size. */
 export async function setSalesforcePullState(
   userId: string,
-  input: { backfillFrom?: string | null; batchLimit?: number | null },
+  input: {
+    backfillFrom?: string | null;
+    batchLimit?: number | null;
+    /** The whole rule, replaced. `undefined` leaves it; `null` clears it (the pull then refuses to run). */
+    include?: import("./server/salesforce-poll").IncludeRule | null;
+  },
 ): Promise<import("./server/salesforce-poll").PullState> {
   const profile = await requireAdmin(userId);
   const state = await loadPullState();
   const next = { ...state };
+  if (input.include !== undefined) {
+    // Refuse a rule SOQL cannot express before it is saved, so the admin
+    // hears about a bad field path now, not from the next cron run.
+    const { ruleToSoql } = await import("./server/salesforce-poll");
+    if (input.include) ruleToSoql(input.include);
+    next.include = input.include;
+  }
   if (input.backfillFrom) {
     const d = new Date(input.backfillFrom);
     if (Number.isNaN(d.getTime())) throw new Error("That is not a date.");
@@ -1122,7 +1248,11 @@ export async function setSalesforcePullState(
     actor_id: profile.id,
     action: "integration.salesforce_pull_state",
     entity_type: "config",
-    payload: { backfillFrom: input.backfillFrom ?? null, batchLimit: input.batchLimit ?? null },
+    payload: {
+      backfillFrom: input.backfillFrom ?? null,
+      batchLimit: input.batchLimit ?? null,
+      include: input.include === undefined ? "unchanged" : (input.include as unknown as Json),
+    },
   });
   return next;
 }

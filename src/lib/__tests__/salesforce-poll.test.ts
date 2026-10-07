@@ -1,13 +1,19 @@
 import { describe, expect, it, vi } from "vitest";
 
-import type { ClosedWonDeps } from "../server/closed-won";
+import { closedWonSchema, type ClosedWonDeps } from "../server/closed-won";
 import {
   buildSoql,
+  conditionToSoql,
   CORE_FIELDS,
+  DEFAULT_INCLUDE_RULE,
   defaultPullState,
   isSoqlFieldPath,
   mappedFieldPaths,
+  matchedGroup,
+  NoIncludeRuleError,
+  recordProducts,
   recordToRow,
+  ruleToSoql,
   runPoll,
   type PullDeps,
   type PullState,
@@ -74,7 +80,7 @@ describe("the query", () => {
     expect(soql).toContain("Field_Users__c");
     expect(soql).not.toContain("Inactive__c");
     expect(soql.match(/Account\.Name/g)).toHaveLength(1);
-    expect(soql).toContain("WHERE IsWon = true AND SystemModstamp > 2026-10-06T14:00:00Z");
+    expect(soql).toContain("WHERE IsWon = true AND SystemModstamp > 2026-10-06T14:00:00Z AND ((");
     expect(soql).toMatch(/ORDER BY SystemModstamp ASC LIMIT 50$/);
   });
 
@@ -226,5 +232,94 @@ describe("running the poll", () => {
     await expect(runPoll(deps)).rejects.toThrow(/INVALID_FIELD/);
     expect(saved.at(-1)?.last_error).toMatch(/INVALID_FIELD/);
     expect(saved.at(-1)?.watermark).toBe("2026-10-06T14:00:00.000Z");
+  });
+});
+
+describe("the include rule", () => {
+  it("turns Cory's rule into SOQL: new logos, or AM deals with a solution on the line items", () => {
+    const where = ruleToSoql(DEFAULT_INCLUDE_RULE);
+    expect(where).toBe(
+      "((Type IN ('New Business', 'New Logo')) OR " +
+        "(Type IN ('Existing Business', 'Existing Customer', 'Add-On', 'Upsell', 'Expansion') AND " +
+        "Id IN (SELECT OpportunityId FROM OpportunityLineItem WHERE Product2.Name IN ('Form Build', 'Integration', 'Analytics'))))",
+    );
+    const soql = buildSoql([], "2026-10-06T14:00:00.000Z", 50);
+    expect(soql).toContain(`AND ${where} ORDER BY`);
+    expect(soql).toContain(
+      "(SELECT Product2.Name, Product2.Family, Quantity, TotalPrice FROM OpportunityLineItems)",
+    );
+    expect(soql).toContain(" Type,");
+  });
+
+  it("refuses to run with no rule, and refuses a field path that is not one", () => {
+    expect(() => ruleToSoql(null)).toThrow(NoIncludeRuleError);
+    expect(() => ruleToSoql({ groups: [] })).toThrow(/refuses to import every Closed Won/);
+    expect(() => buildSoql([], "2026-10-06T14:00:00.000Z", 50, null)).toThrow(NoIncludeRuleError);
+    expect(() =>
+      conditionToSoql({ kind: "field", field: "Type; DELETE", op: "eq", values: ["x"] }),
+    ).toThrow(/not a Salesforce field path/);
+  });
+
+  it("escapes what an admin types", () => {
+    expect(
+      conditionToSoql({ kind: "field", field: "Name", op: "contains", values: ["O'Neil's"] }),
+    ).toBe("Name LIKE '%O\\'Neil\\'s%'");
+    expect(conditionToSoql({ kind: "field", field: "Amount", op: "gte", values: ["$5,000"] })).toBe(
+      "Amount >= 5000",
+    );
+    expect(() =>
+      conditionToSoql({ kind: "field", field: "Amount", op: "gte", values: ["lots"] }),
+    ).toThrow(/not a number/);
+    expect(
+      conditionToSoql({ kind: "field", field: "Needs_Implementation__c", op: "true", values: [] }),
+    ).toBe("Needs_Implementation__c = true");
+  });
+
+  it("re-checks a fetched record against the rule and names the group that let it in", () => {
+    const newLogo = opp({ Type: "New Business" });
+    expect(matchedGroup(newLogo, DEFAULT_INCLUDE_RULE)?.label).toBe("New logo");
+    const amDeal = opp({
+      Type: "Existing Business",
+      OpportunityLineItems: {
+        records: [
+          { Product2: { Name: "Form Build", Family: "Services" }, Quantity: 1 },
+          { Product2: { Name: "Seats", Family: "Licenses" }, Quantity: 40 },
+        ],
+      },
+    });
+    expect(matchedGroup(amDeal, DEFAULT_INCLUDE_RULE)?.label).toBe("AM deal with a solution");
+    const renewalNoSolution = opp({
+      Type: "Existing Business",
+      OpportunityLineItems: { records: [{ Product2: { Name: "Seats", Family: "Licenses" } }] },
+    });
+    expect(matchedGroup(renewalNoSolution, DEFAULT_INCLUDE_RULE)).toBeNull();
+    expect(recordProducts(amDeal)).toEqual({
+      names: ["Form Build", "Seats"],
+      families: ["Services", "Licenses"],
+    });
+  });
+
+  it("gives the deal its products and its onboarding type from the group that matched", () => {
+    const amDeal = opp({
+      Type: "Existing Business",
+      OpportunityLineItems: {
+        records: [{ Product2: { Name: "Integration", Family: "Services" } }],
+      },
+    });
+    const r = recordToRow(amDeal, [], DEFAULT_INCLUDE_RULE);
+    expect(r.row["products"]).toEqual(["Integration"]);
+    expect(r.row["path"]).toBe("existing");
+    expect(r.group).toBe("AM deal with a solution");
+    expect(r.unmappedKeys).not.toContain("OpportunityLineItems");
+    const parsed = closedWonSchema.parse(r.row);
+    expect(parsed.products).toEqual(["Integration"]);
+    expect(parsed.path).toBe("existing");
+    // A mapped onboarding type beats the group's.
+    const mappedPath = recordToRow(
+      opp({ Type: "New Business", Onboarding_Type__c: "DM Conversion" }),
+      [map({ source_path: "Onboarding_Type__c", target_field: "path", transform: null })],
+      DEFAULT_INCLUDE_RULE,
+    );
+    expect(mappedPath.row["path"]).toBe("DM Conversion");
   });
 });

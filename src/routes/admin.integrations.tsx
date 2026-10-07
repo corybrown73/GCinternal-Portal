@@ -19,6 +19,7 @@ import {
   getWebhookEndpoints,
   previewClosedWonPayload,
   previewPayload,
+  previewSalesforce,
   redeliverWebhookDelivery,
   removeFieldMap,
   rerunSyncLogRow,
@@ -32,6 +33,14 @@ import {
 } from "@/lib/sf-integration.functions";
 import { DEAL_FIELD_GROUP_LABEL, DEAL_FIELDS, dealField } from "@/lib/deal-field-catalog";
 import { TRANSFORMS, type FieldMap, type FieldMapDirection } from "@/lib/server/sf-field-maps";
+import {
+  DEFAULT_INCLUDE_RULE,
+  FIELD_OP_LABEL,
+  type FieldOp,
+  type IncludeCondition,
+  type IncludeGroup,
+  type IncludeRule,
+} from "@/lib/salesforce-rule";
 import { When } from "@/components/when";
 import { errorMessage } from "@/lib/error-message";
 
@@ -318,6 +327,8 @@ function SalesforceTab() {
         </div>
       </Panel>
 
+      <IncludeRulePanel rule={pull.state.include} />
+
       {last && last.records.length > 0 ? (
         <Panel title="Last run, record by record" count={last.records.length}>
           <TableScroll>
@@ -325,6 +336,7 @@ function SalesforceTab() {
               <thead>
                 <tr className="border-b border-border">
                   <th className={cn(cellClass, "text-left", labelClass)}>Opportunity</th>
+                  <th className={cn(cellClass, "text-left", labelClass)}>Rule</th>
                   <th className={cn(cellClass, "text-left", labelClass)}>Result</th>
                   <th className={cn(cellClass, "text-left", labelClass)}>Note</th>
                 </tr>
@@ -336,6 +348,7 @@ function SalesforceTab() {
                       {r.name}{" "}
                       <span className="font-mono text-[10px] text-muted-foreground">{r.id}</span>
                     </td>
+                    <td className={cn(cellClass, "text-muted-foreground")}>{r.group ?? "—"}</td>
                     <td className={cn(cellClass, r.status === "failed" && "text-destructive")}>
                       {r.status}
                     </td>
@@ -352,9 +365,15 @@ function SalesforceTab() {
         title="What is fetched"
         meta="The query the current deal map produces: the core fields plus every mapped source path. Map a custom field on the Field maps tab and it is fetched too."
       >
-        <pre className="overflow-x-auto px-3 py-2 font-mono text-[11px] leading-relaxed text-muted-foreground">
-          {pull.soql}
-        </pre>
+        {pull.soql ? (
+          <pre className="overflow-x-auto px-3 py-2 font-mono text-[11px] leading-relaxed text-muted-foreground">
+            {pull.soql}
+          </pre>
+        ) : (
+          <p role="alert" className="px-3 py-2 text-[12px] text-destructive">
+            {pull.soqlError}
+          </p>
+        )}
         <p className="px-3 pb-2 text-[12px] text-muted-foreground">
           Without a map row the record still lands: Account.Name → company, Account.Id → Salesforce
           id, Name → opportunity, Amount, CloseDate, Description → notes, Account.Website,
@@ -363,6 +382,334 @@ function SalesforceTab() {
           owner.
         </p>
       </Panel>
+    </div>
+  );
+}
+
+/**
+ * Which won opportunities are ours. Groups are OR'd, conditions inside a
+ * group are AND'd. Nothing imports until a rule is saved, and Preview shows
+ * exactly which opportunities the saved rule would pull before anything does.
+ */
+function IncludeRulePanel({ rule }: { rule: IncludeRule | null }) {
+  const queryClient = useQueryClient();
+  const setState = useServerFn(updateSalesforcePullState);
+  const preview = useServerFn(previewSalesforce);
+  const [draft, setDraft] = useState<IncludeRule>(rule ?? { groups: [] });
+  const [since, setSince] = useState("");
+  const save = useMutation({
+    mutationFn: (next: IncludeRule | null) => setState({ data: { include: next } }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["admin", "integrations"] }),
+  });
+  const run = useMutation({
+    mutationFn: () =>
+      preview({ data: { sinceIso: since ? new Date(since).toISOString() : null, limit: 50 } }),
+  });
+  const dirty = JSON.stringify(draft) !== JSON.stringify(rule ?? { groups: [] });
+
+  const setGroup = (i: number, g: IncludeGroup) =>
+    setDraft({ groups: draft.groups.map((x, j) => (j === i ? g : x)) });
+  const addGroup = () =>
+    setDraft({
+      groups: [
+        ...draft.groups,
+        {
+          label: `Rule ${draft.groups.length + 1}`,
+          conditions: [{ kind: "field", field: "Type", op: "in", values: [] }],
+          path: null,
+        },
+      ],
+    });
+
+  return (
+    <Panel
+      title="Which won opportunities come through"
+      count={rule?.groups.length ?? 0}
+      meta="A deal is pulled when ANY rule below matches it; inside a rule EVERY condition must hold. Without a saved rule the pull refuses to run. Products conditions look at the opportunity's line items."
+    >
+      <div className="space-y-3 px-3 py-2.5 text-[12px]">
+        {draft.groups.length === 0 ? (
+          <p className="text-destructive">
+            No rule: nothing will be pulled.{" "}
+            <button
+              type="button"
+              className="underline"
+              onClick={() => setDraft(DEFAULT_INCLUDE_RULE)}
+            >
+              Start from the preset
+            </button>{" "}
+            (new logos, and AM deals with Form Build, Integration or Analytics on them).
+          </p>
+        ) : null}
+        {draft.groups.map((g, i) => (
+          <GroupEditor
+            key={i}
+            group={g}
+            index={i}
+            onChange={(next) => setGroup(i, next)}
+            onRemove={() => setDraft({ groups: draft.groups.filter((_, j) => j !== i) })}
+          />
+        ))}
+        <div className="flex flex-wrap items-center gap-2">
+          <button type="button" className={buttonClass} onClick={addGroup}>
+            <Plus className="h-3 w-3" /> Add a rule
+          </button>
+          <button
+            type="button"
+            className={primaryButtonClass}
+            disabled={!dirty || save.isPending}
+            onClick={() => save.mutate(draft.groups.length ? draft : null)}
+          >
+            {save.isPending ? "Saving…" : "Save rule"}
+          </button>
+          {dirty ? <span className="text-muted-foreground">unsaved changes</span> : null}
+          {save.isError ? (
+            <span role="alert" className="text-destructive">
+              {errorMessage(save.error)}
+            </span>
+          ) : null}
+        </div>
+
+        <div className="flex flex-wrap items-end gap-2 border-t border-border pt-3">
+          <label className="flex flex-col gap-1">
+            <span className={labelClass}>Preview wins since</span>
+            <input
+              type="datetime-local"
+              className={cn(inputClass, "w-auto")}
+              value={since}
+              onChange={(e) => setSince(e.target.value)}
+            />
+          </label>
+          <button
+            type="button"
+            className={buttonClass}
+            disabled={run.isPending || dirty}
+            title={
+              dirty
+                ? "Save the rule first"
+                : "Lists what the saved rule would pull; imports nothing"
+            }
+            onClick={() => run.mutate()}
+          >
+            {run.isPending ? "Asking Salesforce…" : "Preview matches"}
+          </button>
+          <span className="text-muted-foreground">
+            Empty date = since the watermark. Nothing is imported.
+          </span>
+        </div>
+        {run.isError ? (
+          <p role="alert" className="text-destructive">
+            {errorMessage(run.error)}
+          </p>
+        ) : null}
+        {run.data ? (
+          run.data.error ? (
+            <p role="alert" className="text-destructive">
+              {run.data.error}
+            </p>
+          ) : run.data.rows.length === 0 ? (
+            <p className="text-muted-foreground">Nothing matches since that date.</p>
+          ) : (
+            <TableScroll>
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-border">
+                    <th className={cn(cellClass, "text-left", labelClass)}>Opportunity</th>
+                    <th className={cn(cellClass, "text-left", labelClass)}>Account → company</th>
+                    <th className={cn(cellClass, "text-left", labelClass)}>Type</th>
+                    <th className={cn(cellClass, "text-left", labelClass)}>Products</th>
+                    <th className={cn(cellClass, "text-left", labelClass)}>Rule</th>
+                    <th className={cn(cellClass, "text-left", labelClass)}>TIS</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {run.data.rows.map((r) => (
+                    <tr key={r.id}>
+                      <td className={cellClass}>
+                        {r.name}
+                        {r.amount !== null ? (
+                          <span className="text-muted-foreground">
+                            {" "}
+                            · ${r.amount.toLocaleString()}
+                          </span>
+                        ) : null}
+                      </td>
+                      <td className={cellClass}>{r.company ?? r.account ?? "—"}</td>
+                      <td className={cn(cellClass, "text-muted-foreground")}>{r.type ?? "—"}</td>
+                      <td className={cn(cellClass, "text-muted-foreground")}>
+                        {r.products.length ? r.products.join(", ") : "—"}
+                      </td>
+                      <td className={cellClass}>{r.group ?? "—"}</td>
+                      <td className={cn(cellClass, "text-muted-foreground")}>
+                        {r.tis ?? "rule picks"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </TableScroll>
+          )
+        ) : null}
+      </div>
+    </Panel>
+  );
+}
+
+const FIELD_OPS: FieldOp[] = [
+  "in",
+  "not_in",
+  "eq",
+  "ne",
+  "contains",
+  "gte",
+  "lte",
+  "true",
+  "false",
+];
+
+function GroupEditor({
+  group,
+  index,
+  onChange,
+  onRemove,
+}: {
+  group: IncludeGroup;
+  index: number;
+  onChange: (g: IncludeGroup) => void;
+  onRemove: () => void;
+}) {
+  const setCondition = (i: number, c: IncludeCondition) =>
+    onChange({ ...group, conditions: group.conditions.map((x, j) => (j === i ? c : x)) });
+  return (
+    <div className="rounded-md border border-border bg-muted/20 p-2.5">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className={labelClass}>{index === 0 ? "Pull when" : "or when"}</span>
+        <input
+          className={cn(inputClass, "w-56")}
+          value={group.label}
+          onChange={(e) => onChange({ ...group, label: e.target.value })}
+          placeholder="Name this rule"
+        />
+        <span className={labelClass}>deal type</span>
+        <select
+          className={cn(inputClass, "w-auto")}
+          value={group.path ?? ""}
+          onChange={(e) =>
+            onChange({ ...group, path: (e.target.value || null) as IncludeGroup["path"] })
+          }
+          title="The onboarding type a deal matched by this rule gets, unless a map row sets it"
+        >
+          <option value="">leave to the map</option>
+          <option value="new_logo">New logo</option>
+          <option value="existing">Existing customer</option>
+          <option value="dm_conversion">DM conversion</option>
+          <option value="field_fusion">Field Fusion</option>
+        </select>
+        <button
+          type="button"
+          className={cn(buttonClass, "ml-auto")}
+          onClick={onRemove}
+          title="Remove this rule"
+        >
+          <Trash2 className="h-3 w-3" />
+        </button>
+      </div>
+      <div className="mt-2 space-y-1.5">
+        {group.conditions.map((c, i) => (
+          <div key={i} className="flex flex-wrap items-center gap-2">
+            <span className="w-8 text-right text-[11px] text-muted-foreground">
+              {i === 0 ? "" : "and"}
+            </span>
+            <select
+              className={cn(inputClass, "w-auto")}
+              value={c.kind}
+              onChange={(e) =>
+                setCondition(
+                  i,
+                  e.target.value === "products"
+                    ? { kind: "products", by: "name", values: c.values }
+                    : { kind: "field", field: "Type", op: "in", values: c.values },
+                )
+              }
+            >
+              <option value="field">a field</option>
+              <option value="products">a product on the line items</option>
+            </select>
+            {c.kind === "field" ? (
+              <>
+                <input
+                  className={cn(inputClass, "w-48 font-mono")}
+                  value={c.field}
+                  placeholder="Type, RecordType.Name, Owner.UserRole.Name, Amount"
+                  onChange={(e) => setCondition(i, { ...c, field: e.target.value })}
+                />
+                <select
+                  className={cn(inputClass, "w-auto")}
+                  value={c.op}
+                  onChange={(e) => setCondition(i, { ...c, op: e.target.value as FieldOp })}
+                >
+                  {FIELD_OPS.map((op) => (
+                    <option key={op} value={op}>
+                      {FIELD_OP_LABEL[op]}
+                    </option>
+                  ))}
+                </select>
+              </>
+            ) : (
+              <select
+                className={cn(inputClass, "w-auto")}
+                value={c.by}
+                onChange={(e) => setCondition(i, { ...c, by: e.target.value as "name" | "family" })}
+              >
+                <option value="name">named any of</option>
+                <option value="family">in a family among</option>
+              </select>
+            )}
+            {c.kind === "products" || (c.op !== "true" && c.op !== "false") ? (
+              <input
+                className={cn(inputClass, "min-w-[16rem] flex-1")}
+                value={c.values.join(", ")}
+                placeholder={
+                  c.kind === "products"
+                    ? "Form Build, Integration, Analytics"
+                    : "values, comma-separated"
+                }
+                onChange={(e) =>
+                  setCondition(i, {
+                    ...c,
+                    values: e.target.value
+                      .split(",")
+                      .map((v) => v.trim())
+                      .filter(Boolean),
+                  } as IncludeCondition)
+                }
+              />
+            ) : null}
+            <button
+              type="button"
+              className={buttonClass}
+              onClick={() =>
+                onChange({ ...group, conditions: group.conditions.filter((_, j) => j !== i) })
+              }
+              title="Remove this condition"
+            >
+              <Trash2 className="h-3 w-3" />
+            </button>
+          </div>
+        ))}
+        <button
+          type="button"
+          className={buttonClass}
+          onClick={() =>
+            onChange({
+              ...group,
+              conditions: [...group.conditions, { kind: "field", field: "", op: "eq", values: [] }],
+            })
+          }
+        >
+          <Plus className="h-3 w-3" /> and
+        </button>
+      </div>
     </div>
   );
 }

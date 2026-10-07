@@ -85,14 +85,200 @@ export function mappedFieldPaths(maps: FieldMap[]): string[] {
   return out;
 }
 
-export function buildSoql(maps: FieldMap[], sinceIso: string, limit = 200): string {
+/* ------------------------------------------------------------ the rule */
+
+/**
+ * Which won opportunities are ours. Without a rule the pull refuses to run:
+ * "every Closed Won in the org" is never what an implementation team wants.
+ *
+ * A rule is groups OR'd together; a group is conditions AND'd. A condition is
+ * a field test on the Opportunity (Type is one of…, Owner.UserRole.Name
+ * contains…, Amount at least…) or a products test on its line items (any
+ * product named / in a family among…). The matched group may also say which
+ * onboarding type the deal is, so New logo and Existing run the right
+ * checklist without a map row.
+ *
+ * Everything becomes SOQL by construction: field paths are validated, values
+ * are quoted and escaped, operators come from a fixed menu. No admin text
+ * reaches the query unescaped.
+ */
+export {
+  DEFAULT_INCLUDE_RULE,
+  FIELD_OP_LABEL,
+  type FieldCondition,
+  type FieldOp,
+  type IncludeCondition,
+  type IncludeGroup,
+  type IncludeRule,
+  type ProductsCondition,
+} from "../salesforce-rule";
+import {
+  DEFAULT_INCLUDE_RULE,
+  FIELD_OP_LABEL,
+  type IncludeCondition,
+  type IncludeGroup,
+  type IncludeRule,
+} from "../salesforce-rule";
+
+export class NoIncludeRuleError extends Error {
+  constructor() {
+    super(
+      "No include rule is set. The pull refuses to import every Closed Won opportunity in the org; add at least one rule group on the Salesforce tab.",
+    );
+    this.name = "NoIncludeRuleError";
+  }
+}
+
+function soqlString(v: string): string {
+  return `'${v.replace(/\\/g, "\\\\").replace(/'/g, "\\'")}'`;
+}
+
+function soqlNumber(v: string): string {
+  const n = Number(String(v).replace(/[$,\s]/g, ""));
+  if (!Number.isFinite(n)) throw new Error(`"${v}" is not a number.`);
+  return String(n);
+}
+
+export function conditionToSoql(c: IncludeCondition): string {
+  if (c.kind === "products") {
+    const vals = c.values.map((v) => v.trim()).filter(Boolean);
+    if (vals.length === 0) throw new Error("A products condition needs at least one product.");
+    const col = c.by === "family" ? "Product2.Family" : "Product2.Name";
+    return `Id IN (SELECT OpportunityId FROM OpportunityLineItem WHERE ${col} IN (${vals.map(soqlString).join(", ")}))`;
+  }
+  if (!isSoqlFieldPath(c.field)) throw new Error(`"${c.field}" is not a Salesforce field path.`);
+  const vals = c.values.map((v) => v.trim()).filter(Boolean);
+  const one = () => {
+    if (vals.length === 0) throw new Error(`"${c.field} ${FIELD_OP_LABEL[c.op]}" needs a value.`);
+    return vals[0]!;
+  };
+  switch (c.op) {
+    case "eq":
+      return `${c.field} = ${soqlString(one())}`;
+    case "ne":
+      return `${c.field} != ${soqlString(one())}`;
+    case "in":
+      if (vals.length === 0) throw new Error(`"${c.field} is one of" needs a value.`);
+      return `${c.field} IN (${vals.map(soqlString).join(", ")})`;
+    case "not_in":
+      if (vals.length === 0) throw new Error(`"${c.field} is none of" needs a value.`);
+      return `${c.field} NOT IN (${vals.map(soqlString).join(", ")})`;
+    case "contains":
+      return `${c.field} LIKE ${soqlString(`%${one()}%`)}`;
+    case "gte":
+      return `${c.field} >= ${soqlNumber(one())}`;
+    case "lte":
+      return `${c.field} <= ${soqlNumber(one())}`;
+    case "true":
+      return `${c.field} = true`;
+    case "false":
+      return `${c.field} = false`;
+  }
+}
+
+/** The WHERE fragment for a rule: `((g1c1 AND g1c2) OR (g2c1))`, or a refusal with no groups. */
+export function ruleToSoql(rule: IncludeRule | null | undefined): string {
+  const groups = (rule?.groups ?? []).filter((g) => g.conditions.length > 0);
+  if (groups.length === 0) throw new NoIncludeRuleError();
+  return `(${groups.map((g) => `(${g.conditions.map(conditionToSoql).join(" AND ")})`).join(" OR ")})`;
+}
+
+/** The fields a rule reads, so the SELECT carries them and matching can be re-checked on the record. */
+export function ruleFieldPaths(rule: IncludeRule | null | undefined): string[] {
+  const out: string[] = [];
+  for (const g of rule?.groups ?? []) {
+    for (const c of g.conditions) {
+      if (c.kind === "field" && isSoqlFieldPath(c.field) && !out.includes(c.field))
+        out.push(c.field);
+    }
+  }
+  return out;
+}
+
+/** The product names and families on a fetched record. */
+export function recordProducts(record: Record<string, unknown>): {
+  names: string[];
+  families: string[];
+} {
+  const li = record["OpportunityLineItems"] as { records?: unknown[] } | unknown[] | undefined;
+  const rows = Array.isArray(li) ? li : Array.isArray(li?.records) ? li.records : [];
+  const names: string[] = [];
+  const families: string[] = [];
+  for (const r of rows) {
+    const p = (r as { Product2?: { Name?: unknown; Family?: unknown } }).Product2;
+    if (typeof p?.Name === "string" && p.Name.trim()) names.push(p.Name.trim());
+    if (typeof p?.Family === "string" && p.Family.trim()) families.push(p.Family.trim());
+  }
+  return { names, families };
+}
+
+const lower = (v: unknown) =>
+  String(v ?? "")
+    .trim()
+    .toLowerCase();
+
+/** Does a fetched record satisfy a condition? The same test SOQL applied, re-run locally. */
+export function conditionMatches(record: Record<string, unknown>, c: IncludeCondition): boolean {
+  if (c.kind === "products") {
+    const have = recordProducts(record);
+    const pool = (c.by === "family" ? have.families : have.names).map(lower);
+    return c.values.some((v) => pool.includes(lower(v)));
+  }
+  const raw = readPath(record, c.field);
+  const vals = c.values.map(lower);
+  switch (c.op) {
+    case "eq":
+      return lower(raw) === vals[0];
+    case "ne":
+      return lower(raw) !== vals[0];
+    case "in":
+      return vals.includes(lower(raw));
+    case "not_in":
+      return !vals.includes(lower(raw));
+    case "contains":
+      return vals[0] !== undefined && lower(raw).includes(vals[0]);
+    case "gte":
+      return Number(raw) >= Number(c.values[0]);
+    case "lte":
+      return Number(raw) <= Number(c.values[0]);
+    case "true":
+      return raw === true;
+    case "false":
+      return raw === false || raw === null || raw === undefined;
+  }
+}
+
+/** The first rule group a record satisfies, or null. */
+export function matchedGroup(
+  record: Record<string, unknown>,
+  rule: IncludeRule | null | undefined,
+): IncludeGroup | null {
+  for (const g of rule?.groups ?? []) {
+    if (g.conditions.length > 0 && g.conditions.every((c) => conditionMatches(record, c))) return g;
+  }
+  return null;
+}
+
+/** The line items ride along as a subquery, so products reach the deal and the rule can be re-checked. */
+export const LINE_ITEMS_SUBQUERY =
+  "(SELECT Product2.Name, Product2.Family, Quantity, TotalPrice FROM OpportunityLineItems)";
+
+export function buildSoql(
+  maps: FieldMap[],
+  sinceIso: string,
+  limit = 200,
+  rule: IncludeRule | null | undefined = DEFAULT_INCLUDE_RULE,
+): string {
   const fields = [...CORE_FIELDS] as string[];
   for (const p of mappedFieldPaths(maps)) if (!fields.includes(p)) fields.push(p);
+  for (const p of ruleFieldPaths(rule)) if (!fields.includes(p)) fields.push(p);
+  fields.push(LINE_ITEMS_SUBQUERY);
+  const where = ruleToSoql(rule);
   // SOQL datetime literals carry no quotes.
   const since = new Date(sinceIso).toISOString().replace(/\.\d{3}Z$/, "Z");
   return (
     `SELECT ${fields.join(", ")} FROM Opportunity ` +
-    `WHERE IsWon = true AND SystemModstamp > ${since} ` +
+    `WHERE IsWon = true AND SystemModstamp > ${since} AND ${where} ` +
     `ORDER BY SystemModstamp ASC LIMIT ${Math.max(1, Math.min(limit, 2000))}`
   );
 }
@@ -108,7 +294,11 @@ export type SalesforceOpportunity = Record<string, unknown> & {
  * only where their English names happen to match), then the defaults for
  * whatever is still empty.
  */
-export function recordToRow(record: SalesforceOpportunity, maps: FieldMap[]) {
+export function recordToRow(
+  record: SalesforceOpportunity,
+  maps: FieldMap[],
+  rule: IncludeRule | null | undefined = null,
+) {
   const mapped = applyDealMaps(record, maps);
   // The defaults sit under the map and over the aliases: on a raw Salesforce
   // record the English aliases are only half right (`Name` is the opportunity,
@@ -137,6 +327,30 @@ export function recordToRow(record: SalesforceOpportunity, maps: FieldMap[]) {
     delete row["company"];
     delete resolvedSources["company"];
   }
+  // Likewise the onboarding type: the alias layer reads Opportunity `Type`
+  // ("Existing Business") as it; the rule group that admitted the record is
+  // the one that knows, and a map row beats both.
+  if (resolvedSources["path"] === "alias") {
+    delete row["path"];
+    delete resolvedSources["path"];
+  }
+  // The line items are the products, unless the map said otherwise.
+  const products = recordProducts(record).names;
+  if (
+    !(row["products"] !== undefined && row["products"] !== null && row["products"] !== "") &&
+    products.length > 0
+  ) {
+    row["products"] = products;
+    resolvedSources["products"] = "map";
+    defaultPath["products"] = "OpportunityLineItems";
+  }
+  // The group that let the record in says what kind of deal it is.
+  const group = matchedGroup(record, rule);
+  if (group?.path && (row["path"] === undefined || row["path"] === null || row["path"] === "")) {
+    row["path"] = group.path;
+    resolvedSources["path"] = "map";
+    defaultPath["path"] = `rule:${group.label}`;
+  }
   const sources: Record<string, string> = {};
   for (const [k, how] of Object.entries(resolvedSources)) {
     sources[k] =
@@ -146,17 +360,22 @@ export function recordToRow(record: SalesforceOpportunity, maps: FieldMap[]) {
           ? `map:${mapped.sources[k]}`
           : `default:${defaultPath[k]}`;
   }
+  // The line-item subquery is consumed, not "unmapped".
+  const unmappedKeys = resolved.unmappedKeys.filter((k) => k !== "OpportunityLineItems");
   return {
     row,
     sources,
-    unmappedKeys: resolved.unmappedKeys,
+    unmappedKeys,
     missingRequired: mapped.missingRequired,
+    group: group?.label ?? null,
   };
 }
 
 export type PullState = {
   /** ISO datetime: records modified after this are fetched. */
   watermark: string;
+  /** Which won opportunities are ours. Null = not set = the pull refuses to run. */
+  include: IncludeRule | null;
   last_run_at: string | null;
   last_result: PullSummary | null;
   last_error: string | null;
@@ -176,12 +395,14 @@ export type PullSummary = {
     name: string;
     status: "created" | "updated" | "failed";
     note: string | null;
+    group: string | null;
   }>;
 };
 
 export function defaultPullState(now: Date): PullState {
   return {
     watermark: new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString(),
+    include: DEFAULT_INCLUDE_RULE,
     last_run_at: null,
     last_result: null,
     last_error: null,
@@ -208,7 +429,7 @@ export type PullDeps = {
 export async function runPoll(deps: PullDeps): Promise<PullSummary> {
   const started = deps.now();
   const [maps, state] = await Promise.all([deps.loadMaps(), deps.loadState()]);
-  const soql = buildSoql(maps, state.watermark, state.batch_limit);
+  const soql = buildSoql(maps, state.watermark, state.batch_limit, state.include);
 
   let records: SalesforceOpportunity[];
   try {
@@ -231,7 +452,11 @@ export async function runPoll(deps: PullDeps): Promise<PullSummary> {
   for (const record of records) {
     const id = sfId18(String(record.Id)) ?? String(record.Id);
     const name = typeof record["Name"] === "string" ? record["Name"] : id;
-    const { row, sources, unmappedKeys, missingRequired } = recordToRow(record, maps);
+    const { row, sources, unmappedKeys, missingRequired, group } = recordToRow(
+      record,
+      maps,
+      state.include,
+    );
     try {
       if (missingRequired.length > 0) {
         throw new Error(
@@ -258,6 +483,7 @@ export async function runPoll(deps: PullDeps): Promise<PullSummary> {
         name,
         status: outcome.kicked_off ? "created" : "updated",
         note: outcome.note,
+        group,
       });
       // Only a processed record moves the watermark. A failure below stops it
       // here, so the failed record is fetched again next run.
@@ -265,7 +491,7 @@ export async function runPoll(deps: PullDeps): Promise<PullSummary> {
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
       summary.failed += 1;
-      summary.records.push({ id, name, status: "failed", note: message });
+      summary.records.push({ id, name, status: "failed", note: message, group });
       await deps.log({
         external_id: id,
         request_payload: record,

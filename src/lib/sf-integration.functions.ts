@@ -269,12 +269,39 @@ export const runSalesforcePull = createServerFn({ method: "POST" })
     return runSalesforcePullNow(context.profile.id);
   });
 
+const includeCondition = z.discriminatedUnion("kind", [
+  z.object({
+    kind: z.literal("field"),
+    field: z.string().trim().min(1).max(120),
+    op: z.enum(["eq", "ne", "in", "not_in", "contains", "gte", "lte", "true", "false"]),
+    values: z.array(z.string().trim().max(200)).max(50),
+  }),
+  z.object({
+    kind: z.literal("products"),
+    by: z.enum(["name", "family"]),
+    values: z.array(z.string().trim().max(200)).max(50),
+  }),
+]);
+
+const includeRule = z.object({
+  groups: z
+    .array(
+      z.object({
+        label: z.string().trim().min(1).max(80),
+        conditions: z.array(includeCondition).max(20),
+        path: z.enum(["new_logo", "existing", "dm_conversion", "field_fusion"]).nullable(),
+      }),
+    )
+    .max(20),
+});
+
 export const updateSalesforcePullState = createServerFn({ method: "POST" })
   .inputValidator((data: unknown) =>
     z
       .object({
         backfillFrom: z.string().trim().max(40).nullable().optional(),
         batchLimit: z.number().int().positive().max(2000).nullable().optional(),
+        include: includeRule.nullable().optional(),
       })
       .parse(data),
   )
@@ -284,5 +311,24 @@ export const updateSalesforcePullState = createServerFn({ method: "POST" })
     return setSalesforcePullState(context.profile.id, {
       backfillFrom: data.backfillFrom ?? null,
       batchLimit: data.batchLimit ?? null,
+      ...(data.include !== undefined ? { include: data.include } : {}),
+    });
+  });
+
+export const previewSalesforce = createServerFn({ method: "POST" })
+  .inputValidator((data: unknown) =>
+    z
+      .object({
+        sinceIso: z.string().trim().max(40).nullable().optional(),
+        limit: z.number().int().positive().max(100).nullable().optional(),
+      })
+      .parse(data ?? {}),
+  )
+  .middleware([requireInternalAuth])
+  .handler(async ({ data, context }) => {
+    const { previewSalesforcePull } = await import("./sf-integration.server");
+    return previewSalesforcePull(context.profile.id, {
+      sinceIso: data.sinceIso ?? null,
+      limit: data.limit ?? null,
     });
   });
