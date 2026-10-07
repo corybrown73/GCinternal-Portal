@@ -173,3 +173,144 @@ describe("the forms they want built", () => {
     expect(readIntake({ wanted_forms: [{ id: "f-1", name: "" }] })).toEqual(EMPTY_INTAKE);
   });
 });
+
+describe("workflow_story — the customer-readable before/during/after", () => {
+  it("defaults every field to null on an intake with neither new field", () => {
+    const a = readIntake({ industry: "Roofing" });
+    expect(a.workflow_story).toEqual({
+      before: null,
+      during: null,
+      after: null,
+      validated_at: null,
+      validated_by: null,
+    });
+    // The rest of an old row still parses exactly as it did.
+    expect(a.industry).toBe("Roofing");
+  });
+
+  it("parses a filled-in story and keeps validation as its own fact", () => {
+    const a = readIntake({
+      workflow_story: {
+        before: "They get a dispatch ticket from the office.",
+        during: "The tech fills out the form on their phone at the job.",
+        after: "The office reviews it and invoices off it the same day.",
+        validated_at: "2026-10-07T12:00:00Z",
+        validated_by: "11111111-1111-4111-8111-111111111111",
+      },
+    });
+    expect(a.workflow_story.before).toMatch(/dispatch ticket/);
+    expect(a.workflow_story.validated_at).toBe("2026-10-07T12:00:00Z");
+  });
+});
+
+describe("implementation_focus — proposed vs. agreed scope, with provenance", () => {
+  it("defaults to an empty list on an intake with neither new field", () => {
+    const a = readIntake({ industry: "Roofing" });
+    expect(a.implementation_focus).toEqual({
+      items: [],
+      validated_at: null,
+      validated_by: null,
+    });
+  });
+
+  it("parses a proposed item with a single source", () => {
+    const a = readIntake({
+      implementation_focus: {
+        items: [
+          {
+            id: "f1",
+            text: "Daily job report replaces the paper ticket",
+            status: "proposed",
+            sources: [{ type: "sow", label: "Daily Job Report", quote: null }],
+          },
+        ],
+      },
+    });
+    expect(a.implementation_focus.items).toHaveLength(1);
+    expect(a.implementation_focus.items[0]).toMatchObject({
+      id: "f1",
+      status: "proposed",
+      review_flag: null,
+    });
+  });
+
+  it("parses an agreed item and keeps validation separate from the item itself", () => {
+    const a = readIntake({
+      implementation_focus: {
+        items: [{ id: "f1", text: "QuickBooks sync", status: "agreed", sources: [] }],
+        validated_at: "2026-10-07T12:00:00Z",
+        validated_by: "11111111-1111-4111-8111-111111111111",
+      },
+    });
+    expect(a.implementation_focus.items[0]!.status).toBe("agreed");
+    expect(a.implementation_focus.validated_at).toBe("2026-10-07T12:00:00Z");
+  });
+
+  it("keeps every source on an item supported by more than one of SOW, intake and Gong", () => {
+    const a = readIntake({
+      implementation_focus: {
+        items: [
+          {
+            id: "f1",
+            text: "Safety inspection form",
+            status: "proposed",
+            sources: [
+              { type: "sow", label: "Safety Inspection", quote: "1x Safety Inspection form" },
+              { type: "intake", label: null, quote: "they mentioned a safety walk" },
+              {
+                type: "gong",
+                label: "Discovery call",
+                quote: "we do a safety check every morning",
+              },
+            ],
+          },
+        ],
+      },
+    });
+    expect(a.implementation_focus.items[0]!.sources).toHaveLength(3);
+    expect(a.implementation_focus.items[0]!.sources.map((s) => s.type)).toEqual([
+      "sow",
+      "intake",
+      "gong",
+    ]);
+  });
+
+  it("parses the gong_only and conflict review flags, and defaults to no flag", () => {
+    const flagged = (flag: "gong_only" | "conflict" | null) =>
+      readIntake({
+        implementation_focus: {
+          items: [
+            {
+              id: "f1",
+              text: "Something",
+              status: "proposed",
+              sources: [],
+              review_flag: flag,
+            },
+          ],
+        },
+      }).implementation_focus.items[0]!.review_flag;
+    expect(flagged("gong_only")).toBe("gong_only");
+    expect(flagged("conflict")).toBe("conflict");
+    expect(flagged(null)).toBeNull();
+    // Unset entirely still defaults to null, not an error.
+    const a = readIntake({
+      implementation_focus: {
+        items: [{ id: "f1", text: "Something", status: "proposed", sources: [] }],
+      },
+    });
+    expect(a.implementation_focus.items[0]!.review_flag).toBeNull();
+  });
+
+  it("rejects a review flag outside the two known values", () => {
+    expect(
+      intakeAnswersSchema.safeParse({
+        implementation_focus: {
+          items: [
+            { id: "f1", text: "Something", status: "proposed", sources: [], review_flag: "bogus" },
+          ],
+        },
+      }).success,
+    ).toBe(false);
+  });
+});

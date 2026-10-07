@@ -4,7 +4,13 @@ import { looksInternal } from "./names";
 import { readIntake } from "./intake-answers";
 import { appUrl } from "@/lib/app-url";
 import { industryIcon } from "@/lib/industry-icons";
-import { HOMEWORK_KEYS, type HomeworkKey, type WelcomeView } from "@/lib/welcome";
+import {
+  HOMEWORK_KEYS,
+  implementationFocusView,
+  workflowStoryView,
+  type HomeworkKey,
+  type WelcomeView,
+} from "@/lib/welcome";
 
 import { audit } from "./server/audit";
 import { hashToken } from "./server/plan-tokens";
@@ -247,6 +253,8 @@ async function viewFor(
         ? `${(await import("./app-url")).appUrl()}/go/${opts.token}`
         : null,
     parkingLot: lot,
+    workflowStory: workflowStoryView(readIntake(deal.intake)),
+    implementationFocus: implementationFocusView(readIntake(deal.intake)),
     intake: (await import("./sales-handoff")).customerPrompt(readIntake(deal.intake)),
     journey: (await import("./welcome-journey")).customerJourney({
       stage: deal.stage ?? null,

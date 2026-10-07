@@ -1,6 +1,70 @@
+import type { IntakeAnswers } from "./intake-answers";
 import type { Timeline } from "./onboarding-timeline";
 import type { CustomerPrompt } from "./sales-handoff";
 import type { CustomerJourney } from "./welcome-journey";
+
+/**
+ * The workflow in the customer's own terms — before field work, during it,
+ * after submission — as the Welcome pipeline exposes it. Camelcase here;
+ * the persisted intake field (`workflow_story`) stays snake_case.
+ */
+export type WorkflowStoryView = {
+  before: string | null;
+  during: string | null;
+  after: string | null;
+  validatedAt: string | null;
+  validatedBy: string | null;
+};
+
+/**
+ * What this implementation will actually deliver, as the Welcome pipeline
+ * exposes it. Camelcase here; the persisted intake field
+ * (`implementation_focus`) stays snake_case. See intake-answers.ts for the
+ * product rules this shape carries: SOW/intake/Gong provenance per item,
+ * proposed vs. agreed, and the review flags that keep a Gong-only or
+ * conflicting item from reading as agreed.
+ */
+export type ImplementationFocusView = {
+  items: Array<{
+    id: string;
+    text: string;
+    status: "proposed" | "agreed";
+    sources: Array<{ type: "sow" | "intake" | "gong"; label: string | null; quote: string | null }>;
+    reviewFlag: "gong_only" | "conflict" | null;
+  }>;
+  validatedAt: string | null;
+  validatedBy: string | null;
+};
+
+/** The stored workflow_story, as the Welcome pipeline exposes it. Pure — no defaults to invent. */
+export function workflowStoryView(a: Pick<IntakeAnswers, "workflow_story">): WorkflowStoryView {
+  const w = a.workflow_story;
+  return {
+    before: w.before,
+    during: w.during,
+    after: w.after,
+    validatedAt: w.validated_at,
+    validatedBy: w.validated_by,
+  };
+}
+
+/** The stored implementation_focus, as the Welcome pipeline exposes it. */
+export function implementationFocusView(
+  a: Pick<IntakeAnswers, "implementation_focus">,
+): ImplementationFocusView {
+  const f = a.implementation_focus;
+  return {
+    items: f.items.map((i) => ({
+      id: i.id,
+      text: i.text,
+      status: i.status,
+      sources: i.sources.map((s) => ({ type: s.type, label: s.label, quote: s.quote })),
+      reviewFlag: i.review_flag,
+    })),
+    validatedAt: f.validated_at,
+    validatedBy: f.validated_by,
+  };
+}
 
 /**
  * What the welcome page renders. Built on the server from the deal, the
@@ -100,6 +164,13 @@ export type WelcomeView = {
     neededForLaunch: boolean;
     owner?: "gocanvas" | "customer" | "both";
   }>;
+  /**
+   * Data foundation for the future Kickoff view and the living Implementation
+   * Plan — the same implementation truth, not a second one. Not yet rendered
+   * by WelcomePage.
+   */
+  workflowStory?: WorkflowStoryView | null;
+  implementationFocus?: ImplementationFocusView | null;
 };
 
 /**
