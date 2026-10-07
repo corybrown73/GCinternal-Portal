@@ -164,3 +164,74 @@ export function kickoffNextStepText(firstFormName: string | null): string {
   const target = firstFormName?.trim() || "your GoCanvas workflow";
   return `Put it to work. Test ${target} on a real job and see what needs to change.`;
 }
+
+/* ------------------------------------------------------------------------
+ * KICKOFF CONVERSATION FRAMEWORK — static, reusable presentation copy that
+ * turns the five screens into a scaffold a TIS can run the call from, not
+ * just a customer summary deck. None of this is customer truth: it is the
+ * same handful of conversation prompts and implementation principles for
+ * every account, kept here (not in WelcomeView, not persisted) because it
+ * belongs to the Kickoff methodology, never to one deal's record.
+ * ---------------------------------------------------------------------- */
+
+/** Screen 1: the lightweight "today we'll…" promise — what this call does, not an agenda. */
+export const KICKOFF_PROMISE: ReadonlyArray<{ icon: string; text: string }> = [
+  { icon: "Search", text: "Confirm how the work really happens" },
+  { icon: "Target", text: "Agree what we're getting working first" },
+  { icon: "Rocket", text: "Get you ready to test it on real work" },
+];
+
+export type KickoffWorkflowPrompts = {
+  before: readonly string[];
+  during: readonly string[];
+  after: readonly string[];
+};
+
+/**
+ * Screen 2: the TIS's own BEFORE/DURING/AFTER question framework, applied
+ * to whatever workflow is on screen. Reusable and account-independent by
+ * construction — these never read WelcomeView, so there is nowhere for an
+ * account-specific branch to sneak in.
+ */
+export const KICKOFF_WORKFLOW_PROMPTS: KickoffWorkflowPrompts = {
+  before: ["How does the worker know what to do?", "What do they need before they start?"],
+  during: ["What must they capture?", "What makes the job complete?"],
+  after: ["Who needs to see it?", "Does it drive another system or process?"],
+};
+
+/** Screen 3: why we get one workflow working well before expanding — the implementation approach, not invented scope. */
+export const KICKOFF_PRINCIPLES: ReadonlyArray<{ icon: string; label: string }> = [
+  { icon: "Smartphone", label: "Make the work easy" },
+  { icon: "ClipboardCheck", label: "Make the information useful" },
+  { icon: "Workflow", label: "Connect what matters" },
+];
+
+/**
+ * Screen 4: a short outcome-oriented line per canonical stage. Presentation
+ * copy only — the stage list, order and labels still come from
+ * view.journey (welcome-journey.ts); this never redefines or persists a
+ * stage, it only explains one already on screen.
+ */
+export const KICKOFF_STAGE_OUTCOME: Record<string, string> = {
+  pre_kickoff: "Understand the work and prepare",
+  kickoff: "Validate the process and first objective",
+  get_it_working: "Prove the workflow end to end",
+  make_it_yours: "Use it on real work and adjust",
+  make_it_run: "Run it as the normal process",
+  complete: "Confirm it is operational and hand off cleanly",
+};
+
+/** Screen 4: what working together actually feels like, day to day. */
+export const KICKOFF_RESPONSIBILITY: ReadonlyArray<{ icon: string; label: string; items: string }> =
+  [
+    { icon: "Wrench", label: "GoCanvas", items: "Prepare · Recommend · Configure · Guide" },
+    { icon: "Handshake", label: "Together", items: "Validate · Test · Refine" },
+    { icon: "HardHat", label: "Your team", items: "Decide · Adopt · Run" },
+  ];
+
+/** Screen 5: the handoff from this call into testing — what happens next, before the CTA. */
+export const KICKOFF_HANDOFF: ReadonlyArray<{ label: string; text: string }> = [
+  { label: "We refine", text: "We apply what we confirmed today to the working version." },
+  { label: "You test", text: "Your team uses it on real work." },
+  { label: "We learn", text: "You tell us what worked, what didn't, and what needs changing." },
+];

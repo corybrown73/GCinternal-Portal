@@ -4363,3 +4363,91 @@ body.gc-presenting {
   font-size: 13px;
   color: var(--wp-body);
 }
+.gc-welcome .wp-responsibility.is-three {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+/* The cover's "today we'll" promise — pills, but tighter: a light touch
+   under an already-full hero column, not a fourth headline. */
+.gc-welcome .wp-pills.is-compact {
+  margin-top: 6px;
+  gap: 6px;
+}
+.gc-welcome .wp-pills.is-compact .wp-pill {
+  padding: 4px 12px 4px 4px;
+  font-size: 12px;
+}
+
+/* ---- kickoff view: conversation scaffold — the TIS's own question
+   framework sitting next to each workflow column, and the "what happens
+   after today" handoff on the closing screen. Small, named additions on
+   the same tokens; no second design system. */
+
+/* "We'll confirm" — a few short, reusable prompts under each workflow
+   column's evidence, visually secondary to it (smaller, dashed divider). */
+.gc-welcome .wp-journey-confirm {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--wp-blue-line);
+  text-align: left;
+}
+.gc-welcome .wp-journey-confirm-label {
+  margin: 0 0 4px;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--wp-blue-deep);
+}
+.gc-welcome .wp-journey-confirm-list {
+  margin: 0;
+  padding: 0 0 0 14px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--wp-body);
+}
+.gc-welcome .wp-journey-confirm-list li {
+  margin-bottom: 2px;
+}
+
+/* What happens after today — a short, arrow-connected handoff sequence
+   above the closing CTA, distinct from the pill/checklist visual grammar
+   used elsewhere on the same slide. */
+.gc-welcome .wp-handoff {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  margin-bottom: 26px;
+}
+.gc-welcome .wp-handoff-step {
+  flex: 1;
+  display: block;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--wp-body);
+}
+.gc-welcome .wp-handoff-step b {
+  display: block;
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--wp-navy);
+  margin-bottom: 2px;
+}
+.gc-welcome .wp-handoff-arrow {
+  flex: none;
+  align-self: center;
+  width: 22px;
+  height: 0;
+  margin-top: -14px;
+  border-top: 2px dotted #9dd3f2;
+  position: relative;
+}
+.gc-welcome .wp-handoff-arrow::after {
+  content: "";
+  position: absolute;
+  right: -2px;
+  top: -4px;
+  border-left: 6px solid var(--wp-blue);
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+}
