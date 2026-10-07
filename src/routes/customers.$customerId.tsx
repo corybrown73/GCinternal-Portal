@@ -872,37 +872,63 @@ function ProductsAndServices({ dealId }: { dealId: string }) {
 /**
  * Resources: what the customer and the team reach for — the help articles
  * picked for this account, the files on the project, the welcome page.
- * Reference material, kept off the workspace and the plan.
+ * Reference material, kept off the workspace and the plan. Grouped under
+ * three plain labels so the tab answers one question: what do I need to
+ * work with or share for this implementation?
  */
 function ResourcesTab({ record }: { record: Customer360 }) {
   const impl = record.implementation!;
   return (
-    <div className="space-y-4">
-      {impl.deal_id ? <HelpPicksFromDeal dealId={impl.deal_id} /> : null}
-      <Panel
-        title="Files & links"
-        meta="Uploaded documents and links on this project"
-        level="primary"
-        collapsible
-        defaultOpen
-        collapseKey="customer:resources:files"
-      >
-        <AttachmentsPanel implementationId={impl.id} />
-      </Panel>
+    <div className="space-y-5">
       {impl.deal_id ? (
-        <Link
-          to="/onboarding-plan/$dealId"
-          params={{ dealId: impl.deal_id }}
-          className="block rounded-md border border-border bg-card px-3 py-2 text-[12px] hover:bg-muted/60"
+        <div className="space-y-2">
+          <ResourceGroupLabel>Help resources</ResourceGroupLabel>
+          <HelpPicksFromDeal dealId={impl.deal_id} />
+        </div>
+      ) : null}
+
+      <div className="space-y-2">
+        <ResourceGroupLabel>Implementation files</ResourceGroupLabel>
+        <Panel
+          title="Files & links"
+          meta="Uploaded documents and links for this implementation"
+          level="primary"
+          collapsible
+          defaultOpen
+          collapseKey="customer:resources:files"
         >
-          <span className="font-medium">Welcome page</span>
-          <span className="text-muted-foreground">
-            {" "}
-            · the plan, the dates and their part, as the customer sees it →
-          </span>
-        </Link>
+          <AttachmentsPanel implementationId={impl.id} />
+        </Panel>
+      </div>
+
+      {impl.deal_id ? (
+        <div className="space-y-2">
+          <ResourceGroupLabel>Customer Welcome page</ResourceGroupLabel>
+          <Link
+            to="/onboarding-plan/$dealId"
+            params={{ dealId: impl.deal_id }}
+            className="block rounded-md border border-border bg-card px-3 py-2 text-[12px] hover:bg-muted/60"
+          >
+            <span className="font-medium">Welcome page</span>
+            <span className="ml-1.5 rounded-sm bg-muted px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+              Customer-facing
+            </span>
+            <span className="mt-0.5 block text-muted-foreground">
+              View the plan, dates and customer responsibilities as the customer sees them. →
+            </span>
+          </Link>
+        </div>
       ) : null}
     </div>
+  );
+}
+
+/** A plain category label grouping Resources content — no card, no border. */
+function ResourceGroupLabel({ children }: { children: ReactNode }) {
+  return (
+    <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+      {children}
+    </p>
   );
 }
 
@@ -923,17 +949,18 @@ function DetailsTab({ record, customerId }: { record: Customer360; customerId: s
     },
     {
       key: "journey",
-      title: "Journey",
+      title: "Delivery record",
       body: (
         <>
           {/* The delivery lifecycle is project history: gates, journey
-              templates and the timeline follow it. The deal's stage is the
-              one the header, the lists and Home show. */}
+              templates and the timeline follow it. Reference/deep-record
+              only — the canonical journey a TIS operates day to day lives on
+              Current Implementation, not here. */}
           <p className="px-3 pt-2 text-[12px] text-muted-foreground">
-            Project stage:{" "}
+            Underlying delivery lifecycle, stage:{" "}
             <b className="text-foreground">{stageLabel(record.implementation?.current_stage)}</b> —
-            the delivery lifecycle this project's gates and history follow. The deal's stage is
-            shown in the header.
+            project history, gates and templates. Not the implementation journey a TIS runs; that is
+            Current Implementation. Reference and record-keeping only.
           </p>
           <JourneyTab record={record} customerId={customerId} />
         </>
