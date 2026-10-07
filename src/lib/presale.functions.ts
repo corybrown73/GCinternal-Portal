@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
-import { timelinePatchSchema } from "./intake-patch";
+import { implementationFocusPatchSchema, timelinePatchSchema } from "./intake-patch";
 import { EDITABLE_DEAL_FIELDS, type EditableDealField } from "./presale-fields";
 
 import {
@@ -565,6 +565,7 @@ export const saveIntake = createServerFn({ method: "POST" })
             // The seven-day plan's knobs, saved whole: the panel sends the
             // complete object so a cleared override is a cleared override.
             timeline: timelinePatchSchema.optional(),
+            implementation_focus: implementationFocusPatchSchema.optional(),
           })
           .strict(),
       })

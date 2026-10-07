@@ -103,3 +103,35 @@ export const timelinePatchSchema = z
     plan_edits: planEditsSchema.optional(),
   })
   .strict();
+
+/**
+ * implementation_focus as the save accepts it. Sent whole, the same way
+ * timeline is: generate/refresh and confirm both spread the record's own
+ * object with the change, so a cleared field stays cleared.
+ */
+export const implementationFocusPatchSchema = z
+  .object({
+    items: z
+      .array(
+        z.object({
+          id: z.string().min(1).max(40),
+          text: z.string().trim().min(1).max(500),
+          status: z.enum(["proposed", "agreed"]),
+          sources: z
+            .array(
+              z.object({
+                type: z.enum(["sow", "intake", "gong"]),
+                label: z.string().trim().max(200).nullable(),
+                quote: z.string().trim().max(400).nullable(),
+              }),
+            )
+            .max(10)
+            .optional(),
+          review_flag: z.enum(["gong_only", "conflict"]).nullable().optional(),
+        }),
+      )
+      .max(60),
+    validated_at: z.string().nullable(),
+    validated_by: z.string().uuid().nullable(),
+  })
+  .strict();

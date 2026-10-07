@@ -539,7 +539,7 @@ export function servicesFromBought(
   return out;
 }
 
-function kindFromWords(text: string): ServiceKind {
+export function kindFromWords(text: string): ServiceKind {
   const t = text.toLowerCase();
   if (/\bpdf\b/.test(t)) return "custom_pdf";
   if (/form build|paid form|build(ing)? (the|a|their) form|we build/.test(t)) return "paid_form";
