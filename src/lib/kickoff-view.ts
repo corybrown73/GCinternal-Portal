@@ -1,4 +1,5 @@
 import type { ImplementationFocusView, WelcomeView, WorkflowStoryView } from "./welcome";
+import type { CustomerJourney, JourneyStage } from "./welcome-journey";
 
 /**
  * Pure data-shaping for Kickoff View's five fixed screens, kept separate
@@ -164,6 +165,43 @@ export function kickoffNextStepText(firstFormName: string | null): string {
   const target = firstFormName?.trim() || "your GoCanvas workflow";
   return `Put it to work. Test ${target} on a real job and see what needs to change.`;
 }
+
+/**
+ * Kickoff View IS the presentation used during the Kickoff call, so its
+ * path-to-launch rail must read as "we are at Kickoff right now" whenever
+ * the account's actual stage is still pre_kickoff (before the call has
+ * happened) — showing "Intake & Process" as the current stage while the
+ * customer is literally sitting in the Kickoff meeting is presentation
+ * truth drift, not implementation truth.
+ *
+ * This is a pure, render-only reshaping: it builds a new array and never
+ * mutates `journey` or anything on it, and it changes nothing once the
+ * account has actually moved past Kickoff (current.key !== "pre_kickoff")
+ * — there is nothing to correct in that case, since the rail already
+ * shows Kickoff (or later) as current. The underlying stage, used by the
+ * customer Implementation Plan, is read here, never written.
+ */
+export function kickoffJourneyStages(
+  journey: Pick<CustomerJourney, "stages" | "current">,
+): JourneyStage[] {
+  if (journey.current.key !== "pre_kickoff") return journey.stages;
+  return journey.stages.map((s) => {
+    if (s.key === "pre_kickoff") return { ...s, state: "done" as const };
+    if (s.key === "kickoff") return { ...s, state: "now" as const };
+    return s;
+  });
+}
+
+/**
+ * The bottom band on "Your path to launch" — fixed Kickoff-presentation
+ * copy, never `view.journey.current.blurb` (written for the living
+ * Implementation Plan's current stage, not for "you are presenting this
+ * during the Kickoff call itself"). A plain constant, not a function of
+ * any account data, so there is structurally nowhere for a stage's own
+ * pre-kickoff messaging to end up here.
+ */
+export const KICKOFF_JOURNEY_BAND =
+  "Today we validate the process and first objective. Next, we get it working on real work.";
 
 /* ------------------------------------------------------------------------
  * KICKOFF CONVERSATION FRAMEWORK — static, reusable presentation copy that
