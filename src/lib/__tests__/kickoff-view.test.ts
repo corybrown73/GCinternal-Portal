@@ -138,13 +138,15 @@ describe("kickoffFocusContent — presentation-only fallback precedence", () => 
   });
 
   it("falls back to the presentation-only proposal, always as proposed, when nothing is saved", () => {
+    // fallbackItems[1] is review_flag: "gong_only" — excluded automatically;
+    // see the dedicated customer-safety describe block below.
     expect(kickoffFocusContent(null, fallbackItems)).toEqual({
       state: "proposed",
-      items: [fallbackItems[0]!.text, fallbackItems[1]!.text],
+      items: [fallbackItems[0]!.text],
     });
     expect(kickoffFocusContent({ items: [], validatedAt: null }, fallbackItems)).toEqual({
       state: "proposed",
-      items: [fallbackItems[0]!.text, fallbackItems[1]!.text],
+      items: [fallbackItems[0]!.text],
     });
   });
 
@@ -153,12 +155,9 @@ describe("kickoffFocusContent — presentation-only fallback precedence", () => 
     expect(kickoffFocusContent({ items: [], validatedAt: null }, [])).toEqual({ state: "empty" });
   });
 
-  it("never exposes a fallback item's sources or review flag, even gong_only/conflict ones", () => {
+  it("never exposes a safe fallback item's sources or review flag", () => {
     const content = kickoffFocusContent(null, fallbackItems);
-    expect(content).toEqual({
-      state: "proposed",
-      items: [fallbackItems[0]!.text, fallbackItems[1]!.text],
-    });
+    expect(content).toEqual({ state: "proposed", items: [fallbackItems[0]!.text] });
     // Structurally — not just by assertion — there is nowhere on this
     // return shape for `sources` or `reviewFlag` to appear.
     expect(Object.keys(content)).toEqual(["state", "items"]);
@@ -171,6 +170,95 @@ describe("kickoffFocusContent — presentation-only fallback precedence", () => 
       kickoffFocusContent({ items: [], validatedAt: null }, frozenFallback),
     ).not.toThrow();
     expect(frozenFallback).toEqual(before);
+  });
+});
+
+describe("kickoffFocusContent — fallback customer-safety filter (Aquatic/Jobber)", () => {
+  // The internal proposeImplementationFocus() output, unfiltered — this
+  // shape, review flags included, is exactly what the internal
+  // ImplementationFocusPanel shows the TIS. Only kickoffFocusContent's
+  // FALLBACK path (nothing saved yet) applies a customer-safety filter on
+  // top of it; proposeImplementationFocus itself is never touched.
+  const safeIntake = {
+    id: "focus-1",
+    text: "Build and configure the Chemical Delivery Ticket workflow for the field team to complete on site.",
+    status: "proposed" as const,
+    sources: [{ type: "intake" as const, label: "Chemical Delivery Ticket", quote: null }],
+    reviewFlag: null,
+  };
+  const safeSow = {
+    id: "focus-2",
+    text: "Connect approved submission data to QuickBooks Online.",
+    status: "proposed" as const,
+    sources: [{ type: "sow" as const, label: "QuickBooks Online", quote: null }],
+    reviewFlag: null,
+  };
+  const gongOnly = {
+    id: "focus-3",
+    text: "Build Jobber analytics for the ops team.",
+    status: "proposed" as const,
+    sources: [{ type: "gong" as const, label: "Discovery call", quote: "mentioned Jobber" }],
+    reviewFlag: "gong_only" as const,
+  };
+  const conflict = {
+    id: "focus-4",
+    text: "Candidate conflicting with purchased scope.",
+    status: "proposed" as const,
+    sources: [{ type: "gong" as const, label: "Discovery call", quote: null }],
+    reviewFlag: "conflict" as const,
+  };
+
+  it("1. a saved agreed item still renders", () => {
+    const agreed = { ...safeSow, status: "agreed" as const };
+    expect(
+      kickoffFocusContent({ items: [agreed], validatedAt: "2026-10-07T12:00:00Z" }, [gongOnly]),
+    ).toEqual({ state: "agreed", items: [agreed.text] });
+  });
+
+  it("2. a saved proposed item still renders as today — saved items are never re-filtered by review_flag", () => {
+    // A saved item carrying a review flag is still the TIS's own working
+    // proposal (deliberately generated/edited in the Hub) — this PR does
+    // not newly filter it.
+    const savedWithFlag = { ...gongOnly, id: "saved-1" };
+    expect(kickoffFocusContent({ items: [savedWithFlag], validatedAt: null }, [])).toEqual({
+      state: "proposed",
+      items: [savedWithFlag.text],
+    });
+  });
+
+  it("3. a safe fallback item (review_flag: null) renders", () => {
+    expect(kickoffFocusContent(null, [safeIntake])).toEqual({
+      state: "proposed",
+      items: [safeIntake.text],
+    });
+  });
+
+  it("4. a gong_only fallback item does NOT render", () => {
+    expect(kickoffFocusContent(null, [gongOnly])).toEqual({ state: "empty" });
+  });
+
+  it("5. a conflict fallback item does NOT render", () => {
+    expect(kickoffFocusContent(null, [conflict])).toEqual({ state: "empty" });
+  });
+
+  it("6. a mixed fallback list renders only the safe items, in order", () => {
+    expect(kickoffFocusContent(null, [safeIntake, gongOnly, safeSow, conflict])).toEqual({
+      state: "proposed",
+      items: [safeIntake.text, safeSow.text],
+    });
+  });
+
+  it("7. is empty, not an invented replacement, once every fallback item is filtered out", () => {
+    expect(kickoffFocusContent(null, [gongOnly, conflict])).toEqual({ state: "empty" });
+    expect(kickoffFocusContent({ items: [], validatedAt: null }, [gongOnly, conflict])).toEqual({
+      state: "empty",
+    });
+  });
+
+  it("8. provenance/review metadata is still not exposed, even by the filtering step itself", () => {
+    const content = kickoffFocusContent(null, [safeIntake, gongOnly, conflict]);
+    expect(Object.keys(content)).toEqual(["state", "items"]);
+    expect(JSON.stringify(content)).not.toMatch(/gong_only|conflict|sources|reviewFlag/);
   });
 });
 
