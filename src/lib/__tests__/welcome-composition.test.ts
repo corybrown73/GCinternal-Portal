@@ -78,13 +78,44 @@ describe("the Plan composition", () => {
 });
 
 describe("the Kickoff composition", () => {
-  it("is the intended seven-screen sequence", () => {
-    const view = baseView();
+  it("includes the focus screen once implementationFocus has items", () => {
+    const view = baseView({
+      implementationFocus: {
+        items: [
+          {
+            id: "f1",
+            text: "Connect approved submission data to QuickBooks Online.",
+            status: "proposed",
+            sources: [],
+            reviewFlag: null,
+          },
+        ],
+        validatedAt: null,
+        validatedBy: null,
+      },
+    });
     expect(kickoffScreenList(view).map((s) => s.key)).toEqual([
       "kickoff-cover",
       "kickoff-understand",
       "kickoff-workflow",
       "kickoff-focus",
+      "kickoff-partnership",
+      "kickoff-journey",
+      "kickoff-next",
+    ]);
+  });
+
+  it("omits the focus screen rather than telling a customer prep isn't finished", () => {
+    // No implementationFocus at all — nothing has been prepared yet. The
+    // screen must not appear (and so can never show internal housekeeping
+    // copy on a customer-facing presentation).
+    const view = baseView();
+    const keys = kickoffScreenList(view).map((s) => s.key);
+    expect(keys).not.toContain("kickoff-focus");
+    expect(keys).toEqual([
+      "kickoff-cover",
+      "kickoff-understand",
+      "kickoff-workflow",
       "kickoff-partnership",
       "kickoff-journey",
       "kickoff-next",
@@ -98,6 +129,6 @@ describe("the Kickoff composition", () => {
     const view = baseView({
       hiddenScreens: ["cover", "team", "overview", "plan", "together", "form", "business"],
     });
-    expect(kickoffScreenList(view).map((s) => s.key)).toHaveLength(7);
+    expect(kickoffScreenList(view).map((s) => s.key)).toHaveLength(6);
   });
 });

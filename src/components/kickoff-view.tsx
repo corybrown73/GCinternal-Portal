@@ -8,6 +8,7 @@ import {
   Tick,
   Tile,
   type Screen,
+  type ScreenArgs,
 } from "@/components/welcome-primitives";
 import { byLabel } from "@/lib/welcome-journey";
 import {
@@ -23,17 +24,14 @@ import type { WelcomeView } from "@/lib/welcome";
  * KICKOFF VIEW — a short TIS-led presentation for the first implementation
  * call, composed from the same WelcomeView the living Plan already reads.
  * One implementation, two views: this file adds the second composition,
- * never a second data model. Internal only in this PR — nothing here is
- * reachable from the customer's shared link.
+ * never a second data model. Internal only — nothing here is reachable
+ * from the customer's shared link.
  *
- * Narrative: here is what we already understand, here is what we believe
- * we are solving, here is what we propose working on, and here is the
- * plan. Did we get it right? No fixed call counts, no "Functional" — this
- * is a first conversation, not a discovery session from zero.
- *
- * The pure decisions behind the trickier screens (what Focus may say,
- * whether the workflow story is worth showing) live in lib/kickoff-view.ts
- * so they can be tested without rendering anything.
+ * Visually, every screen reuses the Plan deck's own grammar — Frame, Tile,
+ * Tick, PhoneMock, the journey-flow columns, the milestone rail, the
+ * orange "good" CTA — recomposed per screen rather than repeating one card
+ * layout seven times. The copy stays the Phase 3 narrative: no fixed call
+ * counts, no "Functional", no provenance ever rendered to a customer.
  */
 
 /* ---------------------------------------------------- 1. Welcome / objective */
@@ -91,11 +89,15 @@ function KickoffCover({ view }: { view: WelcomeView }) {
               </span>
             </div>
           ) : (
-            <div className="wp-art">
-              <div className="wp-art-ring" />
-              <div className="wp-art-disc">
-                <Icon name={view.icon} className="wp-art-icon" strokeWidth={1.5} />
-              </div>
+            // The customer's own workflow, on a device, in the same photo
+            // slot a customer photo would fill — so the opening moment reads
+            // "this is yours" even with no photo on file.
+            <div className="wp-photo wp-phone-panel">
+              <PhoneMock view={view} />
+              <span className="wp-photo-cap">
+                <Icon name="Smartphone" className="h-3.5 w-3.5" />
+                {workflowName}, on the phone
+              </span>
             </div>
           )}
         </div>
@@ -119,51 +121,55 @@ function KickoffUnderstanding({ view, page }: { view: WelcomeView; page: number 
   const champion = view.team.champion;
   const others = view.team.others ?? [];
   const outcome = kickoffBusinessOutcome(view);
+  const today = view.currentProcess;
+  const names = [
+    champion ? `${champion.name}${champion.role ? ` · ${champion.role}` : ""}` : null,
+    ...others.map((o) => `${o.name}${o.role ? ` · ${o.role}` : ""}`),
+  ].filter((x): x is string => Boolean(x));
+
+  const todayColumn = (solo: boolean) => (
+    <div className={cn("wp-journey-col is-now", solo && "is-solo")}>
+      <span className="wp-journey-tag">Today</span>
+      <div className="wp-journey-art">
+        <div className="wp-paper">
+          <FileText className="h-7 w-7" />
+          <i />
+          <i />
+          <i />
+          <i />
+        </div>
+      </div>
+      <h3>How it works today</h3>
+      <p className="wp-journey-quote">{today ?? "We'll capture this together on the call."}</p>
+    </div>
+  );
+
   return (
     <Frame
       k="kickoff-understand"
       page={page}
       eyebrow="What we understand so far"
-      title="Here's what we've"
-      accent="heard"
-      lede="Before we meet: what your calls and your answers have already told us."
-      {...(outcome ? { band: outcome, bandIcon: "Target" } : {})}
+      title="You told us,"
+      accent="we listened"
+      lede="Before we meet — what your calls and your answers have already told us."
+      {...(names.length ? { band: `On the call: ${names.join(" · ")}`, bandIcon: "Users" } : {})}
     >
-      <div className="wp-two">
-        <div className="wp-card">
-          <div className="wp-card-head">
-            <Tile name="Workflow" tone="blue" />
-            <h3>How it works today</h3>
+      {outcome ? (
+        <div className="wp-journey is-two">
+          {todayColumn(false)}
+          <span className="wp-journey-arrow" />
+          <div className="wp-journey-col is-future">
+            <span className="wp-journey-tag is-navy">Where you want to be</span>
+            <div className="wp-journey-art">
+              <Tile name="Target" size="lg" tone="navy" />
+            </div>
+            <h3>The outcome</h3>
+            <p>{outcome}</p>
           </div>
-          <p className="wp-card-body">
-            {view.currentProcess ?? "We'll capture this together on the call."}
-          </p>
         </div>
-        <div className="wp-card is-tint">
-          <div className="wp-card-head">
-            <Tile name="Users" tone="blue" />
-            <h3>Who's involved</h3>
-          </div>
-          {champion || others.length ? (
-            <ul className="wp-ticks">
-              {champion ? (
-                <Tick>
-                  {champion.name}
-                  {champion.role ? ` · ${champion.role}` : ""}
-                </Tick>
-              ) : null}
-              {others.map((o) => (
-                <Tick key={o.name}>
-                  {o.name}
-                  {o.role ? ` · ${o.role}` : ""}
-                </Tick>
-              ))}
-            </ul>
-          ) : (
-            <p className="wp-card-body">We'll confirm who's involved on the call.</p>
-          )}
-        </div>
-      </div>
+      ) : (
+        todayColumn(true)
+      )}
     </Frame>
   );
 }
@@ -177,12 +183,12 @@ function KickoffWorkflow({ view, page }: { view: WelcomeView; page: number }) {
       k="kickoff-workflow"
       page={page}
       eyebrow="Your workflow"
-      title="Before, during,"
-      accent="and after"
+      title={story ? "Before, during," : "How your work"}
+      accent={story ? "and after" : "happens today"}
       lede={
         story
           ? "How the work happens — and what changes."
-          : "How the work happens today. The detail firms up together on the call."
+          : "The detail firms up together on the call."
       }
     >
       {story ? (
@@ -221,12 +227,19 @@ function KickoffWorkflow({ view, page }: { view: WelcomeView; page: number }) {
           </div>
         </div>
       ) : (
-        <div className="wp-card">
-          <div className="wp-card-head">
-            <Tile name="Workflow" tone="blue" />
-            <h3>How it works today</h3>
+        <div className="wp-journey-col is-now is-solo">
+          <span className="wp-journey-tag">Today</span>
+          <div className="wp-journey-art">
+            <div className="wp-paper">
+              <FileText className="h-7 w-7" />
+              <i />
+              <i />
+              <i />
+              <i />
+            </div>
           </div>
-          <p className="wp-card-body">
+          <h3>How it works today</h3>
+          <p className="wp-journey-quote">
             {view.currentProcess ?? "We'll capture this together on the call."}
           </p>
         </div>
@@ -239,45 +252,33 @@ function KickoffWorkflow({ view, page }: { view: WelcomeView; page: number }) {
 
 function KickoffFocus({ view, page }: { view: WelcomeView; page: number }) {
   const content = kickoffFocusContent(view.implementationFocus);
-
-  if (content.state === "empty") {
-    return (
-      <Frame
-        k="kickoff-focus"
-        page={page}
-        eyebrow="What we're working on"
-        title="Implementation focus"
-        accent="not prepared yet"
-      >
-        <div className="wp-card">
-          <p className="wp-card-body">
-            Implementation Focus hasn't been generated yet. Prepare it on Current Implementation
-            before presenting this screen.
-          </p>
-        </div>
-      </Frame>
-    );
-  }
+  // kickoffScreenList never includes this screen when there is nothing to
+  // show — see below. This guard is only a second line of defence against
+  // ever rendering internal "not prepared yet" housekeeping to a customer.
+  if (content.state === "empty") return null;
 
   const agreed = content.state === "agreed";
   return (
     <Frame
       k="kickoff-focus"
       page={page}
-      eyebrow={agreed ? "What we're working on" : "Proposed implementation focus"}
-      title={agreed ? "What we're" : "What we believe"}
-      accent={agreed ? "working on" : "we're solving"}
+      eyebrow={agreed ? "Agreed implementation focus" : "Proposed implementation focus"}
+      title={agreed ? "What we're" : "What we propose"}
+      accent="working on"
       lede={
         agreed
           ? "Agreed together — this is where the implementation is focused."
-          : "This is what we believe the implementation should focus on. Let's review it together now."
+          : "What we believe the implementation should focus on. Let's review it together now."
       }
     >
-      <ul className="wp-ticks">
+      <ol className="wp-focus-list">
         {content.items.map((text, i) => (
-          <Tick key={i}>{text}</Tick>
+          <li key={i} className={cn("wp-focus-item", agreed && "is-agreed")}>
+            <span className="wp-focus-num">{String(i + 1).padStart(2, "0")}</span>
+            <span className="wp-focus-text">{text}</span>
+          </li>
         ))}
-      </ul>
+      </ol>
     </Frame>
   );
 }
@@ -289,17 +290,15 @@ function KickoffPartnership({ page }: { page: number }) {
     <Frame
       k="kickoff-partnership"
       page={page}
-      eyebrow="Two teams"
-      title="Two teams,"
-      accent="one plan"
-      lede="We come prepared. You make it real."
+      eyebrow="Two teams, one plan"
+      title="We come prepared."
+      accent="You make it real."
     >
-      <div className="wp-two">
-        <div className="wp-card">
-          <div className="wp-card-head">
-            <Tile name="Wrench" tone="blue" />
-            <h3>GoCanvas brings</h3>
-          </div>
+      <div className="wp-partner">
+        <div className="wp-partner-col">
+          <h3>
+            <Tile name="Wrench" size="sm" tone="blue" /> GoCanvas brings
+          </h3>
           <ul className="wp-ticks">
             <Tick>Comes prepared, with a plan built from your SOW and your calls</Tick>
             <Tick>Recommends the workflow, and configures or guides it — whichever fits</Tick>
@@ -307,11 +306,13 @@ function KickoffPartnership({ page }: { page: number }) {
             <Tick>Keeps the implementation moving</Tick>
           </ul>
         </div>
-        <div className="wp-card is-tint">
-          <div className="wp-card-head">
-            <Tile name="HardHat" tone="blue" />
-            <h3>You bring</h3>
-          </div>
+        <div className="wp-partner-divider">
+          <Tile name="Handshake" size="lg" tone="navy" />
+        </div>
+        <div className="wp-partner-col">
+          <h3>
+            <Tile name="HardHat" size="sm" tone="blue" /> You bring
+          </h3>
           <ul className="wp-ticks">
             <Tick>Validates that we've got it right</Tick>
             <Tick>Makes the business decisions</Tick>
@@ -326,6 +327,17 @@ function KickoffPartnership({ page }: { page: number }) {
 
 /* ------------------------------------------------------ 6. Your path to launch */
 
+/** The canonical six stages' icons — decoration only; the labels and order
+ * still come from view.journey, never redefined here. */
+const STAGE_ICON: Record<string, string> = {
+  pre_kickoff: "ClipboardCheck",
+  kickoff: "PhoneCall",
+  get_it_working: "Wrench",
+  make_it_yours: "KeyRound",
+  make_it_run: "Workflow",
+  complete: "GraduationCap",
+};
+
 function KickoffJourney({ view, page }: { view: WelcomeView; page: number }) {
   const j = view.journey;
   return (
@@ -336,31 +348,43 @@ function KickoffJourney({ view, page }: { view: WelcomeView; page: number }) {
       title="Dates create"
       accent="accountability"
       lede="Outcomes move stages. Meetings support the work."
+      {...(j ? { band: j.current.blurb, bandIcon: "Route" } : {})}
     >
       {j ? (
-        <ol className="wp-journey">
-          {j.stages.map((s, i) => (
-            <li
-              key={s.key}
-              className={cn(
-                "wp-journey-step",
-                s.state === "now" && "is-now",
-                s.state === "done" && "is-done",
-              )}
-            >
-              <span className="wp-journey-num">
-                {s.state === "done" ? <Check className="h-3.5 w-3.5" strokeWidth={3} /> : i + 1}
+        <div className="wp-rail is-six">
+          <div className="wp-rail-line" />
+          {j.stages.map((s) => (
+            <div key={s.key} className={cn("wp-node", s.state === "now" && "is-today")}>
+              <span className="wp-node-day">
+                {s.state === "now" ? <i className="wp-today-tag">You are here</i> : null}
               </span>
-              <span className="wp-journey-label">{s.label}</span>
-              {s.state === "now" ? <span className="wp-ov-status is-now">You are here</span> : null}
-            </li>
+              <span className={cn("wp-node-tile", s.state === "done" && "is-done")}>
+                <Tile
+                  name={STAGE_ICON[s.key] ?? "Route"}
+                  size="lg"
+                  tone={s.state === "done" ? "navy" : s.state === "now" ? "blue" : "light"}
+                />
+                {s.state === "done" ? (
+                  <span className="wp-done-badge">
+                    <Check className="h-3 w-3" strokeWidth={3} />
+                  </span>
+                ) : null}
+              </span>
+              <span className="wp-node-label">{s.label}</span>
+              {s.key === "complete" && view.timeline.liveDate ? (
+                <span className="wp-node-date">{shortDay(view.timeline.liveDate)}</span>
+              ) : null}
+            </div>
           ))}
-        </ol>
+        </div>
       ) : (
-        <p className="wp-card-body">
-          Your path — Intake &amp; Process, Kickoff, Get it working, Make it yours, Make it run,
-          Graduate — starts once this account is set up.
-        </p>
+        <div className="wp-journey-col is-now is-solo">
+          <h3>Your path to launch</h3>
+          <p className="wp-journey-quote">
+            Intake &amp; Process → Kickoff → Get it working → Make it yours → Make it run →
+            Graduate. Starts once this account is set up.
+          </p>
+        </div>
       )}
     </Frame>
   );
@@ -382,22 +406,21 @@ function KickoffNextStep({ view, page }: { view: WelcomeView; page: number }) {
       eyebrow="What ready looks like"
       title="Know what"
       accent="ready looks like"
-      lede="A few plain signs the implementation is on track."
     >
-      <div className="wp-two">
-        <div className="wp-card">
-          <ul className="wp-ticks">
-            <Tick>Your crew submits from the phone, on the job</Tick>
-            <Tick>The office sees the work as it happens — nothing retyped</Tick>
-            <Tick>A change you ask for gets made, and you see it land</Tick>
-          </ul>
-        </div>
-        <div className="wp-card wp-good">
-          <div className="wp-good-cta">
-            <span className="wp-good-cta-label">Your next step</span>
-            <span className="wp-good-cta-text">{nextText}</span>
-          </div>
-        </div>
+      <div className="wp-pills">
+        <span className="wp-pill">
+          <Tile name="Smartphone" size="sm" tone="blue" /> Submits from the phone, on the job
+        </span>
+        <span className="wp-pill">
+          <Tile name="Workflow" size="sm" tone="blue" /> Nothing retyped in the office
+        </span>
+        <span className="wp-pill">
+          <Tile name="Wrench" size="sm" tone="blue" /> A change you ask for lands, and you see it
+        </span>
+      </div>
+      <div className="wp-good-cta is-hero">
+        <span className="wp-good-cta-label">Your next step</span>
+        <span className="wp-good-cta-text">{nextText}</span>
       </div>
     </Frame>
   );
@@ -405,8 +428,14 @@ function KickoffNextStep({ view, page }: { view: WelcomeView; page: number }) {
 
 /** The Kickoff composition, in order. Never filtered by the customer's
  * persisted hidden-screen preferences — those belong to the Plan
- * composition only. See WelcomePage's `experience` state. */
+ * composition only. See WelcomePage's `experience` state.
+ *
+ * "What we're working on" is left out entirely when there is nothing to
+ * show yet, rather than telling a customer that internal prep is
+ * unfinished — the same rule the Plan's own optional screens (journey,
+ * intake, help) already follow for data that may not exist yet. */
 export function kickoffScreenList(view: WelcomeView): Screen[] {
+  const hasFocus = kickoffFocusContent(view.implementationFocus).state !== "empty";
   return [
     {
       key: "kickoff-cover",
@@ -423,11 +452,17 @@ export function kickoffScreenList(view: WelcomeView): Screen[] {
       label: "Your workflow",
       render: (a) => <KickoffWorkflow key="kickoff-workflow" view={view} page={a.page} />,
     },
-    {
-      key: "kickoff-focus",
-      label: "What we're working on",
-      render: (a) => <KickoffFocus key="kickoff-focus" view={view} page={a.page} />,
-    },
+    ...(hasFocus
+      ? [
+          {
+            key: "kickoff-focus",
+            label: "What we're working on",
+            render: (a: ScreenArgs) => (
+              <KickoffFocus key="kickoff-focus" view={view} page={a.page} />
+            ),
+          } satisfies Screen,
+        ]
+      : []),
     {
       key: "kickoff-partnership",
       label: "Two teams, one plan",
