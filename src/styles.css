@@ -4284,3 +4284,82 @@ body.gc-presenting {
   font-size: 27px;
   line-height: 1.3;
 }
+
+/* ---- kickoff view: five fixed screens — "Our focus" (NOW dominant, NEXT
+   and LATER secondary) and "Your path to launch"'s compact responsibility
+   band. Small, named additions on the same tokens; no second design
+   system. See kickoff-view.tsx for where each one is used. */
+.gc-welcome .wp-focus-now {
+  padding: 28px 32px;
+  border-radius: 18px;
+  background: var(--wp-blue-soft);
+  border: 1px solid var(--wp-blue-line);
+}
+.gc-welcome .wp-focus-now-label {
+  margin: 0 0 8px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--wp-blue-deep);
+}
+.gc-welcome .wp-focus-now-text {
+  margin: 0;
+  font-size: 26px;
+  font-weight: 800;
+  line-height: 1.3;
+  color: var(--wp-navy);
+  letter-spacing: -0.01em;
+}
+.gc-welcome .wp-focus-later {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  margin-top: 22px;
+}
+.gc-welcome .wp-focus-later-col h4 {
+  margin: 0 0 10px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--wp-muted);
+}
+.gc-welcome .wp-focus-later-col .wp-ticks {
+  gap: 6px;
+}
+.gc-welcome .wp-focus-later-col .wp-tick {
+  font-size: 13px;
+}
+.gc-welcome .wp-focus-prompt {
+  margin: 18px 0 0;
+  font-size: 13px;
+  font-style: italic;
+  color: var(--wp-muted);
+  text-align: center;
+}
+
+/* Your path to launch: GoCanvas's/your part, compact — supporting
+   information below the rail, not a second presentation slide. */
+.gc-welcome .wp-responsibility {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  margin-top: 24px;
+  padding-top: 18px;
+  border-top: 1px solid var(--wp-line);
+}
+.gc-welcome .wp-responsibility-col h4 {
+  margin: 0 0 4px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--wp-navy);
+}
+.gc-welcome .wp-responsibility-col p {
+  margin: 0;
+  font-size: 13px;
+  color: var(--wp-body);
+}

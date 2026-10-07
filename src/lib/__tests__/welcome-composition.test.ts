@@ -77,62 +77,100 @@ describe("the Plan composition", () => {
   });
 });
 
-describe("the Kickoff composition", () => {
-  it("includes the focus screen once implementationFocus has items", () => {
-    const view = baseView({
-      implementationFocus: {
-        items: [
-          {
-            id: "f1",
-            text: "Connect approved submission data to QuickBooks Online.",
-            status: "proposed",
-            sources: [],
-            reviewFlag: null,
-          },
-        ],
-        validatedAt: null,
-        validatedBy: null,
-      },
-    });
+describe("the Kickoff composition — five fixed screens, always", () => {
+  it("is the five-screen sequence, in the fixed order, for a bare account", () => {
+    const view = baseView();
     expect(kickoffScreenList(view).map((s) => s.key)).toEqual([
       "kickoff-cover",
-      "kickoff-understand",
       "kickoff-workflow",
       "kickoff-focus",
-      "kickoff-partnership",
       "kickoff-journey",
       "kickoff-next",
     ]);
   });
 
-  it("includes the focus screen from a presentation-only fallback, even when nothing is saved", () => {
+  it("is still five valid screens for a sparse account — nothing saved or known yet", () => {
     const view = baseView({
+      currentProcess: null,
+      workflowStory: null,
       implementationFocus: null,
-      implementationFocusFallback: [
-        {
-          id: "focus-1",
-          text: 'Build and configure the "Daily Job Report" workflow for the field team to complete on site.',
-          status: "proposed",
-          sources: [{ type: "intake", label: "Daily Job Report", quote: null }],
-          reviewFlag: null,
-        },
-      ],
+      journey: null,
+      intake: null,
     });
-    expect(kickoffScreenList(view).map((s) => s.key)).toContain("kickoff-focus");
+    expect(kickoffScreenList(view).map((s) => s.key)).toEqual([
+      "kickoff-cover",
+      "kickoff-workflow",
+      "kickoff-focus",
+      "kickoff-journey",
+      "kickoff-next",
+    ]);
   });
 
-  it("omits the focus screen rather than telling a customer prep isn't finished", () => {
-    // No implementationFocus at all — nothing has been prepared yet. The
-    // screen must not appear (and so can never show internal housekeeping
-    // copy on a customer-facing presentation).
-    const view = baseView();
-    const keys = kickoffScreenList(view).map((s) => s.key);
-    expect(keys).not.toContain("kickoff-focus");
-    expect(keys).toEqual([
+  it("is still exactly five screens for a rich account — everything populated", () => {
+    const view = baseView({
+      currentProcess: "Paper ticket from the truck, retyped on Fridays.",
+      workflowStory: {
+        before: "A dispatch ticket comes over the radio.",
+        during: "The crew fills in the ticket on the truck.",
+        after: "The office reviews it and invoices the same day.",
+        validatedAt: null,
+        validatedBy: null,
+      },
+      implementationFocus: {
+        items: [
+          {
+            id: "f1",
+            text: "Connect approved submission data to QuickBooks Online.",
+            status: "agreed",
+            sources: [],
+            reviewFlag: null,
+          },
+          {
+            id: "f2",
+            text: "Build the Daily Job Report form.",
+            status: "agreed",
+            sources: [],
+            reviewFlag: null,
+          },
+          {
+            id: "f3",
+            text: "Load the customer list.",
+            status: "agreed",
+            sources: [],
+            reviewFlag: null,
+          },
+          {
+            id: "f4",
+            text: "Train the field team.",
+            status: "agreed",
+            sources: [],
+            reviewFlag: null,
+          },
+        ],
+        validatedAt: "2026-10-07T12:00:00Z",
+        validatedBy: "Dana",
+      },
+      journey: {
+        stages: [
+          { key: "pre_kickoff", label: "Intake & Process", state: "done", blurb: "" },
+          { key: "kickoff", label: "Kickoff", state: "now", blurb: "The first meeting." },
+          { key: "get_it_working", label: "Get it working", state: "later", blurb: "" },
+          { key: "make_it_yours", label: "Make it yours", state: "later", blurb: "" },
+          { key: "make_it_run", label: "Make it run", state: "later", blurb: "" },
+          { key: "complete", label: "Graduate", state: "later", blurb: "" },
+        ],
+        current: { key: "kickoff", label: "Kickoff", state: "now", blurb: "The first meeting." },
+        headline: "You are in Kickoff.",
+        solutions: [],
+        yours: [
+          { what: "Download the GoCanvas app and log in", by: "2026-09-25", kind: "homework" },
+        ],
+      },
+    });
+    expect(kickoffScreenList(view).map((s) => s.key)).toEqual([
       "kickoff-cover",
-      "kickoff-understand",
       "kickoff-workflow",
-      "kickoff-partnership",
+      "kickoff-focus",
       "kickoff-journey",
       "kickoff-next",
     ]);
@@ -145,6 +183,6 @@ describe("the Kickoff composition", () => {
     const view = baseView({
       hiddenScreens: ["cover", "team", "overview", "plan", "together", "form", "business"],
     });
-    expect(kickoffScreenList(view).map((s) => s.key)).toHaveLength(6);
+    expect(kickoffScreenList(view).map((s) => s.key)).toHaveLength(5);
   });
 });
