@@ -195,6 +195,26 @@ const sparseView: WelcomeView = {
   journey: null,
   workflowStory: null,
   implementationFocus: null,
+  // Reproduces the Aquatic bug: nothing saved yet, so Kickoff Focus falls
+  // back to proposeImplementationFocus's raw candidates — one customer-
+  // safe (review_flag: null), one unreviewed Gong-only Jobber mention
+  // that must stay internal-only and never reach this slide.
+  implementationFocusFallback: [
+    {
+      id: "focus-1",
+      text: "Connect approved submission data to QuickBooks Online.",
+      status: "proposed",
+      sources: [{ type: "sow", label: "QuickBooks Online", quote: null }],
+      reviewFlag: null,
+    },
+    {
+      id: "focus-2",
+      text: "Build Jobber analytics for the ops team.",
+      status: "proposed",
+      sources: [{ type: "gong", label: "Discovery call", quote: "mentioned Jobber" }],
+      reviewFlag: "gong_only",
+    },
+  ],
 };
 
 function renderDeck(view: WelcomeView, file: string) {

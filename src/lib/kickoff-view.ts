@@ -22,10 +22,21 @@ export type KickoffFocusContent =
  * conflict warning: there is nothing here to render one from.
  *
  * PRECEDENCE: a saved item — agreed or still proposed — always wins, in
- * its saved state. `fallbackItems` (proposeImplementationFocus's output,
- * read fresh on every view, never persisted) is used only when nothing has
- * been saved at all, and always renders as "proposed": a presentation-time
- * proposal is never agreed implementation truth.
+ * its saved state, exactly as saved: items deliberately generated or
+ * edited in the Hub are the TIS's own working proposal, so they are never
+ * re-filtered by review_flag here.
+ *
+ * `fallbackItems` (proposeImplementationFocus's output, read fresh on
+ * every view, never persisted) is used only when nothing has been saved
+ * at all, and always renders as "proposed": a presentation-time proposal
+ * is never agreed implementation truth. Unlike saved items, a fallback
+ * candidate reaches a customer automatically, with no TIS review in
+ * between — so only `reviewFlag === null` candidates are customer-safe.
+ * A candidate flagged "gong_only" (named only on a sales call, never
+ * purchased) or "conflict" (disagrees with what was actually bought)
+ * stays internal review context: it is left out of the slide, never
+ * mutated or deleted, available to the TIS exactly as
+ * proposeImplementationFocus produced it everywhere else in the Hub.
  */
 export function kickoffFocusContent(
   focus: Pick<ImplementationFocusView, "items" | "validatedAt"> | null | undefined,
@@ -38,9 +49,9 @@ export function kickoffFocusContent(
       items: items.map((i) => i.text),
     };
   }
-  const fallback = fallbackItems ?? [];
-  if (!fallback.length) return { state: "empty" };
-  return { state: "proposed", items: fallback.map((i) => i.text) };
+  const safeFallback = (fallbackItems ?? []).filter((i) => i.reviewFlag === null);
+  if (!safeFallback.length) return { state: "empty" };
+  return { state: "proposed", items: safeFallback.map((i) => i.text) };
 }
 
 export type KickoffFocusGroups = {
