@@ -523,6 +523,61 @@ export const intakeAnswersSchema = z.object({
     })
     .default({}),
   /**
+   * A simple, customer-readable account of the workflow — before field
+   * work, during it, after submission. Process truth, not implementation
+   * stage progression (see stage-flow.ts for that). V1: persistence and a
+   * read model only; nothing writes this yet, and no auto-generation runs
+   * in this PR.
+   */
+  workflow_story: z
+    .object({
+      before: z.string().trim().max(4000).nullable().default(null),
+      during: z.string().trim().max(4000).nullable().default(null),
+      after: z.string().trim().max(4000).nullable().default(null),
+      validated_at: z.string().nullable().default(null),
+      validated_by: z.string().uuid().nullable().default(null),
+    })
+    .default({}),
+  /**
+   * What this implementation will actually deliver, as a short list a
+   * customer can read. Proposed from the SOW (the commercial anchor), the
+   * intake (process/customer context) and Gong (supporting evidence) —
+   * none of that generation runs yet in this PR. A person's validation is
+   * the only thing that promotes an item from "proposed" to "agreed";
+   * holding Kickoff does not. `review_flag` marks an item resting on Gong
+   * alone, or on sources that disagree, so it is never read as agreed by
+   * accident. Each item keeps its own source list rather than the single-
+   * source `ai_sources` model, because one item may be supported by more
+   * than one of SOW, intake and Gong at once.
+   */
+  implementation_focus: z
+    .object({
+      items: z
+        .array(
+          z.object({
+            id: z.string().min(1).max(40),
+            text: z.string().trim().min(1).max(500),
+            status: z.enum(["proposed", "agreed"]).default("proposed"),
+            sources: z
+              .array(
+                z.object({
+                  type: z.enum(["sow", "intake", "gong"]),
+                  label: z.string().trim().max(200).nullable().default(null),
+                  quote: z.string().trim().max(400).nullable().default(null),
+                }),
+              )
+              .max(10)
+              .default([]),
+            review_flag: z.enum(["gong_only", "conflict"]).nullable().default(null),
+          }),
+        )
+        .max(60)
+        .default([]),
+      validated_at: z.string().nullable().default(null),
+      validated_by: z.string().uuid().nullable().default(null),
+    })
+    .default({}),
+  /**
    * How Implementation Complete finished (the operating model): Proven, the
    * agreed outcome shown in real use; or Not Proven, with the reason. An
    * internal reporting status, never shown to the customer.
@@ -542,6 +597,10 @@ export const intakeAnswersSchema = z.object({
 export type IntakeAnswers = z.infer<typeof intakeAnswersSchema>;
 export type HandoffAnswer = IntakeAnswers["handoff"]["answers"][string];
 export type HandoffSource = HandoffAnswer["source"];
+export type WorkflowStory = IntakeAnswers["workflow_story"];
+export type ImplementationFocus = IntakeAnswers["implementation_focus"];
+export type ImplementationFocusItem = ImplementationFocus["items"][number];
+export type ImplementationFocusSource = ImplementationFocusItem["sources"][number];
 
 /** Phase 1 is training, not a form build: Field Fusion, or the person said so. */
 export function isTrainingOnly(a: Pick<IntakeAnswers, "path" | "training_only">): boolean {
