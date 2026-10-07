@@ -4149,3 +4149,138 @@ body.gc-presenting {
   background: #e4f3e4;
   color: var(--wp-green);
 }
+
+/* ---- kickoff view: visual recovery — small, named additions, reusing the
+   same tokens, Frame and journey/rail/good-cta primitives the Plan screens
+   already use. See kickoff-view.tsx for where each one is used. */
+
+/* The cover's photo slot, filled with the customer's own form on a phone
+   when there is no customer photo on file — a gradient panel standing in
+   for the photo, the phone standing on it the way it stands on the team
+   screen's panel, sized and tilted for this slot specifically (not reused
+   verbatim) so the caption never overlaps it. */
+.gc-welcome .wp-phone-panel {
+  background: linear-gradient(160deg, #29b1f0 0%, #039de7 50%, #12509b 100%);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+.gc-welcome .wp-phone-panel .wp-phone {
+  width: 190px;
+  height: 380px;
+  margin-bottom: -36px;
+  transform: rotate(-4deg);
+  padding: 8px;
+}
+.gc-welcome .wp-phone-panel .wp-phone .wp-phone-screen {
+  border-radius: 22px;
+}
+
+/* A two-column version of the today → day 7 → future flow, for a single
+   "today → the outcome" story instead of three acts. */
+.gc-welcome .wp-journey.is-two {
+  grid-template-columns: 1fr 36px 1fr;
+}
+/* The same flow column, alone and centred, when there is only one act to
+   show (no business outcome, or no workflow story yet). */
+.gc-welcome .wp-journey-col.is-solo {
+  max-width: 620px;
+  margin: 0 auto;
+  padding: 28px 40px 32px;
+}
+
+/* What we're working on: a few things, scaled up, reading as one
+   implementation rather than a checklist. */
+.gc-welcome .wp-focus-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+.gc-welcome .wp-focus-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 22px;
+  padding: 18px 0;
+  border-bottom: 1px solid var(--wp-line);
+}
+.gc-welcome .wp-focus-item:last-child {
+  border-bottom: none;
+}
+.gc-welcome .wp-focus-num {
+  flex: none;
+  width: 56px;
+  font-size: 30px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--wp-blue-line);
+}
+.gc-welcome .wp-focus-item.is-agreed .wp-focus-num {
+  color: var(--wp-blue);
+}
+.gc-welcome .wp-focus-text {
+  padding-top: 6px;
+  font-size: 19px;
+  font-weight: 700;
+  line-height: 1.4;
+  color: var(--wp-navy);
+}
+
+/* Two teams, one plan: two plain text columns either side of a single
+   connecting mark, instead of two boxed, symmetric dashboard cards. */
+.gc-welcome .wp-partner {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: start;
+  gap: 32px;
+  margin-top: 8px;
+}
+.gc-welcome .wp-partner-col h3 {
+  margin: 0 0 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: var(--wp-navy);
+}
+.gc-welcome .wp-partner-divider {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding-top: 8px;
+}
+.gc-welcome .wp-partner-divider span {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--wp-muted);
+}
+
+/* Your path to launch: the six canonical stages as one rail, reusing the
+   Plan timeline's line-and-tiles — the same visual grammar, applied to the
+   journey the customer already sees on the living plan. */
+.gc-welcome .wp-rail.is-six {
+  grid-template-columns: repeat(6, 1fr);
+}
+
+/* What ready looks like / your next step: the orange CTA, at the scale of
+   a closing statement rather than a card sharing the slide with a list. */
+.gc-welcome .wp-good-cta.is-hero {
+  margin-top: 28px;
+  padding: 36px 48px;
+  border-radius: 20px;
+  box-shadow: 0 20px 40px rgba(243, 112, 33, 0.22);
+  gap: 10px;
+}
+.gc-welcome .wp-good-cta.is-hero .wp-good-cta-label {
+  font-size: 13px;
+}
+.gc-welcome .wp-good-cta.is-hero .wp-good-cta-text {
+  font-size: 27px;
+  line-height: 1.3;
+}
