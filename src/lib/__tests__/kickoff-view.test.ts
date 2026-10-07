@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   KICKOFF_HANDOFF,
+  KICKOFF_JOURNEY_BAND,
   KICKOFF_PRINCIPLES,
   KICKOFF_PROMISE,
   KICKOFF_RESPONSIBILITY,
@@ -11,6 +12,7 @@ import {
   kickoffConcise,
   kickoffFocusContent,
   kickoffFocusGroups,
+  kickoffJourneyStages,
   kickoffNextStepText,
   kickoffWorkflowFallback,
   kickoffWorkflowSlide,
@@ -358,6 +360,80 @@ describe("kickoffNextStepText — testing-oriented, never administrative", () =>
     expect(kickoffNextStepText(null)).toBe(
       "Put it to work. Test your GoCanvas workflow on a real job and see what needs to change.",
     );
+  });
+});
+
+describe("kickoffJourneyStages — Kickoff View is the presentation used during Kickoff", () => {
+  const sixStages = [
+    { key: "pre_kickoff" as const, label: "Intake & Process", state: "now" as const, blurb: "" },
+    { key: "kickoff" as const, label: "Kickoff", state: "later" as const, blurb: "" },
+    { key: "get_it_working" as const, label: "Get it working", state: "later" as const, blurb: "" },
+    { key: "make_it_yours" as const, label: "Make it yours", state: "later" as const, blurb: "" },
+    { key: "make_it_run" as const, label: "Make it run", state: "later" as const, blurb: "" },
+    { key: "complete" as const, label: "Graduate", state: "later" as const, blurb: "" },
+  ];
+
+  it("renders Intake & Process as done when the account is still pre_kickoff", () => {
+    const stages = kickoffJourneyStages({ stages: sixStages, current: sixStages[0]! });
+    expect(stages.find((s) => s.key === "pre_kickoff")!.state).toBe("done");
+  });
+
+  it("renders Kickoff as now / you are here when the account is still pre_kickoff", () => {
+    const stages = kickoffJourneyStages({ stages: sixStages, current: sixStages[0]! });
+    expect(stages.find((s) => s.key === "kickoff")!.state).toBe("now");
+  });
+
+  it("leaves every later stage untouched", () => {
+    const stages = kickoffJourneyStages({ stages: sixStages, current: sixStages[0]! });
+    for (const key of ["get_it_working", "make_it_yours", "make_it_run", "complete"] as const) {
+      expect(stages.find((s) => s.key === key)!.state).toBe("later");
+    }
+  });
+
+  it("does not mutate the source journey — a presentation read, never a write", () => {
+    const frozenStages = sixStages.map((s) => Object.freeze({ ...s }));
+    const before = JSON.parse(JSON.stringify(frozenStages));
+    expect(() =>
+      kickoffJourneyStages({ stages: frozenStages, current: frozenStages[0]! }),
+    ).not.toThrow();
+    expect(frozenStages).toEqual(before);
+  });
+
+  it("keeps the canonical six-stage order unchanged", () => {
+    const stages = kickoffJourneyStages({ stages: sixStages, current: sixStages[0]! });
+    expect(stages.map((s) => s.key)).toEqual([
+      "pre_kickoff",
+      "kickoff",
+      "get_it_working",
+      "make_it_yours",
+      "make_it_run",
+      "complete",
+    ]);
+  });
+
+  it("changes nothing once the account has actually moved past Kickoff", () => {
+    const atWorking = sixStages.map((s) =>
+      s.key === "pre_kickoff" || s.key === "kickoff"
+        ? { ...s, state: "done" as const }
+        : s.key === "get_it_working"
+          ? { ...s, state: "now" as const }
+          : s,
+    );
+    const current = atWorking.find((s) => s.key === "get_it_working")!;
+    const stages = kickoffJourneyStages({ stages: atWorking, current });
+    // Identical to the input — nothing to correct once Kickoff is behind us.
+    expect(stages).toEqual(atWorking);
+  });
+});
+
+describe("KICKOFF_JOURNEY_BAND — fixed Kickoff-presentation copy, never a stage's own blurb", () => {
+  it("is a plain static string, not a function of any journey/account data", () => {
+    expect(typeof KICKOFF_JOURNEY_BAND).toBe("string");
+    expect(KICKOFF_JOURNEY_BAND.length).toBeGreaterThan(0);
+  });
+
+  it("is not the pre-kickoff stage's own 'before we meet' blurb", () => {
+    expect(KICKOFF_JOURNEY_BAND).not.toMatch(/before we meet/i);
   });
 });
 

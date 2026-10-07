@@ -12,6 +12,7 @@ import {
 } from "@/components/welcome-primitives";
 import {
   KICKOFF_HANDOFF,
+  KICKOFF_JOURNEY_BAND,
   KICKOFF_PRINCIPLES,
   KICKOFF_PROMISE,
   KICKOFF_RESPONSIBILITY,
@@ -20,6 +21,7 @@ import {
   kickoffBusinessOutcome,
   kickoffFocusContent,
   kickoffFocusGroups,
+  kickoffJourneyStages,
   kickoffNextStepText,
   kickoffWorkflowSlide,
 } from "@/lib/kickoff-view";
@@ -342,6 +344,7 @@ const STAGE_ICON: Record<string, string> = {
 
 function KickoffJourney({ view, page }: { view: WelcomeView; page: number }) {
   const j = view.journey;
+  const stages = j ? kickoffJourneyStages(j) : [];
   return (
     <Frame
       k="kickoff-journey"
@@ -350,13 +353,13 @@ function KickoffJourney({ view, page }: { view: WelcomeView; page: number }) {
       title="Dates create"
       accent="accountability"
       lede="Outcomes move stages. Meetings support the work."
-      {...(j ? { band: j.current.blurb, bandIcon: "Route" } : {})}
+      {...(j ? { band: KICKOFF_JOURNEY_BAND, bandIcon: "Route" } : {})}
     >
       {j ? (
         <>
           <div className="wp-rail is-six">
             <div className="wp-rail-line" />
-            {j.stages.map((s) => (
+            {stages.map((s) => (
               <div key={s.key} className={cn("wp-node", s.state === "now" && "is-today")}>
                 <span className="wp-node-day">
                   {s.state === "now" ? <i className="wp-today-tag">You are here</i> : null}

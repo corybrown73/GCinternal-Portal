@@ -94,18 +94,24 @@ const richView: WelcomeView = {
     ],
     needed: [],
   },
+  // Reproduces the actual Aquatic export: the account's real underlying
+  // stage is still pre_kickoff (the call hasn't happened in the CRM yet),
+  // which is exactly the case kickoffJourneyStages/KICKOFF_JOURNEY_BAND
+  // exist to fix in Kickoff View's own presentation, without touching
+  // this raw journey truth (the customer Implementation Plan still reads
+  // this unmodified: pre_kickoff "now", the "Before we meet" blurb).
   journey: {
     stages: [
       {
         key: "pre_kickoff",
         label: "Intake & Process",
-        state: "done",
+        state: "now",
         blurb: "Before we meet: your team and ours get ready, and the first meeting is booked.",
       },
       {
         key: "kickoff",
         label: "Kickoff",
-        state: "now",
+        state: "later",
         blurb: "The first meeting: we walk your process together and agree the plan and dates.",
       },
       {
@@ -134,12 +140,12 @@ const richView: WelcomeView = {
       },
     ],
     current: {
-      key: "kickoff",
-      label: "Kickoff",
+      key: "pre_kickoff",
+      label: "Intake & Process",
       state: "now",
-      blurb: "The first meeting: we walk your process together and agree the plan and dates.",
+      blurb: "Before we meet: your team and ours get ready, and the first meeting is booked.",
     },
-    headline: "You are in Kickoff. One thing is yours to do — listed below.",
+    headline: "You are in Intake & Process. One thing is yours to do — listed below.",
     solutions: [],
     yours: [{ what: "Download the GoCanvas app and log in", by: "2026-09-15", kind: "homework" }],
   },
