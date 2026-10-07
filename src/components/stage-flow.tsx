@@ -6,6 +6,7 @@ import { ArrowRight, Check, Copy, Lock, Send, UserRoundCheck } from "lucide-reac
 
 import { FieldFusionGate } from "@/components/field-fusion-gate";
 import { AiSource, ReadingStatus } from "@/components/fill-from-sources";
+import { ImplementationFocusPanel } from "@/components/implementation-focus-panel";
 import { MeetingRecap } from "@/components/meeting-recap";
 import { ParkingLot } from "@/components/parking-lot";
 import { Field, StatusDot } from "@/components/record";
@@ -1154,6 +1155,8 @@ export function CurrentImplementationTab({
       )}
 
       <SolutionsCard deal={deal} editable={editable} />
+
+      <ImplementationFocusPanel dealId={dealId} intake={intake} />
 
       <ImplementationHistorySection
         dealStageHistory={deal.stage_history}

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { EMPTY_INTAKE, claimByPerson, intakeAnswersSchema, readIntake } from "../intake-answers";
-import { timelinePatchSchema } from "../intake-patch";
+import { implementationFocusPatchSchema, timelinePatchSchema } from "../intake-patch";
 
 describe("the timeline as the save accepts it", () => {
   it("takes the record's whole timeline back, every key the record can hold", () => {
@@ -27,6 +27,34 @@ describe("the timeline as the save accepts it", () => {
     const r = timelinePatchSchema.safeParse(full);
     expect(r.success, JSON.stringify(r.success ? null : r.error.issues)).toBe(true);
     expect(Object.keys(full).sort()).toEqual(Object.keys(timelinePatchSchema.shape).sort());
+  });
+});
+
+describe("implementation_focus as the save accepts it", () => {
+  it("takes the record's whole implementation_focus back, every key the record can hold", () => {
+    expect(
+      implementationFocusPatchSchema.safeParse(EMPTY_INTAKE.implementation_focus).success,
+    ).toBe(true);
+    const full = readIntake({
+      implementation_focus: {
+        items: [
+          {
+            id: "focus-1",
+            text: "Connect approved submission data to QuickBooks Online.",
+            status: "agreed",
+            sources: [{ type: "sow", label: "QuickBooks Online", quote: null }],
+            review_flag: null,
+          },
+        ],
+        validated_at: "2026-10-07T12:00:00Z",
+        validated_by: "11111111-1111-4111-8111-111111111111",
+      },
+    }).implementation_focus;
+    const r = implementationFocusPatchSchema.safeParse(full);
+    expect(r.success, JSON.stringify(r.success ? null : r.error.issues)).toBe(true);
+    expect(Object.keys(full).sort()).toEqual(
+      Object.keys(implementationFocusPatchSchema.shape).sort(),
+    );
   });
 });
 
