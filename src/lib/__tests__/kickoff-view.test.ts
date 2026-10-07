@@ -2,8 +2,12 @@ import { describe, expect, it } from "vitest";
 
 import {
   kickoffBusinessOutcome,
+  kickoffConcise,
   kickoffFocusContent,
+  kickoffFocusGroups,
+  kickoffNextStepText,
   kickoffWorkflowFallback,
+  kickoffWorkflowSlide,
   kickoffWorkflowStory,
 } from "../kickoff-view";
 
@@ -225,6 +229,129 @@ describe("kickoffWorkflowFallback — a presentation-only hypothesis from existi
       during: "Running Daily Water Haul Ticket on the job.",
       after: null,
     });
+  });
+});
+
+describe("kickoffFocusGroups — NOW dominant, NEXT/LATER secondary, capped not invented", () => {
+  it("puts a single item in NOW and leaves NEXT/LATER empty", () => {
+    expect(kickoffFocusGroups(["Replace the paper ticket."])).toEqual({
+      now: ["Replace the paper ticket."],
+      next: [],
+      later: [],
+    });
+  });
+
+  it("groups items two and three into NEXT, not a fourth NOW/NEXT/LATER column", () => {
+    expect(kickoffFocusGroups(["A", "B", "C"])).toEqual({
+      now: ["A"],
+      next: ["B", "C"],
+      later: [],
+    });
+  });
+
+  it("caps the display at six items total rather than overflowing the slide or inventing structure", () => {
+    const items = ["A", "B", "C", "D", "E", "F", "G", "H"];
+    const groups = kickoffFocusGroups(items);
+    expect(groups).toEqual({
+      now: ["A"],
+      next: ["B", "C"],
+      later: ["D", "E", "F"],
+    });
+    // G and H are silently capped, not renamed into a fourth bucket.
+    expect([...groups.now, ...groups.next, ...groups.later]).toHaveLength(6);
+  });
+});
+
+describe("kickoffConcise — shortens without inventing or cutting mid-word", () => {
+  it("leaves a short string untouched", () => {
+    expect(kickoffConcise("Running the job.")).toBe("Running the job.");
+  });
+
+  it("leaves null as null", () => {
+    expect(kickoffConcise(null)).toBeNull();
+  });
+
+  it("trims a long string at a word boundary, never mid-word", () => {
+    const long =
+      "Three crews fill in a paper haul ticket on the truck and the office retypes them on Fridays and chases the missing signatures every single week without fail.";
+    const result = kickoffConcise(long, 60);
+    expect(result).not.toBeNull();
+    expect(result!.length).toBeLessThanOrEqual(61);
+    expect(result!.endsWith("…")).toBe(true);
+    expect(long.startsWith(result!.slice(0, -1))).toBe(true);
+  });
+});
+
+describe("kickoffWorkflowSlide — precedence plus the concise slide limit, in one call", () => {
+  it("a saved workflow_story wins over the structured fallback", () => {
+    expect(
+      kickoffWorkflowSlide({
+        workflowStory: {
+          before: "Saved: a dispatch ticket from the office.",
+          during: null,
+          after: null,
+        },
+        currentProcess: "Fallback: paper ticket from the truck.",
+        firstFormName: "Daily Water Haul Ticket",
+        businessOutcome: "Fallback outcome.",
+      }),
+    ).toEqual({
+      before: "Saved: a dispatch ticket from the office.",
+      during: null,
+      after: null,
+    });
+  });
+
+  it("falls back to the structured hypothesis when nothing is saved", () => {
+    expect(
+      kickoffWorkflowSlide({
+        workflowStory: null,
+        currentProcess: "Paper ticket from the truck, retyped on Fridays.",
+        firstFormName: "Daily Water Haul Ticket",
+        businessOutcome: "Invoices go out the same day.",
+      }),
+    ).toEqual({
+      before: "Paper ticket from the truck, retyped on Fridays.",
+      during: "Running Daily Water Haul Ticket on the job.",
+      after: "Invoices go out the same day.",
+    });
+  });
+
+  it("is null when there is no saved story and no structured evidence either", () => {
+    expect(
+      kickoffWorkflowSlide({
+        workflowStory: null,
+        currentProcess: null,
+        firstFormName: null,
+        businessOutcome: null,
+      }),
+    ).toBeNull();
+  });
+
+  it("trims a long saved leg to a safe slide length rather than dumping it verbatim", () => {
+    const longProcess =
+      "Three crews fill in a paper haul ticket on the truck and the office retypes them on Fridays and chases the missing signatures every single week without fail, which is exhausting for everyone involved.";
+    const result = kickoffWorkflowSlide({
+      workflowStory: { before: longProcess, during: null, after: null },
+      currentProcess: null,
+      firstFormName: null,
+      businessOutcome: null,
+    });
+    expect(result!.before!.length).toBeLessThan(longProcess.length);
+  });
+});
+
+describe("kickoffNextStepText — testing-oriented, never administrative", () => {
+  it("uses the customer's own first-form name when there is one", () => {
+    expect(kickoffNextStepText("Daily Water Haul Ticket")).toBe(
+      "Put it to work. Test Daily Water Haul Ticket on a real job and see what needs to change.",
+    );
+  });
+
+  it("falls back safely to a generic workflow reference when there is no form name", () => {
+    expect(kickoffNextStepText(null)).toBe(
+      "Put it to work. Test your GoCanvas workflow on a real job and see what needs to change.",
+    );
   });
 });
 
