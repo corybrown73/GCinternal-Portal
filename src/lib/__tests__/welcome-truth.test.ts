@@ -49,6 +49,7 @@ describe("implementationFocusView", () => {
       items: [],
       validatedAt: null,
       validatedBy: null,
+      aiFilled: false,
     });
   });
 

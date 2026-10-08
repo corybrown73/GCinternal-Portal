@@ -1113,10 +1113,10 @@ export async function uploadDealContract(
 ): Promise<import("./intake-answers").IntakeAnswers> {
   await requireSalesEditor(userId);
   if (args.dataBase64.length > SOW_MAX_BASE64) throw new Error("That file is over 25MB");
-  const { readIntake, intakeAnswersSchema } = await import("./intake-answers");
+  const { readIntake } = await import("./intake-answers");
   const { data: before } = await db()
     .from("portal_accounts")
-    .select("intake")
+    .select("id")
     .eq("id", args.dealId)
     .maybeSingle();
   if (!before) throw new Error("Deal not found");
@@ -1128,17 +1128,19 @@ export async function uploadDealContract(
     .storage.from("attachments")
     .upload(path, binary, { contentType, upsert: false });
   if (upErr) throw new Error(`Could not upload the contract: ${upErr.message}`);
-  const current = readIntake((before as any).intake);
-  const next = intakeAnswersSchema.parse({
-    ...current,
+  // Merged, never the whole intake written back: the upload took seconds,
+  // and the background reading (or a person) may have written the intake
+  // meanwhile — a SOW's services, the reading's own status.
+  const { mergeIntake } = await import("./server/intake-merge");
+  await mergeIntake(args.dealId, {
     contract: { path, name: args.fileName, uploaded_at: new Date().toISOString() },
-    updated_at: new Date().toISOString(),
   });
-  const { error } = await db()
+  const { data: after } = await db()
     .from("portal_accounts")
-    .update({ intake: next, updated_at: new Date().toISOString() })
-    .eq("id", args.dealId);
-  if (error) throw new Error(`Could not record the contract: ${error.message}`);
+    .select("intake")
+    .eq("id", args.dealId)
+    .maybeSingle();
+  const next = readIntake((after as any)?.intake);
   await audit({
     actor_type: "user",
     actor_id: userId,
@@ -1173,41 +1175,13 @@ export async function deleteGongReport(userId: string, reportId: string): Promis
 /** Who asked for the brief: a person, or the background reading (`label` names it). */
 export type BriefActor = { kind: "user"; userId: string } | { kind: "system"; label: string };
 
-export type DealBriefResult = {
-  id: string;
-  status: string;
-  generator: "llm" | "template" | null;
-  error: string | null;
-  filled: string[];
-};
-
-/** A person's brief: the role check, then the same pipeline the job runs. */
-export async function generateDealBrief(userId: string, dealId: string): Promise<DealBriefResult> {
-  await requireInternal(userId);
-  return generateDealBriefAs({ kind: "user", userId }, dealId);
-}
-
-/**
- * The brief, the journey move, the intake prefill, the help picks and the
- * header fill, as whoever asked: a person, or the AI job with nobody behind
- * it. The role check is the caller's — the job has no user to check.
+/*
+ * There is no inline "generate the brief" any more: the three passes
+ * (core, plan, verify) each take up to a model call's worth of time, and
+ * three in one web request would outlive the function. A person's "Read
+ * again" queues the background job (prepareDeal, force), which runs them
+ * as steps and applies the result through `applyBriefToDeal` below.
  */
-export async function generateDealBriefAs(
-  actor: BriefActor,
-  dealId: string,
-): Promise<DealBriefResult> {
-  const userId = actor.kind === "user" ? actor.userId : null;
-  const { generateBrief } = await import("./server/brief/generate");
-  const brief = await generateBrief(dealId, userId);
-  const filled = await applyBriefToDeal(actor, dealId, brief);
-  return {
-    id: brief.id,
-    status: brief.status,
-    generator: brief.generator,
-    error: brief.error,
-    filled,
-  };
-}
 
 /** What `applyBriefToDeal` needs of a brief row. */
 export type BriefToApply = Pick<
@@ -2322,6 +2296,15 @@ export async function saveDealIntake(
   userId: string,
   dealId: string,
   patch: Record<string, unknown>,
+  opts: {
+    /**
+     * The Implementation Focus written as a fresh proposal ("Generate",
+     * "Refresh"): the list is the proposal's own again, not the person's,
+     * so the reading may still add its items to it. An edit, a removal or
+     * an addition on the panel is a person's and claims the list.
+     */
+    proposal?: boolean | undefined;
+  } = {},
 ): Promise<import("./intake-answers").IntakeAnswers> {
   await requireSalesEditor(userId);
   const { readIntake, intakeAnswersSchema } = await import("./intake-answers");
@@ -2345,7 +2328,15 @@ export async function saveDealIntake(
   // A person's answer is theirs: the AI reading stops refreshing it.
   {
     const { claimByPerson } = await import("./intake-answers");
-    Object.assign(merged, claimByPerson(current, Object.keys(patch)));
+    const claimed = opts.proposal
+      ? Object.keys(patch).filter((k) => k !== "implementation_focus")
+      : Object.keys(patch);
+    const own = claimByPerson(current, claimed);
+    if (opts.proposal && "implementation_focus" in patch) {
+      own.person_set = own.person_set.filter((f) => f !== "implementation_focus");
+      own.ai_filled = own.ai_filled.filter((f) => f !== "implementation_focus");
+    }
+    Object.assign(merged, own);
   }
   // The field tester lives on the plan, which is saved whole on every
   // knob: only a changed name is a person's word, and from then on the

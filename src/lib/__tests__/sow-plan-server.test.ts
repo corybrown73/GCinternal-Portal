@@ -109,4 +109,34 @@ describe("proposePlanFromSow", () => {
     expect(next.proposal.summary).toBe("read again");
     expect(h.ai.runStructured).toHaveBeenCalledTimes(1);
   });
+
+  it("sends the contract as a second document when one is on file, and reads both together", async () => {
+    const CONTRACT = new TextEncoder().encode("%PDF-1.7\n% the contract\n%%EOF\n");
+    const path = `deals/${DEAL}/contract/c.pdf`;
+    fake.objects.set(`attachments/${path}`, CONTRACT);
+    fake.store["portal_accounts"]![0]!.intake = {
+      contract: { path, name: "c.pdf", uploaded_at: "2026-10-01" },
+    };
+    await proposePlanFromSow("u1", DEAL, { force: true });
+    const content = h.ai.runStructured.mock.calls[0]![0].content as Array<Record<string, any>>;
+    expect(content).toHaveLength(5);
+    expect(content[0]!["text"]).toMatch(/DOCUMENT 1 — the Statement of Work \(sow\.pdf\)/);
+    expect(content[1]!["type"]).toBe("document");
+    expect(content[2]!["text"]).toMatch(/DOCUMENT 2 — the signed contract \(c\.pdf\)/);
+    expect(content[3]!["type"]).toBe("document");
+    expect(content[3]!["source"]["data"]).toBe(Buffer.from(CONTRACT).toString("base64"));
+    expect(content[4]!["text"]).toMatch(/together/);
+  });
+
+  it("does not attach the contract twice when it is the same file as the SOW", async () => {
+    const path = `deals/${DEAL}/contract/same.pdf`;
+    fake.objects.set(`attachments/${path}`, PDF);
+    fake.store["portal_accounts"]![0]!.intake = {
+      contract: { path, name: "same.pdf", uploaded_at: "2026-10-01" },
+    };
+    await proposePlanFromSow("u1", DEAL, { force: true });
+    const content = h.ai.runStructured.mock.calls[0]![0].content as Array<Record<string, any>>;
+    expect(content).toHaveLength(3);
+    expect(content.some((b) => /DOCUMENT 2/.test(String(b["text"] ?? "")))).toBe(false);
+  });
 });

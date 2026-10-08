@@ -23,7 +23,6 @@ import { DEAL_TYPES } from "@/lib/stage-flow";
 import { cn } from "@/lib/utils";
 import { addDeal, addReport, importDeals, moveDealStage, uploadSow } from "@/lib/presale.functions";
 import { parseWonGate } from "@/lib/won-gate";
-import { prepareDealFn } from "@/lib/stage-flow.functions";
 import { listCustomerOptions } from "@/lib/hub.functions";
 import { startServicesDealFn } from "@/lib/deal-pulse.functions";
 import { dealStageLabel } from "@/lib/deal-stage";
@@ -85,7 +84,6 @@ export function NewDealDialog() {
   const moveStage = useServerFn(moveDealStage);
   const report = useServerFn(addReport);
   const upload = useServerFn(uploadSow);
-  const prepare = useServerFn(prepareDealFn);
   const startServices = useServerFn(startServicesDealFn);
   // Who already exists, for the picker and for the "this is already here"
   // hint under the name. Loaded once the dialog opens.
@@ -206,13 +204,10 @@ export function NewDealDialog() {
       return result;
     },
     onSuccess: (result) => {
-      // The reading is started, not waited for: the brief from the calls and
-      // the services from the SOW take the best part of a minute, and the
-      // dialog used to sit on a spinner for all of it. The deal page shows
-      // it running, and the SOW's contact and services land with it.
-      if (notes.trim() || sow) {
-        void prepare({ data: { dealId: result.account.id } }).catch(() => undefined);
-      }
+      // The reading is the server's: the notes and the SOW saved above each
+      // queued it (flag permitting), and the deal page shows it running.
+      // Nothing is started from here, so the admin's auto-read switch means
+      // what it says.
       queryClient.invalidateQueries({ queryKey: ["pipeline"] });
       setOpen(false);
       reset();

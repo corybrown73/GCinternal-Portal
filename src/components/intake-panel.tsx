@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { ArrowUp, Check, ExternalLink, ListPlus, Upload, X } from "lucide-react";
 
-import { AiSource, useStartReading } from "@/components/fill-from-sources";
+import { AiSource } from "@/components/fill-from-sources";
 import { TemplateCard } from "@/components/template-card";
 import { suggestFormTemplatesFn } from "@/lib/form-templates.functions";
 import type { DealData } from "@/lib/deal-query";
@@ -395,7 +395,6 @@ function ExistingQuestions({
 export function NotesIn({ deal, editable }: { deal: DealData; editable: boolean }) {
   const qc = useQueryClient();
   const create = useServerFn(addReport);
-  const reading = useStartReading(deal.account.id);
   const [content, setContent] = useState("");
   const [title, setTitle] = useState("");
   const [callDate, setCallDate] = useState("");
@@ -419,11 +418,12 @@ export function NotesIn({ deal, editable }: { deal: DealData; editable: boolean 
       setContent("");
       setTitle("");
       setCallDate("");
+      // The reading is the server's to start: addGongReport queues it when
+      // the auto-read flag allows, and the record already says "queued" by
+      // the time this refetch lands. A second request from here would start
+      // one with the flag off, which the admin switch promises it does not.
       void qc.invalidateQueries({ queryKey: ["deal", deal.account.id] });
       void qc.invalidateQueries({ queryKey: ["welcome", deal.account.id] });
-      // Every new Gong brief is read on its own: the flow, the forms, the
-      // process and the plan refresh, and a person's own answers stand.
-      reading.mutate();
     },
     onError: (e) => setError((e as Error).message),
   });
@@ -563,7 +563,6 @@ function PdfUpload({
   const sow = useServerFn(uploadSow);
   const contract = useServerFn(uploadContract);
   const link = useServerFn(getIntakeFormLink);
-  const reading = useStartReading(dealId);
   const inputRef = useRef<HTMLInputElement>(null);
   const [error, setError] = useState<string | null>(null);
   const upload = useMutation({
@@ -586,9 +585,10 @@ function PdfUpload({
     },
     onMutate: () => setError(null),
     onSuccess: () => {
+      // The upload queued the reading server-side (flag permitting); the
+      // record says so on this refetch.
       void qc.invalidateQueries({ queryKey: ["deal", dealId] });
-      // A new SOW is read on its own, with the calls: services onto the plan.
-      if (kind === "sow") reading.mutate();
+      void qc.invalidateQueries({ queryKey: ["welcome", dealId] });
     },
     onError: (e) => setError((e as Error).message),
   });

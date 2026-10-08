@@ -47,7 +47,7 @@ export async function loadTranscriptWork(
   implementationId: string,
   now: Date = new Date(),
 ): Promise<TranscriptWork> {
-  const [{ data: jobs }, { data: rows }] = await Promise.all([
+  const [{ data: jobs }, rows] = await Promise.all([
     db()
       .from("portal_ai_jobs")
       .select("subject_id,status,step,result,last_error,created_at")
@@ -55,13 +55,14 @@ export async function loadTranscriptWork(
       .eq("implementation_id", implementationId)
       .gte("created_at", new Date(now.getTime() - JOB_WINDOW_MS).toISOString())
       .order("created_at", { ascending: false }),
-    db()
-      .from("evidence_proposals")
-      .select("*")
-      .eq("implementation_id", implementationId)
-      .order("created_at", { ascending: false }),
+    allProposalRows<Record<string, any> & { id: string }>((q) =>
+      q.select("*").eq("implementation_id", implementationId),
+    ),
   ]);
-  const list = (rows ?? []) as Array<Record<string, any>>;
+  // Newest first, as the panel lists them.
+  const list = [...rows].sort((a, b) =>
+    String(b["created_at"] ?? "").localeCompare(String(a["created_at"] ?? "")),
+  );
 
   const evidenceIds = [...new Set(list.map((r) => r["evidence_id"]).filter(Boolean))] as string[];
   const dupIds = (type: string) =>
@@ -175,19 +176,47 @@ export async function loadTranscriptWork(
   return { jobs: jobLines, proposals };
 }
 
+/** PostgREST answers at most this many rows per query unless told otherwise; the reads here page past it. */
+export const PROPOSAL_PAGE = 1000;
+
+/**
+ * Every row a query matches, paged by id past the server's row cap. A
+ * count over the whole portfolio, or an implementation's whole list, must
+ * not stop quietly at the first thousand.
+ */
+async function allProposalRows<T extends { id: string }>(
+  filter: (q: any) => any,
+  pageSize = PROPOSAL_PAGE,
+): Promise<T[]> {
+  const rows: T[] = [];
+  let after: string | null = null;
+  for (;;) {
+    let q = filter(db().from("evidence_proposals"))
+      .order("id", { ascending: true })
+      .limit(pageSize);
+    if (after !== null) q = q.gt("id", after);
+    const { data, error } = await q;
+    if (error) throw new Error(`Could not read the proposals: ${error.message}`);
+    const page = (data ?? []) as T[];
+    rows.push(...page);
+    if (page.length < pageSize) return rows;
+    after = String(page[page.length - 1]!.id);
+  }
+}
+
 /** How many transcript proposals await a decision, per implementation. */
 export async function pendingProposalCounts(
   implementationIds: ReadonlyArray<string>,
+  pageSize = PROPOSAL_PAGE,
 ): Promise<Map<string, number>> {
   const out = new Map<string, number>();
   const ids = implementationIds.filter(Boolean);
   if (!ids.length) return out;
-  const { data } = await db()
-    .from("evidence_proposals")
-    .select("implementation_id")
-    .eq("status", "pending")
-    .in("implementation_id", ids);
-  for (const r of (data ?? []) as Array<{ implementation_id: string }>) {
+  const rows = await allProposalRows<{ id: string; implementation_id: string }>(
+    (q) => q.select("id,implementation_id").eq("status", "pending").in("implementation_id", ids),
+    pageSize,
+  );
+  for (const r of rows) {
     out.set(r.implementation_id, (out.get(r.implementation_id) ?? 0) + 1);
   }
   return out;

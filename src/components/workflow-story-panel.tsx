@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 
@@ -39,13 +39,28 @@ export function WorkflowStoryPanel({ dealId, intake }: { dealId: string; intake:
     void qc.invalidateQueries({ queryKey: ["welcome", dealId] });
   };
 
+  // The story is saved whole. `story` is the server's copy and lags a save
+  // by a round trip, so a second beat blurred before the first has landed
+  // must build on what was just sent, not on the stale copy — otherwise
+  // the first beat's words come back as they were. The inputs stay
+  // enabled throughout: tabbing from one beat to the next must not drop
+  // focus and keystrokes.
+  const latest = useRef<WorkflowStory | null>(null);
   const write = useMutation({
     mutationFn: (next: WorkflowStory) =>
       save({ data: { dealId, patch: { workflow_story: next } } as never }),
     onMutate: () => setError(null),
     onSuccess: invalidate,
-    onError: (e) => setError(e instanceof Error ? e.message : "Could not save."),
+    onError: (e) => {
+      latest.current = null;
+      setError(e instanceof Error ? e.message : "Could not save.");
+    },
   });
+  if (!write.isPending && latest.current && !write.isError) {
+    // The refetch landed: the server's copy is current again.
+    const served = JSON.stringify({ ...story, validated_at: null, validated_by: null });
+    if (served === JSON.stringify(latest.current)) latest.current = null;
+  }
   const confirmMutation = useMutation({
     mutationFn: () => confirmFn({ data: { dealId } }),
     onMutate: () => setError(null),
@@ -81,22 +96,30 @@ export function WorkflowStoryPanel({ dealId, intake }: { dealId: string; intake:
           {LEGS.map((leg) => (
             <label key={leg.key} className="space-y-1 text-[12px]">
               <span className="font-medium">{leg.label}</span>
+              {/* Keyed on the server's words for this beat: when the reading
+                  drafts it, or another person retypes it, the box remounts
+                  with the new text instead of showing what it had at mount.
+                  Only that beat remounts, so a sibling mid-edit is untouched. */}
               <textarea
+                key={`${leg.key}:${story[leg.key] ?? ""}`}
                 className="min-h-[72px] w-full rounded-sm border border-border bg-background px-1.5 py-1 text-[12px] outline-none focus:ring-1 focus:ring-ring disabled:opacity-70"
                 placeholder={leg.hint}
                 defaultValue={story[leg.key] ?? ""}
-                disabled={!editable || write.isPending}
+                disabled={!editable}
                 onBlur={(e) => {
                   const next = e.target.value.trim() || null;
-                  if (next === story[leg.key]) return;
+                  const base = latest.current ?? story;
+                  if (next === base[leg.key]) return;
                   // A confirmation names the words it confirmed: a beat
                   // retyped after it is a new story, to be confirmed again.
-                  write.mutate({
-                    ...story,
+                  const whole: WorkflowStory = {
+                    ...base,
                     [leg.key]: next,
                     validated_at: null,
                     validated_by: null,
-                  });
+                  };
+                  latest.current = whole;
+                  write.mutate(whole);
                 }}
               />
             </label>

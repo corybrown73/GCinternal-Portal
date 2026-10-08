@@ -406,9 +406,17 @@ export function prefillWelcomeFromBrief(
     filled.push("the workflow story");
   }
 
+  // What this prefill owns, on top of what the intake already marks as the
+  // reading's; written once at the end, whichever blocks landed.
+  const aiFilled = new Set(intake.ai_filled);
+
   const items = focusItemsFromBrief(intake, w.focus_items ?? []);
   if (items && JSON.stringify(items) !== JSON.stringify(intake.implementation_focus.items)) {
     patch.implementation_focus = { items, validated_at: null, validated_by: null };
+    // Marked as the reading's, so Kickoff View keeps its flagged items off
+    // the slide until a person has looked, and a person's save (which
+    // claims the key) makes the list theirs.
+    aiFilled.add("implementation_focus");
     const added = items.filter((i) => i.id.startsWith("focus-ai-")).length;
     filled.push(`${added} focus item${added === 1 ? "" : "s"}`);
   }
@@ -420,7 +428,7 @@ export function prefillWelcomeFromBrief(
       .join(" · ")
       .slice(0, 120);
     timeline = { field_tester: name };
-    patch.ai_filled = [...new Set([...intake.ai_filled, "field_tester"])];
+    aiFilled.add("field_tester");
     patch.ai_sources = {
       ...intake.ai_sources,
       field_tester: { quote: (tester.quote || name).slice(0, 400), source: "the calls" },
@@ -428,5 +436,6 @@ export function prefillWelcomeFromBrief(
     filled.push("the field tester");
   }
 
+  if (aiFilled.size !== intake.ai_filled.length) patch.ai_filled = [...aiFilled];
   return { patch, timeline, filled };
 }

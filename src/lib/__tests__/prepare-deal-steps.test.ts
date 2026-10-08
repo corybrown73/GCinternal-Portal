@@ -65,7 +65,10 @@ import type { AiJobRow } from "../server/ai/jobs";
 
 const DEAL = "22222222-2222-4222-8222-222222222222";
 const PDF = new TextEncoder().encode("%PDF-1.7\n1 0 obj << /Type /Catalog >> endobj\n%%EOF\n");
+const CONTRACT = new TextEncoder().encode("%PDF-1.7\n% the signed contract: 40 seats\n%%EOF\n");
 const SOW_PATH = `deals/${DEAL}/sow.pdf`;
+const CONTRACT_PATH = `deals/${DEAL}/contract/contract.pdf`;
+const CONTRACT_ON_FILE = { path: CONTRACT_PATH, name: "contract.pdf", uploaded_at: "2026-10-01" };
 
 const job = (over: Partial<AiJobRow> = {}): AiJobRow =>
   ({
@@ -233,7 +236,12 @@ let fake: ReturnType<typeof createFakeSupabase>;
 const account = () => fake.store["portal_accounts"]![0]!;
 
 beforeEach(() => {
-  fake = createFakeSupabase(baseRows, { objects: { [`attachments/${SOW_PATH}`]: PDF } });
+  fake = createFakeSupabase(baseRows, {
+    objects: {
+      [`attachments/${SOW_PATH}`]: PDF,
+      [`attachments/${CONTRACT_PATH}`]: CONTRACT,
+    },
+  });
   h.supabase.client = fake.client;
   h.brief.generateDealBriefAs.mockReset();
   h.brief.applyBriefToDeal.mockReset();
@@ -393,6 +401,45 @@ describe("sources", () => {
     expect(again.skipTo).toBeUndefined();
     expect(again.result).toMatchObject({ nothing_new: false });
   });
+
+  it("reads again after a job that ended done with a reading that failed (the key was missing, the API was down)", async () => {
+    const first = await sources(job(), ctx);
+    // The branches failed, nothing was filled: the job row is done, the
+    // reading on it is not.
+    fake.store["portal_ai_jobs"]!.push({
+      id: "done-failed",
+      kind: "prepare_deal",
+      deal_id: DEAL,
+      status: "done",
+      source_hash: first.sourceHash,
+      result: { status: "failed", filled: [], problems: ["AI is not configured here"] },
+      created_at: "2026-10-07T00:00:00Z",
+    });
+    const again = await sources(job({ id: "job-2" }), ctx);
+    expect(again.skipTo).toBeUndefined();
+    expect(again.result).toMatchObject({ nothing_new: false });
+  });
+
+  it("reports the contract on file beside the SOW", async () => {
+    account().intake.contract = CONTRACT_ON_FILE;
+    const out = await sources(job(), ctx);
+    expect(out.result).toMatchObject({ sources: { sow: "ok", contract: "ok" } });
+    expect(out.sourceHash).toBe(
+      sourceHashOf({
+        sow: { sha256: sha256Hex(PDF) },
+        contract: { sha256: sha256Hex(CONTRACT) },
+        reports: [
+          {
+            id: "r1",
+            content_md: baseRows["portal_gong_reports"]![0]!.content_md,
+            created_at: baseRows["portal_gong_reports"]![0]!.created_at,
+          },
+        ],
+        notes: [],
+        summary: null,
+      }),
+    );
+  });
 });
 
 describe("sow", () => {
@@ -441,13 +488,18 @@ describe("sow", () => {
   });
 
   it("reads a new document once, with the contract beside it, and keeps the reading", async () => {
+    account().intake.contract = CONTRACT_ON_FILE;
     h.sow.readSowDocument.mockResolvedValue({ proposal, usage, model: "claude-opus-5-5" });
     const out = await sow(job({ step: "sow" }), ctx);
     expect(h.sow.readSowDocument).toHaveBeenCalledWith(
       DEAL,
       expect.objectContaining({ sha256: sha256Hex(PDF), kind: "pdf" }),
-      { jobId: "job-1", contract: null },
+      {
+        jobId: "job-1",
+        contract: expect.objectContaining({ sha256: sha256Hex(CONTRACT), name: "contract.pdf" }),
+      },
     );
+    expect(out.problems).toBeUndefined();
     expect(out.usage).toEqual(usage);
     const kept = fake.store["portal_ai_readings"]!;
     expect(kept).toHaveLength(1);
@@ -485,6 +537,67 @@ describe("sow", () => {
     const again = await sow(job({ step: "sow", id: "job-2" }), ctx);
     expect(h.sow.readSowDocument).not.toHaveBeenCalled();
     expect(again.result).toMatchObject({ sow_reused: true });
+  });
+
+  it("reads a new SOW without a contract when there is none on file", async () => {
+    h.sow.readSowDocument.mockResolvedValue({ proposal, usage, model: "claude-opus-5-5" });
+    await sow(job({ step: "sow" }), ctx);
+    expect(h.sow.readSowDocument).toHaveBeenCalledWith(DEAL, expect.anything(), {
+      jobId: "job-1",
+      contract: null,
+    });
+  });
+
+  it("reads the contract itself on a deal with no SOW, and keeps that reading under the contract's path", async () => {
+    account().sow_document_path = null;
+    account().intake.contract = CONTRACT_ON_FILE;
+    h.sow.readSowDocument.mockResolvedValue({ proposal, usage, model: "claude-opus-5-5" });
+    const out = await sow(job({ step: "sow" }), ctx);
+    expect(out.result?.["branches"]).toMatchObject({ sow: { status: "ok" } });
+    expect(h.sow.readSowDocument).toHaveBeenCalledWith(
+      DEAL,
+      expect.objectContaining({ sha256: sha256Hex(CONTRACT), name: "contract.pdf" }),
+      { jobId: "job-1", contract: null },
+    );
+    expect(fake.store["portal_ai_readings"]![0]).toMatchObject({
+      source_hash: sha256Hex(CONTRACT),
+      source_path: CONTRACT_PATH,
+    });
+  });
+
+  it("reads the SOW alone and says so when the contract beside it cannot be read", async () => {
+    // Too large with the SOW (fitDocumentsToRequest, tested on its own), a
+    // file that is not a document: either way the SOW is read and the
+    // contract's problem is said, not swallowed.
+    account().intake.contract = CONTRACT_ON_FILE;
+    fake.objects.set(
+      `attachments/${CONTRACT_PATH}`,
+      new Uint8Array([0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07]),
+    );
+    h.sow.readSowDocument.mockResolvedValue({ proposal, usage, model: "claude-opus-5-5" });
+    const out = await sow(job({ step: "sow" }), ctx);
+    expect(h.sow.readSowDocument).toHaveBeenCalledWith(DEAL, expect.anything(), {
+      jobId: "job-1",
+      contract: null,
+    });
+    expect(out.result?.["branches"]).toMatchObject({ sow: { status: "ok" } });
+    expect(out.problems?.[0]).toMatch(
+      /The contract was not read: contract\.pdf is .*cannot be read/,
+    );
+    expect((out.result?.["branches"] as any).sow.detail).toMatch(/The contract was not read/);
+  });
+
+  it("serves the reading a forced job already wrote when its step is retried", async () => {
+    h.sow.readSowDocument.mockResolvedValue({ proposal, usage, model: "m2" });
+    fake.store["portal_ai_jobs"]!.push({ id: "job-1", result: {} });
+    await sow(job({ step: "sow", force: true }), ctx);
+    expect(h.sow.readSowDocument).toHaveBeenCalledTimes(1);
+    // The job carries the mark before the merges, so a retry after a failed
+    // merge or advance write finds the row this job wrote.
+    expect(fake.store["portal_ai_jobs"]![0]!.result).toMatchObject({ sow_read: true });
+    const retried = await sow(job({ step: "sow", force: true, result: { sow_read: true } }), ctx);
+    expect(h.sow.readSowDocument).toHaveBeenCalledTimes(1);
+    expect(retried.result).toMatchObject({ sow_reused: true });
   });
 
   it("puts the SOW's forms on the intake only when no call named any", async () => {
@@ -582,7 +695,10 @@ describe("the brief passes", () => {
     expect(calls[1].system).toBe(calls[0].system);
     expect(calls[2].system).toBe(calls[0].system);
     const last = prefixes[0][prefixes[0].length - 1];
-    expect(last.cache_control).toEqual({ type: "ephemeral", ttl: "1h" });
+    // No cache marker on the prefix: the three passes send three output
+    // schemas, and the API caches nothing across a schema change, so a
+    // marker here would be paid for and never read.
+    expect(prefixes[0].some((b: any) => b.cache_control)).toBe(false);
     expect(last.text).toContain("Every crew fills a paper daily report");
     expect(prefixes[0][0]).toMatchObject({
       type: "text",

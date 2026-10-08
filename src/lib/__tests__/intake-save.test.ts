@@ -86,6 +86,13 @@ describe("saving an intake patch", () => {
     ]);
   });
 
+  it("a person's save of the Implementation Focus claims the list from the reading", () => {
+    const current = readIntake({ ai_filled: ["implementation_focus", "field_users"] });
+    const own = claimByPerson(current, ["implementation_focus"]);
+    expect(own.person_set).toEqual(["implementation_focus"]);
+    expect(own.ai_filled).toEqual(["field_users"]);
+  });
+
   it("a Field Fusion tick lands, and the other tick and the note stay", () => {
     const current = readIntake({
       path: "field_fusion",

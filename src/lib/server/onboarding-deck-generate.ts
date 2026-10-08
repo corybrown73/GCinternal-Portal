@@ -61,6 +61,15 @@ export async function buildOnboardingDeckInput(dealId: string): Promise<Onboardi
   );
 
   let firstForm: OnboardingDeckInput["firstForm"] = null;
+  // A person's unless the reading wrote the list: marked `ai_filled`, or —
+  // from before ownership was tracked — every id the reading's ("syn-",
+  // "sow-") with nobody having claimed the forms.
+  let firstFormSource: OnboardingDeckInput["firstFormSource"] = null;
+  const formsByAi =
+    intake.ai_filled.includes("wanted_forms") ||
+    (intake.wanted_forms.length > 0 &&
+      intake.wanted_forms.every((f) => /^(syn|sow)-/.test(f.id)) &&
+      !intake.person_set.includes("wanted_forms"));
   let next: Array<{ name: string; description: string | null }> = [];
   const uploaded = intake.uploaded_forms[0];
   const wanted = formsOnly(intake).map((f) => {
@@ -79,6 +88,7 @@ export async function buildOnboardingDeckInput(dealId: string): Promise<Onboardi
       objective: wanted[0].description,
       source: wanted[0].source,
     };
+    firstFormSource = formsByAi ? "ai" : "person";
     const notWanted = (t: { name: string }) => !wanted.some((w) => w.name === t.name);
     next = [
       ...wanted.slice(1),
@@ -87,9 +97,11 @@ export async function buildOnboardingDeckInput(dealId: string): Promise<Onboardi
     ];
   } else if (uploaded) {
     firstForm = { name: displayName(uploaded.name), objective: null, source: "uploaded" };
+    firstFormSource = "person";
     next = [...chosen, ...shelf];
   } else if (chosen[0]) {
     firstForm = { name: chosen[0].name, objective: chosen[0].description, source: "library" };
+    firstFormSource = "person";
     next = [...chosen.slice(1), ...shelf];
   } else {
     next = shelf;
@@ -154,6 +166,7 @@ export async function buildOnboardingDeckInput(dealId: string): Promise<Onboardi
         : null,
     team,
     firstForm,
+    firstFormSource,
     nextUseCases,
     clientLogo: await clientLogo(deal.logo_path as string | null),
   };

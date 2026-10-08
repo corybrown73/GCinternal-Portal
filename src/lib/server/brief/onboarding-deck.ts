@@ -64,6 +64,8 @@ export type OnboardingDeckInput = {
     objective: string | null;
     source: "library" | "uploaded" | "typed" | "tbd";
   } | null;
+  /** Who named the first form: a person, or the AI reading of the SOW and the calls — a proposal until a person confirms it. */
+  firstFormSource?: "ai" | "person" | null;
   /** From the library, for their industry, when there is no integration. */
   nextUseCases: Array<{ name: string; objective: string | null }>;
   /** Data URI, when the customer's logo is on file. */
@@ -678,14 +680,18 @@ function slideFirstForm(pptx: Pptx, d: OnboardingDeckInput) {
     color: BRAND.fg2,
     fontFace: FONT,
   });
+  // A form the reading took from the SOW or the calls is a proposal: the
+  // slide never says the customer described it to us.
   const source =
-    d.firstForm?.source === "uploaded"
-      ? "Starting point: the form you already run today"
-      : d.firstForm?.source === "library"
-        ? "Starting point: from the GoCanvas form library"
-        : d.firstForm?.source === "typed"
-          ? "Starting point: the form you described to us"
-          : "Starting point: chosen together on the kickoff call";
+    d.firstForm && d.firstFormSource === "ai"
+      ? "Starting point: named in your statement of work and calls — we confirm it together"
+      : d.firstForm?.source === "uploaded"
+        ? "Starting point: the form you already run today"
+        : d.firstForm?.source === "library"
+          ? "Starting point: from the GoCanvas form library"
+          : d.firstForm?.source === "typed"
+            ? "Starting point: the form you described to us"
+            : "Starting point: chosen together on the kickoff call";
   s.addText(source.toUpperCase(), {
     x: PAD + 0.22,
     y: top + 2.15,

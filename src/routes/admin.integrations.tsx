@@ -206,8 +206,15 @@ const AI_PRICE_LABEL = "4 in, $20 out, $0.20 cache read, $5 cache write per mill
  * one action on a job; the effort select and the flag are the settings.
  */
 function AiTab() {
-  const { data: ai } = useSuspenseQuery(aiStatusQuery);
   const { data: jobs } = useSuspenseQuery(aiJobsQuery);
+  // The status panel follows the table while a job is live: its "Last job"
+  // line and the totals are the same rows, and a screen that shows a job
+  // done below and running above contradicts itself.
+  const live = jobs.some((j) => j.status === "queued" || j.status === "running");
+  const { data: ai } = useSuspenseQuery({
+    ...aiStatusQuery,
+    refetchInterval: live ? 15_000 : false,
+  });
   const queryClient = useQueryClient();
   const invalidate = () =>
     queryClient.invalidateQueries({ queryKey: ["admin", "integrations", "ai"] });
@@ -257,8 +264,11 @@ function AiTab() {
             </span>
           </p>
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-muted-foreground">Effort:</span>
+            <label htmlFor="ai-effort" className="text-muted-foreground">
+              Effort:
+            </label>
             <select
+              id="ai-effort"
               className={cn(inputClass, "w-auto")}
               value={ai.effort}
               disabled={effort.isPending}

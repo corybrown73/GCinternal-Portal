@@ -295,6 +295,9 @@ describe("prefillWelcomeFromBrief", () => {
     expect(patch.implementation_focus?.validated_at).toBeNull();
     expect(timeline).toEqual({ field_tester: "Ray Cole · Foreman" });
     expect(patch.ai_filled).toContain("field_tester");
+    // The list is the reading's until a person saves it: Kickoff View keeps
+    // its flagged items off the slide, and a person's save claims it.
+    expect(patch.ai_filled).toContain("implementation_focus");
     expect(patch.ai_sources?.["field_tester"]).toEqual({
       quote: "Ray will run it on his jobs",
       source: "the calls",
@@ -316,6 +319,24 @@ describe("prefillWelcomeFromBrief", () => {
       filled: [],
     });
     expect(prefillWelcomeFromBrief(readIntake({}), {})).toEqual({
+      patch: {},
+      timeline: null,
+      filled: [],
+    });
+  });
+
+  it("leaves a list a person reworded or trimmed alone, though its ids are still the proposal's", () => {
+    // The panel's edit and remove keep the "focus-" ids; the save that made
+    // them a person's put the key in person_set.
+    const edited = readIntake({
+      person_set: ["implementation_focus"],
+      implementation_focus: {
+        items: [{ id: "focus-1", text: "Reworded by the TIS", status: "proposed", sources: [] }],
+      },
+      timeline: { field_tester: "Lee" },
+      workflow_story: { before: "Their words", during: null, after: null },
+    });
+    expect(prefillWelcomeFromBrief(edited, { welcome })).toEqual({
       patch: {},
       timeline: null,
       filled: [],

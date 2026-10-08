@@ -306,6 +306,17 @@ describe("analyzeTranscript", () => {
         status: "applied",
       },
       {
+        // A reviewer has this one in hand: Apply claimed it and is creating
+        // the record. Still pending, but theirs.
+        id: "old-claimed",
+        implementation_id: IMPL,
+        attachment_id: FILE,
+        type: "risk",
+        status: "pending",
+        decided_by: "u-1",
+        decided_at: "2026-10-08T09:00:00Z",
+      },
+      {
         id: "other-file",
         implementation_id: IMPL,
         attachment_id: "other",
@@ -328,6 +339,7 @@ describe("analyzeTranscript", () => {
     const ids = fake.store["evidence_proposals"]!.map((p) => p.id);
     expect(ids).not.toContain("old-pending");
     expect(ids).toContain("old-applied");
+    expect(ids).toContain("old-claimed");
     expect(ids).toContain("other-file");
     expect(ids).toContain(r.proposalIds[0]);
   });

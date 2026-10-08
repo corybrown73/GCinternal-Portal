@@ -691,6 +691,14 @@ export const AI_OWNED_FIELDS = [
 export type AiOwnedField = (typeof AI_OWNED_FIELDS)[number];
 
 /**
+ * Blocks a person may take over from the reading besides the answers above:
+ * the Implementation Focus list, which the reading writes whole while it is
+ * still the proposal's own and must leave alone once a person edited it.
+ * Owned through `person_set` and `ai_filled` only; it has no quoted source.
+ */
+const PERSON_CLAIMABLE = [...AI_OWNED_FIELDS, "implementation_focus"] as const;
+
+/**
  * A person answered some of these: they are theirs from now on. The AI
  * stops refreshing them and their quoted source goes, because the answer
  * is no longer the model's.
@@ -699,7 +707,7 @@ export function claimByPerson(
   current: Pick<IntakeAnswers, "ai_filled" | "person_set" | "ai_sources">,
   patchKeys: readonly string[],
 ): Pick<IntakeAnswers, "ai_filled" | "person_set" | "ai_sources"> {
-  const touched = AI_OWNED_FIELDS.filter((f) => patchKeys.includes(f));
+  const touched = PERSON_CLAIMABLE.filter((f) => patchKeys.includes(f));
   // Only these three keys, ever: the caller spreads the result over its
   // patch, and a whole intake returned here would put every old answer back
   // on top of the new one.

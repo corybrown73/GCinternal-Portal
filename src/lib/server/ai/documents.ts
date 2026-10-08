@@ -35,6 +35,12 @@ export type PreparedDocument = {
 
 /** The API's per-image ceiling. */
 const MAX_IMAGE_BYTES = 5_000_000;
+/**
+ * What two documents may add up to on the wire, base64 included. The API
+ * refuses a request over 32 MB; this leaves room for the prompt, the
+ * calls and the kept reading beside the files.
+ */
+export const MAX_DOCUMENTS_ENCODED = 30_000_000;
 /** The API reads a PDF up to this many pages on a 1M-context model. */
 export const MAX_PDF_PAGES = 600;
 /** Characters of text handed over; past this the model is told what it did not see. */
@@ -113,6 +119,36 @@ export function unreadableDocument(name: string, problem: string): PreparedDocum
     mediaType: null,
     truncated: false,
     problem,
+  };
+}
+
+/** How many characters the document's block puts on the wire: its base64 or its text. */
+export function encodedSize(doc: PreparedDocument | null | undefined): number {
+  const block = doc?.block as { source?: { data?: unknown } | undefined } | null | undefined;
+  const data = block?.source?.data;
+  return typeof data === "string" ? data.length : 0;
+}
+
+/**
+ * Two documents that each fit on their own may not fit in one request:
+ * the per-file cap is 20 MB, the request's 32 MB, and both go in the same
+ * message. When the pair is over the line the contract is dropped, with
+ * a problem that names both files and the limit, so the SOW alone is
+ * still read and the person is told which file to shrink. A pair that
+ * fits, a lone document, or the same bytes under both names (never sent
+ * twice) come back as they were.
+ */
+export function fitDocumentsToRequest<
+  T extends { sow: PreparedDocument | null; contract: PreparedDocument | null },
+>(docs: T, limit = MAX_DOCUMENTS_ENCODED): T {
+  const { sow, contract } = docs;
+  if (!sow?.block || !contract?.block || sow.sha256 === contract.sha256) return docs;
+  const total = encodedSize(sow) + encodedSize(contract);
+  if (total <= limit) return docs;
+  const problem = `${contract.name} (${megabytes(contract.bytes.byteLength)}) and ${sow.name} (${megabytes(sow.bytes.byteLength)}) are too large to read together — about ${megabytes(Math.floor((limit * 3) / 4))} of documents can go in one reading. The SOW alone was read; export a smaller copy of the contract to have it read too.`;
+  return {
+    ...docs,
+    contract: { ...contract, kind: "unsupported", block: null, text: null, problem },
   };
 }
 

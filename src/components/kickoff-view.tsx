@@ -89,6 +89,15 @@ function KickoffCover({ view }: { view: WelcomeView }) {
             <T k="kickoff-cover.title-end">to life</T>
           </h1>
           <div className="wp-rule" />
+          {view.firstForm && view.firstFormSource === "ai" ? (
+            // Read from the SOW or the calls, never chosen by a person yet:
+            // the customer hears it as a question, not a decision.
+            <p className="wp-prepared">
+              <T k="kickoff-cover.form-confirm">
+                The form we read from your paperwork — we&apos;ll confirm it today
+              </T>
+            </p>
+          ) : null}
           <p className="wp-cover-name">
             <T k="kickoff-cover.name">{view.clientName}</T>
           </p>

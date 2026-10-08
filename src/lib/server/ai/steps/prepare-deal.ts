@@ -27,8 +27,8 @@ import type { AiJobRow, StepContext, StepFn, StepOutcome } from "../jobs";
  *
  * Each step reloads what it needs: they run in separate invocations, and a
  * retry must not depend on memory. Every write is a merge, so a person
- * typing meanwhile loses nothing. The three brief passes send one cached
- * prefix, so the sources are paid for once.
+ * typing meanwhile loses nothing. The three brief passes send one shared
+ * prefix, so they read the same material and agree with each other.
  */
 
 export const PREPARE_DEAL_STEPS = [
@@ -105,10 +105,18 @@ export const sources: StepFn = async (job) => {
     summary: Boolean(s.account.summary),
   };
   if (!job.force) {
-    // Only a reading that ran to the end counts as "already read": after a
-    // failed one the same sources are read again, so a retrigger retries.
+    // Only a reading that ran to the end AND read something counts as
+    // "already read". A job whose model calls failed still ends `done` —
+    // the branches fail, the job does not throw — with finalize's
+    // `result.status: "failed"`; after that one, as after a failed job,
+    // the same sources are read again, so a retrigger retries.
     const last = await lastFinishedJobForDeal(dealId);
-    if (last && last.status === "done" && last.source_hash === s.sourceHash) {
+    if (
+      last &&
+      last.status === "done" &&
+      last.result?.["status"] !== "failed" &&
+      last.source_hash === s.sourceHash
+    ) {
       // Nothing arrived since that reading: the record keeps saying what it
       // filled, and finalize only puts today's date on it.
       const before = s.intake.ai_reading;
@@ -171,11 +179,14 @@ export const sow: StepFn = async (job) => {
   // document's hash and served from the table the second time. A forced
   // job is a person asking for a fresh reading of what is on file — a
   // reading that came out wrong, or said the document was not a SOW —
-  // and that one replaces the kept row.
+  // and that one replaces the kept row. Once THIS job has written its
+  // fresh reading (`result.sow_read`), a retry of the step after a failed
+  // merge or advance write serves that row rather than reading again.
   let proposal: Reading | null = null;
   let usage: StepOutcome["usage"];
   let reused = false;
-  const kept = job.force ? null : await loadSowReading(dealId, { sha256: doc.sha256 });
+  const readAgain = job.force && job.result?.["sow_read"] !== true;
+  const kept = readAgain ? null : await loadSowReading(dealId, { sha256: doc.sha256 });
   if (kept && kept.source_hash === doc.sha256) {
     proposal = kept.reading;
     reused = true;
@@ -193,7 +204,7 @@ export const sow: StepFn = async (job) => {
       // and the term live.
       read = await readSowDocument(dealId, doc, {
         jobId: job.id,
-        contract: doc === docs.sow ? docs.contract : null,
+        contract: doc === docs.sow && docs.contract?.block ? docs.contract : null,
       });
     } catch (e) {
       const detail = errText(e);
@@ -201,7 +212,7 @@ export const sow: StepFn = async (job) => {
     }
     proposal = read.proposal;
     usage = read.usage;
-    await keepSowReading({
+    const kept = await keepSowReading({
       dealId,
       doc,
       sourcePath: sourcePathFor(account, doc, docs),
@@ -209,6 +220,15 @@ export const sow: StepFn = async (job) => {
       model: read.model,
       usage: read.usage,
     });
+    if (kept && job.force) {
+      // Marked on the job before the merges below, the way finalize marks
+      // `notified`: a retry finds the row this job wrote and does not pay
+      // for the reading twice.
+      await db()
+        .from("portal_ai_jobs")
+        .update({ result: { ...(job.result ?? {}), sow_read: true } })
+        .eq("id", job.id);
+    }
   }
 
   if (!proposal.readable) {
@@ -246,14 +266,22 @@ export const sow: StepFn = async (job) => {
   const stamped = await stampSowFacts(dealId, proposal);
   filled.push(...stamped.map((s) => `the SOW ${s}`));
 
+  // The SOW was read; a contract beside it that was not (too large with
+  // the SOW, a file that is not a document) is said in words, not dropped.
+  const contractProblem =
+    doc === docs.sow && docs.contract?.problem
+      ? `The contract was not read: ${docs.contract.problem}`
+      : null;
+
   return branch(
     {
       status: "ok",
-      detail: `${doc.name}: ${proposal.services.length} service${proposal.services.length === 1 ? "" : "s"} read${reused ? " (kept from an earlier reading)" : ""}, ${accepted} added to the plan`,
+      detail: `${doc.name}: ${proposal.services.length} service${proposal.services.length === 1 ? "" : "s"} read${reused ? " (kept from an earlier reading)" : ""}, ${accepted} added to the plan${contractProblem ? ` · ${contractProblem}` : ""}`,
     },
     {
       ...(usage ? { usage } : {}),
       filled,
+      ...(contractProblem ? { problems: [contractProblem] } : {}),
       result: { services_added: accepted, sow_reused: reused },
     },
   );

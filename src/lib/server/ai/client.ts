@@ -10,7 +10,14 @@ import type {
 import { z as z4 } from "zod/v4";
 
 import { audit } from "../audit";
-import { AI_CALL_TIMEOUT_MS, aiEffort, aiModel, type AiCallKind, type AiEffort } from "./config";
+import {
+  AI_CALL_TIMEOUT_MS,
+  AI_STEP_BUDGET_MS,
+  aiEffort,
+  aiModel,
+  type AiCallKind,
+  type AiEffort,
+} from "./config";
 import { extractJsonObject } from "./json";
 
 /**
@@ -34,11 +41,18 @@ const FALLBACK_BETA = "server-side-fallback-2026-07-01";
  * for an hour. The API caches nothing under 512 tokens (claude-opus-5-5),
  * so the bar sits comfortably above that. The document and the calls live
  * in `messages`, after this breakpoint, and are NOT cached here: one
- * reading alone would write an entry nobody reads back. The job runner
- * (sources.ts) sets `cache_control` on the last content block when several
- * passes share one prefix, and this module leaves a caller's markers alone.
+ * reading alone would write an entry nobody reads back, and two passes
+ * with different output schemas cannot share one either — the output
+ * format is part of the cached prefix. This module leaves a caller's own
+ * markers alone.
  */
 const CACHE_SYSTEM_CHARS = 3000;
+
+/**
+ * A model call that cannot have this long is not started: a repair turn
+ * cut off by the function ceiling spends its tokens and keeps nothing.
+ */
+const MIN_CALL_MS = 20_000;
 
 /** A 400 about the output grammar, as distinct from one about the effort or a budget. */
 function isGrammarRejection(message: string): boolean {
@@ -121,6 +135,19 @@ export class AiParseError extends Error {
   }
 }
 
+/** The step's time ran out before another model call could start. */
+export class AiBudgetError extends Error {
+  constructor(
+    public readonly kind: AiCallKind,
+    public readonly after: string,
+  ) {
+    super(
+      `No time left in this step for another model call${after ? ` after: ${after}` : ""}. Try again.`,
+    );
+    this.name = "AiBudgetError";
+  }
+}
+
 let client: Anthropic | null = null;
 
 /**
@@ -162,8 +189,15 @@ export async function runStructured<T>(
   let useFormat = true;
   let useFallbacks = true;
   let useTtl = true;
+  let lastIssues = "";
+  // One deadline for everything this call may spend: the reply, the repair
+  // turn and the 400 retries share it, so a step never outlives the
+  // function it runs in.
+  const deadline = startedAt + AI_STEP_BUDGET_MS;
 
   const call = async (messages: BetaMessageParam[]): Promise<BetaMessage> => {
+    const remaining = deadline - Date.now();
+    if (remaining < MIN_CALL_MS) throw new AiBudgetError(args.kind, lastIssues);
     const params: BetaMessageStreamParams = {
       model,
       max_tokens: args.maxTokens,
@@ -174,15 +208,22 @@ export async function runStructured<T>(
       ...(useFallbacks ? { betas: [FALLBACK_BETA], fallbacks: "default" as const } : {}),
     };
     attempts += 1;
+    // The client's `timeout` only covers the wait for response headers;
+    // the signal bounds the whole stream, body included, and the SDK's
+    // one connection retry runs inside the same window.
+    const stream = anthropic.beta.messages.stream(params, {
+      signal: AbortSignal.timeout(Math.min(AI_CALL_TIMEOUT_MS, remaining)),
+    });
     try {
-      // The client's `timeout` only covers the wait for response headers;
-      // the signal bounds the whole stream, body included, and the SDK's
-      // one connection retry runs inside the same window.
-      return await anthropic.beta.messages
-        .stream(params, { signal: AbortSignal.timeout(AI_CALL_TIMEOUT_MS) })
-        .finalMessage();
+      return await stream.finalMessage();
     } catch (e) {
-      if (!isBadRequest(e)) throw e;
+      if (!isBadRequest(e)) {
+        // An attempt the timer cut off, or one that broke mid-stream, was
+        // billed for what streamed: the SDK keeps that partial message, so
+        // the usage row carries it. (Nothing arrived yet → nothing known.)
+        addUsage(usage, stream.currentMessage?.usage);
+        throw e;
+      }
       const message = apiMessage(e);
       // The grammar did not compile (too large, an unsupported keyword):
       // ask for JSON in prose with the schema in the prompt instead.
@@ -208,7 +249,6 @@ export async function runStructured<T>(
   };
 
   const messages: BetaMessageParam[] = [{ role: "user", content: args.content }];
-  let lastIssues = "";
   try {
     for (let turn = 0; turn < 2; turn++) {
       const reply = await call(messages);
@@ -380,7 +420,12 @@ function apiMessage(e: ApiErrorLike): string {
  * names the actual problem. `what` names the reading that failed.
  */
 export function describeAiError(e: unknown, what = "AI synthesis"): string {
-  if (e instanceof AiRefusedError || e instanceof AiTruncatedError || e instanceof AiParseError) {
+  if (
+    e instanceof AiRefusedError ||
+    e instanceof AiTruncatedError ||
+    e instanceof AiParseError ||
+    e instanceof AiBudgetError
+  ) {
     return `${what} failed: ${e.message}`;
   }
   if (isApiError(e)) {

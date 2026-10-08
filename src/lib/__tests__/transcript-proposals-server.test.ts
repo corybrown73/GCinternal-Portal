@@ -268,6 +268,25 @@ describe("loadTranscriptWork", () => {
     expect(await pendingProposalCounts([IMPL, "other"])).toEqual(new Map([[IMPL, 8]]));
     expect(await pendingProposalCounts([])).toEqual(new Map());
   });
+
+  it("counts past the server's row cap, page by page", async () => {
+    // Eight pending rows here; with a page of three the count must still
+    // say eight, not three.
+    expect(await pendingProposalCounts([IMPL, "other"], 3)).toEqual(new Map([[IMPL, 8]]));
+    for (let i = 0; i < 1005; i++) {
+      fake.store["evidence_proposals"]!.push(
+        proposal(`bulk-${String(i).padStart(4, "0")}`, { implementation_id: "other" }),
+      );
+    }
+    expect(await pendingProposalCounts([IMPL, "other"])).toEqual(
+      new Map([
+        [IMPL, 8],
+        ["other", 1005],
+      ]),
+    );
+    const w = await loadTranscriptWork("other", new Date("2026-10-08T12:00:00Z"));
+    expect(w.proposals).toHaveLength(1005);
+  });
 });
 
 describe("applyProposal", () => {

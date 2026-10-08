@@ -183,6 +183,35 @@ describe("enqueueAiJob", () => {
     expect(reading().error).toBeNull();
   });
 
+  it("queues a fresh job when the active one finished between the read and the fold", async () => {
+    const { job } = await enqueueAiJob({ kind: "prepare_deal", dealId: DEAL, trigger: "a" });
+    Object.assign(jobs()[0]!, { status: "running", steps_done: ["sources"], step: "finalize" });
+    // The last step's done write lands after the fold read the row and
+    // before it wrote: the fake flips the row on the fold's first update.
+    const origFrom = fake.client.from;
+    let flipped = false;
+    fake.client.from = (table: string) => {
+      const b = origFrom(table);
+      if (table === "portal_ai_jobs" && !flipped) {
+        const update = b.update.bind(b);
+        b.update = (patch: Record<string, unknown>) => {
+          flipped = true;
+          Object.assign(jobs()[0]!, { status: "done", finished_at: new Date().toISOString() });
+          return update(patch);
+        };
+      }
+      return b;
+    };
+    const r = await enqueueAiJob({ kind: "prepare_deal", dealId: DEAL, trigger: "sow_upload" });
+    expect(flipped).toBe(true);
+    expect(r.created).toBe(true);
+    expect(r.job.id).not.toBe(job.id);
+    expect(jobs()).toHaveLength(2);
+    // The flag never landed on the done row; the new job carries the work.
+    expect(jobs()[0]!.rerun_requested).toBe(false);
+    expect(jobs()[1]).toMatchObject({ status: "queued", trigger: "sow_upload" });
+  });
+
   it("keeps deals apart and lets a new job follow a finished one", async () => {
     await enqueueAiJob({ kind: "prepare_deal", dealId: DEAL, trigger: "a" });
     await enqueueAiJob({ kind: "prepare_deal", dealId: OTHER, trigger: "a" });
@@ -211,6 +240,16 @@ describe("kickAiJobs", () => {
   });
 
   it("does nothing without a secret", async () => {
+    const fetchImpl = vi.fn(async () => new Response("ok"));
+    await kickAiJobs(fetchImpl as any);
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it("does nothing without a configured base URL — never the request's host", async () => {
+    process.env["CRON_SECRET"] = "s3cret";
+    for (const key of ["PUBLIC_APP_URL", "APP_URL", "VERCEL_PROJECT_PRODUCTION_URL"]) {
+      delete process.env[key];
+    }
     const fetchImpl = vi.fn(async () => new Response("ok"));
     await kickAiJobs(fetchImpl as any);
     expect(fetchImpl).not.toHaveBeenCalled();
@@ -430,6 +469,48 @@ describe("runOneStep", () => {
     await runOneStep(job);
     expect(jobs()).toHaveLength(2);
     expect(jobs()[1]).toMatchObject({ status: "queued", trigger: "rerun", force: true });
+  });
+
+  it("writes nothing when another runner took the lock while the step ran", async () => {
+    // The runner's copy, as a claim hands it over; the store's row is another object.
+    const job = { ...(await queued({ step: "sow", steps_done: ["sources"], lock_token: "mine" })) };
+    // The stale sweep reclaimed the row and handed it on: a new lock.
+    h.steps.prepareDealSteps["sow"] = vi.fn(async () => {
+      Object.assign(jobs()[0]!, { lock_token: "theirs", attempts: 1 });
+      return { filled: ["late"] };
+    });
+    const out = await runOneStep(job);
+    expect(out).toEqual({ outcome: "lost_lock", step: "sow" });
+    const row = jobs()[0]!;
+    expect(row).toMatchObject({
+      status: "running",
+      step: "sow",
+      lock_token: "theirs",
+      attempts: 1,
+    });
+    expect(row.steps_done).toEqual(["sources"]);
+    expect(row.result?.["filled"]).toBeUndefined();
+
+    // A failure from the runner that lost its lock is not counted either.
+    expect(await failJob(job, "too late")).toBe(false);
+    expect(jobs()[0]).toMatchObject({ status: "running", lock_token: "theirs", attempts: 1 });
+  });
+
+  it("queues the rerun that was asked for even when the job fails for good", async () => {
+    h.steps.prepareDealSteps["sow"] = vi.fn(async () => {
+      // Material arrives during the last attempt: folded onto the row.
+      Object.assign(jobs()[0]!, { rerun_requested: true });
+      throw new Error("the model timed out");
+    });
+    const job = await queued({ step: "sow", steps_done: ["sources"], attempts: 3 });
+    const last = await runOneStep(job);
+    expect(last).toMatchObject({ outcome: "failed", final: true });
+    expect(jobs()).toHaveLength(2);
+    expect(jobs()[0]!.status).toBe("failed");
+    expect(jobs()[1]).toMatchObject({ status: "queued", deal_id: DEAL, trigger: "rerun" });
+    expect(h.alerts).toHaveLength(1);
+    // The screen ends on the fresh job, not the dead one.
+    expect(reading()).toMatchObject({ status: "queued", job_id: jobs()[1]!.id });
   });
 
   it("backs off on a thrown step, then fails for good with an alert and an honest record", async () => {

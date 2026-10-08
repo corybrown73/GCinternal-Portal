@@ -17,12 +17,14 @@ import { BRIEF_SYSTEM_PROMPT } from "./prompt";
 import { verifyBrief } from "./verify";
 
 /**
- * The brief in three passes over one cached prefix: the core (who they
+ * The brief in three passes over one shared prefix: the core (who they
  * are, how they work, what they want), the plan against it (the deck, the
  * expansion, the intake, the welcome page), and the check of both against
  * the sources. The background job runs them as three steps; a person's
  * "Generate brief" runs them in a row. Both go through here, so the
- * prompts, the schemas and the prefix are decided once.
+ * prompts, the schemas and the prefix are decided once. The prefix is
+ * shared for agreement, not for the cache: each pass has its own output
+ * schema, and the API caches nothing across a schema change (sources.ts).
  */
 
 export type BriefContext = {
@@ -30,15 +32,11 @@ export type BriefContext = {
   sources: DealSources;
   /** The kept SOW reading, when one exists: the brief agrees with it rather than reading the SOW a third way. */
   sowReading: SowReading | null;
-  /** Every pass sends exactly this first; the cache marker is on its last block. */
+  /** Every pass sends exactly this first, its own task after it. */
   prefix: BetaContentBlockParam[];
-  /** One system prompt for all three passes, so the cache prefix holds across them. */
+  /** One system prompt for all three passes; the client caches it per pass across deals. */
   system: string;
-  /**
-   * One effort for all three passes, decided here under the `brief` kind:
-   * the cached prefix is keyed on the request's parameters too, so a
-   * per-kind effort would have each pass paying for the prefix again.
-   */
+  /** One effort for all three passes, decided here under the `brief` kind. */
   effort: AiEffort;
   jobId?: string | null | undefined;
 };

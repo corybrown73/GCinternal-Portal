@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod/v4";
 
 /**
@@ -14,7 +14,14 @@ const h = vi.hoisted(() => {
     model?: string;
   };
   const state = {
-    script: [] as Array<{ reply?: Reply; error?: Error }>,
+    script: [] as Array<{
+      reply?: Reply;
+      error?: Error;
+      /** What had streamed when the error struck, as the SDK keeps it. */
+      partial?: Record<string, number | null>;
+      /** Runs when the call is answered: a test moves the clock here. */
+      before?: () => void;
+    }>,
     calls: [] as Array<Record<string, any>>,
     options: [] as Array<Record<string, any> | undefined>,
     audits: [] as Array<Record<string, any>>,
@@ -23,11 +30,19 @@ const h = vi.hoisted(() => {
   const stream = (params: Record<string, any>, options?: Record<string, any>) => {
     state.calls.push(params);
     state.options.push(options);
+    let current: { usage: Record<string, number | null> } | undefined;
     return {
+      get currentMessage() {
+        return current;
+      },
       finalMessage: async () => {
         const next = state.script.shift();
         if (!next) throw new Error("no scripted reply left");
-        if (next.error) throw next.error;
+        next.before?.();
+        if (next.error) {
+          if (next.partial) current = { usage: next.partial };
+          throw next.error;
+        }
         return {
           id: "msg_1",
           role: "assistant",
@@ -73,6 +88,7 @@ vi.mock("../server/app-config", () => ({
 }));
 
 import {
+  AiBudgetError,
   AiParseError,
   AiRefusedError,
   AiTruncatedError,
@@ -80,6 +96,7 @@ import {
   resetAnthropicClient,
   runStructured,
 } from "../server/ai/client";
+import { AI_CALL_TIMEOUT_MS, AI_STEP_BUDGET_MS } from "../server/ai/config";
 
 const schema = z.object({ name: z.string(), seats: z.number().nullable() });
 const good = { name: "Summit", seats: 140 };
@@ -108,6 +125,10 @@ beforeEach(() => {
   h.state.config = null;
   resetAnthropicClient();
   delete process.env["ANTHROPIC_MODEL"];
+});
+
+afterEach(() => {
+  vi.useRealTimers();
 });
 
 describe("runStructured", () => {
@@ -265,6 +286,61 @@ describe("runStructured", () => {
     h.state.script.push({ reply: { stop_reason: "refusal", content: [] } });
     await expect(run()).rejects.toBeInstanceOf(AiRefusedError);
     expect(h.state.audits[0]!["payload"]["usage"]["input_tokens"]).toBe(100);
+  });
+
+  it("records what an attempt the timer cut off had already streamed", async () => {
+    const aborted = new Error("Request was aborted.");
+    aborted.name = "APIUserAbortError";
+    h.state.script.push({
+      error: aborted,
+      partial: {
+        input_tokens: 5000,
+        output_tokens: 15000,
+        cache_read_input_tokens: 0,
+        cache_creation_input_tokens: 0,
+      },
+    });
+    await expect(run()).rejects.toThrow(/aborted/);
+    expect(h.state.audits).toHaveLength(1);
+    expect(h.state.audits[0]!["payload"]["usage"]).toEqual({
+      input_tokens: 5000,
+      output_tokens: 15000,
+      cache_read_input_tokens: 0,
+      cache_creation_input_tokens: 0,
+    });
+    expect(h.state.audits[0]!["payload"]["attempts"]).toBe(1);
+  });
+
+  it("bounds the whole call by one step budget: the repair turn is not started when it cannot finish", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-08T10:00:00Z"));
+    const bad = [text(JSON.stringify({ name: 5 }))];
+    h.state.script.push({
+      reply: { stop_reason: "end_turn", content: bad },
+      // The first reply took almost the whole budget.
+      before: () => vi.setSystemTime(Date.now() + AI_STEP_BUDGET_MS - 10_000),
+    });
+    const e = await run().catch((err) => err);
+    expect(e).toBeInstanceOf(AiBudgetError);
+    expect(String(e.message)).toMatch(/No time left.*name/);
+    expect(h.state.calls).toHaveLength(1);
+    // The first call still carried the full per-call cap.
+    expect(h.state.options[0]?.["signal"]).toBeInstanceOf(AbortSignal);
+    expect(h.state.audits[0]!["payload"]["attempts"]).toBe(1);
+    expect(describeAiError(e, "The brief")).toMatch(/^The brief failed: No time left/);
+
+    // With time left, the repair turn runs, bounded by what remains.
+    h.state.script.push(
+      {
+        reply: { stop_reason: "end_turn", content: bad },
+        before: () => vi.setSystemTime(Date.now() + AI_STEP_BUDGET_MS - AI_CALL_TIMEOUT_MS),
+      },
+      { reply: { stop_reason: "end_turn", content: [text(JSON.stringify(good))] } },
+    );
+    vi.setSystemTime(new Date("2026-10-08T11:00:00Z"));
+    const r = await run();
+    expect(r.data).toEqual(good);
+    expect(r.attempts).toBe(2);
   });
 
   it("maps max_tokens to AiTruncatedError", async () => {

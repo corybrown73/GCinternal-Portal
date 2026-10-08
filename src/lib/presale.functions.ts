@@ -229,14 +229,6 @@ export const removeReport = createServerFn({ method: "POST" })
     return deleteGongReport(context.userId, data.reportId);
   });
 
-export const generateBriefForDeal = createServerFn({ method: "POST" })
-  .middleware([requireDealEditor])
-  .inputValidator((data: unknown) => z.object({ dealId: z.string().uuid() }).parse(data))
-  .handler(async ({ data, context }) => {
-    const { generateDealBrief } = await import("./presale.server");
-    return generateDealBrief(context.userId, data.dealId);
-  });
-
 export const getBriefDownloadUrl = createServerFn({ method: "POST" })
   .middleware([requireInternalAuth])
   .inputValidator((data: unknown) => z.object({ briefId: z.string().uuid() }).parse(data))

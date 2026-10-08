@@ -7,7 +7,12 @@ import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { readIntake, type IntakeAnswers } from "../../intake-answers";
 import type { Account, GongReport, OnboardingNote } from "../../presale-types";
 import { buildBriefUserPrompt, SOW_ATTACHED_NOTE, summaryAsReport } from "../brief/prompt";
-import { prepareDocument, unreadableDocument, type PreparedDocument } from "./documents";
+import {
+  fitDocumentsToRequest,
+  prepareDocument,
+  unreadableDocument,
+  type PreparedDocument,
+} from "./documents";
 
 /**
  * Everything the AI reads about a deal, loaded once per step: the record,
@@ -63,7 +68,12 @@ async function documentAt(
   }
 }
 
-/** The SOW and the contract on file, through `prepareDocument`, bytes from storage. */
+/**
+ * The SOW and the contract on file, through `prepareDocument`, bytes from
+ * storage — and cut to what one request can carry: two files that each
+ * pass the per-file cap can still be too much together, in which case the
+ * contract comes back unreadable with a problem that says so.
+ */
 export async function loadDealDocuments(
   account: Pick<Account, "intake"> & {
     sow_document_path?: string | null;
@@ -75,7 +85,7 @@ export async function loadDealDocuments(
     documentAt(account.sow_document_path, account.sow_document_name, "Signed Statement of Work"),
     documentAt(intake.contract?.path, intake.contract?.name, "Signed contract"),
   ]);
-  return { sow, contract };
+  return fitDocumentsToRequest({ sow, contract });
 }
 
 export async function loadDealSources(dealId: string): Promise<DealSources> {
@@ -131,11 +141,16 @@ export async function loadDealSources(dealId: string): Promise<DealSources> {
 /**
  * The identical opening every brief pass sends: the SOW as a document, the
  * contract beside it, the record's facts with the calls and the reviewed
- * notes as text, and the kept SOW reading as JSON. The last block carries
- * the cache marker, so brief_core, brief_plan and verify pay for these
- * tokens once an hour, not three times. A pass puts its own instruction
- * after this, never inside it: one changed byte here is a cache miss for
- * every pass that follows.
+ * notes as text, and the kept SOW reading as JSON. One prefix so the three
+ * passes read the same material and agree with each other; a pass puts its
+ * own instruction after it, never inside it.
+ *
+ * NOT cached, on purpose. The API's cache is a byte-prefix match that
+ * includes the output format, and each pass sends its own schema, so an
+ * entry written by brief_core is never read by brief_plan or verify: with
+ * a marker here every pass paid the write price for an entry nobody read.
+ * The system prompt still gets its own breakpoint (client.ts), and that
+ * one is shared across deals of the same pass.
  */
 export function sharedPrefix(
   s: Pick<DealSources, "account" | "reports" | "notes" | "sow" | "contract">,
@@ -157,6 +172,11 @@ export function sharedPrefix(
   else if (s.sow?.problem ?? opts.sowProblem) {
     notes.push(`The SOW on file could not be read (${s.sow?.problem ?? opts.sowProblem}).`);
   }
+  // A contract on file that did not make it into the request is said, so
+  // the brief does not take its absence for "no contract".
+  if (s.contract?.problem && !contract) {
+    notes.push(`The signed contract on file could not be read (${s.contract.problem}).`);
+  }
   // The record's summary stands in as one call-notes report when there are
   // no reports, exactly as the brief has always read it.
   const reports = s.reports.length ? s.reports : [summaryAsReport(s.account)].filter(isReport);
@@ -166,11 +186,7 @@ export function sharedPrefix(
       `WHAT THE SIGNED SOW SAYS, ALREADY EXTRACTED (JSON, one reading of the document above; the forms, seats, dates and services here were read from the SOW and agree with it):\n${JSON.stringify(opts.sowReading)}`,
     );
   }
-  blocks.push({
-    type: "text",
-    text: notes.join("\n\n---\n\n"),
-    cache_control: { type: "ephemeral", ttl: "1h" },
-  });
+  blocks.push({ type: "text", text: notes.join("\n\n---\n\n") });
   return blocks;
 }
 

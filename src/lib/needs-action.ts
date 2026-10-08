@@ -44,7 +44,7 @@ export type DealFacts = {
   /** The plan's close and finish line, for time-to-value and "launching". */
   close_date?: string | null;
   live_date?: string | null;
-  /** Transcript proposals on the deal's implementations that nobody has applied or dismissed. */
+  /** Transcript proposals on THIS implementation that nobody has applied or dismissed (laid on per implementation by `withPendingProposals`). */
   pending_proposals?: number;
 };
 

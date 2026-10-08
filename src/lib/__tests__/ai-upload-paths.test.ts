@@ -13,6 +13,10 @@ const h = vi.hoisted(() => {
     supabase: { client: null as any },
     forward: null as any,
     flagModule: null as any,
+    /** The automatic reading's trigger, mocked: what each upload path asked for, and when. */
+    jobs: {
+      autoReadDeal: vi.fn(async (_dealId: string, _trigger: string, _by?: string | null) => null),
+    },
   };
   state.forward = new Proxy({}, { get: (_t, prop) => state.supabase.client?.[prop] });
   state.flagModule = {
@@ -27,8 +31,9 @@ vi.mock("@/integrations/supabase/client.server", () => ({ supabaseAdmin: h.forwa
 vi.mock("../../integrations/supabase/client.server", () => ({ supabaseAdmin: h.forward }));
 vi.mock("@/lib/app-config.server", () => h.flagModule);
 vi.mock("../app-config.server", () => h.flagModule);
+vi.mock("../server/ai/jobs", () => h.jobs);
 
-import { uploadDealSow } from "../presale.server";
+import { addGongReport, uploadDealContract, uploadDealSow } from "../presale.server";
 import { storagePathFor } from "../sow-analysis.server";
 import { sowDocument } from "../server/brief/generate";
 import { MAX_DOC_BYTES } from "../server/ai/config";
@@ -50,16 +55,87 @@ const rows: Rows = {
   portal_profiles: [
     { id: USER, email: "ae@gocanvas.com", full_name: "An AE", role: "sales", created_at: "" },
   ],
-  portal_accounts: [{ id: DEAL, name: "Summit", sow_document_path: null }],
+  portal_accounts: [
+    { id: DEAL, name: "Summit", sow_document_path: null, intake: { field_users: 12 } },
+  ],
+  portal_gong_reports: [],
   portal_audit_log: [],
   portal_activity: [],
 };
 
 let fake: ReturnType<typeof createFakeSupabase>;
+const account = () => fake.store["portal_accounts"]![0]!;
 
 beforeEach(() => {
   fake = createFakeSupabase(rows);
   h.supabase.client = fake.client;
+  h.jobs.autoReadDeal.mockReset();
+  h.jobs.autoReadDeal.mockResolvedValue(null);
+});
+
+/**
+ * The automatic reading, server-side: every path that stores a source
+ * queues the reading AFTER the write it depends on, with its own trigger
+ * name, whoever uploaded. The flag decides inside autoReadDeal (ai-jobs
+ * tests); here the binding is what is checked, because a trigger dropped
+ * or moved above its write would leave every other test green.
+ */
+describe("the automatic reading's triggers", () => {
+  it("uploadDealSow queues the reading once the new path is on the record", async () => {
+    let pathSeen: string | null | undefined;
+    h.jobs.autoReadDeal.mockImplementation(async () => {
+      pathSeen = account().sow_document_path;
+      return null;
+    });
+    await uploadDealSow(USER, {
+      dealId: DEAL,
+      fileName: "summit-sow.pdf",
+      contentType: "application/pdf",
+      dataBase64: b64(PDF),
+    });
+    expect(h.jobs.autoReadDeal).toHaveBeenCalledTimes(1);
+    expect(h.jobs.autoReadDeal).toHaveBeenCalledWith(DEAL, "sow_upload", USER);
+    expect(pathSeen).toBe(fake.uploads[0]!.path);
+  });
+
+  it("uploadDealContract merges the contract onto the intake, then queues the reading", async () => {
+    let contractSeen: unknown;
+    h.jobs.autoReadDeal.mockImplementation(async () => {
+      contractSeen = account().intake.contract;
+      return null;
+    });
+    const next = await uploadDealContract(USER, {
+      dealId: DEAL,
+      fileName: "contract.pdf",
+      contentType: "application/pdf",
+      dataBase64: b64(PDF),
+    });
+    expect(h.jobs.autoReadDeal).toHaveBeenCalledWith(DEAL, "contract_upload", USER);
+    expect(contractSeen).toMatchObject({ path: fake.uploads[0]!.path, name: "contract.pdf" });
+    // A merge of the one key, not the whole intake written back: what was
+    // on the record before (or written during the upload) stands.
+    expect(fake.rpcs.map((r) => r.fn)).toEqual(["portal_merge_intake"]);
+    expect(Object.keys(fake.rpcs[0]!.args["p_patch"]).sort()).toEqual(["contract", "updated_at"]);
+    expect(account().intake.field_users).toBe(12);
+    expect(next.contract?.name).toBe("contract.pdf");
+    expect(next.field_users).toBe(12);
+  });
+
+  it("addGongReport queues the reading once the notes are saved", async () => {
+    let notesSeen = 0;
+    h.jobs.autoReadDeal.mockImplementation(async () => {
+      notesSeen = fake.store["portal_gong_reports"]!.length;
+      return null;
+    });
+    await addGongReport(USER, {
+      dealId: DEAL,
+      title: "Discovery",
+      reportType: "call_notes",
+      contentMd: "Three crews, all paper.",
+    });
+    expect(h.jobs.autoReadDeal).toHaveBeenCalledWith(DEAL, "call_notes", USER);
+    expect(notesSeen).toBe(1);
+  });
 });
 
 describe("uploadDealSow", () => {

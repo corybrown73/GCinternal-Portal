@@ -34,6 +34,13 @@ export type ImplementationFocusView = {
   }>;
   validatedAt: string | null;
   validatedBy: string | null;
+  /**
+   * True while the saved list is the AI reading's — written by the
+   * automatic apply, not generated or edited by a person on the panel. A
+   * flagged item on such a list has had no review, so Kickoff View keeps
+   * it off the slide until a person confirms the list.
+   */
+  aiFilled?: boolean;
 };
 
 /** The stored workflow_story, as the Welcome pipeline exposes it. Pure — no defaults to invent. */
@@ -50,7 +57,7 @@ export function workflowStoryView(a: Pick<IntakeAnswers, "workflow_story">): Wor
 
 /** The stored implementation_focus, as the Welcome pipeline exposes it. */
 export function implementationFocusView(
-  a: Pick<IntakeAnswers, "implementation_focus">,
+  a: Pick<IntakeAnswers, "implementation_focus" | "ai_filled">,
 ): ImplementationFocusView {
   const f = a.implementation_focus;
   return {
@@ -63,6 +70,7 @@ export function implementationFocusView(
     })),
     validatedAt: f.validated_at,
     validatedBy: f.validated_by,
+    aiFilled: a.ai_filled.includes("implementation_focus"),
   };
 }
 
@@ -128,6 +136,8 @@ export type WelcomeView = {
     objective: string | null;
     source: "library" | "uploaded" | "typed" | "tbd";
   } | null;
+  /** "person" when a person named or chose the first form; "ai" when the reading read it from the SOW or the calls, shown as to confirm. */
+  firstFormSource: "ai" | "person" | null;
   nextUseCases: Array<{ name: string; objective: string | null }>;
   /** Signed, short-lived. null → the icon composition. */
   photoUrl: string | null;

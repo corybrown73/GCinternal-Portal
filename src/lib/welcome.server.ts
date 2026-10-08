@@ -121,6 +121,12 @@ async function viewFor(
         label: "First form",
         hint: "Onboarding intake → pick a library card or upload what they have.",
       });
+    else if (input.firstForm && input.firstFormSource === "ai")
+      readiness.push({
+        key: "form_words",
+        label: "First form — confirm it",
+        hint: "Onboarding intake → the forms they named. The AI reading took this one from the SOW or the calls; the cover and the phone show it as “to confirm” until you change it or pick it yourself.",
+      });
     if (!input.currentProcess)
       readiness.push({
         key: "process",
@@ -228,6 +234,7 @@ async function viewFor(
         : null,
     },
     firstForm: input.firstForm,
+    firstFormSource: input.firstForm ? (input.firstFormSource ?? "person") : null,
     nextUseCases: input.nextUseCases,
     photoUrl,
     toolMarks,

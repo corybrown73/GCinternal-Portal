@@ -111,7 +111,7 @@ async function currentSow(
  * asked for again ("Re-read the SOW", a forced job) replaces the kept
  * one, so what the plan panel showed is what the brief, the analysis and
  * the handoff context serve from then on. Never throws: the reading is
- * the point.
+ * the point. Returns whether the row was written.
  */
 export async function keepSowReading(input: {
   dealId: string;
@@ -120,7 +120,7 @@ export async function keepSowReading(input: {
   reading: SowReading;
   model: string;
   usage: AiUsage;
-}): Promise<void> {
+}): Promise<boolean> {
   const { error } = await db().from("portal_ai_readings").upsert(
     {
       deal_id: input.dealId,
@@ -136,7 +136,9 @@ export async function keepSowReading(input: {
   );
   if (error) {
     console.error("[ai-readings] could not keep the SOW reading", error.message);
+    return false;
   }
+  return true;
 }
 
 /** Where the document the reading came from lives on the record. */

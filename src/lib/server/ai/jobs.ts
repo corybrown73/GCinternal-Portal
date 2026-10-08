@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 
-import { appUrl } from "../../app-url";
+import { configuredAppUrl } from "../../app-url";
 import type { IntakeAnswers } from "../../intake-answers";
 import type { AiUsage } from "./client";
 
@@ -131,17 +131,26 @@ async function activeJob(
   return (data as AiJobRow | null) ?? null;
 }
 
+/** How many times enqueue looks again when the active job moves under it. */
+const ENQUEUE_PASSES = 3;
+
 /**
  * Queue a reading, or fold the request into the one already active.
  *
  * The rerun flag is set ONLY when the active job has already taken its
  * source snapshot (`steps_done` includes "sources") — queued between steps
  * or running one, it is equally blind to what arrives now. A job that has
- * not read its sources yet will see the new material anyway — and the
- * browser still fires `prepareDealFn` right after the server enqueued, so
- * a naive flag would double every reading. (Material landing inside the
- * sources step itself, after the hash and before `steps_done` is written,
- * is the one window left; the next trigger reads it.)
+ * not read its sources yet will see the new material anyway, and a second
+ * trigger landing before the snapshot (an upload, then the close) would
+ * otherwise double every reading. (Material landing inside the sources
+ * step itself, after the hash and before `steps_done` is written, is the
+ * one window left; the next trigger reads it.)
+ *
+ * The fold is written only onto a job that is still active. A job that
+ * finished between the read and the write — its last step was ending —
+ * would take the flag to its grave: nothing reads `rerun_requested` on a
+ * done row. So a fold that matches no row falls through to a fresh job,
+ * which the unique index now allows.
  *
  * A person asking ("manual", or `force`) while the active job waits out a
  * backoff gets the retry now, not in five minutes.
@@ -149,7 +158,7 @@ async function activeJob(
 export async function enqueueAiJob(args: EnqueueArgs): Promise<EnqueueResult> {
   const dealId = args.dealId ?? null;
   const subjectId = args.subjectId ?? null;
-  const fold = async (active: AiJobRow): Promise<EnqueueResult> => {
+  const fold = async (active: AiJobRow): Promise<EnqueueResult | null> => {
     const now = new Date();
     const snapshotTaken = active.steps_done.includes("sources");
     const patch: Record<string, unknown> = {};
@@ -160,7 +169,14 @@ export async function enqueueAiJob(args: EnqueueArgs): Promise<EnqueueResult> {
       active.status === "queued" && Date.parse(active.next_attempt_at) > now.getTime();
     if (asked && waiting) patch["next_attempt_at"] = now.toISOString();
     if (Object.keys(patch).length) {
-      await db().from("portal_ai_jobs").update(patch).eq("id", active.id);
+      const { data } = await db()
+        .from("portal_ai_jobs")
+        .update(patch)
+        .eq("id", active.id)
+        .in("status", ["queued", "running"])
+        .select("id");
+      // Finished meanwhile: the flag would be lost on a done row.
+      if ((data ?? []).length === 0) return null;
     }
     if (asked && waiting && active.deal_id) {
       // The screen said "stalled" through the backoff; the click revives it.
@@ -176,49 +192,54 @@ export async function enqueueAiJob(args: EnqueueArgs): Promise<EnqueueResult> {
     };
   };
 
-  const existing = await activeJob(args.kind, dealId, subjectId);
-  if (existing) return fold(existing);
+  for (let pass = 0; pass < ENQUEUE_PASSES; pass++) {
+    const existing = await activeJob(args.kind, dealId, subjectId);
+    if (existing) {
+      const folded = await fold(existing);
+      if (folded) return folded;
+      continue;
+    }
 
-  const { data, error } = await db()
-    .from("portal_ai_jobs")
-    .insert({
-      kind: args.kind,
-      deal_id: dealId,
-      implementation_id: args.implementationId ?? null,
-      subject_id: subjectId,
-      status: "queued",
-      step: null,
-      steps_done: [],
-      trigger: args.trigger,
-      requested_by: args.requestedBy ?? null,
-      force: Boolean(args.force),
-      rerun_requested: false,
-      attempts: 0,
-      max_attempts: DEFAULT_MAX_ATTEMPTS,
-      next_attempt_at: new Date().toISOString(),
-      result: {},
-      usage: {},
-    })
-    .select("*")
-    .single();
-  if (error) {
-    // The unique index on active jobs: another request got there first.
-    if (error.code === "23505") {
-      const raced = await activeJob(args.kind, dealId, subjectId);
-      if (raced) return fold(raced);
+    const { data, error } = await db()
+      .from("portal_ai_jobs")
+      .insert({
+        kind: args.kind,
+        deal_id: dealId,
+        implementation_id: args.implementationId ?? null,
+        subject_id: subjectId,
+        status: "queued",
+        step: null,
+        steps_done: [],
+        trigger: args.trigger,
+        requested_by: args.requestedBy ?? null,
+        force: Boolean(args.force),
+        rerun_requested: false,
+        attempts: 0,
+        max_attempts: DEFAULT_MAX_ATTEMPTS,
+        next_attempt_at: new Date().toISOString(),
+        result: {},
+        usage: {},
+      })
+      .select("*")
+      .single();
+    if (error) {
+      // The unique index on active jobs: another request got there first;
+      // the next pass finds it and folds.
+      if (error.code === "23505") continue;
+      throw new Error(`Could not queue the AI reading: ${error.message}`);
     }
-    throw new Error(`Could not queue the AI reading: ${error.message}`);
-  }
-  const job = data as AiJobRow;
-  if (job.deal_id) {
-    try {
-      await markReadingQueued(job);
-    } catch (e) {
-      // The job is queued either way; the record catches up at the first step.
-      console.error("[ai-jobs] could not mark the reading queued", job.id, e);
+    const job = data as AiJobRow;
+    if (job.deal_id) {
+      try {
+        await markReadingQueued(job);
+      } catch (e) {
+        // The job is queued either way; the record catches up at the first step.
+        console.error("[ai-jobs] could not mark the reading queued", job.id, e);
+      }
     }
+    return { job, created: true, rerunRequested: false };
   }
-  return { job, created: true, rerunRequested: false };
+  throw new Error("Could not queue the AI reading: the active job kept changing underneath");
 }
 
 /**
@@ -278,11 +299,14 @@ async function touchReadingOf(job: AiJobRow, patch: Partial<Reading>): Promise<v
  * Vercel the route answers as soon as it has claimed its jobs and runs the
  * steps after the response (`waitUntil`), so the caller waits a round trip,
  * not a step; elsewhere the two seconds are the ceiling. Never throws, and
- * does nothing where there is no secret to call with.
+ * does nothing where there is no secret, or no CONFIGURED base URL, to
+ * call with — never the request's own host: the kick carries the cron
+ * secret, and the request's Host header is the caller's to set. Without a
+ * base the minute cron picks the job up.
  */
 export async function kickAiJobs(fetchImpl: typeof fetch = fetch): Promise<void> {
   const secret = process.env["CRON_SECRET"];
-  const base = appUrl();
+  const base = configuredAppUrl();
   if (!secret || !base) return;
   try {
     await fetchImpl(`${base}/api/cron/ai-jobs`, {
@@ -343,16 +367,18 @@ export async function claimJobs(limit: number, now: Date = new Date()): Promise<
   for (const row of (stale ?? []) as AiJobRow[]) {
     // Conditional on the lock it was found with, and the lock replaced: a
     // step that finished meanwhile has moved the row, and two overlapping
-    // ticks cannot both count the same cut-off.
+    // ticks cannot both count the same cut-off. The failure is written
+    // under the new lock — the one the row now holds.
+    const token = randomUUID();
     const { data } = await db()
       .from("portal_ai_jobs")
-      .update({ locked_at: nowIso, lock_token: randomUUID() })
+      .update({ locked_at: nowIso, lock_token: token })
       .eq("id", row.id)
       .eq("status", "running")
       .eq("lock_token", row.lock_token)
       .select("id");
     if ((data ?? []).length === 0) continue;
-    await failJob(row, CUT_OFF_ERROR);
+    await failJob({ ...row, lock_token: token }, CUT_OFF_ERROR);
   }
 
   const { data: due } = await db()
@@ -388,14 +414,20 @@ export async function claimJobs(limit: number, now: Date = new Date()): Promise<
 
 /* ------------------------------------------------------------------- run */
 
+/** One load of each kind's step module, shared by the jobs a tick runs side by side. */
+const stepModules: {
+  prepare_deal?: Promise<typeof import("./steps/prepare-deal")>;
+  analyze_transcript?: Promise<typeof import("./steps/analyze-transcript")>;
+} = {};
+
 async function stepSetFor(kind: AiJobKind): Promise<StepSet> {
   switch (kind) {
     case "prepare_deal": {
-      const m = await import("./steps/prepare-deal");
+      const m = await (stepModules.prepare_deal ??= import("./steps/prepare-deal"));
       return { order: m.PREPARE_DEAL_STEPS, steps: m.prepareDealSteps };
     }
     case "analyze_transcript": {
-      const m = await import("./steps/analyze-transcript");
+      const m = await (stepModules.analyze_transcript ??= import("./steps/analyze-transcript"));
       return { order: m.ANALYZE_TRANSCRIPT_STEPS, steps: m.analyzeTranscriptSteps };
     }
   }
@@ -404,7 +436,21 @@ async function stepSetFor(kind: AiJobKind): Promise<StepSet> {
 export type RunOutcome =
   | { outcome: "advanced"; step: string; next: string }
   | { outcome: "finished"; step: string }
-  | { outcome: "failed"; step: string; error: string; final: boolean };
+  | { outcome: "failed"; step: string; error: string; final: boolean }
+  /** The lock was taken from this runner while it ran; nothing was written. */
+  | { outcome: "lost_lock"; step: string };
+
+/**
+ * The row no longer carries this runner's lock: the stale sweep reclaimed
+ * it (a step that outlived the stale window) and another runner may be on
+ * the same step. Whoever holds the lock now owns the writes.
+ */
+export class LockLostError extends Error {
+  constructor(public readonly jobId: string) {
+    super(`The AI job ${jobId} was reclaimed while this step ran; its result was not written`);
+    this.name = "LockLostError";
+  }
+}
 
 /**
  * Run the job's current step and write what happened. Throws nothing of
@@ -433,7 +479,15 @@ export async function runOneStep(
   }
   const index = set.order.indexOf(step);
   const next = out.skipTo ?? (index >= 0 ? (set.order[index + 1] ?? null) : null);
-  await advanceJob(job, step, out, next);
+  try {
+    await advanceJob(job, step, out, next);
+  } catch (e) {
+    if (e instanceof LockLostError) {
+      console.error("[ai-jobs] lost the lock", job.id, step);
+      return { outcome: "lost_lock", step };
+    }
+    throw e;
+  }
   if (next) {
     // The next step starts now, in a fresh invocation, not next minute.
     await kickAiJobs();
@@ -446,11 +500,34 @@ export async function runOneStep(
 const ADVANCE_WRITE_TRIES = 3;
 
 /**
+ * A write to the claimed row, by id and by the lock this runner holds. A
+ * row claimed without a lock (a direct call in a test) is written by id.
+ */
+function ownRow(job: AiJobRow, patch: Record<string, unknown>) {
+  let q = db().from("portal_ai_jobs").update(patch).eq("id", job.id);
+  if (job.lock_token) q = q.eq("lock_token", job.lock_token);
+  return q;
+}
+
+/** Whether the row is still this runner's: present, and under its lock. */
+async function lockHeld(job: AiJobRow): Promise<"held" | "lost" | "missing"> {
+  const { data } = await db()
+    .from("portal_ai_jobs")
+    .select("id,lock_token")
+    .eq("id", job.id)
+    .maybeSingle();
+  if (!data) return "missing";
+  return !job.lock_token || data.lock_token === job.lock_token ? "held" : "lost";
+}
+
+/**
  * `steps_done`, usage, result and the next step, in one write. The write
  * is retried before the step is given up on, because a step re-run over a
  * failed write would spend its model calls again. The rerun and force
  * flags are read back from the row, not from the copy claimed minutes ago:
- * a request folded in during the last step must not be lost.
+ * a request folded in during the last step must not be lost. Conditional
+ * on the runner's lock: a runner the stale sweep gave up on writes
+ * nothing over the runner that took its place.
  */
 export async function advanceJob(
   job: AiJobRow,
@@ -482,48 +559,61 @@ export async function advanceJob(
   let lastError = "no row";
   for (let attempt = 0; attempt < ADVANCE_WRITE_TRIES && !written; attempt++) {
     if (attempt > 0) await new Promise((r) => setTimeout(r, 250 * attempt));
-    const { data, error } = await db()
-      .from("portal_ai_jobs")
-      .update(patch)
-      .eq("id", job.id)
-      .select("rerun_requested,force");
+    const { data, error } = await ownRow(job, patch).select("rerun_requested,force");
     if (error) {
       lastError = error.message;
       continue;
     }
     const row = (data ?? [])[0] as Pick<AiJobRow, "rerun_requested" | "force"> | undefined;
-    if (row) written = row;
-    else lastError = "no row";
+    if (row) {
+      written = row;
+    } else {
+      if ((await lockHeld(job)) === "lost") throw new LockLostError(job.id);
+      lastError = "no row";
+    }
   }
   if (!written) throw new Error(`Could not advance the AI job: ${lastError}`);
   const updated = { ...job, ...patch, ...written } as AiJobRow;
 
-  // Something arrived while this job read: one more pass, as a new job, so
-  // the dedupe index and the audit trail both see it for what it is.
-  if (!next && updated.rerun_requested) {
-    try {
-      await enqueueAiJob({
-        kind: job.kind,
-        dealId: job.deal_id,
-        implementationId: job.implementation_id,
-        subjectId: job.subject_id,
-        trigger: "rerun",
-        requestedBy: job.requested_by,
-        force: updated.force,
-      });
-      await kickAiJobs();
-    } catch (e) {
-      console.error("[ai-jobs] could not queue the rerun", job.id, e);
-    }
-  }
+  if (!next) await queueRerunIfAsked(job, updated);
   return updated;
+}
+
+/**
+ * Something arrived while this job read: one more pass, as a new job, so
+ * the dedupe index and the audit trail both see it for what it is. Called
+ * once the job's row has left the active states, so the index allows the
+ * fresh row. Never throws: the job ended either way.
+ */
+async function queueRerunIfAsked(
+  job: AiJobRow,
+  written: Pick<AiJobRow, "rerun_requested" | "force">,
+): Promise<void> {
+  if (!written.rerun_requested) return;
+  try {
+    await enqueueAiJob({
+      kind: job.kind,
+      dealId: job.deal_id,
+      implementationId: job.implementation_id,
+      subjectId: job.subject_id,
+      trigger: "rerun",
+      requestedBy: job.requested_by,
+      force: written.force,
+    });
+    await kickAiJobs();
+  } catch (e) {
+    console.error("[ai-jobs] could not queue the rerun", job.id, e);
+  }
 }
 
 /**
  * A failed attempt: back off 1 → 2 → 5 → 10 minutes and try the same step
  * again; past `max_attempts`, the job is failed, the humans are told once,
- * and the deal's record says the reading did not finish. Returns true when
- * the failure was final.
+ * the deal's record says the reading did not finish, and material that
+ * arrived while it ran (`rerun_requested`) still gets its reading as a
+ * fresh job. Returns true when the failure was final. Conditional on the
+ * runner's lock, like the advance: a runner that lost its lock records
+ * nothing.
  */
 export async function failJob(job: AiJobRow, error: string): Promise<boolean> {
   const attempts = (job.attempts ?? 0) + 1;
@@ -532,17 +622,18 @@ export async function failJob(job: AiJobRow, error: string): Promise<boolean> {
   const now = new Date();
   if (!final) {
     const minutes = BACKOFF_MINUTES[Math.min(attempts, BACKOFF_MINUTES.length) - 1]!;
-    await db()
-      .from("portal_ai_jobs")
-      .update({
-        status: "queued",
-        attempts,
-        last_error: message,
-        lock_token: null,
-        locked_at: null,
-        next_attempt_at: new Date(now.getTime() + minutes * 60_000).toISOString(),
-      })
-      .eq("id", job.id);
+    const { data } = await ownRow(job, {
+      status: "queued",
+      attempts,
+      last_error: message,
+      lock_token: null,
+      locked_at: null,
+      next_attempt_at: new Date(now.getTime() + minutes * 60_000).toISOString(),
+    }).select("id");
+    if ((data ?? []).length === 0) {
+      console.error("[ai-jobs] lost the lock before recording the failure", job.id);
+      return false;
+    }
     // The record keeps breathing through the wait, and says why it waits,
     // so the screen reads "retrying", not "stalled".
     await touchReadingOf(job, {
@@ -556,17 +647,21 @@ export async function failJob(job: AiJobRow, error: string): Promise<boolean> {
     });
     return false;
   }
-  await db()
-    .from("portal_ai_jobs")
-    .update({
-      status: "failed",
-      attempts,
-      last_error: message,
-      lock_token: null,
-      locked_at: null,
-      finished_at: now.toISOString(),
-    })
-    .eq("id", job.id);
+  // The flags come back from the row: a fold during the last attempt is
+  // not on the claimed copy.
+  const { data: failed } = await ownRow(job, {
+    status: "failed",
+    attempts,
+    last_error: message,
+    lock_token: null,
+    locked_at: null,
+    finished_at: now.toISOString(),
+  }).select("rerun_requested,force");
+  const written = ((failed ?? [])[0] ?? null) as Pick<AiJobRow, "rerun_requested" | "force"> | null;
+  if (!written) {
+    console.error("[ai-jobs] lost the lock before recording the failure", job.id);
+    return false;
+  }
   const { safeCreateAlert } = await import("../events");
   await safeCreateAlert({
     kind: "ai_job_failed",
@@ -583,6 +678,9 @@ export async function failJob(job: AiJobRow, error: string): Promise<boolean> {
       console.error("[ai-jobs] could not mark the reading failed", job.id, e);
     }
   }
+  // After the record says failed, so the fresh job's "queued" is what the
+  // screen ends on, with the new job's id.
+  await queueRerunIfAsked(job, written);
   return true;
 }
 

@@ -137,6 +137,31 @@ describe("kickoffFocusContent — presentation-only fallback precedence", () => 
     });
   });
 
+  it("keeps flagged items off the slide while the saved list is the AI reading's own and unconfirmed", () => {
+    // Saved by the automatic apply, nobody pressed Generate: a Gong-only or
+    // conflicting item has had no review, so it is held back exactly like a
+    // flagged fallback candidate.
+    const aiList = { items: fallbackItems, validatedAt: null, aiFilled: true };
+    expect(kickoffFocusContent(aiList, [])).toEqual({
+      state: "proposed",
+      items: [fallbackItems[0]!.text],
+    });
+    // Nothing safe on it: empty, not the fallback (the same anchors again).
+    expect(
+      kickoffFocusContent({ items: [fallbackItems[1]!], validatedAt: null, aiFilled: true }, [
+        fallbackItems[0]!,
+      ]),
+    ).toEqual({ state: "empty" });
+    // A person's save lifts the hold; so does Confirm.
+    expect(kickoffFocusContent({ ...aiList, aiFilled: false }, [])).toEqual({
+      state: "proposed",
+      items: fallbackItems.map((i) => i.text),
+    });
+    expect(
+      kickoffFocusContent({ ...aiList, validatedAt: "2026-10-07T12:00:00Z" }, []),
+    ).toMatchObject({ state: "agreed" });
+  });
+
   it("falls back to the presentation-only proposal, always as proposed, when nothing is saved", () => {
     // fallbackItems[1] is review_flag: "gong_only" — excluded automatically;
     // see the dedicated customer-safety describe block below.

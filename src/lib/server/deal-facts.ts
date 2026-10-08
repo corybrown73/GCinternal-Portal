@@ -11,6 +11,26 @@ import { watchOutsFor } from "../watch-outs";
 const db = () => supabaseAdmin as any;
 
 /**
+ * The deal's facts with THIS implementation's pending transcript proposals
+ * on them. A deal may run several implementations; the proposals belong to
+ * one each, and Home's row (and its link) is per implementation, so the
+ * count is laid on here, not summed onto the deal in `dealFactsFor`.
+ */
+export async function withPendingProposals<T extends { id: string; deal_id: string | null }>(
+  implementations: ReadonlyArray<T>,
+  facts: Map<string, DealFacts>,
+): Promise<Map<string, DealFacts | null>> {
+  const { pendingProposalCounts } = await import("../transcript-proposals.server");
+  const pending = await pendingProposalCounts(implementations.map((i) => i.id));
+  const out = new Map<string, DealFacts | null>();
+  for (const i of implementations) {
+    const deal = i.deal_id ? (facts.get(i.deal_id) ?? null) : null;
+    out.set(i.id, deal ? { ...deal, pending_proposals: pending.get(i.id) ?? 0 } : null);
+  }
+  return out;
+}
+
+/**
  * The facts Home's triage reads about each deal, gathered once for a set of
  * deals: the checklist's state, the plan's overdue calls and the watch-outs
  * the plan contradicts. The same readers the deal page uses (stageFlow,
@@ -72,14 +92,6 @@ export async function dealFactsFor(
   const implRows = (impls ?? []) as Array<{ id: string; deal_id: string; owner_id: string | null }>;
   for (const i of implRows)
     if (!ownerIdByDeal.has(i.deal_id)) ownerIdByDeal.set(i.deal_id, i.owner_id);
-  // Transcript proposals awaiting a decision, counted onto the deal they belong to.
-  const { pendingProposalCounts } = await import("../transcript-proposals.server");
-  const pendingByImpl = await pendingProposalCounts(implRows.map((i) => i.id));
-  const pendingByDeal = new Map<string, number>();
-  for (const i of implRows) {
-    const n = pendingByImpl.get(i.id) ?? 0;
-    if (n) pendingByDeal.set(i.deal_id, (pendingByDeal.get(i.deal_id) ?? 0) + n);
-  }
   const ownerIds = [...new Set([...ownerIdByDeal.values()].filter(Boolean))] as string[];
   const { data: members } = ownerIds.length
     ? await db().from("team_members").select("id,name").in("id", ownerIds)
@@ -164,7 +176,11 @@ export async function dealFactsFor(
           : [],
       close_date: timeline.closeDate,
       live_date: timeline.liveDate,
-      pending_proposals: pendingByDeal.get(d.id) ?? 0,
+      // Transcript proposals are an implementation's, not the deal's: the
+      // caller that knows which implementation it is rendering overlays the
+      // count (`withPendingProposals`), so a deal with two implementations
+      // does not show one's proposals on the other's row.
+      pending_proposals: 0,
       watch_outs: watchOutsFor({
         brief: briefByDeal.get(d.id) ?? null,
         notes: noteTexts,

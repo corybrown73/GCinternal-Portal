@@ -162,16 +162,22 @@ export function TimelinePanel({
     sowName: string | null;
     proposal: SowPlanProposal;
     rows: Array<SowPlanRow & { accept: boolean; edited?: boolean }>;
+    /** True when the kept reading was served, not the model asked. */
+    reused: boolean;
   } | null>(null);
   const sowRead = useMutation({
-    // The first read is served from the kept reading when there is one;
-    // "Re-read" asks the model again.
-    mutationFn: () => readSow({ data: { dealId, force: services.length > 0 } }),
+    // The kept reading is served whenever the document on file is the one
+    // that was read — the automatic job usually read it already, so the
+    // button is instant and free. Asking the model again is its own,
+    // explicit action on the proposal ("Ask the model again"), never the
+    // default of a click.
+    mutationFn: (vars: { force: boolean }) => readSow({ data: { dealId, force: vars.force } }),
     onMutate: () => setError(null),
     onSuccess: (r) =>
       setProposal({
         sowName: r.sowName,
         proposal: r.proposal,
+        reused: r.reused,
         rows: r.proposal.services.map((row) => ({
           ...row,
           accept: row.confidence !== "uncertain",
@@ -503,20 +509,20 @@ export function TimelinePanel({
                 disabled={!hasSow || sowRead.isPending}
                 onClick={(e) => {
                   e.stopPropagation();
-                  sowRead.mutate();
+                  sowRead.mutate({ force: false });
                 }}
                 title={
                   !hasSow
                     ? "Upload the signed SOW first"
                     : services.length
-                      ? "Read the SOW again and propose changes — what is on the plan stays until you remove it"
+                      ? "Show what the SOW says and propose changes — what is on the plan stays until you remove it"
                       : "Read the signed SOW and propose the services — you review every row before it lands"
                 }
               >
                 {sowRead.isPending ? (
                   <Working label="Reading the SOW…" estimateSeconds={60} />
                 ) : hasSow && services.length ? (
-                  "Re-read the SOW"
+                  "Propose from the SOW"
                 ) : (
                   "Read the SOW into the plan"
                 )}
@@ -546,6 +552,21 @@ export function TimelinePanel({
                       {services.length
                         ? ` The plan already holds ${services.length}: a twin updates it, a new row is added.`
                         : ""}
+                      {proposal.reused && editable ? (
+                        <>
+                          {" "}
+                          Served from the kept reading of this document.{" "}
+                          <button
+                            type="button"
+                            className="underline disabled:opacity-50"
+                            disabled={sowRead.isPending}
+                            onClick={() => sowRead.mutate({ force: true })}
+                            title="Read the document again with the model — the new reading replaces the kept one everywhere"
+                          >
+                            {sowRead.isPending ? "Asking…" : "Ask the model again"}
+                          </button>
+                        </>
+                      ) : null}
                     </p>
                   </div>
                   {proposal.rows.length ? (

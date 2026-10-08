@@ -22,6 +22,8 @@ vi.mock("mammoth", () => ({
 
 import { MAX_DOC_BYTES } from "../server/ai/config";
 import {
+  encodedSize,
+  fitDocumentsToRequest,
   MAX_DOC_TEXT_CHARS,
   MAX_PDF_PAGES,
   pdfPageCount,
@@ -169,6 +171,43 @@ describe("prepareDocument", () => {
     const b = await prepareDocument(new Uint8Array(PDF), "b.pdf");
     expect(a.sha256).toBe(b.sha256);
     expect((await prepareDocument(TEXT, "c.txt")).sha256).not.toBe(a.sha256);
+  });
+});
+
+describe("fitDocumentsToRequest", () => {
+  it("drops the contract, with the reason, when the pair would not fit one request", async () => {
+    const sow = await prepareDocument(PDF, "sow.pdf");
+    const contract = await prepareDocument(
+      bytes("%PDF-1.7\n% the contract\n%%EOF\n"),
+      "contract.pdf",
+    );
+    const pair = encodedSize(sow) + encodedSize(contract);
+    expect(pair).toBeGreaterThan(0);
+
+    // Fits: untouched.
+    const kept = fitDocumentsToRequest({ sow, contract }, pair);
+    expect(kept.contract).toBe(contract);
+    expect(kept.sow).toBe(sow);
+
+    // Over the line: the SOW stays, the contract says why it was left out.
+    const cut = fitDocumentsToRequest({ sow, contract }, pair - 1);
+    expect(cut.sow).toBe(sow);
+    expect(cut.contract?.block).toBeNull();
+    expect(cut.contract?.kind).toBe("unsupported");
+    expect(cut.contract?.sha256).toBe(contract.sha256);
+    expect(cut.contract?.problem).toMatch(
+      /contract\.pdf .* and sow\.pdf .* too large to read together/,
+    );
+    expect(cut.contract?.problem).toMatch(/The SOW alone was read/);
+  });
+
+  it("leaves a lone document, an unreadable one, and the same bytes under both names alone", async () => {
+    const sow = await prepareDocument(PDF, "sow.pdf");
+    expect(fitDocumentsToRequest({ sow, contract: null }, 1).contract).toBeNull();
+    const twin = await prepareDocument(PDF, "contract.pdf");
+    expect(fitDocumentsToRequest({ sow, contract: twin }, 1).contract).toBe(twin);
+    const broken = unreadableDocument("contract.pdf", "not found");
+    expect(fitDocumentsToRequest({ sow, contract: broken }, 1).contract).toBe(broken);
   });
 });
 

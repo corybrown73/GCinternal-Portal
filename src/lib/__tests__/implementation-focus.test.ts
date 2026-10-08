@@ -246,6 +246,15 @@ describe("focusItemsFromBrief — the AI reading's items behind the anchors", ()
       },
     });
     expect(focusItemsFromBrief(manual, [briefItems[0]])).toBeNull();
+    // Reworded or trimmed on the panel: the ids are still "focus-", the
+    // person's save is known by the claim.
+    const reworded = readIntake({
+      person_set: ["implementation_focus"],
+      implementation_focus: {
+        items: [{ id: "focus-1", text: "Reworded", status: "proposed", sources: [] }],
+      },
+    });
+    expect(focusItemsFromBrief(reworded, [briefItems[0]])).toBeNull();
     const agreed = readIntake({
       implementation_focus: {
         items: [{ id: "focus-1", text: "Agreed", status: "agreed", sources: [] }],

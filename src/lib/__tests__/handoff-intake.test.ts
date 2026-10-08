@@ -21,6 +21,7 @@ const h = vi.hoisted(() => {
     updated: [] as Array<{ table: string; patch: Row; id: string }>,
     audits: [] as Row[],
     db: null as any,
+    jobs: { autoReadDeal: vi.fn(async (_dealId: string, _trigger: string) => null) },
   };
 
   state.db = {
@@ -82,6 +83,7 @@ vi.mock("../server/audit", () => ({
     h.audits.push(entry);
   },
 }));
+vi.mock("../server/ai/jobs", () => h.jobs);
 
 import { addCallNotes, createDeal, updateDeal } from "../server/handoff-tools";
 
@@ -160,6 +162,18 @@ describe("add_call_notes", () => {
     expect(h.inserted[0]!.row["content_md"]).toBe(transcript);
     expect(h.inserted[0]!.row["report_type"]).toBe("call_notes");
     expect(h.inserted[0]!.row["account_id"]).toBe(EXISTING);
+  });
+
+  it("queues the automatic reading after the notes are filed, named as the MCP's", async () => {
+    h.jobs.autoReadDeal.mockClear();
+    let filedWhenAsked = 0;
+    h.jobs.autoReadDeal.mockImplementationOnce(async () => {
+      filedWhenAsked = h.inserted.length;
+      return null;
+    });
+    await addCallNotes({ dealId: EXISTING, title: "T", markdown: "three crews" });
+    expect(h.jobs.autoReadDeal).toHaveBeenCalledWith(EXISTING, "call_notes_mcp");
+    expect(filedWhenAsked).toBe(1);
   });
 
   it("refuses a kind the enum does not have", async () => {

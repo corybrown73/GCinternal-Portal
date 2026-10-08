@@ -30,9 +30,14 @@ export async function generateImplementationFocus(
   const proposed = proposeImplementationFocus(current);
   if (proposed === null) return current;
   const { saveDealIntake } = await import("./presale.server");
-  return saveDealIntake(userId, dealId, {
-    implementation_focus: { items: proposed, validated_at: null, validated_by: null },
-  });
+  // A fresh proposal is the proposal's own, not the person's: the reading
+  // may still add the brief's items behind these anchors.
+  return saveDealIntake(
+    userId,
+    dealId,
+    { implementation_focus: { items: proposed, validated_at: null, validated_by: null } },
+    { proposal: true },
+  );
 }
 
 /**

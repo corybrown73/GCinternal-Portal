@@ -177,16 +177,19 @@ function normalizedText(text: string): string {
 /**
  * The brief's own focus items, behind the deterministic anchors. The AI
  * reading writes the list only while it is still a proposal's — nothing
- * saved, or every id the proposal's own ("focus-…", the AI's included) —
- * so a list a person edited by hand ("manual-…") or agreed is never
- * touched, and a refresh of the proposal keeps working as it did. SOW and
- * intake anchors come first, the brief's items after, each once by its
- * wording; an item the calls alone support keeps the Gong-only flag the
- * handoff's systems get, so it never reads as agreed by accident. Null
- * when there is nothing to write.
+ * saved, or every id the proposal's own ("focus-…", the AI's included) and
+ * no person has claimed the list — so a list a person edited by hand is
+ * never touched: an added item ("manual-…"), but also a reworded or a
+ * trimmed one, which keep the proposal's ids and are known only by the
+ * save that put "implementation_focus" in `person_set`. An agreed list is
+ * never touched either, and a refresh of the proposal keeps working as it
+ * did. SOW and intake anchors come first, the brief's items after, each
+ * once by its wording; an item the calls alone support keeps the Gong-only
+ * flag the handoff's systems get, so it never reads as agreed by accident.
+ * Null when there is nothing to write.
  */
 export function focusItemsFromBrief(
-  intake: Parameters<typeof proposeImplementationFocus>[0],
+  intake: Parameters<typeof proposeImplementationFocus>[0] & Pick<IntakeAnswers, "person_set">,
   briefItems: ReadonlyArray<{
     text: string;
     source_type: "sow" | "gong" | "intake";
@@ -196,6 +199,7 @@ export function focusItemsFromBrief(
 ): ImplementationFocusItem[] | null {
   const focus = intake.implementation_focus;
   if (focus.validated_at) return null;
+  if (intake.person_set.includes("implementation_focus")) return null;
   if (focus.items.length && !focus.items.every((i) => i.id.startsWith("focus-"))) return null;
   if (!briefItems.length) return null;
   const anchors = proposeImplementationFocus(intake) ?? [];

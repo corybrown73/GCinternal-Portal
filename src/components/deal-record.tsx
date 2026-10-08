@@ -38,7 +38,6 @@ import {
   addNote,
   addReport,
   createTamRequestForDeal,
-  generateBriefForDeal,
   getBriefDownloadUrl,
   getDeal,
   getHandoffOptions,

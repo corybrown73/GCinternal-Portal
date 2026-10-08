@@ -39,6 +39,7 @@ function baseView(over: Partial<WelcomeView> = {}): WelcomeView {
       champion: null,
     },
     firstForm: { name: "Daily Job Report", objective: null, source: "typed" },
+    firstFormSource: "person",
     nextUseCases: [],
     photoUrl: null,
     clientLogoUrl: null,

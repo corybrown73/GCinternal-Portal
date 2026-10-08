@@ -748,6 +748,7 @@ function ProposalRow({
                 value={date}
                 disabled={disabled}
                 onChange={(e) => onDate(e.target.value)}
+                aria-label={`Target date for ${proposal.title}`}
                 className="h-6 rounded-sm border border-border bg-background px-1.5 text-[12px] outline-none focus:ring-1 focus:ring-ring"
               />
               {!date ? (
@@ -768,6 +769,7 @@ function ProposalRow({
                 value={ownerId}
                 disabled={disabled}
                 onChange={(e) => onOwner(e.target.value)}
+                aria-label={`Owner for ${proposal.title}`}
                 className="h-6 rounded-sm border border-border bg-background px-1.5 text-[12px] outline-none focus:ring-1 focus:ring-ring"
               >
                 <option value="">{needsOwner ? "Pick who…" : "Nobody"}</option>

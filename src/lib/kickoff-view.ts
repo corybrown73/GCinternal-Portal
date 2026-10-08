@@ -24,7 +24,11 @@ export type KickoffFocusContent =
  * PRECEDENCE: a saved item — agreed or still proposed — always wins, in
  * its saved state, exactly as saved: items deliberately generated or
  * edited in the Hub are the TIS's own working proposal, so they are never
- * re-filtered by review_flag here.
+ * re-filtered by review_flag here. ONE EXCEPTION: a list the AI reading
+ * saved on its own (`aiFilled`, nobody pressed Generate) has had no
+ * review at all, so while it is unvalidated its flagged items — Gong-only,
+ * or in conflict with the SOW — stay off the slide exactly like a flagged
+ * fallback candidate. A person's save of the list, or Confirm, lifts that.
  *
  * `fallbackItems` (proposeImplementationFocus's output, read fresh on
  * every view, never persisted) is used only when nothing has been saved
@@ -39,16 +43,21 @@ export type KickoffFocusContent =
  * proposeImplementationFocus produced it everywhere else in the Hub.
  */
 export function kickoffFocusContent(
-  focus: Pick<ImplementationFocusView, "items" | "validatedAt"> | null | undefined,
+  focus: Pick<ImplementationFocusView, "items" | "validatedAt" | "aiFilled"> | null | undefined,
   fallbackItems?: ImplementationFocusView["items"] | null,
 ): KickoffFocusContent {
-  const items = focus?.items ?? [];
+  const saved = focus?.items ?? [];
+  const unreviewed = Boolean(focus?.aiFilled) && !focus?.validatedAt;
+  const items = unreviewed ? saved.filter((i) => i.reviewFlag === null) : saved;
   if (items.length) {
     return {
       state: focus?.validatedAt ? "agreed" : "proposed",
       items: items.map((i) => i.text),
     };
   }
+  // An AI-written list with nothing customer-safe on it is not replaced
+  // by the fallback: the fallback is the same anchors, filtered the same way.
+  if (saved.length) return { state: "empty" };
   const safeFallback = (fallbackItems ?? []).filter((i) => i.reviewFlag === null);
   if (!safeFallback.length) return { state: "empty" };
   return { state: "proposed", items: safeFallback.map((i) => i.text) };

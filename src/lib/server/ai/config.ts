@@ -22,11 +22,19 @@ export type AiCallKind =
 
 /**
  * One model call may run this long, headers and streamed body together,
- * including the SDK's single connection retry: under Vercel's 300s ceiling
- * with room to write. A reading with a repair turn is two calls, which is
- * why the readings belong in background jobs rather than a web request.
+ * including the SDK's single connection retry.
  */
 export const AI_CALL_TIMEOUT_MS = 240_000;
+
+/**
+ * Everything one `runStructured` may spend on model calls together — the
+ * reply, a repair turn, the 400 retries — so that one step of a job, or
+ * one web request, ends in an orderly way inside Vercel's 300s ceiling
+ * with room left to load the sources and write the result. A job step
+ * runs under the same ceiling as a web request; the background queue
+ * buys a retry, not a longer function.
+ */
+export const AI_STEP_BUDGET_MS = 270_000;
 
 /** A PDF or Word document past this is reported, not silently dropped. */
 export const MAX_DOC_BYTES = 20_000_000;
@@ -48,9 +56,9 @@ export function isAiEffort(v: unknown): v is AiEffort {
  * The value is one level for everything ("high"), or an object with a
  * `default` and per-kind overrides ({ default: "high", brief: "xhigh" }).
  * The three brief passes (`brief_core`, `brief_plan`, `verify`) all run
- * at the `brief` kind's effort, decided once per brief, so their shared
- * cached prefix is sent with the same parameters every time. Anything
- * else falls back to the seeded default.
+ * at the `brief` kind's effort, decided once per brief, so one reading
+ * thinks as hard throughout. Anything else falls back to the seeded
+ * default.
  */
 export async function aiEffort(kind: AiCallKind): Promise<AiEffort> {
   const value = await getConfigValue("ai.effort");

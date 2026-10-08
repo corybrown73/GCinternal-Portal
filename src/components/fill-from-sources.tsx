@@ -11,8 +11,10 @@ import { cn } from "@/lib/utils";
 
 /**
  * Queue the reading and do not wait for it: the progress is on the record.
- * Used by the Gong and SOW uploads (automatically) and by "Read again",
- * which passes `force` so the job reads even when nothing changed.
+ * A person's action only — "Read again" passes `force` so the job reads
+ * even when nothing changed. The automatic readings are queued server-side
+ * by the upload and the close themselves, behind the `ai_auto_read` flag;
+ * nothing in the browser starts one on its own.
  */
 export function useStartReading(dealId: string) {
   const qc = useQueryClient();

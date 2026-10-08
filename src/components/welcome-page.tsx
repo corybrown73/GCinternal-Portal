@@ -1059,8 +1059,9 @@ function Team({ view, page }: { view: WelcomeView; page: number }) {
           <PhoneMock view={view} className="is-team" />
           <span className="wp-team-photo-cap">
             <Icon name="Smartphone" className="h-3.5 w-3.5" />
-            {view.firstForm?.name ?? (view.timeline.training ? "Your jobs" : "Your first form")}, on
-            the crew&apos;s phone
+            {view.firstForm?.name ?? (view.timeline.training ? "Your jobs" : "Your first form")}
+            {view.firstForm && view.firstFormSource === "ai" ? " (to confirm)" : ""}, on the
+            crew&apos;s phone
           </span>
         </div>
       </div>
