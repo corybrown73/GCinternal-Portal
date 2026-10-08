@@ -283,6 +283,24 @@ describe("done marks", () => {
     const t = buildTimeline({ closeDate: "2026-09-09", completed: { kickoff: "yesterday" } });
     expect(t.milestones.find((m) => m.key === "kickoff")!.doneOn).toBeNull();
   });
+
+  it("keeps a completed milestone's own date when an earlier one is moved by hand", () => {
+    const homeworkBase = addBusinessDays("2026-09-09", 3);
+    const t = buildTimeline({
+      closeDate: "2026-09-09",
+      overrides: { kickoff: "2026-09-15" },
+      completed: { homework: homeworkBase },
+    });
+    const homework = t.milestones.find((m) => m.key === "homework")!;
+    // The work already happened on its own scheduled day; the kickoff
+    // override must not retroactively move it.
+    expect(homework.date).toBe(homeworkBase);
+    expect(homework.moved).toBe(false);
+    expect(homework.shifted).toBe(false);
+    // The shift still reaches the milestones after it that are not done.
+    const working = t.milestones.find((m) => m.key === "working")!;
+    expect(working.date).not.toBe(addBusinessDays("2026-09-09", 5));
+  });
 });
 
 describe("phases with several services", () => {

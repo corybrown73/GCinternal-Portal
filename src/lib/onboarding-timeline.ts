@@ -1303,9 +1303,14 @@ export function buildTimeline(options: TimelineOptions): Timeline {
       const plannedDate = shift === 0 ? base : addBusinessDays(base, shift, holidays);
       const override = overrides[spec.key];
       const moved = Boolean(override && ISO.test(override) && override !== plannedDate);
-      const date = moved ? override! : plannedDate;
-      if (moved) shift = businessDaysBetween(base, date, holidays);
       const done = completed[spec.key];
+      const doneOn = done && ISO.test(done) ? done : null;
+      // Work that is already done keeps the date it was scheduled for: an
+      // upstream hand-move must not retroactively shift a milestone whose
+      // date nobody is still deciding. An explicit override on this
+      // milestone itself still wins, exactly as it always has.
+      const date = moved ? override! : doneOn ? base : plannedDate;
+      if (moved) shift = businessDaysBetween(base, date, holidays);
       const time = times[spec.key];
       return {
         ...spec,
@@ -1314,7 +1319,7 @@ export function buildTimeline(options: TimelineOptions): Timeline {
         plannedDate,
         moved,
         shifted: !moved && shift !== 0 && date !== base,
-        doneOn: done && ISO.test(done) ? done : null,
+        doneOn,
         time: time && /^\d{2}:\d{2}$/.test(time) ? time : null,
         phase: 1,
       };
