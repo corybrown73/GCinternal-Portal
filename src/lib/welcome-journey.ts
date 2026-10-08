@@ -38,11 +38,38 @@ export type SolutionBallView = {
   status: string;
   /** Who holds it: us, you, or nobody because it is finished. */
   who: "us" | "you" | "done";
-  /** The date it is wanted by, when one is set. */
+  /** The date it is wanted by, when one is set — ball.date, else the solution's own due date. */
   when: string | null;
   /** The customer can say "tested, it works" and hand the ball back. */
   canConfirm: boolean;
   note: string | null;
+  /**
+   * The person explicitly recorded as responsible for this ball. Read from
+   * the solution's own `ball`, never from solutionBall()'s computed
+   * default (which may stand in the project lead's name when nobody has
+   * actually been named) — null here means no one was named, not that the
+   * lead is assumed.
+   */
+  responsiblePerson: string | null;
+  /**
+   * Which side an explicitly-recorded ball marks as blocked. Read from the
+   * solution's own `ball.who`, never inferred from status or default — null
+   * unless a person actually recorded a blocked ball.
+   */
+  blocked: "customer" | "internal" | null;
+  /**
+   * The explicitly-recorded ball's own date. Distinct from `when` (which
+   * also falls back to the solution's due date) — null unless a person set
+   * a ball with a date, so a missing ball date is never read as "waiting
+   * since" anything.
+   */
+  ballDate: string | null;
+  /**
+   * The solution's own due date (the customer's date for their part), kept
+   * separate from the ball's date so one is never mistaken for a stage
+   * deadline or for the other.
+   */
+  dueDate: string | null;
 };
 
 export type YourItem = {
@@ -163,6 +190,18 @@ export function customerJourney(input: {
       when: ball?.date ?? s.due ?? null,
       canConfirm: who === "you" && status === "accept" && !completed[`${s.id}:review`],
       note: ball?.note ?? null,
+      // Explicit source truth only — s.ball, never solutionBall()'s
+      // computed default, which may carry the project lead's name or the
+      // solution's due date as a stand-in for an unset ball.
+      responsiblePerson: s.ball?.person ?? null,
+      blocked:
+        s.ball?.who === "blocked_customer"
+          ? "customer"
+          : s.ball?.who === "blocked_internal"
+            ? "internal"
+            : null,
+      ballDate: s.ball?.date ?? null,
+      dueDate: s.due ?? null,
     };
   });
 
