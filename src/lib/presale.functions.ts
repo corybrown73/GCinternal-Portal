@@ -717,6 +717,37 @@ export const explainTargetChange = createServerFn({ method: "POST" })
     return explain(context.profile.id, data.changeId, data.reasonCode, data.note);
   });
 
+/** A TIS setting the target graduation date directly, with a mandatory reason. */
+export const setTargetGraduationDate = createServerFn({ method: "POST" })
+  .middleware([requireDealEditor])
+  .inputValidator((data: unknown) =>
+    z
+      .object({
+        implementationId: z.string().uuid(),
+        date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+        reasonCode: z.enum([
+          "tier_mismatch",
+          "mis_scope",
+          "expansion",
+          "internal_delivery",
+          "customer",
+          "feasibility_outcome",
+        ]),
+        note: z.string().trim().max(500).nullable(),
+      })
+      .parse(data),
+  )
+  .handler(async ({ data, context }) => {
+    const { setTargetGraduationDate: setDate } = await import("./presale.server");
+    return setDate(
+      context.profile.id,
+      data.implementationId,
+      data.date,
+      data.reasonCode,
+      data.note,
+    );
+  });
+
 /* ---------- purchased solutions ---------- */
 
 const ballSchema = z

@@ -5,6 +5,7 @@ import {
   expectedGoLive,
   parseComplexityTiers,
   reasonLabel,
+  targetOverrideHolds,
   tierForIntake,
 } from "../complexity-tiers";
 import { readIntake } from "../intake-answers";
@@ -75,5 +76,58 @@ describe("complexity tiers", () => {
     expect(reasonLabel("customer")).toMatch(/^Customer/);
     expect(reasonLabel(null)).toBe("Reason not given yet");
     expect(reasonLabel("made_up")).toBe("Reason not given yet");
+  });
+
+  describe("targetOverrideHolds", () => {
+    it("holds for a target set and explained in the same action", () => {
+      const at = "2026-10-08T10:00:00.000Z";
+      expect(
+        targetOverrideHolds("2026-11-01", {
+          to_date: "2026-11-01",
+          reason_code: "customer",
+          changed_at: at,
+          explained_at: at,
+        }),
+      ).toBe(true);
+    });
+
+    it("does not hold for an automatic plan shift explained later", () => {
+      expect(
+        targetOverrideHolds("2026-11-01", {
+          to_date: "2026-11-01",
+          reason_code: "customer",
+          changed_at: "2026-10-01T10:00:00.000Z",
+          explained_at: "2026-10-05T09:00:00.000Z",
+        }),
+      ).toBe(false);
+    });
+
+    it("does not hold for an unexplained automatic shift", () => {
+      expect(
+        targetOverrideHolds("2026-11-01", {
+          to_date: "2026-11-01",
+          reason_code: null,
+          changed_at: "2026-10-01T10:00:00.000Z",
+          explained_at: null,
+        }),
+      ).toBe(false);
+    });
+
+    it("does not hold once the target has moved past the explained row", () => {
+      const at = "2026-10-08T10:00:00.000Z";
+      expect(
+        targetOverrideHolds("2026-11-15", {
+          to_date: "2026-11-01",
+          reason_code: "customer",
+          changed_at: at,
+          explained_at: at,
+        }),
+      ).toBe(false);
+    });
+
+    it("does not hold with no change on record", () => {
+      expect(targetOverrideHolds("2026-11-01", null)).toBe(false);
+      expect(targetOverrideHolds("2026-11-01", undefined)).toBe(false);
+    });
   });
 });

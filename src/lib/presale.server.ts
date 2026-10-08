@@ -2487,6 +2487,28 @@ export async function syncTargetLaunch(
       : t.liveDate;
     const was: string | null = impl?.target_date ?? impl?.target_launch_date ?? null;
     if (was === target && impl?.target_date) return;
+
+    // The one read of the latest change row, reused below for both the
+    // override check and the existing dedup logic rather than queried twice.
+    const last =
+      was &&
+      (
+        await db()
+          .from("target_date_changes")
+          .select("id,reason_code,from_date,to_date,changed_at,explained_at")
+          .eq("implementation_id", implId)
+          .order("changed_at", { ascending: false })
+          .limit(1)
+          .maybeSingle()
+      ).data;
+
+    // A person changed the target directly — "Change target graduation
+    // date" on Current Implementation — and gave the reason in the same
+    // action. That holds until a person moves it again; the plan's own
+    // recompute must not quietly replace it.
+    const { targetOverrideHolds } = await import("./complexity-tiers");
+    if (targetOverrideHolds(was, last)) return;
+
     await db()
       .from("implementations")
       .update({ target_launch_date: target, target_date: target })
@@ -2494,13 +2516,6 @@ export async function syncTargetLaunch(
     // After the baseline is locked, every move of the target is a row that
     // asks for its reason. Two nudges before anyone answers stay one row.
     if (impl?.baseline_locked_at && was && was !== target) {
-      const { data: last } = await db()
-        .from("target_date_changes")
-        .select("id,reason_code,from_date")
-        .eq("implementation_id", implId)
-        .order("changed_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
       if (last && !last.reason_code) {
         await db()
           .from("target_date_changes")
@@ -2601,6 +2616,65 @@ export async function explainTargetChange(
     payload: { change_id: changeId, reason_code: reasonCode },
   });
   return { ok: true };
+}
+
+/**
+ * A TIS setting the target graduation date directly, not through a plan
+ * milestone — "Change target graduation date" on Current Implementation.
+ *
+ * Writes the same two places `syncTargetLaunch()` and `explainTargetChange()`
+ * already write — `implementations.target_date`/`target_launch_date`, and a
+ * `target_date_changes` row — except the reason is given in the same action
+ * that makes the change, never attached later. That is what
+ * `targetOverrideHolds()` reads to tell this apart from a plan-driven shift,
+ * and is why `changed_at` and `explained_at` are stamped identically here
+ * rather than left to separate defaults.
+ */
+export async function setTargetGraduationDate(
+  userId: string,
+  implementationId: string,
+  newDate: string,
+  reasonCode: string,
+  note: string | null,
+): Promise<{ ok: true; from: string | null; to: string }> {
+  await requireSalesEditor(userId);
+  const { data: impl } = await db()
+    .from("implementations")
+    .select("id,target_date,target_launch_date")
+    .eq("id", implementationId)
+    .maybeSingle();
+  if (!impl) throw new Error("Implementation not found.");
+  const was: string | null = impl.target_date ?? impl.target_launch_date ?? null;
+  if (was === newDate) return { ok: true, from: was, to: newDate };
+  const { error } = await db()
+    .from("implementations")
+    .update({ target_date: newDate, target_launch_date: newDate })
+    .eq("id", implementationId);
+  if (error) throw new Error(`Could not save the target date: ${error.message}`);
+  const at = new Date().toISOString();
+  const { error: historyError } = await db()
+    .from("target_date_changes")
+    .insert({
+      implementation_id: implementationId,
+      from_date: was,
+      to_date: newDate,
+      reason_code: reasonCode,
+      note: note?.trim() ?? "",
+      changed_by: userId,
+      explained_by: userId,
+      changed_at: at,
+      explained_at: at,
+    });
+  if (historyError) throw new Error(`Could not record the change: ${historyError.message}`);
+  await audit({
+    actor_type: "user",
+    actor_id: userId,
+    action: "implementation.target_date_changed",
+    entity_type: "implementation",
+    entity_id: implementationId,
+    payload: { from: was, to: newDate, reason_code: reasonCode },
+  });
+  return { ok: true, from: was, to: newDate };
 }
 
 /**

@@ -1009,6 +1009,7 @@ export function CurrentImplementationTab({
         customerId={customerId}
         intake={intake}
         closeDate={close.date}
+        targetDate={record.implementation?.dates.target ?? null}
         editable={editable}
       />
 
