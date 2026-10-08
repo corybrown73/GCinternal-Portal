@@ -18,16 +18,25 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 
 // The scope is part of the key: switching whose accounts you are looking at
 // has to refetch, and two scopes must never share a cache entry.
+//
+// Today is the one page where nothing-specified means "mine" for every
+// internal user, admins and managers included — not resolveScope()'s usual
+// default of "all" for an admin or for someone who owns nothing yet, which
+// is the right default for /customers, /pipeline and the rest and stays
+// exactly as it is there. Sending "mine" explicitly (rather than omitting
+// scope) is what skips that admin/owns-nothing override: resolveScope()
+// only applies it when nothing was asked for. "All work" is still one click
+// away in the scope switch, same as on every other scoped page.
 const homeQuery = (scope: string | null) =>
   queryOptions({
     queryKey: ["home", scope],
-    queryFn: () => getHome({ data: scope ? { scope } : {} }),
+    queryFn: () => getHome({ data: { scope: scope ?? "mine" } }),
   });
 
 const dealInboxQuery = (scope: string | null) =>
   queryOptions({
     queryKey: ["deal-inbox", scope],
-    queryFn: () => getDealInbox({ data: scope ? { scope } : {} }),
+    queryFn: () => getDealInbox({ data: { scope: scope ?? "mine" } }),
   });
 
 export const Route = createFileRoute("/")({
