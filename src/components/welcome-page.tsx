@@ -31,7 +31,7 @@ import {
 } from "@/lib/onboarding-timeline";
 import { stampDay } from "@/lib/stage-flow";
 import type { HandoffValue } from "@/lib/sales-handoff";
-import { byLabel } from "@/lib/welcome-journey";
+import { byLabel, dueLabel, journeyOverviewItems } from "@/lib/welcome-journey";
 import { kickoffScreenList } from "@/components/kickoff-view";
 import {
   EditCtx,
@@ -1868,6 +1868,7 @@ function JourneyScreen({
     }
   };
   const n = j.stages.findIndex((s) => s.state === "now") + 1;
+  const overview = journeyOverviewItems(j.solutions);
   return (
     <Frame
       k="journey"
@@ -1880,6 +1881,46 @@ function JourneyScreen({
       band={j.current.blurb}
       bandIcon="Route"
     >
+      {j.current.key !== "complete" ? (
+        <div className="wp-card wp-overview-card" style={{ marginBottom: 18 }}>
+          <div className="wp-card-head">
+            <Tile name="Flag" tone="blue" />
+            <h3>Status at a glance</h3>
+          </div>
+          {overview.length ? (
+            <ul className="wp-ready-list">
+              {overview.map((o) => (
+                <li key={o.id}>
+                  <span className="wp-ready-q">
+                    {o.name} <small style={{ fontWeight: 500, opacity: 0.7 }}>· {o.kind}</small>
+                  </span>
+                  <span className="wp-ready-a">
+                    <span
+                      className={cn(
+                        "wp-ball",
+                        o.blocked ? "is-blocked" : `is-${o.side === "customer" ? "you" : "us"}`,
+                      )}
+                    >
+                      {o.blocked === "customer"
+                        ? "Blocked — waiting on you"
+                        : o.blocked === "internal"
+                          ? "Blocked — on our side"
+                          : o.side === "customer"
+                            ? "With you"
+                            : "With us"}
+                    </span>{" "}
+                    {o.person ?? (o.side === "customer" ? "Your team" : "The GoCanvas team")}
+                    {" · "}
+                    {dueLabel(o.dueDate)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="wp-ready-empty">No active solution items to show.</p>
+          )}
+        </div>
+      ) : null}
       <ol className="wp-journey">
         {j.stages.map((s, i) => (
           <li
