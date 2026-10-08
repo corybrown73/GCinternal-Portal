@@ -198,11 +198,76 @@ describe("Today", () => {
     expect(fgp.detail).toBe("Customer feedback was due Sep 25.");
     expect(fgp.nextStep).toBe("Follow up with customer");
     expect(fgp.meta).toBe("Tier 3 · TTV 21 days");
-    expect(fgp.due).toEqual({ label: "Oct 1", tone: "warning" });
+    // The fixture's next step ("Follow up with customer") is not the overdue
+    // call, the upcoming call, or the launch — none of those dates is a
+    // deadline for it, so Due is "—", not the unrelated Oct 1 call date.
+    expect(fgp.due).toBeNull();
     const win = t.needsMe[0]!;
     expect(win.chip.label).toBe("Unclaimed");
     expect(win.nextStep).toBe("Assign an owner");
     expect(win.due?.label).toBe("Today");
+  });
+
+  describe("the Due column only shows a date that is the displayed next step's own deadline", () => {
+    it("shows an overdue call's date when the next step is to tick or rebook that same call", () => {
+      const r = row({
+        next_action: "Tick Stage 1 — Get it working if it happened, or rebook it",
+        facts: {
+          ...row().facts!,
+          overdue_calls: [
+            { label: "Stage 1 — Get it working", date: "2026-09-20", businessDaysLate: 5 },
+          ],
+        },
+      });
+      const t = todayFor(
+        input({ dealInbox: [], queue: { act_now: [r], needs_attention: [], moving: [] } }),
+      );
+      expect(t.needsMe[0]!.due).toEqual(dueLabel("2026-09-20", TODAY));
+    });
+
+    it("does not show an overdue call's date when the next step is unrelated to it", () => {
+      // Same overdue call as above, but the next step (from the default
+      // fixture) is "Follow up with customer" — about something else.
+      const r = row({
+        facts: {
+          ...row().facts!,
+          overdue_calls: [
+            { label: "Stage 1 — Get it working", date: "2026-09-20", businessDaysLate: 5 },
+          ],
+        },
+      });
+      const t = todayFor(
+        input({ dealInbox: [], queue: { act_now: [r], needs_attention: [], moving: [] } }),
+      );
+      expect(t.needsMe[0]!.due).toBeNull();
+    });
+
+    it("shows the target launch date when the next step is the launch-review fallback", () => {
+      const r = row({
+        next_action: "Launch date has passed (Oct 9) — needs a launch review and replan",
+        impl: impl({ target_launch_date: "2026-10-09" }),
+      });
+      const t = todayFor(
+        input({ dealInbox: [], queue: { act_now: [r], needs_attention: [], moving: [] } }),
+      );
+      expect(t.needsMe[0]!.due).toEqual(dueLabel("2026-10-09", TODAY));
+    });
+
+    it("does not show the target launch date when only the reason, not the next step, is about it", () => {
+      // This is the real shape of a launch-slipped row whose next step
+      // resolved to something else (e.g. an overdue commitment) ahead of
+      // the launch-review fallback — the reason mentions the launch, the
+      // displayed next step does not.
+      const r = row({
+        reason: "Target launch passed Oct 9 — not launched (3d over).",
+        next_action: "Close out the overdue commitment — Send the W9 (due Sep 20, Teya Rampaul)",
+        impl: impl({ target_launch_date: "2026-10-09" }),
+      });
+      const t = todayFor(
+        input({ dealInbox: [], queue: { act_now: [r], needs_attention: [], moving: [] } }),
+      );
+      expect(t.needsMe[0]!.due).toBeNull();
+    });
   });
 
   it("links an implementation row to the implementation it is about, not just the customer", () => {

@@ -161,11 +161,23 @@ function rowFromQueue(
   const needsMe = doINeedToAct(row.dependency, viewerName);
   const facts = row.facts;
   const { head, detail } = splitReason(row.reason);
-  // The date this row turns on: an overdue call, else the next call, else
-  // the target. Nothing invented — no date, no "due".
-  const overdue = facts?.overdue_calls[0]?.date ?? null;
-  const nextCall = facts?.upcoming_calls?.[0]?.date ?? null;
-  const dueIso = overdue ?? nextCall ?? row.impl.target_launch_date ?? null;
+  const next = row.next_action;
+  // A date is only ever "Due" here when it is the deadline FOR THE DISPLAYED
+  // NEXT STEP, not merely a date that exists somewhere on the deal. The
+  // overdue call and the launch date are each produced by exactly one
+  // branch of needsAction()/nextAction() (needs-action.ts, customer360-derive.ts),
+  // with wording that names the same thing next_action does — so matching
+  // that wording is how we know the two agree, without re-deriving it here
+  // or reaching into those modules. Every other next_action (a risk, an
+  // issue, a commitment, a stalled stage, a checklist step…) has no date on
+  // this row that is reliably about it, so it gets "—", not a guess.
+  const overdueCall = facts?.overdue_calls[0] ?? null;
+  const dueIso =
+    overdueCall && next === `Tick ${overdueCall.label} if it happened, or rebook it`
+      ? overdueCall.date
+      : row.impl.target_launch_date && next.startsWith("Launch date has passed")
+        ? row.impl.target_launch_date
+        : null;
   const ttv =
     facts?.close_date && facts.live_date
       ? Math.round(
@@ -177,7 +189,6 @@ function rowFromQueue(
   const meta = [row.impl.tier ? `Tier ${row.impl.tier}` : null, ttv ? `TTV ${ttv} days` : null]
     .filter(Boolean)
     .join(" · ");
-  const next = row.next_action;
   return {
     id: row.impl.id,
     kind: "implementation",
