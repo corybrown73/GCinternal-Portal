@@ -44,7 +44,13 @@ export function speakerNotes(view: WelcomeView): {
   const fieldtest = at("fieldtest");
   const integ = t.integration;
   const form = view.firstForm?.name ?? "the first form";
-  const tester = view.fieldTester ?? "your field tester";
+  // The presenter's notes say where the name came from: a proposed one is
+  // a question to ask on the call, not a fact to state.
+  const tester = view.fieldTester
+    ? view.fieldTesterSource === "ai"
+      ? `${view.fieldTester} (proposed from the calls — confirm it)`
+      : view.fieldTester
+    : "your field tester";
   const champion = view.team.champion?.name ?? "your project owner";
   const lead = view.team.lead ?? "your onboarding lead";
   // A fallback that opens a sentence is capitalised like one; a name is left alone.

@@ -6,9 +6,15 @@ import {
   type HandoffAnswer,
   type IntakeAnswers,
 } from "./intake-answers";
+import { focusItemsFromBrief } from "./implementation-focus";
+import { normalizeServiceKey } from "./onboarding-services";
 import { answerSource, handoffQuestion, isAnswered, type HandoffValue } from "./sales-handoff";
 import type { BriefJson } from "./server/schemas";
+import type { SowReading } from "./sow-plan";
 import { synthesisFromBrief } from "./welcome-synthesis";
+
+/** What the kept SOW reading lends the prefill: the seats and the forms the document names. */
+export type SowReadingFacts = Pick<SowReading, "seats" | "forms" | "first_form">;
 
 /**
  * The AI reading of the calls and the SOW, written into the intake.
@@ -21,12 +27,17 @@ import { synthesisFromBrief } from "./welcome-synthesis";
  * sources change without undoing a single thing a person typed.
  *
  * Every field it writes records the words it came from (`ai_sources`).
+ *
+ * The kept SOW reading stands behind the calls: its seats fill the field
+ * count when the calls gave none, its forms the list when the calls named
+ * none. The calls' own words win where both speak.
  */
 export function prefillFromSynthesis(
   intake: IntakeAnswers,
   brief: unknown,
   /** The call notes as pasted, for what the brief did not keep verbatim. */
   notes?: string | null,
+  opts: { sowReading?: SowReadingFacts | null } = {},
 ): { patch: Partial<IntakeAnswers>; filled: string[] } {
   const patch: Partial<IntakeAnswers> = {};
   const filled: string[] = [];
@@ -34,13 +45,15 @@ export function prefillFromSynthesis(
   if (!b || typeof b !== "object") return { patch, filled };
   const synth = synthesisFromBrief(b);
   const ob = b.onboarding ?? null;
+  const sow = opts.sowReading ?? null;
 
   const aiFilled = new Set(intake.ai_filled);
   // Written by the reading before ownership was tracked: the forms it made
-  // carry "syn-" ids, the process it wrote is marked "ai". Still the AI's.
+  // carry "syn-" ids (the SOW step's "sow-"), the process it wrote is
+  // marked "ai". Still the AI's.
   if (
     intake.wanted_forms.length &&
-    intake.wanted_forms.every((f) => f.id.startsWith("syn-")) &&
+    intake.wanted_forms.every((f) => /^(syn|sow)-/.test(f.id)) &&
     !intake.person_set.includes("wanted_forms")
   ) {
     aiFilled.add("wanted_forms");
@@ -130,20 +143,23 @@ export function prefillFromSynthesis(
 
   // THE FORMS, first form first. From the checked reading when there is
   // one — every entry a real form, quoted — else from the brief's scope
-  // list with the services taken out.
-  const forms =
+  // list with the services taken out; and when the calls named none, the
+  // forms the SOW sells.
+  const fromCalls =
     ob && ob.forms.length
       ? ob.forms.map((f) => ({ name: f.name, from: { quote: f.quote, source: f.source } }))
       : (b.kickoff?.scope ?? [])
           .map((x) => x.workflow?.trim())
           .filter((n): n is string => Boolean(n) && !isServiceName(n))
           .map((name) => ({ name, from: null }));
+  const forms = fromCalls.length ? fromCalls : sowForms(sow);
+  const idPrefix = fromCalls.length ? "syn" : "sow";
   const existingAccount = intake.path === "existing" || ob?.flow === "existing";
   if (forms.length && !intake.training_only && !(ob?.training_only === true) && !existingAccount) {
     write(
       "wanted_forms",
       forms.slice(0, 8).map((f, i) => ({
-        id: `syn-${i + 1}`,
+        id: `${idPrefix}-${i + 1}`,
         name: f.name.slice(0, 160),
         template_id: null,
       })),
@@ -170,9 +186,20 @@ export function prefillFromSynthesis(
       write("field_users", acct.field_users, "people in the field");
     }
   }
+  const seatsInCalls =
+    (typeof acct?.field_users === "number" && acct.field_users > 0) ||
+    Number(/\d[\d,]*/.exec(b.kickoff?.licensed_seats ?? "")?.[0]?.replace(/,/g, "")) > 0;
   if (patch.field_users == null && intake.field_users == null && b.kickoff?.licensed_seats) {
     const n = Number(/\d[\d,]*/.exec(b.kickoff.licensed_seats)?.[0]?.replace(/,/g, ""));
     if (Number.isInteger(n) && n > 0) write("field_users", n, "people in the field");
+  }
+  // The SOW's seat count, when the calls gave none. The SOW step may have
+  // written it already: the same value is then only claimed, not refilled.
+  if (patch.field_users == null && !seatsInCalls && sow?.seats && sow.seats > 0) {
+    write("field_users", sow.seats, "people in the field", {
+      quote: `${sow.seats} seats`,
+      source: "SOW",
+    });
   }
 
   // Integrations and other services come from the SOW read, never from the
@@ -184,6 +211,27 @@ export function prefillFromSynthesis(
     patch.ai_sources = sources;
   }
   return { patch, filled };
+}
+
+/** The forms the SOW names, the first form first, one entry per form, each with the words it rests on. */
+function sowForms(
+  sow: SowReadingFacts | null,
+): Array<{ name: string; from: { quote: string; source: string } | null }> {
+  if (!sow) return [];
+  const first = sow.first_form?.trim().toLowerCase() ?? null;
+  const seen = new Set<string>();
+  const named = sow.forms
+    .map((f) => ({ name: f.name.trim(), quote: f.quote }))
+    .filter((f) => f.name);
+  const isFirst = (f: { name: string }) => f.name.toLowerCase() === first;
+  return [...named.filter(isFirst), ...named.filter((f) => !isFirst(f))]
+    .filter((f) => {
+      const key = normalizeServiceKey(f.name, "paid_form");
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .map((f) => ({ name: f.name, from: f.quote ? { quote: f.quote, source: "SOW" } : null }));
 }
 
 /**
@@ -205,12 +253,19 @@ export function mentionsDeviceMagic(text: string): boolean {
 
 /* ------------------------------------------------- the handoff's blanks */
 
+/** The customer-side questions the brief's welcome block answers, by the same key. */
+const CUSTOMER_SIDE_KEYS = ["forms_today", "data_lists", "devices", "kickoff_attendees"] as const;
+
 /**
  * The AI reading fills the Sales handoff's blanks the same way: an answer
  * nobody has given, or that the AI gave last time, from what the brief
- * says — never over a person's or the customer's words. Commitments are
- * left alone on purpose: what was promised is for a person to say, or to
- * say there were none.
+ * says — never over a person's or the customer's words. Contacts come by
+ * the stakeholder's kind (the older word test stands in for a brief that
+ * predates kinds); the customer's own answers land as the AI's, which the
+ * welcome link shows as "to confirm" and the readiness check counts as
+ * outstanding until they do. Commitments are drafted only from entries
+ * that say a promise was made, never over "nothing beyond the SOW", and
+ * the Sales gate still waits for a person to say what was promised.
  */
 export function prefillHandoffFromSynthesis(
   intake: IntakeAnswers,
@@ -239,29 +294,59 @@ export function prefillHandoffFromSynthesis(
   const day90 = b.kickoff?.day_90_definition ?? null;
   if (day90) write("success_measure", day90, day90);
 
-  // Contacts from the stakeholders, by what their role says.
-  const people = b.stakeholders ?? [];
-  const line = (p: { name: string; role: string }) =>
-    `${p.name}${p.role ? ` · ${p.role}` : ""}`.trim();
-  const decider = people.find((p) =>
-    /decision|owner|director|vp|vice|president|ceo|cfo|coo|founder|principal|head of/i.test(
-      `${p.role} ${p.notes}`,
-    ),
-  );
-  if (decider) write("contact_decision_maker", line(decider), decider.notes || null);
-  const builder = people.find(
-    (p) =>
-      p !== decider &&
-      /admin|build|office|coordinator|manager|analyst|it\b|systems|dispatcher/i.test(
-        `${p.role} ${p.notes}`,
-      ),
-  );
-  if (builder) write("contact_admin_builder", line(builder), builder.notes || null);
+  // What was promised, when the brief states it: the "what we know" entries
+  // whose topic says a promise was made. "Included services" describes the
+  // SOW, not a promise beyond it, so it is not one of them. Nothing stated
+  // leaves the question alone.
+  if (!intake.handoff.commitments_none) {
+    const promised = (b.what_we_know ?? [])
+      .filter((w) =>
+        /promis|commit|agreed to|thrown in|at no (?:extra )?(?:cost|charge)|free of charge/i.test(
+          w.topic,
+        ),
+      )
+      .map((w) => w.detail.trim())
+      .filter(Boolean);
+    if (promised.length) write("commitments", promised.join("\n"), promised[0] ?? null);
+  }
 
-  const deadline = (b.dates ?? []).find(
-    (d) => d.type === "deadline" && /^\d{4}-\d{2}-\d{2}$/.test(d.date),
-  );
+  // Contacts: "Name · role · email", as the question asks.
+  const people = b.stakeholders ?? [];
+  const line = (p: { name: string; role: string; email?: string | null | undefined }) =>
+    [p.name, p.role, p.email ?? null]
+      .map((s) => s?.trim() ?? "")
+      .filter(Boolean)
+      .join(" · ");
+  const typed = people.some((p) => p.role_kind);
+  const byKind = (kind: string) => people.find((p) => p.role_kind === kind) ?? null;
+  const decider = typed
+    ? byKind("decision_maker")
+    : people.find((p) =>
+        /decision|owner|director|vp|vice|president|ceo|cfo|coo|founder|principal|head of/i.test(
+          `${p.role} ${p.notes}`,
+        ),
+      );
+  if (decider) write("contact_decision_maker", line(decider), decider.notes || null);
+  const builder = typed
+    ? byKind("admin_builder")
+    : people.find(
+        (p) =>
+          p !== decider &&
+          /admin|build|office|coordinator|manager|analyst|it\b|systems|dispatcher/i.test(
+            `${p.role} ${p.notes}`,
+          ),
+      );
+  if (builder) write("contact_admin_builder", line(builder), builder.notes || null);
+  const daily = typed ? byKind("day_to_day") : null;
+  if (daily) write("contact_day_to_day", line(daily), daily.notes || null);
+
+  const isoDay = (d: string) => /^\d{4}-\d{2}-\d{2}$/.test(d);
+  const deadline = (b.dates ?? []).find((d) => d.type === "deadline" && isoDay(d.date));
   if (deadline) write("desired_launch_date", deadline.date, deadline.quote);
+  const start = (b.dates ?? []).find((d) => d.type === "start" && isoDay(d.date));
+  if (start) {
+    write("agreed_start", `${start.date}${start.quote ? ` — ${start.quote}` : ""}`, start.quote);
+  }
 
   const systems = [
     ...(b.kickoff?.integrations ?? []),
@@ -272,5 +357,76 @@ export function prefillHandoffFromSynthesis(
   const open = (b.risks_open_items ?? []).filter(Boolean);
   if (open.length) write("open_questions", open.join("\n"), open[0] ?? null);
 
+  // The customer's half, drafted from the calls for them to confirm.
+  for (const key of CUSTOMER_SIDE_KEYS) {
+    const v = b.welcome?.customer_side?.[key] ?? null;
+    if (v?.value?.trim()) write(key, v.value.trim(), v.quote || null);
+  }
+
   return { answers, filled };
+}
+
+/* ------------------------------------------- the welcome page's own facts */
+
+/**
+ * What the brief's welcome block puts on the record beside the intake and
+ * the handoff: the workflow story when nobody has written one, the focus
+ * items when the list is still the proposal's own, the field tester when
+ * the plan has none. All of it is the AI's until a person confirms it — the
+ * story and the focus carry their own `validated_at`, the tester is owned
+ * through `ai_filled` like the intake's other answers. `timeline` holds
+ * the plan keys, merged into intake.timeline by the caller.
+ */
+export function prefillWelcomeFromBrief(
+  intake: IntakeAnswers,
+  brief: unknown,
+): { patch: Partial<IntakeAnswers>; timeline: Record<string, unknown> | null; filled: string[] } {
+  const patch: Partial<IntakeAnswers> = {};
+  const filled: string[] = [];
+  let timeline: Record<string, unknown> | null = null;
+  const b = brief as Partial<BriefJson> | null | undefined;
+  const w = b && typeof b === "object" ? (b.welcome ?? null) : null;
+  if (!w) return { patch, timeline, filled };
+
+  const story = intake.workflow_story;
+  const leg = (s: string | null | undefined) => s?.trim().slice(0, 4000) || null;
+  const drafted = {
+    before: leg(w.workflow_story?.before),
+    during: leg(w.workflow_story?.during),
+    after: leg(w.workflow_story?.after),
+  };
+  if (
+    story.before === null &&
+    story.during === null &&
+    story.after === null &&
+    story.validated_at === null &&
+    (drafted.before || drafted.during || drafted.after)
+  ) {
+    patch.workflow_story = { ...drafted, validated_at: null, validated_by: null };
+    filled.push("the workflow story");
+  }
+
+  const items = focusItemsFromBrief(intake, w.focus_items ?? []);
+  if (items && JSON.stringify(items) !== JSON.stringify(intake.implementation_focus.items)) {
+    patch.implementation_focus = { items, validated_at: null, validated_by: null };
+    const added = items.filter((i) => i.id.startsWith("focus-ai-")).length;
+    filled.push(`${added} focus item${added === 1 ? "" : "s"}`);
+  }
+
+  const tester = w.field_tester;
+  if (tester?.name?.trim() && !intake.timeline.field_tester) {
+    const name = [tester.name.trim(), tester.role?.trim() || null]
+      .filter(Boolean)
+      .join(" · ")
+      .slice(0, 120);
+    timeline = { field_tester: name };
+    patch.ai_filled = [...new Set([...intake.ai_filled, "field_tester"])];
+    patch.ai_sources = {
+      ...intake.ai_sources,
+      field_tester: { quote: (tester.quote || name).slice(0, 400), source: "the calls" },
+    };
+    filled.push("the field tester");
+  }
+
+  return { patch, timeline, filled };
 }

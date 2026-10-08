@@ -47,7 +47,10 @@ export function isAiEffort(v: unknown): v is AiEffort {
  * The effort for a kind of call, from `portal_app_config` key `ai.effort`.
  * The value is one level for everything ("high"), or an object with a
  * `default` and per-kind overrides ({ default: "high", brief: "xhigh" }).
- * Anything else falls back to the seeded default.
+ * The three brief passes (`brief_core`, `brief_plan`, `verify`) all run
+ * at the `brief` kind's effort, decided once per brief, so their shared
+ * cached prefix is sent with the same parameters every time. Anything
+ * else falls back to the seeded default.
  */
 export async function aiEffort(kind: AiCallKind): Promise<AiEffort> {
   const value = await getConfigValue("ai.effort");

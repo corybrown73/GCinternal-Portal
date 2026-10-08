@@ -583,6 +583,36 @@ describe("the Kickoff conversation framework — static, never account-specific"
   });
 });
 
+describe("the 'to confirm' markers — nothing the AI or Sales wrote reads as the customer's word", () => {
+  const known = (confirmed: boolean) => ({
+    intake: {
+      known: [
+        {
+          key: "business_outcome",
+          ask: "What success looks like for you",
+          value: "Same day",
+          confirmed,
+        },
+      ],
+      needed: [],
+    },
+  });
+
+  it("marks the business outcome until the customer confirms it on their page", async () => {
+    const { kickoffBusinessOutcomeConfirmed } = await import("../kickoff-view");
+    expect(kickoffBusinessOutcomeConfirmed({ intake: null })).toBe(false);
+    expect(kickoffBusinessOutcomeConfirmed(known(false))).toBe(false);
+    expect(kickoffBusinessOutcomeConfirmed(known(true))).toBe(true);
+  });
+
+  it("marks the workflow story until a person validates it; the structured fallback always", async () => {
+    const { kickoffWorkflowToConfirm } = await import("../kickoff-view");
+    expect(kickoffWorkflowToConfirm(null)).toBe(true);
+    expect(kickoffWorkflowToConfirm({ validatedAt: null })).toBe(true);
+    expect(kickoffWorkflowToConfirm({ validatedAt: "2026-10-07T12:00:00Z" })).toBe(false);
+  });
+});
+
 describe("kickoffBusinessOutcome", () => {
   it("is null when the handoff has not shared a business outcome yet", () => {
     expect(kickoffBusinessOutcome({ intake: null })).toBeNull();

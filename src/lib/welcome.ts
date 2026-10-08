@@ -100,6 +100,8 @@ export type WelcomeView = {
   timeline: Timeline;
   lead: string | null;
   fieldTester: string | null;
+  /** "person" when a person named them; "ai" when the reading proposed the name, shown as to confirm. */
+  fieldTesterSource: "ai" | "person" | null;
   /** The process today, in their words. Null → a generic "paper and retyping". */
   currentProcess: string | null;
   /** "person" when a person wrote or confirmed it; "ai" when it is the brief's paraphrase. */

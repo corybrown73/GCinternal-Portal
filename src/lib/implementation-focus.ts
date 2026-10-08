@@ -166,6 +166,66 @@ export function proposeImplementationFocus(
   }));
 }
 
+/** Lower case, letters and digits only, one space between words: the key two wordings of one item share. */
+function normalizedText(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+/**
+ * The brief's own focus items, behind the deterministic anchors. The AI
+ * reading writes the list only while it is still a proposal's — nothing
+ * saved, or every id the proposal's own ("focus-…", the AI's included) —
+ * so a list a person edited by hand ("manual-…") or agreed is never
+ * touched, and a refresh of the proposal keeps working as it did. SOW and
+ * intake anchors come first, the brief's items after, each once by its
+ * wording; an item the calls alone support keeps the Gong-only flag the
+ * handoff's systems get, so it never reads as agreed by accident. Null
+ * when there is nothing to write.
+ */
+export function focusItemsFromBrief(
+  intake: Parameters<typeof proposeImplementationFocus>[0],
+  briefItems: ReadonlyArray<{
+    text: string;
+    source_type: "sow" | "gong" | "intake";
+    source_label: string;
+    quote: string;
+  }>,
+): ImplementationFocusItem[] | null {
+  const focus = intake.implementation_focus;
+  if (focus.validated_at) return null;
+  if (focus.items.length && !focus.items.every((i) => i.id.startsWith("focus-"))) return null;
+  if (!briefItems.length) return null;
+  const anchors = proposeImplementationFocus(intake) ?? [];
+  const seen = new Set(anchors.map((a) => normalizedText(a.text)));
+  const ai: ImplementationFocusItem[] = [];
+  for (const item of briefItems.slice(0, 8)) {
+    const text = item.text.trim().slice(0, 500);
+    const key = normalizedText(text);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    ai.push({
+      id: `focus-ai-${ai.length + 1}`,
+      text,
+      status: "proposed",
+      sources: [
+        {
+          type: item.source_type,
+          label: item.source_label.trim().slice(0, 200) || null,
+          quote: item.quote.trim().slice(0, 400) || null,
+        },
+      ],
+      review_flag: item.source_type === "gong" ? "gong_only" : null,
+    });
+  }
+  // A brief that only repeats the anchors adds nothing: the list is left
+  // for "Refresh proposal", and the record does not say it was filled.
+  if (!ai.length) return null;
+  return [...anchors, ...ai].slice(0, 60);
+}
+
 /**
  * What "Confirm implementation focus" does to the record: every item
  * currently on the list is promoted to agreed, and validation is stamped

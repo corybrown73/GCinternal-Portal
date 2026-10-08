@@ -95,11 +95,6 @@ export async function analyzeSow(implementationId: string): Promise<SowAnalysisR
     throw new Error("Could not open the attached SOW file.");
   }
 
-  const { aiConfigured } = await import("./server/ai/config");
-  if (!aiConfigured()) {
-    throw new Error("AI analysis is not configured — set ANTHROPIC_API_KEY on the deployment.");
-  }
-
   // Sniffed, not judged by the file name: a PDF as a PDF, a Word file as
   // its text, anything else with a reason a person can act on.
   const { prepareDocument } = await import("./server/ai/documents");
@@ -110,6 +105,28 @@ export async function analyzeSow(implementationId: string): Promise<SowAnalysisR
     { title: "Statement of Work" },
   );
   if (!sow.block) throw new Error(sow.problem ?? "The attached SOW could not be read.");
+
+  // The deal's reading of these same bytes, when the automatic reading
+  // already kept one: the journey is laid out from it and the model is not
+  // asked to read the document a second time.
+  const dealId = (impl.deal_id as string | null) ?? null;
+  if (dealId) {
+    const { loadSowReading } = await import("./server/ai/readings");
+    const kept = await loadSowReading(dealId, { sha256: sow.sha256 });
+    if (kept && kept.source_hash === sow.sha256 && kept.reading.readable) {
+      const { journeyFromSowReading } = await import("./sow-analysis");
+      return {
+        sowName: (impl.sow_document_name as string | null) ?? null,
+        sowPath: path,
+        analysis: journeyFromSowReading(kept.reading),
+      };
+    }
+  }
+
+  const { aiConfigured } = await import("./server/ai/config");
+  if (!aiConfigured()) {
+    throw new Error("AI analysis is not configured — set ANTHROPIC_API_KEY on the deployment.");
+  }
 
   const content: BetaContentBlockParam[] = [
     sow.block,

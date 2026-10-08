@@ -1,27 +1,45 @@
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 
 import { readIntake, type IntakeAnswers } from "../../../intake-answers";
+import { HANDOFF_QUESTIONS } from "../../../sales-handoff";
 import { mergeIntake } from "../../intake-merge";
 import type { AiJobRow, StepContext, StepFn, StepOutcome } from "../jobs";
 
 /**
  * The `prepare_deal` job, one step per invocation:
  *
- *   sources  — snapshot what is on the record and hash it; nothing new since
- *              the last reading → straight to finalize.
- *   sow      — the SOW (or the contract) read once per document, persisted,
- *              its services onto the plan and its facts onto the record.
- *   brief    — the brief from the calls, the reviewed notes or the summary,
- *              then the intake prefill, the help picks, the header.
- *   finalize — the customer's link, the record's reading status, the audit
- *              row, and one message to the TIS.
+ *   sources    — snapshot what is on the record and hash it; nothing new
+ *                since the last reading → straight to finalize.
+ *   sow        — the SOW and the contract read once per document, kept, the
+ *                services onto the plan, the facts, seats and forms onto the
+ *                record.
+ *   brief_core — who they are, how they work, what they want, from the
+ *                calls, the reviewed notes or the summary, with the kept SOW
+ *                reading beside them; the brief row starts here.
+ *   brief_plan — the deck, the expansion, the intake and the welcome page,
+ *                against the core.
+ *   verify     — the whole brief checked against the sources; the row is
+ *                complete from here.
+ *   apply      — the brief onto the deal: the deck, the journey, the intake
+ *                and handoff prefill, the help picks, the header.
+ *   finalize   — the customer's link, the record's reading status, the audit
+ *                row, and one message to the TIS.
  *
  * Each step reloads what it needs: they run in separate invocations, and a
  * retry must not depend on memory. Every write is a merge, so a person
- * typing meanwhile loses nothing.
+ * typing meanwhile loses nothing. The three brief passes send one cached
+ * prefix, so the sources are paid for once.
  */
 
-export const PREPARE_DEAL_STEPS = ["sources", "sow", "brief", "finalize"] as const;
+export const PREPARE_DEAL_STEPS = [
+  "sources",
+  "sow",
+  "brief_core",
+  "brief_plan",
+  "verify",
+  "apply",
+  "finalize",
+] as const;
 export type PrepareDealStep = (typeof PREPARE_DEAL_STEPS)[number];
 
 type Branch = { status: "ok" | "failed" | "skipped"; detail: string | null };
@@ -146,28 +164,21 @@ export const sow: StepFn = async (job) => {
   }
 
   const { aiConfigured } = await import("../config");
-  const { sowPlanProposalSchema, normalizeProposal } = await import("../../../sow-plan");
-  type Proposal = import("../../../sow-plan").SowPlanProposal;
+  const { loadSowReading, keepSowReading, sourcePathFor } = await import("../readings");
+  type Reading = import("../../../sow-plan").SowReading;
 
   // The same bytes are never sent twice: the reading is kept by the
-  // document's hash and served from the table the second time.
-  let proposal: Proposal | null = null;
+  // document's hash and served from the table the second time. A forced
+  // job is a person asking for a fresh reading of what is on file — a
+  // reading that came out wrong, or said the document was not a SOW —
+  // and that one replaces the kept row.
+  let proposal: Reading | null = null;
   let usage: StepOutcome["usage"];
   let reused = false;
-  const { data: kept } = await db()
-    .from("portal_ai_readings")
-    .select("output")
-    .eq("deal_id", dealId)
-    .eq("kind", "sow")
-    .eq("source_hash", doc.sha256)
-    .limit(1)
-    .maybeSingle();
-  if (kept?.output) {
-    const parsed = sowPlanProposalSchema.safeParse(kept.output);
-    if (parsed.success) {
-      proposal = normalizeProposal(parsed.data);
-      reused = true;
-    }
+  const kept = job.force ? null : await loadSowReading(dealId, { sha256: doc.sha256 });
+  if (kept && kept.source_hash === doc.sha256) {
+    proposal = kept.reading;
+    reused = true;
   }
   if (!proposal) {
     if (!aiConfigured()) {
@@ -178,32 +189,26 @@ export const sow: StepFn = async (job) => {
     const { readSowDocument } = await import("../../../sow-plan.server");
     let read: Awaited<ReturnType<typeof readSowDocument>>;
     try {
-      read = await readSowDocument(dealId, doc, { jobId: job.id });
+      // The contract beside the SOW: on a small deal it is where the seats
+      // and the term live.
+      read = await readSowDocument(dealId, doc, {
+        jobId: job.id,
+        contract: doc === docs.sow ? docs.contract : null,
+      });
     } catch (e) {
       const detail = errText(e);
       return branch({ status: "failed", detail }, { problems: [detail] });
     }
     proposal = read.proposal;
     usage = read.usage;
-    const { error } = await db()
-      .from("portal_ai_readings")
-      .insert({
-        deal_id: dealId,
-        kind: "sow",
-        source_path:
-          doc === docs.sow
-            ? (account.sow_document_path ?? null)
-            : (readIntake(account.intake).contract?.path ?? null),
-        source_name: doc.name,
-        source_hash: doc.sha256,
-        model: read.model,
-        output: proposal,
-        usage: read.usage,
-      });
-    // 23505: a parallel reading of the same bytes already kept it.
-    if (error && error.code !== "23505") {
-      console.error("[prepare-deal] could not keep the SOW reading", error.message);
-    }
+    await keepSowReading({
+      dealId,
+      doc,
+      sourcePath: sourcePathFor(account, doc, docs),
+      reading: proposal,
+      model: read.model,
+      usage: read.usage,
+    });
   }
 
   if (!proposal.readable) {
@@ -217,21 +222,26 @@ export const sow: StepFn = async (job) => {
   }
 
   // Exactly what the reading applies: the services onto the plan (a person's
-  // rows stand) and the SOW's own facts onto the record (blanks only).
+  // rows stand), the SOW's own facts onto the record (blanks only), and the
+  // seats and the forms onto the intake (blanks and the AI's own answers).
   const filled: string[] = [];
-  const { data: fresh } = await db()
-    .from("portal_accounts")
-    .select("intake")
-    .eq("id", dealId)
-    .maybeSingle();
-  const { sowTimelinePatch } = await import("../../../sow-plan");
+  const [{ data: fresh }, { data: reports }] = await Promise.all([
+    db().from("portal_accounts").select("intake").eq("id", dealId).maybeSingle(),
+    db().from("portal_gong_reports").select("id").eq("account_id", dealId).limit(1),
+  ]);
+  const { sowTimelinePatch, sowIntakePatch } = await import("../../../sow-plan");
+  const current = readIntake(fresh?.intake);
   const { timeline, accepted } = sowTimelinePatch(
-    readIntake(fresh?.intake),
+    current,
     proposal,
     (row) => `${row.kind.slice(0, 4)}-${Math.random().toString(36).slice(2, 8)}`,
   );
-  await mergeIntake(dealId, {}, timeline);
+  const intakePatch = sowIntakePatch(current, proposal, {
+    hasReports: (reports ?? []).length > 0,
+  });
+  await mergeIntake(dealId, intakePatch.patch as Record<string, unknown>, timeline);
   if (accepted) filled.push(`${accepted} service${accepted === 1 ? "" : "s"} from the SOW`);
+  filled.push(...intakePatch.filled.map((s) => `${s} (from the SOW)`));
   const { stampSowFacts } = await import("../../../sow-plan.server");
   const stamped = await stampSowFacts(dealId, proposal);
   filled.push(...stamped.map((s) => `the SOW ${s}`));
@@ -264,13 +274,68 @@ export function briefSourcesFor(input: {
   return { any: what.length > 0, what };
 }
 
-export const brief: StepFn = async (job) => {
+/** Every brief step reports under one branch: the record says "the calls" were read, however many passes it took. */
+const briefBranch = (b: Branch, extra: StepOutcome = {}): StepOutcome => ({
+  ...extra,
+  result: { ...(extra.result ?? {}), branches: { brief: b } },
+});
+
+/**
+ * A pass that failed ends the brief: the row says why, the branch says
+ * why, and the job goes to finalize — the later passes have nothing to
+ * build on. Not a retry: the client already retried the call itself.
+ */
+async function briefFailed(briefId: string | null, detail: string): Promise<StepOutcome> {
+  if (briefId) {
+    await db().from("portal_briefs").update({ status: "failed", error: detail }).eq("id", briefId);
+  }
+  return briefBranch({ status: "failed", detail }, { problems: [detail], skipTo: "finalize" });
+}
+
+type BriefRow = {
+  id: string;
+  status: string;
+  generator: string | null;
+  structured_json: Record<string, unknown> | null;
+  pptx_storage_path: string | null;
+  error: string | null;
+};
+
+/**
+ * The brief row this job is writing: named by the job's result, or — a
+ * retry after the advance write failed — the row this job inserted and
+ * lost the id of. Never a person's brief, and never one from before this
+ * job started.
+ */
+async function briefRowForJob(job: AiJobRow): Promise<BriefRow | null> {
+  const id = typeof job.result?.["brief_id"] === "string" ? job.result["brief_id"] : null;
+  if (id) {
+    const { data } = await db().from("portal_briefs").select("*").eq("id", id).maybeSingle();
+    if (data) return data as BriefRow;
+  }
+  const { data } = await db()
+    .from("portal_briefs")
+    .select("*")
+    .eq("account_id", dealIdOf(job))
+    .is("created_by", null)
+    .gte("created_at", job.started_at ?? job.created_at)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  return (data as BriefRow | null) ?? null;
+}
+
+/** The sources and the cached prefix, loaded for a pass. */
+async function briefContextFor(job: AiJobRow) {
+  const { buildBriefContext } = await import("../../brief/pipeline");
+  return buildBriefContext(dealIdOf(job), { jobId: job.id });
+}
+
+/* ---------------------------------------------------------- brief_core */
+
+export const brief_core: StepFn = async (job) => {
   const dealId = dealIdOf(job);
-  await touchReading(job, "brief");
-  const branch = (b: Branch, extra: StepOutcome = {}): StepOutcome => ({
-    ...extra,
-    result: { ...(extra.result ?? {}), branches: { brief: b } },
-  });
+  await touchReading(job, "brief_core");
 
   const [{ data: account }, { data: reports }, { data: notes }] = await Promise.all([
     db().from("portal_accounts").select("id,summary").eq("id", dealId).maybeSingle(),
@@ -288,55 +353,189 @@ export const brief: StepFn = async (job) => {
     summary: account.summary,
   });
   if (!have.any) {
-    return branch({
-      status: "skipped",
-      detail: "No call notes, reviewed notes or summary to read.",
-    });
-  }
-
-  // A retry of this step after its advance write failed must not write a
-  // second brief: one this job already finished is taken as it stands.
-  const { data: earlier } = await db()
-    .from("portal_briefs")
-    .select("id")
-    .eq("account_id", dealId)
-    .eq("status", "complete")
-    .eq("generator", "llm")
-    .is("created_by", null)
-    .gte("created_at", job.started_at ?? job.created_at)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  if (earlier?.id) {
-    return branch(
-      { status: "ok", detail: `Read ${have.what.join(", ")} (kept from an earlier attempt)` },
-      { result: { brief_id: earlier.id } },
+    return briefBranch(
+      { status: "skipped", detail: "No call notes, reviewed notes or summary to read." },
+      { skipTo: "finalize" },
     );
   }
 
-  const { generateDealBriefAs } = await import("../../../presale.server");
-  let result: Awaited<ReturnType<typeof generateDealBriefAs>>;
-  try {
-    result = await generateDealBriefAs({ kind: "system", label: "the AI reading" }, dealId);
-  } catch (e) {
-    const detail = `The brief did not finish: ${errText(e)}`;
-    return branch({ status: "failed", detail }, { problems: [detail] });
+  // A retry of this step after its advance write failed must not spend
+  // the pass again: the core this job already wrote is taken as it stands.
+  const earlier = await briefRowForJob(job);
+  if (earlier?.structured_json?.["account_name"]) {
+    return briefBranch(
+      { status: "ok", detail: `Read ${have.what.join(", ")} (core kept from an earlier attempt)` },
+      { result: { brief_id: earlier.id, brief_sources: have.what } },
+    );
   }
-  if (result.generator !== "llm") {
+
+  const { aiConfigured } = await import("../config");
+  if (!aiConfigured()) {
     const detail =
-      result.error ??
       "The AI reading did not run — AI is not configured here (an admin can check Admin → Integrations); nothing was filled.";
-    return branch({ status: "failed", detail }, { problems: [detail] });
+    return briefBranch({ status: "failed", detail }, { problems: [detail], skipTo: "finalize" });
   }
-  // The brief's own calls are recorded by the client as `ai.call` rows; the
-  // step reports what it filled.
-  return branch(
+
+  let briefId = earlier?.id ?? null;
+  if (!briefId) {
+    const { data: row, error } = await db()
+      .from("portal_briefs")
+      .insert({
+        account_id: dealId,
+        status: "generating",
+        created_by: null,
+        source_report_ids: (reports ?? []).map((r: { id: string }) => r.id),
+      })
+      .select("id")
+      .single();
+    if (error || !row) throw new Error(`Could not start the brief: ${error?.message ?? "no row"}`);
+    briefId = row.id as string;
+  }
+
+  try {
+    const { runBriefCore } = await import("../../brief/pipeline");
+    const ctx = await briefContextFor(job);
+    const { core, usage } = await runBriefCore(ctx);
+    await db()
+      .from("portal_briefs")
+      .update({ status: "generating", structured_json: core, error: null })
+      .eq("id", briefId);
+    return briefBranch(
+      { status: "ok", detail: `Read ${have.what.join(", ")}` },
+      { usage, result: { brief_id: briefId, brief_sources: have.what } },
+    );
+  } catch (e) {
+    const { describeAiError } = await import("../client");
+    return briefFailed(briefId, `The brief did not finish: ${describeAiError(e, "The brief")}`);
+  }
+};
+
+/* ---------------------------------------------------------- brief_plan */
+
+export const brief_plan: StepFn = async (job) => {
+  await touchReading(job, "brief_plan");
+  const row = await briefRowForJob(job);
+  const { briefCoreSchema } = await import("../../schemas");
+  const core = row ? briefCoreSchema.safeParse(row.structured_json) : null;
+  if (!row || !core?.success) {
+    return briefFailed(
+      row?.id ?? null,
+      "The brief's core was not kept; the plan could not be written.",
+    );
+  }
+  if (row.structured_json?.["kickoff"]) {
+    return briefBranch(
+      { status: "ok", detail: "Plan kept from an earlier attempt" },
+      { result: { brief_id: row.id } },
+    );
+  }
+  try {
+    const { runBriefPlan } = await import("../../brief/pipeline");
+    const { assembleBrief } = await import("../../schemas");
+    const ctx = await briefContextFor(job);
+    const { plan, usage } = await runBriefPlan(ctx, core.data);
+    await db()
+      .from("portal_briefs")
+      .update({ structured_json: assembleBrief(core.data, plan) })
+      .eq("id", row.id);
+    return briefBranch(
+      { status: "ok", detail: "Plan written" },
+      { usage, result: { brief_id: row.id } },
+    );
+  } catch (e) {
+    const { describeAiError } = await import("../client");
+    return briefFailed(
+      row.id,
+      `The brief did not finish: ${describeAiError(e, "The brief's plan")}`,
+    );
+  }
+};
+
+/* -------------------------------------------------------------- verify */
+
+export const verify: StepFn = async (job, ctx) => {
+  await touchReading(job, "verify");
+  const row = await briefRowForJob(job);
+  const { briefJsonSchema } = await import("../../schemas");
+  const brief = row ? briefJsonSchema.safeParse(row.structured_json) : null;
+  if (!row || !brief?.success) {
+    return briefFailed(row?.id ?? null, "The brief was not kept whole; it could not be checked.");
+  }
+  if (row.status === "complete") {
+    return briefBranch(
+      { status: "ok", detail: "Checked (kept from an earlier attempt)" },
+      { result: { brief_id: row.id } },
+    );
+  }
+  // The verifier never throws: a check that could not run leaves the brief
+  // grounded by code and every item marked to check.
+  const { runBriefVerify } = await import("../../brief/pipeline");
+  const context = await briefContextFor(job);
+  const { brief: verified, usage } = await runBriefVerify(context, brief.data, ctx.now);
+  const sowProblem = context.sources.sow?.problem
+    ? `The SOW was not read: ${context.sources.sow.problem}`
+    : null;
+  const { error } = await db()
+    .from("portal_briefs")
+    .update({
+      status: "complete",
+      generator: "llm",
+      structured_json: verified,
+      error: sowProblem,
+    })
+    .eq("id", row.id);
+  if (error) throw new Error(`Could not complete the brief: ${error.message}`);
+  const fields = Object.values(verified.verification?.fields ?? {});
+  const unverified = fields.filter((s) => s !== "grounded").length;
+  return briefBranch(
     {
       status: "ok",
-      detail: `Read ${have.what.join(", ")}${result.error ? ` · ${result.error}` : ""}`,
+      detail: `Checked ${fields.length} item${fields.length === 1 ? "" : "s"}${unverified ? `, ${unverified} to confirm` : ""}${usage ? "" : " (the checker did not run)"}`,
     },
-    { filled: result.filled, result: { brief_id: result.id } },
+    { ...(usage ? { usage } : {}), result: { brief_id: row.id, verified: fields.length } },
   );
+};
+
+/* --------------------------------------------------------------- apply */
+
+/**
+ * The finished brief onto the deal, exactly as a person's "Generate brief"
+ * does it: the deck, the journey move, the intake and handoff prefill, the
+ * help picks, the header.
+ */
+export const apply: StepFn = async (job) => {
+  const dealId = dealIdOf(job);
+  await touchReading(job, "apply");
+  const row = await briefRowForJob(job);
+  if (!row || row.status !== "complete") {
+    return briefBranch(
+      { status: "skipped", detail: "No finished brief to apply." },
+      { result: { brief_id: row?.id ?? null } },
+    );
+  }
+  const { applyBriefToDeal } = await import("../../../presale.server");
+  const sources = Array.isArray(job.result?.["brief_sources"])
+    ? (job.result["brief_sources"] as string[])
+    : [];
+  try {
+    const filled = await applyBriefToDeal({ kind: "system", label: "the AI reading" }, dealId, {
+      id: row.id,
+      status: row.status as "complete",
+      generator: (row.generator as "llm" | "template" | null) ?? null,
+      structured_json: row.structured_json,
+      pptx_storage_path: row.pptx_storage_path,
+    });
+    return briefBranch(
+      {
+        status: "ok",
+        detail: `Read ${sources.length ? sources.join(", ") : "the calls"}${row.error ? ` · ${row.error}` : ""}`,
+      },
+      { filled, result: { brief_id: row.id } },
+    );
+  } catch (e) {
+    const detail = `The brief was written but not applied: ${errText(e)}`;
+    return briefBranch({ status: "failed", detail }, { problems: [detail] });
+  }
 };
 
 /* ------------------------------------------------------------ finalize */
@@ -450,7 +649,12 @@ export const finalize: StepFn = async (job, ctx: StepContext) => {
   return { result: { status, notified } };
 };
 
-/** "The AI read <what> for <deal>: N services, M fields filled — review them on the deal." */
+/**
+ * "The AI read <what> for <deal>: N services, M fields filled, K handoff
+ * answers, the workflow story, J focus items — review them on the deal."
+ * Counted from the filled list's own words: a handoff answer is named by
+ * its question, the story and the focus by the prefill's labels.
+ */
 export function readingSummaryLine(input: {
   dealName: string;
   services: number;
@@ -461,8 +665,21 @@ export function readingSummaryLine(input: {
   if (input.branches["sow"]?.status === "ok") read.push("the SOW");
   if (input.branches["brief"]?.status === "ok") read.push("the calls");
   const what = read.length ? read.join(" and ") : "the deal";
-  const fields = input.filled.filter((f) => !/service.* from the SOW$/.test(f)).length;
-  return `The AI read ${what} for ${input.dealName}: ${input.services} service${input.services === 1 ? "" : "s"}, ${fields} field${fields === 1 ? "" : "s"} filled — review them on the deal.`;
+  const n = (count: number, word: string) => `${count} ${word}${count === 1 ? "" : "s"}`;
+  const labels = new Set(HANDOFF_QUESTIONS.map((q) => q.label));
+  const items = input.filled.filter((f) => !/service.* from the SOW$/.test(f));
+  const answers = items.filter((f) => labels.has(f)).length;
+  const story = items.includes("the workflow story");
+  const focus = Number(items.map((f) => /^(\d+) focus items?$/.exec(f)?.[1]).find(Boolean) ?? 0);
+  const fields = items.length - answers - (story ? 1 : 0) - (focus ? 1 : 0);
+  const parts = [
+    n(input.services, "service"),
+    fields || !(answers || story || focus) ? `${n(fields, "field")} filled` : null,
+    answers ? n(answers, "handoff answer") : null,
+    story ? "the workflow story" : null,
+    focus ? n(focus, "focus item") : null,
+  ].filter(Boolean);
+  return `The AI read ${what} for ${input.dealName}: ${parts.join(", ")} — review them on the deal.`;
 }
 
 async function notifyAssignee(
@@ -505,6 +722,9 @@ async function notifyAssignee(
 export const prepareDealSteps: Record<PrepareDealStep, StepFn> = {
   sources,
   sow,
-  brief,
+  brief_core,
+  brief_plan,
+  verify,
+  apply,
   finalize,
 };

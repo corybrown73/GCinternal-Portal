@@ -12,6 +12,7 @@ import { ParkingLot } from "@/components/parking-lot";
 import { Field, StatusDot } from "@/components/record";
 import { SolutionsCard } from "@/components/solutions-card";
 import { TranscriptUpdatePanel } from "@/components/transcript-update-panel";
+import { WorkflowStoryPanel } from "@/components/workflow-story-panel";
 import { ImplementationUpdatePanel } from "@/components/implementation-update-panel";
 import { ImplementationHistorySection } from "@/components/implementation-history";
 import { FactsStep, FlowStep, NotesIn, SowStep } from "@/components/intake-panel";
@@ -1157,6 +1158,8 @@ export function CurrentImplementationTab({
       <SolutionsCard deal={deal} editable={editable} />
 
       <ImplementationFocusPanel dealId={dealId} intake={intake} />
+
+      <WorkflowStoryPanel dealId={dealId} intake={intake} />
 
       <ImplementationHistorySection
         dealStageHistory={deal.stage_history}

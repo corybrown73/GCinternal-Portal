@@ -396,7 +396,14 @@ export function handoffChecks(a: IntakeAnswers): HandoffChecks {
   const missingFor = (side: HandoffSide) =>
     HANDOFF_QUESTIONS.filter((q) => q.side === side && q.required).filter((q) => {
       if (q.key === "commitments" && a.handoff.commitments_none) return false;
-      return !isAnswered(answerValue(a, q.key));
+      if (!isAnswered(answerValue(a, q.key))) return true;
+      // The customer's half: what the AI read from the calls is a draft on
+      // their page until they, or a person, say it is right. What was
+      // promised is the one Sales answer held to the same rule: a promise
+      // is for the person who made it to state, so the AI's draft stands
+      // on the panel but does not complete the handoff.
+      const src = answerSource(a, q.key);
+      return src === "ai" && (side === "customer" || q.key === "commitments");
     });
   const salesMissing = missingFor("sales");
   const customerMissing = missingFor("customer");

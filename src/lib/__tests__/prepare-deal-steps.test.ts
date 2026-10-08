@@ -5,14 +5,23 @@ import { createFakeSupabase, type Rows } from "./fake-supabase";
 /**
  * The prepare_deal steps against an in-memory database: the source hash and
  * the short-circuit, a SOW reading served from the table instead of the
- * model, a brief that runs on the summary alone, and the final record.
+ * model, the three brief passes over one cached prefix, the apply step
+ * called once, and the final record.
  */
 const h = vi.hoisted(() => {
   const state = {
     supabase: { client: null as any },
     forward: null as any,
-    brief: { generateDealBriefAs: vi.fn() },
+    brief: { generateDealBriefAs: vi.fn(), applyBriefToDeal: vi.fn() },
     sow: { readSowDocument: vi.fn(), stampSowFacts: vi.fn(async () => ["reference"]) },
+    ai: {
+      runStructured: vi.fn(),
+      describeAiError: (e: unknown, what = "AI synthesis") =>
+        `${what} failed: ${e instanceof Error ? e.message : String(e)}`,
+      AiParseError: class extends Error {},
+      AiRefusedError: class extends Error {},
+      AiTruncatedError: class extends Error {},
+    },
     assignment: {
       dealAssignment: vi.fn(async () => ({
         owner: { teamMemberId: "tm-1", name: "Priya Nair", email: "priya@gocanvas.com" },
@@ -29,13 +38,16 @@ const h = vi.hoisted(() => {
 vi.mock("@/integrations/supabase/client.server", () => ({ supabaseAdmin: h.forward }));
 vi.mock("../presale.server", () => h.brief);
 vi.mock("../sow-plan.server", () => h.sow);
+vi.mock("../server/ai/client", () => h.ai);
 vi.mock("../assignment.server", () => h.assignment);
 vi.mock("../server/email", () => h.email);
 vi.mock("../welcome.server", () => h.welcome);
 vi.mock("../server/audit", () => h.audit);
 
 import {
-  brief,
+  apply,
+  brief_core,
+  brief_plan,
   briefSourcesFor,
   finalize,
   finalStatus,
@@ -43,10 +55,11 @@ import {
   readingSummaryLine,
   sources,
   sow,
+  verify,
 } from "../server/ai/steps/prepare-deal";
 import { sourceHashOf } from "../server/ai/sources";
 import { sha256Hex } from "../server/ai/documents";
-import { sowPlanProposalSchema } from "../sow-plan";
+import { sowPlanProposalSchema, sowReadingSchema } from "../sow-plan";
 import { summaryAsReport } from "../server/brief/prompt";
 import type { AiJobRow } from "../server/ai/jobs";
 
@@ -93,6 +106,10 @@ const baseRows: Rows = {
       name: "Summit Roofing",
       display_name: null,
       summary: null,
+      stage: "closed_won",
+      domain: null,
+      arr: null,
+      products: [],
       sow_document_path: SOW_PATH,
       sow_document_name: "summit-sow.pdf",
       welcome_share_url: null,
@@ -107,13 +124,109 @@ const baseRows: Rows = {
       id: "r1",
       account_id: DEAL,
       title: "Discovery",
-      content_md: "notes",
+      report_type: "call_notes",
+      content_md: "Every crew fills a paper daily report. Dana runs the office.",
       created_at: "2026-10-01T00:00:00Z",
     },
   ],
   portal_onboarding_notes: [],
   portal_ai_jobs: [],
   portal_ai_readings: [],
+  portal_briefs: [],
+};
+
+const usage = {
+  input_tokens: 900,
+  output_tokens: 300,
+  cache_read_input_tokens: 0,
+  cache_creation_input_tokens: 0,
+};
+
+const core = {
+  account_name: "Summit Roofing",
+  one_liner: "Summit runs crews on paper and bought GoCanvas to stop.",
+  account: { industry: "Roofing", company_size: null, field_users: 40, website: null },
+  current_process: [{ title: "Daily", bullets: ["Paper daily report"] }],
+  goals: ["Same-day reports"],
+  what_we_know: [],
+  stakeholders: [
+    {
+      name: "Dana",
+      role: "Office manager",
+      notes: "Runs the office",
+      role_kind: "admin_builder",
+      email: null,
+    },
+  ],
+  risks_open_items: [],
+  dates: [],
+  discovery_questions: [],
+  process_gaps: [],
+};
+
+const plan = {
+  kickoff: {
+    day_90_definition: null,
+    scope: [{ workflow: "Daily report", replaces: "Paper daily report", teams: null }],
+    out_of_scope: null,
+    integrations: [],
+    roles: [],
+    licensed_seats: "40 seats",
+    renewal_date: null,
+    it_contact: null,
+    training: [],
+    kpi_qualifiers: [],
+    next_meeting: null,
+  },
+  expansion: {
+    integration_target: null,
+    form_already_built: null,
+    historical_data: null,
+    current_process: null,
+    time_saved: null,
+    data_flows: [],
+    environment_notes: [],
+    blockers: [],
+  },
+  onboarding: {
+    flow: "new_logo",
+    flow_evidence: { quote: "Every crew fills a paper daily report", source: "Discovery" },
+    training_only: false,
+    solutions_involved: null,
+    forms: [
+      { name: "Daily report", quote: "Every crew fills a paper daily report", source: "Discovery" },
+    ],
+    current_process: null,
+  },
+  welcome: {
+    field_tester: null,
+    customer_side: { forms_today: null, data_lists: null, devices: null, kickoff_attendees: null },
+    workflow_story: { before: null, during: null, after: null },
+    focus_items: [],
+  },
+};
+
+const verified = {
+  onboarding: plan.onboarding,
+  kickoff: {
+    scope: [
+      {
+        ...plan.kickoff.scope[0],
+        quote: "Every crew fills a paper daily report",
+        source: "calls",
+        page: null,
+      },
+    ],
+    licensed_seats: { value: "40 seats", quote: "forty seats", source: "calls", page: null },
+    renewal_date: null,
+    roles: [],
+    it_contact: null,
+  },
+  stakeholders: [
+    { ...core.stakeholders[0], quote: "Dana runs the office", source: "calls", page: null },
+  ],
+  goals: [{ text: "Same-day reports", quote: "same day", source: "calls", page: null }],
+  dates: [],
 };
 
 let fake: ReturnType<typeof createFakeSupabase>;
@@ -123,7 +236,13 @@ beforeEach(() => {
   fake = createFakeSupabase(baseRows, { objects: { [`attachments/${SOW_PATH}`]: PDF } });
   h.supabase.client = fake.client;
   h.brief.generateDealBriefAs.mockReset();
+  h.brief.applyBriefToDeal.mockReset();
   h.sow.readSowDocument.mockReset();
+  h.ai.runStructured.mockReset();
+  h.ai.runStructured.mockImplementation(async (args: { kind: string }) => {
+    const data = args.kind === "brief_core" ? core : args.kind === "brief_plan" ? plan : verified;
+    return { data, usage, model: "claude-opus-5-5", stop_reason: "end_turn", attempts: 1, ms: 1 };
+  });
   h.email.sendEmail.mockClear();
   h.welcome.issueWelcomeLinkAs.mockClear();
   h.audit.audit.mockClear();
@@ -131,8 +250,16 @@ beforeEach(() => {
 });
 
 describe("the step list", () => {
-  it("is sources, sow, brief, finalize for now", () => {
-    expect([...PREPARE_DEAL_STEPS]).toEqual(["sources", "sow", "brief", "finalize"]);
+  it("is sources, sow, the three brief passes, apply, finalize", () => {
+    expect([...PREPARE_DEAL_STEPS]).toEqual([
+      "sources",
+      "sow",
+      "brief_core",
+      "brief_plan",
+      "verify",
+      "apply",
+      "finalize",
+    ]);
   });
 });
 
@@ -151,11 +278,12 @@ describe("sources", () => {
     });
     expect(reading.heartbeat_at).toBeTruthy();
     // The hash is the pure function over the same inputs.
+    const r = baseRows["portal_gong_reports"]![0]!;
     expect(out.sourceHash).toBe(
       sourceHashOf({
         sow: { sha256: sha256Hex(PDF) },
         contract: null,
-        reports: [{ id: "r1", content_md: "notes", created_at: "2026-10-01T00:00:00Z" }],
+        reports: [{ id: "r1", content_md: r.content_md, created_at: r.created_at }],
         notes: [],
         summary: null,
       }),
@@ -268,10 +396,11 @@ describe("sources", () => {
 });
 
 describe("sow", () => {
-  const proposal = sowPlanProposalSchema.parse({
+  const proposal = sowReadingSchema.parse({
     readable: true,
     reference: "SOW-42",
     summary: "QuickBooks integration plus one extra form",
+    seats: 40,
     services: [
       { kind: "integration", name: "QuickBooks Online", tier: 3, phase: 2, confidence: "stated" },
       { kind: "paid_form", name: "Job Safety Analysis", phase: 1, confidence: "stated" },
@@ -285,16 +414,25 @@ describe("sow", () => {
       kind: "sow",
       source_hash: sha256Hex(PDF),
       output: proposal,
+      created_at: "2026-10-07T00:00:00Z",
     });
     const out = await sow(job({ step: "sow", steps_done: ["sources"] }), ctx);
     expect(h.sow.readSowDocument).not.toHaveBeenCalled();
     expect(out.result?.["branches"]).toMatchObject({ sow: { status: "ok" } });
     expect((out.result?.["branches"] as any).sow.detail).toMatch(/kept from an earlier reading/);
-    expect(out.filled).toEqual(["2 services from the SOW", "the SOW reference"]);
+    expect(out.filled).toEqual([
+      "2 services from the SOW",
+      "people in the field (from the SOW)",
+      "the SOW reference",
+    ]);
     expect(out.result).toMatchObject({ services_added: 2, sow_reused: true });
     expect(out.usage).toBeUndefined();
     const services = account().intake.timeline.services as Array<{ name: string }>;
     expect(services.map((s) => s.name)).toEqual(["QuickBooks Online", "Job Safety Analysis"]);
+    // The seats land on the intake as the AI's answer, with the SOW as the source.
+    expect(account().intake.field_users).toBe(40);
+    expect(account().intake.ai_filled).toEqual(["field_users"]);
+    expect(account().intake.ai_sources.field_users.source).toBe("SOW");
     expect(h.sow.stampSowFacts).toHaveBeenCalledWith(
       DEAL,
       expect.objectContaining({ reference: "SOW-42" }),
@@ -302,19 +440,13 @@ describe("sow", () => {
     expect(account().intake.ai_reading.step).toBe("sow");
   });
 
-  it("reads a new document once and keeps the reading", async () => {
-    const usage = {
-      input_tokens: 900,
-      output_tokens: 300,
-      cache_read_input_tokens: 0,
-      cache_creation_input_tokens: 0,
-    };
+  it("reads a new document once, with the contract beside it, and keeps the reading", async () => {
     h.sow.readSowDocument.mockResolvedValue({ proposal, usage, model: "claude-opus-5-5" });
     const out = await sow(job({ step: "sow" }), ctx);
     expect(h.sow.readSowDocument).toHaveBeenCalledWith(
       DEAL,
       expect.objectContaining({ sha256: sha256Hex(PDF), kind: "pdf" }),
-      { jobId: "job-1" },
+      { jobId: "job-1", contract: null },
     );
     expect(out.usage).toEqual(usage);
     const kept = fake.store["portal_ai_readings"]!;
@@ -327,6 +459,50 @@ describe("sow", () => {
       model: "claude-opus-5-5",
     });
     expect(kept[0]!.output.services).toHaveLength(2);
+  });
+
+  it("reads the same bytes again when the job is forced, and the new reading replaces the kept one", async () => {
+    fake.store["portal_ai_readings"]!.push({
+      id: "rd-1",
+      deal_id: DEAL,
+      kind: "sow",
+      source_hash: sha256Hex(PDF),
+      output: sowPlanProposalSchema.parse({ readable: false, problem: "This is a brochure." }),
+      created_at: "2026-10-07T00:00:00Z",
+    });
+    h.sow.readSowDocument.mockResolvedValue({ proposal, usage, model: "m2" });
+    const out = await sow(job({ step: "sow", force: true }), ctx);
+    expect(h.sow.readSowDocument).toHaveBeenCalledTimes(1);
+    expect(out.result?.["branches"]).toMatchObject({ sow: { status: "ok" } });
+    expect(out.result).toMatchObject({ services_added: 2, sow_reused: false });
+    const kept = fake.store["portal_ai_readings"]!;
+    expect(kept).toHaveLength(1);
+    expect(kept[0]).toMatchObject({ id: "rd-1", model: "m2" });
+    expect(kept[0]!.output.readable).toBe(true);
+
+    // The next job, unforced, serves the fresh reading.
+    h.sow.readSowDocument.mockClear();
+    const again = await sow(job({ step: "sow", id: "job-2" }), ctx);
+    expect(h.sow.readSowDocument).not.toHaveBeenCalled();
+    expect(again.result).toMatchObject({ sow_reused: true });
+  });
+
+  it("puts the SOW's forms on the intake only when no call named any", async () => {
+    const withForms = {
+      ...proposal,
+      forms: [{ name: "Daily Report", purpose: null, quote: "Daily Report form" }],
+    };
+    h.sow.readSowDocument.mockResolvedValue({ proposal: withForms, usage, model: "m" });
+    await sow(job({ step: "sow" }), ctx);
+    expect(account().intake.wanted_forms).toEqual([]);
+
+    fake.store["portal_gong_reports"] = [];
+    fake.store["portal_ai_readings"] = [];
+    const out = await sow(job({ step: "sow", id: "job-2" }), ctx);
+    expect(account().intake.wanted_forms).toEqual([
+      { id: "sow-1", name: "Daily Report", template_id: null },
+    ]);
+    expect(out.filled).toContain("the first form (from the SOW)");
   });
 
   it("skips without a document and fails with the reason when one cannot be read", async () => {
@@ -360,70 +536,183 @@ describe("sow", () => {
   });
 });
 
-describe("brief", () => {
-  it("runs on the summary alone, as the system", async () => {
-    fake.store["portal_gong_reports"] = [];
-    account().summary = "Closed won. 3 crews, QuickBooks next year.";
-    h.brief.generateDealBriefAs.mockResolvedValue({
-      id: "b1",
-      status: "complete",
-      generator: "llm",
-      error: null,
-      filled: ["the onboarding flow", "the forms"],
+describe("the brief passes", () => {
+  it("run core, plan and verify over one identical cached prefix, then apply once", async () => {
+    const first = await brief_core(job({ step: "brief_core" }), ctx);
+    const briefId = first.result?.["brief_id"] as string;
+    expect(briefId).toBeTruthy();
+    expect(first.result?.["branches"]).toMatchObject({ brief: { status: "ok" } });
+    expect(first.usage).toEqual(usage);
+    const row = () => fake.store["portal_briefs"]!.find((b) => b.id === briefId)!;
+    expect(row()).toMatchObject({ status: "generating", created_by: null });
+    expect(row().structured_json.account_name).toBe("Summit Roofing");
+    expect(row().structured_json.kickoff).toBeUndefined();
+
+    const next = job({ step: "brief_plan", result: { brief_id: briefId } });
+    const second = await brief_plan(next, ctx);
+    expect(second.result?.["branches"]).toMatchObject({ brief: { status: "ok" } });
+    expect(row().structured_json.kickoff.licensed_seats).toBe("40 seats");
+    expect(row().status).toBe("generating");
+
+    const third = await verify({ ...next, step: "verify" }, ctx);
+    expect(third.result?.["branches"]).toMatchObject({ brief: { status: "ok" } });
+    expect(row().status).toBe("complete");
+    expect(row().generator).toBe("llm");
+    expect(row().structured_json.verification).toMatchObject({
+      checked_at: "2026-10-08T10:05:00.000Z",
+      fields: {
+        "kickoff.scope[0]": "grounded",
+        "kickoff.licensed_seats": "unverified",
+        "stakeholders[0]": "grounded",
+        "goals[0]": "unverified",
+        "onboarding.forms[0]": "grounded",
+        "onboarding.flow": "grounded",
+      },
     });
-    const out = await brief(job({ step: "brief" }), ctx);
-    expect(h.brief.generateDealBriefAs).toHaveBeenCalledWith(
+    expect((third.result?.["branches"] as any).brief.detail).toMatch(
+      /Checked 6 items, 2 to confirm/,
+    );
+
+    // The three calls: one system prompt, one prefix, the pass's own ask last.
+    const calls = h.ai.runStructured.mock.calls.map((c: any[]) => c[0]);
+    expect(calls.map((c: any) => c.kind)).toEqual(["brief_core", "brief_plan", "verify"]);
+    const prefixes = calls.map((c: any) => c.content.slice(0, -1));
+    expect(prefixes[1]).toEqual(prefixes[0]);
+    expect(prefixes[2]).toEqual(prefixes[0]);
+    expect(calls[1].system).toBe(calls[0].system);
+    expect(calls[2].system).toBe(calls[0].system);
+    const last = prefixes[0][prefixes[0].length - 1];
+    expect(last.cache_control).toEqual({ type: "ephemeral", ttl: "1h" });
+    expect(last.text).toContain("Every crew fills a paper daily report");
+    expect(prefixes[0][0]).toMatchObject({
+      type: "text",
+      text: expect.stringMatching(/STATEMENT OF WORK/),
+    });
+    expect(prefixes[0][1].type).toBe("document");
+    // The plan pass sees the core; the verifier sees the whole brief.
+    expect(calls[1].content.at(-1).text).toContain('"account_name":"Summit Roofing"');
+    expect(calls[2].content.at(-1).text).toContain("THE BRIEF TO CHECK");
+    expect(calls.every((c: any) => c.jobId === "job-1" && c.dealId === DEAL)).toBe(true);
+
+    h.brief.applyBriefToDeal.mockResolvedValue(["the onboarding flow", "the first form"]);
+    const fourth = await apply(
+      { ...next, step: "apply", result: { brief_id: briefId, brief_sources: ["1 call note"] } },
+      ctx,
+    );
+    expect(h.brief.applyBriefToDeal).toHaveBeenCalledTimes(1);
+    expect(h.brief.applyBriefToDeal).toHaveBeenCalledWith(
       { kind: "system", label: "the AI reading" },
       DEAL,
+      expect.objectContaining({ id: briefId, status: "complete", generator: "llm" }),
     );
-    expect(out.filled).toEqual(["the onboarding flow", "the forms"]);
-    expect(out.result?.["branches"]).toMatchObject({ brief: { status: "ok" } });
-    expect((out.result?.["branches"] as any).brief.detail).toMatch(/the deal's summary/);
+    expect(fourth.filled).toEqual(["the onboarding flow", "the first form"]);
+    expect((fourth.result?.["branches"] as any).brief.detail).toBe("Read 1 call note");
   });
 
-  it("skips when there is nothing to read", async () => {
+  it("puts the kept SOW reading in the prefix so the brief agrees with it", async () => {
+    fake.store["portal_ai_readings"]!.push({
+      id: "rd-1",
+      deal_id: DEAL,
+      kind: "sow",
+      source_hash: sha256Hex(PDF),
+      output: sowPlanProposalSchema.parse({
+        readable: true,
+        summary: "One form, QuickBooks",
+        services: [],
+      }),
+      created_at: "2026-10-07T00:00:00Z",
+    });
+    await brief_core(job({ step: "brief_core" }), ctx);
+    const content = h.ai.runStructured.mock.calls[0]![0].content;
+    expect(content.at(-2).text).toContain("WHAT THE SIGNED SOW SAYS, ALREADY EXTRACTED");
+    expect(content.at(-2).text).toContain("One form, QuickBooks");
+  });
+
+  it("skips to finalize when there is nothing to read", async () => {
     fake.store["portal_gong_reports"] = [];
-    const out = await brief(job({ step: "brief" }), ctx);
-    expect(h.brief.generateDealBriefAs).not.toHaveBeenCalled();
+    const out = await brief_core(job({ step: "brief_core" }), ctx);
+    expect(h.ai.runStructured).not.toHaveBeenCalled();
+    expect(out.skipTo).toBe("finalize");
     expect(out.result?.["branches"]).toMatchObject({ brief: { status: "skipped" } });
+    expect(fake.store["portal_briefs"]).toHaveLength(0);
   });
 
-  it("keeps a brief this job already wrote instead of writing a second on a retry", async () => {
+  it("runs on the summary alone", async () => {
+    fake.store["portal_gong_reports"] = [];
+    account().summary = "Closed won. 3 crews, QuickBooks next year.";
+    const out = await brief_core(job({ step: "brief_core" }), ctx);
+    expect((out.result?.["branches"] as any).brief.detail).toMatch(/the deal's summary/);
+    const content = h.ai.runStructured.mock.calls[0]![0].content;
+    expect(content.at(-2).text).toContain("3 crews, QuickBooks next year");
+  });
+
+  it("keeps the core this job already wrote instead of spending the pass again", async () => {
     fake.store["portal_briefs"] = [
-      {
-        id: "b-old",
-        account_id: DEAL,
-        status: "complete",
-        generator: "llm",
-        created_by: null,
-        created_at: "2026-10-01T00:00:00Z",
-      },
       {
         id: "b-mine",
         account_id: DEAL,
-        status: "complete",
-        generator: "llm",
+        status: "generating",
+        generator: null,
         created_by: null,
+        structured_json: core,
         created_at: "2026-10-08T10:02:00Z",
       },
     ];
-    const out = await brief(job({ step: "brief" }), ctx);
-    expect(h.brief.generateDealBriefAs).not.toHaveBeenCalled();
+    const out = await brief_core(job({ step: "brief_core" }), ctx);
+    expect(h.ai.runStructured).not.toHaveBeenCalled();
     expect(out.result).toMatchObject({ brief_id: "b-mine" });
     expect((out.result?.["branches"] as any).brief.detail).toMatch(/kept from an earlier attempt/);
   });
 
-  it("reports a brief that fell back to the template as a failure of the reading", async () => {
-    h.brief.generateDealBriefAs.mockResolvedValue({
-      id: "b1",
-      status: "complete",
-      generator: "template",
-      error: "AI synthesis failed: rate limited.",
-      filled: [],
-    });
-    const out = await brief(job({ step: "brief" }), ctx);
+  it("fails the brief row and goes to finalize when a pass fails", async () => {
+    h.ai.runStructured.mockRejectedValue(new Error("rate limited"));
+    const out = await brief_core(job({ step: "brief_core" }), ctx);
+    expect(out.skipTo).toBe("finalize");
     expect(out.result?.["branches"]).toMatchObject({ brief: { status: "failed" } });
-    expect(out.problems).toEqual(["AI synthesis failed: rate limited."]);
+    expect(out.problems?.[0]).toMatch(/The brief did not finish: The brief failed: rate limited/);
+    expect(fake.store["portal_briefs"]![0]).toMatchObject({ status: "failed" });
+  });
+
+  it("fails when AI is not configured, without a row", async () => {
+    delete process.env["ANTHROPIC_API_KEY"];
+    const out = await brief_core(job({ step: "brief_core" }), ctx);
+    expect(out.skipTo).toBe("finalize");
+    expect(out.problems?.[0]).toMatch(/not configured/);
+    expect(fake.store["portal_briefs"]).toHaveLength(0);
+  });
+
+  it("completes the brief with every item to confirm when the checker cannot run", async () => {
+    fake.store["portal_briefs"] = [
+      {
+        id: "b-1",
+        account_id: DEAL,
+        status: "generating",
+        generator: null,
+        created_by: null,
+        structured_json: { ...core, ...plan },
+        created_at: "2026-10-08T10:02:00Z",
+      },
+    ];
+    h.ai.runStructured.mockRejectedValue(new Error("rate limited"));
+    const out = await verify(job({ step: "verify", result: { brief_id: "b-1" } }), ctx);
+    expect(out.result?.["branches"]).toMatchObject({ brief: { status: "ok" } });
+    expect(out.usage).toBeUndefined();
+    const row = fake.store["portal_briefs"]![0]!;
+    expect(row.status).toBe("complete");
+    expect(row.structured_json.verification.fields).toEqual({
+      "kickoff.scope[0]": "unverified",
+      "kickoff.licensed_seats": "unverified",
+      "stakeholders[0]": "unverified",
+      "goals[0]": "unverified",
+      "onboarding.forms[0]": "unverified",
+      "onboarding.flow": "unverified",
+    });
+  });
+
+  it("applies nothing when there is no finished brief", async () => {
+    const out = await apply(job({ step: "apply" }), ctx);
+    expect(h.brief.applyBriefToDeal).not.toHaveBeenCalled();
+    expect(out.result?.["branches"]).toMatchObject({ brief: { status: "skipped" } });
   });
 
   it("decides the sources it can read from", () => {
@@ -480,7 +769,7 @@ describe("finalize", () => {
     const out = await finalize(
       job({
         step: "finalize",
-        steps_done: ["sources", "sow", "brief"],
+        steps_done: ["sources", "sow", "brief_core", "brief_plan", "verify", "apply"],
         result: {
           filled: ["2 services from the SOW", "the onboarding flow", "the forms"],
           problems: [],
@@ -625,6 +914,24 @@ describe("finalize", () => {
       }),
     ).toBe(
       "The AI read the calls for Acme: 0 services, 3 fields filled — review them on the deal.",
+    );
+    // What the prefill drafted, by name: the handoff's answers, the story, the focus.
+    expect(
+      readingSummaryLine({
+        dealName: "Acme",
+        services: 2,
+        filled: [
+          "2 services from the SOW",
+          "the first form",
+          "Decision maker",
+          "Who will be at kickoff",
+          "the workflow story",
+          "3 focus items",
+        ],
+        branches: { sow: { status: "ok", detail: null }, brief: { status: "ok", detail: null } },
+      }),
+    ).toBe(
+      "The AI read the SOW and the calls for Acme: 2 services, 1 field filled, 2 handoff answers, the workflow story, 3 focus items — review them on the deal.",
     );
   });
 });

@@ -1,3 +1,5 @@
+import { firstFormName, type IntakeAnswers } from "./intake-answers";
+import { answerSource, answerValue } from "./sales-handoff";
 import type { BriefJson } from "./server/schemas";
 
 /**
@@ -23,12 +25,54 @@ import type { BriefJson } from "./server/schemas";
  * human name, not a department"). They come back in `missing` so the AE gets a
  * list rather than a surprise in the meeting.
  *
- * PURE. No imports beyond a type; the whole thing is testable without a
- * database, which is what makes "does the deck invent a KPI when none is
- * recorded?" a question with an answer.
+ * PURE. Nothing imported but other pure modules; the whole thing is testable
+ * without a database, which is what makes "does the deck invent a KPI when
+ * none is recorded?" a question with an answer.
  */
 
 export type KickoffPerson = { name: string; role: string };
+
+/** A value off the intake, and whether the AI reading put it there. */
+export type KickoffFact = { text: string; ai: boolean };
+
+/**
+ * What the merged intake lends the deck: the first form, the process
+ * today and the handoff's contacts — a person's answers where there are
+ * some, the reading's where not. They sit between the records (which win)
+ * and the raw brief (which fills what is left), so the deck says what the
+ * deal says after the prefill, not what the brief said before it.
+ */
+export type KickoffIntakeFacts = {
+  firstForm: KickoffFact | null;
+  currentProcess: KickoffFact | null;
+  contacts: Array<{ name: string; role: string | null; ai: boolean }>;
+};
+
+const CONTACT_KEYS = ["contact_decision_maker", "contact_admin_builder", "contact_day_to_day"];
+
+export function kickoffFactsFromIntake(a: IntakeAnswers): KickoffIntakeFacts {
+  const first = firstFormName(a);
+  const contacts: KickoffIntakeFacts["contacts"] = [];
+  for (const key of CONTACT_KEYS) {
+    const v = answerValue(a, key);
+    if (typeof v !== "string") continue;
+    // "Name · role · email": the email is not a role.
+    const [name, role] = v.split("·").map((s) => s.trim());
+    if (!name) continue;
+    contacts.push({
+      name,
+      role: role && !role.includes("@") ? role : null,
+      ai: answerSource(a, key) === "ai",
+    });
+  }
+  return {
+    firstForm: first ? { text: first, ai: a.ai_filled.includes("wanted_forms") } : null,
+    currentProcess: a.current_process
+      ? { text: a.current_process, ai: a.current_process_source === "ai" }
+      : null,
+    contacts,
+  };
+}
 
 export type KickoffStage = {
   name: string;
@@ -77,6 +121,8 @@ export type KickoffInput = {
   solutions: string[];
   targetLaunchDate: string | null;
   itContact: KickoffPerson | null;
+  /** The merged intake's own facts; absent on a deck drawn before the prefill. */
+  intake?: KickoffIntakeFacts | null;
 };
 
 export type KickoffDeckData = {
@@ -317,9 +363,44 @@ export function buildKickoffData(input: KickoffInput): KickoffDeckData {
     if (!v) return;
     f[key] = v;
     fromCalls.add(key);
+    fromBrief.add(key);
+  };
+
+  /**
+   * A value off the merged intake. Under the records, over the brief: a
+   * person's answer there is a record, the reading's own is remembered
+   * for the AE to check like anything else read out of the calls.
+   */
+  const fact = (key: string, value: KickoffFact | null | undefined) => {
+    if (key in f || !value) return;
+    const v = clean(value.text);
+    if (!v) return;
+    f[key] = v;
+    if (value.ai) fromCalls.add(key);
   };
 
   const k = input.brief.kickoff;
+
+  /**
+   * What the verifier found for the brief item behind a deck field. A
+   * field whose item the sources did not support — "unverified", or
+   * "dropped" — joins `fromCalls`, so slide one's notes say CHECK THESE
+   * even when the value came through `set`. Only fields the brief filled:
+   * a record's value is never flagged for a brief item it happens to
+   * share a key with.
+   */
+  const verification = input.brief.verification?.fields ?? {};
+  const fromBrief = new Set<string>();
+  const flag = (path: string, ...keys: string[]) => {
+    const status = verification[path];
+    if (status !== "unverified" && status !== "dropped") return;
+    for (const key of keys) if (key in f && fromBrief.has(key)) fromCalls.add(key);
+  };
+  /** `set` for a value the brief wrote, remembered so the verifier's word can reach it. */
+  const setFromBrief = (key: string, value: string | null | undefined) => {
+    set(key, value);
+    if (key in f) fromBrief.add(key);
+  };
 
   /* ------------------------------------------------------------ 01, 03, 17 */
 
@@ -335,17 +416,43 @@ export function buildKickoffData(input: KickoffInput): KickoffDeckData {
   set("gc_person_3_name", third?.name);
   set("gc_person_3_role", third?.role);
 
-  input.clientPeople.slice(0, 3).forEach((p, i) => {
-    set(`client_person_${i + 1}_name`, p.name);
-    set(`client_person_${i + 1}_role`, p.role);
+  // The customer's people: the handoff's contacts first — a person's
+  // answers, or the reading's drafts of them — then whoever else the brief
+  // named, each once.
+  const people: Array<{ name: string; role: string; fromIntake: boolean; ai: boolean }> = [];
+  const named = new Set<string>();
+  for (const c of input.intake?.contacts ?? []) {
+    const key = c.name.trim().toLowerCase();
+    if (!key || named.has(key)) continue;
+    named.add(key);
+    people.push({ name: c.name, role: c.role ?? "", fromIntake: true, ai: c.ai });
+  }
+  for (const p of input.clientPeople) {
+    const key = p.name.trim().toLowerCase();
+    if (!key || named.has(key)) continue;
+    named.add(key);
+    people.push({ ...p, fromIntake: false, ai: false });
+  }
+  people.slice(0, 3).forEach((p, i) => {
+    // The brief's own stakeholders, when that is where the person came
+    // from, carry the verifier's word with them; so does a contact the
+    // reading drafted from one.
+    const at = input.brief.stakeholders.findIndex((s) => s.name === p.name);
+    const viaBrief = at >= 0 && (!p.fromIntake || p.ai);
+    const keys = [`client_person_${i + 1}_name`, `client_person_${i + 1}_role`] as const;
+    (viaBrief ? setFromBrief : set)(keys[0], p.name);
+    (viaBrief ? setFromBrief : set)(keys[1], p.role);
+    if (p.ai) for (const key of keys) if (key in f) fromCalls.add(key);
+    if (at >= 0) flag(`stakeholders[${at}]`, ...keys);
   });
 
   /* ------------------------------------------------------------------- 06 */
 
   input.brief.goals.slice(0, 4).forEach((g, i) => {
     const { headline, detail } = splitGoal(g);
-    set(`goal_${i + 1}`, headline);
-    set(`goal_${i + 1}_detail`, detail);
+    setFromBrief(`goal_${i + 1}`, headline);
+    setFromBrief(`goal_${i + 1}_detail`, detail);
+    flag(`goals[${i}]`, `goal_${i + 1}`, `goal_${i + 1}_detail`);
   });
 
   /* ------------------------------------------------------------------- 07 */
@@ -378,13 +485,40 @@ export function buildKickoffData(input: KickoffInput): KickoffDeckData {
   const outOfScope = input.requirements.filter((r) => !r.inScope).map((r) => r.title);
   set("out_of_scope", outOfScope.length ? outOfScope.join(", ") : null);
 
+  // The intake's first form is the first workflow, and the process today
+  // is what it retires — one sentence of it; the slide has one line.
+  fact("scope_1_workflow", input.intake?.firstForm);
+  fact(
+    "scope_1_replaces",
+    input.intake?.currentProcess
+      ? {
+          text: splitGoal(input.intake.currentProcess.text).headline.slice(0, 200),
+          ai: input.intake.currentProcess.ai,
+        }
+      : null,
+  );
+
   // The calls carry what the portal cannot: what each workflow retires and who
-  // uses it. Pre-handoff they also carry the workflows themselves.
-  k.scope.slice(0, 5).forEach((row, i) => {
-    infer(`scope_${i + 1}_workflow`, row.workflow);
-    infer(`scope_${i + 1}_replaces`, row.replaces);
-    infer(`scope_${i + 1}_teams`, row.teams);
-  });
+  // uses it. Pre-handoff they also carry the workflows themselves. A row
+  // goes to the line that already names its workflow — the record's, or the
+  // intake's first form — and fills what that line lacks; any other row
+  // takes the next free line. By name, not by position: the same workflow
+  // never sits on two lines, and a row the verifier dropped from the front
+  // does not shift the rest onto the wrong one.
+  const SCOPE_LINES = [1, 2, 3, 4, 5] as const;
+  const lineNames = (n: number) => clean(f[`scope_${n}_workflow`])?.toLowerCase() ?? null;
+  for (const [at, row] of k.scope.entries()) {
+    const workflow = clean(row.workflow)?.toLowerCase();
+    if (!workflow) continue;
+    const n =
+      SCOPE_LINES.find((line) => lineNames(line) === workflow) ??
+      SCOPE_LINES.find((line) => lineNames(line) === null);
+    if (!n) break;
+    infer(`scope_${n}_workflow`, row.workflow);
+    infer(`scope_${n}_replaces`, row.replaces);
+    infer(`scope_${n}_teams`, row.teams);
+    flag(`kickoff.scope[${at}]`, `scope_${n}_workflow`, `scope_${n}_replaces`, `scope_${n}_teams`);
+  }
   infer("out_of_scope", k.out_of_scope);
 
   /* ------------------------------------------------------------------- 10 */
@@ -410,6 +544,7 @@ export function buildKickoffData(input: KickoffInput): KickoffDeckData {
   k.integrations.slice(0, 3).forEach((s, i) => infer(`integration_${i + 1}`, s));
   set("it_contact", input.itContact ? `${input.itContact.name} · ${input.itContact.role}` : null);
   infer("it_contact", k.it_contact);
+  flag("kickoff.it_contact", "it_contact");
 
   /* ------------------------------------------------------------------- 14 */
 
@@ -459,12 +594,14 @@ export function buildKickoffData(input: KickoffInput): KickoffDeckData {
   // only when the notes named an owner for that exact one — matching loosely
   // would put the person who owns devices against the build.
   RACI_RESPONSIBILITIES.forEach((responsibility, i) => {
-    const hit = k.roles.find(
+    const at = k.roles.findIndex(
       (r) => r.responsibility.trim().toLowerCase() === responsibility.toLowerCase(),
     );
+    const hit = k.roles[at];
     if (!hit) return;
     infer(`raci_${i + 1}_owner`, hit.owner);
     infer(`raci_${i + 1}_support`, hit.support);
+    flag(`kickoff.roles[${at}]`, `raci_${i + 1}_owner`, `raci_${i + 1}_support`);
   });
 
   k.training.slice(0, 3).forEach((t, i) => {
@@ -472,7 +609,9 @@ export function buildKickoffData(input: KickoffInput): KickoffDeckData {
     infer(`training_${i + 1}_who`, t.who);
   });
   infer("licensed_seats", k.licensed_seats);
+  flag("kickoff.licensed_seats", "licensed_seats");
   infer("renewal_date", k.renewal_date);
+  flag("kickoff.renewal_date", "renewal_date");
   infer("next_meeting", k.next_meeting);
   infer("day_90_definition", k.day_90_definition);
 

@@ -141,6 +141,11 @@ export async function buildOnboardingDeckInput(dealId: string): Promise<Onboardi
     timeline,
     lead,
     fieldTester: intake.timeline.field_tester,
+    fieldTesterSource: intake.timeline.field_tester
+      ? intake.ai_filled.includes("field_tester")
+        ? "ai"
+        : "person"
+      : null,
     currentProcess: intake.current_process ?? synth?.currentProcess ?? null,
     currentProcessSource: intake.current_process
       ? (intake.current_process_source ?? "person")

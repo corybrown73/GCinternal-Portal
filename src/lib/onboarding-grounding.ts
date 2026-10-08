@@ -14,6 +14,13 @@ function norm(s: string): string {
     .trim();
 }
 
+/** Is the quote in the text, word for word give or take punctuation and case? */
+export function quoteInText(quote: string, text: string): boolean {
+  const q = norm(quote);
+  if (q.length < 4) return false;
+  return norm(text).includes(q);
+}
+
 /**
  * Is this quote really in what it says it came from? A SOW quote cannot be
  * checked here (the PDF is read by the model, not by us) and is trusted to
@@ -21,10 +28,9 @@ function norm(s: string): string {
  * give or take punctuation.
  */
 export function quoteHolds(quote: string, source: string, callsText: string): boolean {
-  const q = norm(quote);
-  if (q.length < 4) return false;
+  if (norm(quote).length < 4) return false;
   if (/^sow\b|statement of work/i.test(source.trim())) return true;
-  return norm(callsText).includes(q);
+  return quoteInText(quote, callsText);
 }
 
 /**

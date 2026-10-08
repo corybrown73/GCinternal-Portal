@@ -2,7 +2,11 @@ import { describe, expect, it } from "vitest";
 
 import { readIntake } from "../intake-answers";
 import { implementationFocusPatchSchema } from "../intake-patch";
-import { agreeImplementationFocus, proposeImplementationFocus } from "../implementation-focus";
+import {
+  agreeImplementationFocus,
+  focusItemsFromBrief,
+  proposeImplementationFocus,
+} from "../implementation-focus";
 
 const UUID = "11111111-1111-4111-8111-111111111111";
 
@@ -170,6 +174,96 @@ describe("proposeImplementationFocus — human truth is never overwritten", () =
       },
     });
     expect(proposeImplementationFocus(intake)).toBeNull();
+  });
+});
+
+describe("focusItemsFromBrief — the AI reading's items behind the anchors", () => {
+  const briefItems = [
+    {
+      text: "Daily report live on every crew's phone",
+      source_type: "sow",
+      source_label: "SOW",
+      quote: "one form",
+    },
+    {
+      text: "Connect approved submission data to QuickBooks Online.",
+      source_type: "sow",
+      source_label: "SOW",
+      quote: "QBO",
+    },
+    {
+      text: "Dashboards for the ops team",
+      source_type: "gong",
+      source_label: "Discovery",
+      quote: "a dashboard would be nice",
+    },
+    {
+      text: "  daily REPORT live on every crew's phone!  ",
+      source_type: "intake",
+      source_label: "Intake",
+      quote: "",
+    },
+  ] as const;
+
+  it("puts the SOW and intake anchors first, the brief's items after, each once by its wording", () => {
+    const intake = readIntake({
+      timeline: {
+        services: [{ id: "qb", kind: "integration", name: "QuickBooks Online", phase: 2, tier: 3 }],
+      },
+    });
+    const items = focusItemsFromBrief(intake, [...briefItems])!;
+    expect(items.map((i) => i.id)).toEqual(["focus-1", "focus-ai-1", "focus-ai-2"]);
+    expect(items[0]!.text).toBe("Connect approved submission data to QuickBooks Online.");
+    expect(items[1]).toMatchObject({
+      text: "Daily report live on every crew's phone",
+      status: "proposed",
+      sources: [{ type: "sow", label: "SOW", quote: "one form" }],
+      review_flag: null,
+    });
+    // A thing only the calls say is not a sale: it keeps the Gong-only flag.
+    expect(items[2]).toMatchObject({
+      text: "Dashboards for the ops team",
+      review_flag: "gong_only",
+    });
+  });
+
+  it("replaces a list that is still the proposal's own, the AI's included", () => {
+    const intake = readIntake({
+      implementation_focus: {
+        items: [
+          { id: "focus-1", text: "Old anchor", status: "proposed", sources: [] },
+          { id: "focus-ai-1", text: "Old AI item", status: "proposed", sources: [] },
+        ],
+      },
+    });
+    expect(focusItemsFromBrief(intake, [briefItems[0]])!.map((i) => i.id)).toEqual(["focus-ai-1"]);
+  });
+
+  it("never touches a list a person edited or agreed, and writes nothing from an empty brief", () => {
+    const manual = readIntake({
+      implementation_focus: {
+        items: [{ id: "manual-1", text: "Hand-added", status: "proposed", sources: [] }],
+      },
+    });
+    expect(focusItemsFromBrief(manual, [briefItems[0]])).toBeNull();
+    const agreed = readIntake({
+      implementation_focus: {
+        items: [{ id: "focus-1", text: "Agreed", status: "agreed", sources: [] }],
+        validated_at: "2026-10-01T00:00:00Z",
+        validated_by: UUID,
+      },
+    });
+    expect(focusItemsFromBrief(agreed, [briefItems[0]])).toBeNull();
+    expect(focusItemsFromBrief(readIntake({}), [])).toBeNull();
+  });
+
+  it("writes nothing when every item of the brief's only repeats an anchor", () => {
+    const intake = readIntake({
+      timeline: {
+        services: [{ id: "qb", kind: "integration", name: "QuickBooks Online", phase: 2, tier: 3 }],
+      },
+    });
+    expect(focusItemsFromBrief(intake, [briefItems[1]])).toBeNull();
   });
 });
 

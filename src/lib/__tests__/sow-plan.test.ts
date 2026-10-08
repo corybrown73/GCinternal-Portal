@@ -1,17 +1,181 @@
 import { describe, expect, it } from "vitest";
 
 import { addBusinessDays, buildTimeline } from "../onboarding-timeline";
+import { readIntake } from "../intake-answers";
 import {
   catalogueForPrompt,
   mergeProposal,
   normalizeProposal,
+  parseSowReading,
   rowToService,
   rowWeeks,
+  sowIntakePatch,
   sowPlanProposalSchema,
+  sowReadingSchema,
   sowTimelinePatch,
   trainingSessionMinutes,
   type SowPlanRow,
 } from "../sow-plan";
+
+describe("the deep SOW reading", () => {
+  const full = {
+    readable: true,
+    problem: null,
+    reference: "SOW-7",
+    signed_date: "2026-09-30",
+    start_date: null,
+    value: "$24,000",
+    contact: { name: "Dana", role: "Ops", email: null },
+    summary: "One form and QuickBooks",
+    first_form: "Daily Report",
+    seats: "40 users",
+    services: [{ kind: "integration", name: "QuickBooks Online", tier: 3, phase: 2 }],
+    notes: [],
+    gaps: ["Which crews"],
+    dates: [],
+    deliverables: [
+      { text: "Daily Report form built", quote: "one (1) form", page: 2 },
+      { text: "", quote: "dropped: no text", page: 1 },
+      "not an item",
+    ],
+    out_of_scope: [{ text: "Data migration", quote: null, page: "3" }],
+    customer_responsibilities: [{ text: "API credentials", quote: "credentials", page: null }],
+    acceptance_criteria: [{ text: "Sign-off", quote: "sign-off", page: 6 }],
+    assumptions: [],
+    term: { start: "2026-10-01", end: "2027-09-30", months: "12" },
+    pricing: {
+      total: "$24,000",
+      currency: "USD",
+      recurring: 2000,
+      one_time: null,
+      payment_terms: "Net 30",
+    },
+    contacts: [
+      { name: "Dana", role: "Ops", email: "dana@x.com", side: "customer", quote: "Dana, Ops" },
+      { name: "Priya", role: "SE", email: null, side: "gocanvas", quote: null },
+    ],
+    signature: { date: "2026-09-30", signer_name: "Dana", signer_title: "VP" },
+    integrations: [
+      { system: "QuickBooks Online", direction: "jobs to invoices", tier: "3", quote: "QBO" },
+    ],
+    forms: [
+      { name: "Daily Report", purpose: "the day", quote: "Daily Report" },
+      { name: "", purpose: null, quote: null },
+    ],
+  };
+
+  it("parses a full reading, tidying what it can and dropping what it cannot", () => {
+    const r = sowReadingSchema.parse(full);
+    expect(r.deliverables).toEqual([
+      { text: "Daily Report form built", quote: "one (1) form", page: 2 },
+    ]);
+    expect(r.out_of_scope).toEqual([{ text: "Data migration", quote: null, page: 3 }]);
+    expect(r.term).toEqual({ start: "2026-10-01", end: "2027-09-30", months: 12 });
+    expect(r.pricing).toMatchObject({
+      total: 24000,
+      currency: "USD",
+      recurring: 2000,
+      one_time: null,
+    });
+    expect(r.contacts).toHaveLength(2);
+    expect(r.contacts[1]!.side).toBe("gocanvas");
+    expect(r.signature).toEqual({ date: "2026-09-30", signer_name: "Dana", signer_title: "VP" });
+    expect(r.integrations[0]).toMatchObject({ system: "QuickBooks Online", tier: 3 });
+    expect(r.forms).toEqual([{ name: "Daily Report", purpose: "the day", quote: "Daily Report" }]);
+    expect(r.seats).toBe(40);
+    expect(r.value).toBe(24000);
+  });
+
+  it("parses a minimal reading with every deep field empty or null", () => {
+    const r = sowReadingSchema.parse({ readable: false, problem: "A brochure." });
+    expect(r.readable).toBe(false);
+    expect(r.deliverables).toEqual([]);
+    expect(r.forms).toEqual([]);
+    expect(r.contacts).toEqual([]);
+    expect(r.term).toBeNull();
+    expect(r.pricing).toBeNull();
+    expect(r.signature).toBeNull();
+  });
+
+  it("reads a reading kept before the deep fields existed", () => {
+    const old = sowPlanProposalSchema.parse({ readable: true, summary: "x", services: [] });
+    const r = parseSowReading(old);
+    expect(r?.summary).toBe("x");
+    expect(r?.deliverables).toEqual([]);
+    expect(parseSowReading("junk")).toBeNull();
+  });
+
+  describe("sowIntakePatch", () => {
+    const read = (over: Record<string, unknown> = {}) =>
+      sowReadingSchema.parse({
+        readable: true,
+        seats: 40,
+        first_form: "JSA",
+        forms: [
+          { name: "Daily Report", quote: "Daily Report form" },
+          { name: "JSA", quote: "JSA form" },
+          { name: "daily report", quote: "twice" },
+        ],
+        ...over,
+      });
+
+    it("fills the seats and the forms on a blank intake, the first form first, with the SOW as source", () => {
+      const { patch, filled } = sowIntakePatch(readIntake({}), read(), { hasReports: false });
+      expect(patch.field_users).toBe(40);
+      expect(patch.wanted_forms).toEqual([
+        { id: "sow-1", name: "JSA", template_id: null },
+        { id: "sow-2", name: "Daily Report", template_id: null },
+      ]);
+      expect(patch.forms_built).toBe(false);
+      expect(patch.ai_filled).toEqual(["field_users", "wanted_forms", "forms_built"]);
+      expect(patch.ai_sources).toEqual({
+        field_users: { quote: "40 seats", source: "SOW" },
+        wanted_forms: { quote: "JSA form", source: "SOW" },
+      });
+      expect(filled).toEqual(["people in the field", "2 forms to build"]);
+    });
+
+    it("leaves the forms to the calls when there are any, and a person's answers alone", () => {
+      const withCalls = sowIntakePatch(readIntake({}), read(), { hasReports: true });
+      expect(withCalls.patch.wanted_forms).toBeUndefined();
+      expect(withCalls.patch.field_users).toBe(40);
+
+      const theirs = sowIntakePatch(
+        readIntake({
+          field_users: 12,
+          wanted_forms: [{ id: "f-1", name: "Timesheet" }],
+          person_set: ["wanted_forms"],
+        }),
+        read(),
+        { hasReports: false },
+      );
+      expect(theirs.patch).toEqual({});
+      expect(theirs.filled).toEqual([]);
+    });
+
+    it("refreshes its own earlier forms, and never writes a training-only or existing account's", () => {
+      const own = sowIntakePatch(
+        readIntake({
+          wanted_forms: [{ id: "sow-1", name: "Old form" }],
+          ai_filled: ["wanted_forms"],
+        }),
+        read(),
+        { hasReports: false },
+      );
+      expect(own.patch.wanted_forms?.map((f) => f.name)).toEqual(["JSA", "Daily Report"]);
+      expect(
+        sowIntakePatch(readIntake({ training_only: true }), read({ seats: null }), {
+          hasReports: false,
+        }).patch,
+      ).toEqual({});
+      expect(
+        sowIntakePatch(readIntake({ path: "existing" }), read({ seats: null }), {
+          hasReports: false,
+        }).patch,
+      ).toEqual({});
+    });
+  });
+});
 
 const qb: SowPlanRow = {
   kind: "integration",

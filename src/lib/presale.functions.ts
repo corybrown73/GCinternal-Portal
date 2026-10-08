@@ -2,7 +2,11 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
 import { DOCUMENT_UPLOAD_TYPES } from "./document-upload";
-import { implementationFocusPatchSchema, timelinePatchSchema } from "./intake-patch";
+import {
+  implementationFocusPatchSchema,
+  timelinePatchSchema,
+  workflowStoryPatchSchema,
+} from "./intake-patch";
 import { EDITABLE_DEAL_FIELDS, type EditableDealField } from "./presale-fields";
 
 import {
@@ -567,6 +571,7 @@ export const saveIntake = createServerFn({ method: "POST" })
             // complete object so a cleared override is a cleared override.
             timeline: timelinePatchSchema.optional(),
             implementation_focus: implementationFocusPatchSchema.optional(),
+            workflow_story: workflowStoryPatchSchema.optional(),
           })
           .strict(),
       })

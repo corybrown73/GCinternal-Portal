@@ -23,6 +23,7 @@ export type Rows = Record<string, any[]>;
 type Op =
   | { kind: "select" }
   | { kind: "insert"; values: Record<string, any>[] }
+  | { kind: "upsert"; values: Record<string, any>[]; onConflict: string[] }
   | { kind: "update"; patch: Record<string, any> }
   | { kind: "delete" };
 
@@ -118,6 +119,20 @@ class Builder implements PromiseLike<{ data: any; error: any }> {
     return this;
   }
 
+  /** Merge-duplicates only, as the app uses it: a row matching every `onConflict` column is updated in place. */
+  upsert(
+    values: Record<string, any> | Record<string, any>[],
+    opts: { onConflict?: string } = {},
+  ): this {
+    if (!opts.onConflict) throw new Error("fake-supabase: upsert needs onConflict");
+    this.op = {
+      kind: "upsert",
+      values: Array.isArray(values) ? values : [values],
+      onConflict: opts.onConflict.split(",").map((c) => c.trim()),
+    };
+    return this;
+  }
+
   update(patch: Record<string, any>): this {
     this.op = { kind: "update", patch };
     return this;
@@ -151,6 +166,27 @@ class Builder implements PromiseLike<{ data: any; error: any }> {
       this.rows().push(...created);
       for (const row of created) this.log.inserts.push({ table: this.table, row });
       return { data: created, error: null };
+    }
+    if (this.op.kind === "upsert") {
+      const { onConflict } = this.op;
+      const out: any[] = [];
+      for (const v of this.op.values) {
+        const existing = this.rows().find((r) => onConflict.every((c) => r[c] === v[c]));
+        if (existing) {
+          Object.assign(existing, v);
+          out.push(existing);
+          continue;
+        }
+        const created = {
+          id: v["id"] ?? `${this.table}-${Math.random().toString(16).slice(2, 10)}`,
+          created_at: v["created_at"] ?? new Date().toISOString(),
+          ...v,
+        };
+        this.rows().push(created);
+        this.log.inserts.push({ table: this.table, row: created });
+        out.push(created);
+      }
+      return { data: out, error: null };
     }
     if (this.op.kind === "update") {
       const hit = this.matching();

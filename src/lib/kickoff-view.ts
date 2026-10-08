@@ -163,6 +163,28 @@ export function kickoffBusinessOutcome(view: Pick<WelcomeView, "intake">): strin
 }
 
 /**
+ * Whether the outcome on screen is the customer's confirmed words. An
+ * answer the AI read out of the calls, or Sales typed, is shown with a
+ * "to confirm" marker until the customer confirms it on their page — never
+ * read aloud as something they said.
+ */
+export function kickoffBusinessOutcomeConfirmed(view: Pick<WelcomeView, "intake">): boolean {
+  return Boolean(view.intake?.known.find((k) => k.key === "business_outcome")?.confirmed);
+}
+
+/**
+ * Whether the workflow on screen still needs the customer's word: a saved
+ * story that nobody has validated, or the structured fallback, which is a
+ * hypothesis by construction. Only a story with `validatedAt` set is shown
+ * without the marker.
+ */
+export function kickoffWorkflowToConfirm(
+  story: Pick<WorkflowStoryView, "validatedAt"> | null | undefined,
+): boolean {
+  return !story?.validatedAt;
+}
+
+/**
  * The deck's closing action — always testing-oriented, never
  * administrative. Deliberately does NOT read from view.journey.yours[0]:
  * that list also carries homework ("download the app"), parking-lot items

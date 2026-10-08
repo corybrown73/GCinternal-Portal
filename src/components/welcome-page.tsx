@@ -1005,10 +1005,15 @@ function Team({ view, page }: { view: WelcomeView; page: number }) {
       side: "client",
     });
   }
+  // A name the reading proposed is a question to the customer, not a fact
+  // about them: it is shown, and marked as theirs to confirm.
+  const testerProposed = Boolean(view.fieldTester) && view.fieldTesterSource === "ai";
   people.push({
     name: view.fieldTester ?? "Your field tester",
-    role: `Field tester, ${view.clientName}`,
-    does: "One crew, real jobs, from the field-test day. What they say is what we fix.",
+    role: `Field tester${testerProposed ? " · to confirm" : ""}, ${view.clientName}`,
+    does: testerProposed
+      ? "We heard this is who will run it on real jobs — tell us if it is someone else. What they say is what we fix."
+      : "One crew, real jobs, from the field-test day. What they say is what we fix.",
     icon: "HardHat",
     side: "client",
   });
@@ -2324,14 +2329,14 @@ function FirstForm({ view, page }: { view: WelcomeView; page: number }) {
                 Reviewed together {at("kickoff") ? shortDay(at("kickoff")!.date) : "in Stage 1"},
                 adjusted by your hands{" "}
                 {at("working") ? shortDay(at("working")!.date) : "in Stage 2"}, run on real jobs by{" "}
-                {view.fieldTester ?? "your crew"}.
+                {testerName(view) ?? "your crew"}.
               </>
             ) : (
               <>
                 Built live {at("kickoff") ? shortDay(at("kickoff")!.date) : "on the kickoff"},
                 finished by your hands{" "}
                 {at("working") ? shortDay(at("working")!.date) : "in the working session"}, proven
-                by {view.fieldTester ?? "your field tester"} on real jobs.
+                by {testerName(view) ?? "your field tester"} on real jobs.
               </>
             )}
             {view.timeline.alongside.length
@@ -2670,6 +2675,15 @@ const OPS = /operations|\bops\b|manager|superintendent|foreman|supervisor|lead|c
 const OFFICE = /admin|office|dispatch|controller|accounting|billing|bookkeep|hr\b/i;
 const SYSTEMS = /\bit\b|systems|technology|erp|data|analyst|engineer|integration/i;
 const FIELD = /field|technician|tech\b|crew|inspector|assessor|driver/i;
+
+/**
+ * The field tester's name for the stage copy: only a name a person gave.
+ * One the reading proposed is marked on the team screen and left out of
+ * the sentences that would state it as fact.
+ */
+function testerName(view: Pick<WelcomeView, "fieldTester" | "fieldTesterSource">): string | null {
+  return view.fieldTester && view.fieldTesterSource !== "ai" ? view.fieldTester : null;
+}
 
 /**
  * One line on what a customer-side person does, from their title. Two people

@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 
+import { readIntake } from "../intake-answers";
 import {
   buildKickoffData,
+  kickoffFactsFromIntake,
   monthYear,
   shortDate,
   splitGoal,
@@ -65,7 +67,217 @@ function input(over: Partial<KickoffInput> = {}): KickoffInput {
   };
 }
 
+describe("the deck from the merged intake", () => {
+  const at = "2026-10-08T10:00:00Z";
+
+  it("reads the first form, the process and the contacts off the intake, and who put them there", () => {
+    const facts = kickoffFactsFromIntake(
+      readIntake({
+        wanted_forms: [{ id: "syn-1", name: "Daily report", template_id: null }],
+        ai_filled: ["wanted_forms"],
+        current_process: "Paper on the truck. Retyped on Fridays.",
+        current_process_source: "person",
+        handoff: {
+          answers: {
+            contact_decision_maker: {
+              value: "Pat Lee · Director of Operations · pat@summit.com",
+              source: "sales",
+              at,
+              by: null,
+              quote: null,
+            },
+            contact_admin_builder: {
+              value: "Sam Ortiz · sam@summit.com",
+              source: "ai",
+              at,
+              by: null,
+              quote: null,
+            },
+          },
+        },
+      }),
+    );
+    expect(facts).toEqual({
+      firstForm: { text: "Daily report", ai: true },
+      currentProcess: { text: "Paper on the truck. Retyped on Fridays.", ai: false },
+      contacts: [
+        { name: "Pat Lee", role: "Director of Operations", ai: false },
+        // The email is not a role.
+        { name: "Sam Ortiz", role: null, ai: true },
+      ],
+    });
+    expect(kickoffFactsFromIntake(readIntake({}))).toEqual({
+      firstForm: null,
+      currentProcess: null,
+      contacts: [],
+    });
+  });
+
+  it("layers the intake under the records and over the brief, and remembers what the reading wrote", () => {
+    const brief: BriefJson = {
+      ...emptyBrief,
+      stakeholders: [
+        { name: "Dana", role: "Office manager", notes: "" },
+        { name: "Tom", role: "IT", notes: "" },
+      ],
+      kickoff: {
+        ...emptyBrief.kickoff,
+        scope: [{ workflow: "Brief's workflow", replaces: "Brief's process", teams: "All crews" }],
+      },
+      verification: { checked_at: at, fields: { "stakeholders[0]": "unverified" } },
+    };
+    const intake = {
+      firstForm: { text: "Daily report", ai: false },
+      currentProcess: { text: "Paper on the truck. Retyped on Fridays.", ai: true },
+      contacts: [
+        { name: "Pat", role: "Ops director", ai: false },
+        { name: "Dana", role: "Office", ai: true },
+      ],
+    };
+    const { fields, fromCalls } = buildKickoffData(
+      input({
+        brief,
+        intake,
+        clientPeople: brief.stakeholders.map((p) => ({ name: p.name, role: p.role })),
+      }),
+    );
+    // The intake's form and process on the first line; a brief row naming a
+    // different workflow is its own line, its details never lent to the first.
+    expect(fields["scope_1_workflow"]).toBe("Daily report");
+    expect(fields["scope_1_replaces"]).toBe("Paper on the truck.");
+    expect(fields["scope_1_teams"]).toBeUndefined();
+    expect(fields["scope_2_workflow"]).toBe("Brief's workflow");
+    expect(fields["scope_2_replaces"]).toBe("Brief's process");
+    expect(fields["scope_2_teams"]).toBe("All crews");
+    // The handoff's contacts first, the brief's other people after, nobody twice.
+    expect(fields["client_person_1_name"]).toBe("Pat");
+    expect(fields["client_person_1_role"]).toBe("Ops director");
+    expect(fields["client_person_2_name"]).toBe("Dana");
+    expect(fields["client_person_2_role"]).toBe("Office");
+    expect(fields["client_person_3_name"]).toBe("Tom");
+    // The reading's own lines are on the AE's list; a person's are not.
+    expect(fromCalls).toContain("scope_1_replaces");
+    expect(fromCalls).toContain("client_person_2_name");
+    expect(fromCalls).not.toContain("scope_1_workflow");
+    expect(fromCalls).not.toContain("client_person_1_name");
+
+    // A record still wins over the intake.
+    const withRecords = buildKickoffData(
+      input({ brief, intake, requirements: [{ title: "Timesheet", inScope: true }] }),
+    );
+    expect(withRecords.fields["scope_1_workflow"]).toBe("Timesheet");
+  });
+
+  it("puts a brief row on the line that already names its workflow, never on two", () => {
+    const brief: BriefJson = {
+      ...emptyBrief,
+      kickoff: {
+        ...emptyBrief.kickoff,
+        scope: [
+          { workflow: "Daily report", replaces: "Paper", teams: null },
+          { workflow: "JSA", replaces: "Clipboard", teams: "All crews" },
+        ],
+      },
+      verification: { checked_at: at, fields: { "kickoff.scope[1]": "unverified" } },
+    };
+    // The intake's first form is the brief's second row: it leads, with
+    // that row's details, and the brief's first row follows it.
+    const { fields, fromCalls } = buildKickoffData(
+      input({
+        brief,
+        intake: { firstForm: { text: "jsa", ai: true }, currentProcess: null, contacts: [] },
+      }),
+    );
+    expect(fields["scope_1_workflow"]).toBe("jsa");
+    expect(fields["scope_1_replaces"]).toBe("Clipboard");
+    expect(fields["scope_1_teams"]).toBe("All crews");
+    expect(fields["scope_2_workflow"]).toBe("Daily report");
+    expect(fields["scope_2_replaces"]).toBe("Paper");
+    expect(fields["scope_3_workflow"]).toBeUndefined();
+    // The verifier's word reaches the line the row landed on.
+    expect(fromCalls).toEqual(
+      expect.arrayContaining(["scope_1_workflow", "scope_1_replaces", "scope_1_teams"]),
+    );
+  });
+});
+
 describe("buildKickoffData", () => {
+  it("lists every field whose brief item the verifier could not ground, so slide one says CHECK THESE", () => {
+    const { fields, fromCalls } = buildKickoffData(
+      input({
+        brief: {
+          ...emptyBrief,
+          goals: ["Same-day reports. No more Friday rekeying.", "Fewer lost tickets"],
+          stakeholders: [
+            { name: "Dana", role: "Ops", notes: "" },
+            { name: "Tom", role: "IT", notes: "" },
+          ],
+          kickoff: {
+            ...emptyBrief.kickoff,
+            scope: [
+              { workflow: "Daily report", replaces: "Paper", teams: null },
+              { workflow: "JSA", replaces: null, teams: "All crews" },
+            ],
+            roles: [
+              { responsibility: "Devices in the field", owner: "Tom", support: null },
+              { responsibility: "Form and workflow build", owner: "Dana", support: "Priya" },
+            ],
+            licensed_seats: "40 seats",
+            renewal_date: "2027-10-01",
+            it_contact: "Tom",
+          },
+          verification: {
+            checked_at: "2026-10-08T10:05:00.000Z",
+            fields: {
+              "goals[0]": "unverified",
+              "goals[1]": "grounded",
+              "stakeholders[0]": "grounded",
+              "stakeholders[1]": "unverified",
+              "kickoff.scope[0]": "grounded",
+              "kickoff.scope[1]": "unverified",
+              "kickoff.roles[0]": "unverified",
+              "kickoff.roles[1]": "grounded",
+              "kickoff.licensed_seats": "dropped",
+              "kickoff.renewal_date": "grounded",
+              "kickoff.it_contact": "unverified",
+            },
+          },
+        },
+        clientPeople: [
+          { name: "Dana", role: "Ops" },
+          { name: "Tom", role: "IT" },
+        ],
+        // The record's own first workflow: never flagged for the brief's row.
+        requirements: [{ title: "Timesheet", inScope: true }],
+      }),
+    );
+    expect(fromCalls).toEqual(
+      expect.arrayContaining([
+        "goal_1",
+        "goal_1_detail",
+        "client_person_2_name",
+        "client_person_2_role",
+        "scope_2_workflow",
+        "scope_3_workflow",
+        "scope_3_teams",
+        "raci_3_owner",
+        "licensed_seats",
+        "it_contact",
+      ]),
+    );
+    expect(fromCalls).not.toContain("goal_2");
+    expect(fromCalls).not.toContain("client_person_1_name");
+    // The record's workflow keeps its line; the calls' two take the next lines.
+    expect(fields["scope_1_workflow"]).toBe("Timesheet");
+    expect(fields["scope_1_replaces"]).toBeUndefined();
+    expect(fields["scope_2_workflow"]).toBe("Daily report");
+    expect(fields["scope_3_workflow"]).toBe("JSA");
+    expect(fromCalls).not.toContain("scope_1_workflow");
+    // Fields read out of the calls stay listed even when grounded: a quote is still a quote.
+    expect(fromCalls).toContain("renewal_date");
+    expect(fromCalls).toContain("raci_1_owner");
+  });
+
   it("never leaves the template's example copy standing", () => {
     // The whole reason `missing` exists. A deck that says "Acme Construction"
     // to a customer who is not Acme is this feature's worst failure.

@@ -459,6 +459,213 @@ export function proposalAsNote(
   return lines.join("\n");
 }
 
+/* ------------------------------------------- from the kept SOW reading */
+
+type Reading = import("./sow-plan").SowReading;
+type Grounded = import("./sow-plan").SowGroundedItem;
+
+const INTEGRATION_WORDS =
+  /\b(api|integration|integrat|credential|sandbox|connector|endpoint|sync|quickbooks|salesforce|netsuite|sage|erp|crm|webhook|export)\b/i;
+const TRAINING_WORDS = /\b(train|training|rollout|roll-out|adoption|onboard|session|attend)\b/i;
+const PILOT_WORDS = /\b(pilot|test|uat|acceptance|sign[- ]?off|accept|validate|field)\b/i;
+
+function fromGrounded(
+  items: Grounded[],
+  confidence: "stated" | "implied" = "stated",
+): SowFinding[] {
+  return items.map((i) => ({ text: i.text, confidence, quote: i.quote }));
+}
+
+function noTiming(rationale: string | null): SowProposedStage["timing"] {
+  return {
+    startWeek: null,
+    endWeek: null,
+    statedText: null,
+    fromSow: false,
+    rationale,
+    dependencyDriver: null,
+    parallelWith: [],
+    insufficientInfo: true,
+  };
+}
+
+/**
+ * The journey the implementation panel shows, built from the deal's kept
+ * SOW reading instead of a second model pass over the same document. The
+ * reading already says what was sold; this lays it onto the lifecycle the
+ * team runs — kickoff, build, pilot, launch, complete — and carries the
+ * customer's responsibilities and the acceptance criteria to the stage the
+ * words point at. Timing is left honest: the reading carries none per
+ * stage, and the plan computes dates from the start. Pure.
+ */
+export function journeyFromSowReading(reading: Reading): SowAnalysis {
+  const forms = reading.forms.map((f) => f.name);
+  const firstForm = reading.first_form ?? forms[0] ?? null;
+  const services = reading.services;
+  const phase1 = services.filter((s) => s.phase === 1 && s.kind !== "training");
+  const later = services.filter((s) => s.phase >= 2);
+  const training = services.filter((s) => s.kind === "training");
+  const integrations = reading.integrations.map((i) =>
+    i.direction ? `${i.system} · ${i.direction}` : i.system,
+  );
+  const responsibilities = reading.customer_responsibilities.map((r) => r.text);
+  const criteria = reading.acceptance_criteria.map((c) => c.text);
+  const byWords = (items: string[], re: RegExp) => items.filter((t) => re.test(t));
+  const rest = (items: string[], ...taken: string[][]) =>
+    items.filter((t) => !taken.some((list) => list.includes(t)));
+
+  const integrationDuties = byWords(responsibilities, INTEGRATION_WORDS);
+  const trainingDuties = byWords(responsibilities, TRAINING_WORDS);
+  const pilotCriteria = byWords(criteria, PILOT_WORDS);
+  const integrationCriteria = byWords(criteria, INTEGRATION_WORDS);
+
+  const stages: SowProposedStage[] = [];
+  stages.push({
+    name: "Kickoff",
+    lifecycleStage: "plan-internal",
+    purpose: firstForm
+      ? `Agree the plan and start the first form (${firstForm}) together.`
+      : "Agree the plan and what is built first.",
+    workstreams: [...(firstForm ? [`First form: ${firstForm}`] : []), ...phase1.map((s) => s.name)],
+    dependencies: [],
+    customerResponsibilities: rest(responsibilities, integrationDuties, trainingDuties),
+    acceptanceCriteria: [],
+    timing: noTiming("The plan computes the kickoff from the start date."),
+    confidence: "implied",
+  });
+  if (forms.length || phase1.length) {
+    stages.push({
+      name: "Build",
+      lifecycleStage: "build",
+      purpose:
+        "The forms and phase-one services built with the customer over the working sessions.",
+      workstreams: [...forms, ...phase1.filter((s) => s.kind !== "paid_form").map((s) => s.name)],
+      dependencies: firstForm ? [`What the customer uses today for ${firstForm}`] : [],
+      customerResponsibilities: [],
+      acceptanceCriteria: [],
+      timing: noTiming("Fifteen business days from the kickoff by the standard plan."),
+      confidence: forms.length ? "stated" : "implied",
+    });
+    stages.push({
+      name: "Pilot",
+      lifecycleStage: "validate-iterate",
+      purpose: "One crew runs the form on real jobs; what they say is what gets fixed.",
+      workstreams: firstForm ? [`${firstForm} in the field`] : ["The first form in the field"],
+      dependencies: ["A finished form in the field tester's hands"],
+      customerResponsibilities: [],
+      acceptanceCriteria: pilotCriteria,
+      timing: noTiming(null),
+      confidence: "implied",
+    });
+  }
+  if (later.length || integrations.length || training.length) {
+    stages.push({
+      name: "Launch",
+      lifecycleStage: "launch",
+      purpose: "Live for the whole team; integrations, PDFs and training follow on the plan.",
+      workstreams: [
+        ...integrations,
+        ...later.filter((s) => s.kind !== "integration").map((s) => s.name),
+        ...(later.some((s) => s.kind === "integration") && !integrations.length
+          ? later.filter((s) => s.kind === "integration").map((s) => s.name)
+          : []),
+        ...training.map((s) => s.name),
+      ],
+      dependencies:
+        integrations.length || later.some((s) => s.kind === "integration")
+          ? ["The first form proven in the field"]
+          : [],
+      customerResponsibilities: [...integrationDuties, ...trainingDuties],
+      acceptanceCriteria: integrationCriteria.filter((c) => !pilotCriteria.includes(c)),
+      timing: noTiming(
+        "Phase two opens once the first form is proven; lengths come from the catalogue.",
+      ),
+      confidence: later.length || integrations.length ? "stated" : "implied",
+    });
+  }
+  const leftover = rest(criteria, pilotCriteria, integrationCriteria);
+  stages.push({
+    name: "Complete",
+    lifecycleStage: "graduate-to-cs",
+    purpose: "Everything on the plan is live and accepted; the account is Customer Success's.",
+    workstreams: [],
+    dependencies: [],
+    customerResponsibilities: [],
+    acceptanceCriteria: leftover,
+    timing: noTiming(null),
+    confidence: leftover.length ? "stated" : "implied",
+  });
+
+  const months = reading.term?.months ?? null;
+  const weeks = months !== null ? Math.round(months * 4.345) : null;
+
+  return {
+    readable: reading.readable,
+    problem: reading.problem,
+    summary: reading.summary,
+    extraction: {
+      objectives: reading.summary
+        ? [{ text: reading.summary, confidence: "implied", quote: null }]
+        : [],
+      scope: [
+        ...forms.map((f) => ({ text: `Form: ${f}`, confidence: "stated" as const, quote: null })),
+        ...services.map((s) => ({
+          text: s.name,
+          confidence: s.confidence,
+          quote: s.evidence,
+        })),
+      ],
+      deliverables: fromGrounded(reading.deliverables),
+      integrations: reading.integrations.map((i) => ({
+        text: i.direction ? `${i.system} · ${i.direction}` : i.system,
+        confidence: "stated" as const,
+        quote: i.quote,
+      })),
+      customerResponsibilities: fromGrounded(reading.customer_responsibilities),
+      providerResponsibilities: [],
+      trainingAndAdoption: training.map((s) => ({
+        text: s.name,
+        confidence: s.confidence,
+        quote: s.evidence,
+      })),
+      acceptanceCriteria: fromGrounded(reading.acceptance_criteria),
+      timeline: (reading.dates ?? []).map((d) => ({
+        text: `${d.type}: ${d.date}${d.end ? ` to ${d.end}` : ""}${d.who ? ` (${d.who})` : ""}`,
+        confidence: "stated" as const,
+        quote: d.quote,
+      })),
+      dependencies: [],
+      outOfScope: fromGrounded(reading.out_of_scope),
+      requirements: [],
+      technicalSolutions: services
+        .filter((s) => ["integration", "custom_pdf", "data_load"].includes(s.kind))
+        .map((s) => ({ text: s.name, confidence: s.confidence, quote: s.evidence })),
+      successMeasures: [],
+      risksAndQuestions: reading.gaps.map((g) => ({
+        text: g,
+        confidence: "uncertain" as const,
+        quote: null,
+      })),
+    },
+    proposedJourney: stages,
+    deliveryWindow: {
+      statedText: months !== null ? `${months} months` : null,
+      minWeeks: weeks,
+      maxWeeks: weeks,
+      startDateStated: reading.term?.start ?? reading.start_date,
+      startCondition: null,
+      delayConditions: [],
+      stageTimingProvided: false,
+      quote: null,
+    },
+    assumptions: [
+      ...reading.assumptions.map((a) => a.text),
+      "Journey built from the kept SOW reading; stage timing comes from the plan, not the document.",
+    ],
+    gaps: reading.gaps,
+  };
+}
+
 /** Replacing just the attached SOW document, without touching anything else. */
 export const setSowDocumentInput = z.object({
   implementationId: z.string().uuid(),

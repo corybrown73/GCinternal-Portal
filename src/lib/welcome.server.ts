@@ -133,6 +133,13 @@ async function viewFor(
         label: "The process today — confirm it is their words",
         hint: "Onboarding intake → the brief wrote this line from the call notes. Retype it as they said it, or press “These are their words”. Until then the page shows it without quotation marks.",
       });
+    const story = readIntake(deal.intake).workflow_story;
+    if ((story.before || story.during || story.after) && !story.validated_at)
+      readiness.push({
+        key: "story",
+        label: "The workflow story — confirm it is their words",
+        hint: "Customer 360 → Current Implementation → Workflow story. The AI reading drafted it from the calls; Kickoff View shows it as “to confirm” until you confirm or retype it.",
+      });
     if (!input.team?.champion)
       readiness.push({
         key: "champion",
@@ -144,6 +151,12 @@ async function viewFor(
         key: "tester",
         label: "Their field tester",
         hint: "Onboarding plan → field tester. The most important name on the page.",
+      });
+    else if (input.fieldTesterSource === "ai")
+      readiness.push({
+        key: "tester_words",
+        label: "Their field tester — confirm it",
+        hint: "Onboarding plan → field tester. The AI reading proposed this name from the calls; the page shows it as “to confirm” until you retype it (or correct it) as theirs.",
       });
     if (!leadName)
       readiness.push({
@@ -190,6 +203,7 @@ async function viewFor(
     timeline: input.timeline,
     lead: leadName,
     fieldTester: input.fieldTester,
+    fieldTesterSource: input.fieldTesterSource ?? null,
     currentProcess: input.currentProcess ?? null,
     currentProcessSource: input.currentProcessSource ?? null,
     team: {

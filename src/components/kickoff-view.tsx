@@ -19,11 +19,13 @@ import {
   KICKOFF_STAGE_OUTCOME,
   KICKOFF_WORKFLOW_PROMPTS,
   kickoffBusinessOutcome,
+  kickoffBusinessOutcomeConfirmed,
   kickoffFocusContent,
   kickoffFocusGroups,
   kickoffJourneyStages,
   kickoffNextStepText,
   kickoffWorkflowSlide,
+  kickoffWorkflowToConfirm,
 } from "@/lib/kickoff-view";
 import { shortDay } from "@/lib/onboarding-timeline";
 import { cn } from "@/lib/utils";
@@ -65,6 +67,7 @@ import type { WelcomeView } from "@/lib/welcome";
 function KickoffCover({ view }: { view: WelcomeView }) {
   const workflowName = view.firstForm?.name ?? "your workflow";
   const outcome = kickoffBusinessOutcome(view);
+  const outcomeConfirmed = kickoffBusinessOutcomeConfirmed(view);
   return (
     <section className="wp-screen is-cover">
       <div className="wp-blob is-cover" />
@@ -92,6 +95,12 @@ function KickoffCover({ view }: { view: WelcomeView }) {
           {outcome ? (
             <p className="wp-lede">
               <T k="kickoff-cover.outcome">{outcome}</T>
+            </p>
+          ) : null}
+          {outcome && !outcomeConfirmed ? (
+            // Read from the calls, or typed by Sales: theirs to confirm today.
+            <p className="wp-prepared">
+              <T k="kickoff-cover.outcome-confirm">What we heard — we&apos;ll confirm it today</T>
             </p>
           ) : null}
           {view.timeline.liveDate ? (
@@ -164,23 +173,26 @@ function KickoffWorkflow({ view, page }: { view: WelcomeView; page: number }) {
     businessOutcome: kickoffBusinessOutcome(view),
   });
   const confirm = KICKOFF_WORKFLOW_PROMPTS;
+  const toConfirm = kickoffWorkflowToConfirm(view.workflowStory);
   return (
     <Frame
       k="kickoff-workflow"
       page={page}
-      eyebrow="Your workflow"
+      eyebrow={toConfirm ? "Your workflow · to confirm" : "Your workflow"}
       title={story ? "Here's how we see" : "Let's map it"}
       accent={story ? "your workflow" : "together"}
       lede={
         story
-          ? "What we think we know, and what we'll confirm together — the foundation for your first working version."
+          ? toConfirm
+            ? "What we think we know, and what we'll confirm together — the foundation for your first working version."
+            : "How the work runs, in your words — the foundation for your first working version."
           : "There's not enough yet to sketch this out — we'll build it on the call."
       }
     >
       {story ? (
         <div className="wp-journey">
           <div className="wp-journey-col is-now">
-            <span className="wp-journey-tag">Today</span>
+            <span className="wp-journey-tag">{toConfirm ? "Today · to confirm" : "Today"}</span>
             <div className="wp-journey-art">
               <div className="wp-paper">
                 <FileText className="h-7 w-7" />

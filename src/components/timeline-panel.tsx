@@ -164,7 +164,9 @@ export function TimelinePanel({
     rows: Array<SowPlanRow & { accept: boolean; edited?: boolean }>;
   } | null>(null);
   const sowRead = useMutation({
-    mutationFn: () => readSow({ data: { dealId } }),
+    // The first read is served from the kept reading when there is one;
+    // "Re-read" asks the model again.
+    mutationFn: () => readSow({ data: { dealId, force: services.length > 0 } }),
     onMutate: () => setError(null),
     onSuccess: (r) =>
       setProposal({

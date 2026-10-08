@@ -105,6 +105,21 @@ export const timelinePatchSchema = z
   .strict();
 
 /**
+ * workflow_story as the save accepts it. Sent whole, like the focus: the
+ * panel spreads the record's own story with the leg that changed, and
+ * Confirm stamps the validation beside the words it validated.
+ */
+export const workflowStoryPatchSchema = z
+  .object({
+    before: z.string().trim().max(4000).nullable(),
+    during: z.string().trim().max(4000).nullable(),
+    after: z.string().trim().max(4000).nullable(),
+    validated_at: z.string().nullable(),
+    validated_by: z.string().uuid().nullable(),
+  })
+  .strict();
+
+/**
  * implementation_focus as the save accepts it. Sent whole, the same way
  * timeline is: generate/refresh and confirm both spread the record's own
  * object with the change, so a cleared field stays cleared.

@@ -1,9 +1,12 @@
 import { createHash } from "node:crypto";
 
+import type { BetaContentBlockParam } from "@anthropic-ai/sdk/resources/beta/messages/messages";
+
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 
 import { readIntake, type IntakeAnswers } from "../../intake-answers";
 import type { Account, GongReport, OnboardingNote } from "../../presale-types";
+import { buildBriefUserPrompt, SOW_ATTACHED_NOTE, summaryAsReport } from "../brief/prompt";
 import { prepareDocument, unreadableDocument, type PreparedDocument } from "./documents";
 
 /**
@@ -123,6 +126,56 @@ export async function loadDealSources(dealId: string): Promise<DealSources> {
       summary: (account.summary as string | null) ?? null,
     }),
   };
+}
+
+/**
+ * The identical opening every brief pass sends: the SOW as a document, the
+ * contract beside it, the record's facts with the calls and the reviewed
+ * notes as text, and the kept SOW reading as JSON. The last block carries
+ * the cache marker, so brief_core, brief_plan and verify pay for these
+ * tokens once an hour, not three times. A pass puts its own instruction
+ * after this, never inside it: one changed byte here is a cache miss for
+ * every pass that follows.
+ */
+export function sharedPrefix(
+  s: Pick<DealSources, "account" | "reports" | "notes" | "sow" | "contract">,
+  opts: { sowReading?: unknown; sowProblem?: string | null | undefined } = {},
+): BetaContentBlockParam[] {
+  const blocks: BetaContentBlockParam[] = [];
+  const readable = s.sow && !s.sow.problem ? s.sow : null;
+  if (readable?.block) {
+    blocks.push({ type: "text", text: `THE SIGNED STATEMENT OF WORK (${readable.name}):` });
+    blocks.push(readable.block);
+  }
+  const contract = s.contract && !s.contract.problem ? s.contract : null;
+  if (contract?.block && contract.sha256 !== readable?.sha256) {
+    blocks.push({ type: "text", text: `THE SIGNED CONTRACT (${contract.name}):` });
+    blocks.push(contract.block);
+  }
+  const notes: string[] = [];
+  if (readable) notes.push(SOW_ATTACHED_NOTE);
+  else if (s.sow?.problem ?? opts.sowProblem) {
+    notes.push(`The SOW on file could not be read (${s.sow?.problem ?? opts.sowProblem}).`);
+  }
+  // The record's summary stands in as one call-notes report when there are
+  // no reports, exactly as the brief has always read it.
+  const reports = s.reports.length ? s.reports : [summaryAsReport(s.account)].filter(isReport);
+  notes.push(buildBriefUserPrompt(s.account as Account, reports, s.notes));
+  if (opts.sowReading) {
+    notes.push(
+      `WHAT THE SIGNED SOW SAYS, ALREADY EXTRACTED (JSON, one reading of the document above; the forms, seats, dates and services here were read from the SOW and agree with it):\n${JSON.stringify(opts.sowReading)}`,
+    );
+  }
+  blocks.push({
+    type: "text",
+    text: notes.join("\n\n---\n\n"),
+    cache_control: { type: "ephemeral", ttl: "1h" },
+  });
+  return blocks;
+}
+
+function isReport(r: GongReport | null): r is GongReport {
+  return r !== null;
 }
 
 /**

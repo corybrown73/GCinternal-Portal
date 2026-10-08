@@ -44,6 +44,8 @@ export type OnboardingDeckInput = {
   lead: string | null;
   /** Who at the customer runs the form on real jobs. */
   fieldTester: string | null;
+  /** Who named them: a person, or the AI reading of the calls — shown as a proposal until a person retypes it. */
+  fieldTesterSource?: "ai" | "person" | null;
   /** The process today, in the customer's words, from the intake. */
   currentProcess?: string | null;
   /** Who wrote currentProcess: a person, or the brief's synthesis. */
@@ -715,7 +717,9 @@ function slideFirstForm(pptx: Pptx, d: OnboardingDeckInput) {
     {
       icon: "HardHat",
       head: `Proven on real jobs · from ${at("fieldtest") ? shortDay(at("fieldtest")!.date) : "the field test"}`,
-      body: `${d.fieldTester ? d.fieldTester : "Your field tester"} runs it on real work. We watch the submissions and fix what the field says.`,
+      // A name the reading proposed is not put on the customer's slide as
+      // their choice: the generic line stands until a person names them.
+      body: `${d.fieldTester && d.fieldTesterSource !== "ai" ? d.fieldTester : "Your field tester"} runs it on real work. We watch the submissions and fix what the field says.`,
     },
   ];
   rows.forEach((r, i) => {

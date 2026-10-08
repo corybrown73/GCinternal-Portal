@@ -1199,6 +1199,38 @@ export async function generateDealBriefAs(
   const userId = actor.kind === "user" ? actor.userId : null;
   const { generateBrief } = await import("./server/brief/generate");
   const brief = await generateBrief(dealId, userId);
+  const filled = await applyBriefToDeal(actor, dealId, brief);
+  return {
+    id: brief.id,
+    status: brief.status,
+    generator: brief.generator,
+    error: brief.error,
+    filled,
+  };
+}
+
+/** What `applyBriefToDeal` needs of a brief row. */
+export type BriefToApply = Pick<
+  Brief,
+  "id" | "status" | "generator" | "structured_json" | "pptx_storage_path"
+>;
+
+/**
+ * Everything a finished brief does to the deal: the journey move, the
+ * intake prefill, the handoff prefill, the welcome page's own facts (the
+ * workflow story, the focus items, the field tester), the help picks, the
+ * header fill, and last the deck — drawn from the merged intake, so it
+ * says what the deal says. One function, so the background job's apply
+ * step and a person's "Generate brief" land the same writes. Every write
+ * is a blanks-or-AI-owned merge; a person's answers stand. Returns what
+ * was filled, in words for the record.
+ */
+export async function applyBriefToDeal(
+  actor: BriefActor,
+  dealId: string,
+  brief: BriefToApply,
+): Promise<string[]> {
+  const userId = actor.kind === "user" ? actor.userId : null;
 
   // A brief on file is the first fact the journey reads: the account moves
   // from Handoff to Kickoff on its own.
@@ -1213,7 +1245,7 @@ export async function generateDealBriefAs(
   if (brief.status === "complete" && brief.generator === "llm" && brief.structured_json) {
     try {
       const { readIntake, intakeAnswersSchema } = await import("./intake-answers");
-      const { prefillFromSynthesis } = await import("./intake-prefill");
+      const { prefillFromSynthesis, prefillWelcomeFromBrief } = await import("./intake-prefill");
       const { data: row } = await db()
         .from("portal_accounts")
         .select("intake")
@@ -1227,7 +1259,17 @@ export async function generateDealBriefAs(
       const notesText = ((notes ?? []) as Array<{ content_md: string }>)
         .map((r) => r.content_md)
         .join("\n\n");
-      const result = prefillFromSynthesis(current, brief.structured_json, notesText);
+      // The kept SOW reading stands behind the calls for the seats and the
+      // forms. By path, not by hash: the document is not downloaded here.
+      const sowReading = await import("./server/ai/readings")
+        .then(({ loadSowReading }) => loadSowReading(dealId, { fetch: false }))
+        .then(
+          (kept) => kept?.reading ?? null,
+          () => null,
+        );
+      const result = prefillFromSynthesis(current, brief.structured_json, notesText, {
+        sowReading,
+      });
       // The Sales handoff's blanks, from the same reading. Merged in code,
       // because the merge RPC replaces a top-level key whole.
       {
@@ -1242,11 +1284,27 @@ export async function generateDealBriefAs(
           result.filled.push(...h.filled);
         }
       }
-      if (Object.keys(result.patch).length) {
+      // The welcome page's own facts, over the intake as it stands after
+      // the prefill, so the ownership lists carry both sets of writes.
+      const welcome = prefillWelcomeFromBrief(
+        readIntake({ ...current, ...result.patch }),
+        brief.structured_json,
+      );
+      Object.assign(result.patch, welcome.patch);
+      result.filled.push(...welcome.filled);
+      if (Object.keys(result.patch).length || welcome.timeline) {
         // Validated whole, written as a merge of only what changed.
-        intakeAnswersSchema.parse({ ...current, ...result.patch });
+        intakeAnswersSchema.parse({
+          ...current,
+          ...result.patch,
+          timeline: { ...current.timeline, ...(welcome.timeline ?? {}) },
+        });
         const { mergeIntake } = await import("./server/intake-merge");
-        const error = await mergeIntake(dealId, result.patch as Record<string, unknown>).then(
+        const error = await mergeIntake(
+          dealId,
+          result.patch as Record<string, unknown>,
+          welcome.timeline,
+        ).then(
           () => null,
           (e: unknown) => e,
         );
@@ -1273,9 +1331,9 @@ export async function generateDealBriefAs(
     }
 
     // "Get started on your own": the help articles for what the calls
-    // flagged. Only while nobody has picked any — a person's list stands.
+    // flagged, picked again on every reading. A person's own picks stand.
     try {
-      await pickHelpForDeal(dealId, userId, brief.structured_json, false);
+      await pickHelpForDeal(dealId, userId, brief.structured_json, true);
     } catch (e) {
       console.error("[brief] could not pick the help articles", e);
     }
@@ -1314,13 +1372,20 @@ export async function generateDealBriefAs(
       console.error("[brief] could not fill the deal header", e);
     }
   }
-  return {
-    id: brief.id,
-    status: brief.status,
-    generator: brief.generator,
-    error: brief.error,
-    filled,
-  };
+
+  // The deck last, from the deal as it now stands: the merged intake, the
+  // header, the records — not the raw brief.
+  if (brief.status === "complete" && brief.structured_json) {
+    try {
+      const { buildAndStoreDeck } = await import("./server/brief/generate");
+      const { briefJsonSchema } = await import("./server/schemas");
+      const parsed = briefJsonSchema.safeParse(brief.structured_json);
+      if (parsed.success) await buildAndStoreDeck(dealId, brief.id, parsed.data);
+    } catch (e) {
+      console.error("[brief] could not draw the deck", e);
+    }
+  }
+  return filled;
 }
 
 export async function briefDownloadUrl(userId: string, briefId: string): Promise<{ url: string }> {
@@ -2281,6 +2346,24 @@ export async function saveDealIntake(
   {
     const { claimByPerson } = await import("./intake-answers");
     Object.assign(merged, claimByPerson(current, Object.keys(patch)));
+  }
+  // The field tester lives on the plan, which is saved whole on every
+  // knob: only a changed name is a person's word, and from then on the
+  // pages show it as theirs rather than as the reading's proposal.
+  {
+    const timeline = patch["timeline"] as { field_tester?: string | null } | undefined;
+    if (
+      timeline &&
+      "field_tester" in timeline &&
+      (timeline.field_tester ?? null) !== current.timeline.field_tester &&
+      current.ai_filled.includes("field_tester")
+    ) {
+      const own = merged as Pick<typeof current, "ai_filled" | "ai_sources">;
+      own.ai_filled = (own.ai_filled ?? current.ai_filled).filter((f) => f !== "field_tester");
+      const sources = { ...(own.ai_sources ?? current.ai_sources) };
+      delete sources["field_tester"];
+      own.ai_sources = sources;
+    }
   }
   // The handoff: one answer at a time, a null stamp removes one, the flags
   // take the patch's value.

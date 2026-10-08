@@ -27,6 +27,7 @@ function baseView(over: Partial<WelcomeView> = {}): WelcomeView {
     timeline,
     lead: "Dana",
     fieldTester: null,
+    fieldTesterSource: null,
     currentProcess: null,
     currentProcessSource: null,
     team: {

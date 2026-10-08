@@ -1,6 +1,11 @@
 import { z } from "zod/v4";
 
-import { typedDateSchema, type TypedDate } from "./intake-answers";
+import {
+  typedDateSchema,
+  type AiOwnedField,
+  type IntakeAnswers,
+  type TypedDate,
+} from "./intake-answers";
 import {
   SERVICE_KIND_LIST,
   normalizeServiceKey,
@@ -174,6 +179,269 @@ export const sowPlanProposalSchema = z.object({
   gaps: textList(20),
 });
 export type SowPlanProposal = z.infer<typeof sowPlanProposalSchema>;
+
+/* ------------------------------------------------------ the deep reading */
+
+/**
+ * One grounded line from the document: what it says, the words it says it
+ * in, and the page when the reader could tell. A line the model could not
+ * shape is dropped, never fatal.
+ */
+const groundedItem = z.object({
+  text: z.preprocess((v) => (typeof v === "string" ? v.trim().slice(0, 500) : v), z.string()),
+  quote: z.preprocess(looseText(400), z.string().nullable()),
+  page: z.preprocess(
+    (v) => inRange(1, 2000)(Math.round(Number(looseNumber(v) ?? NaN))),
+    z.number().int().nullable(),
+  ),
+});
+export type SowGroundedItem = z.infer<typeof groundedItem>;
+
+const groundedList = (max: number) =>
+  z.preprocess(
+    (v) =>
+      Array.isArray(v)
+        ? v.filter((row) => groundedItem.safeParse(row).success && textOf(row)).slice(0, max)
+        : [],
+    z.array(groundedItem),
+  );
+const textOf = (row: unknown): boolean =>
+  Boolean(row && typeof row === "object" && String((row as { text?: unknown }).text ?? "").trim());
+
+const nullableObject = <T extends z.ZodRawShape>(shape: T) =>
+  z.preprocess((v) => (v && typeof v === "object" ? v : null), z.object(shape).nullable());
+
+const sideEnum = z.preprocess(
+  (v) => (v === "gocanvas" ? "gocanvas" : "customer"),
+  z.enum(["customer", "gocanvas"]),
+);
+
+/**
+ * The whole document, read once and kept: the plan's proposal, and what
+ * the plan cannot hold but the welcome page, the kickoff deck, the
+ * implementation's journey and the handoff context all need — what is
+ * delivered, what is excluded, what the customer owes, how done is judged,
+ * the term, the money, the people, the signature, the systems, the forms.
+ */
+export const sowReadingSchema = sowPlanProposalSchema.extend({
+  deliverables: groundedList(40),
+  out_of_scope: groundedList(30),
+  customer_responsibilities: groundedList(30),
+  acceptance_criteria: groundedList(30),
+  assumptions: groundedList(30),
+  /** The contract term as printed: start, end, length in months. */
+  term: nullableObject({
+    start: isoDate,
+    end: isoDate,
+    months: z.preprocess(
+      (v) => inRange(0, 600)(Math.round(Number(looseNumber(v) ?? NaN))),
+      z.number().int().nullable(),
+    ),
+  }),
+  pricing: nullableObject({
+    total: z.preprocess(looseNumber, z.number().nullable()),
+    currency: z.preprocess(looseText(10), z.string().nullable()),
+    recurring: z.preprocess(looseNumber, z.number().nullable()),
+    one_time: z.preprocess(looseNumber, z.number().nullable()),
+    payment_terms: z.preprocess(looseText(300), z.string().nullable()),
+  }),
+  /** Everyone the document names, on either side. */
+  contacts: z.preprocess(
+    (v) => (Array.isArray(v) ? v.filter((c) => c && typeof c === "object").slice(0, 10) : []),
+    z.array(
+      z.object({
+        name: z.preprocess(looseText(120), z.string().nullable()),
+        role: z.preprocess(looseText(120), z.string().nullable()),
+        email: z.preprocess(looseText(160), z.string().nullable()),
+        side: sideEnum,
+        quote: z.preprocess(looseText(300), z.string().nullable()),
+      }),
+    ),
+  ),
+  signature: nullableObject({
+    date: isoDate,
+    signer_name: z.preprocess(looseText(120), z.string().nullable()),
+    signer_title: z.preprocess(looseText(120), z.string().nullable()),
+  }),
+  /** Systems to connect, each with the direction and tier the document supports. */
+  integrations: z.preprocess(
+    (v) =>
+      Array.isArray(v)
+        ? v
+            .filter((c) => c && typeof c === "object" && String((c as any).system ?? "").trim())
+            .slice(0, 10)
+        : [],
+    z.array(
+      z.object({
+        system: z.preprocess(looseText(120), z.string()),
+        direction: z.preprocess(looseText(160), z.string().nullable()),
+        tier: z.preprocess(
+          (v) => inRange(2, 5)(Math.round(Number(looseNumber(v) ?? NaN))),
+          z.number().int().nullable(),
+        ),
+        quote: z.preprocess(looseText(300), z.string().nullable()),
+      }),
+    ),
+  ),
+  /** Every form the document names, the first form included. */
+  forms: z.preprocess(
+    (v) =>
+      Array.isArray(v)
+        ? v
+            .filter((c) => c && typeof c === "object" && String((c as any).name ?? "").trim())
+            .slice(0, 20)
+        : [],
+    z.array(
+      z.object({
+        name: z.preprocess(looseText(160), z.string()),
+        purpose: z.preprocess(looseText(300), z.string().nullable()),
+        quote: z.preprocess(looseText(300), z.string().nullable()),
+      }),
+    ),
+  ),
+});
+export type SowReading = z.infer<typeof sowReadingSchema>;
+
+/**
+ * A kept reading, whatever its age: one written before the deep fields
+ * existed parses with them empty, so nothing the plan needs is lost to a
+ * newer shape.
+ */
+export function parseSowReading(output: unknown): SowReading | null {
+  if (!output || typeof output !== "object") return null;
+  const deep = sowReadingSchema.safeParse(output);
+  if (deep.success) return normalizeProposal(deep.data) as SowReading;
+  const plan = sowPlanProposalSchema.safeParse(output);
+  if (!plan.success) return null;
+  return {
+    ...normalizeProposal(plan.data),
+    deliverables: [],
+    out_of_scope: [],
+    customer_responsibilities: [],
+    acceptance_criteria: [],
+    assumptions: [],
+    term: null,
+    pricing: null,
+    contacts: [],
+    signature: null,
+    integrations: [],
+    forms: [],
+  };
+}
+
+/** The slice of a reading the handoff context and a deck prompt carry: what was sold, in the document's words. */
+export function sowReadingSummary(r: SowReading): {
+  summary: string;
+  deliverables: SowGroundedItem[];
+  out_of_scope: SowGroundedItem[];
+  customer_responsibilities: SowGroundedItem[];
+  acceptance_criteria: SowGroundedItem[];
+  term: SowReading["term"];
+  contacts: SowReading["contacts"];
+} {
+  return {
+    summary: r.summary,
+    deliverables: r.deliverables,
+    out_of_scope: r.out_of_scope,
+    customer_responsibilities: r.customer_responsibilities,
+    acceptance_criteria: r.acceptance_criteria,
+    term: r.term,
+    contacts: r.contacts,
+  };
+}
+
+/**
+ * What the SOW itself puts on the intake, beside the plan: the seat count
+ * as the people in the field, and the forms it names when no call has
+ * named any. Blanks and the AI's own earlier answers only — a person's
+ * answer stands (`person_set`) — and every write carries the words it
+ * rests on, as the brief's prefill does. Pure.
+ */
+export function sowIntakePatch(
+  intake: Pick<
+    IntakeAnswers,
+    | "field_users"
+    | "wanted_forms"
+    | "forms_built"
+    | "training_only"
+    | "path"
+    | "ai_filled"
+    | "person_set"
+    | "ai_sources"
+  >,
+  reading: Pick<SowReading, "seats" | "forms" | "first_form">,
+  opts: { hasReports: boolean },
+): { patch: Partial<IntakeAnswers>; filled: string[] } {
+  const patch: Partial<IntakeAnswers> = {};
+  const filled: string[] = [];
+  const aiFilled = new Set(intake.ai_filled);
+  const sources = { ...intake.ai_sources };
+  const owned = (f: AiOwnedField) => !intake.person_set.includes(f);
+
+  if (
+    reading.seats !== null &&
+    reading.seats > 0 &&
+    intake.field_users == null &&
+    owned("field_users")
+  ) {
+    patch.field_users = reading.seats;
+    aiFilled.add("field_users");
+    sources["field_users"] = { quote: `${reading.seats} seats`, source: "SOW" };
+    filled.push("people in the field");
+  }
+
+  // The forms the SOW names, only where no call could: the calls say what
+  // the customer wants built, the SOW what was bought — the calls' names
+  // are the better ones when both exist.
+  const formsOwned =
+    !intake.person_set.includes("wanted_forms") &&
+    (intake.wanted_forms.length === 0 ||
+      aiFilled.has("wanted_forms") ||
+      intake.wanted_forms.every((f) => /^(syn|sow)-/.test(f.id)));
+  const named = reading.forms.map((f) => f.name.trim()).filter(Boolean);
+  if (
+    !opts.hasReports &&
+    named.length &&
+    formsOwned &&
+    !intake.training_only &&
+    intake.path !== "existing" &&
+    intake.path !== "field_fusion"
+  ) {
+    // The first form first, where the reader named one.
+    const first = reading.first_form?.trim().toLowerCase() ?? null;
+    const ordered = [...named].sort((a, b) =>
+      a.toLowerCase() === first ? -1 : b.toLowerCase() === first ? 1 : 0,
+    );
+    const seen = new Set<string>();
+    const forms = ordered
+      .filter((n) => {
+        const key = normalizeServiceKey(n, "paid_form");
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })
+      .slice(0, 8)
+      .map((name, i) => ({ id: `sow-${i + 1}`, name: name.slice(0, 160), template_id: null }));
+    if (JSON.stringify(forms) !== JSON.stringify(intake.wanted_forms)) {
+      patch.wanted_forms = forms;
+      const quote = reading.forms.find((f) => f.name.trim() === ordered[0])?.quote ?? null;
+      if (quote) sources["wanted_forms"] = { quote: quote.slice(0, 400), source: "SOW" };
+      else delete sources["wanted_forms"];
+      filled.push(forms.length === 1 ? "the first form" : `${forms.length} forms to build`);
+    }
+    aiFilled.add("wanted_forms");
+    if (intake.forms_built === null && !intake.person_set.includes("forms_built")) {
+      patch.forms_built = false;
+      aiFilled.add("forms_built");
+    }
+  }
+
+  if (filled.length) {
+    patch.ai_filled = [...aiFilled];
+    patch.ai_sources = sources;
+  }
+  return { patch, filled };
+}
 
 /** The catalogue, in words the model reads. */
 export function catalogueForPrompt(): string {
