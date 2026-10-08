@@ -45,7 +45,7 @@ export async function dealFactsFor(
         .order("created_at", { ascending: false }),
       db()
         .from("implementations")
-        .select("deal_id,owner_id,created_at")
+        .select("id,deal_id,owner_id,created_at")
         .in("deal_id", ids)
         .order("created_at", { ascending: false }),
       db()
@@ -69,8 +69,17 @@ export async function dealFactsFor(
   for (const b of (briefs ?? []) as Array<{ account_id: string; structured_json: unknown }>)
     if (!briefByDeal.has(b.account_id)) briefByDeal.set(b.account_id, b.structured_json ?? null);
   const ownerIdByDeal = new Map<string, string | null>();
-  for (const i of (impls ?? []) as Array<{ deal_id: string; owner_id: string | null }>)
+  const implRows = (impls ?? []) as Array<{ id: string; deal_id: string; owner_id: string | null }>;
+  for (const i of implRows)
     if (!ownerIdByDeal.has(i.deal_id)) ownerIdByDeal.set(i.deal_id, i.owner_id);
+  // Transcript proposals awaiting a decision, counted onto the deal they belong to.
+  const { pendingProposalCounts } = await import("../transcript-proposals.server");
+  const pendingByImpl = await pendingProposalCounts(implRows.map((i) => i.id));
+  const pendingByDeal = new Map<string, number>();
+  for (const i of implRows) {
+    const n = pendingByImpl.get(i.id) ?? 0;
+    if (n) pendingByDeal.set(i.deal_id, (pendingByDeal.get(i.deal_id) ?? 0) + n);
+  }
   const ownerIds = [...new Set([...ownerIdByDeal.values()].filter(Boolean))] as string[];
   const { data: members } = ownerIds.length
     ? await db().from("team_members").select("id,name").in("id", ownerIds)
@@ -155,6 +164,7 @@ export async function dealFactsFor(
           : [],
       close_date: timeline.closeDate,
       live_date: timeline.liveDate,
+      pending_proposals: pendingByDeal.get(d.id) ?? 0,
       watch_outs: watchOutsFor({
         brief: briefByDeal.get(d.id) ?? null,
         notes: noteTexts,

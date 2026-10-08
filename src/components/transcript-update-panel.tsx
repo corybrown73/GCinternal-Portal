@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { ChevronDown, ChevronRight, Sparkles, Upload } from "lucide-react";
+import { ChevronDown, ChevronRight, Loader2, Sparkles, Upload } from "lucide-react";
 
 import { fileToBase64, MAX_ATTACHMENT_BYTES, textToBase64 } from "@/lib/attachment-client";
 import { uploadAttachment } from "@/lib/attachments.functions";
@@ -9,26 +9,25 @@ import { documentUploadType } from "@/lib/document-upload";
 import type { TeamOption } from "@/components/owner-picker";
 import {
   addEvidence,
-  addDecision,
-  addIssue,
-  addJournalEntry,
-  addRisk,
   analyzeTranscriptDocument,
+  applyEvidenceProposal,
+  dismissEvidenceProposal,
   getTeamOptions,
-  setRecordField,
+  pendingTranscriptWork,
 } from "@/lib/hub.functions";
 import type { IntakeAnswers } from "@/lib/intake-answers";
-import { localIso } from "@/lib/onboarding-timeline";
+import { localIso, shortDay } from "@/lib/onboarding-timeline";
 import { saveIntake } from "@/lib/presale.functions";
+import { handoffQuestion } from "@/lib/sales-handoff";
 import { completedAfterTick } from "@/lib/stage-flow";
 import {
   attachmentReferenceFor,
   CONFIDENCE_LABEL,
   isValidIsoDate,
   PROPOSAL_TYPE_LABEL,
+  proposalDefaultSelected,
+  type EvidenceProposalRow,
   type ProposalType,
-  type TranscriptAnalysis,
-  type TranscriptProposal,
 } from "@/lib/transcript-analysis";
 import { cn } from "@/lib/utils";
 
@@ -43,22 +42,6 @@ export type KickoffOutcomePrompt = {
   intake: IntakeAnswers;
 };
 
-type ApplySummary = {
-  risks: number;
-  issues: number;
-  decisions: number;
-  targetDate: boolean;
-  owner: boolean;
-  notes: number;
-};
-
-type Run = {
-  id: number;
-  fileName: string;
-  analysis: TranscriptAnalysis;
-  applied: ApplySummary | null;
-};
-
 /** Case-insensitive best-effort match of a said name to a team member. Never applied without this control being explicitly confirmed. */
 function guessOwner(team: TeamOption[], name: string): string {
   const n = name.trim().toLowerCase();
@@ -71,34 +54,78 @@ function guessOwner(team: TeamOption[], name: string): string {
   return partial?.id ?? "";
 }
 
-function attributionFor(quote: string | null): string {
-  return quote
-    ? `\n\nFrom the meeting transcript: "${quote}"`
-    : "\n\n(From the meeting transcript.)";
+/**
+ * The roster id a row starts on: the reading's pick (already checked against
+ * the roster when it was kept), else — for an owner change only — the name
+ * it heard. A risk or issue is never matched on its description: an owner
+ * the reviewer did not see is never written.
+ */
+function initialOwner(team: TeamOption[], p: EvidenceProposalRow): string {
+  if (p.owner_team_member_id) return p.owner_team_member_id;
+  if (p.type !== "owner") return "";
+  return guessOwner(team, p.owner_name ?? p.text);
+}
+
+/** Whether the row shows the owner picker — and so whether Apply sends an owner at all. */
+function showsOwner(p: EvidenceProposalRow): boolean {
+  if (p.type === "owner") return true;
+  return (p.type === "risk" || p.type === "issue") && Boolean(p.owner_team_member_id);
+}
+
+/** What one Apply click did, row by row; a failed row stays ticked with its reason. */
+type ApplyResult = { applied: number; failed: Array<{ id: string; message: string }> };
+
+/** Rows from one upload sit together, newest upload first. */
+function groupBySource(rows: EvidenceProposalRow[]): Array<{
+  key: string;
+  title: string;
+  at: string | null;
+  rows: EvidenceProposalRow[];
+}> {
+  const groups = new Map<
+    string,
+    { title: string; at: string | null; rows: EvidenceProposalRow[] }
+  >();
+  for (const r of rows) {
+    const key = r.evidence_id ?? r.attachment_id ?? "unknown";
+    const g = groups.get(key) ?? {
+      title: r.source_title ?? "Meeting transcript",
+      at: r.source_at ?? r.created_at ?? null,
+      rows: [],
+    };
+    g.rows.push(r);
+    groups.set(key, g);
+  }
+  return [...groups.entries()].map(([key, g]) => ({ key, ...g }));
+}
+
+function dayOf(iso: string | null): string | null {
+  if (!iso) return null;
+  const day = iso.slice(0, 10);
+  return isValidIsoDate(day) ? shortDay(day) : null;
 }
 
 /**
- * Update from customer meeting — V1.
+ * Update from customer meeting — V2.
  *
  * Transcript = evidence. Human-confirmed updates = implementation truth. A
  * transcript — pasted directly, or uploaded as a file — is read once by the
- * model, which proposes risks, issues, decisions, a target-date change, an
- * owner change, or a follow-up note — each with a confidence and a
- * supporting quote. Nothing here writes anything until the reviewer ticks
- * the items they want and clicks Apply; applying runs through the Hub's
- * existing risk/issue/decision/record-field/journal write paths, exactly as
- * if entered by hand. The one deliberate exception is Meeting outcome
- * (below): while Kickoff is the actual current stage and not done yet, the
- * TIS can explicitly confirm "Kickoff held" — never inferred from the
- * transcript, never automatic — which sets intake.timeline.completed.kickoff
- * through the exact same saveIntake call the Kickoff checklist tick already
- * uses, so the existing saveIntake → syncDealStage → transitionStage
- * machinery (not this component) performs the actual stage move.
- *
- * Paste and upload are two ways of getting to the same input, not two
- * features: pasted text is base64-encoded into a synthetic .txt file and
- * sent through the exact same upload → evidence → analyse pipeline a real
- * uploaded file uses, so there is exactly one transcript-analysis path.
+ * model against what the Hub knows about the implementation, and every
+ * proposal it makes is kept in `evidence_proposals` until a person applies
+ * or dismisses it: a reload keeps them, a colleague can review them, Home
+ * counts them. The transcript is read in the background — pasted or
+ * uploaded, it is stored as a file first — and this panel polls until the
+ * reading lands; only when nothing could be queued (the flag off, no key)
+ * is it read while you wait.
+ * Applying runs through the Hub's existing risk/issue/decision/record-field/
+ * journal/plan/handoff write paths on the server, exactly as if entered by
+ * hand. The one deliberate exception is Meeting outcome (below): while
+ * Kickoff is the actual current stage and not done yet, the TIS can
+ * explicitly confirm "Kickoff held" — never inferred from the transcript,
+ * never automatic — which sets intake.timeline.completed.kickoff through the
+ * exact same saveIntake call the Kickoff checklist tick already uses, so the
+ * existing saveIntake → syncDealStage → transitionStage machinery (not this
+ * component) performs the actual stage move.
  */
 export function TranscriptUpdatePanel({
   customerId: _customerId,
@@ -110,9 +137,9 @@ export function TranscriptUpdatePanel({
   implementationId: string;
   /**
    * True for an implementation that came from a deal: its target date is the
-   * onboarding plan's Go-Live and the implementation column is only a mirror
-   * the next plan sync overwrites. Writing it here would look applied and
-   * change nothing, so the proposal is shown but not applied.
+   * onboarding plan's Go-Live. A proposed date then moves the plan's live
+   * date (the server routes it by the deal link); otherwise it sets the
+   * record's target column.
    */
   planOwnsTarget?: boolean;
   /** See KickoffOutcomePrompt. Null hides the Meeting outcome control entirely. */
@@ -120,6 +147,16 @@ export function TranscriptUpdatePanel({
 }) {
   const qc = useQueryClient();
   const team = useQuery({ queryKey: ["team-options"], queryFn: () => getTeamOptions() });
+  const workFn = useServerFn(pendingTranscriptWork);
+  const work = useQuery({
+    queryKey: ["transcript-work", implementationId],
+    queryFn: () => workFn({ data: { implementationId } }),
+    // While a reading runs in the background, ask again every five seconds.
+    refetchInterval: (q) =>
+      (q.state.data?.jobs ?? []).some((j) => j.status === "queued" || j.status === "running")
+        ? 5000
+        : false,
+  });
 
   const [kickoffChecked, setKickoffChecked] = useState(false);
   const [kickoffPending, setKickoffPending] = useState(false);
@@ -167,22 +204,58 @@ export function TranscriptUpdatePanel({
   const upload = useServerFn(uploadAttachment);
   const recordEvidence = useServerFn(addEvidence);
   const analyze = useServerFn(analyzeTranscriptDocument);
-  const createRiskFn = useServerFn(addRisk);
-  const createIssueFn = useServerFn(addIssue);
-  const createDecisionFn = useServerFn(addDecision);
-  const setField = useServerFn(setRecordField);
-  const addNote = useServerFn(addJournalEntry);
+  const applyFn = useServerFn(applyEvidenceProposal);
+  const dismissFn = useServerFn(dismissEvidenceProposal);
 
   const [open, setOpen] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [pastedText, setPastedText] = useState("");
-  const [runs, setRuns] = useState<Run[]>([]);
-  const [activeId, setActiveId] = useState<number | null>(null);
-  const [selected, setSelected] = useState<Record<number, boolean>>({});
-  const [resolvedDate, setResolvedDate] = useState<Record<number, string>>({});
-  const [resolvedOwner, setResolvedOwner] = useState<Record<number, string>>({});
+  const [lastSummary, setLastSummary] = useState<string | null>(null);
+  const [showDecided, setShowDecided] = useState(false);
+  const [selected, setSelected] = useState<Record<string, boolean>>({});
+  const [resolvedDate, setResolvedDate] = useState<Record<string, string>>({});
+  const [resolvedOwner, setResolvedOwner] = useState<Record<string, string>>({});
+  const [rowErrors, setRowErrors] = useState<Record<string, string>>({});
 
-  const active = runs.find((r) => r.id === activeId) ?? null;
+  const proposals = useMemo(() => work.data?.proposals ?? [], [work.data]);
+  const pending = useMemo(() => proposals.filter((p) => p.status === "pending"), [proposals]);
+  const decided = useMemo(() => proposals.filter((p) => p.status !== "pending"), [proposals]);
+  const jobs = work.data?.jobs ?? [];
+  const running = jobs.filter((j) => j.status === "queued" || j.status === "running");
+  const finished = jobs.filter((j) => j.status === "done" || j.status === "failed");
+  const roster = useMemo(() => team.data ?? [], [team.data]);
+  // Rows are seeded once the roster is known (or known missing): an owner
+  // row seeded against an empty roster would lose its name for good.
+  const rosterKnown = team.isFetched;
+
+  // A row that just arrived starts ticked or unticked by its own shape; a
+  // row the reviewer already touched keeps their choice. Untouched state is
+  // handed back as is, so a poll that brought nothing new renders nothing.
+  useEffect(() => {
+    if (!rosterKnown) return;
+    const fresh = (prev: Record<string, unknown>) => pending.filter((p) => !(p.id in prev));
+    setResolvedOwner((prev) => {
+      const add = fresh(prev);
+      if (!add.length) return prev;
+      const next = { ...prev };
+      for (const p of add) next[p.id] = initialOwner(roster, p);
+      return next;
+    });
+    setResolvedDate((prev) => {
+      const add = fresh(prev);
+      if (!add.length) return prev;
+      const next = { ...prev };
+      for (const p of add) next[p.id] = p.proposed_date ?? "";
+      return next;
+    });
+    setSelected((prev) => {
+      const add = fresh(prev);
+      if (!add.length) return prev;
+      const next = { ...prev };
+      for (const p of add) next[p.id] = proposalDefaultSelected(p, initialOwner(roster, p));
+      return next;
+    });
+  }, [pending, roster, rosterKnown]);
 
   type RunInput = { kind: "paste"; text: string } | { kind: "file"; file: File };
 
@@ -222,8 +295,9 @@ export function TranscriptUpdatePanel({
       // The transcript is evidence the moment it exists, whether or not
       // anything proposed from it is ever applied. The description carries a
       // durable reference back to the uploaded file (see
-      // attachmentReferenceFor) — there is no column for it.
-      await recordEvidence({
+      // attachmentReferenceFor) — there is no column for it. Recording it
+      // queues the background reading; the poll above picks it up.
+      const recorded = await recordEvidence({
         data: {
           implementationId,
           type: "communication",
@@ -237,142 +311,58 @@ export function TranscriptUpdatePanel({
           relatedEntityId: null,
         },
       });
+      if (recorded.analysis_queued) return { summary: null as string | null };
+      // Nothing could be queued (the flag is off, or no key): read it now,
+      // the way the panel always did, and say so if the file is not a
+      // transcript.
       const result = await analyze({ data: { implementationId, attachmentId: stored.id } });
-      return { fileName, analysis: result.analysis };
+      if (!result.analysis.readable) {
+        throw new Error(
+          result.analysis.problem ?? "That file could not be read as a meeting transcript.",
+        );
+      }
+      return { summary: result.analysis.summary || null };
     },
-    onSuccess: ({ fileName, analysis }) => {
-      const id = Date.now();
-      const sel: Record<number, boolean> = {};
-      const dates: Record<number, string> = {};
-      const owners: Record<number, string> = {};
-      analysis.proposals.forEach((p, i) => {
-        if (p.type === "target_date") {
-          const ok = isValidIsoDate(p.text);
-          dates[i] = ok ? p.text.trim() : "";
-          sel[i] = ok && !planOwnsTarget;
-        } else if (p.type === "owner") {
-          const match = guessOwner(team.data ?? [], p.text);
-          owners[i] = match;
-          sel[i] = match !== "";
-        } else {
-          sel[i] = true;
-        }
-      });
-      setSelected(sel);
-      setResolvedDate(dates);
-      setResolvedOwner(owners);
-      setRuns((rs) => [...rs, { id, fileName, analysis, applied: null }]);
-      setActiveId(id);
+    onSuccess: ({ summary }) => {
+      setLastSummary(summary);
       setFile(null);
       setPastedText("");
+      void qc.invalidateQueries({ queryKey: ["transcript-work", implementationId] });
     },
   });
 
   const apply = useMutation({
-    mutationFn: async (): Promise<ApplySummary | null> => {
-      if (!active) return null;
-      const applied: ApplySummary = {
-        risks: 0,
-        issues: 0,
-        decisions: 0,
-        targetDate: false,
-        owner: false,
-        notes: 0,
-      };
-      for (let i = 0; i < active.analysis.proposals.length; i++) {
-        if (!selected[i]) continue;
-        const p = active.analysis.proposals[i]!;
-        const attribution = attributionFor(p.quote);
-        switch (p.type) {
-          case "risk":
-            await createRiskFn({
-              data: {
-                implementationId,
-                title: p.title,
-                description: `${p.text}${attribution}`,
-                severity: "medium",
-                likelihood: "medium",
-                status: "open",
-                ownerId: null,
-                impact: null,
-                mitigation: null,
-                identifiedAt: null,
-                resolvedAt: null,
-              },
-            });
-            applied.risks += 1;
-            break;
-          case "issue":
-            await createIssueFn({
-              data: {
-                implementationId,
-                title: p.title,
-                description: `${p.text}${attribution}`,
-                severity: "medium",
-                status: "open",
-                ownerId: null,
-                resolution: null,
-                raisedAt: null,
-                resolvedAt: null,
-              },
-            });
-            applied.issues += 1;
-            break;
-          case "decision":
-            await createDecisionFn({
-              data: {
-                implementationId,
-                title: p.title,
-                description: null,
-                rationale: `${p.text}${attribution}`,
-                decidedBy: null,
-                decisionDate: null,
-                status: "active",
-              },
-            });
-            applied.decisions += 1;
-            break;
-          case "target_date": {
-            const date = resolvedDate[i];
-            if (planOwnsTarget || !date || !isValidIsoDate(date)) break;
-            await setField({
-              data: { implementationId, field: "target_launch_date", value: date },
-            });
-            applied.targetDate = true;
-            break;
-          }
-          case "owner": {
-            const ownerId = resolvedOwner[i];
-            if (!ownerId) break;
-            await setField({ data: { implementationId, field: "owner_id", value: ownerId } });
-            applied.owner = true;
-            break;
-          }
-          case "note":
-          default:
-            await addNote({
-              data: {
-                implementationId,
-                note: `${p.title}\n\n${p.text}${attribution}`,
-                // The server resolves the signed-in actor through the
-                // team_members bridge (journal_entries.author_id does not
-                // accept a portal_profiles id).
-                authorId: null,
-                links: null,
-                attachmentUrl: null,
-                attachmentName: null,
-                kind: "note",
-              },
-            });
-            applied.notes += 1;
-            break;
+    mutationFn: async (): Promise<ApplyResult> => {
+      const out: ApplyResult = { applied: 0, failed: [] };
+      // Every ticked row gets its turn: a row refused on purpose (a question
+      // a person answered meanwhile, a row a colleague just decided) stops
+      // nothing but itself.
+      for (const p of pending) {
+        if (!selected[p.id]) continue;
+        try {
+          await applyFn({
+            data: {
+              id: p.id,
+              // Only an owner the reviewer could see is sent; a row with no
+              // picker writes none, whatever the reading carried.
+              ownerTeamMemberId: showsOwner(p) ? resolvedOwner[p.id] || null : null,
+              proposedDate: resolvedDate[p.id] || null,
+            },
+          });
+          out.applied += 1;
+        } catch (e) {
+          out.failed.push({
+            id: p.id,
+            message: e instanceof Error ? e.message : "Could not apply this update.",
+          });
         }
       }
-      return applied;
+      return out;
     },
-    onSuccess: (applied) => {
-      if (!applied || !active) return;
-      setRuns((rs) => rs.map((r) => (r.id === active.id ? { ...r, applied } : r)));
+    onSuccess: (out) => {
+      setRowErrors(Object.fromEntries(out.failed.map((f) => [f.id, f.message])));
+    },
+    onSettled: () => {
       // Risks, issues, decisions, owner and target date all live outside this
       // component's own state (Details, the header, Overview); a plain
       // invalidation is how every other cross-cutting write on this page
@@ -381,7 +371,15 @@ export function TranscriptUpdatePanel({
     },
   });
 
-  const selectedCount = Object.values(selected).filter(Boolean).length;
+  const dismiss = useMutation({
+    mutationFn: async (id: string) => dismissFn({ data: { id } }),
+    onSettled: () => {
+      void qc.invalidateQueries({ queryKey: ["transcript-work", implementationId] });
+    },
+  });
+
+  const selectedCount = pending.filter((p) => selected[p.id]).length;
+  const busy = run.isPending || apply.isPending;
 
   return (
     <section
@@ -396,6 +394,11 @@ export function TranscriptUpdatePanel({
         <span className="flex items-center gap-1.5 text-[13px] font-semibold">
           <Sparkles className="h-3.5 w-3.5 text-primary" />
           Update from customer meeting
+          {pending.length ? (
+            <span className="ml-1 rounded-full border border-primary/40 bg-primary/10 px-1.5 text-[10px] font-medium text-primary">
+              {pending.length} to review
+            </span>
+          ) : null}
         </span>
         {open ? (
           <ChevronDown className="h-4 w-4 text-muted-foreground" />
@@ -491,7 +494,7 @@ export function TranscriptUpdatePanel({
               >
                 <Upload className="h-3 w-3" />
                 {run.isPending && run.variables?.kind === "file"
-                  ? "Reading…"
+                  ? "Uploading…"
                   : "Upload and analyse"}
               </button>
             </div>
@@ -501,63 +504,125 @@ export function TranscriptUpdatePanel({
             <p className="text-[12px] text-destructive">{(run.error as Error).message}</p>
           ) : null}
 
-          {runs.length > 0 ? (
-            <div className="space-y-2 border-t border-border pt-3">
-              <div className="flex flex-wrap gap-1.5">
-                {runs.map((r) => (
-                  <button
-                    key={r.id}
-                    type="button"
-                    onClick={() => setActiveId(r.id)}
-                    className={cn(
-                      "rounded-full border px-2.5 py-1 text-[11px] font-medium",
-                      r.id === activeId
-                        ? "border-primary bg-primary text-primary-foreground"
-                        : "border-border text-muted-foreground hover:text-foreground",
-                    )}
-                  >
-                    {r.fileName}
-                  </button>
-                ))}
-              </div>
-              {active ? (
-                <RunReview
-                  run={active}
-                  planOwnsTarget={planOwnsTarget}
-                  team={team.data ?? []}
-                  selected={selected}
-                  setSelected={setSelected}
-                  resolvedDate={resolvedDate}
-                  setResolvedDate={setResolvedDate}
-                  resolvedOwner={resolvedOwner}
-                  setResolvedOwner={setResolvedOwner}
-                />
-              ) : null}
-              {active && !active.applied ? (
-                <>
-                  <button
-                    type="button"
-                    disabled={selectedCount === 0 || apply.isPending}
-                    onClick={() => apply.mutate()}
-                    className="inline-flex items-center gap-1.5 rounded-sm border border-foreground/30 bg-foreground/90 px-2.5 py-1 text-[12px] font-medium text-background hover:bg-foreground disabled:opacity-50"
-                  >
-                    {apply.isPending
-                      ? "Applying…"
-                      : `Apply ${selectedCount} selected update${selectedCount === 1 ? "" : "s"}`}
-                  </button>
-                  {apply.isError ? (
-                    <p className="text-[12px] text-destructive">{(apply.error as Error).message}</p>
-                  ) : null}
-                </>
-              ) : active?.applied ? (
-                <p className="text-[12px] text-status-ontrack-foreground">
-                  Applied: {active.applied.risks} risk{active.applied.risks === 1 ? "" : "s"} ·{" "}
-                  {active.applied.issues} issue{active.applied.issues === 1 ? "" : "s"} ·{" "}
-                  {active.applied.decisions} decision{active.applied.decisions === 1 ? "" : "s"}
-                  {active.applied.targetDate ? " · target date updated" : ""}
-                  {active.applied.owner ? " · owner updated" : ""} · {active.applied.notes} note
-                  {active.applied.notes === 1 ? "" : "s"}.
+          {running.length ? (
+            <p className="flex items-center gap-1.5 text-[12px] text-muted-foreground">
+              <Loader2 className="h-3 w-3 animate-spin" />
+              Reading the transcript… proposals appear here when it is done.
+            </p>
+          ) : null}
+
+          {finished.map((j) => (
+            <p
+              key={j.attachment_id}
+              className={cn(
+                "text-[12px]",
+                j.problem ? "text-destructive" : "text-muted-foreground",
+              )}
+            >
+              {j.problem
+                ? `Could not read ${j.title ?? "the transcript"}: ${j.problem} Upload a different file, or paste the text.`
+                : `Nothing in ${j.title ?? "the transcript"} proposed an update.`}
+            </p>
+          ))}
+
+          {lastSummary ? (
+            <p className="rounded-sm bg-muted/40 px-2.5 py-1.5 text-[12px] text-muted-foreground">
+              {lastSummary}
+            </p>
+          ) : null}
+
+          {work.isError ? (
+            <p className="text-[12px] text-destructive">{(work.error as Error).message}</p>
+          ) : null}
+
+          {pending.length > 0 ? (
+            <div className="space-y-3 border-t border-border pt-3">
+              {groupBySource(pending).map((g) => (
+                <div key={g.key} className="space-y-2">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                    {g.title}
+                    {dayOf(g.at) ? ` · ${dayOf(g.at)}` : ""}
+                  </div>
+                  <ul className="space-y-2">
+                    {g.rows.map((p) => (
+                      <ProposalRow
+                        key={p.id}
+                        proposal={p}
+                        checked={Boolean(selected[p.id])}
+                        disabled={busy}
+                        planOwnsTarget={planOwnsTarget}
+                        onToggle={(v) => setSelected((prev) => ({ ...prev, [p.id]: v }))}
+                        team={roster}
+                        date={resolvedDate[p.id] ?? ""}
+                        onDate={(v) => setResolvedDate((prev) => ({ ...prev, [p.id]: v }))}
+                        ownerId={resolvedOwner[p.id] ?? ""}
+                        onOwner={(v) => setResolvedOwner((prev) => ({ ...prev, [p.id]: v }))}
+                        error={rowErrors[p.id] ?? null}
+                        onDismiss={() => dismiss.mutate(p.id)}
+                      />
+                    ))}
+                  </ul>
+                </div>
+              ))}
+              <button
+                type="button"
+                disabled={selectedCount === 0 || busy}
+                onClick={() => apply.mutate()}
+                className="inline-flex items-center gap-1.5 rounded-sm border border-foreground/30 bg-foreground/90 px-2.5 py-1 text-[12px] font-medium text-background hover:bg-foreground disabled:opacity-50"
+              >
+                {apply.isPending
+                  ? "Applying…"
+                  : `Apply ${selectedCount} selected update${selectedCount === 1 ? "" : "s"}`}
+              </button>
+              {apply.data && apply.data.failed.length ? (
+                <p className="text-[12px] text-destructive">
+                  {apply.data.applied} applied; {apply.data.failed.length} could not be — each says
+                  why above and stays ticked.
                 </p>
+              ) : null}
+              {apply.isError ? (
+                <p className="text-[12px] text-destructive">{(apply.error as Error).message}</p>
+              ) : null}
+              {dismiss.isError ? (
+                <p className="text-[12px] text-destructive">{(dismiss.error as Error).message}</p>
+              ) : null}
+            </div>
+          ) : work.data && !jobs.length && decided.length === 0 && lastSummary ? (
+            <p className="text-[12px] text-muted-foreground">
+              Nothing in this transcript proposed an update.
+            </p>
+          ) : null}
+
+          {decided.length > 0 ? (
+            <div className="border-t border-border pt-2">
+              <button
+                type="button"
+                onClick={() => setShowDecided((v) => !v)}
+                className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground"
+              >
+                {showDecided ? (
+                  <ChevronDown className="h-3 w-3" />
+                ) : (
+                  <ChevronRight className="h-3 w-3" />
+                )}
+                Decided ({decided.length})
+              </button>
+              {showDecided ? (
+                <div className="mt-2 space-y-3">
+                  {groupBySource(decided).map((g) => (
+                    <div key={g.key} className="space-y-1.5">
+                      <div className="text-[11px] text-muted-foreground">
+                        {g.title}
+                        {dayOf(g.at) ? ` · ${dayOf(g.at)}` : ""}
+                      </div>
+                      <ul className="space-y-1.5">
+                        {g.rows.map((p) => (
+                          <DecidedRow key={p.id} proposal={p} />
+                        ))}
+                      </ul>
+                    </div>
+                  ))}
+                </div>
               ) : null}
             </div>
           ) : null}
@@ -567,66 +632,29 @@ export function TranscriptUpdatePanel({
   );
 }
 
-function RunReview({
-  run,
-  planOwnsTarget,
-  team,
-  selected,
-  setSelected,
-  resolvedDate,
-  setResolvedDate,
-  resolvedOwner,
-  setResolvedOwner,
-}: {
-  run: Run;
-  planOwnsTarget: boolean;
-  team: TeamOption[];
-  selected: Record<number, boolean>;
-  setSelected: (fn: (prev: Record<number, boolean>) => Record<number, boolean>) => void;
-  resolvedDate: Record<number, string>;
-  setResolvedDate: (fn: (prev: Record<number, string>) => Record<number, string>) => void;
-  resolvedOwner: Record<number, string>;
-  setResolvedOwner: (fn: (prev: Record<number, string>) => Record<number, string>) => void;
-}) {
-  const disabled = Boolean(run.applied);
-  return (
-    <div className="space-y-3">
-      {run.analysis.summary ? (
-        <p className="rounded-sm bg-muted/40 px-2.5 py-1.5 text-[12px] text-muted-foreground">
-          {run.analysis.summary}
-        </p>
-      ) : null}
-      {run.analysis.proposals.length === 0 ? (
-        <p className="text-[12px] text-muted-foreground">
-          Nothing in this transcript proposed an update.
-        </p>
-      ) : (
-        <ul className="space-y-2">
-          {run.analysis.proposals.map((p, i) => (
-            <ProposalRow
-              key={i}
-              proposal={p}
-              checked={Boolean(selected[i])}
-              disabled={disabled}
-              planOwnsTarget={planOwnsTarget}
-              onToggle={(v) => setSelected((prev) => ({ ...prev, [i]: v }))}
-              team={team}
-              date={resolvedDate[i] ?? ""}
-              onDate={(v) => setResolvedDate((prev) => ({ ...prev, [i]: v }))}
-              ownerId={resolvedOwner[i] ?? ""}
-              onOwner={(v) => setResolvedOwner((prev) => ({ ...prev, [i]: v }))}
-            />
-          ))}
-        </ul>
-      )}
-    </div>
-  );
-}
-
 function TypeTag({ type }: { type: ProposalType }) {
   return (
     <span className="rounded-sm border border-border px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-[0.06em] text-muted-foreground">
       {PROPOSAL_TYPE_LABEL[type]}
+    </span>
+  );
+}
+
+function LevelPill({ label, value }: { label: string; value: string | null }) {
+  if (!value) return null;
+  return (
+    <span
+      className={cn(
+        "rounded-sm border px-1 font-mono text-[10px] uppercase tracking-[0.06em]",
+        value === "high"
+          ? "border-destructive/40 text-destructive"
+          : value === "low"
+            ? "border-border text-muted-foreground"
+            : "border-amber-500/40 text-amber-800 dark:text-amber-300",
+      )}
+      title={`${label}: ${value}`}
+    >
+      {label} {value}
     </span>
   );
 }
@@ -642,8 +670,10 @@ function ProposalRow({
   onDate,
   ownerId,
   onOwner,
+  error,
+  onDismiss,
 }: {
-  proposal: TranscriptProposal;
+  proposal: EvidenceProposalRow;
   checked: boolean;
   disabled: boolean;
   planOwnsTarget: boolean;
@@ -653,25 +683,38 @@ function ProposalRow({
   onDate: (v: string) => void;
   ownerId: string;
   onOwner: (v: string) => void;
+  error: string | null;
+  onDismiss: () => void;
 }) {
   const needsDate = proposal.type === "target_date";
   const needsOwner = proposal.type === "owner";
-  const planOwned = needsDate && planOwnsTarget;
-  const unresolved = planOwned || (needsDate && !isValidIsoDate(date)) || (needsOwner && !ownerId);
+  // A risk or issue the reading assigned to someone shows who, so the
+  // reviewer can clear it; one it did not assign writes no owner.
+  const picksOwner = showsOwner(proposal);
+  const isSuggestion = proposal.type === "intake_suggestion";
+  const question =
+    isSuggestion && proposal.intake_key ? handoffQuestion(proposal.intake_key) : null;
+  const unresolved =
+    (needsDate && !isValidIsoDate(date)) || (needsOwner && !ownerId) || (isSuggestion && !question);
   return (
     <li className="rounded-md border border-border p-2.5">
-      <label className="flex items-start gap-2 text-[12px]">
+      <div className="flex items-start gap-2 text-[12px]">
         <input
           type="checkbox"
           className="mt-0.5 h-3 w-3"
           checked={checked}
           disabled={disabled || unresolved}
           onChange={(e) => onToggle(e.target.checked)}
+          aria-label={`Apply: ${proposal.title}`}
         />
         <span className="min-w-0 flex-1">
           <span className="flex flex-wrap items-center gap-1.5">
             <TypeTag type={proposal.type} />
-            <span className="font-medium text-foreground">{proposal.title}</span>
+            <span className="font-medium text-foreground">
+              {isSuggestion
+                ? `Suggested answer for ${question?.label ?? proposal.intake_key ?? "a handoff question"}`
+                : proposal.title}
+            </span>
             {proposal.confidence !== "stated" ? (
               <span
                 className="rounded-sm border border-border px-1 font-mono text-[10px] uppercase tracking-[0.06em] text-muted-foreground"
@@ -680,23 +723,26 @@ function ProposalRow({
                 {proposal.confidence}
               </span>
             ) : null}
+            <LevelPill label="severity" value={proposal.severity} />
+            <LevelPill label="likelihood" value={proposal.likelihood} />
           </span>
-          {!needsDate && !needsOwner ? (
-            <span className="mt-1 block text-foreground">{proposal.text}</span>
-          ) : null}
+          {!needsOwner ? <span className="mt-1 block text-foreground">{proposal.text}</span> : null}
           {proposal.quote ? (
             <span className="mt-1 block border-l border-border pl-2 text-[11px] italic text-muted-foreground">
               “{proposal.quote}”
             </span>
           ) : null}
-          {planOwned ? (
-            <span className="mt-1.5 block text-[11px] text-muted-foreground">
-              Heard: {proposal.text}. The target date for this account comes from its onboarding
-              plan — move it there, and this page follows.
+          {proposal.duplicate_of_id ? (
+            <span className="mt-1 block text-[11px] text-amber-800 dark:text-amber-300">
+              Looks like {proposal.duplicate_title ?? "a record already on the implementation"} —
+              unticked so it is not added twice.
             </span>
-          ) : needsDate ? (
-            <span className="mt-1.5 flex items-center gap-1.5">
-              <span className="text-[11px] text-muted-foreground">New target date</span>
+          ) : null}
+          {needsDate ? (
+            <span className="mt-1.5 flex flex-wrap items-center gap-1.5">
+              <span className="text-[11px] text-muted-foreground">
+                {planOwnsTarget ? "Moves the plan's live date to" : "New target date"}
+              </span>
               <input
                 type="date"
                 value={date}
@@ -711,10 +757,12 @@ function ProposalRow({
               ) : null}
             </span>
           ) : null}
-          {needsOwner ? (
-            <span className="mt-1.5 flex items-center gap-1.5">
+          {picksOwner ? (
+            <span className="mt-1.5 flex flex-wrap items-center gap-1.5">
               <span className="text-[11px] text-muted-foreground">
-                Said: “{proposal.text}” — new owner
+                {needsOwner
+                  ? `Said: “${proposal.owner_name ?? proposal.text}” — new owner`
+                  : "Owner"}
               </span>
               <select
                 value={ownerId}
@@ -722,7 +770,7 @@ function ProposalRow({
                 onChange={(e) => onOwner(e.target.value)}
                 className="h-6 rounded-sm border border-border bg-background px-1.5 text-[12px] outline-none focus:ring-1 focus:ring-ring"
               >
-                <option value="">Pick who…</option>
+                <option value="">{needsOwner ? "Pick who…" : "Nobody"}</option>
                 {team.map((t) => (
                   <option key={t.id} value={t.id}>
                     {t.name}
@@ -731,8 +779,47 @@ function ProposalRow({
               </select>
             </span>
           ) : null}
+          {proposal.type === "decision" && proposal.proposed_date ? (
+            <span className="mt-1 block text-[11px] text-muted-foreground">
+              Decided {shortDay(proposal.proposed_date)}
+            </span>
+          ) : null}
+          {isSuggestion ? (
+            <span className="mt-1 block text-[11px] text-muted-foreground">
+              Lands on the handoff as the implementation team's answer, only if the question is
+              blank or AI-filled.
+            </span>
+          ) : null}
+          {error ? <span className="mt-1 block text-[11px] text-destructive">{error}</span> : null}
         </span>
-      </label>
+        <button
+          type="button"
+          disabled={disabled}
+          onClick={onDismiss}
+          className="shrink-0 text-[11px] text-muted-foreground hover:text-foreground hover:underline disabled:opacity-50"
+        >
+          Dismiss
+        </button>
+      </div>
+    </li>
+  );
+}
+
+function DecidedRow({ proposal }: { proposal: EvidenceProposalRow }) {
+  const applied = proposal.status === "applied";
+  return (
+    <li className="flex flex-wrap items-center gap-1.5 text-[12px] text-muted-foreground">
+      <span
+        className={cn(
+          "rounded-sm border px-1 font-mono text-[10px] uppercase tracking-[0.06em]",
+          applied ? "border-status-ontrack-foreground/40 text-status-ontrack-foreground" : "",
+        )}
+      >
+        {applied ? "Applied" : "Dismissed"}
+      </span>
+      <TypeTag type={proposal.type} />
+      <span className="text-foreground">{proposal.title}</span>
+      {dayOf(proposal.decided_at) ? <span>· {dayOf(proposal.decided_at)}</span> : null}
     </li>
   );
 }

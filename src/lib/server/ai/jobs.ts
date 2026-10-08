@@ -394,8 +394,10 @@ async function stepSetFor(kind: AiJobKind): Promise<StepSet> {
       const m = await import("./steps/prepare-deal");
       return { order: m.PREPARE_DEAL_STEPS, steps: m.prepareDealSteps };
     }
-    case "analyze_transcript":
-      throw new Error("analyze_transcript jobs are not implemented yet");
+    case "analyze_transcript": {
+      const m = await import("./steps/analyze-transcript");
+      return { order: m.ANALYZE_TRANSCRIPT_STEPS, steps: m.analyzeTranscriptSteps };
+    }
   }
 }
 

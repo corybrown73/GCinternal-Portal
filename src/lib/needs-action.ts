@@ -44,6 +44,8 @@ export type DealFacts = {
   /** The plan's close and finish line, for time-to-value and "launching". */
   close_date?: string | null;
   live_date?: string | null;
+  /** Transcript proposals on the deal's implementations that nobody has applied or dismissed. */
+  pending_proposals?: number;
 };
 
 export type ActionBucket = "act_now" | "needs_attention";
@@ -55,7 +57,7 @@ export type ActionReason = {
   reason: string;
   /** What is at stake, appended to the commercial context. */
   impact: string;
-  tab: "overview" | "journey";
+  tab: "overview" | "journey" | "implementation";
   next?: string;
 };
 
@@ -162,6 +164,18 @@ export function needsAction(deal: DealFacts | null | undefined): ActionReason[] 
       impact: "the plan is built from what is here",
       tab: "overview",
       next: `Add the ${missing[0]}`,
+    });
+  }
+
+  // A meeting was read and nobody has said yes or no to what it proposed.
+  if (deal.pending_proposals) {
+    out.push({
+      bucket: "needs_attention",
+      rank: 2.6,
+      reason: `${plural(deal.pending_proposals, "meeting update")} to review`,
+      impact: "proposed from a transcript, not yet on the record",
+      tab: "implementation",
+      next: "Review the meeting updates",
     });
   }
 

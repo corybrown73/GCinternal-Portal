@@ -113,6 +113,25 @@ describe("what a deal needs, from its own facts", () => {
     ).toEqual([]);
   });
 
+  it("counts the meeting updates nobody has reviewed, linking to Current Implementation", () => {
+    const r = needsAction(deal({ pending_proposals: 3 }));
+    expect(r).toHaveLength(1);
+    expect(r[0]).toMatchObject({
+      bucket: "needs_attention",
+      reason: "3 meeting updates to review",
+      tab: "implementation",
+      next: "Review the meeting updates",
+    });
+    expect(needsAction(deal({ pending_proposals: 1 }))[0]!.reason).toBe(
+      "1 meeting update to review",
+    );
+    expect(needsAction(deal({ pending_proposals: 0 }))).toEqual([]);
+    // Home's row carries the tab through, so the link lands on the panel.
+    const row = triageRow(impl(), bundle(deal({ pending_proposals: 2 })));
+    expect(row.tab).toBe("implementation");
+    expect(row.reason).toBe("2 meeting updates to review");
+  });
+
   it("says when the core meetings are still unbooked in Pre-kickoff, and when it is stuck", () => {
     const r = needsAction(
       deal({ stage: "onboarding_kickoff", core_booked: false, business_days_in_stage: 2 }),

@@ -989,11 +989,11 @@ export function CurrentImplementationTab({
           Update the implementation
         </div>
         <div className="space-y-2.5">
-          {/* Every implementation on this tab came from a deal, so its target is the plan's. */}
+          {/* An implementation that came from a deal has its target on the plan; a proposed date moves the plan's live date. */}
           <TranscriptUpdatePanel
             customerId={customerId}
             implementationId={implementationId}
-            planOwnsTarget
+            planOwnsTarget={Boolean(dealId)}
             kickoffOutcome={kickoffOutcome}
           />
           <ImplementationUpdatePanel implementationId={implementationId} />
