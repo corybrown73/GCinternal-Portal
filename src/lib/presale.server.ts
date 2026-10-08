@@ -2321,6 +2321,104 @@ export async function saveDealIntake(
 }
 
 /**
+ * Move one milestone's date with a required reason, recorded atomically
+ * with the move itself (0078: portal_record_milestone_date_change). Unlike
+ * saveDealIntake, this is the one write path that can never leave the date
+ * changed with no record of why, or a record with no matching date — the
+ * override and the history land in the same database transaction.
+ *
+ * The cascade this one override causes on later, not-independently-moved
+ * milestones is computed here in JS, from the same buildTimeline() every
+ * screen uses (via planMilestoneDateChange) — the database function only
+ * records what this already computed, never re-derives the plan's cascade
+ * math.
+ *
+ * Returns null when the date given is the one already in effect: nothing
+ * changed, so nothing is recorded — a reason for a non-change is not a
+ * change's reason.
+ */
+export async function recordMilestoneDateChange(
+  userId: string,
+  dealId: string,
+  milestoneKey: string,
+  newDate: string,
+  reason: string,
+): Promise<{ changeId: string } | null> {
+  await requireSalesEditor(userId);
+  const trimmedReason = reason.trim();
+  if (!trimmedReason) throw new Error("A reason is required to change a milestone's date.");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(newDate)) throw new Error("newDate must be YYYY-MM-DD");
+
+  const { readIntake } = await import("./intake-answers");
+  const { closeDateFor, timelineFor } = await import("./onboarding-plan");
+  const { planMilestoneDateChange, wasOverdueAsOf } = await import("./milestone-history");
+  const { todayIn } = await import("./onboarding-timeline");
+
+  const { data: row } = await db()
+    .from("portal_accounts")
+    .select("intake")
+    .eq("id", dealId)
+    .maybeSingle();
+  if (!row) throw new Error("Deal not found");
+  const intake = readIntake((row as any).intake);
+
+  const [{ data: transitions }, stages] = await Promise.all([
+    db().from("portal_stage_transitions").select("to_stage,occurred_at").eq("account_id", dealId),
+    loadPipelineStages(),
+  ]);
+  const close = closeDateFor({
+    intake,
+    stageHistory: (transitions ?? []) as Array<{ to_stage: string; occurred_at: string }>,
+    wonStageKey: wonStage(stages).key,
+  }).date;
+
+  const before = timelineFor(intake, close);
+  const newOverrides = { ...intake.timeline.overrides, [milestoneKey]: newDate };
+  const after = timelineFor(
+    { ...intake, timeline: { ...intake.timeline, overrides: newOverrides } },
+    close,
+  );
+
+  const plan = planMilestoneDateChange(before, after, milestoneKey);
+  if (!plan) throw new Error(`Unknown milestone "${milestoneKey}"`);
+  if (plan.direct.previousDate === plan.direct.newDate) return null;
+
+  const today = todayIn(intake.timeline.timezone);
+  const { data: changeId, error } = await db().rpc("portal_record_milestone_date_change", {
+    p_account: dealId,
+    p_milestone_key: milestoneKey,
+    p_previous_date: plan.direct.previousDate,
+    p_new_date: plan.direct.newDate,
+    p_reason: trimmedReason,
+    p_actor: userId,
+    p_was_overdue: wasOverdueAsOf(plan.direct.previousDate, today),
+    p_cascades: plan.cascades.map((c) => ({
+      milestoneKey: c.milestoneKey,
+      previousDate: c.previousDate,
+      newDate: c.newDate,
+      wasOverdue: wasOverdueAsOf(c.previousDate, today),
+    })),
+  });
+  if (error) throw new Error(`Could not record the date change: ${error.message}`);
+
+  await audit({
+    actor_type: "user",
+    actor_id: userId,
+    action: "deal.milestone_date_changed",
+    entity_type: "account",
+    entity_id: dealId,
+    payload: { milestone_key: milestoneKey, cascaded: plan.cascades.length },
+  });
+
+  // The plan's last date may itself have just moved — keep "Functional" and
+  // the Customers list in step, exactly as a move through the timeline
+  // panel already would.
+  await syncTargetLaunch(dealId, userId);
+
+  return { changeId: String(changeId) };
+}
+
+/**
  * The project's target launch is the plan's last date: "Functional" (or the
  * last phase's end when the SOW bought more). Set at the handoff and kept
  * in step here, so a Stage 3 moved on the checklist moves the date the
