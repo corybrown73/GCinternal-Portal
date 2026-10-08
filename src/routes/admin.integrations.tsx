@@ -31,6 +31,14 @@ import {
   updateSalesforcePullState,
   upsertFieldMap,
 } from "@/lib/sf-integration.functions";
+import {
+  getAiStatusFn,
+  listAiJobsFn,
+  rerunAiJobFn,
+  setAiAutoReadFn,
+  setAiEffortFn,
+} from "@/lib/ai-admin.functions";
+import { AI_EFFORTS, type AiEffort } from "@/lib/server/ai/config";
 import { DEAL_FIELD_GROUP_LABEL, DEAL_FIELDS, dealField } from "@/lib/deal-field-catalog";
 import { TRANSFORMS, type FieldMap, type FieldMapDirection } from "@/lib/server/sf-field-maps";
 import {
@@ -82,6 +90,19 @@ const salesforcePullQuery = queryOptions({
   queryKey: ["admin", "integrations", "salesforce-pull"],
   queryFn: () => getSalesforcePullStatus(),
 });
+const aiStatusQuery = queryOptions({
+  queryKey: ["admin", "integrations", "ai", "status"],
+  queryFn: () => getAiStatusFn(),
+});
+const aiJobsQuery = queryOptions({
+  queryKey: ["admin", "integrations", "ai", "jobs"],
+  queryFn: () => listAiJobsFn({ data: {} }),
+  // A reading walks its steps over minutes; the table follows while one is live.
+  refetchInterval: (query) =>
+    (query.state.data ?? []).some((j) => j.status === "queued" || j.status === "running")
+      ? 15_000
+      : false,
+});
 
 export const Route = createFileRoute("/admin/integrations")({
   head: () => ({ meta: [{ title: "Integrations — Admin | GoCanvas Handoff Hub" }] }),
@@ -106,7 +127,15 @@ const inputClass =
 const labelClass = "text-[10px] uppercase tracking-[0.1em] text-muted-foreground";
 const cellClass = "px-2 py-1.5 align-top text-[12px]";
 
-const TABS = ["Salesforce", "Field maps", "Sync log", "Status", "Zapier", "Webhooks"] as const;
+const TABS = [
+  "AI",
+  "Salesforce",
+  "Field maps",
+  "Sync log",
+  "Status",
+  "Zapier",
+  "Webhooks",
+] as const;
 type Tab = (typeof TABS)[number];
 
 function IntegrationsPage() {
@@ -142,6 +171,7 @@ function IntegrationsPage() {
           ))}
         </div>
 
+        {tab === "AI" ? <AiTab /> : null}
         {tab === "Salesforce" ? <SalesforceTab /> : null}
         {tab === "Zapier" ? <ZapierTab /> : null}
         {tab === "Status" ? <StatusTab /> : null}
@@ -150,6 +180,269 @@ function IntegrationsPage() {
         {tab === "Webhooks" ? <WebhooksTab /> : null}
       </PageBody>
     </>
+  );
+}
+
+/* ------------------------------------------------------------------- ai */
+
+const fmtTokens = (n: number) => n.toLocaleString();
+const fmtUsd = (n: number) => `$${n.toFixed(2)}`;
+const fmtDuration = (ms: number | null) => {
+  if (ms === null) return "—";
+  const s = Math.round(ms / 1000);
+  if (s < 60) return `${s}s`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m ${s % 60}s`;
+  return `${Math.floor(m / 60)}h ${m % 60}m`;
+};
+const truncate = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
+/** The list prices behind the estimate, for the meta line. */
+const AI_PRICE_LABEL = "4 in, $20 out, $0.20 cache read, $5 cache write per million tokens";
+
+/**
+ * The reading, watched: whether the key is there, which model and how hard
+ * it thinks, whether deals are read on their own, what the last month cost,
+ * and every job with its step, its spend and its error. "Run again" is the
+ * one action on a job; the effort select and the flag are the settings.
+ */
+function AiTab() {
+  const { data: ai } = useSuspenseQuery(aiStatusQuery);
+  const { data: jobs } = useSuspenseQuery(aiJobsQuery);
+  const queryClient = useQueryClient();
+  const invalidate = () =>
+    queryClient.invalidateQueries({ queryKey: ["admin", "integrations", "ai"] });
+  const setEffort = useServerFn(setAiEffortFn);
+  const setAutoRead = useServerFn(setAiAutoReadFn);
+  const rerun = useServerFn(rerunAiJobFn);
+
+  const effort = useMutation({
+    mutationFn: (effort: AiEffort) => setEffort({ data: { effort } }),
+    onSuccess: invalidate,
+  });
+  const flip = useMutation({
+    mutationFn: (enabled: boolean) => setAutoRead({ data: { enabled } }),
+    onSuccess: invalidate,
+  });
+  const runAgain = useMutation({
+    mutationFn: (jobId: string) => rerun({ data: { jobId } }),
+    onSuccess: invalidate,
+  });
+
+  const t = ai.totals30d;
+  const last = ai.lastJob;
+
+  return (
+    <div className="space-y-4">
+      <Panel
+        title="Status"
+        level="primary"
+        meta="Every deal is read by one background job: the SOW and contract, the call notes, the brief, a verification pass, then the record and the welcome deck filled from it. One step per minute-cron tick, so a cut-off function is a retry, not a lost reading."
+      >
+        <div className="space-y-2 px-3 py-2.5 text-[12px]">
+          <p>
+            <span className="text-muted-foreground">Key:</span>{" "}
+            {ai.configured ? (
+              <span className="text-status-ontrack-foreground">configured</span>
+            ) : (
+              <span className="text-destructive">not set — nothing is read until it is</span>
+            )}{" "}
+            <code className="font-mono text-[11px] text-muted-foreground">ANTHROPIC_API_KEY</code>
+          </p>
+          <p>
+            <span className="text-muted-foreground">Model:</span>{" "}
+            <code className="font-mono">{ai.model}</code>{" "}
+            <span className="text-muted-foreground">
+              (override with <code className="font-mono text-[11px]">ANTHROPIC_MODEL</code>;
+              redeploy after changing it)
+            </span>
+          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-muted-foreground">Effort:</span>
+            <select
+              className={cn(inputClass, "w-auto")}
+              value={ai.effort}
+              disabled={effort.isPending}
+              onChange={(e) => effort.mutate(e.target.value as AiEffort)}
+              title="How hard the model thinks on every reading; higher is slower and dearer"
+            >
+              {AI_EFFORTS.map((level) => (
+                <option key={level} value={level}>
+                  {level}
+                </option>
+              ))}
+            </select>
+            <span className="text-muted-foreground">
+              applies to the next job; high is the default, xhigh when a reading misses things.
+            </span>
+            {effort.isError ? (
+              <span role="alert" className="text-destructive">
+                {errorMessage(effort.error)}
+              </span>
+            ) : null}
+          </div>
+        </div>
+        <div className="divide-y divide-border border-t border-border">
+          <FlagRow
+            name="ai_auto_read"
+            title="Read deals automatically"
+            detail="A SOW upload, pasted call notes or a close (from Salesforce, the API or the board) queues the reading on its own. Off: only “Read again” on the deal starts one."
+            enabled={ai.autoRead}
+            busy={flip.isPending}
+            onToggle={(enabled) => flip.mutate(enabled)}
+          />
+        </div>
+        {flip.isError ? (
+          <p role="alert" className="px-3 pb-2 text-[12px] text-destructive">
+            {errorMessage(flip.error)}
+          </p>
+        ) : null}
+        <p className="border-t border-border px-3 py-2 text-[12px] text-muted-foreground">
+          <span>Last job:</span>{" "}
+          {last ? (
+            <>
+              <When value={last.created_at} /> · {last.deal_name ?? last.kind} · {last.status}
+              {last.step ? ` at ${last.step}` : ""} · {fmtDuration(last.duration_ms)}
+              {last.last_error ? (
+                <span className="text-destructive"> · {truncate(last.last_error, 80)}</span>
+              ) : null}
+            </>
+          ) : (
+            "none yet"
+          )}
+        </p>
+      </Panel>
+
+      <Panel
+        title="Last 30 days"
+        meta={`Summed from every model call's usage row. Cost is an estimate at list price — $${AI_PRICE_LABEL} — the invoice is the truth.`}
+      >
+        <dl className="grid grid-cols-2 gap-3 px-3 py-3 sm:grid-cols-6">
+          <Stat label="Jobs" value={t.jobs} />
+          <Stat label="Calls" value={t.calls} />
+          <Stat label="Tokens in" value={fmtTokens(t.input_tokens)} />
+          <Stat label="Tokens out" value={fmtTokens(t.output_tokens)} />
+          <Stat
+            label="Cached"
+            value={
+              <span title={`${fmtTokens(t.cache_creation_input_tokens)} written to the cache`}>
+                {fmtTokens(t.cache_read_input_tokens)}
+              </span>
+            }
+          />
+          <Stat label="Estimated cost" value={fmtUsd(t.estimated_cost_usd)} />
+        </dl>
+      </Panel>
+
+      <Panel
+        title="Jobs"
+        count={jobs.length}
+        meta="The last 50 readings, newest first. A queued or running job refreshes the table every 15 seconds. “Run again” reads the deal from scratch, even when nothing changed."
+      >
+        {runAgain.isError ? (
+          <p role="alert" className="px-3 py-2 text-[12px] text-destructive">
+            {errorMessage(runAgain.error)}
+          </p>
+        ) : null}
+        {jobs.length === 0 ? (
+          <NoRows label="No readings yet. Upload a SOW or close a deal and one appears here." />
+        ) : (
+          <TableScroll minWidth={960}>
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-border">
+                  <th className={cn(cellClass, "text-left", labelClass)}>Created</th>
+                  <th className={cn(cellClass, "text-left", labelClass)}>Deal</th>
+                  <th className={cn(cellClass, "text-left", labelClass)}>Kind</th>
+                  <th className={cn(cellClass, "text-left", labelClass)}>Trigger</th>
+                  <th className={cn(cellClass, "text-left", labelClass)}>Status</th>
+                  <th className={cn(cellClass, "text-left", labelClass)}>Duration</th>
+                  <th className={cn(cellClass, "text-left", labelClass)}>
+                    Tokens in / out / cached
+                  </th>
+                  <th className={cn(cellClass, "text-left", labelClass)}>Error</th>
+                  <th />
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {jobs.map((j) => (
+                  <tr key={j.id}>
+                    <td className={cn(cellClass, "text-muted-foreground")}>
+                      <When value={j.created_at} />
+                    </td>
+                    <td className={cellClass}>
+                      {j.deal_id ? (
+                        <Link
+                          to="/deals/$dealId"
+                          params={{ dealId: j.deal_id }}
+                          className="hover:underline"
+                        >
+                          {j.deal_name ?? "(deal)"}
+                        </Link>
+                      ) : (
+                        "—"
+                      )}
+                    </td>
+                    <td className={cn(cellClass, "font-mono text-[11px]")}>{j.kind}</td>
+                    <td className={cn(cellClass, "text-muted-foreground")}>{j.trigger}</td>
+                    <td className={cellClass}>
+                      <span
+                        className={cn(
+                          "rounded-sm px-1.5 py-0.5 text-[11px]",
+                          j.status === "failed"
+                            ? "bg-status-blocked text-status-blocked-foreground"
+                            : j.status === "done"
+                              ? "bg-status-ontrack text-status-ontrack-foreground"
+                              : "bg-muted text-muted-foreground",
+                        )}
+                      >
+                        {j.status}
+                      </span>
+                      {j.step && j.status !== "done" ? (
+                        <span className="ml-1 font-mono text-[11px] text-muted-foreground">
+                          {j.step}
+                        </span>
+                      ) : null}
+                      {j.attempts > 1 ? (
+                        <span className="ml-1 text-[11px] text-muted-foreground">
+                          · attempt {j.attempts}
+                        </span>
+                      ) : null}
+                    </td>
+                    <td className={cn(cellClass, "tabular-nums text-muted-foreground")}>
+                      {fmtDuration(j.duration_ms)}
+                    </td>
+                    <td className={cn(cellClass, "tabular-nums text-muted-foreground")}>
+                      {j.usage.calls === 0
+                        ? "—"
+                        : `${fmtTokens(j.usage.input_tokens)} / ${fmtTokens(j.usage.output_tokens)} / ${fmtTokens(j.usage.cache_read_input_tokens)}`}
+                    </td>
+                    <td
+                      className={cn(cellClass, "max-w-[16rem] text-destructive")}
+                      title={j.last_error ?? undefined}
+                    >
+                      {j.last_error ? truncate(j.last_error, 60) : ""}
+                    </td>
+                    <td className={cn(cellClass, "text-right")}>
+                      {j.deal_id ? (
+                        <button
+                          type="button"
+                          className={buttonClass}
+                          disabled={runAgain.isPending}
+                          onClick={() => runAgain.mutate(j.id)}
+                          title="Queue a fresh reading of this deal, even when nothing changed"
+                        >
+                          Run again
+                        </button>
+                      ) : null}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </TableScroll>
+        )}
+      </Panel>
+    </div>
   );
 }
 
