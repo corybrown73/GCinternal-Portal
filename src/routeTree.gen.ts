@@ -29,6 +29,7 @@ import { Route as SequencesRouteImport } from "./routes/sequences";
 import { Route as SettingsRouteImport } from "./routes/settings";
 import { Route as SignalsRouteImport } from "./routes/signals";
 import { Route as SignupRouteImport } from "./routes/signup";
+import { Route as StageBackfillPreviewRouteImport } from "./routes/stage-backfill-preview";
 import { Route as TechnicalSolutionsRouteImport } from "./routes/technical-solutions";
 import { Route as TemplatesRouteImport } from "./routes/templates";
 import { Route as TicketsRouteImport } from "./routes/tickets";
@@ -194,6 +195,11 @@ const SignalsRoute = SignalsRouteImport.update({
 const SignupRoute = SignupRouteImport.update({
   id: "/signup",
   path: "/signup",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const StageBackfillPreviewRoute = StageBackfillPreviewRouteImport.update({
+  id: "/stage-backfill-preview",
+  path: "/stage-backfill-preview",
   getParentRoute: () => rootRouteImport,
 } as any);
 const TechnicalSolutionsRoute = TechnicalSolutionsRouteImport.update({
@@ -548,6 +554,7 @@ export interface FileRoutesByFullPath {
   "/settings": typeof SettingsRoute;
   "/signals": typeof SignalsRoute;
   "/signup": typeof SignupRoute;
+  "/stage-backfill-preview": typeof StageBackfillPreviewRoute;
   "/technical-solutions": typeof TechnicalSolutionsRouteWithChildren;
   "/templates": typeof TemplatesRoute;
   "/tickets": typeof TicketsRouteWithChildren;
@@ -632,6 +639,7 @@ export interface FileRoutesByTo {
   "/settings": typeof SettingsRoute;
   "/signals": typeof SignalsRoute;
   "/signup": typeof SignupRoute;
+  "/stage-backfill-preview": typeof StageBackfillPreviewRoute;
   "/templates": typeof TemplatesRoute;
   "/admin/analytics": typeof AdminAnalyticsRoute;
   "/admin/api-keys": typeof AdminApiKeysRoute;
@@ -719,6 +727,7 @@ export interface FileRoutesById {
   "/settings": typeof SettingsRoute;
   "/signals": typeof SignalsRoute;
   "/signup": typeof SignupRoute;
+  "/stage-backfill-preview": typeof StageBackfillPreviewRoute;
   "/technical-solutions": typeof TechnicalSolutionsRouteWithChildren;
   "/templates": typeof TemplatesRoute;
   "/tickets": typeof TicketsRouteWithChildren;
@@ -809,6 +818,7 @@ export interface FileRouteTypes {
     | "/settings"
     | "/signals"
     | "/signup"
+    | "/stage-backfill-preview"
     | "/technical-solutions"
     | "/templates"
     | "/tickets"
@@ -893,6 +903,7 @@ export interface FileRouteTypes {
     | "/settings"
     | "/signals"
     | "/signup"
+    | "/stage-backfill-preview"
     | "/templates"
     | "/admin/analytics"
     | "/admin/api-keys"
@@ -979,6 +990,7 @@ export interface FileRouteTypes {
     | "/settings"
     | "/signals"
     | "/signup"
+    | "/stage-backfill-preview"
     | "/technical-solutions"
     | "/templates"
     | "/tickets"
@@ -1068,6 +1080,7 @@ export interface RootRouteChildren {
   SettingsRoute: typeof SettingsRoute;
   SignalsRoute: typeof SignalsRoute;
   SignupRoute: typeof SignupRoute;
+  StageBackfillPreviewRoute: typeof StageBackfillPreviewRoute;
   TechnicalSolutionsRoute: typeof TechnicalSolutionsRouteWithChildren;
   TemplatesRoute: typeof TemplatesRoute;
   TicketsRoute: typeof TicketsRouteWithChildren;
@@ -1248,6 +1261,13 @@ declare module "@tanstack/react-router" {
       path: "/signup";
       fullPath: "/signup";
       preLoaderRoute: typeof SignupRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/stage-backfill-preview": {
+      id: "/stage-backfill-preview";
+      path: "/stage-backfill-preview";
+      fullPath: "/stage-backfill-preview";
+      preLoaderRoute: typeof StageBackfillPreviewRouteImport;
       parentRoute: typeof rootRouteImport;
     };
     "/technical-solutions": {
@@ -1870,6 +1890,7 @@ const rootRouteChildren: RootRouteChildren = {
   SettingsRoute: SettingsRoute,
   SignalsRoute: SignalsRoute,
   SignupRoute: SignupRoute,
+  StageBackfillPreviewRoute: StageBackfillPreviewRoute,
   TechnicalSolutionsRoute: TechnicalSolutionsRouteWithChildren,
   TemplatesRoute: TemplatesRoute,
   TicketsRoute: TicketsRouteWithChildren,
