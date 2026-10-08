@@ -497,7 +497,11 @@ function Rows({ rows }: { rows: NeedsMeRow[] }) {
             <Link
               to="/customers/$customerId"
               params={{ customerId: r.link.customerId }}
-              search={r.link.implementationId ? { impl: r.link.implementationId } : {}}
+              search={
+                r.link.implementationId
+                  ? { tab: "implementation", impl: r.link.implementationId }
+                  : {}
+              }
               className="inline-flex items-center gap-1 justify-self-end rounded-md border border-border px-3 py-1.5 text-[12px] font-medium hover:bg-muted"
             >
               Open <ArrowRight className="h-3.5 w-3.5" />
