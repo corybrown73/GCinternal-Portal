@@ -28,10 +28,17 @@ const ISO_RE = /^\d{4}-\d{2}-\d{2}$/;
  * reason, so the change and why it was made both read back from mechanisms
  * that already exist.
  *
- * Completed milestones (`doneOn` set) are never offered as the one to move,
- * and never listed as "moved" in the preview even if the engine's own
- * `date` field shifts under them — their real date is `doneOn`, which this
- * panel never touches.
+ * Completed milestones (`doneOn` set) are never offered as the one to move.
+ * `buildTimeline()`'s cascade itself now keeps a completed milestone's own
+ * `date` at its scheduled value regardless of an upstream shift — see the
+ * "done" handling in `onboarding-timeline.ts`'s cascade() — so the filter
+ * below is a second, redundant guard against ever listing one as "moved",
+ * not the only thing preventing it.
+ *
+ * The save and the reason cannot come apart: the journal note recording the
+ * reason is written before the timeline save, so a failure to record the
+ * reason stops the date change before it happens, and a date that did
+ * change is always one a reason was successfully recorded for.
  */
 export function AdjustPlanDatesPanel({
   dealId,
@@ -91,22 +98,28 @@ export function AdjustPlanDatesPanel({
   const mutation = useMutation({
     mutationFn: async () => {
       if (!selected) throw new Error("Pick a milestone to move.");
-      const t = intake.timeline;
-      await save({
-        data: {
-          dealId,
-          patch: { timeline: { ...t, overrides: { ...t.overrides, [milestoneKey]: newDate } } },
-        } as never,
-      });
+      const trimmedReason = reason.trim();
+      if (!trimmedReason) throw new Error("A reason is required.");
+      // The reason is written FIRST. If this fails, the date is never
+      // touched below — the one thing this panel must never produce is a
+      // moved date with no recorded reason, and the save that follows is
+      // the only step that can actually move it.
       await addNote({
         data: {
           implementationId,
-          note: `Plan date adjusted: "${selected.label}" moved from ${selected.date} to ${newDate}. Reason: ${reason.trim()}`,
+          note: `Plan date adjusted: "${selected.label}" moved from ${selected.date} to ${newDate}. Reason: ${trimmedReason}`,
           authorId: null,
           links: null,
           attachmentUrl: null,
           attachmentName: null,
           kind: "note",
+        } as never,
+      });
+      const t = intake.timeline;
+      await save({
+        data: {
+          dealId,
+          patch: { timeline: { ...t, overrides: { ...t.overrides, [milestoneKey]: newDate } } },
         } as never,
       });
     },
@@ -135,6 +148,10 @@ export function AdjustPlanDatesPanel({
       </button>
       {open ? (
         <div className="space-y-2.5 border-t border-border px-4 py-3">
+          <p className="text-[11px] text-muted-foreground">
+            Covers the initial plan's milestones only — not phase 2 or later service work, which
+            follows its own schedule.
+          </p>
           {pickable.length === 0 ? (
             <p className="text-[12px] text-muted-foreground">
               Every remaining milestone is already done.
