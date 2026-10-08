@@ -1058,6 +1058,14 @@ export async function runSalesforcePull(
           .maybeSingle();
         return (data?.id as string | undefined) ?? null;
       },
+      storeNotes: async (dealId, notes, source) => {
+        const { storeOpportunityNotes } = await import("./server/opportunity-notes");
+        await storeOpportunityNotes(dealId, notes, { opportunityId: source?.opportunityId });
+      },
+      startReading: async (dealId) => {
+        const { autoReadDeal } = await import("./server/ai/jobs");
+        await autoReadDeal(dealId, "closed_won_salesforce");
+      },
     },
   });
 }

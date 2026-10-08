@@ -81,33 +81,7 @@ export async function proposePlanFromSow(
   );
   if (!sow.block) throw new Error(sow.problem ?? "The attached SOW could not be read.");
 
-  const content: BetaContentBlockParam[] = [
-    sow.block,
-    {
-      type: "text",
-      text: "Read this Statement of Work and return the JSON described in the system message. Ground every row in the document.",
-    },
-  ];
-
-  const { runStructured, describeAiError } = await import("./server/ai/client");
-  let proposal: SowPlanProposal;
-  try {
-    // A SOW is where a service gets mistaken for a form or a phase gets
-    // wrong: room to reason through it is worth the tokens.
-    const result = await runStructured({
-      kind: "sow_plan",
-      schema: sowPlanProposalSchema,
-      system: [{ type: "text", text: SYSTEM_PROMPT }],
-      content,
-      maxTokens: 32000,
-      dealId,
-    });
-    proposal = result.data;
-  } catch (e) {
-    console.error("[sow-plan] the reading failed", e);
-    throw new Error(`${describeAiError(e, "Reading the SOW")} Nothing has been changed.`);
-  }
-  proposal = normalizeProposal(proposal);
+  const { proposal } = await readSowDocument(dealId, sow);
   if (!proposal.readable) {
     throw new Error(
       proposal.problem ??
@@ -135,13 +109,57 @@ export async function proposePlanFromSow(
 }
 
 /**
+ * The model call itself: one prepared document in, a normalised proposal
+ * out, with the usage so a job can account for it. No reads, no writes —
+ * the plan panel and the background reading both go through here, and the
+ * job persists the result so the same bytes are never sent twice.
+ */
+export async function readSowDocument(
+  dealId: string,
+  doc: import("./server/ai/documents").PreparedDocument,
+  opts: { jobId?: string | null | undefined } = {},
+): Promise<{
+  proposal: SowPlanProposal;
+  usage: import("./server/ai/client").AiUsage;
+  model: string;
+}> {
+  if (!doc.block) throw new Error(doc.problem ?? `${doc.name} could not be read.`);
+  const content: BetaContentBlockParam[] = [
+    doc.block,
+    {
+      type: "text",
+      text: "Read this Statement of Work and return the JSON described in the system message. Ground every row in the document.",
+    },
+  ];
+
+  const { runStructured, describeAiError } = await import("./server/ai/client");
+  try {
+    // A SOW is where a service gets mistaken for a form or a phase gets
+    // wrong: room to reason through it is worth the tokens.
+    const result = await runStructured({
+      kind: "sow_plan",
+      schema: sowPlanProposalSchema,
+      system: [{ type: "text", text: SYSTEM_PROMPT }],
+      content,
+      maxTokens: 32000,
+      dealId,
+      jobId: opts.jobId ?? null,
+    });
+    return { proposal: normalizeProposal(result.data), usage: result.usage, model: result.model };
+  } catch (e) {
+    console.error("[sow-plan] the reading failed", e);
+    throw new Error(`${describeAiError(e, "Reading the SOW")} Nothing has been changed.`);
+  }
+}
+
+/**
  * Write what the SOW states onto the columns the rest of the app reads:
  * the reference, the signed date, the value, the named contact, and the
  * start date as the plan's day 0. Only blanks are filled. Never throws —
  * the reading is the point, and a column that could not be written is
  * reported, not fatal.
  */
-async function stampSowFacts(dealId: string, p: SowPlanProposal): Promise<string[]> {
+export async function stampSowFacts(dealId: string, p: SowPlanProposal): Promise<string[]> {
   const stamped: string[] = [];
   try {
     const { data: deal } = await db()

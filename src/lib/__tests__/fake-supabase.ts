@@ -71,8 +71,18 @@ class Builder implements PromiseLike<{ data: any; error: any }> {
     return this;
   }
 
+  gt(col: string, value: string): this {
+    this.filters.push((r) => String(r[col] ?? "") > value);
+    return this;
+  }
+
   lt(col: string, value: string): this {
     this.filters.push((r) => String(r[col] ?? "") < value);
+    return this;
+  }
+
+  lte(col: string, value: string): this {
+    this.filters.push((r) => String(r[col] ?? "") <= value);
     return this;
   }
 
@@ -179,12 +189,21 @@ export type FakeSupabase = {
   store: Rows;
   inserts: Array<{ table: string; row: any }>;
   uploads: Array<{ bucket: string; path: string; bytes: number; contentType: string }>;
+  /** Object bytes by "bucket/path", for `download`; seed it for a stored SOW. */
+  objects: Map<string, Uint8Array>;
+  /** Every `rpc` call, in order. */
+  rpcs: Array<{ fn: string; args: Record<string, any> }>;
 };
 
-export function createFakeSupabase(initial: Rows): FakeSupabase {
+export function createFakeSupabase(
+  initial: Rows,
+  options: { objects?: Record<string, Uint8Array> } = {},
+): FakeSupabase {
   const store: Rows = JSON.parse(JSON.stringify(initial));
   const log = { inserts: [] as Array<{ table: string; row: any }> };
   const uploads: FakeSupabase["uploads"] = [];
+  const objects = new Map<string, Uint8Array>(Object.entries(options.objects ?? {}));
+  const rpcs: FakeSupabase["rpcs"] = [];
 
   const client = {
     from: (table: string) => new Builder(table, store, log),
@@ -197,11 +216,36 @@ export function createFakeSupabase(initial: Rows): FakeSupabase {
             bytes: bytes.byteLength,
             contentType: opts?.contentType ?? "",
           });
+          objects.set(`${bucket}/${path}`, bytes);
           return { data: { path }, error: null };
         },
+        download: async (path: string) => {
+          const bytes = objects.get(`${bucket}/${path}`);
+          if (!bytes) return { data: null, error: { message: "Object not found" } };
+          return { data: new Blob([bytes as BlobPart]), error: null };
+        },
+        remove: async (_paths: string[]) => ({ data: null, error: null }),
       }),
+    },
+    // The one RPC the AI path uses: 0062's merge into `portal_accounts.intake`
+    // — patch keys replace top-level keys, timeline keys merge into
+    // intake.timeline. Emulated so a merge-only writer can be exercised here.
+    rpc: async (fn: string, args: Record<string, any>) => {
+      rpcs.push({ fn, args });
+      if (fn !== "portal_merge_intake") {
+        return { data: null, error: { message: `fake-supabase: unsupported rpc ${fn}` } };
+      }
+      const row = (store["portal_accounts"] ?? []).find((r) => r["id"] === args["p_account"]);
+      if (!row) return { data: null, error: null };
+      const intake = { ...(row["intake"] ?? {}), ...(args["p_patch"] ?? {}) };
+      if (args["p_timeline"]) {
+        intake["timeline"] = { ...(intake["timeline"] ?? {}), ...args["p_timeline"] };
+      }
+      row["intake"] = intake;
+      row["updated_at"] = new Date().toISOString();
+      return { data: intake, error: null };
     },
   };
 
-  return { client, store, inserts: log.inserts, uploads };
+  return { client, store, inserts: log.inserts, uploads, objects, rpcs };
 }

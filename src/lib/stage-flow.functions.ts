@@ -16,14 +16,17 @@ export const syncDealStageFn = createServerFn({ method: "POST" })
   });
 
 /**
- * Read the Gong brief and the SOW and prepare the deal. The page fires this
- * when notes or a SOW arrive and does not wait on it: progress is on the
- * record (intake.ai_reading), so any screen can show it.
+ * Queue the reading of the deal's sources — the SOW, the calls, the
+ * summary. The page fires this when notes or a SOW arrive and does not
+ * wait on it: progress is on the record (intake.ai_reading), so any screen
+ * can show it. `force` is "Read again": read even when nothing changed.
  */
 export const prepareDealFn = createServerFn({ method: "POST" })
   .middleware([requireDealEditor])
-  .inputValidator((data: unknown) => z.object({ dealId: z.string().uuid() }).parse(data))
+  .inputValidator((data: unknown) =>
+    z.object({ dealId: z.string().uuid(), force: z.boolean().optional() }).parse(data),
+  )
   .handler(async ({ data, context }) => {
     const { prepareDeal } = await import("./prepare-deal.server");
-    return prepareDeal(context.userId, data.dealId);
+    return prepareDeal(context.userId, data.dealId, { force: data.force });
   });

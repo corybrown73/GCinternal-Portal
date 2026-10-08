@@ -277,15 +277,18 @@ export const KICKOFF_CADENCE: ReadonlyArray<{ day: string; step: string }> = [
 ];
 
 /**
- * A reading that started this long ago and never finished died with its
- * request: the function it ran in is cut off at five minutes, so a spinner
- * past this is a spinner for nothing.
+ * A reading whose job has not touched the record for this long is not
+ * coming back: a step runs under five minutes and the cron reclaims a
+ * stale lock after six, so a spinner past eight minutes without a
+ * heartbeat is a spinner for nothing.
  */
-export const READING_STALE_MS = 4.5 * 60 * 1000;
+export const READING_STALE_MS = 8 * 60 * 1000;
 
-/** The automatic reading is running right now (and has not quietly died). */
+/** The automatic reading is queued or running right now (and has not quietly died). */
 export function readingInFlight(r: IntakeAnswers["ai_reading"], now = Date.now()): boolean {
-  return r?.status === "running" && now - Date.parse(r.started_at) < READING_STALE_MS;
+  if (r?.status !== "queued" && r?.status !== "running") return false;
+  const last = Date.parse(r.heartbeat_at ?? r.started_at);
+  return Number.isFinite(last) && now - last < READING_STALE_MS;
 }
 
 /** The tasks always present in Intake & Process; a Process Call is added only when needed. */

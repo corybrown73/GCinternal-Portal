@@ -570,6 +570,10 @@ export async function transitionDeal(
         console.error("[close] could not hand the deal to the rotation", e);
       }
     }
+    // The close is when the reading pays off: whatever is on the record —
+    // the SOW, the notes, the summary — is read now, in the background.
+    const { autoReadDeal } = await import("./server/ai/jobs");
+    await autoReadDeal(dealId, "closed_won_ui", userId);
   }
   return result;
 }
@@ -1038,6 +1042,11 @@ export async function uploadDealSow(
     payload: { file_name: args.fileName, replaced: previous ?? null },
   });
 
+  // The document is the reading's reason to exist: queue it from here,
+  // whichever screen uploaded, and never wait on it.
+  const { autoReadDeal } = await import("./server/ai/jobs");
+  await autoReadDeal(args.dealId, "sow_upload", userId);
+
   return { ok: true, path, name: args.fileName };
 }
 
@@ -1086,9 +1095,10 @@ export async function addGongReport(
       call_date: input.callDate ?? null,
     });
   if (error) throw new Error(`Could not save the report: ${error.message}`);
-  // The brief is NOT written here. Saving notes took a minute while the
-  // model read them, which looked like a hang on the create dialog; the
-  // caller starts the brief as its own request and shows it running.
+  // The reading is queued, not run: the notes are saved in a moment and the
+  // job reads them in the background, from here or from the MCP server.
+  const { autoReadDeal } = await import("./server/ai/jobs");
+  await autoReadDeal(input.dealId, "call_notes", userId);
   return { ok: true };
 }
 
@@ -1137,6 +1147,8 @@ export async function uploadDealContract(
     entity_id: args.dealId,
     payload: { name: args.fileName },
   });
+  const { autoReadDeal } = await import("./server/ai/jobs");
+  await autoReadDeal(args.dealId, "contract_upload", userId);
   return next;
 }
 
@@ -1158,17 +1170,33 @@ export async function deleteGongReport(userId: string, reportId: string): Promis
 
 /* ---------- briefs ---------- */
 
-export async function generateDealBrief(
-  userId: string,
-  dealId: string,
-): Promise<{
+/** Who asked for the brief: a person, or the background reading (`label` names it). */
+export type BriefActor = { kind: "user"; userId: string } | { kind: "system"; label: string };
+
+export type DealBriefResult = {
   id: string;
   status: string;
   generator: "llm" | "template" | null;
   error: string | null;
   filled: string[];
-}> {
+};
+
+/** A person's brief: the role check, then the same pipeline the job runs. */
+export async function generateDealBrief(userId: string, dealId: string): Promise<DealBriefResult> {
   await requireInternal(userId);
+  return generateDealBriefAs({ kind: "user", userId }, dealId);
+}
+
+/**
+ * The brief, the journey move, the intake prefill, the help picks and the
+ * header fill, as whoever asked: a person, or the AI job with nobody behind
+ * it. The role check is the caller's — the job has no user to check.
+ */
+export async function generateDealBriefAs(
+  actor: BriefActor,
+  dealId: string,
+): Promise<DealBriefResult> {
+  const userId = actor.kind === "user" ? actor.userId : null;
   const { generateBrief } = await import("./server/brief/generate");
   const brief = await generateBrief(dealId, userId);
 
@@ -1225,12 +1253,16 @@ export async function generateDealBrief(
         if (!error) {
           filled = result.filled;
           await audit({
-            actor_type: "user",
+            actor_type: userId ? "user" : "system",
             actor_id: userId,
             action: "deal.intake_prefilled",
             entity_type: "account",
             entity_id: dealId,
-            payload: { brief_id: brief.id, filled },
+            payload: {
+              brief_id: brief.id,
+              filled,
+              ...(actor.kind === "system" ? { by: actor.label } : {}),
+            },
           });
         }
       }

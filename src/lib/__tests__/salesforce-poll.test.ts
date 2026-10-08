@@ -139,6 +139,7 @@ function pullDeps(records: SalesforceOpportunity[], over: Partial<PullDeps> = {}
     })),
     existingImplementation: vi.fn(async () => null),
     assign: vi.fn(async () => ({ assigneeName: "Priya Nair" })),
+    storeNotes: vi.fn(async () => {}),
   };
   const deps: PullDeps = {
     now: () => new Date("2026-10-06T16:00:00.000Z"),
@@ -181,6 +182,10 @@ describe("running the poll", () => {
       "impl-1",
       "priya.nair@gocanvas.com",
     );
+    // The notes are filed per opportunity: the poll hands the id along.
+    expect(ingestDeps.storeNotes).toHaveBeenCalledWith("deal-Acme Roofing", "Three crews", {
+      opportunityId: "0066g00000ABCDEAA5",
+    });
     expect(logged.map((l) => l.status)).toEqual(["succeeded", "succeeded"]);
     expect(saved.at(-1)?.watermark).toBe("2026-10-06T15:30:00.000Z");
     expect(saved.at(-1)?.last_error).toBeNull();

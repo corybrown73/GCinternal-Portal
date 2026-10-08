@@ -285,17 +285,32 @@ export const intakeAnswersSchema = z.object({
    */
   /**
    * The automatic reading's own state, so every screen can say "reading…"
-   * and a reload does not lose it. `again` asks for one more run when new
-   * notes or a new SOW arrived while one was in flight.
+   * and a reload does not lose it. The reading is a background job
+   * (server/ai/jobs.ts): `job_id` names it, `step` is where it stands,
+   * `heartbeat_at` is the last time a step touched the record, and
+   * `branches` says how each part (the SOW, the brief) went. `again` is
+   * the old in-request flag, kept so stored rows parse.
    */
   ai_reading: z
     .object({
-      status: z.enum(["running", "done", "failed"]),
+      status: z.enum(["queued", "running", "done", "failed"]),
       started_at: z.string(),
       finished_at: z.string().nullable().default(null),
       filled: z.array(z.string().max(120)).max(30).default([]),
       error: z.string().max(500).nullable().default(null),
       again: z.boolean().default(false),
+      job_id: z.string().max(40).nullable().default(null),
+      step: z.string().max(40).nullable().default(null),
+      heartbeat_at: z.string().max(40).nullable().default(null),
+      branches: z
+        .record(
+          z.string().max(40),
+          z.object({
+            status: z.enum(["ok", "failed", "skipped"]),
+            detail: z.string().max(500).nullable().default(null),
+          }),
+        )
+        .default({}),
     })
     .nullable()
     .default(null),

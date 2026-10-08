@@ -43,6 +43,29 @@ The \`onboarding\` object fills the onboarding intake on the deal, so nobody ret
 - current_process.summary: how the work is done today, two or three sentences, in their words where possible.
 - Every quote is copied word for word from its source, under 200 characters. source is "SOW" or the title of the call notes it came from. If you cannot quote it, leave it out: a blank a person fills beats a guess the customer reads.`;
 
+/** The title the synthetic report carries when the record's summary stands in for call notes. */
+export const SUMMARY_REPORT_TITLE = "Notes on the deal";
+
+/**
+ * A deal with no call notes but a summary — Salesforce puts the
+ * opportunity's notes there — is still worth a reading. The summary goes
+ * to the prompt as one call-notes report, built here and never inserted:
+ * the record stays as it was, and `source_report_ids` stays honest.
+ */
+export function summaryAsReport(account: Account): GongReport | null {
+  const text = account.summary?.trim();
+  if (!text) return null;
+  return {
+    id: "summary",
+    account_id: account.id,
+    report_type: "call_notes",
+    title: SUMMARY_REPORT_TITLE,
+    content_md: text,
+    uploaded_by: null,
+    created_at: account.updated_at ?? account.created_at ?? new Date().toISOString(),
+  };
+}
+
 export function buildBriefUserPrompt(
   account: Account,
   reports: GongReport[],

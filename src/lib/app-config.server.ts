@@ -85,6 +85,12 @@ export type V2Flags = {
    * the new table.
    */
   lifecycle_stage_config: boolean;
+  /**
+   * A SOW upload, pasted call notes or a close (from Salesforce, the API or
+   * the board) queues the AI reading on its own. Off, only "Read again"
+   * on the deal starts one. Default ON: the reading is the point.
+   */
+  ai_auto_read: boolean;
 };
 
 const DEFAULT_FLAGS: V2Flags = {
@@ -116,6 +122,8 @@ const DEFAULT_FLAGS: V2Flags = {
   conversations: false,
   /* Editable post-sale stages — see docs/design/lifecycle-stages.md. */
   lifecycle_stage_config: false,
+  /* The automatic AI reading; see server/ai/jobs.ts. */
+  ai_auto_read: true,
 };
 const CACHE_MS = 60_000;
 

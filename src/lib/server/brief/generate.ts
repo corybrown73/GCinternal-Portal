@@ -281,9 +281,10 @@ async function customerLogoDataUri(
   }
 }
 
-// Synchronous within the request (Vercel route sets maxDuration=300).
-// The LLM call is the long pole; the deck build takes under a second.
-export async function generateBrief(accountId: string, createdBy: string): Promise<Brief> {
+// One model call for the brief and one for the verifier, then the deck
+// build (under a second). The background job runs this as one step;
+// `createdBy` is null then, and the audit row says the system did it.
+export async function generateBrief(accountId: string, createdBy: string | null): Promise<Brief> {
   const admin = createAdminClient();
 
   // Crash recovery: anything stuck "generating" for >10 minutes is dead.
@@ -316,7 +317,14 @@ export async function generateBrief(accountId: string, createdBy: string): Promi
       .order("created_at", { ascending: false })
       .returns<OnboardingNote[]>(),
   ]);
-  if (!reports || reports.length === 0) {
+  // No call notes: the record's summary stands in as one report (never
+  // inserted), or the reviewed notes carry the reading on their own.
+  // Nothing at all is still nothing to read.
+  const { summaryAsReport } = await import("./prompt");
+  const synthetic = reports && reports.length ? null : summaryAsReport(account);
+  const sourceReports: GongReport[] =
+    reports && reports.length ? reports : synthetic ? [synthetic] : [];
+  if (sourceReports.length === 0 && (notes ?? []).length === 0) {
     throw new Error("Add at least one Gong report before generating a brief");
   }
 
@@ -333,7 +341,7 @@ export async function generateBrief(accountId: string, createdBy: string): Promi
       account_id: accountId,
       status: "generating",
       created_by: createdBy,
-      source_report_ids: reports.map((r: GongReport) => r.id),
+      source_report_ids: (reports ?? []).map((r: GongReport) => r.id),
     })
     .select("*")
     .single<Brief>();
@@ -354,7 +362,7 @@ export async function generateBrief(accountId: string, createdBy: string): Promi
       const sowProblem = sow?.problem ? `The SOW was not read: ${sow.problem}` : null;
       const readable = sow && !sow.problem ? sow : null;
       try {
-        json = await generateBriefWithLLM(account, reports, notes ?? [], readable);
+        json = await generateBriefWithLLM(account, sourceReports, notes ?? [], readable);
         if (json) generator = "llm";
         else llmError = "LLM declined or returned unparseable output; used template";
       } catch (e) {
@@ -367,7 +375,10 @@ export async function generateBrief(accountId: string, createdBy: string): Promi
         const { verifyOnboarding } = await import("./verify");
         const onboarding = await verifyOnboarding({
           reading: json.onboarding,
-          callsText: reports.map((r: GongReport) => `${r.title}\n${r.content_md}`).join("\n\n"),
+          callsText: [
+            ...sourceReports.map((r: GongReport) => `${r.title}\n${r.content_md}`),
+            ...(notes ?? []).map((n: OnboardingNote) => n.body_md),
+          ].join("\n\n"),
           sow: readable,
           dealId: accountId,
         });
@@ -375,7 +386,7 @@ export async function generateBrief(accountId: string, createdBy: string): Promi
       }
     }
     if (!json) {
-      json = buildTemplateBrief(account, reports);
+      json = buildTemplateBrief(account, sourceReports);
     }
 
     // The deck IS the Client Kickoff Deck Template: what fills which of its
@@ -429,7 +440,7 @@ export async function generateBrief(accountId: string, createdBy: string): Promi
     if (updateError) throw new Error(updateError.message);
 
     await audit({
-      actor_type: "user",
+      actor_type: createdBy ? "user" : "system",
       actor_id: createdBy,
       action: "brief.generate",
       entity_type: "brief",
