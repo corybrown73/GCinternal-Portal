@@ -18,6 +18,10 @@ const h = vi.hoisted(() => {
     // .range() is called again; the last page is reused once exhausted.
     pages: {} as Record<string, Array<{ data: Row[] | null; error: { message: string } | null }>>,
     calls: {} as Record<string, number>,
+    // Every .order() call made on each table, in call order — so a test can
+    // assert ordering was applied (and with what column/direction) BEFORE
+    // .range() ever ran, not just that range ran.
+    orderCalls: {} as Record<string, Array<{ column: string; ascending: boolean | undefined }>>,
     db: null as any,
   };
 
@@ -35,6 +39,10 @@ const h = vi.hoisted(() => {
         eq: () => builder,
         is: () => builder,
         in: () => builder,
+        order: (column: string, opts?: { ascending?: boolean }) => {
+          (state.orderCalls[table] ??= []).push({ column, ascending: opts?.ascending });
+          return builder;
+        },
         range: async () => nextPage(table),
       };
       return builder;
@@ -59,6 +67,7 @@ beforeEach(() => {
     journey_template_stages: [EMPTY_OK],
   };
   h.calls = {};
+  h.orderCalls = {};
 });
 
 describe("loadStageBackfillPreview — database read errors", () => {
@@ -144,5 +153,60 @@ describe("loadStageBackfillPreview — pagination past PostgREST's default page 
     ];
     await loadStageBackfillPreview();
     expect(h.calls["stage_instances"]).toBe(1);
+  });
+});
+
+describe("loadStageBackfillPreview — deterministic pagination ordering", () => {
+  it("orders every paginated table by its own stable, unique id before paging, not left to an unspecified default", async () => {
+    await loadStageBackfillPreview();
+    for (const table of [
+      "implementations",
+      "implementation_stage_history",
+      "stage_instances",
+      "journey_templates",
+    ]) {
+      expect(h.orderCalls[table]).toEqual([{ column: "id", ascending: true }]);
+    }
+  });
+
+  it("orders journey_template_stages by id too, once templates exist to fetch stages for", async () => {
+    h.pages["journey_templates"] = [
+      {
+        data: [
+          {
+            id: "tpl-1",
+            key: "new-logo",
+            version: 1,
+            name: "New Logo",
+            journey_type: "new_logo",
+            status: "published",
+          },
+        ],
+        error: null,
+      },
+    ];
+    await loadStageBackfillPreview();
+    expect(h.orderCalls["journey_template_stages"]).toEqual([{ column: "id", ascending: true }]);
+  });
+
+  it("re-applies the same order on every page of a multi-page read, not only the first", async () => {
+    const filler = Array.from({ length: PAGE_SIZE }, (_, i) => ({
+      id: `filler-${i}`,
+      name: "Filler",
+      current_stage: "",
+      journey_type: null,
+    }));
+    h.pages["implementations"] = [
+      { data: filler, error: null },
+      { data: [{ id: "impl-2", name: "Co", current_stage: "", journey_type: null }], error: null },
+    ];
+    await loadStageBackfillPreview();
+    expect(h.calls["implementations"]).toBe(2);
+    // .order() is part of the query built fresh each page — called once per
+    // page, with the same column and direction both times.
+    expect(h.orderCalls["implementations"]).toEqual([
+      { column: "id", ascending: true },
+      { column: "id", ascending: true },
+    ]);
   });
 });

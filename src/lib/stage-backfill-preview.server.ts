@@ -27,6 +27,15 @@ const PAGE_SIZE = 1000;
  * named: a failed read becomes a thrown error identifying which query
  * failed, never a silent empty array that reads as "nothing to review".
  *
+ * Every paginated read is also explicitly ordered by its own primary key
+ * (`id`) before `.range()` is applied. Without an explicit, stable order,
+ * Postgres makes no promise that two `.range()` calls against the same
+ * query see the same row order — rows could be skipped or repeated across
+ * pages, which is the one way a paginated read can be even less reliable
+ * than an unpaged one. All five tables read here have a single uuid
+ * primary key, so ordering by that one column is already a total,
+ * tie-free order; none of them needs a composite key to stay deterministic.
+ *
  * Every implementation not superseded is read (not only ones already known
  * to lack stage_instances): classifying "already has rows" vs "none at all"
  * vs "some, but not a clean match" is the pure function's job, from the raw
@@ -54,21 +63,27 @@ export async function loadStageBackfillPreview(): Promise<BackfillCandidate[]> {
       db()
         .from("implementations")
         .select("id, name, current_stage, journey_type")
-        .is("superseded_by_implementation_id", null),
+        .is("superseded_by_implementation_id", null)
+        .order("id", { ascending: true }),
     ),
     fetchAll<StageHistoryRow>("implementation_stage_history", () =>
       db()
         .from("implementation_stage_history")
-        .select("implementation_id, stage, entered_at, exited_at"),
+        .select("id, implementation_id, stage, entered_at, exited_at")
+        .order("id", { ascending: true }),
     ),
     fetchAll<ExistingStageInstanceRow>("stage_instances", () =>
-      db().from("stage_instances").select("implementation_id, stage_key"),
+      db()
+        .from("stage_instances")
+        .select("id, implementation_id, stage_key")
+        .order("id", { ascending: true }),
     ),
     fetchAll<PublishedTemplateRow>("journey_templates", () =>
       db()
         .from("journey_templates")
         .select("id, key, version, name, journey_type, status")
-        .eq("status", "published"),
+        .eq("status", "published")
+        .order("id", { ascending: true }),
     ),
   ]);
 
@@ -77,8 +92,9 @@ export async function loadStageBackfillPreview(): Promise<BackfillCandidate[]> {
     ? await fetchAll<TemplateStageRow>("journey_template_stages", () =>
         db()
           .from("journey_template_stages")
-          .select("template_id, stage_key, name, position")
-          .in("template_id", templateIds),
+          .select("id, template_id, stage_key, name, position")
+          .in("template_id", templateIds)
+          .order("id", { ascending: true }),
       )
     : [];
 
