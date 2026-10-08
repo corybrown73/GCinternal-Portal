@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import { readIntake } from "../intake-answers";
 import { timelineFor } from "../onboarding-plan";
-import { byLabel, customerJourney, journeyOverviewItems } from "../welcome-journey";
+import { shortDay } from "../onboarding-timeline";
+import { byLabel, customerJourney, dueLabel, journeyOverviewItems } from "../welcome-journey";
 
 /**
  * The customer's "where we are": the five stages from the deal's stage,
@@ -336,10 +337,12 @@ describe("the solution ball's accountability fields — explicit source truth on
  * journeyOverviewItems() shapes the active solutions for the compact
  * "status at a glance" band at the top of the Plan. It never collapses
  * several active items into one implied owner, never infers a missing
- * date or person, and leaves finished solutions out entirely.
+ * date or person, keeps a ball's own date and a solution's due date as
+ * distinct fields (never merged), and leaves finished solutions out
+ * entirely.
  */
 describe("journeyOverviewItems — the top-of-plan status overview", () => {
-  it("lists each active solution separately, with its own side, person and date — never one global owner", () => {
+  it("lists each active solution separately, with its own side, person, ball date and due date — never one global owner", () => {
     const j = build("get_it_working", {
       services: [
         {
@@ -348,6 +351,7 @@ describe("journeyOverviewItems — the top-of-plan status overview", () => {
           name: "QuickBooks Online",
           phase: 2,
           tier: 3,
+          due: "2026-10-09",
           ball: { who: "us", person: "Priya Nair", date: "2026-09-25", note: null },
         },
         {
@@ -368,16 +372,20 @@ describe("journeyOverviewItems — the top-of-plan status overview", () => {
         side: "gocanvas",
         person: "Priya Nair",
         blocked: null,
-        date: "2026-09-25",
+        ballDate: "2026-09-25",
+        dueDate: "2026-10-09",
       }),
       expect.objectContaining({
         id: "s2",
         side: "customer",
         person: null,
         blocked: null,
-        date: "2026-10-01",
+        ballDate: null,
+        dueDate: "2026-10-01",
       }),
     ]);
+    // The two are never the same value standing in for each other.
+    expect(items[0]!.ballDate).not.toBe(items[0]!.dueDate);
   });
 
   it("marks explicitly blocked solutions distinctly from ordinary in-progress work, naming which side", () => {
@@ -414,11 +422,32 @@ describe("journeyOverviewItems — the top-of-plan status overview", () => {
     ]);
   });
 
-  it("carries a missing date as null, never inferring one from the generated timeline", () => {
+  it("carries a missing ball date and a missing due date as null, never inferring one from the generated timeline", () => {
     const j = build("get_it_working", {
       services: [{ id: "s1", kind: "integration", name: "QuickBooks Online", phase: 2, tier: 3 }],
     })!; // no due, no ball at all
-    expect(journeyOverviewItems(j.solutions)).toEqual([expect.objectContaining({ date: null })]);
+    expect(journeyOverviewItems(j.solutions)).toEqual([
+      expect.objectContaining({ ballDate: null, dueDate: null }),
+    ]);
+  });
+
+  it("keeps a recorded ball date distinct from a missing due date — a ball date is never shown as a due date", () => {
+    const j = build("get_it_working", {
+      services: [
+        {
+          id: "s1",
+          kind: "integration",
+          name: "QuickBooks Online",
+          phase: 2,
+          tier: 3,
+          // No `due` at all: only the ball carries a date.
+          ball: { who: "us", person: null, date: "2026-09-20", note: null },
+        },
+      ],
+    })!;
+    expect(journeyOverviewItems(j.solutions)).toEqual([
+      expect.objectContaining({ ballDate: "2026-09-20", dueDate: null }),
+    ]);
   });
 
   it("leaves out finished solutions, so a completed item never shows as still active", () => {
@@ -436,5 +465,24 @@ describe("journeyOverviewItems — the top-of-plan status overview", () => {
 
   it("is empty, not fabricated, when there are no solutions at all", () => {
     expect(journeyOverviewItems([])).toEqual([]);
+  });
+});
+
+/**
+ * dueLabel() is the only place a solution's own due date is ever worded as
+ * a due date — it never takes a ball date, and never fabricates one when
+ * none was recorded.
+ */
+describe("dueLabel — wording a due date, and only a due date", () => {
+  it("writes an ISO due date as 'Due <short day>'", () => {
+    expect(dueLabel("2026-10-09")).toBe(`Due ${shortDay("2026-10-09")}`);
+  });
+
+  it("writes a non-ISO due phrase as 'Due <phrase>'", () => {
+    expect(dueLabel("Week 4")).toBe("Due Week 4");
+  });
+
+  it("says the due date is not set, rather than fabricating one, when none was recorded", () => {
+    expect(dueLabel(null)).toBe("Due date not set");
   });
 });

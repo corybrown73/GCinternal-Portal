@@ -75,9 +75,11 @@ export type SolutionBallView = {
 /**
  * One active solution for the compact "status at a glance" overview at the
  * top of the Plan: who currently holds it, the person actually named (never
- * a stand-in), whether it is explicitly blocked, and its actual recorded
- * date. Finished solutions are left out — the overview is about what is
- * still active, not a full history.
+ * a stand-in), whether it is explicitly blocked, and its ball date and due
+ * date kept as separate fields — never merged into one "date", since a ball
+ * date is not a deadline and a due date is not a "waiting since" timestamp.
+ * Finished solutions are left out — the overview is about what is still
+ * active, not a full history.
  */
 export type JourneyOverviewItem = {
   id: string;
@@ -89,8 +91,13 @@ export type JourneyOverviewItem = {
   person: string | null;
   /** Explicitly recorded as blocked, when a ball marks it so — never inferred from status. */
   blocked: "customer" | "internal" | null;
-  /** The ball's own date, else the solution's due date — same safe value as `when`, never a generated timeline position. */
-  date: string | null;
+  /**
+   * The ball's own recorded date, when one exists. Never shown as a due date
+   * or a deadline — a ball date only says when that ball was last set.
+   */
+  ballDate: string | null;
+  /** The solution's own due date — the only field ever labeled as a due date. */
+  dueDate: string | null;
 };
 
 /** The active (not finished) solutions, shaped for the top-of-plan overview. */
@@ -106,8 +113,15 @@ export function journeyOverviewItems(
       side: s.who === "you" ? "customer" : "gocanvas",
       person: s.responsiblePerson,
       blocked: s.blocked,
-      date: s.when,
+      ballDate: s.ballDate,
+      dueDate: s.dueDate,
     }));
+}
+
+/** "Due Oct 9" / "Due Week 4" / "Due date not set" — never used for a ball date. */
+export function dueLabel(due: string | null): string {
+  if (!due) return "Due date not set";
+  return /^\d{4}-\d{2}-\d{2}$/.test(due) ? `Due ${shortDay(due)}` : `Due ${due}`;
 }
 
 export type YourItem = {

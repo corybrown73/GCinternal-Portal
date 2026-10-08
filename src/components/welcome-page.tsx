@@ -31,7 +31,7 @@ import {
 } from "@/lib/onboarding-timeline";
 import { stampDay } from "@/lib/stage-flow";
 import type { HandoffValue } from "@/lib/sales-handoff";
-import { byLabel, journeyOverviewItems } from "@/lib/welcome-journey";
+import { byLabel, dueLabel, journeyOverviewItems } from "@/lib/welcome-journey";
 import { kickoffScreenList } from "@/components/kickoff-view";
 import {
   EditCtx,
@@ -1911,13 +1911,13 @@ function JourneyScreen({
                     </span>{" "}
                     {o.person ?? (o.side === "customer" ? "Your team" : "The GoCanvas team")}
                     {" · "}
-                    {o.date ? byLabel(o.date) : "No date set yet"}
+                    {dueLabel(o.dueDate)}
                   </span>
                 </li>
               ))}
             </ul>
           ) : (
-            <p className="wp-ready-empty">Nothing is actively waiting on either side right now.</p>
+            <p className="wp-ready-empty">No active solution items to show.</p>
           )}
         </div>
       ) : null}
