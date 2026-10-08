@@ -9,9 +9,10 @@ import { STAGE_ALIASES } from "@/lib/lifecycle";
  *
  * It mirrors 0015's own rules on purpose, generalised to any published
  * template rather than hardcoded to "new-logo":
- *   - A stage is proposed only when the implementation's `journey_type`
- *     resolves to exactly one published template (or there is exactly one
- *     published template at all) — never a guess among several.
+ *   - A template is proposed only when the implementation's `journey_type`
+ *     is actually recorded AND resolves to exactly one published template.
+ *     A missing journey_type is never papered over by "there's only one
+ *     published template anyway" — that is still a guess, not evidence.
  *   - `current_stage` must normalise (via the same trim/lowercase/dash and
  *     STAGE_ALIASES 0015 used) to a stage_key the candidate template
  *     actually has. If it does not, the match is withdrawn — "Needs review"
@@ -23,6 +24,12 @@ import { STAGE_ALIASES } from "@/lib/lifecycle";
  *     backfill would write this is exactly that value.
  *   - exited_at is never set for the current or a later stage, and never
  *     invented from entered_at — an open stage stays open.
+ *   - Existing stage_instances rows are compared by their actual stage_key
+ *     set against the candidate template's, not by row count: missing,
+ *     extra, and duplicated keys are named, never averaged into "complete".
+ *   - History that contradicts itself (more than one stage with no
+ *     recorded exit, or a later stage entered before an earlier one) is
+ *     named for manual review — never silently read as a clean match.
  */
 
 export type ImplementationRow = {
@@ -41,6 +48,7 @@ export type StageHistoryRow = {
 
 export type ExistingStageInstanceRow = {
   implementation_id: string;
+  stage_key: string;
 };
 
 export type PublishedTemplateRow = {
@@ -80,6 +88,16 @@ export type TemplateMatch = {
   templateName: string;
 };
 
+/** How the existing stage_instances rows' stage_keys compare to the candidate template's. */
+export type StageKeyMismatch = {
+  /** In the template, not among the existing rows. */
+  missing: string[];
+  /** Among the existing rows, not in the template. */
+  extra: string[];
+  /** A stage_key with more than one existing row — a data problem on its own. */
+  duplicates: string[];
+};
+
 export type BackfillCandidate = {
   implementationId: string;
   implementationName: string;
@@ -89,9 +107,15 @@ export type BackfillCandidate = {
   /** Stage values in current_stage or history that don't normalise to anything known. */
   unsupportedStageKeys: string[];
   existingStageInstanceCount: number;
+  /** The raw stage_key of every existing stage_instances row for this implementation. */
+  existingStageKeys: string[];
   /** The proposed template, or null when none is safely supported by the data. */
   templateMatch: TemplateMatch | null;
-  /** "clean": no existing rows, a single supported template. "partial": some rows already exist. "needs_review": no safe match. */
+  /** Null only when there is no confirmed template to compare existing rows against. */
+  mismatch: StageKeyMismatch | null;
+  /** Contradictions found in implementation_stage_history itself — never silently absorbed. */
+  historyConflicts: string[];
+  /** "clean": no existing rows, a single supported template, no conflicts. "partial": existing rows that don't fully, exactly match. "needs_review": no safe match, or a conflict. */
   status: "clean" | "partial" | "needs_review";
   /** Why, in order found — empty only when status is "clean". */
   reviewReasons: string[];
@@ -112,44 +136,30 @@ function resolveAgainstAliases(normalized: string): string[] {
   return aliased ? [normalized, aliased] : [normalized];
 }
 
-function candidateTemplatesFor(
-  impl: ImplementationRow,
-  templates: readonly PublishedTemplateRow[],
-): PublishedTemplateRow[] {
-  const published = templates.filter((t) => t.status === "published");
-  // No recorded journey_type at all: fall back to "every published
-  // template" so a lone published template still counts as unambiguous.
-  // But a journey_type that IS recorded and matches nothing published is
-  // itself the finding — never silently widened to "any template".
-  return impl.journey_type
-    ? published.filter((t) => t.journey_type === impl.journey_type)
-    : published;
+function historyRowsFor(
+  stageKey: string,
+  implementationId: string,
+  history: readonly StageHistoryRow[],
+): StageHistoryRow[] {
+  return history.filter((h) => {
+    if (h.implementation_id !== implementationId) return false;
+    const normalized = normalizeStageKey(h.stage);
+    if (!normalized) return false;
+    return resolveAgainstAliases(normalized).includes(stageKey);
+  });
 }
 
 function previewStagesFor(
-  template: PublishedTemplateRow,
+  stagesOfTemplate: readonly TemplateStageRow[],
   implementationId: string,
   currentStageKeys: string[],
   history: readonly StageHistoryRow[],
-  templateStages: readonly TemplateStageRow[],
 ): StagePreviewRow[] {
-  const stages = templateStages
-    .filter((s) => s.template_id === template.id)
-    .slice()
-    .sort((a, b) => a.position - b.position);
   const currentPosition =
-    stages.find((s) => currentStageKeys.includes(s.stage_key))?.position ?? -1;
+    stagesOfTemplate.find((s) => currentStageKeys.includes(s.stage_key))?.position ?? -1;
 
-  const historyFor = (stageKey: string) =>
-    history.filter((h) => {
-      if (h.implementation_id !== implementationId) return false;
-      const normalized = normalizeStageKey(h.stage);
-      if (!normalized) return false;
-      return resolveAgainstAliases(normalized).includes(stageKey);
-    });
-
-  return stages.map((s) => {
-    const rows = historyFor(s.stage_key);
+  return stagesOfTemplate.map((s) => {
+    const rows = historyRowsFor(s.stage_key, implementationId, history);
     const enteredAt = rows.length
       ? rows.map((r) => r.entered_at).reduce((min, d) => (d < min ? d : min))
       : null;
@@ -171,6 +181,69 @@ function previewStagesFor(
   });
 }
 
+/** Set comparison, never a count — a count cannot tell "complete" from "wrong rows". */
+function compareExistingStageKeys(existing: string[], templateKeys: string[]): StageKeyMismatch {
+  const missing = templateKeys.filter((k) => !existing.includes(k));
+  const extra = [...new Set(existing)].filter((k) => !templateKeys.includes(k));
+  const seen = new Set<string>();
+  const duplicates = new Set<string>();
+  for (const k of existing) {
+    if (seen.has(k)) duplicates.add(k);
+    seen.add(k);
+  }
+  return { missing, extra, duplicates: [...duplicates] };
+}
+
+/**
+ * Contradictions inside implementation_stage_history itself, for the
+ * matched template's stages: more than one stage recorded with no exit (the
+ * implementation cannot be in two stages at once), or a later stage entered
+ * before an earlier one (recorded out of the template's own order). Named,
+ * not resolved — the timestamps that caused it are left exactly as recorded.
+ */
+function detectHistoryConflicts(
+  stagesOfTemplate: readonly TemplateStageRow[],
+  implementationId: string,
+  history: readonly StageHistoryRow[],
+): string[] {
+  const grouped = stagesOfTemplate
+    .map((s) => ({
+      stageKey: s.stage_key,
+      position: s.position,
+      rows: historyRowsFor(s.stage_key, implementationId, history),
+    }))
+    .filter((g) => g.rows.length > 0);
+
+  const conflicts: string[] = [];
+
+  const stillOpen = grouped.filter((g) => g.rows.some((r) => r.exited_at === null));
+  if (stillOpen.length > 1) {
+    conflicts.push(
+      `more than one stage has a history row with no recorded exit (${stillOpen
+        .map((g) => g.stageKey)
+        .join(", ")}) — an implementation cannot be in two stages at once`,
+    );
+  }
+
+  for (let i = 0; i < grouped.length; i++) {
+    for (let j = i + 1; j < grouped.length; j++) {
+      const earlier = grouped[i]!;
+      const later = grouped[j]!;
+      if (later.position <= earlier.position) continue;
+      const earlierMin = earlier.rows.map((r) => r.entered_at).sort()[0]!;
+      const laterMin = later.rows.map((r) => r.entered_at).sort()[0]!;
+      if (laterMin < earlierMin) {
+        conflicts.push(
+          `"${later.stageKey}" is recorded entered (${laterMin}) before "${earlier.stageKey}" ` +
+            `(${earlierMin}) — out of the template's order`,
+        );
+      }
+    }
+  }
+
+  return conflicts;
+}
+
 /**
  * The preview for one implementation. Pure: every input is already read
  * from the database by the caller — nothing here queries or writes anything.
@@ -183,7 +256,9 @@ export function previewOneImplementation(
   templateStages: readonly TemplateStageRow[],
 ): BackfillCandidate {
   const implHistory = history.filter((h) => h.implementation_id === impl.id);
-  const existingCount = existingInstances.filter((r) => r.implementation_id === impl.id).length;
+  const existingStageKeys = existingInstances
+    .filter((r) => r.implementation_id === impl.id)
+    .map((r) => r.stage_key);
 
   const rawStageValues = [impl.current_stage, ...implHistory.map((h) => h.stage)];
   const unsupportedStageKeys = [...new Set(rawStageValues)].filter(
@@ -196,55 +271,96 @@ export function previewOneImplementation(
     reviewReasons.push(`current_stage "${impl.current_stage}" does not normalise to a stage key`);
   }
 
-  const candidates = candidateTemplatesFor(impl, templates);
   let templateMatch: TemplateMatch | null = null;
   let stagePreview: StagePreviewRow[] = [];
+  let mismatch: StageKeyMismatch | null = null;
+  let historyConflicts: string[] = [];
 
   if (normalizedCurrentStage) {
-    if (candidates.length === 0) {
+    if (!impl.journey_type) {
+      // No evidence to match against — never assigned by elimination, even
+      // when exactly one published template exists.
       reviewReasons.push(
-        impl.journey_type
-          ? `no published template for journey_type "${impl.journey_type}"`
-          : "no journey_type recorded, and no published template exists",
-      );
-    } else if (candidates.length > 1) {
-      reviewReasons.push(
-        `ambiguous: ${candidates.length} published templates match ` +
-          (impl.journey_type
-            ? `journey_type "${impl.journey_type}"`
-            : "with no journey_type to narrow by") +
-          ` (${candidates.map((c) => `${c.key} v${c.version}`).join(", ")})`,
+        "no journey_type recorded — matching a template without it would be a guess, not evidence",
       );
     } else {
-      const only = candidates[0]!;
-      const stageKeys = resolveAgainstAliases(normalizedCurrentStage);
-      const stagesOfTemplate = templateStages.filter((s) => s.template_id === only.id);
-      const hasStage = stagesOfTemplate.some((s) => stageKeys.includes(s.stage_key));
-      if (!hasStage) {
+      const candidates = templates.filter(
+        (t) => t.status === "published" && t.journey_type === impl.journey_type,
+      );
+      if (candidates.length === 0) {
+        reviewReasons.push(`no published template for journey_type "${impl.journey_type}"`);
+      } else if (candidates.length > 1) {
         reviewReasons.push(
-          `current_stage "${impl.current_stage}" (normalised "${normalizedCurrentStage}") is not a stage in ` +
-            `template "${only.key}" v${only.version}`,
+          `ambiguous: ${candidates.length} published templates match journey_type "${impl.journey_type}" ` +
+            `(${candidates.map((c) => `${c.key} v${c.version}`).join(", ")})`,
         );
       } else {
-        templateMatch = {
-          templateId: only.id,
-          templateKey: only.key,
-          templateVersion: only.version,
-          templateName: only.name,
-        };
-        stagePreview = previewStagesFor(only, impl.id, stageKeys, history, templateStages);
+        const only = candidates[0]!;
+        const stageKeys = resolveAgainstAliases(normalizedCurrentStage);
+        const stagesOfTemplate = templateStages
+          .filter((s) => s.template_id === only.id)
+          .slice()
+          .sort((a, b) => a.position - b.position);
+        const hasStage = stagesOfTemplate.some((s) => stageKeys.includes(s.stage_key));
+        if (!hasStage) {
+          reviewReasons.push(
+            `current_stage "${impl.current_stage}" (normalised "${normalizedCurrentStage}") is not a stage in ` +
+              `template "${only.key}" v${only.version}`,
+          );
+        } else {
+          templateMatch = {
+            templateId: only.id,
+            templateKey: only.key,
+            templateVersion: only.version,
+            templateName: only.name,
+          };
+          stagePreview = previewStagesFor(stagesOfTemplate, impl.id, stageKeys, history);
+
+          mismatch = compareExistingStageKeys(
+            existingStageKeys,
+            stagesOfTemplate.map((s) => s.stage_key),
+          );
+          // Zero existing rows is simply "not yet backfilled" (status "clean"
+          // already says so) — not a mismatch worth its own reason. Only
+          // surface this once there IS something recorded that doesn't fit.
+          if (
+            existingStageKeys.length > 0 &&
+            (mismatch.missing.length || mismatch.extra.length || mismatch.duplicates.length)
+          ) {
+            reviewReasons.push(
+              "existing stage_instances rows do not match the template's stage keys: " +
+                [
+                  mismatch.missing.length ? `missing ${mismatch.missing.join(", ")}` : null,
+                  mismatch.extra.length ? `extra ${mismatch.extra.join(", ")}` : null,
+                  mismatch.duplicates.length
+                    ? `duplicated ${mismatch.duplicates.join(", ")}`
+                    : null,
+                ]
+                  .filter((s): s is string => s !== null)
+                  .join("; "),
+            );
+          }
+
+          historyConflicts = detectHistoryConflicts(stagesOfTemplate, impl.id, history);
+          reviewReasons.push(...historyConflicts);
+        }
       }
     }
   }
 
-  if (existingCount > 0) {
+  if (templateMatch === null && existingStageKeys.length > 0) {
     reviewReasons.push(
-      `already has ${existingCount} existing stage_instances row(s) — not a clean, zero-row backfill`,
+      `has ${existingStageKeys.length} existing stage_instances row(s) (${existingStageKeys.join(", ")}) ` +
+        "that could not be checked against a confirmed template",
     );
   }
 
   const status: BackfillCandidate["status"] =
-    templateMatch === null ? "needs_review" : existingCount > 0 ? "partial" : "clean";
+    templateMatch === null || historyConflicts.length > 0
+      ? "needs_review"
+      : existingStageKeys.length === 0
+        ? "clean"
+        : "partial";
 
   return {
     implementationId: impl.id,
@@ -253,8 +369,11 @@ export function previewOneImplementation(
     normalizedCurrentStage,
     historyStageKeys: implHistory.map((h) => h.stage),
     unsupportedStageKeys,
-    existingStageInstanceCount: existingCount,
+    existingStageInstanceCount: existingStageKeys.length,
+    existingStageKeys,
     templateMatch,
+    mismatch,
+    historyConflicts,
     status,
     reviewReasons,
     stagePreview,
@@ -262,10 +381,12 @@ export function previewOneImplementation(
 }
 
 /**
- * Every implementation that is not already fully, cleanly instantiated:
- * zero stage_instances (the main "legacy, never backfilled" case) or some
- * but not a clean match. An implementation already carrying a full,
- * untouched set is left out — there is nothing to preview for it.
+ * Every implementation that is not already fully, cleanly instantiated —
+ * compared by the actual set of stage_keys, never by a row count — or that
+ * has a history conflict worth a human's attention even if the keys do
+ * line up. An implementation whose existing rows exactly match the
+ * template's stage keys, with no conflict, is left out: there is nothing
+ * to preview for it.
  */
 export function previewStageBackfill(input: {
   implementations: readonly ImplementationRow[];
@@ -274,19 +395,24 @@ export function previewStageBackfill(input: {
   templates: readonly PublishedTemplateRow[];
   templateStages: readonly TemplateStageRow[];
 }): BackfillCandidate[] {
-  return (
-    input.implementations
-      .map((impl) =>
-        previewOneImplementation(
-          impl,
-          input.history,
-          input.existingInstances,
-          input.templates,
-          input.templateStages,
-        ),
-      )
-      // Already fully, cleanly instantiated: a confident template match whose
-      // every stage already has a row. Nothing to preview for it.
-      .filter((c) => !(c.templateMatch && c.existingStageInstanceCount >= c.stagePreview.length))
-  );
+  return input.implementations
+    .map((impl) =>
+      previewOneImplementation(
+        impl,
+        input.history,
+        input.existingInstances,
+        input.templates,
+        input.templateStages,
+      ),
+    )
+    .filter((c) => {
+      if (c.historyConflicts.length > 0) return true;
+      if (!c.mismatch) return true;
+      const fullyPopulated =
+        c.mismatch.missing.length === 0 &&
+        c.mismatch.extra.length === 0 &&
+        c.mismatch.duplicates.length === 0 &&
+        c.existingStageKeys.length > 0;
+      return !fullyPopulated;
+    });
 }

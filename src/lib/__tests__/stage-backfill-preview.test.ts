@@ -70,6 +70,10 @@ function impl(over: Partial<ImplementationRow> = {}): ImplementationRow {
   };
 }
 
+function existingRow(stage_key: string): ExistingStageInstanceRow {
+  return { implementation_id: "impl-1", stage_key };
+}
+
 function run(
   i: ImplementationRow,
   history: StageHistoryRow[] = [],
@@ -118,6 +122,12 @@ describe("previewOneImplementation — complete (clean) case", () => {
 
     expect(c.status).toBe("clean");
     expect(c.reviewReasons).toEqual([]);
+    expect(c.historyConflicts).toEqual([]);
+    // Zero existing rows: every template key is technically "missing", but
+    // that is simply "not yet backfilled" — status "clean" already says so,
+    // and it is not surfaced as a reviewReason (see the test below).
+    expect(c.mismatch?.missing).toHaveLength(8);
+    expect(c.mismatch).toMatchObject({ extra: [], duplicates: [] });
     expect(c.templateMatch).toEqual({
       templateId: "tpl-new-logo-v1",
       templateKey: "new-logo",
@@ -151,23 +161,72 @@ describe("previewOneImplementation — complete (clean) case", () => {
   });
 });
 
-describe("previewOneImplementation — partial existing records", () => {
-  it("still proposes the template but flags the implementation as partial, not clean", () => {
-    const existing: ExistingStageInstanceRow[] = [
-      { implementation_id: "impl-1" },
-      { implementation_id: "impl-1" },
-    ];
+describe("previewOneImplementation — existing stage_instances compared by key, never by count", () => {
+  it("flags a MISSING stage key even though the row count looks plausible", () => {
+    // 7 existing rows, one short of the template's 8 — but critically, the
+    // one missing is "build" (the active stage), not an arbitrary one.
+    const existing = NEW_LOGO_STAGES.filter((s) => s.stage_key !== "build").map((s) =>
+      existingRow(s.stage_key),
+    );
     const c = run(impl(), [], existing);
     expect(c.status).toBe("partial");
-    expect(c.templateMatch).not.toBeNull();
-    expect(c.existingStageInstanceCount).toBe(2);
-    expect(c.reviewReasons.some((r) => r.includes("already has 2 existing"))).toBe(true);
+    expect(c.mismatch).toEqual({ missing: ["build"], extra: [], duplicates: [] });
+    expect(c.reviewReasons.some((r) => r.includes("missing build"))).toBe(true);
   });
 
-  it("is left out of the full-list preview once every stage already has a row", () => {
-    const existing: ExistingStageInstanceRow[] = Array.from({ length: 8 }, () => ({
-      implementation_id: "impl-1",
-    }));
+  it("flags an EXTRA stage key that isn't in the template at all", () => {
+    const existing = [
+      ...NEW_LOGO_STAGES.map((s) => existingRow(s.stage_key)),
+      existingRow("some-retired-stage-key"),
+    ];
+    const c = run(impl(), [], existing);
+    expect(c.mismatch?.extra).toEqual(["some-retired-stage-key"]);
+    expect(c.status).toBe("partial");
+    expect(c.reviewReasons.some((r) => r.includes("extra some-retired-stage-key"))).toBe(true);
+  });
+
+  it("flags a DUPLICATED stage key rather than counting it as two legitimate rows", () => {
+    const existing = [
+      ...NEW_LOGO_STAGES.map((s) => existingRow(s.stage_key)),
+      existingRow("build"),
+    ];
+    const c = run(impl(), [], existing);
+    // 9 rows total — the same count a naive "existingCount >= 8" check would
+    // have called "more than fully populated" and silently excluded.
+    expect(c.existingStageInstanceCount).toBe(9);
+    expect(c.mismatch?.duplicates).toEqual(["build"]);
+    expect(c.status).toBe("partial");
+    expect(c.reviewReasons.some((r) => r.includes("duplicated build"))).toBe(true);
+  });
+
+  it("is never excluded from the full-list preview while mismatched, even with 8+ rows", () => {
+    // Exactly 8 rows (matching the template's count), but the wrong set:
+    // every stage except "handoff", plus one extra. A row-count check would
+    // call this "fully populated"; a key-set check must not.
+    const existing = [
+      ...NEW_LOGO_STAGES.filter((s) => s.stage_key !== "handoff").map((s) =>
+        existingRow(s.stage_key),
+      ),
+      existingRow("some-retired-stage-key"),
+    ];
+    const result = previewStageBackfill({
+      implementations: [impl()],
+      history: [],
+      existingInstances: existing,
+      templates: [NEW_LOGO_TEMPLATE],
+      templateStages: NEW_LOGO_STAGES,
+    });
+    expect(result).toHaveLength(1);
+    expect(result[0]!.status).toBe("partial");
+    expect(result[0]!.mismatch).toEqual({
+      missing: ["handoff"],
+      extra: ["some-retired-stage-key"],
+      duplicates: [],
+    });
+  });
+
+  it("is excluded only when the existing keys exactly match the template's, with no duplicates", () => {
+    const existing = NEW_LOGO_STAGES.map((s) => existingRow(s.stage_key));
     const result = previewStageBackfill({
       implementations: [impl()],
       history: [],
@@ -180,7 +239,7 @@ describe("previewOneImplementation — partial existing records", () => {
 });
 
 describe("previewOneImplementation — ambiguous match", () => {
-  it("withdraws the match when two published templates fit, and names both", () => {
+  it("withdraws the match when two published templates fit the same journey_type, and names both", () => {
     const second: PublishedTemplateRow = {
       id: "tpl-new-logo-v2-fork",
       key: "new-logo-fork",
@@ -197,8 +256,23 @@ describe("previewOneImplementation — ambiguous match", () => {
     expect(c.reviewReasons[0]).toContain("new-logo v1");
     expect(c.reviewReasons[0]).toContain("new-logo-fork v1");
   });
+});
 
-  it("is also ambiguous with no recorded journey_type and more than one published template", () => {
+describe("previewOneImplementation — missing journey_type is never guessed", () => {
+  it("does NOT auto-assign the only published template when journey_type is missing", () => {
+    // Exactly one published template exists — the scenario a naive
+    // "no journey_type? fall back to the only published template" rule
+    // would treat as safely unambiguous. It must not be.
+    const c = run(impl({ journey_type: null }), [], [], [NEW_LOGO_TEMPLATE]);
+    expect(c.templateMatch).toBeNull();
+    expect(c.status).toBe("needs_review");
+    expect(c.stagePreview).toEqual([]);
+    expect(c.reviewReasons).toContain(
+      "no journey_type recorded — matching a template without it would be a guess, not evidence",
+    );
+  });
+
+  it("still does not match with no journey_type even if several published templates could narrow to one by elimination", () => {
     const other: PublishedTemplateRow = {
       id: "tpl-other",
       key: "add-on-standard",
@@ -208,9 +282,18 @@ describe("previewOneImplementation — ambiguous match", () => {
       status: "published",
     };
     const c = run(impl({ journey_type: null }), [], [], [NEW_LOGO_TEMPLATE, other]);
-    expect(c.status).toBe("needs_review");
     expect(c.templateMatch).toBeNull();
-    expect(c.reviewReasons[0]).toMatch(/no journey_type to narrow by/);
+    expect(c.status).toBe("needs_review");
+  });
+
+  it("surfaces any existing stage_instances rows for visibility even though no template could be confirmed", () => {
+    const c = run(impl({ journey_type: null }), [], [existingRow("handoff")], [NEW_LOGO_TEMPLATE]);
+    expect(c.templateMatch).toBeNull();
+    expect(c.mismatch).toBeNull(); // nothing to compare against — never fabricated
+    expect(c.existingStageKeys).toEqual(["handoff"]);
+    expect(
+      c.reviewReasons.some((r) => r.includes("1 existing stage_instances row(s) (handoff)")),
+    ).toBe(true);
   });
 });
 
@@ -254,12 +337,6 @@ describe("previewOneImplementation — missing template", () => {
     expect(c.reviewReasons[0]).toBe('no published template for journey_type "data_migration"');
   });
 
-  it("flags when there is no journey_type and no published template at all", () => {
-    const c = run(impl({ journey_type: null }), [], [], []);
-    expect(c.status).toBe("needs_review");
-    expect(c.reviewReasons[0]).toMatch(/no published template exists/);
-  });
-
   it("does not propose a draft or archived template, even if the key would otherwise fit", () => {
     const draft: PublishedTemplateRow = { ...NEW_LOGO_TEMPLATE, status: "draft" };
     const c = run(impl(), [], [], [draft]);
@@ -298,14 +375,121 @@ describe("previewOneImplementation — never invents timestamps", () => {
   });
 });
 
+describe("previewOneImplementation — conflicting history is flagged, never silently clean", () => {
+  it("flags more than one stage recorded with no exit, and keeps both recorded timestamps as-is", () => {
+    const history: StageHistoryRow[] = [
+      {
+        implementation_id: "impl-1",
+        stage: "plan-internal",
+        entered_at: "2026-01-05T00:00:00Z",
+        exited_at: null, // never recorded as exited...
+      },
+      {
+        implementation_id: "impl-1",
+        stage: "build", // ...yet "build" is also open. Cannot both be true.
+        entered_at: "2026-01-12T00:00:00Z",
+        exited_at: null,
+      },
+    ];
+    const c = run(impl({ current_stage: "build" }), history);
+    expect(c.status).toBe("needs_review"); // never "clean" despite an otherwise-fine match
+    expect(c.templateMatch).not.toBeNull(); // the proposal is still shown, for review
+    expect(c.historyConflicts).toHaveLength(1);
+    expect(c.historyConflicts[0]).toMatch(
+      /more than one stage has a history row with no recorded exit/,
+    );
+    expect(c.historyConflicts[0]).toContain("plan-internal");
+    expect(c.historyConflicts[0]).toContain("build");
+    // The real recorded dates are preserved verbatim, not altered or dropped.
+    const planInternal = c.stagePreview.find((s) => s.stageKey === "plan-internal")!;
+    expect(planInternal.enteredAt).toBe("2026-01-05T00:00:00Z");
+    expect(planInternal.exitedAt).toBeNull();
+  });
+
+  it("flags a later stage recorded entered before an earlier one, without inventing a resolution", () => {
+    const history: StageHistoryRow[] = [
+      {
+        implementation_id: "impl-1",
+        stage: "handoff",
+        entered_at: "2026-02-01T00:00:00Z",
+        exited_at: "2026-02-03T00:00:00Z",
+      },
+      {
+        implementation_id: "impl-1",
+        // "build" (a later stage) is recorded as entered BEFORE "handoff" —
+        // contradicts the template's own order.
+        stage: "build",
+        entered_at: "2026-01-10T00:00:00Z",
+        exited_at: null,
+      },
+    ];
+    const c = run(impl({ current_stage: "build" }), history);
+    expect(c.status).toBe("needs_review");
+    expect(c.historyConflicts.some((r) => r.includes('"build" is recorded entered'))).toBe(true);
+    expect(c.historyConflicts.some((r) => r.includes("out of the template's order"))).toBe(true);
+    // Both original timestamps are still exactly what was recorded.
+    const handoff = c.stagePreview.find((s) => s.stageKey === "handoff")!;
+    expect(handoff.enteredAt).toBe("2026-02-01T00:00:00Z");
+    const build = c.stagePreview.find((s) => s.stageKey === "build")!;
+    expect(build.enteredAt).toBe("2026-01-10T00:00:00Z");
+  });
+
+  it("is never excluded from the full-list preview while conflicted, even with a perfectly matching key set", () => {
+    const history: StageHistoryRow[] = [
+      {
+        implementation_id: "impl-1",
+        stage: "plan-internal",
+        entered_at: "2026-01-05T00:00:00Z",
+        exited_at: null,
+      },
+      {
+        implementation_id: "impl-1",
+        stage: "build",
+        entered_at: "2026-01-12T00:00:00Z",
+        exited_at: null,
+      },
+    ];
+    const existing = NEW_LOGO_STAGES.map((s) => existingRow(s.stage_key)); // exact match, would otherwise be excluded
+    const result = previewStageBackfill({
+      implementations: [impl({ current_stage: "build" })],
+      history,
+      existingInstances: existing,
+      templates: [NEW_LOGO_TEMPLATE],
+      templateStages: NEW_LOGO_STAGES,
+    });
+    expect(result).toHaveLength(1);
+    expect(result[0]!.status).toBe("needs_review");
+  });
+
+  it("has no conflicts for ordinary sequential history", () => {
+    const history: StageHistoryRow[] = [
+      {
+        implementation_id: "impl-1",
+        stage: "handoff",
+        entered_at: "2026-01-01T00:00:00Z",
+        exited_at: "2026-01-03T00:00:00Z",
+      },
+      {
+        implementation_id: "impl-1",
+        stage: "build",
+        entered_at: "2026-01-10T00:00:00Z",
+        exited_at: null,
+      },
+    ];
+    const c = run(impl({ current_stage: "build" }), history);
+    expect(c.historyConflicts).toEqual([]);
+    expect(c.status).toBe("clean");
+  });
+});
+
 describe("previewStageBackfill — the full list", () => {
-  it("includes a zero-instance implementation and a partial one, excludes a fully-instantiated one", () => {
+  it("includes a zero-instance implementation and a mismatched one, excludes an exactly-matching one", () => {
     const zero = impl({ id: "impl-zero", name: "Zero Co" });
     const partial = impl({ id: "impl-partial", name: "Partial Co" });
     const full = impl({ id: "impl-full", name: "Full Co" });
     const existing: ExistingStageInstanceRow[] = [
-      { implementation_id: "impl-partial" },
-      ...Array.from({ length: 8 }, () => ({ implementation_id: "impl-full" })),
+      { implementation_id: "impl-partial", stage_key: "handoff" },
+      ...NEW_LOGO_STAGES.map((s) => ({ implementation_id: "impl-full", stage_key: s.stage_key })),
     ];
     const result = previewStageBackfill({
       implementations: [zero, partial, full],
