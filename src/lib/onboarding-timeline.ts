@@ -1579,6 +1579,19 @@ export function daysToValue(t: Timeline): number {
   return businessDaysBetween(t.closeDate, t.liveDate);
 }
 
+/**
+ * Every milestone across the seven-day plan and every service, flattened —
+ * the same set `progress` is counted from. One milestone key appears once:
+ * `integration.milestones` is a reference into `phases`, not a second copy.
+ */
+export function allMilestones(t: Timeline): Milestone[] {
+  return [
+    ...t.milestones,
+    ...t.alongside.flatMap((x) => x.milestones),
+    ...t.phases.flatMap((p) => p.services.flatMap((x) => x.milestones)),
+  ];
+}
+
 /** "Day 4", or "Day 4–5" for a step that spans more than one. */
 export function dayLabel(m: Pick<MilestoneSpec, "day" | "throughDay">): string {
   return m.throughDay && m.throughDay > m.day ? `Day ${m.day}–${m.throughDay}` : `Day ${m.day}`;
