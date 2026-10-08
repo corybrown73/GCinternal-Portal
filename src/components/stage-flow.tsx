@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { ArrowRight, Check, Copy, Lock, Send, UserRoundCheck } from "lucide-react";
 
+import { AdjustPlanDatesPanel } from "@/components/adjust-plan-dates";
 import { FieldFusionGate } from "@/components/field-fusion-gate";
 import { AiSource, ReadingStatus } from "@/components/fill-from-sources";
 import { ImplementationFocusPanel } from "@/components/implementation-focus-panel";
@@ -1001,6 +1002,15 @@ export function CurrentImplementationTab({
       </div>
 
       <ImplementationTargetSection record={record} />
+
+      <AdjustPlanDatesPanel
+        dealId={dealId}
+        implementationId={implementationId}
+        customerId={customerId}
+        intake={intake}
+        closeDate={close.date}
+        editable={editable}
+      />
 
       <section
         className="rounded-md border border-border bg-card px-4 py-3"
