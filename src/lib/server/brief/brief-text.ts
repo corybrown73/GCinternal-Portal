@@ -1,34 +1,24 @@
 import { z as z4 } from "zod/v4";
 
 import { briefJsonSchema, type BriefJson } from "../schemas";
+import { extractJsonObject } from "../ai/json";
+
+export { extractJsonObject };
 
 /**
- * The brief comes back from the model as text that holds one JSON object.
+ * The brief as text that holds one JSON object: the shape the text path
+ * sends when the API cannot compile the brief's schema into a grammar.
  *
  * WHY TEXT AND NOT A GRAMMAR. The brief's shape — two nested objects, a dozen
- * arrays of small records — is too large for the API to compile into a
- * constrained-decoding grammar: every request was rejected with a 400
- * ("The compiled grammar is too large") and the tool fell back to the
- * template brief without saying so. Asking for JSON in prose and validating
- * it with the same zod schema keeps the guarantee that matters (nothing
- * malformed reaches the deck) without the size limit.
+ * arrays of small records — has been too large for the API to compile into a
+ * constrained-decoding grammar ("The compiled grammar is too large"). The
+ * shared client tries the grammar first and falls back to asking for JSON in
+ * prose with this schema in the prompt, validated with the same zod schema,
+ * so nothing malformed reaches the deck either way.
  */
 
 /** The shape, as JSON Schema text, for the system prompt. Computed once. */
 export const BRIEF_SHAPE_JSON = JSON.stringify(z4.toJSONSchema(briefJsonSchema));
-
-/**
- * Pull the one JSON object out of a reply that may wrap it in a code fence or
- * a sentence of preamble. Returns null when there is no object to find.
- */
-export function extractJsonObject(text: string): string | null {
-  const fenced = /```(?:json)?\s*([\s\S]*?)```/i.exec(text);
-  const body = fenced?.[1] ?? text;
-  const start = body.indexOf("{");
-  const end = body.lastIndexOf("}");
-  if (start < 0 || end <= start) return null;
-  return body.slice(start, end + 1);
-}
 
 export type BriefParse = { ok: true; data: BriefJson } | { ok: false; error: string };
 

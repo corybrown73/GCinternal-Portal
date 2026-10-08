@@ -1,4 +1,4 @@
-import { z } from "zod";
+import { z } from "zod/v4";
 
 import { typedDateSchema, type TypedDate } from "./intake-answers";
 import {
@@ -96,6 +96,24 @@ const textList = (max: number) =>
     z.array(z.string()).max(max),
   );
 
+/**
+ * `typedDateSchema` twice over: the intake's is zod v3, and this schema is
+ * zod v4 because the Anthropic helper that turns it into the model's output
+ * grammar reads v4 internals. Same shape, same output type; the preprocess
+ * still filters rows with the intake's own schema.
+ */
+const typedDate = z.object({
+  type: z.enum(["signed", "start", "deadline", "absence"]),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  end: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .nullable()
+    .default(null),
+  who: z.string().trim().max(120).nullable().default(null),
+  quote: z.string().max(300),
+});
+
 export const sowPlanProposalSchema = z.object({
   readable: z.preprocess((v) => (typeof v === "boolean" ? v : true), z.boolean()),
   problem: z.preprocess(looseText(500), z.string().nullable()),
@@ -150,7 +168,7 @@ export const sowPlanProposalSchema = z.object({
       Array.isArray(v)
         ? v.filter((row) => typedDateSchema.safeParse(row).success).slice(0, 20)
         : [],
-    z.array(typedDateSchema).max(20),
+    z.array(typedDate).max(20),
   ),
   /** What the SOW does not say that the plan needs. */
   gaps: textList(20),

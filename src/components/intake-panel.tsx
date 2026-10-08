@@ -8,6 +8,11 @@ import { TemplateCard } from "@/components/template-card";
 import { suggestFormTemplatesFn } from "@/lib/form-templates.functions";
 import type { DealData } from "@/lib/deal-query";
 import {
+  DOCUMENT_UPLOAD_ACCEPT,
+  DOCUMENT_UPLOAD_HINT,
+  documentUploadType,
+} from "@/lib/document-upload";
+import {
   addWantedForm,
   chosenFrom,
   COMPANY_SIZES,
@@ -538,7 +543,7 @@ export function NotesIn({ deal, editable }: { deal: DealData; editable: boolean 
   );
 }
 
-/** A PDF onto the deal: the SOW onto the record, or the contract onto the intake. */
+/** A PDF or Word file onto the deal: the SOW onto the record, or the contract onto the intake. */
 function PdfUpload({
   dealId,
   kind,
@@ -563,7 +568,8 @@ function PdfUpload({
   const [error, setError] = useState<string | null>(null);
   const upload = useMutation({
     mutationFn: async (file: File) => {
-      if (file.type !== "application/pdf") throw new Error("A PDF, please.");
+      const contentType = documentUploadType(file);
+      if (!contentType) throw new Error(DOCUMENT_UPLOAD_HINT);
       const dataBase64 = await new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
         reader.onerror = () => reject(new Error("Could not read that file."));
@@ -573,7 +579,7 @@ function PdfUpload({
       const data = {
         dealId,
         fileName: file.name,
-        contentType: "application/pdf" as const,
+        contentType,
         dataBase64,
       };
       return kind === "sow" ? sow({ data }) : contract({ data });
@@ -618,7 +624,7 @@ function PdfUpload({
           <input
             ref={inputRef}
             type="file"
-            accept="application/pdf"
+            accept={DOCUMENT_UPLOAD_ACCEPT}
             className="hidden"
             onChange={(e) => {
               const f = e.target.files?.[0];

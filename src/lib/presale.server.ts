@@ -607,6 +607,7 @@ export async function pickHelpForDeal(
     intake: current,
     brief,
     notesText,
+    dealId,
   });
   const kept = current.help_picks.filter((p) => p.source === "person");
   const merged = [
@@ -924,15 +925,33 @@ export async function loadDeal(dealId: string): Promise<DealDetail | null> {
 
 /* ---------- the signed SOW ---------- */
 
-/** ~34 MB of base64 is ~25 MB of PDF, the same ceiling account uploads use. */
+/** ~34 MB of base64 is ~25 MB of file, the same ceiling account uploads use. */
 const SOW_MAX_BASE64 = 34_000_000;
+
+/**
+ * The bytes decide what a signed document is. The browser's type is a guess
+ * from the extension, and one dialog once stored a Word file as a PDF that
+ * every reader then choked on. Returns the real content type, or throws a
+ * message naming what was sent.
+ */
+async function sniffSignedDocument(binary: Buffer, what: string): Promise<string> {
+  const { sniffDocumentType } = await import("./server/ai/documents");
+  const real = sniffDocumentType(new Uint8Array(binary));
+  if (!real) {
+    throw new Error(
+      `The ${what} should be a PDF or a Word document (.docx) — this file is neither.`,
+    );
+  }
+  return real;
+}
 
 /**
  * Upload the countersigned SOW against a deal.
  *
- * A FILE, NOT A LINK. What an AE has after close is the PDF; asking them to
- * park it somewhere else first and paste a URL is why the field stayed empty.
- * `sow_document_url` survives for a SOW that genuinely lives in Docusign.
+ * A FILE, NOT A LINK. What an AE has after close is the PDF or the Word
+ * file; asking them to park it somewhere else first and paste a URL is why
+ * the field stayed empty. `sow_document_url` survives for a SOW that
+ * genuinely lives in Docusign.
  *
  * Into the PRIVATE attachments bucket, like every other customer document
  * here. A contract must never sit behind a URL that works for anyone who has
@@ -944,9 +963,6 @@ export async function uploadDealSow(
 ): Promise<{ ok: true; path: string; name: string }> {
   await requireSalesEditor(userId);
 
-  if (args.contentType !== "application/pdf") {
-    throw new Error("The signed SOW should be a PDF");
-  }
   if (args.dataBase64.length > SOW_MAX_BASE64) {
     throw new Error("That file is over 25MB — link to it instead");
   }
@@ -959,12 +975,13 @@ export async function uploadDealSow(
   if (!before) throw new Error("Deal not found");
 
   const binary = Buffer.from(args.dataBase64, "base64");
+  const contentType = await sniffSignedDocument(binary, "signed SOW");
   const safe = args.fileName.replace(/[^A-Za-z0-9._-]+/g, "-").slice(-120) || "sow.pdf";
   const path = `deals/${args.dealId}/${crypto.randomUUID()}-${safe}`;
 
   const { error: upErr } = await db()
     .storage.from("attachments")
-    .upload(path, binary, { contentType: args.contentType, upsert: false });
+    .upload(path, binary, { contentType, upsert: false });
   if (upErr) throw new Error(`Could not upload the SOW: ${upErr.message}`);
 
   const { error } = await db()
@@ -1077,12 +1094,12 @@ export async function addGongReport(
 
 /**
  * The signed contract, beside or instead of a SOW: a three-seat deal has no
- * SOW, but its contract says how many seats and for how long. PDF only,
- * same bucket and same rule as the forms.
+ * SOW, but its contract says how many seats and for how long. A PDF or a
+ * Word file, same bucket and same rule as the SOW.
  */
 export async function uploadDealContract(
   userId: string,
-  args: { dealId: string; fileName: string; dataBase64: string },
+  args: { dealId: string; fileName: string; contentType?: string | undefined; dataBase64: string },
 ): Promise<import("./intake-answers").IntakeAnswers> {
   await requireSalesEditor(userId);
   if (args.dataBase64.length > SOW_MAX_BASE64) throw new Error("That file is over 25MB");
@@ -1094,11 +1111,12 @@ export async function uploadDealContract(
     .maybeSingle();
   if (!before) throw new Error("Deal not found");
   const binary = Buffer.from(args.dataBase64, "base64");
+  const contentType = await sniffSignedDocument(binary, "signed contract");
   const safe = args.fileName.replace(/[^A-Za-z0-9._-]+/g, "-").slice(-120) || "contract.pdf";
   const path = `deals/${args.dealId}/contract/${crypto.randomUUID()}-${safe}`;
   const { error: upErr } = await db()
     .storage.from("attachments")
-    .upload(path, binary, { contentType: "application/pdf", upsert: false });
+    .upload(path, binary, { contentType, upsert: false });
   if (upErr) throw new Error(`Could not upload the contract: ${upErr.message}`);
   const current = readIntake((before as any).intake);
   const next = intakeAnswersSchema.parse({

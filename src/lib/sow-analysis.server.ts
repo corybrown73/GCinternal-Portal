@@ -1,21 +1,15 @@
 // TYPE-only: erased at compile time, so importing it costs nothing at runtime.
-// The SDK itself is ~578 kB and is pulled in dynamically at the one call site
-// below. This module is reached from hub.functions.ts, which defines 48 server
-// functions and is therefore loaded on essentially every request — a static
-// import here made every cold start parse the whole SDK to serve a page that
-// never analyses a SOW.
-import type Anthropic from "@anthropic-ai/sdk";
+// The SDK itself is ~578 kB and is pulled in dynamically by the shared AI
+// client at the one call site below. This module is reached from
+// hub.functions.ts, which defines 48 server functions and is therefore loaded
+// on essentially every request — a static import here made every cold start
+// parse the whole SDK to serve a page that never analyses a SOW.
+import type { BetaContentBlockParam } from "@anthropic-ai/sdk/resources/beta/messages/messages";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { LIFECYCLE_STAGES } from "./lifecycle";
 import { sowAnalysisSchema, type SowAnalysis } from "./sow-analysis";
 
 const ATTACHMENT_BUCKET = "attachments";
-const MODEL = "claude-opus-5";
-
-/** How much of a text SOW we hand to the model — POC scale. */
-const MAX_TEXT_CHARS = 120_000;
-/** ~8 MB of PDF; larger documents are rejected with a clear message. */
-const MAX_FILE_BYTES = 8_000_000;
 
 const db = () => supabaseAdmin as any;
 
@@ -24,11 +18,6 @@ export type SowAnalysisResult = {
   sowPath: string;
   analysis: SowAnalysis;
 };
-
-function extensionOf(name: string) {
-  const m = /\.([A-Za-z0-9]+)$/.exec(name.trim());
-  return m ? m[1]!.toLowerCase() : "";
-}
 
 const SYSTEM_PROMPT = `You read Statements of Work for a B2B SaaS implementation team and return structured JSON only.
 
@@ -57,63 +46,27 @@ Existing lifecycle stage ids: ${LIFECYCLE_STAGES.map((s) => s.id).join(", ")}.
 Return JSON exactly in this shape:
 {"readable":true,"problem":null,"summary":"","extraction":{"objectives":[{"text":"","confidence":"stated","quote":null}],"scope":[],"deliverables":[],"integrations":[],"customerResponsibilities":[],"providerResponsibilities":[],"trainingAndAdoption":[],"acceptanceCriteria":[],"timeline":[],"dependencies":[],"outOfScope":[],"requirements":[],"technicalSolutions":[],"successMeasures":[],"risksAndQuestions":[]},"deliveryWindow":{"statedText":null,"minWeeks":null,"maxWeeks":null,"startDateStated":null,"startCondition":null,"delayConditions":[],"stageTimingProvided":false,"quote":null},"proposedJourney":[{"name":"","lifecycleStage":"handoff","purpose":"","workstreams":[],"dependencies":[],"customerResponsibilities":[],"acceptanceCriteria":[],"timing":{"startWeek":null,"endWeek":null,"statedText":null,"fromSow":false,"rationale":null,"dependencyDriver":null,"parallelWith":[],"insufficientInfo":false},"confidence":"stated"}],"assumptions":[],"gaps":[]}`;
 
-/** Build the user message content from the stored file, by type. */
-async function sowContent(
-  bytes: Uint8Array,
-  fileName: string,
-): Promise<Anthropic.ContentBlockParam[]> {
-  const ext = extensionOf(fileName);
-  const instruction: Anthropic.TextBlockParam = {
-    type: "text",
-    text: "Read this Statement of Work and return the JSON described in the system message. Ground everything in the document.",
-  };
-
-  if (ext === "pdf") {
-    const base64 = Buffer.from(bytes).toString("base64");
-    return [
-      {
-        type: "document",
-        source: { type: "base64", media_type: "application/pdf", data: base64 },
-      },
-      instruction,
-    ];
-  }
-
-  if (["txt", "md", "markdown", "csv", "json", "html", "rtf"].includes(ext) || ext === "") {
-    const text = new TextDecoder().decode(bytes).slice(0, MAX_TEXT_CHARS).trim();
-    if (text.length < 40) {
-      throw new Error("The attached SOW looks empty — there is no readable text to analyse.");
-    }
-    return [{ type: "text", text }, instruction];
-  }
-
-  throw new Error(
-    `The attached SOW is a .${ext} file, which this preview cannot read. Attach the SOW as a PDF or a text file and try again.`,
-  );
-}
-
-function tryParseAnalysis(raw: string): SowAnalysis | null {
-  const cleaned = raw
-    .trim()
-    .replace(/^```(?:json)?/i, "")
-    .replace(/```$/, "")
-    .trim();
-  let json: unknown;
-  try {
-    json = JSON.parse(cleaned);
-  } catch {
-    console.error("[sow-analysis] not json", cleaned.slice(0, 300));
-    return null;
-  }
-  const parsed = sowAnalysisSchema.safeParse(json);
-  if (!parsed.success) {
-    console.error(
-      "[sow-analysis] shape mismatch",
-      JSON.stringify(parsed.error.issues).slice(0, 800),
-    );
-    return null;
-  }
-  return parsed.data;
+/**
+ * Where the implementation's SOW lives. The path column is the handoff's
+ * copy of the deal's upload; the URL column is older and holds either a
+ * storage path or a link into another system. A link cannot be read here.
+ * A storage path is `folder/uuid-name`; anything with a scheme (`https:`,
+ * `mailto:`), a `www.` start or a dotted host before its first slash is a
+ * link somebody pasted.
+ */
+export function storagePathFor(impl: {
+  sow_document_path?: string | null;
+  sow_document_url?: string | null;
+}): { path: string | null; link: string | null } {
+  const path = (impl.sow_document_path as string | null)?.trim();
+  if (path) return { path, link: null };
+  const url = (impl.sow_document_url as string | null)?.trim();
+  if (!url) return { path: null, link: null };
+  const looksLikeLink =
+    /^[a-z][a-z0-9+.-]*:/i.test(url) ||
+    /^www\./i.test(url) ||
+    /^[a-z0-9-]+(\.[a-z0-9-]+)+(\/|$)/i.test(url);
+  return looksLikeLink ? { path: null, link: url } : { path: url, link: null };
 }
 
 /**
@@ -123,80 +76,64 @@ function tryParseAnalysis(raw: string): SowAnalysis | null {
 export async function analyzeSow(implementationId: string): Promise<SowAnalysisResult> {
   const { data: impl, error } = await db()
     .from("implementations")
-    .select("id,sow_document_url,sow_document_name")
+    .select("id,sow_document_path,sow_document_url,sow_document_name,deal_id")
     .eq("id", implementationId)
     .maybeSingle();
   if (error) throw new Error("Could not load the implementation.");
   if (!impl) throw new Error("That implementation no longer exists.");
-  if (!impl.sow_document_url) {
-    throw new Error("No SOW is attached to this implementation yet — attach one first.");
+  const { path, link } = storagePathFor(impl);
+  if (!path) {
+    throw new Error(
+      link
+        ? "The SOW on this implementation is a link to another system, which cannot be read here — attach the file itself."
+        : "No SOW is attached to this implementation yet — attach one first.",
+    );
   }
 
-  const download = await db()
-    .storage.from(ATTACHMENT_BUCKET)
-    .download(impl.sow_document_url as string);
+  const download = await db().storage.from(ATTACHMENT_BUCKET).download(path);
   if (download.error || !download.data) {
     throw new Error("Could not open the attached SOW file.");
   }
-  const bytes = new Uint8Array(await download.data.arrayBuffer());
-  if (bytes.byteLength === 0) {
-    throw new Error("The attached SOW file is empty.");
-  }
-  if (bytes.byteLength > MAX_FILE_BYTES) {
-    throw new Error("The attached SOW is too large for this preview to analyse.");
-  }
 
-  if (!process.env["ANTHROPIC_API_KEY"]) {
+  const { aiConfigured } = await import("./server/ai/config");
+  if (!aiConfigured()) {
     throw new Error("AI analysis is not configured — set ANTHROPIC_API_KEY on the deployment.");
   }
 
-  const content = await sowContent(
-    bytes,
-    (impl.sow_document_name as string | null) ?? (impl.sow_document_url as string),
+  // Sniffed, not judged by the file name: a PDF as a PDF, a Word file as
+  // its text, anything else with a reason a person can act on.
+  const { prepareDocument } = await import("./server/ai/documents");
+  const sow = await prepareDocument(
+    new Uint8Array(await download.data.arrayBuffer()),
+    (impl.sow_document_name as string | null) ?? path.split("/").pop() ?? "the attached SOW",
+    null,
+    { title: "Statement of Work" },
   );
+  if (!sow.block) throw new Error(sow.problem ?? "The attached SOW could not be read.");
 
-  // Loaded here, not at module scope: by this point the request really is a
-  // SOW analysis, so paying for the SDK is warranted.
-  const { default: AnthropicSDK } = await import("@anthropic-ai/sdk");
-  const client = new AnthropicSDK();
-  const requestAnalysis = async (): Promise<string> => {
-    try {
-      const response = await client.messages.create({
-        model: MODEL,
-        max_tokens: 16000,
-        system: SYSTEM_PROMPT,
-        messages: [{ role: "user", content }],
-      });
-      if (response.stop_reason === "refusal") {
-        throw new Error("The model declined to analyse this document.");
-      }
-      return response.content
-        .filter((b): b is Anthropic.TextBlock => b.type === "text")
-        .map((b) => b.text)
-        .join("");
-    } catch (e) {
-      if (e instanceof AnthropicSDK.RateLimitError) {
-        throw new Error("The AI service is busy — try again in a moment.");
-      }
-      if (e instanceof AnthropicSDK.AuthenticationError) {
-        throw new Error("AI analysis is misconfigured: the ANTHROPIC_API_KEY was rejected.");
-      }
-      if (e instanceof AnthropicSDK.APIError) {
-        console.error("[sow-analysis] api error", e.status, e.message);
-        throw new Error("The SOW analysis failed. Nothing has been changed.");
-      }
-      throw e;
-    }
-  };
+  const content: BetaContentBlockParam[] = [
+    sow.block,
+    {
+      type: "text",
+      text: "Read this Statement of Work and return the JSON described in the system message. Ground everything in the document.",
+    },
+  ];
 
-  let analysis = tryParseAnalysis(await requestAnalysis());
-  if (!analysis) {
-    // Models occasionally return a near-miss shape; one clean retry rather than
-    // handing the user a failure they can only fix by clicking again themselves.
-    analysis = tryParseAnalysis(await requestAnalysis());
-  }
-  if (!analysis) {
-    throw new Error("The analysis came back incomplete. Run it again.");
+  const { runStructured, describeAiError } = await import("./server/ai/client");
+  let analysis: SowAnalysis;
+  try {
+    const result = await runStructured({
+      kind: "sow_analysis",
+      schema: sowAnalysisSchema,
+      system: [{ type: "text", text: SYSTEM_PROMPT }],
+      content,
+      maxTokens: 32000,
+      dealId: (impl.deal_id as string | null) ?? null,
+    });
+    analysis = result.data;
+  } catch (e) {
+    console.error("[sow-analysis] the reading failed", e);
+    throw new Error(`${describeAiError(e, "The SOW analysis")} Nothing has been changed.`);
   }
   if (!analysis.readable) {
     throw new Error(
@@ -211,7 +148,7 @@ export async function analyzeSow(implementationId: string): Promise<SowAnalysisR
 
   return {
     sowName: (impl.sow_document_name as string | null) ?? null,
-    sowPath: impl.sow_document_url as string,
+    sowPath: path,
     analysis,
   };
 }

@@ -1,4 +1,4 @@
-import { z } from "zod";
+import { z } from "zod/v4";
 
 /**
  * SOW analysis (POC). One read-only pass over the SOW already attached to an

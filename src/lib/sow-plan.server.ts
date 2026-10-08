@@ -1,4 +1,4 @@
-import type Anthropic from "@anthropic-ai/sdk";
+import type { BetaContentBlockParam } from "@anthropic-ai/sdk/resources/beta/messages/messages";
 
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 
@@ -19,8 +19,6 @@ import {
  */
 
 const BUCKET = "attachments";
-const MODEL = "claude-opus-5";
-const MAX_FILE_BYTES = 8_000_000;
 
 const db = () => supabaseAdmin as any;
 
@@ -47,41 +45,6 @@ ${catalogueForPrompt()}
 Return JSON exactly in this shape:
 {"readable":true,"problem":null,"reference":null,"signed_date":null,"start_date":null,"value":null,"contact":null,"summary":"","first_form":null,"seats":null,"services":[{"kind":"integration","name":"","tier":3,"weeks":null,"phase":2,"needs":null,"evidence":null,"confidence":"stated"}],"notes":[],"gaps":[],"dates":[]}`;
 
-/**
- * The JSON object in the model's text, wherever it sits: a model that
- * reasons first sometimes writes a line before the object or after the
- * closing fence, and a reading that is right must not be thrown away for
- * the sentence around it.
- */
-export function extractJsonObject(raw: string): string {
-  const cleaned = raw
-    .trim()
-    .replace(/^```(?:json)?/i, "")
-    .replace(/```$/, "")
-    .trim();
-  if (cleaned.startsWith("{")) return cleaned;
-  const start = cleaned.indexOf("{");
-  const end = cleaned.lastIndexOf("}");
-  return start >= 0 && end > start ? cleaned.slice(start, end + 1) : cleaned;
-}
-
-function tryParse(raw: string): SowPlanProposal | null {
-  const cleaned = extractJsonObject(raw);
-  let json: unknown;
-  try {
-    json = JSON.parse(cleaned);
-  } catch {
-    console.error("[sow-plan] not json", cleaned.slice(0, 300));
-    return null;
-  }
-  const parsed = sowPlanProposalSchema.safeParse(json);
-  if (!parsed.success) {
-    console.error("[sow-plan] shape mismatch", JSON.stringify(parsed.error.issues).slice(0, 800));
-    return null;
-  }
-  return parsed.data;
-}
-
 export async function proposePlanFromSow(
   userId: string,
   dealId: string,
@@ -97,7 +60,8 @@ export async function proposePlanFromSow(
   if (!deal.sow_document_path) {
     throw new Error("Upload the signed SOW first — the plan is read from that document.");
   }
-  if (!process.env["ANTHROPIC_API_KEY"]) {
+  const { aiConfigured } = await import("./server/ai/config");
+  if (!aiConfigured()) {
     throw new Error("AI reading is not configured here — an admin can check Admin → Integrations.");
   }
 
@@ -105,67 +69,44 @@ export async function proposePlanFromSow(
     .storage.from(BUCKET)
     .download(deal.sow_document_path as string);
   if (download.error || !download.data) throw new Error("Could not open the attached SOW.");
-  const bytes = new Uint8Array(await download.data.arrayBuffer());
-  if (bytes.byteLength === 0) throw new Error("The attached SOW file is empty.");
-  if (bytes.byteLength > MAX_FILE_BYTES) {
-    throw new Error("The attached SOW is too large to read here — under 8MB works.");
-  }
 
-  const content: Anthropic.ContentBlockParam[] = [
-    {
-      type: "document",
-      source: {
-        type: "base64",
-        media_type: "application/pdf",
-        data: Buffer.from(bytes).toString("base64"),
-      },
-    },
+  // Sniffed, not assumed: a Word file is read as text, a PDF as a PDF, and
+  // a file that is neither says why it was not read.
+  const { prepareDocument } = await import("./server/ai/documents");
+  const sow = await prepareDocument(
+    new Uint8Array(await download.data.arrayBuffer()),
+    (deal.sow_document_name as string | null) ?? "the attached SOW",
+    null,
+    { title: "Signed Statement of Work" },
+  );
+  if (!sow.block) throw new Error(sow.problem ?? "The attached SOW could not be read.");
+
+  const content: BetaContentBlockParam[] = [
+    sow.block,
     {
       type: "text",
       text: "Read this Statement of Work and return the JSON described in the system message. Ground every row in the document.",
     },
   ];
 
-  // Loaded here, not at module scope: the SDK is only worth parsing when a
-  // SOW is actually being read.
-  const { default: AnthropicSDK } = await import("@anthropic-ai/sdk");
-  const client = new AnthropicSDK();
-  const ask = async (): Promise<string> => {
-    try {
-      const response = await client.messages.create({
-        model: MODEL,
-        // A SOW is where a service gets mistaken for a form or a phase gets
-        // wrong: room to reason through it is worth the tokens.
-        max_tokens: 16000,
-        thinking: { type: "adaptive" },
-        system: SYSTEM_PROMPT,
-        messages: [{ role: "user", content }],
-      });
-      if (response.stop_reason === "refusal") {
-        throw new Error("The model declined to read this document.");
-      }
-      return response.content
-        .filter((b): b is Anthropic.TextBlock => b.type === "text")
-        .map((b) => b.text)
-        .join("");
-    } catch (e) {
-      if (e instanceof AnthropicSDK.RateLimitError) {
-        throw new Error("The AI service is busy — try again in a moment.");
-      }
-      if (e instanceof AnthropicSDK.AuthenticationError) {
-        throw new Error("AI reading is misconfigured: the ANTHROPIC_API_KEY was rejected.");
-      }
-      if (e instanceof AnthropicSDK.APIError) {
-        console.error("[sow-plan] api error", e.status, e.message);
-        throw new Error("Reading the SOW failed. Nothing has been changed.");
-      }
-      throw e;
-    }
-  };
-
-  let proposal = tryParse(await ask());
-  if (!proposal) proposal = tryParse(await ask());
-  if (!proposal) throw new Error("The reading came back incomplete. Run it again.");
+  const { runStructured, describeAiError } = await import("./server/ai/client");
+  let proposal: SowPlanProposal;
+  try {
+    // A SOW is where a service gets mistaken for a form or a phase gets
+    // wrong: room to reason through it is worth the tokens.
+    const result = await runStructured({
+      kind: "sow_plan",
+      schema: sowPlanProposalSchema,
+      system: [{ type: "text", text: SYSTEM_PROMPT }],
+      content,
+      maxTokens: 32000,
+      dealId,
+    });
+    proposal = result.data;
+  } catch (e) {
+    console.error("[sow-plan] the reading failed", e);
+    throw new Error(`${describeAiError(e, "Reading the SOW")} Nothing has been changed.`);
+  }
   proposal = normalizeProposal(proposal);
   if (!proposal.readable) {
     throw new Error(

@@ -159,10 +159,14 @@ export async function addAccountUpload(args: {
   const binary = Buffer.from(args.dataBase64, "base64");
   const safe = args.fileName.replace(/[^A-Za-z0-9._-]+/g, "-").slice(-120);
   const path = `accounts/${args.implementationId}/${crypto.randomUUID()}-${safe}`;
+  // A PDF or a Word file is stored as what its bytes say, not as the
+  // browser's guess; the readers open it by this type later.
+  const { sniffDocumentType } = await import("./server/ai/documents");
+  const contentType = sniffDocumentType(new Uint8Array(binary)) ?? args.contentType;
 
   const { error: upErr } = await db()
     .storage.from(BUCKET)
-    .upload(path, binary, { contentType: args.contentType, upsert: false });
+    .upload(path, binary, { contentType, upsert: false });
   if (upErr) throw new Error(`Could not upload the file: ${upErr.message}`);
 
   const { data, error } = await db()
@@ -172,7 +176,7 @@ export async function addAccountUpload(args: {
       title: args.title.trim(),
       kind: args.kind,
       storage_path: path,
-      content_type: args.contentType,
+      content_type: contentType,
       size_bytes: binary.byteLength,
       added_by: args.actorProfileId,
     })

@@ -179,18 +179,37 @@ async function loadHandoffContext(
   };
 }
 
-/** The signed SOW's bytes, when one is on file and small enough to read. Never throws. */
-async function sowBytes(admin: SupabaseClient, account: Account): Promise<Uint8Array | null> {
+/**
+ * The signed SOW, when one is on file, sniffed and turned into the block the
+ * model reads: a PDF as a PDF, a Word file as its text. Never throws; a file
+ * that cannot be read, or fetched, comes back with its `problem` so the
+ * brief can say so instead of silently reading the calls alone.
+ */
+export async function sowDocument(
+  admin: Pick<SupabaseClient, "storage">,
+  account: Account,
+): Promise<import("../ai/documents").PreparedDocument | null> {
   const path = (account as any).sow_document_path as string | null | undefined;
   if (!path) return null;
+  const name = ((account as any).sow_document_name as string | null) ?? path.split("/").pop()!;
+  const { prepareDocument, unreadableDocument } = await import("../ai/documents");
   try {
     const { data, error } = await admin.storage.from("attachments").download(path);
-    if (error || !data) return null;
-    const bytes = new Uint8Array(await data.arrayBuffer());
-    return bytes.byteLength > 0 && bytes.byteLength <= 8_000_000 ? bytes : null;
+    if (error || !data) {
+      return unreadableDocument(
+        name,
+        `${name} could not be downloaded from storage${error?.message ? ` (${error.message})` : ""}. Upload it again.`,
+      );
+    }
+    return await prepareDocument(new Uint8Array(await data.arrayBuffer()), name, null, {
+      title: "Signed Statement of Work",
+    });
   } catch (e) {
     console.error("[brief] could not read the SOW; the brief reads the calls alone", e);
-    return null;
+    return unreadableDocument(
+      name,
+      `${name} could not be opened (${e instanceof Error ? e.message : String(e)}).`,
+    );
   }
 }
 
@@ -326,18 +345,22 @@ export async function generateBrief(accountId: string, createdBy: string): Promi
     let llmError: string | null = null;
 
     const { generateBriefWithLLM, llmAvailable } = await import("./llm");
-    const { describeLlmError } = await import("./llm-error");
+    const { describeAiError } = await import("../ai/client");
     if (llmAvailable()) {
       // The SOW is read WITH the calls, so what was sold and how they work
       // come out of one reading instead of two that disagree.
-      const sowPdf = await sowBytes(admin, account);
+      const sow = await sowDocument(admin, account);
+      // A SOW that cannot be read is said so on the brief, not dropped.
+      const sowProblem = sow?.problem ? `The SOW was not read: ${sow.problem}` : null;
+      const readable = sow && !sow.problem ? sow : null;
       try {
-        json = await generateBriefWithLLM(account, reports, notes ?? [], sowPdf);
+        json = await generateBriefWithLLM(account, reports, notes ?? [], readable);
         if (json) generator = "llm";
         else llmError = "LLM declined or returned unparseable output; used template";
       } catch (e) {
-        llmError = describeLlmError(e);
+        llmError = describeAiError(e);
       }
+      if (sowProblem) llmError = [llmError, sowProblem].filter(Boolean).join(" ");
       // Then a second reading checks the onboarding facts against the same
       // sources, and the code rules run on its answer.
       if (json) {
@@ -345,7 +368,8 @@ export async function generateBrief(accountId: string, createdBy: string): Promi
         const onboarding = await verifyOnboarding({
           reading: json.onboarding,
           callsText: reports.map((r: GongReport) => `${r.title}\n${r.content_md}`).join("\n\n"),
-          sowPdf,
+          sow: readable,
+          dealId: accountId,
         });
         json = { ...json, ...(onboarding ? { onboarding } : {}) };
       }

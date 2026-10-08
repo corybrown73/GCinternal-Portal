@@ -12,6 +12,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  DOCUMENT_UPLOAD_ACCEPT,
+  DOCUMENT_UPLOAD_HINT,
+  documentUploadType,
+} from "@/lib/document-upload";
 import { INDUSTRIES } from "@/lib/intake-answers";
 import { mentionsDeviceMagic, mentionsFieldFusion } from "@/lib/intake-prefill";
 import { DEAL_TYPES } from "@/lib/stage-flow";
@@ -126,6 +131,11 @@ export function NewDealDialog() {
       if (arr != null && !Number.isFinite(arr)) {
         throw new Error("ARR must be a number");
       }
+      // Checked before anything is created: a file the server would refuse
+      // used to fail after the account and the notes existed, and pressing
+      // Create again made a second account.
+      const sowType = sow ? documentUploadType(sow) : null;
+      if (sow && !sowType) throw new Error(DOCUMENT_UPLOAD_HINT);
       let dealId: string;
       let result: { account: { id: string } };
       if (existing && draft.customerId) {
@@ -164,7 +174,7 @@ export function NewDealDialog() {
           },
         });
       }
-      if (sow) {
+      if (sow && sowType) {
         setPhase("Uploading the SOW");
         const dataBase64 = await new Promise<string>((resolve, reject) => {
           const reader = new FileReader();
@@ -173,7 +183,12 @@ export function NewDealDialog() {
           reader.readAsDataURL(sow);
         });
         await upload({
-          data: { dealId, fileName: sow.name, contentType: "application/pdf", dataBase64 },
+          data: {
+            dealId,
+            fileName: sow.name,
+            contentType: sowType,
+            dataBase64,
+          },
         });
       }
       // A deal entered in a later stage moves there now, after the notes and
@@ -401,13 +416,13 @@ export function NewDealDialog() {
             </div>
             <div>
               <label className={labelClass} htmlFor="new-deal-sow">
-                Signed SOW (PDF, optional)
+                Signed SOW (PDF or Word, optional)
               </label>
               <input
                 id="new-deal-sow"
                 name="sow"
                 type="file"
-                accept="application/pdf,.pdf"
+                accept={DOCUMENT_UPLOAD_ACCEPT}
                 className="block w-full text-[11px] text-muted-foreground file:mr-2 file:rounded-sm file:border file:border-border file:bg-background file:px-1.5 file:py-0.5 file:text-[11px] file:text-foreground"
                 onChange={(e) => setSow(e.target.files?.[0] ?? null)}
               />

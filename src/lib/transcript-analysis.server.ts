@@ -1,18 +1,13 @@
 // TYPE-only: erased at compile time, so importing it costs nothing at runtime.
-// The SDK itself is ~578 kB and is pulled in dynamically at the one call site
-// below, the same way sow-analysis.server.ts does it — this module is reached
-// from hub.functions.ts, which is loaded on essentially every request.
-import type Anthropic from "@anthropic-ai/sdk";
+// The SDK itself is ~578 kB and is pulled in dynamically by the shared AI
+// client at the one call site below, the same way sow-analysis.server.ts does
+// it — this module is reached from hub.functions.ts, which is loaded on
+// essentially every request.
+import type { BetaContentBlockParam } from "@anthropic-ai/sdk/resources/beta/messages/messages";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { transcriptAnalysisSchema, type TranscriptAnalysis } from "./transcript-analysis";
 
 const ATTACHMENT_BUCKET = "attachments";
-const MODEL = "claude-opus-5";
-
-/** How much of a text transcript we hand to the model — POC scale. */
-const MAX_TEXT_CHARS = 120_000;
-/** ~8 MB of PDF; larger files are rejected with a clear message. */
-const MAX_FILE_BYTES = 8_000_000;
 
 const db = () => supabaseAdmin as any;
 
@@ -20,11 +15,6 @@ export type TranscriptAnalysisResult = {
   attachmentTitle: string | null;
   analysis: TranscriptAnalysis;
 };
-
-function extensionOf(name: string) {
-  const m = /\.([A-Za-z0-9]+)$/.exec(name.trim());
-  return m ? m[1]!.toLowerCase() : "";
-}
 
 const SYSTEM_PROMPT = `You read transcripts of customer implementation meetings for a B2B SaaS delivery team and return structured JSON only.
 
@@ -48,67 +38,6 @@ Rules you must not break:
 Return JSON exactly in this shape:
 {"readable":true,"problem":null,"summary":"","proposals":[{"type":"risk","title":"","text":"","confidence":"stated","quote":""}]}`;
 
-/** Build the user message content from the stored file, by type. */
-async function transcriptContent(
-  bytes: Uint8Array,
-  fileName: string,
-): Promise<Anthropic.ContentBlockParam[]> {
-  const ext = extensionOf(fileName);
-  const instruction: Anthropic.TextBlockParam = {
-    type: "text",
-    text: "Read this meeting transcript and return the JSON described in the system message. Ground every proposal in what was actually said.",
-  };
-
-  if (ext === "pdf") {
-    const base64 = Buffer.from(bytes).toString("base64");
-    return [
-      {
-        type: "document",
-        source: { type: "base64", media_type: "application/pdf", data: base64 },
-      },
-      instruction,
-    ];
-  }
-
-  if (["txt", "md", "markdown", "csv", "json", "html", "vtt", "srt"].includes(ext) || ext === "") {
-    const text = new TextDecoder().decode(bytes).slice(0, MAX_TEXT_CHARS).trim();
-    if (text.length < 40) {
-      throw new Error(
-        "The uploaded transcript looks empty — there is no readable text to analyse.",
-      );
-    }
-    return [{ type: "text", text }, instruction];
-  }
-
-  throw new Error(
-    `The uploaded transcript is a .${ext} file, which this preview cannot read. Attach it as a PDF or a text file (.txt, .vtt, .srt) and try again.`,
-  );
-}
-
-function tryParseAnalysis(raw: string): TranscriptAnalysis | null {
-  const cleaned = raw
-    .trim()
-    .replace(/^```(?:json)?/i, "")
-    .replace(/```$/, "")
-    .trim();
-  let json: unknown;
-  try {
-    json = JSON.parse(cleaned);
-  } catch {
-    console.error("[transcript-analysis] not json", cleaned.slice(0, 300));
-    return null;
-  }
-  const parsed = transcriptAnalysisSchema.safeParse(json);
-  if (!parsed.success) {
-    console.error(
-      "[transcript-analysis] shape mismatch",
-      JSON.stringify(parsed.error.issues).slice(0, 800),
-    );
-    return null;
-  }
-  return parsed.data;
-}
-
 /**
  * Read an uploaded transcript (an `account_files` row already on this
  * implementation) and propose updates. Read-only: nothing is written here.
@@ -119,7 +48,7 @@ export async function analyzeTranscript(
 ): Promise<TranscriptAnalysisResult> {
   const { data: file, error } = await db()
     .from("account_files")
-    .select("id,title,storage_path,implementation_id")
+    .select("id,title,storage_path,implementation_id,content_type")
     .eq("id", attachmentId)
     .maybeSingle();
   if (error) throw new Error("Could not load the transcript.");
@@ -136,62 +65,54 @@ export async function analyzeTranscript(
   if (download.error || !download.data) {
     throw new Error("Could not open the uploaded transcript file.");
   }
-  const bytes = new Uint8Array(await download.data.arrayBuffer());
-  if (bytes.byteLength === 0) {
-    throw new Error("The uploaded transcript file is empty.");
-  }
-  if (bytes.byteLength > MAX_FILE_BYTES) {
-    throw new Error("That transcript is too large for this preview to analyse.");
-  }
 
-  if (!process.env["ANTHROPIC_API_KEY"]) {
+  const { aiConfigured } = await import("./server/ai/config");
+  if (!aiConfigured()) {
     throw new Error("AI analysis is not configured — set ANTHROPIC_API_KEY on the deployment.");
   }
 
-  const content = await transcriptContent(bytes, (file.title as string | null) ?? "transcript");
-
-  // Loaded here, not at module scope: by this point the request really is a
-  // transcript analysis, so paying for the SDK is warranted.
-  const { default: AnthropicSDK } = await import("@anthropic-ai/sdk");
-  const client = new AnthropicSDK();
-  const requestAnalysis = async (): Promise<string> => {
-    try {
-      const response = await client.messages.create({
-        model: MODEL,
-        max_tokens: 8000,
-        system: SYSTEM_PROMPT,
-        messages: [{ role: "user", content }],
-      });
-      if (response.stop_reason === "refusal") {
-        throw new Error("The model declined to analyse this transcript.");
-      }
-      return response.content
-        .filter((b): b is Anthropic.TextBlock => b.type === "text")
-        .map((b) => b.text)
-        .join("");
-    } catch (e) {
-      if (e instanceof AnthropicSDK.RateLimitError) {
-        throw new Error("The AI service is busy — try again in a moment.");
-      }
-      if (e instanceof AnthropicSDK.AuthenticationError) {
-        throw new Error("AI analysis is misconfigured: the ANTHROPIC_API_KEY was rejected.");
-      }
-      if (e instanceof AnthropicSDK.APIError) {
-        console.error("[transcript-analysis] api error", e.status, e.message);
-        throw new Error("The transcript analysis failed. Nothing has been changed.");
-      }
-      throw e;
-    }
-  };
-
-  let analysis = tryParseAnalysis(await requestAnalysis());
-  if (!analysis) {
-    // One clean retry for an occasional near-miss shape, rather than handing
-    // the user a failure only fixable by clicking the same button again.
-    analysis = tryParseAnalysis(await requestAnalysis());
+  // A .vtt, a .docx export from the meeting tool, a PDF: the bytes decide,
+  // and a file that cannot be read says why.
+  const { prepareDocument } = await import("./server/ai/documents");
+  const transcript = await prepareDocument(
+    new Uint8Array(await download.data.arrayBuffer()),
+    (file.title as string | null) ?? (file.storage_path as string).split("/").pop() ?? "transcript",
+    (file.content_type as string | null) ?? null,
+    { title: "Meeting transcript" },
+  );
+  if (!transcript.block) {
+    throw new Error(transcript.problem ?? "The uploaded transcript could not be read.");
   }
-  if (!analysis) {
-    throw new Error("The analysis came back incomplete. Run it again.");
+
+  const content: BetaContentBlockParam[] = [
+    transcript.block,
+    {
+      type: "text",
+      text: "Read this meeting transcript and return the JSON described in the system message. Ground every proposal in what was actually said.",
+    },
+  ];
+
+  const { data: impl } = await db()
+    .from("implementations")
+    .select("deal_id")
+    .eq("id", implementationId)
+    .maybeSingle();
+
+  const { runStructured, describeAiError } = await import("./server/ai/client");
+  let analysis: TranscriptAnalysis;
+  try {
+    const result = await runStructured({
+      kind: "transcript",
+      schema: transcriptAnalysisSchema,
+      system: [{ type: "text", text: SYSTEM_PROMPT }],
+      content,
+      maxTokens: 16000,
+      dealId: (impl?.deal_id as string | null) ?? null,
+    });
+    analysis = result.data;
+  } catch (e) {
+    console.error("[transcript-analysis] the reading failed", e);
+    throw new Error(`${describeAiError(e, "The transcript analysis")} Nothing has been changed.`);
   }
   if (!analysis.readable) {
     throw new Error(analysis.problem ?? "That file could not be read as a meeting transcript.");

@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
+import { DOCUMENT_UPLOAD_TYPES } from "./document-upload";
 import { implementationFocusPatchSchema, timelinePatchSchema } from "./intake-patch";
 import { EDITABLE_DEAL_FIELDS, type EditableDealField } from "./presale-fields";
 
@@ -124,11 +125,11 @@ export const uploadSow = createServerFn({ method: "POST" })
       .object({
         dealId: z.string().uuid(),
         fileName: z.string().trim().min(1).max(200),
-        // PDF only. A signed contract is a PDF, and accepting anything else
-        // means accepting a document format that can carry script from a
-        // signed URL on our own origin.
-        contentType: z.literal("application/pdf"),
-        /** ~34 MB of base64 is ~25 MB of PDF. */
+        // A PDF or a Word file. Nothing that can carry script from a signed
+        // URL on our own origin; the server sniffs the bytes and refuses
+        // anything that is not what it says it is.
+        contentType: z.enum(DOCUMENT_UPLOAD_TYPES),
+        /** ~34 MB of base64 is ~25 MB of file. */
         dataBase64: z.string().min(1).max(34_000_000),
       })
       .parse(data),
@@ -594,7 +595,7 @@ export const uploadIntakeForm = createServerFn({ method: "POST" })
     return uploadDealIntakeForm(context.profile.id, data);
   });
 
-/** The signed contract, PDF only, onto the intake. Beside or instead of a SOW. */
+/** The signed contract, a PDF or Word file, onto the intake. Beside or instead of a SOW. */
 export const uploadContract = createServerFn({ method: "POST" })
   .middleware([requireDealEditor])
   .inputValidator((data: unknown) =>
@@ -602,7 +603,7 @@ export const uploadContract = createServerFn({ method: "POST" })
       .object({
         dealId: z.string().uuid(),
         fileName: z.string().trim().min(1).max(200),
-        contentType: z.literal("application/pdf"),
+        contentType: z.enum(DOCUMENT_UPLOAD_TYPES),
         dataBase64: z.string().min(1).max(34_000_000),
       })
       .parse(data),
@@ -612,6 +613,7 @@ export const uploadContract = createServerFn({ method: "POST" })
     return uploadDealContract(context.profile.id, {
       dealId: data.dealId,
       fileName: data.fileName,
+      contentType: data.contentType,
       dataBase64: data.dataBase64,
     });
   });

@@ -5,6 +5,7 @@ import { ChevronDown, ChevronRight, Sparkles, Upload } from "lucide-react";
 
 import { fileToBase64, MAX_ATTACHMENT_BYTES, textToBase64 } from "@/lib/attachment-client";
 import { uploadAttachment } from "@/lib/attachments.functions";
+import { documentUploadType } from "@/lib/document-upload";
 import type { TeamOption } from "@/components/owner-picker";
 import {
   addEvidence,
@@ -203,7 +204,7 @@ export function TranscriptUpdatePanel({
           throw new Error("That file is too large for this preview — keep it under 4.5 MB.");
         }
         fileName = picked.name;
-        contentType = picked.type || "application/octet-stream";
+        contentType = documentUploadType(picked) ?? (picked.type || "application/octet-stream");
         dataBase64 = await fileToBase64(picked);
       }
 
@@ -472,7 +473,7 @@ export function TranscriptUpdatePanel({
             <div className="flex flex-wrap items-center gap-2">
               <input
                 type="file"
-                accept=".txt,.md,.vtt,.srt,.pdf"
+                accept=".txt,.md,.vtt,.srt,.pdf,.docx"
                 disabled={run.isPending}
                 onChange={(e) => setFile(e.target.files?.[0] ?? null)}
                 className={cn(

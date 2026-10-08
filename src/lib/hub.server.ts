@@ -2819,9 +2819,13 @@ export async function storeAttachment(args: {
   const binary = Buffer.from(args.dataBase64, "base64");
   const safe = args.fileName.replace(/[^A-Za-z0-9._-]+/g, "-").slice(-120);
   const path = `${args.folder}/${crypto.randomUUID()}-${safe}`;
+  // The bytes say whether this is a PDF or a Word file; the browser's type
+  // is kept only for everything else.
+  const { sniffDocumentType } = await import("./server/ai/documents");
+  const contentType = sniffDocumentType(new Uint8Array(binary)) ?? args.contentType;
   const { error } = await db()
     .storage.from(ATTACHMENT_BUCKET)
-    .upload(path, binary, { contentType: args.contentType, upsert: false });
+    .upload(path, binary, { contentType, upsert: false });
   if (error) throw new Error(`Could not upload the file: ${error.message}`);
   return { path, name: args.fileName };
 }
