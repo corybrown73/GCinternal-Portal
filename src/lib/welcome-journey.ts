@@ -72,6 +72,44 @@ export type SolutionBallView = {
   dueDate: string | null;
 };
 
+/**
+ * One active solution for the compact "status at a glance" overview at the
+ * top of the Plan: who currently holds it, the person actually named (never
+ * a stand-in), whether it is explicitly blocked, and its actual recorded
+ * date. Finished solutions are left out — the overview is about what is
+ * still active, not a full history.
+ */
+export type JourneyOverviewItem = {
+  id: string;
+  name: string;
+  kind: string;
+  /** Which side currently holds the ball. */
+  side: "gocanvas" | "customer";
+  /** The explicitly-recorded responsible person, when one exists — never a stand-in. */
+  person: string | null;
+  /** Explicitly recorded as blocked, when a ball marks it so — never inferred from status. */
+  blocked: "customer" | "internal" | null;
+  /** The ball's own date, else the solution's due date — same safe value as `when`, never a generated timeline position. */
+  date: string | null;
+};
+
+/** The active (not finished) solutions, shaped for the top-of-plan overview. */
+export function journeyOverviewItems(
+  solutions: ReadonlyArray<SolutionBallView>,
+): JourneyOverviewItem[] {
+  return solutions
+    .filter((s) => s.who !== "done")
+    .map((s) => ({
+      id: s.id,
+      name: s.name,
+      kind: s.kind,
+      side: s.who === "you" ? "customer" : "gocanvas",
+      person: s.responsiblePerson,
+      blocked: s.blocked,
+      date: s.when,
+    }));
+}
+
 export type YourItem = {
   what: string;
   /** ISO date when dated, else a short phrase ("Week 4") or null. */

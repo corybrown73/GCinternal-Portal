@@ -4149,6 +4149,10 @@ body.gc-presenting {
   background: #e4f3e4;
   color: var(--wp-green);
 }
+.gc-welcome .wp-ball.is-blocked {
+  background: #fbe9e6;
+  color: #b23b2e;
+}
 
 /* ---- kickoff view: visual recovery — small, named additions, reusing the
    same tokens, Frame and journey/rail/good-cta primitives the Plan screens

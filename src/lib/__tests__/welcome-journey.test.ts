@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { readIntake } from "../intake-answers";
 import { timelineFor } from "../onboarding-plan";
-import { byLabel, customerJourney } from "../welcome-journey";
+import { byLabel, customerJourney, journeyOverviewItems } from "../welcome-journey";
 
 /**
  * The customer's "where we are": the five stages from the deal's stage,
@@ -329,5 +329,112 @@ describe("the solution ball's accountability fields — explicit source truth on
     for (const k of ["responsiblePerson", "blocked", "ballDate", "dueDate"]) {
       expect(keys).toContain(k);
     }
+  });
+});
+
+/**
+ * journeyOverviewItems() shapes the active solutions for the compact
+ * "status at a glance" band at the top of the Plan. It never collapses
+ * several active items into one implied owner, never infers a missing
+ * date or person, and leaves finished solutions out entirely.
+ */
+describe("journeyOverviewItems — the top-of-plan status overview", () => {
+  it("lists each active solution separately, with its own side, person and date — never one global owner", () => {
+    const j = build("get_it_working", {
+      services: [
+        {
+          id: "s1",
+          kind: "integration",
+          name: "QuickBooks Online",
+          phase: 2,
+          tier: 3,
+          ball: { who: "us", person: "Priya Nair", date: "2026-09-25", note: null },
+        },
+        {
+          id: "s2",
+          kind: "custom_pdf",
+          name: "Daily job report PDF",
+          phase: 2,
+          tier: 1,
+          due: "2026-10-01",
+          ball: { who: "customer", person: null, date: null, note: null },
+        },
+      ],
+    })!;
+    const items = journeyOverviewItems(j.solutions);
+    expect(items).toEqual([
+      expect.objectContaining({
+        id: "s1",
+        side: "gocanvas",
+        person: "Priya Nair",
+        blocked: null,
+        date: "2026-09-25",
+      }),
+      expect.objectContaining({
+        id: "s2",
+        side: "customer",
+        person: null,
+        blocked: null,
+        date: "2026-10-01",
+      }),
+    ]);
+  });
+
+  it("marks explicitly blocked solutions distinctly from ordinary in-progress work, naming which side", () => {
+    const j = build("get_it_working", {
+      services: [
+        {
+          id: "s1",
+          kind: "integration",
+          name: "QuickBooks Online",
+          phase: 2,
+          tier: 3,
+          ball: { who: "blocked_customer", person: null, date: null, note: "Waiting on API keys" },
+        },
+        {
+          id: "s2",
+          kind: "custom_pdf",
+          name: "Daily job report PDF",
+          phase: 2,
+          tier: 1,
+          ball: { who: "blocked_internal", person: "Priya Nair", date: null, note: null },
+        },
+      ],
+    })!;
+    const items = journeyOverviewItems(j.solutions);
+    expect(items[0]).toMatchObject({ id: "s1", blocked: "customer" });
+    expect(items[1]).toMatchObject({ id: "s2", blocked: "internal" });
+  });
+
+  it("labels the responsible side when no person is named, never inventing one", () => {
+    const j = build("get_it_working")!; // default fixture: no ball recorded
+    const items = journeyOverviewItems(j.solutions);
+    expect(items).toEqual([
+      expect.objectContaining({ side: "gocanvas", person: null, blocked: null }),
+    ]);
+  });
+
+  it("carries a missing date as null, never inferring one from the generated timeline", () => {
+    const j = build("get_it_working", {
+      services: [{ id: "s1", kind: "integration", name: "QuickBooks Online", phase: 2, tier: 3 }],
+    })!; // no due, no ball at all
+    expect(journeyOverviewItems(j.solutions)).toEqual([expect.objectContaining({ date: null })]);
+  });
+
+  it("leaves out finished solutions, so a completed item never shows as still active", () => {
+    const j = build("make_it_run", {
+      completed: {
+        "s1:kickoff": "2026-09-20",
+        "s1:build": "2026-09-28",
+        "s1:review": "2026-10-01",
+        "s1:live": "2026-10-02",
+      },
+    })!;
+    expect(j.solutions[0]!.who).toBe("done"); // sanity: the source solution is finished
+    expect(journeyOverviewItems(j.solutions)).toEqual([]);
+  });
+
+  it("is empty, not fabricated, when there are no solutions at all", () => {
+    expect(journeyOverviewItems([])).toEqual([]);
   });
 });
