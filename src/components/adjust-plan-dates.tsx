@@ -3,13 +3,23 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { ChevronRight } from "lucide-react";
 
+import { TIER_REASON_CODES, type TargetReasonCode } from "@/lib/complexity-tiers";
 import { addJournalEntry } from "@/lib/hub.functions";
 import type { IntakeAnswers } from "@/lib/intake-answers";
 import { timelineFor } from "@/lib/onboarding-plan";
-import { saveIntake } from "@/lib/presale.functions";
+import { saveIntake, setTargetGraduationDate } from "@/lib/presale.functions";
 import { cn } from "@/lib/utils";
 
 const ISO_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * Deal closing is a historical sales event (closeDateFor() — the day the
+ * deal entered Closed Won, or a person's stated close date on the intake),
+ * not an implementation date. The plan anchors every other milestone from
+ * it; moving it is a different operation (intake.timeline.close_date) and
+ * not one this panel offers.
+ */
+const NOT_ADJUSTABLE_HERE = new Set(["close"]);
 
 /**
  * "Adjust plan dates": move one plan milestone by hand and preview the
@@ -39,6 +49,19 @@ const ISO_RE = /^\d{4}-\d{2}-\d{2}$/;
  * reason is written before the timeline save, so a failure to record the
  * reason stops the date change before it happens, and a date that did
  * change is always one a reason was successfully recorded for.
+ *
+ * A second, separate option — "Change target graduation date" — sets
+ * `implementations.target_date` directly, the field `ImplementationTargetSection`
+ * shows as "Target graduation" and the one the Customers list reads. This is
+ * a different date from any plan milestone: `syncTargetLaunch()` normally
+ * keeps it in step with the plan's own computed end, which is exactly the
+ * "silently overwrite" this panel must not do to a date someone just set on
+ * purpose. It reuses the same storage and history `syncTargetLaunch()` and
+ * `explainTargetChange()` already write to — `target_date_changes`, with its
+ * existing reason-code vocabulary (`TIER_REASON_CODES`) — except the reason
+ * is given in the same action that makes the change, which
+ * `targetOverrideHolds()` (complexity-tiers.ts) reads as "hold this, don't
+ * recompute it" the next time any plan milestone saves.
  */
 export function AdjustPlanDatesPanel({
   dealId,
@@ -46,6 +69,7 @@ export function AdjustPlanDatesPanel({
   customerId,
   intake,
   closeDate,
+  targetDate,
   editable,
 }: {
   dealId: string;
@@ -53,19 +77,28 @@ export function AdjustPlanDatesPanel({
   customerId: string;
   intake: IntakeAnswers;
   closeDate: string;
+  /** `record.implementation.dates.target` — the current target graduation date. */
+  targetDate: string | null;
   editable: boolean;
 }) {
   const qc = useQueryClient();
   const save = useServerFn(saveIntake);
   const addNote = useServerFn(addJournalEntry);
+  const setTarget = useServerFn(setTargetGraduationDate);
   const [open, setOpen] = useState(false);
   const [milestoneKey, setMilestoneKey] = useState("");
   const [newDate, setNewDate] = useState("");
   const [reason, setReason] = useState("");
   const [error, setError] = useState<string | null>(null);
 
+  const [targetOpen, setTargetOpen] = useState(false);
+  const [targetNewDate, setTargetNewDate] = useState("");
+  const [targetReasonCode, setTargetReasonCode] = useState<TargetReasonCode | "">("");
+  const [targetNote, setTargetNote] = useState("");
+  const [targetError, setTargetError] = useState<string | null>(null);
+
   const current = timelineFor(intake, closeDate);
-  const pickable = current.milestones.filter((m) => !m.doneOn);
+  const pickable = current.milestones.filter((m) => !m.doneOn && !NOT_ADJUSTABLE_HERE.has(m.key));
   const selected = pickable.find((m) => m.key === milestoneKey) ?? null;
 
   const previewIntake: IntakeAnswers | null =
@@ -133,6 +166,40 @@ export function AdjustPlanDatesPanel({
       setReason("");
     },
     onError: (e) => setError(e instanceof Error ? e.message : "Could not save the change."),
+  });
+
+  const targetValid =
+    editable &&
+    ISO_RE.test(targetNewDate) &&
+    targetNewDate !== targetDate &&
+    targetReasonCode !== "";
+
+  const targetMutation = useMutation({
+    mutationFn: async () => {
+      if (!ISO_RE.test(targetNewDate)) throw new Error("Pick a date.");
+      if (targetReasonCode === "") throw new Error("A reason is required.");
+      // One call, same as explainTargetChange(): the date and its reason are
+      // written together, which is exactly what tells this override apart
+      // from a plan-driven shift later explained — see targetOverrideHolds().
+      return setTarget({
+        data: {
+          implementationId,
+          date: targetNewDate,
+          reasonCode: targetReasonCode,
+          note: targetNote.trim() || null,
+        } as never,
+      });
+    },
+    onMutate: () => setTargetError(null),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["deal", dealId] });
+      void qc.invalidateQueries({ queryKey: ["customer360", customerId] });
+      setTargetOpen(false);
+      setTargetNewDate("");
+      setTargetReasonCode("");
+      setTargetNote("");
+    },
+    onError: (e) => setTargetError(e instanceof Error ? e.message : "Could not save the change."),
   });
 
   return (
@@ -248,6 +315,96 @@ export function AdjustPlanDatesPanel({
               </div>
             </>
           )}
+
+          <div className="border-t border-border pt-2.5">
+            <button
+              type="button"
+              onClick={() => setTargetOpen((v) => !v)}
+              aria-expanded={targetOpen}
+              className="flex items-center gap-1.5 text-[12px] font-semibold"
+            >
+              <ChevronRight
+                className={cn("h-3.5 w-3.5 text-muted-foreground", targetOpen && "rotate-90")}
+              />
+              Change target graduation date
+            </button>
+            {targetOpen ? (
+              <div className="mt-2 space-y-2.5">
+                <p className="text-[11px] text-muted-foreground">
+                  Sets the target directly — a different change from moving a plan milestone above.
+                  Once given a reason here, this date holds until changed again; it will not be
+                  quietly replaced the next time a milestone above moves.
+                </p>
+                <div className="flex flex-wrap items-end gap-2">
+                  <label className="text-[11px] text-muted-foreground">
+                    New target date
+                    <input
+                      type="date"
+                      className="mt-0.5 block h-8 rounded-sm border border-border bg-background px-2 text-[12px] text-foreground"
+                      value={targetNewDate}
+                      disabled={!editable || targetMutation.isPending}
+                      onChange={(e) => setTargetNewDate(e.target.value)}
+                    />
+                  </label>
+                  <label className="text-[11px] text-muted-foreground">
+                    Reason
+                    <select
+                      className="mt-0.5 block h-8 min-w-[16rem] rounded-sm border border-border bg-background px-2 text-[12px] text-foreground"
+                      value={targetReasonCode}
+                      disabled={!editable || targetMutation.isPending}
+                      onChange={(e) => setTargetReasonCode(e.target.value as TargetReasonCode)}
+                    >
+                      <option value="">Choose one…</option>
+                      {TIER_REASON_CODES.map((r) => (
+                        <option key={r.code} value={r.code}>
+                          {r.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+
+                <label className="block text-[11px] text-muted-foreground">
+                  Note (optional)
+                  <textarea
+                    className="mt-0.5 block w-full rounded-sm border border-border bg-background px-2 py-1.5 text-[12px] text-foreground"
+                    rows={2}
+                    maxLength={500}
+                    value={targetNote}
+                    disabled={!editable || targetMutation.isPending}
+                    onChange={(e) => setTargetNote(e.target.value)}
+                    placeholder="A line on why, for the record."
+                  />
+                </label>
+
+                {ISO_RE.test(targetNewDate) ? (
+                  <p className="rounded-sm border border-border px-3 py-1.5 text-[12px]">
+                    <span className="text-muted-foreground">Previous: </span>
+                    {targetDate ?? "Not set"}
+                    <span className="mx-1.5 text-muted-foreground">
+                      <ChevronRight className="inline h-3 w-3" />
+                    </span>
+                    <span className="text-muted-foreground">Proposed: </span>
+                    {targetNewDate}
+                  </p>
+                ) : null}
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    className="inline-flex h-8 items-center rounded-sm bg-primary px-3 text-[12px] font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+                    disabled={!targetValid || targetMutation.isPending}
+                    onClick={() => targetMutation.mutate()}
+                  >
+                    {targetMutation.isPending ? "Saving…" : "Save the target date"}
+                  </button>
+                  {targetError ? (
+                    <p className="text-[12px] text-destructive">{targetError}</p>
+                  ) : null}
+                </div>
+              </div>
+            ) : null}
+          </div>
         </div>
       ) : null}
     </section>
