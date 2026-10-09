@@ -1019,11 +1019,12 @@ export function stageFlow(input: StageFlowInput): StageFlow {
   const graduationBrief: FlowTask = {
     key: "graduation_brief",
     label: "Upload the post-implementation brief",
-    hint: "The summary that goes with the account to Customer Success.",
+    hint: "Attach a brief if one is needed for the Customer Success handoff.",
     done: Boolean(input.hasGraduationBrief),
     summary: input.hasGraduationBrief ? "Attached" : null,
     action: "upload_brief",
     locked: null,
+    optional: true,
   };
   const completeTasks = [graduationBrief, ...ob.complete];
   // Without the plan the middle stages have no tasks to judge; they are not
