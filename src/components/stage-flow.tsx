@@ -28,6 +28,7 @@ import { reasonLabel } from "@/lib/complexity-tiers";
 import { deriveHealth } from "@/lib/customer360-derive";
 import { dealQuery, type DealData } from "@/lib/deal-query";
 import type { Customer360 } from "@/lib/hub-types";
+import { HEALTH_LABEL } from "@/lib/leadership";
 import {
   firstFormName,
   flowAnswered,
@@ -953,6 +954,11 @@ export function CurrentImplementationTab({
       ? { sharedAt: welcome.data.sharedAt ?? null, openedAt: welcome.data.openedAt ?? null }
       : null,
   });
+  // Same computation ImplementationTargetSection's StatusDot already makes —
+  // read again here so the status row below can say WHY, not just show the
+  // colour. No new rule: deriveHealth() already carries a `reason` for every
+  // level; this is the one place that was discarding it.
+  const health = record.implementation ? deriveHealth(record, record.implementation) : null;
 
   const canonicalStages = flow.stages.filter((s) => CANONICAL_JOURNEY_KEYS.includes(s.key));
   const currentInCanon =
@@ -1054,6 +1060,35 @@ export function CurrentImplementationTab({
             </span>
           </span>
         </div>
+        {/* UAT: the row above named a count and a status word with nowhere
+            to see what either actually meant. Both lines below are already
+            computed — deriveHealth()'s own `reason`, every workspaceFor()
+            `waiting` entry's `who` — just not read until now. */}
+        {health && health.level !== "on_track" ? (
+          <p className="mt-1.5 border-t border-border pt-1.5 text-[11px] text-muted-foreground">
+            <span className="font-medium text-foreground">
+              Why {HEALTH_LABEL[health.level].toLowerCase()}:
+            </span>{" "}
+            {health.reason ?? "No specific reason recorded"}
+          </p>
+        ) : null}
+        {ws.waiting.length > 1 ? (
+          <ul
+            className={cn(
+              "mt-1 space-y-0.5 text-[11px] text-muted-foreground",
+              !(health && health.level !== "on_track") && "border-t border-border pt-1.5",
+            )}
+          >
+            {ws.waiting.map((w, i) => (
+              <li key={i}>
+                <span className="font-medium text-foreground">
+                  {w.who === "customer" ? "Customer" : "GoCanvas"}:
+                </span>{" "}
+                {w.what}
+              </li>
+            ))}
+          </ul>
+        ) : null}
       </section>
 
       <section
