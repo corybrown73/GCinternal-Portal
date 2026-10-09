@@ -6,10 +6,10 @@ import tsconfigPaths from "vite-tsconfig-paths";
 import { nitro } from "nitro/vite";
 import { readFileSync } from "node:fs";
 
-// vercel.json is the one list of schedules. This app deploys through the
-// Build Output API, and Vercel reads crons from .vercel/output/config.json,
-// not from vercel.json — so the list is handed to the Vercel preset, which
-// writes it there. Without this no cron runs in production at all.
+// vercel-crons.json is the one list of schedules. This app deploys through
+// the Build Output API, so the list is handed to the Vercel preset, which
+// writes it into .vercel/output/config.json. Declaring the same crons in
+// vercel.json as well makes Vercel refuse the deployment.
 const crons = JSON.parse(
   readFileSync(new URL("./vercel-crons.json", import.meta.url), "utf8"),
 ) as Array<{ path: string; schedule: string }>;
