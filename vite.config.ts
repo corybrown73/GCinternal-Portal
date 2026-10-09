@@ -4,17 +4,6 @@ import viteReact from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import tsconfigPaths from "vite-tsconfig-paths";
 import { nitro } from "nitro/vite";
-import { readFileSync } from "node:fs";
-
-// vercel.json is the one list of schedules. This app deploys through the
-// Build Output API, and Vercel reads crons from .vercel/output/config.json,
-// not from vercel.json — so the list is handed to the Vercel preset, which
-// writes it there. Without this no cron runs in production at all.
-const crons = (
-  JSON.parse(readFileSync(new URL("./vercel.json", import.meta.url), "utf8")) as {
-    crons?: Array<{ path: string; schedule: string }>;
-  }
-).crons;
 
 export default defineConfig({
   plugins: [
@@ -25,10 +14,7 @@ export default defineConfig({
     // Deploy target: Vercel (Build Output API). `npm run build` emits .vercel/output.
     // Five minutes: one "Fill in the rest" reads the calls and the SOW,
     // checks the reading, and picks the help articles — three model calls.
-    nitro({
-      preset: "vercel",
-      vercel: { functions: { maxDuration: 300 }, config: { version: 3, crons: crons ?? [] } },
-    }),
+    nitro({ preset: "vercel", vercel: { functions: { maxDuration: 300 } } }),
   ],
   resolve: {
     // One copy of React/TanStack across app + linked deps.

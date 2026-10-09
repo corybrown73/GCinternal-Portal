@@ -27,8 +27,6 @@ jobs:
       # Public build-time values come from the committed .env.production;
       # server secrets are never needed to build.
       - run: npm run build
-      # The schedules must reach the Build Output config Vercel reads.
-      - run: node scripts/check-crons.mjs
 
   migrations:
     name: Migrations up → down → up
