@@ -122,6 +122,36 @@ export const moveDealStage = createServerFn({ method: "POST" })
     return transitionDeal(context.userId, data.dealId, data.toStage, data.note, data.force);
   });
 
+/**
+ * A TIS moving straight to Graduation, skipping whatever stages are still
+ * open — Current Implementation's own "Skip to Graduation" action, not
+ * `moveDealStage`'s generic forced move. That one keeps requiring a manager
+ * (deliberately — it also covers the Closed Won gate and every other forced
+ * move on the board); this one is scoped to exactly one target stage and one
+ * caller, so the deal's own editor can use it on their own implementation.
+ * The reason is mandatory, unlike moveDealStage's optional note, and reaches
+ * transitionDeal()'s existing force path unchanged — same RPC, same
+ * audit, same stage-transition history, same journey mirror.
+ */
+export const moveToGraduation = createServerFn({ method: "POST" })
+  .middleware([requireDealEditor])
+  .inputValidator((data: unknown) =>
+    z
+      .object({
+        dealId: z.string().uuid(),
+        reason: z
+          .string()
+          .trim()
+          .min(1, "Say why the remaining stages are being skipped")
+          .max(2000),
+      })
+      .parse(data),
+  )
+  .handler(async ({ data, context }) => {
+    const { transitionDeal } = await import("./presale.server");
+    return transitionDeal(context.userId, data.dealId, "onboarding_complete", data.reason, true);
+  });
+
 export const uploadSow = createServerFn({ method: "POST" })
   .middleware([requireDealEditor])
   .inputValidator((data: unknown) =>

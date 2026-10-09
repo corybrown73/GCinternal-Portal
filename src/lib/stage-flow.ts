@@ -218,7 +218,8 @@ export type TaskAction =
   | "process_call"
   | "solution"
   | "tick"
-  | "graduate";
+  | "graduate"
+  | "upload_brief";
 
 export type FlowTask = {
   key: string;
@@ -254,7 +255,18 @@ export type StageFlowInput = {
   hasLink: boolean;
   /** The plan, for the Onboarding stage's tasks. Optional: the server does not need it. */
   timeline?: Timeline | null;
+  /**
+   * The post-implementation brief is attached (an account_files row titled
+   * GRADUATION_BRIEF_TITLE) — read by the caller, which has the attachments
+   * query; this module stays pure. Optional: callers that never render the
+   * Graduate stage (the digest, the board) do not need to check.
+   */
+  hasGraduationBrief?: boolean;
 };
+
+/** The exact, fixed title the Graduation task's upload looks for — never a
+ * title a person types, so "is it attached" never depends on word choice. */
+export const GRADUATION_BRIEF_TITLE = "Post-implementation brief";
 
 export type StageFlow = {
   /** Where the deal is, in the checklist's terms. Null before Closed Won. */
@@ -1000,6 +1012,20 @@ export function stageFlow(input: StageFlowInput): StageFlow {
   const cw = closedWonTasks(a, input, closed || current === "negotiate");
   const pk = preKickoffTasks(a);
   const ob = tasksByStage(a, input.timeline);
+  // The one Graduation task this module cannot compute itself — whether the
+  // brief is attached lives in account_files, which this pure function never
+  // reads. First in the stage: the brief is written reviewing the whole
+  // engagement, before the close-out and the graduation checks below it.
+  const graduationBrief: FlowTask = {
+    key: "graduation_brief",
+    label: "Upload the post-implementation brief",
+    hint: "The summary that goes with the account to Customer Success.",
+    done: Boolean(input.hasGraduationBrief),
+    summary: input.hasGraduationBrief ? "Attached" : null,
+    action: "upload_brief",
+    locked: null,
+  };
+  const completeTasks = [graduationBrief, ...ob.complete];
   // Without the plan the middle stages have no tasks to judge; they are not
   // passed through on that account.
   const hasPlan = Boolean(input.timeline);
@@ -1079,7 +1105,7 @@ export function stageFlow(input: StageFlowInput): StageFlow {
     {
       key: "complete",
       label: flowLabel("complete"),
-      tasks: ob.complete,
+      tasks: completeTasks,
       done: current === "complete" && a.outcome !== null,
     },
   ];
