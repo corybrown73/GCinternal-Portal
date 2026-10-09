@@ -40,7 +40,13 @@ import {
   type IntakeAnswers,
 } from "@/lib/intake-answers";
 import { closeDateFor, timelineFor } from "@/lib/onboarding-plan";
-import { coreWindowEnd, dayCounter, localIso, shortDay } from "@/lib/onboarding-timeline";
+import {
+  coreWindowEnd,
+  dayCounter,
+  localIso,
+  shortDay,
+  type Timeline,
+} from "@/lib/onboarding-timeline";
 import { getHandover, saveHandoverRecord } from "@/lib/hygiene.functions";
 import { getParkingLot } from "@/lib/parking-lot.functions";
 import { getWelcome } from "@/lib/welcome.functions";
@@ -64,6 +70,7 @@ import {
   flowLabel,
   GRADUATION_BRIEF_TITLE,
   isWorkingStageKey,
+  journeyStageDate,
   KICKOFF_CADENCE,
   latestStageTransition,
   PREP_ITEMS,
@@ -1160,6 +1167,9 @@ export function CurrentImplementationTab({
               setViewing(k === currentInCanon ? null : k);
               setManual(null);
             }}
+            history={deal.stage_history}
+            timeline={timeline}
+            outcomeAt={intake.outcome?.at ?? null}
           />
           {editable && currentInCanon !== null && currentInCanon !== "complete" ? (
             <div className="flex items-center justify-end border-b border-border px-4 py-1.5">
@@ -1411,11 +1421,22 @@ function Stepper({
   current,
   shown,
   onShow,
+  history,
+  timeline,
+  outcomeAt,
 }: {
   stages: ReturnType<typeof stageFlow>["stages"];
   current: FlowStageKey | null;
   shown: FlowStageKey;
   onShow: (k: FlowStageKey) => void;
+  /**
+   * Only the canonical journey (Current Implementation) passes these: the
+   * rail's other caller shows Closed Won's own non-canonical stages, which
+   * `journeyStageDate` was not built to date.
+   */
+  history?: DealData["stage_history"];
+  timeline?: Timeline | null;
+  outcomeAt?: string | null;
 }) {
   const at = stages.findIndex((s) => s.key === current);
   return (
@@ -1429,6 +1450,19 @@ function Stepper({
         // got the same green checkmark as a finished one. `s.done` is the
         // one fact that actually says which; skipped stays visibly distinct.
         const skipped = past && !s.done;
+        // `s.done` decides completed over position: Implementation Complete
+        // can be both "current" (nothing comes after it) and done once it
+        // has an outcome, and that's a completed date, not a target.
+        const status = skipped
+          ? "skipped"
+          : s.done
+            ? "completed"
+            : isCurrent
+              ? "current"
+              : "upcoming";
+        const date = history
+          ? journeyStageDate(s.key, status, history, timeline ?? null, outcomeAt ?? null)
+          : null;
         return (
           <li key={s.key} className="flex items-center gap-1">
             <button
@@ -1453,6 +1487,11 @@ function Stepper({
                 <Check className="h-3 w-3" strokeWidth={3} />
               ) : null}
               {s.label}
+              {date ? (
+                <span className="font-normal opacity-75">
+                  · {date.label} {date.text}
+                </span>
+              ) : null}
             </button>
             {i < stages.length - 1 ? (
               <ArrowRight className="h-3 w-3 text-muted-foreground" />

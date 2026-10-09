@@ -190,6 +190,47 @@ export function latestStageTransition<T extends { to_stage: string; occurred_at:
 }
 
 /**
+ * The one date Current Implementation's journey rail shows per canonical
+ * stage, reusing the same sources StageTiming already reads — never a
+ * stored per-stage field, never invented:
+ *
+ *   completed  when the deal actually moved past it — the next stage's own
+ *              transition row, the same record StageHistory reads, so a
+ *              scheduled call never passes for the stage's real close.
+ *              Complete has no next stage to read, so it reads the
+ *              operating model's own finish stamp (`intake.outcome.at`)
+ *              instead.
+ *   current    the plan's own target for it (stageTargetDate) — "Target".
+ *   upcoming   the same plan date, ahead of it — "Planned".
+ *   skipped    none: its badge already says "Skipped".
+ *
+ * Null whenever the source it would read does not exist (no transition
+ * recorded yet, or the plan has no milestone to date that stage) — the
+ * caller shows nothing rather than guess.
+ */
+export function journeyStageDate(
+  key: FlowStageKey,
+  status: "completed" | "current" | "upcoming" | "skipped",
+  history: readonly { to_stage: string; occurred_at: string }[],
+  timeline: Timeline | null,
+  outcomeAt: string | null,
+): { label: string; text: string } | null {
+  if (status === "skipped") return null;
+  if (status === "completed") {
+    if (key === "complete") {
+      return outcomeAt ? { label: "Completed", text: stampDay(outcomeAt) } : null;
+    }
+    const nextKey = CANONICAL_JOURNEY_KEYS[CANONICAL_JOURNEY_KEYS.indexOf(key) + 1];
+    const nextStage = nextKey ? FLOW_STAGES.find((s) => s.key === nextKey)?.stage : undefined;
+    const t = latestStageTransition(history, nextStage);
+    return t ? { label: "Completed", text: stampDay(t.occurred_at) } : null;
+  }
+  const target = stageTargetDate(key, timeline);
+  if (!target) return null;
+  return { label: status === "current" ? "Target" : "Planned", text: shortDay(target) };
+}
+
+/**
  * Whether the implementation's target has moved from its agreed baseline —
  * the trigger for showing "Target changed". False whenever either date is
  * unknown: a baseline that was never locked is not a disagreement.
