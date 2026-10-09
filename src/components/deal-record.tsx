@@ -63,6 +63,7 @@ import { Working } from "@/components/working";
 import type { EditableDealField } from "@/lib/presale-fields";
 import { parseWonGate, type WonGateMissing } from "@/lib/won-gate";
 import { ClosedWonGateNotice } from "@/components/closed-won-gate";
+import { liveWonGateMissing } from "@/lib/deal-entry";
 import type { AccountStage } from "@/lib/presale-stages";
 import { cn } from "@/lib/utils";
 
@@ -95,11 +96,14 @@ function StageControl({
   stage,
   stages,
   editable,
+  gateFacts,
 }: {
   dealId: string;
   stage: string;
   stages: readonly PipelineStage[];
   editable: boolean;
+  /** What the record holds now, so a refusal's notice clears once the piece is added. */
+  gateFacts: { reports: number; sowPath: string | null; sowReference: string | null };
 }) {
   const move = useServerFn(moveDealStage);
   const queryClient = useQueryClient();
@@ -148,10 +152,10 @@ function StageControl({
           ))}
       </select>
       {error ? <span className="mt-0.5 text-[11px] text-destructive">{error}</span> : null}
-      {gate ? (
+      {gate && liveWonGateMissing(gate.missing, gateFacts).length ? (
         <span className="mt-1 block">
           <ClosedWonGateNotice
-            missing={gate.missing}
+            missing={liveWonGateMissing(gate.missing, gateFacts)}
             dealId={dealId}
             toStage={gate.toStage}
             canForce={canManage(profile?.role)}
@@ -412,6 +416,11 @@ export function DealRecord({ deal, embedded = false }: { deal: DealData; embedde
                       stage={account.stage}
                       stages={deal.stages}
                       editable={canManage(profile?.role)}
+                      gateFacts={{
+                        reports: deal.gong_reports.length,
+                        sowPath: account.sow_document_path,
+                        sowReference: account.sow_reference,
+                      }}
                     />
                     {!(counter && onPlan) ? (
                       <span className="font-mono text-[11px] text-muted-foreground">
@@ -822,6 +831,9 @@ function SowDocument({ deal, editable }: { deal: DealData; editable: boolean }) 
     },
     onSuccess: async () => {
       setError(null);
+      // The deal feeds the Closed Won notice; the welcome page reads the SOW too.
+      void qc.invalidateQueries({ queryKey: ["welcome", account.id] });
+      void qc.invalidateQueries({ queryKey: ["pipeline"] });
       await qc.invalidateQueries({ queryKey: ["deal", account.id] });
     },
     onError: (e: unknown) => setError(e instanceof Error ? e.message : "Upload failed."),

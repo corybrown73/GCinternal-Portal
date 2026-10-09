@@ -651,6 +651,138 @@ export const FORM_LIBRARY_SEED: Record<string, FormLibraryEntry[]> = {
       tags: ["incident", "photos", "insurance"],
     },
   ],
+
+  Electrical: [
+    {
+      name: "Electrical Service Work Order",
+      description:
+        "The call from arrival to sign-off: the problem reported, what was found, circuits and devices worked on, parts and hours, photos of the panel before and after, and the customer's signature.",
+      tags: ["work order", "photos", "signature", "parts"],
+    },
+    {
+      name: "Lockout / Tagout (LOTO) Verification",
+      description:
+        "Each energy source isolated, locked and tagged, with the zero-energy test recorded and every worker's lock listed before anyone touches a conductor. Signed again when the locks come off.",
+      tags: ["safety", "LOTO", "signature", "OSHA"],
+    },
+    {
+      name: "Panel / Switchgear Inspection",
+      description:
+        "Condition of the enclosure, breakers, labelling, clearances and terminations, with thermal readings where taken and photos of anything out of spec flagged for repair.",
+      tags: ["inspection", "readings", "photos", "NFPA 70B"],
+    },
+    {
+      name: "Job Safety Analysis (JSA)",
+      description:
+        "The day's task broken into steps with the shock, arc-flash and fall hazards named and the control for each, signed by the crew before work starts.",
+      tags: ["safety", "pre-task", "arc flash", "signature"],
+    },
+    {
+      name: "Inspection Readiness Checklist",
+      description:
+        "Everything the authority having jurisdiction will look at — grounding, bonding, box fill, GFCI and AFCI protection, labelling — checked and photographed before the inspector arrives.",
+      tags: ["inspection", "permit", "photos", "code"],
+    },
+  ],
+
+  "Pest Control": [
+    {
+      name: "Service Report",
+      description:
+        "What was treated, where, with which product and how much, target pests, conditions found and advice left for the customer, signed on site. The record the customer and the regulator both ask for.",
+      tags: ["service", "chemical use", "signature", "photos"],
+    },
+    {
+      name: "Bait Station / Device Check",
+      description:
+        "Every station on the site map: activity found, bait consumed or replaced, device condition and barcode scanned, so the trend per station shows where the pressure is.",
+      tags: ["monitoring", "barcode", "trend", "devices"],
+    },
+    {
+      name: "Wood-Destroying Insect Inspection",
+      description:
+        "Evidence of termites and other wood-destroying insects, damage found, conducive conditions and areas not accessible, with photos. The report a home sale waits on.",
+      tags: ["inspection", "termite", "photos", "real estate"],
+    },
+    {
+      name: "Pesticide Application Record",
+      description:
+        "Product, EPA registration number, rate, amount applied, site and weather at application, and the licensed applicator's ID. Kept for the state's record-keeping rules.",
+      tags: ["compliance", "chemical use", "EPA", "license"],
+    },
+    {
+      name: "Commercial Audit Walkthrough",
+      description:
+        "A food plant or restaurant walked against the audit standard: sanitation, exclusion, harbourage and pest evidence by area, with photos and corrective actions assigned to the client.",
+      tags: ["audit", "food safety", "photos", "corrective action"],
+    },
+  ],
+
+  "Water/Wastewater": [
+    {
+      name: "Daily Plant Rounds",
+      description:
+        "The operator's walk through the plant: flows, levels, chemical feed rates, pump hours and alarms, with readings against their limits so anything drifting is caught on the shift.",
+      tags: ["daily", "readings", "operations", "alarms"],
+    },
+    {
+      name: "Lift Station Inspection",
+      description:
+        "Wet well level, pump run times and amps, floats, generator and alarm test, odour and housekeeping, with photos of anything that needs a work order.",
+      tags: ["inspection", "lift station", "readings", "photos"],
+    },
+    {
+      name: "Sample Collection / Chain of Custody",
+      description:
+        "Sample point, time, method, preservation and who held it at every hand-off, so a compliance result stands up when the permit report is filed.",
+      tags: ["sampling", "chain of custody", "compliance", "lab"],
+    },
+    {
+      name: "Hydrant / Valve Exercise",
+      description:
+        "Each hydrant flushed or valve turned: location, turns, condition, flow and pressure readings, and repairs needed, mapped so the next round starts where this one stopped.",
+      tags: ["distribution", "GPS", "readings", "maintenance"],
+    },
+    {
+      name: "Septic System Inspection",
+      description:
+        "Tank level, baffles, effluent filter, distribution box and drain field condition, with the pump-out volume and photos. The report a transfer or a permit needs.",
+      tags: ["septic", "inspection", "photos", "permit"],
+    },
+  ],
+
+  "Education/Government": [
+    {
+      name: "Facility Work Order",
+      description:
+        "A request from a school or municipal building through to completion: the problem, the trade, time and parts, photos before and after, and the site contact's sign-off.",
+      tags: ["work order", "photos", "signature", "facilities"],
+    },
+    {
+      name: "Playground / Park Safety Inspection",
+      description:
+        "Equipment, surfacing, fencing and signage checked against the safety standard, with photos and anything unsafe closed off and assigned the same day.",
+      tags: ["inspection", "safety", "photos", "corrective action"],
+    },
+    {
+      name: "Fire & Life Safety Walkthrough",
+      description:
+        "Extinguishers, exits, emergency lighting, alarms and fire doors building by building, with dates tested and deficiencies listed for the fire marshal's visit.",
+      tags: ["fire", "inspection", "compliance", "photos"],
+    },
+    {
+      name: "Code Enforcement Inspection",
+      description:
+        "The property, the violation observed, the code section, photos and the notice given, with the follow-up date. One record per case the clerk's office can stand behind.",
+      tags: ["code", "inspection", "photos", "notice"],
+    },
+    {
+      name: "Fleet Vehicle Inspection",
+      description:
+        "Pre-trip check of a bus or municipal vehicle — brakes, lights, tyres, emergency equipment — with defects reported and the unit held out of service until a mechanic signs it off.",
+      tags: ["fleet", "daily", "safety", "DVIR"],
+    },
+  ],
 };
 
 /** Every entry as a flat list, with its industry. */

@@ -391,7 +391,7 @@ function closedWonTasks(
       action: "assign",
       // Sales brings the TIS in before the close: from Negotiate & Finalize
       // on. A bare Prospect has nobody to bring in yet.
-      locked: assignable ? null : "Assigned at Negotiate & Finalize or Closed Won",
+      locked: assignable ? null : "Move the deal to Negotiate & Finalize to bring the TIS in",
     },
     {
       key: "notes",

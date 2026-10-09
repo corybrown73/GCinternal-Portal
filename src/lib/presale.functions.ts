@@ -76,6 +76,8 @@ export const addDeal = createServerFn({ method: "POST" })
         stage: z.enum(STAGES).optional(),
         /** The team member being covered for: the deal is theirs from the start. */
         coverFor: z.string().uuid().optional(),
+        /** The AE (sales owner). */
+        amOwnerId: z.string().uuid().nullable().optional(),
       })
       .parse(data),
   )
@@ -91,7 +93,55 @@ export const addDeal = createServerFn({ method: "POST" })
       industry: data.industry ?? null,
       stage: data.stage ?? null,
       coverForTeamMemberId: data.coverFor ?? null,
+      amOwnerId: data.amOwnerId ?? null,
     });
+  });
+
+/** New account: who can be named as the AE and, for a manager, the TIS. */
+export const getNewDealOwnerOptions = createServerFn({ method: "GET" })
+  .middleware([requireDealEditor])
+  .handler(async ({ context }) => {
+    const { newDealOwnerOptions } = await import("./presale.server");
+    const { canManage } = await import("@/lib/auth");
+    const canAssign = canManage(context.profile.role as import("@/lib/auth").PortalRole);
+    return { ...(await newDealOwnerOptions(context.userId, canAssign)), canAssign };
+  });
+
+/**
+ * New account, after the notes and the SOW are saved: the TIS, then the
+ * stage it was entered in. A refused Closed Won comes back as data — the
+ * deal exists, held at Negotiate & Finalize, and the dialog says why.
+ */
+export const settleNewDealFn = createServerFn({ method: "POST" })
+  .middleware([requireDealEditor])
+  .inputValidator((data: unknown) =>
+    z
+      .object({
+        dealId: z.string().uuid(),
+        stage: z.enum(STAGES),
+        implementationOwnerId: z.string().uuid().nullable().optional(),
+      })
+      .parse(data),
+  )
+  .handler(async ({ data, context }) => {
+    const { settleNewDeal } = await import("./presale.server");
+    const { canManage } = await import("@/lib/auth");
+    return settleNewDeal(context.userId, data.dealId, {
+      stage: data.stage,
+      implementationOwnerId: data.implementationOwnerId ?? null,
+      canAssign: canManage(context.profile.role as import("@/lib/auth").PortalRole),
+    });
+  });
+
+/** An existing account's customer, picked on the deal page; null clears it. */
+export const linkExistingCustomerFn = createServerFn({ method: "POST" })
+  .middleware([requireDealEditor])
+  .inputValidator((data: unknown) =>
+    z.object({ dealId: z.string().uuid(), customerId: z.string().uuid().nullable() }).parse(data),
+  )
+  .handler(async ({ data, context }) => {
+    const { linkExistingCustomer } = await import("./presale.server");
+    return linkExistingCustomer(context.userId, data.dealId, data.customerId);
   });
 
 export const moveDealStage = createServerFn({ method: "POST" })

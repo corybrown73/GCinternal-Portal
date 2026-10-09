@@ -4,6 +4,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { ArrowUp, Check, ExternalLink, ListPlus, Upload, X } from "lucide-react";
 
 import { AiSource } from "@/components/fill-from-sources";
+import { IndustrySelect } from "@/components/industry-select";
 import { TemplateCard } from "@/components/template-card";
 import { suggestFormTemplatesFn } from "@/lib/form-templates.functions";
 import type { DealData } from "@/lib/deal-query";
@@ -17,7 +18,6 @@ import {
   chosenFrom,
   COMPANY_SIZES,
   formsOnly,
-  INDUSTRIES,
   isTrainingOnly,
   makeFirstWantedForm,
   readIntake,
@@ -586,9 +586,11 @@ function PdfUpload({
     onMutate: () => setError(null),
     onSuccess: () => {
       // The upload queued the reading server-side (flag permitting); the
-      // record says so on this refetch.
+      // record says so on this refetch. The deal also feeds the Closed Won
+      // notice, and the board shows the SOW on the card.
       void qc.invalidateQueries({ queryKey: ["deal", dealId] });
       void qc.invalidateQueries({ queryKey: ["welcome", dealId] });
+      void qc.invalidateQueries({ queryKey: ["pipeline"] });
     },
     onError: (e) => setError((e as Error).message),
   });
@@ -828,19 +830,12 @@ function NoForms({
       <div className="grid grid-cols-1 gap-2 rounded-md border border-border bg-muted/20 p-2.5 sm:grid-cols-3">
         <label className="space-y-1 text-[11px] text-muted-foreground">
           Industry
-          <select
+          <IndustrySelect
             className={cn(input, "w-full")}
-            value={answers.industry ?? ""}
+            value={answers.industry}
             disabled={!editable || busy}
-            onChange={(e) => onSet({ industry: e.target.value || null })}
-          >
-            <option value="">—</option>
-            {INDUSTRIES.map((i) => (
-              <option key={i} value={i}>
-                {i}
-              </option>
-            ))}
-          </select>
+            onChange={(industry) => onSet({ industry })}
+          />
         </label>
         <label className="space-y-1 text-[11px] text-muted-foreground">
           Company size
