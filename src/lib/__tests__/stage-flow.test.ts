@@ -158,6 +158,7 @@ describe("the stage checklist", () => {
       "live",
       "svc:qb",
       "go_live",
+      "graduation_brief",
       "grad_admin_built",
       "grad_second",
       "grad_office",
@@ -282,6 +283,7 @@ describe("the new-logo plan: the Implementation Playbook", () => {
       "svc:qb",
       "activate",
       "go_live",
+      "graduation_brief",
       "closeout",
       "disp:qb",
     ]);
