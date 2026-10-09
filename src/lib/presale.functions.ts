@@ -7,6 +7,7 @@ import {
   timelinePatchSchema,
   workflowStoryPatchSchema,
 } from "./intake-patch";
+import { stageTargetUpdateSchema } from "./stage-targets";
 import { EDITABLE_DEAL_FIELDS, type EditableDealField } from "./presale-fields";
 
 import {
@@ -602,6 +603,24 @@ export const saveIntake = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const { saveDealIntake } = await import("./presale.server");
     return saveDealIntake(context.profile.id, data.dealId, data.patch);
+  });
+
+export const saveStageTarget = createServerFn({ method: "POST" })
+  .middleware([requireDealEditor])
+  .inputValidator((data: unknown) =>
+    z
+      .object({ dealId: z.string().uuid(), update: stageTargetUpdateSchema })
+      .strict()
+      .parse(data),
+  )
+  .handler(async ({ data, context }) => {
+    const { saveDealIntake } = await import("./presale.server");
+    return saveDealIntake(
+      context.profile.id,
+      data.dealId,
+      { timeline: {} },
+      { stageTarget: data.update },
+    );
   });
 
 export const uploadIntakeForm = createServerFn({ method: "POST" })

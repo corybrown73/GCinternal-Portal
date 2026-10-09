@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { planEditsSchema, typedDateSchema } from "./intake-answers";
+import { stageTargetsSchema } from "./stage-targets";
 
 /**
  * The plan's knobs as the save accepts them.
@@ -20,10 +21,16 @@ export const timelinePatchSchema = z
       .regex(/^\d{4}-\d{2}-\d{2}$/)
       .nullable(),
     overrides: z.record(z.string(), z.string().regex(/^\d{4}-\d{2}-\d{2}$/)),
+    /** Agreed stage completion targets, separate from meeting bookings. */
+    stage_targets: stageTargetsSchema,
     holidays: z.array(z.string().regex(/^\d{4}-\d{2}-\d{2}$/)).max(30),
     integration_tier: z.number().int().min(0).max(5),
     integration_target: z.string().trim().max(120).nullable(),
     field_tester: z.string().trim().max(120).nullable(),
+    field_tester_due: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/)
+      .nullable(),
     form_proven_on: z
       .string()
       .regex(/^\d{4}-\d{2}-\d{2}$/)

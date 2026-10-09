@@ -10,6 +10,7 @@ import {
 import type { Timeline } from "./onboarding-timeline";
 import { shortDay } from "./onboarding-timeline";
 import { isPreClose, normalizeStage, type AccountStage } from "./presale-stages";
+import type { StageTargetKey, StageTargets } from "./stage-targets";
 import { HOMEWORK_KEYS, type HomeworkKey } from "./welcome";
 
 /**
@@ -28,7 +29,40 @@ export type JourneyStage = {
   state: "done" | "now" | "later";
   /** One line, for the customer, on what the stage is. */
   blurb: string;
+  /** Explicitly agreed target dates and observed completion, never estimates. */
+  target?: { originalDate: string | null; currentDate: string | null; actualDate: string | null };
 };
+
+export type ImplementationStageHistoryEntry = {
+  stage: string;
+  entered_at: string;
+  exited_at: string | null;
+};
+
+const COMPLETION_BOUNDARIES: Record<
+  StageTargetKey,
+  { stages: readonly string[]; edge: "entered_at" | "exited_at" }
+> = {
+  get_it_working: { stages: ["build", "get-it-working"], edge: "exited_at" },
+  make_it_yours: { stages: ["validate-iterate", "make-it-yours"], edge: "exited_at" },
+  make_it_run: { stages: ["adopt", "make-it-run"], edge: "exited_at" },
+  complete: { stages: ["graduate-to-cs", "complete", "onboarding-complete"], edge: "entered_at" },
+};
+
+/** Read a stage's actual completion only from its terminal history boundary. */
+export function actualStageCompletionDate(
+  history: readonly ImplementationStageHistoryEntry[],
+  key: StageTargetKey,
+): string | null {
+  const boundary = COMPLETION_BOUNDARIES[key];
+  const candidates = history
+    .filter((row) => boundary.stages.includes(row.stage.trim().toLowerCase().replace(/_/g, "-")))
+    .map((row) => row[boundary.edge])
+    .filter((stamp): stamp is string => Boolean(stamp))
+    .sort((a, b) => b.localeCompare(a));
+  const date = candidates[0]?.slice(0, 10) ?? null;
+  return date && /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : null;
+}
 
 export type SolutionBallView = {
   id: string;
@@ -129,6 +163,8 @@ export type YourItem = {
   /** ISO date when dated, else a short phrase ("Week 4") or null. */
   by: string | null;
   kind: "meeting" | "homework" | "solution" | "parking";
+  ownerSide: "customer" | "gocanvas" | "both";
+  ownerName: string | null;
 };
 
 export type CustomerJourney = {
@@ -208,15 +244,36 @@ export function customerJourney(input: {
   homeworkDone: Record<string, string>;
   parkingLot: ReadonlyArray<{ request: string; target: string; status: string; owner?: string }>;
   leadName: string | null;
+  stageHistory?: readonly ImplementationStageHistoryEntry[];
 }): CustomerJourney | null {
   const stage = input.stage ? normalizeStage(String(input.stage)) : null;
   if (!stage || isPreClose(stage)) return null;
   const nowKey = STAGE_TO_KEY[stage] ?? "pre_kickoff";
   const at = JOURNEY.findIndex((s) => s.key === nowKey);
-  const stages: JourneyStage[] = JOURNEY.map((s, i) => ({
-    ...s,
-    state: i < at ? "done" : i === at ? "now" : "later",
-  }));
+  const targetKey: Partial<Record<JourneyStageKey, StageTargetKey>> = {
+    get_it_working: "get_it_working",
+    make_it_yours: "make_it_yours",
+    make_it_run: "make_it_run",
+    complete: "complete",
+  };
+  const targets: StageTargets = input.intake.timeline.stage_targets;
+  const stages: JourneyStage[] = JOURNEY.map((s, i) => {
+    const key = targetKey[s.key];
+    const target = key ? targets[key] : null;
+    return {
+      ...s,
+      state: i < at ? "done" : i === at ? "now" : "later",
+      ...(key && target
+        ? {
+            target: {
+              originalDate: target.original_date,
+              currentDate: target.current_date,
+              actualDate: actualStageCompletionDate(input.stageHistory ?? [], key),
+            },
+          }
+        : {}),
+    };
+  });
   const current = stages[at]!;
 
   const completed = input.intake.timeline.completed;
@@ -266,26 +323,51 @@ export function customerJourney(input: {
     const next = calls.find((m) => !m.doneOn);
     // Only a booked call carries a date: the plan's day for an unbooked one
     // is ours to fix, and shown to the customer it reads as an appointment.
-    if (next) yours.push({ what: next.label, by: next.time ? next.date : null, kind: "meeting" });
+    if (next)
+      yours.push({
+        what: next.label,
+        by: next.time ? next.date : null,
+        kind: "meeting",
+        ownerSide: "both",
+        ownerName: null,
+      });
     const first = calls[0];
     const held = calls.filter((m) => m.doneOn).length;
     if (first?.doneOn && held === 1) {
       const working = calls[1];
       for (const k of HOMEWORK_KEYS) {
         if (!input.homeworkDone[k]) {
-          yours.push({ what: HOMEWORK_TEXT[k], by: working?.date ?? null, kind: "homework" });
+          yours.push({
+            what: HOMEWORK_TEXT[k],
+            by: working?.time ? working.date : null,
+            kind: "homework",
+            ownerSide: "customer",
+            ownerName: null,
+          });
         }
       }
     }
   }
   for (const s of solutions) {
     if (s.who === "you") {
-      yours.push({ what: `Test ${s.name} on real work`, by: s.when, kind: "solution" });
+      yours.push({
+        what: `Test ${s.name} on real work`,
+        by: s.when,
+        kind: "solution",
+        ownerSide: s.who === "you" ? "customer" : "gocanvas",
+        ownerName: s.responsiblePerson,
+      });
     }
   }
   for (const p of input.parkingLot) {
     if ((p.status === "open" || p.status === "scheduled") && p.owner === "customer") {
-      yours.push({ what: p.request, by: p.target || null, kind: "parking" });
+      yours.push({
+        what: p.request,
+        by: p.target || null,
+        kind: "parking",
+        ownerSide: p.owner === "gocanvas" ? "gocanvas" : p.owner === "customer" ? "customer" : "both",
+        ownerName: null,
+      });
     }
   }
   const isIso = (s: string | null) => Boolean(s && /^\d{4}-\d{2}-\d{2}$/.test(s));
