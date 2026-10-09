@@ -2,6 +2,89 @@ import { describe, expect, it } from "vitest";
 
 import { EMPTY_INTAKE, claimByPerson, intakeAnswersSchema, readIntake } from "../intake-answers";
 import { implementationFocusPatchSchema, timelinePatchSchema } from "../intake-patch";
+import { stageTargetsSchema, updateStageTarget } from "../stage-targets";
+
+const stageTargetActor = "11111111-1111-4111-8111-111111111111";
+const stageTargetChangedAt = "2026-10-09T12:00:00Z";
+
+describe("stage target changes", () => {
+  it("locks the first agreed date as both original and current, without inventing a change", () => {
+    const targets = updateStageTarget(
+      stageTargetsSchema.parse({}),
+      { key: "get_it_working", new_date: "2026-10-20" },
+      stageTargetActor,
+      stageTargetChangedAt,
+    );
+
+    expect(targets.get_it_working).toEqual({
+      original_date: "2026-10-20",
+      current_date: "2026-10-20",
+      history: [],
+    });
+  });
+
+  it("preserves the baseline and appends a reasoned, attributed date change", () => {
+    const baseline = stageTargetsSchema.parse({
+      get_it_working: { original_date: "2026-10-20", current_date: "2026-10-20" },
+    });
+    const targets = updateStageTarget(
+      baseline,
+      {
+        key: "get_it_working",
+        new_date: "2026-10-23",
+        reason: "Customer site access moved.",
+        category: "customer_delay",
+      },
+      stageTargetActor,
+      stageTargetChangedAt,
+    );
+
+    expect(targets.get_it_working).toEqual({
+      original_date: "2026-10-20",
+      current_date: "2026-10-23",
+      history: [
+        {
+          previous_date: "2026-10-20",
+          new_date: "2026-10-23",
+          reason: "Customer site access moved.",
+          category: "customer_delay",
+          changed_by: stageTargetActor,
+          changed_at: stageTargetChangedAt,
+        },
+      ],
+    });
+  });
+
+  it("rejects a target change after agreement when its reason or delay category is missing", () => {
+    const baseline = stageTargetsSchema.parse({
+      make_it_yours: { original_date: "2026-10-20", current_date: "2026-10-20" },
+    });
+
+    expect(() =>
+      updateStageTarget(
+        baseline,
+        { key: "make_it_yours", new_date: "2026-10-23" },
+        stageTargetActor,
+        stageTargetChangedAt,
+      ),
+    ).toThrow();
+  });
+
+  it("does not create history or move the original date when the current date is unchanged", () => {
+    const baseline = stageTargetsSchema.parse({
+      make_it_run: { original_date: "2026-10-20", current_date: "2026-10-23" },
+    });
+
+    expect(
+      updateStageTarget(
+        baseline,
+        { key: "make_it_run", new_date: "2026-10-23" },
+        stageTargetActor,
+        stageTargetChangedAt,
+      ),
+    ).toEqual(baseline);
+  });
+});
 
 describe("the timeline as the save accepts it", () => {
   it("takes the record's whole timeline back, every key the record can hold", () => {
@@ -28,27 +111,27 @@ describe("the timeline as the save accepts it", () => {
     expect(r.success, JSON.stringify(r.success ? null : r.error.issues)).toBe(true);
     expect(Object.keys(full).sort()).toEqual(Object.keys(timelinePatchSchema.shape).sort());
     expect(full.stage_targets).toEqual({
-  get_it_working: {
-    original_date: null,
-    current_date: null,
-    history: [],
-  },
-  make_it_yours: {
-    original_date: null,
-    current_date: null,
-    history: [],
-  },
-  make_it_run: {
-    original_date: null,
-    current_date: null,
-    history: [],
-  },
-  complete: {
-    original_date: null,
-    current_date: null,
-    history: [],
-  },
-});
+      get_it_working: {
+        original_date: null,
+        current_date: null,
+        history: [],
+      },
+      make_it_yours: {
+        original_date: null,
+        current_date: null,
+        history: [],
+      },
+      make_it_run: {
+        original_date: null,
+        current_date: null,
+        history: [],
+      },
+      complete: {
+        original_date: null,
+        current_date: null,
+        history: [],
+      },
+    });
   });
 });
 

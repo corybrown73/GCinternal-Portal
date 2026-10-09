@@ -97,7 +97,24 @@ async function viewFor(
   const leadName = leadCard?.name ?? input.lead;
   if (leadCard?.email) leadEmail = leadCard.email;
   const { bookingShown } = await import("./welcome");
-  const bookingOn = bookingShown(readIntake(deal.intake).welcome_hidden_screens);
+  const intake = readIntake(deal.intake);
+  const bookingOn = bookingShown(intake.welcome_hidden_screens);
+  const formArtifacts: WelcomeView["formArtifacts"] = [];
+  if (opts.internal && intake.uploaded_forms.length) {
+    const { intakeFormLink } = await import("./presale.server");
+    const linked = await Promise.all(
+      intake.uploaded_forms.map(async (form) => {
+        try {
+          const { url } = await intakeFormLink(String(deal.id), form.path);
+          return { name: form.name, url };
+        } catch (error) {
+          console.error("[welcome] could not sign an uploaded form", error);
+          return null;
+        }
+      }),
+    );
+    formArtifacts.push(...linked.filter((form): form is { name: string; url: string } => !!form));
+  }
 
   const readiness: WelcomeView["readiness"] = [];
   if (opts.internal) {
@@ -201,6 +218,10 @@ async function viewFor(
   }
 
   const lot = await parkingLotFor(String(deal.id));
+  const stageHistory = await implementationStageHistoryForDeal(
+    String(deal.id),
+    deal.customer_id ? String(deal.customer_id) : null,
+  );
   return {
     dealId: String(deal.id),
     clientName: input.clientName,
@@ -209,6 +230,7 @@ async function viewFor(
     timeline: input.timeline,
     lead: leadName,
     fieldTester: input.fieldTester,
+    fieldTesterDue: intake.timeline.field_tester_due,
     fieldTesterSource: input.fieldTesterSource ?? null,
     currentProcess: input.currentProcess ?? null,
     currentProcessSource: input.currentProcessSource ?? null,
@@ -234,6 +256,7 @@ async function viewFor(
         : null,
     },
     firstForm: input.firstForm,
+    formArtifacts,
     firstFormSource: input.firstForm ? (input.firstFormSource ?? "person") : null,
     nextUseCases: input.nextUseCases,
     photoUrl,
@@ -291,8 +314,30 @@ async function viewFor(
       homeworkDone,
       parkingLot: lot,
       leadName,
+      stageHistory,
     }),
   };
+}
+
+async function implementationStageHistoryForDeal(
+  dealId: string,
+  customerId: string | null,
+): Promise<import("./welcome-journey").ImplementationStageHistoryEntry[]> {
+  try {
+    const { implementationForDeal } = await import("./assignment.server");
+    const implementationId = await implementationForDeal(dealId, customerId);
+    if (!implementationId) return [];
+    const { data, error } = await db()
+      .from("implementation_stage_history")
+      .select("stage,entered_at,exited_at")
+      .eq("implementation_id", implementationId)
+      .order("entered_at", { ascending: true });
+    if (error) throw error;
+    return (data ?? []) as import("./welcome-journey").ImplementationStageHistoryEntry[];
+  } catch (error) {
+    console.error("[welcome] could not read implementation stage history", error);
+    return [];
+  }
 }
 
 /** The parking lot for the customer's page. Never throws: an empty lot is a quiet page. */

@@ -42,6 +42,14 @@ import {
   localIso,
 } from "@/lib/onboarding-timeline";
 import { saveIntake } from "@/lib/presale.functions";
+import { saveStageTarget } from "@/lib/presale.functions";
+import {
+  stageTargetChangeCategories,
+  stageTargetKeys,
+  type StageTargetKey,
+  type StageTargets,
+  type StageTargetUpdate,
+} from "@/lib/stage-targets";
 import { toolByKey, toolFromName, toolsForKind } from "@/lib/onboarding-tools";
 import { mergeProposal, rowWeeks, type SowPlanProposal, type SowPlanRow } from "@/lib/sow-plan";
 import { proposePlanFromSowFn } from "@/lib/sow-plan.functions";
@@ -49,6 +57,166 @@ import { isCall, planEvents } from "@/lib/welcome-events";
 import { getWelcome } from "@/lib/welcome.functions";
 import { cn } from "@/lib/utils";
 import { Working } from "@/components/working";
+
+const STAGE_TARGET_LABELS: Record<StageTargetKey, string> = {
+  get_it_working: "Get It Working",
+  make_it_yours: "Make It Yours",
+  make_it_run: "Make It Run",
+  complete: "Graduate",
+};
+
+function StageTargetsEditor({
+  targets,
+  disabled,
+  actualDateFor,
+  onSave,
+}: {
+  targets: StageTargets;
+  disabled: boolean;
+  actualDateFor: (key: StageTargetKey) => string | null;
+  onSave: (update: StageTargetUpdate) => void;
+}) {
+  return (
+    <section className="space-y-2 rounded-md border border-border bg-muted/10 p-2.5">
+      <div>
+        <h3 className="text-[12px] font-semibold">Agreed stage targets</h3>
+        <p className="text-[11px] text-muted-foreground">
+          These dates are independent of booked sessions. A target change never moves a meeting.
+        </p>
+      </div>
+      <div className="divide-y divide-border">
+        {stageTargetKeys.map((key) => (
+          <StageTargetRow
+            key={key}
+            stageKey={key}
+            label={STAGE_TARGET_LABELS[key]}
+            target={targets[key]}
+            actualDate={actualDateFor(key)}
+            disabled={disabled}
+            onSave={onSave}
+          />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function StageTargetRow({
+  stageKey,
+  label,
+  target,
+  actualDate,
+  disabled,
+  onSave,
+}: {
+  stageKey: StageTargetKey;
+  label: string;
+  target: StageTargets[StageTargetKey];
+  actualDate: string | null;
+  disabled: boolean;
+  onSave: (update: StageTargetUpdate) => void;
+}) {
+  const [date, setDate] = useState(target.current_date ?? target.original_date ?? "");
+  const [reason, setReason] = useState("");
+  const [category, setCategory] = useState<(typeof stageTargetChangeCategories)[number] | "">("");
+  const hasBaseline = target.original_date !== null || target.current_date !== null;
+  const changed = hasBaseline && date !== target.current_date;
+  const canSave = Boolean(date) && (!changed || Boolean(reason.trim() && category));
+
+  useEffect(() => {
+    setDate(target.current_date ?? target.original_date ?? "");
+  }, [target.current_date, target.original_date]);
+
+  return (
+    <div className="space-y-1.5 py-2 first:pt-0 last:pb-0">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+        <strong className="min-w-28 text-[11px]">{label}</strong>
+        <span className="text-[11px] text-muted-foreground">
+          Baseline: {target.original_date ? shortDay(target.original_date) : "Not set"}
+        </span>
+        <span className="text-[11px] text-muted-foreground">
+          Current: {target.current_date ? shortDay(target.current_date) : "Not set"}
+        </span>
+        {actualDate ? (
+          <span className="text-[11px] text-emerald-700">Completed: {shortDay(actualDate)}</span>
+        ) : null}
+      </div>
+      <div className="flex flex-wrap items-end gap-1.5">
+        <label className="grid gap-0.5 text-[10px] text-muted-foreground">
+          {hasBaseline ? "New target" : "Agreed target"}
+          <input
+            type="date"
+            value={date}
+            disabled={disabled}
+            onChange={(event) => setDate(event.target.value)}
+            className="h-7 rounded-sm border border-border bg-background px-1.5 text-[11px] text-foreground"
+          />
+        </label>
+        {changed ? (
+          <>
+            <label className="grid gap-0.5 text-[10px] text-muted-foreground">
+              Delay category
+              <select
+                value={category}
+                disabled={disabled}
+                onChange={(event) =>
+                  setCategory(event.target.value as (typeof stageTargetChangeCategories)[number] | "")
+                }
+                className="h-7 rounded-sm border border-border bg-background px-1.5 text-[11px] text-foreground"
+                required
+              >
+                <option value="">Select category</option>
+                {stageTargetChangeCategories.map((option) => (
+                  <option key={option} value={option}>
+                    {option.replaceAll("_", " ")}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="grid min-w-48 flex-1 gap-0.5 text-[10px] text-muted-foreground">
+              Reason
+              <input
+                value={reason}
+                maxLength={500}
+                disabled={disabled}
+                onChange={(event) => setReason(event.target.value)}
+                className="h-7 rounded-sm border border-border bg-background px-1.5 text-[11px] text-foreground"
+                required
+              />
+            </label>
+          </>
+        ) : null}
+        <button
+          type="button"
+          disabled={disabled || !canSave || date === target.current_date}
+          onClick={() => {
+            onSave({
+              key: stageKey,
+              new_date: date,
+              ...(changed ? { reason, category: category || undefined } : {}),
+            });
+            setReason("");
+            setCategory("");
+          }}
+          className="h-7 rounded-sm bg-primary px-2 text-[11px] font-medium text-primary-foreground disabled:opacity-50"
+        >
+          {hasBaseline ? "Save target" : "Set baseline"}
+        </button>
+      </div>
+      {target.history.length ? (
+        <ul className="space-y-0.5 pl-2 text-[10px] text-muted-foreground">
+          {target.history.map((change, index) => (
+            <li key={`${change.changed_at}-${index}`}>
+              {change.previous_date ? shortDay(change.previous_date) : "No prior target"} →{" "}
+              {shortDay(change.new_date)} · {change.category.replaceAll("_", " ")} · {change.reason} ·
+              {" "}user {change.changed_by} · {change.changed_at}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </div>
+  );
+}
 
 /**
  * The seven-day plan, as dates a person can move.
@@ -86,10 +254,12 @@ export function TimelinePanel({
 
   const qc = useQueryClient();
   const save = useServerFn(saveIntake);
+  const saveStageTargetFn = useServerFn(saveStageTarget);
   const loadWelcome = useServerFn(getWelcome);
   const [error, setError] = useState<string | null>(null);
   const [holiday, setHoliday] = useState("");
   const [tester, setTester] = useState(knobs.field_tester ?? "");
+  const [testerDue, setTesterDue] = useState(knobs.field_tester_due ?? "");
   const [newKind, setNewKind] = useState<ServiceKind>("integration");
   const [newName, setNewName] = useState("");
   const [newPhase, setNewPhase] = useState<number>(SERVICE_KINDS.integration.defaultPhase);
@@ -221,10 +391,20 @@ export function TimelinePanel({
     },
     onError: (e) => setError((e as Error).message),
   });
+  const stageTargetMutation = useMutation({
+    mutationFn: (update: StageTargetUpdate) =>
+      saveStageTargetFn({ data: { dealId, update } }),
+    onMutate: () => setError(null),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["deal", dealId] });
+      void qc.invalidateQueries({ queryKey: ["welcome", dealId] });
+    },
+    onError: (e) => setError((e as Error).message),
+  });
   const set = (patch: Partial<IntakeAnswers["timeline"]>) =>
     mutation.mutate({ ...knobs, ...patch });
 
-  const busy = !editable || mutation.isPending;
+  const busy = !editable || mutation.isPending || stageTargetMutation.isPending;
   // One door per phase: the full editor for phase 1, dates and times for a
   // phase whose steps come from the SOW.
   const [editing, setEditing] = useState<PlanEditorTarget | "phase1" | null>(null);
@@ -370,6 +550,15 @@ export function TimelinePanel({
       }
     >
       <div className="space-y-2 px-3 py-2.5">
+        <StageTargetsEditor
+          targets={knobs.stage_targets}
+          disabled={!editable || stageTargetMutation.isPending}
+          actualDateFor={(key) =>
+            welcome.data?.journey?.stages.find((stage) => stage.key === key)?.target?.actualDate ??
+            null
+          }
+          onSave={(update) => stageTargetMutation.mutate(update)}
+        />
         {notice ? (
           <p
             role="status"
@@ -455,6 +644,20 @@ export function TimelinePanel({
                       if ((tester.trim() || null) !== (knobs.field_tester ?? null)) {
                         set({ field_tester: tester.trim() || null });
                       }
+                    }}
+                  />
+                </label>
+                <label className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                  Testing deadline
+                  <input
+                    className={cn(input, "w-36")}
+                    type="date"
+                    value={testerDue}
+                    disabled={busy}
+                    onChange={(event) => setTesterDue(event.target.value)}
+                    onBlur={() => {
+                      const next = testerDue || null;
+                      if (next !== knobs.field_tester_due) set({ field_tester_due: next });
                     }}
                   />
                 </label>

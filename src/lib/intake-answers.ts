@@ -394,12 +394,18 @@ export const intakeAnswersSchema = z.object({
       /** milestone key → YYYY-MM-DD, for dates moved by hand. */
       overrides: z.record(z.string(), z.string()).default({}),
       /** Agreed stage completion targets, separate from meeting dates. */
-stage_targets: stageTargetsSchema.default({}),
+      stage_targets: stageTargetsSchema.default({}),
       holidays: z.array(z.string().regex(/^\d{4}-\d{2}-\d{2}$/)).default([]),
       integration_tier: z.number().int().min(0).max(5).default(0),
       integration_target: z.string().trim().max(120).nullable().default(null),
       /** Who at the customer runs the form on real jobs. */
       field_tester: z.string().trim().max(120).nullable().default(null),
+      /** The date the named field tester is expected to finish real-world testing. */
+      field_tester_due: z
+        .string()
+        .regex(/^\d{4}-\d{2}-\d{2}$/)
+        .nullable()
+        .default(null),
       /** The phase-2 gate: the day a person recorded the form as dialed in. */
       form_proven_on: z
         .string()

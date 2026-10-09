@@ -2304,6 +2304,8 @@ export async function saveDealIntake(
      * an addition on the panel is a person's and claims the list.
      */
     proposal?: boolean | undefined;
+    /** The only authorized path for changing stage targets. */
+    stageTarget?: import("./stage-targets").StageTargetUpdate | undefined;
   } = {},
 ): Promise<import("./intake-answers").IntakeAnswers> {
   await requireSalesEditor(userId);
@@ -2320,6 +2322,23 @@ export async function saveDealIntake(
   // The Field Fusion block is patched one tick at a time; a tick must not
   // wipe the other tick, the note, or the handoff stamp.
   const merged: Record<string, unknown> = { ...patch };
+  if (patch.timeline && typeof patch.timeline === "object") {
+    const incomingTimeline = patch.timeline as Record<string, unknown>;
+    const { updateStageTarget } = await import("./stage-targets");
+    const stageTargets = opts.stageTarget
+      ? updateStageTarget(
+          current.timeline.stage_targets,
+          opts.stageTarget,
+          userId,
+          new Date().toISOString(),
+        )
+      : current.timeline.stage_targets;
+    merged.timeline = {
+      ...current.timeline,
+      ...incomingTimeline,
+      stage_targets: stageTargets,
+    };
+  }
   for (const block of ["field_fusion", "existing"] as const) {
     if (patch[block] && typeof patch[block] === "object") {
       merged[block] = { ...current[block], ...(patch[block] as Record<string, unknown>) };
@@ -2405,7 +2424,7 @@ export async function saveDealIntake(
   // A re-booked meeting moves "Functional": the project's target launch,
   // which the Customers list and "At a glance" read, follows the plan. Then
   // the dates the operating model keeps: a locked baseline, a Go-Live.
-  if (patch["timeline"]) {
+  if (patch["timeline"] && !opts.stageTarget) {
     await syncTargetLaunch(dealId, userId);
     await stampDealDates(dealId, current.timeline.completed, next.timeline.completed);
   }
