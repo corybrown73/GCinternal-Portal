@@ -4,7 +4,7 @@
 // .vercel/output/config.json, so nothing scheduled ever ran in production.
 import { existsSync, readFileSync } from "node:fs";
 
-const wanted = JSON.parse(readFileSync("vercel.json", "utf8")).crons ?? [];
+const wanted = JSON.parse(readFileSync("vercel-crons.json", "utf8"));
 const built = JSON.parse(readFileSync(".vercel/output/config.json", "utf8")).crons ?? [];
 const routes = readFileSync("src/routeTree.gen.ts", "utf8");
 

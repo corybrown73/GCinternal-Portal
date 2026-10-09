@@ -10,11 +10,9 @@ import { readFileSync } from "node:fs";
 // Build Output API, and Vercel reads crons from .vercel/output/config.json,
 // not from vercel.json — so the list is handed to the Vercel preset, which
 // writes it there. Without this no cron runs in production at all.
-const crons = (
-  JSON.parse(readFileSync(new URL("./vercel.json", import.meta.url), "utf8")) as {
-    crons?: Array<{ path: string; schedule: string }>;
-  }
-).crons;
+const crons = JSON.parse(
+  readFileSync(new URL("./vercel-crons.json", import.meta.url), "utf8"),
+) as Array<{ path: string; schedule: string }>;
 
 export default defineConfig({
   plugins: [
