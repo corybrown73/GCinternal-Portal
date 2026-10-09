@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { stageTargetsSchema } from "./stage-targets";
 
 /**
  * A date a source states, typed by the reader that read it — never parsed
@@ -392,6 +393,8 @@ export const intakeAnswersSchema = z.object({
         .default(null),
       /** milestone key → YYYY-MM-DD, for dates moved by hand. */
       overrides: z.record(z.string(), z.string()).default({}),
+      /** Agreed stage completion targets, separate from meeting dates. */
+stage_targets: stageTargetsSchema.default({}),
       holidays: z.array(z.string().regex(/^\d{4}-\d{2}-\d{2}$/)).default([]),
       integration_tier: z.number().int().min(0).max(5).default(0),
       integration_target: z.string().trim().max(120).nullable().default(null),

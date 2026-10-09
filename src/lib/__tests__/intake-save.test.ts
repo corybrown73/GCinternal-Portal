@@ -27,6 +27,28 @@ describe("the timeline as the save accepts it", () => {
     const r = timelinePatchSchema.safeParse(full);
     expect(r.success, JSON.stringify(r.success ? null : r.error.issues)).toBe(true);
     expect(Object.keys(full).sort()).toEqual(Object.keys(timelinePatchSchema.shape).sort());
+    expect(full.stage_targets).toEqual({
+  get_it_working: {
+    original_date: null,
+    current_date: null,
+    history: [],
+  },
+  make_it_yours: {
+    original_date: null,
+    current_date: null,
+    history: [],
+  },
+  make_it_run: {
+    original_date: null,
+    current_date: null,
+    history: [],
+  },
+  complete: {
+    original_date: null,
+    current_date: null,
+    history: [],
+  },
+});
   });
 });
 
