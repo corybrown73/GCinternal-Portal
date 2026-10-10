@@ -268,7 +268,7 @@ export function OwnerField({ dealId, editable }: { dealId: string; editable: boo
           onClick={() => setOpen(true)}
           title={
             a?.last
-              ? `${a.last.source === "auto" ? "By rule" : "By hand"} · $<When value={a.last.createdAt} />${a.last.note ? ` · ${a.last.note}` : ""}`
+              ? `${a.last.source === "auto" ? "By rule" : "By hand"} · ${fmtDateTime(a.last.createdAt)}${a.last.note ? ` · ${a.last.note}` : ""}`
               : a?.mode === "claim"
                 ? "Claimed by whoever takes it; click to pick by hand"
                 : "Assigned by rule when the deal closes; click to pick by hand"

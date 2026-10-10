@@ -222,11 +222,15 @@ function TicketDetailPage() {
                     First response due <When value={ticket.sla_due_at} />
                   </p>
                   <p>
-                    {ticket.first_response_at
-                      ? `First response $<When value={ticket.first_response_at} />`
-                      : ticket.sla_breached
-                        ? "Breached — no first response inside the window"
-                        : "No first response yet"}
+                    {ticket.first_response_at ? (
+                      <>
+                        First response <When value={ticket.first_response_at} />
+                      </>
+                    ) : ticket.sla_breached ? (
+                      "Breached — no first response inside the window"
+                    ) : (
+                      "No first response yet"
+                    )}
                   </p>
                   {ticket.resolved_at ? (
                     <p>

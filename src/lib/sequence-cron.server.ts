@@ -1,7 +1,6 @@
 /**
- * The sequence cron body, extracted so the canonical route
- * (/api/cron/sequences) and the deprecated /api/cron/journeys alias share one
- * implementation for the release that both exist.
+ * The sequence cron body, behind /api/cron/sequences (the old
+ * /api/cron/journeys alias is gone; nothing scheduled it).
  *
  * Advances delay-based sequence steps and auto-enrols contacts for
  * 'customer_created' sequences. Auth: Authorization: Bearer ${CRON_SECRET}.

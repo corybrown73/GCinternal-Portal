@@ -298,7 +298,10 @@ async function runDispatch(): Promise<Response> {
     summary.pruned = (prunedLogs ?? 0) + (prunedDeliveries ?? 0);
   }
 
-  await audit({ actor_type: "system", action: "cron.webhook_dispatch", payload: summary });
+  // Every five minutes: an idle run is not worth an audit row.
+  if (Object.values(summary).some((n) => n > 0)) {
+    await audit({ actor_type: "system", action: "cron.webhook_dispatch", payload: summary });
+  }
   return Response.json({ ok: true, ...summary });
 }
 

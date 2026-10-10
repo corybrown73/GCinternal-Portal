@@ -15,12 +15,29 @@ export const Route = createFileRoute("/alerts")({
       { title: "Alerts — GoCanvas Handoff Hub" },
       {
         name: "description",
-        content: "SLA breaches, stalled implementations, overdue milestones and external alerts.",
+        content:
+          "Escalations: SLA breaches, deals stuck past their stage limit, AI readings that gave up, integration failures and API alerts.",
       },
     ],
   }),
   component: AlertsPage,
 });
+
+/** What each kind is called on the page; anything new reads through humanize. */
+const KIND_LABEL: Record<string, string> = {
+  sla_breach: "SLA breach",
+  stalled_implementation: "Stuck",
+  overdue_milestone: "Overdue milestone",
+  ai_job_failed: "AI reading",
+  webhook_exhausted: "Webhook",
+  webhook_endpoint_disabled: "Webhook",
+  sf_rewon_after_completion: "Salesforce",
+  audit_write_failed: "Audit log",
+  handoff_returned: "Handoff returned",
+  champion_gone_quiet: "Champion quiet",
+  launch_date_at_risk: "Launch at risk",
+  external: "API",
+};
 
 const SEVERITY_CLASS: Record<string, string> = {
   critical: "bg-status-blocked text-status-blocked-foreground",
@@ -45,7 +62,7 @@ function AlertsPage() {
     <>
       <PageHeader
         title="Alerts"
-        description="What the system flagged: SLA breaches, stalled implementations, overdue milestones and anything reported from outside."
+        description="Escalations only: tickets past their first-response SLA, deals stuck past their stage's escalate limit, AI readings that gave up, failed webhook deliveries and Salesforce sync problems, and alerts sent in through the API. Everyday attention items stay on Home."
         actions={
           <span className="font-mono text-[11px] text-muted-foreground">{open.length} open</span>
         }
@@ -125,7 +142,7 @@ function AlertList({
                     {humanize(a.severity)}
                   </span>
                   <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-                    {a.kind}
+                    {KIND_LABEL[a.kind] ?? humanize(a.kind)}
                   </span>
                   <p className="text-[13px] font-medium">{a.title}</p>
                 </div>
@@ -146,9 +163,25 @@ function AlertList({
                         {a.customer_name ?? "Customer"}
                       </Link>
                     </>
+                  ) : a.deal_id ? (
+                    <>
+                      {" · "}
+                      <Link
+                        to="/deals/$dealId"
+                        params={{ dealId: a.deal_id }}
+                        className="hover:underline"
+                      >
+                        Open the deal
+                      </Link>
+                    </>
                   ) : null}
                   {a.source !== "system" ? ` · via ${a.source}` : null}
-                  {a.acknowledged_at ? ` · acknowledged $<When value={a.acknowledged_at} />` : null}
+                  {a.acknowledged_at ? (
+                    <>
+                      {" · acknowledged "}
+                      <When value={a.acknowledged_at} />
+                    </>
+                  ) : null}
                 </p>
               </div>
               {action ? action(a.id) : null}

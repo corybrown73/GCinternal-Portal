@@ -222,6 +222,28 @@ describe("the 30-day totals", () => {
     expect(s.model).toBe("claude-opus-5");
   });
 
+  it("says whether the scheduler runs, and how late the queue is (QA 1.2)", async () => {
+    const queued = fake.store["portal_ai_jobs"]!.find((j) => j.id === JOB_NO_DEAL)!;
+    // Due 25 minutes ago and never picked up.
+    queued.next_attempt_at = new Date(NOW.getTime() - 25 * 60_000).toISOString();
+    let s = await getAiStatus(MANAGER);
+    expect(s.cronSecretSet).toBe(false);
+    expect(s.lastTickAt).toBeNull();
+    expect(s.overdue).toEqual({ count: 1, oldestMinutes: 25 });
+
+    process.env["CRON_SECRET"] = "s";
+    fake.store["portal_app_config"] = [
+      ...(fake.store["portal_app_config"] ?? []),
+      { key: "scheduler.last_tick_at", value: "2026-10-08T11:59:00.000Z" },
+    ];
+    // A job waiting out a backoff is not late: due five minutes from now.
+    queued.next_attempt_at = new Date(NOW.getTime() + 5 * 60_000).toISOString();
+    s = await getAiStatus(MANAGER);
+    expect(s.cronSecretSet).toBe(true);
+    expect(s.lastTickAt).toBe("2026-10-08T11:59:00.000Z");
+    expect(s.overdue).toEqual({ count: 0, oldestMinutes: 0 });
+  });
+
   it("is manager-only", async () => {
     await expect(getAiStatus(TIS)).rejects.toThrow(/manager-only/);
     await expect(getAiStatus("nobody")).rejects.toThrow(/No portal profile/);

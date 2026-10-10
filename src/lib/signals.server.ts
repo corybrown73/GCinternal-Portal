@@ -449,9 +449,20 @@ export type SignalAlertSweep = {
 };
 
 /**
- * Emit `champion_gone_quiet` and `launch_date_at_risk`, deduped against an
- * existing unacknowledged alert of the same kind on the same implementation —
- * the rule the cron's stalled and overdue-milestone passes already use.
+ * What makes a signal "the same one again": the unanswered ask, or the
+ * target date at risk. Raised once per visit, acknowledged or not (0080).
+ */
+export function signalVisit(finding: { kind: string; payload: Record<string, unknown> }): string {
+  if (finding.kind === "champion_gone_quiet") {
+    return `asked@${String(finding.payload["asked_at"] ?? "")}`;
+  }
+  return `target@${String(finding.payload["target_launch_date"] ?? "")}`;
+}
+
+/**
+ * Emit `champion_gone_quiet` and `launch_date_at_risk`, once per visit
+ * (signalVisit) on the same implementation, acknowledged or not — the rule
+ * the cron's stall and overdue-milestone passes use.
  *
  * Neither kind emails (`notify: false`). Email is for something somebody must
  * do today; both of these are "read this before your next call", and an alert
@@ -465,36 +476,31 @@ export async function runSignalAlerts(now: Date = new Date()): Promise<SignalAle
   const view = await loadSignals(now);
   const kinds = ["champion_gone_quiet", "launch_date_at_risk"];
 
-  const { data: openAlerts } = await db()
-    .from("alerts")
-    .select("kind, implementation_id")
-    .in("kind", kinds)
-    .is("acknowledged_at", null);
-  const already = new Set(
-    (openAlerts ?? []).map((a: any) => `${a.kind}:${a.implementation_id ?? ""}`),
-  );
-
-  const { createAlert } = await import("./tickets.server");
+  const { createAlert, raisedVisits, visitKey } = await import("./tickets.server");
+  const already = await raisedVisits(kinds);
   let created = 0;
   let deduped = 0;
   for (const finding of view.would_fire) {
-    if (already.has(`${finding.kind}:${finding.implementation_id}`)) {
+    const visit = signalVisit(finding);
+    const key = visitKey(finding.kind, finding.implementation_id, visit);
+    if (already.has(key)) {
       deduped += 1;
       continue;
     }
-    await createAlert({
+    const row = await createAlert({
       kind: finding.kind,
       severity: finding.severity,
       title: finding.title,
       detail: finding.detail,
       customerId: finding.customer_id,
       implementationId: finding.implementation_id,
-      payload: { ...finding.payload, evidence: finding.evidence },
+      payload: { ...finding.payload, evidence: finding.evidence, visit },
       notify: false,
       actor: { type: "system" },
     });
-    already.add(`${finding.kind}:${finding.implementation_id}`);
-    created += 1;
+    already.add(key);
+    if (row.already_raised) deduped += 1;
+    else created += 1;
   }
 
   return {

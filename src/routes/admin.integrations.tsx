@@ -205,6 +205,48 @@ const AI_PRICE_LABEL = "4 in, $20 out, $0.20 cache read, $5 cache write per mill
  * and every job with its step, its spend and its error. "Run again" is the
  * one action on a job; the effort select and the flag are the settings.
  */
+/** A scheduled tick older than this means the cron has stopped. */
+const SCHEDULER_STALE_MINUTES = 5;
+
+/** Whether the minute cron runs: the secret, then its last heartbeat. */
+function SchedulerLine({
+  cronSecretSet,
+  lastTickAt,
+}: {
+  cronSecretSet: boolean;
+  lastTickAt: string | null;
+}) {
+  const minutes = lastTickAt ? Math.floor((Date.now() - Date.parse(lastTickAt)) / 60_000) : null;
+  const ago = minutes === null ? "" : minutes < 1 ? "under a minute ago" : `${minutes} min ago`;
+  const healthy = cronSecretSet && minutes !== null && minutes <= SCHEDULER_STALE_MINUTES;
+  return (
+    <p>
+      <span className="text-muted-foreground">Scheduler:</span>{" "}
+      {!cronSecretSet ? (
+        <span className="text-destructive">
+          not running — <code className="font-mono text-[11px]">CRON_SECRET</code> missing
+        </span>
+      ) : minutes === null ? (
+        <span className="text-destructive">never ran</span>
+      ) : minutes > SCHEDULER_STALE_MINUTES ? (
+        <span className="text-destructive" suppressHydrationWarning>
+          not running · last tick {ago}
+        </span>
+      ) : (
+        <span className="text-status-ontrack-foreground" suppressHydrationWarning>
+          running · last tick {ago}
+        </span>
+      )}
+      <span className="text-muted-foreground">
+        {" "}
+        {healthy
+          ? "(a reading starts right after it is queued; the cron runs its later steps and retries)"
+          : "(a reading still starts when it is queued, but only one model step runs then; its later steps and every retry wait for the cron, and until it runs each Run again moves a reading one step on)"}
+      </span>
+    </p>
+  );
+}
+
 function AiTab() {
   const { data: jobs } = useSuspenseQuery(aiJobsQuery);
   // The status panel follows the table while a job is live: its "Last job"
@@ -240,12 +282,23 @@ function AiTab() {
 
   return (
     <div className="space-y-4">
+      {ai.overdue.count > 0 ? (
+        <p
+          role="alert"
+          className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-[12px] text-destructive"
+        >
+          {ai.overdue.count === 1 ? "1 reading has" : `${ai.overdue.count} readings have`} been
+          waiting more than 10 minutes (the oldest {ai.overdue.oldestMinutes} min) — the job runner
+          may not be running. Check the Scheduler line below.
+        </p>
+      ) : null}
       <Panel
         title="Status"
         level="primary"
-        meta="Every deal is read by one background job: the SOW and contract, the call notes, the brief, a verification pass, then the record and the welcome deck filled from it. One step per minute-cron tick, so a cut-off function is a retry, not a lost reading."
+        meta="Every deal is read by one background job: the SOW and contract, the call notes, the brief, a verification pass, then the record and the welcome deck filled from it. One step at a time — worked right after whatever queued it, and by the minute cron — so a cut-off function is a retry, not a lost reading."
       >
         <div className="space-y-2 px-3 py-2.5 text-[12px]">
+          <SchedulerLine cronSecretSet={ai.cronSecretSet} lastTickAt={ai.lastTickAt} />
           <p>
             <span className="text-muted-foreground">Key:</span>{" "}
             {ai.configured ? (

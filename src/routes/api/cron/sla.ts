@@ -2,22 +2,30 @@ import { createFileRoute } from "@tanstack/react-router";
 import { appUrl } from "@/lib/app-url";
 
 /**
- * GET/POST /api/cron/sla — hourly sweep (see vercel.json):
+ * GET/POST /api/cron/sla — hourly sweep (see vercel-crons.json):
  *   1. Warn:   open/in_progress tickets past 50% of the first-response window,
  *              not yet warned → email the assignee (or role pool), stamp sla_warned_at.
  *   2. Breach: tickets past sla_due_at with no first response → set sla_breached,
- *              insert a critical sla_breach alert, email managers + super admins.
- *   3. Stall:  implementations sitting in a non-terminal stage for >14 days with no
- *              open stalled_implementation alert → warning alert + manager email.
- *   4. Slip:   milestones past target_date and not complete, deduped per milestone →
- *              overdue_milestone alert.
+ *              insert a critical sla_breach alert, email managers + super admins
+ *              (not for a breach already a week old when first seen).
+ *   3. Stall:  deals past their stage's escalate limit (STAGE_LIMITS, business
+ *              days, the clock Home uses) → stalled_implementation alert, once per
+ *              stage visit, no email (the escalate nudge emails).
+ *   4. Slip:   legacy milestones past target_date and not complete, once per
+ *              milestone and date → overdue_milestone alert, no email.
  *   6. Signals: champion_gone_quiet + launch_date_at_risk (Phase 6), behind the
  *              `signals_alerts` flag; deduped per implementation, no email.
- * Every pass is guarded (sla_warned_at / sla_breached / existing unacknowledged
- * alert) so re-runs never double-email.
+ *   7. Nudges: the checklist's own limits; the first sweep ever records the
+ *              current state without emailing (nudges.server.ts).
+ * Every pass is guarded (sla_warned_at / sla_breached / an alert already raised
+ * for the visit, 0080 / a nudge claimed for the hour, 0081) so re-runs, even
+ * overlapping ones, never double-email.
  *
  * Auth: `Authorization: Bearer ${CRON_SECRET}`.
  */
+
+/** A breach older than this when first seen is recorded without an email. */
+const STALE_BREACH_MS = 7 * 86_400_000;
 
 async function authorizeCron(request: Request): Promise<Response | null> {
   const { authenticateCronRequest } = await import("@/integrations/supabase/cron-auth");
@@ -30,7 +38,6 @@ async function runSlaSweep(): Promise<Response> {
   const { audit } = await import("@/lib/server/audit");
   const ticketsServer = await import("@/lib/tickets.server");
   const { createAlert, managerProfiles, rolePool, escapeHtml } = ticketsServer;
-  const { normalizeStage } = await import("@/lib/hub-format");
   const db = supabaseAdmin as any;
 
   const now = Date.now();
@@ -129,6 +136,9 @@ async function runSlaSweep(): Promise<Response> {
       .select("id");
     if (!flagged || flagged.length === 0) continue;
 
+    // A breach found a week late (the first sweep, or one after an outage)
+    // is history, not news: flagged and on /alerts, but not emailed.
+    const stale = Date.parse(t.sla_due_at) < now - STALE_BREACH_MS;
     await createAlert({
       kind: "sla_breach",
       severity: "critical",
@@ -136,93 +146,33 @@ async function runSlaSweep(): Promise<Response> {
       detail: `Ticket from ${t.submitter_email ?? "unknown"} got no first response within 24 hours. ${base}/tickets/${t.id}`,
       customerId: t.customer_id,
       implementationId: t.implementation_id,
-      payload: { ticket_id: t.id },
-      notify: true, // emails every manager + super admin, stamps notified_at
+      payload: { ticket_id: t.id, ...(stale ? { stale: true } : {}) },
+      notify: !stale, // emails every manager + super admin, stamps notified_at
       actor: { type: "system" },
     });
     summary.breached += 1;
   }
 
-  /* ---- Dedupe data for passes 3 + 4: open system alerts of these kinds ---- */
-  const { data: openAlerts } = await db
-    .from("alerts")
-    .select("kind, implementation_id, payload")
-    .in("kind", ["stalled_implementation", "overdue_milestone"])
-    .is("acknowledged_at", null);
-  const stalledFlagged = new Set(
-    (openAlerts ?? [])
-      .filter((a: any) => a.kind === "stalled_implementation")
-      .map((a: any) => a.implementation_id as string),
-  );
-  const milestoneFlagged = new Set(
-    (openAlerts ?? [])
-      .filter((a: any) => a.kind === "overdue_milestone")
-      .map((a: any) => a.payload?.milestone_id as string | undefined)
-      .filter(Boolean),
-  );
-
-  /* ---- 3. Stalled implementations: >14 days in a non-terminal stage ---- */
-  const cutoff = new Date(now - 14 * 86_400_000).toISOString();
-  const { data: impls } = await db
-    .from("implementations")
-    .select("id, name, customer_id, current_stage, stage_entered_at, status")
-    .lt("stage_entered_at", cutoff);
-  const stalled = (impls ?? []).filter(
-    (i: any) => normalizeStage(i.current_stage) !== "graduate-to-cs" && !stalledFlagged.has(i.id),
-  );
-  const customerIds = [...new Set(stalled.map((i: any) => i.customer_id).filter(Boolean))];
-  const { data: customers } = customerIds.length
-    ? await db.from("customers").select("id, name").in("id", customerIds)
-    : { data: [] };
-  const customerName = new Map<string, string>((customers ?? []).map((c: any) => [c.id, c.name]));
-  for (const impl of stalled) {
-    const days = Math.floor((now - new Date(impl.stage_entered_at).getTime()) / 86_400_000);
-    await createAlert({
-      kind: "stalled_implementation",
-      severity: "warning",
-      title: `Stalled: ${customerName.get(impl.customer_id) ?? impl.name} — ${days}d in ${impl.current_stage}`,
-      detail: `Implementation "${impl.name}" has been in stage "${impl.current_stage}" for ${days} days with no advance.`,
-      customerId: impl.customer_id,
-      implementationId: impl.id,
-      notify: true, // emails managers
-      actor: { type: "system" },
-    });
-    summary.stalled += 1;
+  /* ---- 3. Stuck deals: past their stage's escalate limit ----
+   * The same clock and limits as Home (business days in the deal's stage,
+   * STAGE_LIMITS), raised once per stage visit and never emailed: the
+   * escalate nudge below already told the owner and the managers.
+   */
+  try {
+    const { runStallAlerts } = await import("@/lib/stall-alerts.server");
+    summary.stalled = (await runStallAlerts()).raised;
+  } catch (e) {
+    console.error("[cron] stall pass failed", e);
   }
 
-  /* ---- 4. Overdue milestones: target_date past, not complete ---- */
-  const today = new Date(now).toISOString().slice(0, 10);
-  const { data: milestones } = await db
-    .from("milestones")
-    .select("id, name, implementation_id, target_date, completed_date, status")
-    .lt("target_date", today)
-    .is("completed_date", null);
-  const overdue = (milestones ?? []).filter(
-    (m: any) =>
-      !["completed", "complete", "done"].includes((m.status ?? "").toLowerCase()) &&
-      !milestoneFlagged.has(m.id),
-  );
-  const implIds = [...new Set(overdue.map((m: any) => m.implementation_id).filter(Boolean))];
-  const { data: milestoneImpls } = implIds.length
-    ? await db.from("implementations").select("id, customer_id, name").in("id", implIds)
-    : { data: [] };
-  const implById = new Map<string, { id: string; customer_id: string | null; name: string }>(
-    (milestoneImpls ?? []).map((i: any) => [i.id, i]),
-  );
-  for (const m of overdue) {
-    const impl = implById.get(m.implementation_id);
-    await createAlert({
-      kind: "overdue_milestone",
-      severity: "warning",
-      title: `Overdue milestone: ${m.name}`,
-      detail: `Milestone "${m.name}"${impl ? ` on "${impl.name}"` : ""} was due ${m.target_date} and is not complete.`,
-      customerId: impl?.customer_id ?? null,
-      implementationId: m.implementation_id,
-      payload: { milestone_id: m.id },
-      notify: false, // alert row only; managers see it on /alerts
-      actor: { type: "system" },
-    });
-    summary.overdue_milestones += 1;
+  /* ---- 4. Overdue milestones (legacy milestones table): alert row only ----
+   * Keyed by the milestone and its date, so an acknowledged one is not
+   * raised again every hour. notify:false — this pass never emails.
+   */
+  try {
+    summary.overdue_milestones = await overdueMilestonePass(db, now, ticketsServer);
+  } catch (e) {
+    console.error("[cron] overdue-milestone pass failed", e);
   }
 
   /* ---- 5. Computed-health backstop ----
@@ -243,6 +193,10 @@ async function runSlaSweep(): Promise<Response> {
     const { runDealNudges } = await import("@/lib/nudges.server");
     const n = await runDealNudges();
     (summary as Record<string, number>)["deal_nudges_sent"] = n.sent;
+    (summary as Record<string, number>)["deal_nudges_baselined"] = n.baselined;
+    (summary as Record<string, number>)["deal_nudges_failed"] = n.failed;
+    // A read failed: nothing was sent or baselined this hour (the log says why).
+    (summary as Record<string, number>)["deal_nudges_halted"] = n.halted ? 1 : 0;
   } catch (e) {
     console.error("[cron] deal nudges failed", e);
   }
@@ -268,6 +222,53 @@ async function runSlaSweep(): Promise<Response> {
   });
 
   return Response.json({ ok: true, ...summary });
+}
+
+/** Pass 4: legacy milestones past their date, one alert per milestone and date. */
+async function overdueMilestonePass(
+  db: any,
+  now: number,
+  ticketsServer: typeof import("@/lib/tickets.server"),
+): Promise<number> {
+  const { createAlert, raisedVisits, visitKey } = ticketsServer;
+  const raised = await raisedVisits(["overdue_milestone"]);
+  let raisedCount = 0;
+  const today = new Date(now).toISOString().slice(0, 10);
+  const { data: milestones } = await db
+    .from("milestones")
+    .select("id, name, implementation_id, target_date, completed_date, status")
+    .lt("target_date", today)
+    .is("completed_date", null);
+  const overdue = (milestones ?? []).filter(
+    (m: any) =>
+      !["completed", "complete", "done"].includes((m.status ?? "").toLowerCase()) &&
+      !raised.has(
+        visitKey("overdue_milestone", m.implementation_id ?? "", `${m.id}@${m.target_date}`),
+      ),
+  );
+  const implIds = [...new Set(overdue.map((m: any) => m.implementation_id).filter(Boolean))];
+  const { data: milestoneImpls } = implIds.length
+    ? await db.from("implementations").select("id, customer_id, name").in("id", implIds)
+    : { data: [] };
+  const implById = new Map<string, { id: string; customer_id: string | null; name: string }>(
+    (milestoneImpls ?? []).map((i: any) => [i.id, i]),
+  );
+  for (const m of overdue) {
+    const impl = implById.get(m.implementation_id);
+    const row = await createAlert({
+      kind: "overdue_milestone",
+      severity: "warning",
+      title: `Overdue milestone: ${m.name}`,
+      detail: `Milestone "${m.name}"${impl ? ` on "${impl.name}"` : ""} was due ${m.target_date} and is not complete.`,
+      customerId: impl?.customer_id ?? null,
+      implementationId: m.implementation_id,
+      payload: { milestone_id: m.id, visit: `${m.id}@${m.target_date}` },
+      notify: false, // never emails; managers see it on /alerts
+      actor: { type: "system" },
+    });
+    if (!row.already_raised) raisedCount += 1;
+  }
+  return raisedCount;
 }
 
 async function handle(request: Request): Promise<Response> {

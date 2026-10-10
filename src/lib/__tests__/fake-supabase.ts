@@ -20,6 +20,23 @@
 // the suite reads columns by name without a generated type in the way.
 export type Rows = Record<string, any[]>;
 
+/** A column, or one JSON key of it as text (`payload->>visit`), as PostgREST reads it. */
+function field(row: any, col: string): unknown {
+  const at = col.indexOf("->>");
+  if (at === -1) return row[col];
+  const v = row[col.slice(0, at)]?.[col.slice(at + 3)];
+  return v === undefined || v === null ? null : String(v);
+}
+
+/**
+ * Unique indexes to enforce on insert, per table: the columns (or JSON keys,
+ * `payload->>claim`) and the partial index's WHERE as a predicate.
+ */
+export type UniqueIndexes = Record<
+  string,
+  Array<{ cols: string[]; where?: (row: any) => boolean }>
+>;
+
 type Op =
   | { kind: "select" }
   | { kind: "insert"; values: Record<string, any>[] }
@@ -32,12 +49,32 @@ class Builder implements PromiseLike<{ data: any; error: any }> {
   private op: Op = { kind: "select" };
   private orderBy: Array<{ col: string; asc: boolean }> = [];
   private limitTo: number | null = null;
+  private offset = 0;
 
   constructor(
     private readonly table: string,
     private readonly store: Rows,
     private readonly log: { inserts: Array<{ table: string; row: any }> },
+    private readonly unique: UniqueIndexes = {},
   ) {}
+
+  /** The first insert that a unique index refuses (nulls never collide, as in Postgres). */
+  private violates(values: Record<string, any>[]): boolean {
+    const seen = [...this.rows()];
+    for (const v of values) {
+      for (const idx of this.unique[this.table] ?? []) {
+        if (idx.where && !idx.where(v)) continue;
+        const key = idx.cols.map((c) => field(v, c));
+        if (key.some((k) => k == null)) continue;
+        const clash = seen.some(
+          (r) => (!idx.where || idx.where(r)) && idx.cols.every((c, i) => field(r, c) === key[i]),
+        );
+        if (clash) return true;
+      }
+      seen.push(v);
+    }
+    return false;
+  }
 
   private rows(): any[] {
     return (this.store[this.table] ??= []);
@@ -48,7 +85,7 @@ class Builder implements PromiseLike<{ data: any; error: any }> {
   }
 
   eq(col: string, value: unknown): this {
-    this.filters.push((r) => r[col] === value);
+    this.filters.push((r) => field(r, col) === value);
     return this;
   }
 
@@ -93,8 +130,13 @@ class Builder implements PromiseLike<{ data: any; error: any }> {
     return this;
   }
 
-  not(col: string, operator: string, value: string): this {
-    if (operator !== "in") throw new Error(`fake-supabase: unsupported not(${operator})`);
+  not(col: string, operator: string, value: string | null): this {
+    if (operator === "is" && value === null) {
+      this.filters.push((r) => field(r, col) != null);
+      return this;
+    }
+    if (operator !== "in" || value === null)
+      throw new Error(`fake-supabase: unsupported not(${operator})`);
     const list = value
       .replace(/^\(/, "")
       .replace(/\)$/, "")
@@ -111,6 +153,12 @@ class Builder implements PromiseLike<{ data: any; error: any }> {
 
   limit(n: number): this {
     this.limitTo = n;
+    return this;
+  }
+
+  range(from: number, to: number): this {
+    this.offset = from;
+    this.limitTo = to - from + 1;
     return this;
   }
 
@@ -152,12 +200,19 @@ class Builder implements PromiseLike<{ data: any; error: any }> {
         return av === bv ? 0 : (av < bv ? -1 : 1) * (asc ? 1 : -1);
       });
     }
-    if (this.limitTo !== null) out = out.slice(0, this.limitTo);
+    if (this.limitTo !== null) out = out.slice(this.offset, this.offset + this.limitTo);
+    else if (this.offset) out = out.slice(this.offset);
     return out;
   }
 
   private run(): { data: any; error: any } {
     if (this.op.kind === "insert") {
+      if (this.violates(this.op.values)) {
+        return {
+          data: null,
+          error: { code: "23505", message: "duplicate key value violates unique constraint" },
+        };
+      }
       const created = this.op.values.map((v) => ({
         id: v["id"] ?? `${this.table}-${Math.random().toString(16).slice(2, 10)}`,
         created_at: v["created_at"] ?? new Date().toISOString(),
@@ -233,7 +288,7 @@ export type FakeSupabase = {
 
 export function createFakeSupabase(
   initial: Rows,
-  options: { objects?: Record<string, Uint8Array> } = {},
+  options: { objects?: Record<string, Uint8Array>; unique?: UniqueIndexes } = {},
 ): FakeSupabase {
   const store: Rows = JSON.parse(JSON.stringify(initial));
   const log = { inserts: [] as Array<{ table: string; row: any }> };
@@ -242,7 +297,7 @@ export function createFakeSupabase(
   const rpcs: FakeSupabase["rpcs"] = [];
 
   const client = {
-    from: (table: string) => new Builder(table, store, log),
+    from: (table: string) => new Builder(table, store, log, options.unique),
     storage: {
       from: (bucket: string) => ({
         upload: async (path: string, bytes: Uint8Array, opts?: { contentType?: string }) => {

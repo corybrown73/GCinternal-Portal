@@ -122,8 +122,10 @@ export async function recordStageChange(args: {
  * acceptable on a path a Zapier retry storm can hit: a re-fired closed-won
  * opportunity would 500 the handler and email every manager again, every time.
  *
- * This wrapper follows the SLA sweep's open-alert-query idiom: an unacknowledged
- * alert of the same kind for the same subject means the humans already know.
+ * `dedupeOn`: an unacknowledged alert of the same kind for the same subject
+ * means the humans already know. `visit`: raised once per visit, ever —
+ * acknowledged or not (0080's index backs it). `source` defaults to
+ * "system"; only the Salesforce integration says "salesforce".
  */
 export async function safeCreateAlert(input: {
   kind: string;
@@ -135,9 +137,24 @@ export async function safeCreateAlert(input: {
   payload?: Record<string, unknown> | null;
   /** payload key + value that identifies "the same alert". */
   dedupeOn?: { key: string; value: string } | null;
+  /** Written to payload.visit; skipped when any alert of this kind has it. */
+  visit?: string | null;
   notify?: boolean;
+  source?: string;
 }): Promise<{ created: boolean; deduped: boolean }> {
   try {
+    const payload = input.visit ? { ...(input.payload ?? {}), visit: input.visit } : input.payload;
+    if (input.visit) {
+      const { alertSubject, raisedVisits, visitKey } = await import("@/lib/tickets.server");
+      const raised = await raisedVisits([input.kind]);
+      const subject = alertSubject({
+        implementation_id: input.implementationId ?? null,
+        payload: payload ?? null,
+      });
+      if (raised.has(visitKey(input.kind, subject, input.visit))) {
+        return { created: false, deduped: true };
+      }
+    }
     if (input.dedupeOn) {
       const { data: open } = await db()
         .from("alerts")
@@ -153,18 +170,19 @@ export async function safeCreateAlert(input: {
     // createAlert emits `alert.raised` itself, for every alert whatever raised
     // it — there is deliberately no second emission here.
     const { createAlert } = await import("@/lib/tickets.server");
-    await createAlert({
+    const created = await createAlert({
       kind: input.kind,
       severity: input.severity ?? "warning",
       title: input.title,
       detail: input.detail ?? null,
       customerId: input.customerId ?? null,
       implementationId: input.implementationId ?? null,
-      source: "salesforce",
-      payload: input.payload ?? null,
+      source: input.source ?? "system",
+      payload: payload ?? null,
       notify: input.notify ?? true,
       actor: { type: "system" },
     });
+    if (created.already_raised) return { created: false, deduped: true };
 
     return { created: true, deduped: false };
   } catch (e) {

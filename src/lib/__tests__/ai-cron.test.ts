@@ -27,7 +27,13 @@ vi.mock("../server/ai/steps/prepare-deal", () => h.steps);
 vi.mock("../server/audit", () => ({ audit: async (e: any) => void h.audits.push(e) }));
 vi.mock("../app-config.server", () => h.flags);
 
-import { CLAIM_LIMIT, runClaimed, tickAiJobs, waitUntilOf } from "../server/ai/cron";
+import {
+  CLAIM_LIMIT,
+  runClaimed,
+  SCHEDULER_TICK_KEY,
+  tickAiJobs,
+  waitUntilOf,
+} from "../server/ai/cron";
 import type { AiJobRow } from "../server/ai/jobs";
 
 const rows: Rows = { portal_ai_jobs: [], portal_accounts: [] };
@@ -135,6 +141,24 @@ describe("tickAiJobs", () => {
     });
     const summary = await runClaimed([{ ...jobs()[0]! }]);
     expect(summary).toMatchObject({ claimed: 1, lost: 1, failed: 0, advanced: 0 });
+  });
+});
+
+describe("the scheduler's heartbeat", () => {
+  it("a scheduled tick (GET) stamps it, even with nothing to do; a kick (POST) does not", async () => {
+    const tick = () =>
+      (fake.store["portal_app_config"] ?? []).find((r) => r.key === SCHEDULER_TICK_KEY);
+    await tickAiJobs(new Request("https://hub.example.com/api/cron/ai-jobs", { method: "POST" }));
+    expect(tick()).toBeUndefined();
+    await tickAiJobs(new Request("https://hub.example.com/api/cron/ai-jobs"));
+    expect(Date.parse(tick()!.value)).toBeGreaterThan(Date.now() - 5000);
+    const first = tick()!.value;
+    await new Promise((r) => setTimeout(r, 5));
+    await tickAiJobs(new Request("https://hub.example.com/api/cron/ai-jobs"));
+    expect(
+      fake.store["portal_app_config"]!.filter((r) => r.key === SCHEDULER_TICK_KEY),
+    ).toHaveLength(1);
+    expect(tick()!.value >= first).toBe(true);
   });
 });
 

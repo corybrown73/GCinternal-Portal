@@ -66,7 +66,12 @@ function AuditHealthPage() {
             <div className="border-t border-border px-3 py-2">
               <p className="text-[12px] text-destructive">
                 Last failure: {data.lastFailureAction} — {data.lastFailureError}
-                {data.lastFailureAt ? ` ($<When value={data.lastFailureAt} />)` : ""}
+                {data.lastFailureAt ? (
+                  <>
+                    {" ("}
+                    <When value={data.lastFailureAt} />)
+                  </>
+                ) : null}
               </p>
             </div>
           ) : null}

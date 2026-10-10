@@ -789,12 +789,16 @@ export function HandoffPanel({
 
         <span className="ml-auto text-[11px] text-muted-foreground">
           {status === "draft" ? "Not submitted yet." : null}
-          {status === "submitted"
-            ? `Submitted by ${submittedBy} · $<When value={packet?.submitted_at} />`
-            : null}
-          {status === "accepted" || status === "returned"
-            ? `${STATUS_LABEL[status]} by ${decidedBy} · $<When value={packet?.decided_at} />`
-            : null}
+          {status === "submitted" ? (
+            <>
+              Submitted by {submittedBy} · <When value={packet?.submitted_at} />
+            </>
+          ) : null}
+          {status === "accepted" || status === "returned" ? (
+            <>
+              {STATUS_LABEL[status]} by {decidedBy} · <When value={packet?.decided_at} />
+            </>
+          ) : null}
         </span>
       </div>
 

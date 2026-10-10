@@ -313,6 +313,7 @@ export function createIngestPort(ctx: { apiKeyId: string | null }): IngestPort {
         },
         dedupeOn: { key: "salesforce_opportunity_id", value: args.opportunityId },
         notify: true,
+        source: "salesforce",
       });
     },
 
@@ -1064,7 +1065,7 @@ export async function runSalesforcePull(
       },
       startReading: async (dealId) => {
         const { autoReadDeal } = await import("./server/ai/jobs");
-        await autoReadDeal(dealId, "closed_won_salesforce");
+        await autoReadDeal(dealId, "closed_won_salesforce", null, { pump: false });
       },
     },
   });
