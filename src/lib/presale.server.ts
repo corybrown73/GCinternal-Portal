@@ -4,7 +4,13 @@ import { nextChecklistTask, stageFlow } from "./stage-flow";
 import { TERM_LABELS } from "./terms";
 import { resolveAccountId, transitionStage, upsertAccount } from "./server/accounts";
 import { accountUpsertSchema } from "./server/schemas";
-import { isOnboardingStage, isStage, STAGE_LABELS, type AccountStage } from "./presale-stages";
+import {
+  isOnboardingStage,
+  isPreClose,
+  isStage,
+  STAGE_LABELS,
+  type AccountStage,
+} from "./presale-stages";
 import { isSolutionKind, launchCriticalOpen, normalizeServices } from "./onboarding-services";
 import { MANAGE_ROLES } from "./roles";
 import { handoffChecks } from "./sales-handoff";
@@ -494,16 +500,19 @@ export async function enterDealAtStage(
     return { stage: target, refused: null };
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
-    const { gateTarget, parseWonGate } = await import("./won-gate");
+    const { gateTarget, parseWonGate, WON_GATE_LABEL } = await import("./won-gate");
     const missing = parseWonGate(message);
     if (!missing || gateTarget(message) !== "closed_won") throw e;
     const hold = findStage(pipeline, "negotiate") ? ("negotiate" as const) : null;
     if (hold) {
+      // Stage history shows the note as written: the missing pieces in
+      // words, not the gate's message with its machine tag.
+      const { heldNote } = await import("./deal-entry");
       await transitionDeal(
         userId,
         dealId,
         hold,
-        `Entered as ${STAGE_LABELS[target] ?? target}; held here — ${message}`,
+        heldNote(STAGE_LABELS[target] ?? target, STAGE_LABELS[hold], missing, WON_GATE_LABEL),
       );
     }
     return { stage: hold ?? "prospect", refused: { missing, message } };
@@ -522,7 +531,7 @@ export async function settleNewDeal(
   input: { stage: AccountStage; implementationOwnerId?: string | null; canAssign: boolean },
 ): Promise<DealEntryResult & { assignee: string | null }> {
   await requireSalesEditor(userId);
-  const { isNewDealStage, canAssignAtEntry } = await import("./deal-entry");
+  const { isNewDealStage, canAssignAtEntry, ALREADY_STAGED } = await import("./deal-entry");
   if (!isNewDealStage(input.stage)) {
     throw new Error(
       `A new deal starts at Prospect, Negotiate & Finalize or Closed Won — not ${STAGE_LABELS[input.stage] ?? input.stage}.`,
@@ -537,7 +546,7 @@ export async function settleNewDeal(
   // Only the deal just entered, by the person who entered it: anything else
   // has a stage of its own and moves from the board.
   if (deal.created_by !== userId || deal.stage !== "prospect") {
-    throw new Error("This deal already has its stage. Move it from the deal page.");
+    throw new Error(ALREADY_STAGED);
   }
   let assignee: string | null = null;
   if (input.implementationOwnerId) {
@@ -545,14 +554,32 @@ export async function settleNewDeal(
     if (!canAssignAtEntry(input.stage)) {
       throw new Error("The TIS is assigned from Negotiate & Finalize on.");
     }
-    const { assignDeal } = await import("./assignment.server");
-    const assigned = await assignDeal({
-      dealId,
-      teamMemberId: input.implementationOwnerId,
-      actorProfileId: userId,
-      note: "Chosen when the account was entered",
-    });
-    assignee = assigned?.assigneeName ?? null;
+    const { assignDeal, loadPool } = await import("./assignment.server");
+    // The pick must still be on the team. assignDeal would otherwise fall
+    // back to the rule (or the claim email) while the ledger said this
+    // person was chosen.
+    const member = (await loadPool()).find((p) => p.teamMemberId === input.implementationOwnerId);
+    if (!member) throw new Error("That TIS is no longer on the team — pick another.");
+    // A retry after a failure part-way: the TIS is already on the deal, so
+    // they are not assigned (and emailed) a second time.
+    const { data: last } = await db()
+      .from("portal_assignments")
+      .select("team_member_id")
+      .eq("deal_id", dealId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (last && String(last.team_member_id) === member.teamMemberId) {
+      assignee = member.name;
+    } else {
+      const assigned = await assignDeal({
+        dealId,
+        teamMemberId: member.teamMemberId,
+        actorProfileId: userId,
+        note: "Chosen when the account was entered",
+      });
+      assignee = assigned?.assigneeName ?? null;
+    }
   }
   const entry = await enterDealAtStage(userId, dealId, input.stage);
   return { ...entry, assignee };
@@ -600,12 +627,19 @@ export async function linkExistingCustomer(
   await requireSalesEditor(userId);
   const { data: deal } = await db()
     .from("portal_accounts")
-    .select("id,intake,customer_id")
+    .select("id,stage,intake,customer_id")
     .eq("id", dealId)
     .maybeSingle();
   if (!deal) throw new Error("Deal not found");
   if (deal.customer_id) {
     throw new Error("This deal is already on its customer's page.");
+  }
+  // Only the close reads the pick. A deal past it would save the choice and
+  // do nothing with it.
+  if (!isPreClose(String(deal.stage))) {
+    throw new Error(
+      "This deal has already closed, so picking the customer here would change nothing. Use “Add services” on the customer's page instead.",
+    );
   }
   let name: string | null = null;
   let industry: string | null = null;

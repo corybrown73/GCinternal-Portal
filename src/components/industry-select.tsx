@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
-import { INDUSTRIES, isListedIndustry } from "@/lib/intake-answers";
+import { canonicalIndustry, INDUSTRIES, isListedIndustry } from "@/lib/intake-answers";
 import { cn } from "@/lib/utils";
 
 const TYPE_IT = "__type_it__";
@@ -32,8 +32,14 @@ export function IndustrySelect({
   const typedValue = value && !isListedIndustry(value) ? value : null;
   const [typing, setTyping] = useState(Boolean(typedValue));
   const [text, setText] = useState(typedValue ?? "");
+  // What this field reported itself, keystroke by keystroke (live): that
+  // value coming back is not a change from outside, so typing "HVAC" does
+  // not close the box under the cursor.
+  const sent = useRef<string | null | undefined>(undefined);
   // The record changed under the field (a save, the AI): follow it.
   useEffect(() => {
+    if (sent.current !== undefined && value === sent.current) return;
+    sent.current = undefined;
     if (value && !isListedIndustry(value)) {
       setTyping(true);
       setText((t) => (t.trim() === value ? t : value));
@@ -42,9 +48,22 @@ export function IndustrySelect({
     }
   }, [value]);
 
+  // On blur or Enter. A listed industry typed in any case snaps to the list;
+  // nothing typed leaves the saved value alone (clearing is the empty option).
   const commit = () => {
-    const t = text.trim();
-    if ((t || null) !== (value ?? null)) onChange(t || null);
+    const next = canonicalIndustry(text);
+    if (next === null) {
+      if (value && !isListedIndustry(value)) setText(value);
+      else setTyping(false);
+      return;
+    }
+    if (isListedIndustry(next)) {
+      setTyping(false);
+      setText("");
+    } else if (next !== text) {
+      setText(next);
+    }
+    if (next !== (value ?? null)) onChange(next);
   };
 
   return (
@@ -65,7 +84,9 @@ export function IndustrySelect({
         }}
       >
         <option value="">{emptyLabel}</option>
-        {INDUSTRIES.map((i) => (
+        {/* "Other" is the type-it option below; a value already saved as
+            "Other" still shows as itself. */}
+        {INDUSTRIES.filter((i) => i !== "Other" || value === "Other").map((i) => (
           <option key={i} value={i}>
             {i}
           </option>
@@ -83,7 +104,10 @@ export function IndustrySelect({
           autoFocus={!typedValue}
           onChange={(e) => {
             setText(e.target.value);
-            if (live) onChange(e.target.value.trim() || null);
+            if (live) {
+              sent.current = e.target.value.trim() || null;
+              onChange(sent.current);
+            }
           }}
           onBlur={commit}
           onKeyDown={(e) => {

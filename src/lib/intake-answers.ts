@@ -123,6 +123,17 @@ export function isListedIndustry(value: string | null | undefined): boolean {
   return (INDUSTRIES as readonly string[]).includes(value ?? "");
 }
 
+/**
+ * Typed text as it is saved: a listed industry in any case is that listed
+ * industry ("electrical" is Electrical, with its icon and its forms);
+ * anything else is kept as typed, trimmed. Empty is null.
+ */
+export function canonicalIndustry(typed: string): string | null {
+  const t = typed.trim();
+  if (!t) return null;
+  return INDUSTRIES.find((i) => i.toLowerCase() === t.toLowerCase()) ?? t;
+}
+
 export const COMPANY_SIZES = ["1–10", "11–50", "51–200", "201–1,000", "1,000+"] as const;
 
 const shortText = z.string().trim().max(300).nullable().default(null);

@@ -57,3 +57,40 @@ export function existingCustomerAtClose(
   if (intake.path !== "existing") return null;
   return intake.existing_customer_id ?? null;
 }
+
+/**
+ * settleNewDeal's refusal for a deal that has already left Prospect. The
+ * dialog reads it on a retry: the first try moved the deal, so the job is
+ * done and the deal page is where to go.
+ */
+export const ALREADY_STAGED = "This deal already has its stage. Move it from the deal page.";
+
+/**
+ * The refusal handed from the New account dialog to the deal page, as a
+ * search param (`?gate=notes,sow`), so the page opens on what is missing
+ * instead of a bare "Not closed yet".
+ */
+export function gateParam(missing: readonly WonGateMissing[]): string {
+  return missing.join(",");
+}
+
+/** The missing pieces a `?gate=` param names; null for none or nonsense. */
+export function parseGateParam(raw: unknown): WonGateMissing[] | null {
+  if (typeof raw !== "string") return null;
+  const keys = raw
+    .split(",")
+    .map((k) => k.trim())
+    .filter((k): k is "notes" | "sow" => k === "notes" || k === "sow");
+  return keys.length ? [...new Set(keys)] : null;
+}
+
+/** The hold note in Stage history: what was missing, in words, without the gate's machine tag. */
+export function heldNote(
+  enteredAs: string,
+  heldAt: string,
+  missing: readonly WonGateMissing[],
+  labels: Record<WonGateMissing, string>,
+): string {
+  const named = missing.map((m) => labels[m]).filter(Boolean);
+  return `Entered as ${enteredAs}; held at ${heldAt}${named.length ? ` — no ${named.join(" and no ")} yet` : ""}`;
+}

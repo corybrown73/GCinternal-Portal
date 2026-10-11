@@ -76,12 +76,27 @@ vi.mock("../app-config.server", () => ({ isFlagOn: async () => true }));
 vi.mock("../assignment.server", () => ({
   assignDeal: async (args: Record<string, any>) => {
     h.assigned.push(args);
+    if (args["teamMemberId"]) {
+      (h.fake.store.portal_assignments ??= []).push({
+        deal_id: args["dealId"],
+        team_member_id: args["teamMemberId"],
+        created_at: new Date().toISOString(),
+      });
+    }
     return { assigneeName: args["teamMemberId"] ? "Teya Rampaul" : "Next up" };
   },
   dealAssignment: async (dealId: string) => ({
     owner: h.assigned.some((a) => a["dealId"] === dealId) ? { name: "Teya Rampaul" } : null,
   }),
-  loadPool: async () => [],
+  // The active team: the TIS is on it; nobody else is.
+  loadPool: async () => [
+    {
+      teamMemberId: "44444444-4444-4444-8444-444444444444",
+      name: "Teya Rampaul",
+      active: true,
+      inPool: true,
+    },
+  ],
 }));
 vi.mock("../server/ai/jobs", () => ({ autoReadDeal: async () => null }));
 vi.mock("../activity.server", () => ({ teamMemberIdForProfile: async () => null }));
@@ -102,11 +117,15 @@ import {
 import {
   canAssignAtEntry,
   existingCustomerAtClose,
+  gateParam,
+  heldNote,
   isNewDealStage,
   liveWonGateMissing,
   NEW_DEAL_STAGES,
+  parseGateParam,
 } from "../deal-entry";
-import { INDUSTRIES, isListedIndustry, readIntake } from "../intake-answers";
+import { WON_GATE_LABEL } from "../won-gate";
+import { canonicalIndustry, INDUSTRIES, isListedIndustry, readIntake } from "../intake-answers";
 import { industryIcon } from "../industry-icons";
 
 const ME = "11111111-1111-4111-8111-111111111111";
@@ -177,7 +196,10 @@ describe("a deal entered at Closed Won", () => {
     expect(out.refused?.missing).toEqual(["sow"]);
     expect(out.refused?.message).toMatch(/Not ready for Closed Won/);
     expect(deal(id).stage).toBe("negotiate");
-    expect(h.moves.at(-1)?.note).toMatch(/Entered as Closed Won; held here/);
+    // Stage history reads in words, without the gate's machine tag.
+    expect(h.moves.at(-1)?.note).toBe(
+      "Entered as Closed Won; held at Negotiate & Finalize — no signed SOW or contract yet",
+    );
     // Nothing the close starts happened.
     expect(h.fake.store.implementations).toHaveLength(0);
   });
@@ -237,6 +259,34 @@ describe("owners named at entry", () => {
     expect(h.assigned).toHaveLength(1);
   });
 
+  it("refuses a TIS who has left the team, before anything is written", async () => {
+    const id = await seedDeal({ sow_document_path: "sow/summit.pdf" });
+    h.fake.store.portal_gong_reports.push({ id: "r1", account_id: id });
+    await expect(
+      settleNewDeal(ME, id, {
+        stage: "closed_won",
+        implementationOwnerId: "77777777-7777-4777-8777-777777777777",
+        canAssign: true,
+      }),
+    ).rejects.toThrow(/no longer on the team/);
+    expect(h.assigned).toHaveLength(0);
+    expect(deal(id).stage).toBe("prospect");
+  });
+
+  it("does not assign the TIS twice when a retry follows a failure after the assignment", async () => {
+    const id = await seedDeal();
+    h.fake.store.portal_assignments = [
+      { deal_id: id, team_member_id: TIS, created_at: new Date().toISOString() },
+    ];
+    const out = await settleNewDeal(ME, id, {
+      stage: "negotiate",
+      implementationOwnerId: TIS,
+      canAssign: true,
+    });
+    expect(h.assigned).toHaveLength(0);
+    expect(out).toMatchObject({ stage: "negotiate", assignee: "Teya Rampaul" });
+  });
+
   it("does not assign at a bare Prospect, nor for someone who is not a manager", async () => {
     const id = await seedDeal();
     await expect(
@@ -283,6 +333,16 @@ describe("an existing account picked on the deal page", () => {
     await expect(linkExistingCustomer(ME, id, VARLEY)).rejects.toThrow(/already on its customer/);
   });
 
+  it("refuses once the deal is past the close, where nothing would read the pick", async () => {
+    const id = await seedDeal({ stage: "closed_won" });
+    await expect(linkExistingCustomer(ME, id, VARLEY)).rejects.toThrow(/already closed/);
+    expect(readIntake(deal(id).intake).existing_customer_id).toBeNull();
+    deal(id).stage = "negotiate";
+    await expect(linkExistingCustomer(ME, id, VARLEY)).resolves.toMatchObject({
+      customerId: VARLEY,
+    });
+  });
+
   it("is only read for an existing account that is not linked yet", () => {
     expect(existingCustomerAtClose({ path: "existing", existing_customer_id: VARLEY }, null)).toBe(
       VARLEY,
@@ -309,6 +369,23 @@ describe("the Closed Won notice after an upload", () => {
   });
 });
 
+describe("the refusal handed to the deal page", () => {
+  it("round-trips through ?gate= and ignores anything else", () => {
+    expect(parseGateParam(gateParam(["notes", "sow"]))).toEqual(["notes", "sow"]);
+    expect(parseGateParam("sow")).toEqual(["sow"]);
+    expect(parseGateParam("sow,sow, bogus")).toEqual(["sow"]);
+    expect(parseGateParam("")).toBeNull();
+    expect(parseGateParam(undefined)).toBeNull();
+    expect(parseGateParam(42)).toBeNull();
+  });
+
+  it("writes the hold note in words", () => {
+    expect(heldNote("Closed Won", "Negotiate & Finalize", ["notes", "sow"], WON_GATE_LABEL)).toBe(
+      "Entered as Closed Won; held at Negotiate & Finalize — no Gong brief or call note and no signed SOW or contract yet",
+    );
+  });
+});
+
 describe("industries", () => {
   it("lists the four added verticals, with Other last", () => {
     for (const i of ["Electrical", "Pest Control", "Water/Wastewater", "Education/Government"]) {
@@ -316,6 +393,13 @@ describe("industries", () => {
       expect(industryIcon(i)).not.toBe("ClipboardCheck");
     }
     expect(INDUSTRIES.at(-1)).toBe("Other");
+  });
+
+  it("snaps typed text to a listed industry in any case, and keeps the rest as typed", () => {
+    expect(canonicalIndustry("electrical")).toBe("Electrical");
+    expect(canonicalIndustry("  hvac ")).toBe("HVAC");
+    expect(canonicalIndustry(" Landscaping ")).toBe("Landscaping");
+    expect(canonicalIndustry("   ")).toBeNull();
   });
 
   it("keeps a typed industry as typed, and gives it the general icon", async () => {

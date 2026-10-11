@@ -6,7 +6,7 @@ import { Check } from "lucide-react";
 import type { DealData } from "@/lib/deal-query";
 import { listCustomerOptions } from "@/lib/hub.functions";
 import type { IntakeAnswers } from "@/lib/intake-answers";
-import { linkExistingCustomerFn } from "@/lib/presale.functions";
+import { getHandoffOptions, linkExistingCustomerFn } from "@/lib/presale.functions";
 import { cn } from "@/lib/utils";
 
 /**
@@ -31,6 +31,14 @@ export function ExistingCustomerLink({
   const options = useQuery({
     queryKey: ["customer-options"],
     queryFn: () => listCustomerOptions(),
+    staleTime: 60_000,
+  });
+  // Whether the close honours the pick at all: with \`account_model\` off it
+  // starts a new customer whatever is picked. Same query as the deal's
+  // handoff panel, so it is usually cached already.
+  const handoff = useQuery({
+    queryKey: ["handoff-options", deal.account.id],
+    queryFn: () => getHandoffOptions({ data: { dealId: deal.account.id } }),
     staleTime: 60_000,
   });
   const m = useMutation({
@@ -58,8 +66,18 @@ export function ExistingCustomerLink({
       <p className="flex flex-wrap items-center gap-2 rounded-md border border-border bg-background px-3 py-2 text-[12px]">
         <Check className="h-3.5 w-3.5 text-primary" strokeWidth={3} />
         <span>
-          Adds to <b>{picked?.name ?? (options.isPending ? "…" : "a customer no longer listed")}</b>
-          . At Closed Won the implementation goes on their page.
+          {handoff.data?.flagOn === false ? "Picked " : "Adds to "}
+          <b>
+            {picked?.name ??
+              (options.isPending
+                ? "…"
+                : options.isError
+                  ? "the customer picked (the list did not load)"
+                  : "a customer no longer listed")}
+          </b>
+          {handoff.data?.flagOn === false
+            ? ", but the close still starts a new customer for now (the account model is off) — merge it into theirs afterwards."
+            : " when the deal is marked Closed Won here. A close that comes from Salesforce starts a new customer, to be merged into theirs."}
         </span>
         {editable ? (
           <button
@@ -81,18 +99,37 @@ export function ExistingCustomerLink({
         Which customer is this for?
       </label>
       <p className="text-[11px] text-muted-foreground">
-        Pick them so the close adds this to their record instead of starting a second customer.
+        Pick them so marking it Closed Won here adds this to their record instead of starting a
+        second customer.
       </p>
       <input
         id={`existing-customer-${deal.account.id}`}
         className="h-8 w-full rounded-sm border border-border bg-background px-2 text-[12px] focus:outline-none focus:ring-1 focus:ring-primary disabled:opacity-60"
         value={query}
         onChange={(e) => setQuery(e.target.value)}
-        placeholder={options.isPending ? "Loading customers…" : "Search customers by name"}
+        placeholder={
+          options.isPending
+            ? "Loading customers…"
+            : options.isError
+              ? "Could not load customers"
+              : "Search customers by name"
+        }
         disabled={!editable || m.isPending}
         autoComplete="off"
       />
-      {q ? (
+      {options.isError ? (
+        <p className="text-destructive">
+          Could not load the customers.{" "}
+          <button
+            type="button"
+            className="underline"
+            disabled={options.isFetching}
+            onClick={() => void options.refetch()}
+          >
+            {options.isFetching ? "Trying…" : "Try again"}
+          </button>
+        </p>
+      ) : q ? (
         hits.length ? (
           <ul className="divide-y divide-border rounded-sm border border-border bg-background">
             {hits.map((c) => (

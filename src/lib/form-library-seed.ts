@@ -683,6 +683,12 @@ export const FORM_LIBRARY_SEED: Record<string, FormLibraryEntry[]> = {
         "Everything the authority having jurisdiction will look at — grounding, bonding, box fill, GFCI and AFCI protection, labelling — checked and photographed before the inspector arrives.",
       tags: ["inspection", "permit", "photos", "code"],
     },
+    {
+      name: "Time & Materials Ticket",
+      description:
+        "Hours by electrician, materials and equipment used, and any extra work the customer asked for on the day, signed on site so the office can bill it without calling the crew.",
+      tags: ["billing", "time", "materials", "signature"],
+    },
   ],
 
   "Pest Control": [
@@ -715,6 +721,12 @@ export const FORM_LIBRARY_SEED: Record<string, FormLibraryEntry[]> = {
       description:
         "A food plant or restaurant walked against the audit standard: sanitation, exclusion, harbourage and pest evidence by area, with photos and corrective actions assigned to the client.",
       tags: ["audit", "food safety", "photos", "corrective action"],
+    },
+    {
+      name: "New Account Site Survey",
+      description:
+        "A first visit to a prospective account: the building and grounds, pests reported and found, entry points and risk areas, and the recommended program, signed so the office can write the service agreement.",
+      tags: ["sales", "site survey", "photos", "signature"],
     },
   ],
 
@@ -749,6 +761,12 @@ export const FORM_LIBRARY_SEED: Record<string, FormLibraryEntry[]> = {
         "Tank level, baffles, effluent filter, distribution box and drain field condition, with the pump-out volume and photos. The report a transfer or a permit needs.",
       tags: ["septic", "inspection", "photos", "permit"],
     },
+    {
+      name: "Main Break / Repair Report",
+      description:
+        "Location, pipe size and material, cause, time out of service, customers affected, crew hours and parts, with photos, so the asset record and the outage report match what was done in the trench.",
+      tags: ["repair", "GPS", "photos", "asset"],
+    },
   ],
 
   "Education/Government": [
@@ -781,6 +799,12 @@ export const FORM_LIBRARY_SEED: Record<string, FormLibraryEntry[]> = {
       description:
         "Pre-trip check of a bus or municipal vehicle — brakes, lights, tyres, emergency equipment — with defects reported and the unit held out of service until a mechanic signs it off.",
       tags: ["fleet", "daily", "safety", "DVIR"],
+    },
+    {
+      name: "Asset Inventory Audit",
+      description:
+        "Each asset in a building or yard tagged and checked: location, condition, serial or barcode and a photo, so the capital plan and the insurance schedule list what is actually there.",
+      tags: ["asset", "barcode", "inventory", "photos"],
     },
   ],
 };

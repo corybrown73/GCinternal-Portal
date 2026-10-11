@@ -30,8 +30,14 @@ import {
   settleNewDealFn,
   uploadSow,
 } from "@/lib/presale.functions";
-import { WON_GATE_LABEL } from "@/lib/won-gate";
-import { canAssignAtEntry, NEW_DEAL_STAGES, type NewDealStage } from "@/lib/deal-entry";
+import { WON_GATE_LABEL, type WonGateMissing } from "@/lib/won-gate";
+import {
+  ALREADY_STAGED,
+  canAssignAtEntry,
+  gateParam,
+  NEW_DEAL_STAGES,
+  type NewDealStage,
+} from "@/lib/deal-entry";
 import { listCustomerOptions } from "@/lib/hub.functions";
 import { startServicesDealFn } from "@/lib/deal-pulse.functions";
 import { dealStageLabel } from "@/lib/deal-stage";
@@ -86,7 +92,7 @@ const emptyDeal: DealDraft = {
 type Held = {
   dealId: string;
   stage: AccountStage;
-  missing: string[];
+  missing: WonGateMissing[];
 };
 
 export function NewDealDialog() {
@@ -100,10 +106,16 @@ export function NewDealDialog() {
   const [held, setHeld] = useState<Held | null>(null);
   // What already happened, so a retry after a failure part-way finishes the
   // job instead of creating a second account.
-  const progress = useRef<{ dealId: string | null; notes: boolean; sow: boolean }>({
+  const progress = useRef<{
+    dealId: string | null;
+    notes: boolean;
+    sow: boolean;
+    settled: boolean;
+  }>({
     dealId: null,
     notes: false,
     sow: false,
+    settled: false,
   });
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -160,13 +172,15 @@ export function NewDealDialog() {
     setTouched(false);
     setPhase(null);
     setHeld(null);
-    progress.current = { dealId: null, notes: false, sow: false };
+    progress.current = { dealId: null, notes: false, sow: false, settled: false };
   };
-  const finish = (dealId: string) => {
+  // `gate`: what the Closed Won gate said was missing, so the deal page
+  // opens on it rather than on a bare "Not closed yet".
+  const finish = (dealId: string, gate?: string) => {
     queryClient.invalidateQueries({ queryKey: ["pipeline"] });
     setOpen(false);
     reset();
-    navigate({ to: "/deals/$dealId", params: { dealId } });
+    navigate({ to: "/deals/$dealId", params: { dealId }, search: gate ? { gate } : {} });
   };
 
   // One dialog, three things the tool needs: who, what they do, what was
@@ -247,16 +261,29 @@ export function NewDealDialog() {
       // deal is held at Negotiate & Finalize and this dialog says why.
       if (
         !(existing && draft.customerId) &&
+        !done.settled &&
         (draft.stage !== "prospect" || draft.implementationOwnerId)
       ) {
         setPhase(closing ? "Marking it Closed Won" : "Moving it to its stage");
-        const entry = await settle({
-          data: {
-            dealId,
-            stage: draft.stage,
-            implementationOwnerId: showTis ? draft.implementationOwnerId || null : null,
-          },
-        });
+        let entry: Awaited<ReturnType<typeof settle>>;
+        try {
+          entry = await settle({
+            data: {
+              dealId,
+              stage: draft.stage,
+              implementationOwnerId: showTis ? draft.implementationOwnerId || null : null,
+            },
+          });
+        } catch (e) {
+          // A retry after the first try already moved the deal (the answer
+          // was lost on the way back): the job is done.
+          if (e instanceof Error && e.message.includes(ALREADY_STAGED)) {
+            done.settled = true;
+            return { dealId, held: null };
+          }
+          throw e;
+        }
+        done.settled = true;
         if (entry.refused) {
           return { dealId, held: { dealId, stage: entry.stage, missing: entry.refused.missing } };
         }
@@ -315,7 +342,7 @@ export function NewDealDialog() {
                 <button
                   type="button"
                   className={primaryButtonClass}
-                  onClick={() => finish(held.dealId)}
+                  onClick={() => finish(held.dealId, gateParam(held.missing))}
                 >
                   Open the deal
                 </button>
@@ -356,7 +383,11 @@ export function NewDealDialog() {
                     autoFocus
                   >
                     <option value="">
-                      {options.isPending ? "Loading customers…" : "Pick the customer…"}
+                      {options.isPending
+                        ? "Loading customers…"
+                        : options.isError
+                          ? "Could not load customers"
+                          : "Pick the customer…"}
                     </option>
                     {(options.data?.customers ?? []).map((c) => (
                       <option key={c.id} value={c.id}>
@@ -394,11 +425,26 @@ export function NewDealDialog() {
                   {existing
                     ? draft.customerId
                       ? "The services deal starts closed on this customer's record, with what they already told us."
-                      : "Not one of our customers yet? Pick a different type of deal."
+                      : options.isError
+                        ? null
+                        : "Not one of our customers yet? Pick a different type of deal."
                     : touched && draft.name.trim() === ""
                       ? "The account needs the company's name."
                       : "Required. Everything else can be filled in later."}
                 </p>
+                {existing && options.isError ? (
+                  <p role="alert" className="mt-0.5 text-[11px] text-destructive">
+                    Could not load the customers.{" "}
+                    <button
+                      type="button"
+                      className="underline"
+                      disabled={options.isFetching}
+                      onClick={() => void options.refetch()}
+                    >
+                      {options.isFetching ? "Trying…" : "Try again"}
+                    </button>
+                  </p>
+                ) : null}
                 {!existing && (matches.customers.length || matches.deals.length) ? (
                   <p role="status" className="mt-1 text-[11px] text-amber-800 dark:text-amber-300">
                     Already here:{" "}
@@ -415,17 +461,35 @@ export function NewDealDialog() {
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className={labelClass} htmlFor="new-deal-industry">
-                    Industry
-                  </label>
-                  <IndustrySelect
-                    id="new-deal-industry"
-                    className={inputClass}
-                    value={draft.industry || null}
-                    onChange={(industry) => set({ industry: industry ?? "" })}
-                    emptyLabel="Not sure yet"
-                    live
-                  />
+                  {existing ? (
+                    // The services deal inherits the customer's industry;
+                    // a pick here would not be saved, so none is offered.
+                    <>
+                      <span className={labelClass}>Industry</span>
+                      <p className="flex h-6 items-center text-[12px] text-foreground">
+                        {draft.customerId ? draft.industry || "Not set" : "—"}
+                        {draft.customerId ? (
+                          <span className="ml-1 text-[11px] text-muted-foreground">
+                            (from their record)
+                          </span>
+                        ) : null}
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <label className={labelClass} htmlFor="new-deal-industry">
+                        Industry
+                      </label>
+                      <IndustrySelect
+                        id="new-deal-industry"
+                        className={inputClass}
+                        value={draft.industry || null}
+                        onChange={(industry) => set({ industry: industry ?? "" })}
+                        emptyLabel="Not sure yet"
+                        live
+                      />
+                    </>
+                  )}
                 </div>
                 <div>
                   <label className={labelClass} htmlFor="new-deal-path">
@@ -507,28 +571,59 @@ export function NewDealDialog() {
                       value={amOwnerId}
                       onChange={(e) => set({ amOwnerId: e.target.value })}
                     >
-                      <option value="">{owners.isPending ? "Loading…" : "Not set"}</option>
+                      <option value="">
+                        {owners.isPending
+                          ? "Loading…"
+                          : owners.isError
+                            ? "Could not load the team"
+                            : "Not set"}
+                      </option>
                       {amList.map((o) => (
                         <option key={o.value} value={o.value}>
                           {o.value === owners.data?.me ? `${o.label} (me)` : o.label}
                         </option>
                       ))}
                     </select>
+                    {owners.isError ? (
+                      <p className="mt-0.5 text-[11px] text-destructive">
+                        The team did not load.{" "}
+                        <button
+                          type="button"
+                          className="underline"
+                          disabled={owners.isFetching}
+                          onClick={() => void owners.refetch()}
+                        >
+                          {owners.isFetching ? "Trying…" : "Try again"}
+                        </button>
+                      </p>
+                    ) : null}
                   </div>
                 </div>
               ) : null}
               {!existing && closing ? (
                 <p className="text-[11px] text-amber-800 dark:text-amber-300">
-                  Closed Won needs the call notes and the signed SOW. Without them the account is
-                  created at Negotiate & Finalize, and this says what is missing.
+                  Closed Won needs a {WON_GATE_LABEL.notes} and the {WON_GATE_LABEL.sow}. Without
+                  them the account is created at Negotiate & Finalize and this window lists what is
+                  missing.
                 </p>
               ) : null}
               {!existing && showTis ? (
                 <div>
-                  <label className={labelClass} htmlFor="new-deal-tis">
-                    Implementation owner (TIS, optional)
-                  </label>
                   {owners.data?.canAssign ? (
+                    <label className={labelClass} htmlFor="new-deal-tis">
+                      Implementation owner (TIS, optional)
+                    </label>
+                  ) : (
+                    <p className={labelClass}>Implementation owner (TIS)</p>
+                  )}
+                  {owners.isPending ? (
+                    <p className="text-[11px] text-muted-foreground">Loading the team…</p>
+                  ) : owners.isError ? (
+                    <p className="text-[11px] text-destructive">
+                      The team did not load, so the TIS cannot be picked here. Assign them on the
+                      deal.
+                    </p>
+                  ) : owners.data?.canAssign ? (
                     <select
                       id="new-deal-tis"
                       name="implementationOwnerId"
@@ -649,7 +744,23 @@ export function NewDealDialog() {
               ) : null}
 
               {mutation.isError ? (
-                <p className="text-[11px] text-destructive">{(mutation.error as Error).message}</p>
+                <p className="text-[11px] text-destructive">
+                  {(mutation.error as Error).message}
+                  {progress.current.dealId && !existing ? (
+                    <>
+                      {" "}
+                      The account was created —{" "}
+                      <button
+                        type="button"
+                        className="underline"
+                        onClick={() => finish(progress.current.dealId!)}
+                      >
+                        open the deal
+                      </button>{" "}
+                      to finish there.
+                    </>
+                  ) : null}
+                </p>
               ) : null}
               <div className="flex items-center justify-end gap-2 pt-1">
                 {mutation.isPending && phase ? (
