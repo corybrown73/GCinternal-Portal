@@ -1,3 +1,5 @@
+import { supabaseAdmin } from "@/integrations/supabase/client.server";
+
 import { audit } from "../audit";
 import { claimJobs, failJob, runOneStep, type AiJobRow } from "./jobs";
 
@@ -57,14 +59,37 @@ export async function runClaimed(jobs: AiJobRow[]): Promise<TickSummary> {
   return summary;
 }
 
-/** The runtime's "finish this after the response", where there is one. */
-export function waitUntilOf(request: Request): ((p: Promise<unknown>) => void) | null {
-  const onRequest = (request as unknown as { waitUntil?: unknown }).waitUntil;
+/**
+ * The runtime's "finish this after the response", where there is one: on
+ * the request, else Vercel's request context (which needs no request, so a
+ * server function deep in a call can ask for it too).
+ */
+export function waitUntilOf(request?: Request): ((p: Promise<unknown>) => void) | null {
+  const onRequest = (request as unknown as { waitUntil?: unknown } | undefined)?.waitUntil;
   if (typeof onRequest === "function") return onRequest as (p: Promise<unknown>) => void;
   const ctx = (globalThis as Record<symbol, unknown>)[Symbol.for("@vercel/request-context")] as
     { get?: () => { waitUntil?: (p: Promise<unknown>) => void } | undefined } | undefined;
   const fn = ctx?.get?.()?.waitUntil;
   return typeof fn === "function" ? fn : null;
+}
+
+/** portal_app_config key: the last time the scheduler (not a kick) ran a tick. */
+export const SCHEDULER_TICK_KEY = "scheduler.last_tick_at";
+
+/**
+ * The scheduler's heartbeat: one upsert per scheduled tick, so the Admin AI
+ * tab can say whether the cron runs at all. Never throws.
+ */
+export async function recordSchedulerTick(now: Date = new Date()): Promise<void> {
+  try {
+    const at = now.toISOString();
+    const { error } = await (supabaseAdmin as any)
+      .from("portal_app_config")
+      .upsert({ key: SCHEDULER_TICK_KEY, value: at, updated_at: at }, { onConflict: "key" });
+    if (error) console.error("[ai-jobs] could not record the scheduler tick", error);
+  } catch (e) {
+    console.error("[ai-jobs] could not record the scheduler tick", e);
+  }
 }
 
 /**
@@ -81,6 +106,8 @@ export async function tickAiJobs(
 ): Promise<Response> {
   const claim = deps.claim ?? claimJobs;
   const run = deps.run ?? runClaimed;
+  // Vercel's scheduler calls GET; a kick is a POST and proves nothing about it.
+  if (request.method !== "POST") await recordSchedulerTick();
   const jobs = await claim(CLAIM_LIMIT);
   if (jobs.length === 0) {
     return Response.json({ ok: true, claimed: 0, advanced: 0, finished: 0, failed: 0, lost: 0 });

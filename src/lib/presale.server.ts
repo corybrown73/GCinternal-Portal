@@ -4,7 +4,13 @@ import { nextChecklistTask, stageFlow } from "./stage-flow";
 import { TERM_LABELS } from "./terms";
 import { resolveAccountId, transitionStage, upsertAccount } from "./server/accounts";
 import { accountUpsertSchema } from "./server/schemas";
-import { isOnboardingStage, isStage, STAGE_LABELS, type AccountStage } from "./presale-stages";
+import {
+  isOnboardingStage,
+  isPreClose,
+  isStage,
+  STAGE_LABELS,
+  type AccountStage,
+} from "./presale-stages";
 import { isSolutionKind, launchCriticalOpen, normalizeServices } from "./onboarding-services";
 import { MANAGE_ROLES } from "./roles";
 import { handoffChecks } from "./sales-handoff";
@@ -364,9 +370,23 @@ export async function createDeal(
     stage?: AccountStage | null;
     /** Created while covering for this team member: the deal is theirs. */
     coverForTeamMemberId?: string | null;
+    /** The AE (sales owner): a seller or a manager. */
+    amOwnerId?: string | null;
   },
-): Promise<{ account: Account; created: boolean }> {
+): Promise<{
+  account: Account;
+  created: boolean;
+  /** Where a deal entered in a later stage was held, and why, when the gate refused. */
+  entry?: DealEntryResult;
+}> {
   await requireSalesEditor(userId);
+  // Checked before anything is written: a wrong pick must not leave a deal behind.
+  if (input.amOwnerId) {
+    const allowed = ownerOptionsByRole(await profileDirectory()).am;
+    if (!allowed.some((o) => o.value === input.amOwnerId)) {
+      throw new Error("The sales owner must be a seller or a manager.");
+    }
+  }
   const parsed = accountUpsertSchema.parse({
     name: input.name,
     ...(input.domain ? { domain: input.domain } : {}),
@@ -390,9 +410,14 @@ export async function createDeal(
     }
   }
   const result = await upsertAccount(parsed, { source: "ui", actorProfileId: userId });
-  // Who entered it: their board shows it until an owner is assigned.
+  // Who entered it: their board shows it until an owner is assigned. The
+  // AE picked at entry is the deal's sales owner from the first minute.
   if (result.created) {
-    await db().from("portal_accounts").update({ created_by: userId }).eq("id", result.account.id);
+    await db()
+      .from("portal_accounts")
+      .update({ created_by: userId, ...(input.amOwnerId ? { am_owner_id: input.amOwnerId } : {}) })
+      .eq("id", result.account.id);
+    if (input.amOwnerId) result.account = { ...result.account, am_owner_id: input.amOwnerId };
   }
   // Entered while covering for a colleague: it is their account, so it goes
   // on their board (and their card shows their name) rather than vanishing
@@ -434,12 +459,222 @@ export async function createDeal(
   // A deal entered where it already is: the same move a person would make
   // from the board — the Closed Won gate applies, and so does everything the
   // close starts (the customer's page, the assignment). The dialog attaches
-  // the notes and the SOW first and moves the deal after, for that reason.
+  // the notes and the SOW first and moves the deal after (settleNewDeal).
   if (input.stage && input.stage !== result.account.stage && result.created) {
-    await transitionDeal(userId, result.account.id, input.stage, "Created in this stage");
-    result.account = { ...result.account, stage: input.stage };
+    const entry = await enterDealAtStage(userId, result.account.id, input.stage);
+    result.account = { ...result.account, stage: entry.stage };
+    return { account: result.account, created: result.created, entry };
   }
   return { account: result.account, created: result.created };
+}
+
+/** Where a hand-entered deal ended up, and what the Closed Won gate said if it refused. */
+export interface DealEntryResult {
+  stage: AccountStage;
+  refused: { missing: import("./won-gate").WonGateMissing[]; message: string } | null;
+}
+
+/**
+ * Move a freshly entered deal to the stage it was entered in, through
+ * transitionDeal — the gate and everything the close starts apply as they
+ * do for "Mark Closed Won". Refused at the gate, the deal is held at the
+ * furthest stage it may hold (Negotiate & Finalize) and the refusal is
+ * returned, never swallowed.
+ */
+export async function enterDealAtStage(
+  userId: string,
+  dealId: string,
+  stage: AccountStage,
+): Promise<DealEntryResult> {
+  const { isNewDealStage } = await import("./deal-entry");
+  if (!isNewDealStage(stage)) {
+    throw new Error(
+      `A new deal starts at Prospect, Negotiate & Finalize or Closed Won — not ${STAGE_LABELS[stage] ?? stage}.`,
+    );
+  }
+  if (stage === "prospect") return { stage: "prospect", refused: null };
+  const pipeline = await loadPipelineStages();
+  const target = stage === "closed_won" ? (wonStage(pipeline).key as AccountStage) : stage;
+  try {
+    await transitionDeal(userId, dealId, target, "Created in this stage");
+    return { stage: target, refused: null };
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    const { gateTarget, parseWonGate, WON_GATE_LABEL } = await import("./won-gate");
+    const missing = parseWonGate(message);
+    if (!missing || gateTarget(message) !== "closed_won") throw e;
+    const hold = findStage(pipeline, "negotiate") ? ("negotiate" as const) : null;
+    if (hold) {
+      // Stage history shows the note as written: the missing pieces in
+      // words, not the gate's message with its machine tag.
+      const { heldNote } = await import("./deal-entry");
+      await transitionDeal(
+        userId,
+        dealId,
+        hold,
+        heldNote(STAGE_LABELS[target] ?? target, STAGE_LABELS[hold], missing, WON_GATE_LABEL),
+      );
+    }
+    return { stage: hold ?? "prospect", refused: { missing, message } };
+  }
+}
+
+/**
+ * The New account dialog's last step, after the notes and the SOW are on
+ * the deal: the TIS (from Negotiate & Finalize on, through assignDeal like
+ * the Assign step), then the stage. The TIS goes first so the close finds
+ * an owner and does not hand the deal to the rotation as well.
+ */
+export async function settleNewDeal(
+  userId: string,
+  dealId: string,
+  input: { stage: AccountStage; implementationOwnerId?: string | null; canAssign: boolean },
+): Promise<DealEntryResult & { assignee: string | null }> {
+  await requireSalesEditor(userId);
+  const { isNewDealStage, canAssignAtEntry, ALREADY_STAGED } = await import("./deal-entry");
+  if (!isNewDealStage(input.stage)) {
+    throw new Error(
+      `A new deal starts at Prospect, Negotiate & Finalize or Closed Won — not ${STAGE_LABELS[input.stage] ?? input.stage}.`,
+    );
+  }
+  const { data: deal } = await db()
+    .from("portal_accounts")
+    .select("id,stage,created_by")
+    .eq("id", dealId)
+    .maybeSingle();
+  if (!deal) throw new Error("Deal not found");
+  // Only the deal just entered, by the person who entered it: anything else
+  // has a stage of its own and moves from the board.
+  if (deal.created_by !== userId || deal.stage !== "prospect") {
+    throw new Error(ALREADY_STAGED);
+  }
+  let assignee: string | null = null;
+  if (input.implementationOwnerId) {
+    if (!input.canAssign) throw new Error("Only a manager can assign the TIS.");
+    if (!canAssignAtEntry(input.stage)) {
+      throw new Error("The TIS is assigned from Negotiate & Finalize on.");
+    }
+    const { assignDeal, loadPool } = await import("./assignment.server");
+    // The pick must still be on the team. assignDeal would otherwise fall
+    // back to the rule (or the claim email) while the ledger said this
+    // person was chosen.
+    const member = (await loadPool()).find((p) => p.teamMemberId === input.implementationOwnerId);
+    if (!member) throw new Error("That TIS is no longer on the team — pick another.");
+    // A retry after a failure part-way: the TIS is already on the deal, so
+    // they are not assigned (and emailed) a second time.
+    const { data: last } = await db()
+      .from("portal_assignments")
+      .select("team_member_id")
+      .eq("deal_id", dealId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (last && String(last.team_member_id) === member.teamMemberId) {
+      assignee = member.name;
+    } else {
+      const assigned = await assignDeal({
+        dealId,
+        teamMemberId: member.teamMemberId,
+        actorProfileId: userId,
+        note: "Chosen when the account was entered",
+      });
+      assignee = assigned?.assigneeName ?? null;
+    }
+  }
+  const entry = await enterDealAtStage(userId, dealId, input.stage);
+  return { ...entry, assignee };
+}
+
+/** Who the New account dialog can name: the AEs, and (for a manager) the TIS list the Assign step shows. */
+export async function newDealOwnerOptions(
+  userId: string,
+  canAssign: boolean,
+): Promise<{
+  am: Array<{ value: string; label: string }>;
+  me: string;
+  members: import("./assignment.server").DealAssignment["members"];
+}> {
+  await requireSalesEditor(userId);
+  const am = ownerOptionsByRole(await profileDirectory()).am;
+  let members: import("./assignment.server").DealAssignment["members"] = [];
+  if (canAssign) {
+    const { loadPool } = await import("./assignment.server");
+    members = (await loadPool()).map((p) => ({
+      teamMemberId: p.teamMemberId,
+      name: p.name,
+      email: p.email,
+      inPool: p.inPool && p.active,
+      rank: p.rank,
+      load: p.load,
+      assignments: p.assignments,
+    }));
+  }
+  return { am, me: userId, members };
+}
+
+/**
+ * An existing account's customer, named on the deal page before the close.
+ * Kept on the intake rather than portal_accounts.customer_id: a linked deal
+ * is shown as its customer's page, and this one is still being sold. The
+ * close reads it (transitionDeal) and joins the implementation to that
+ * customer, as "Add services" does. null clears it.
+ */
+export async function linkExistingCustomer(
+  userId: string,
+  dealId: string,
+  customerId: string | null,
+): Promise<{ customerId: string | null; name: string | null }> {
+  await requireSalesEditor(userId);
+  const { data: deal } = await db()
+    .from("portal_accounts")
+    .select("id,stage,intake,customer_id")
+    .eq("id", dealId)
+    .maybeSingle();
+  if (!deal) throw new Error("Deal not found");
+  if (deal.customer_id) {
+    throw new Error("This deal is already on its customer's page.");
+  }
+  // Only the close reads the pick. A deal past it would save the choice and
+  // do nothing with it.
+  if (!isPreClose(String(deal.stage))) {
+    throw new Error(
+      "This deal has already closed, so picking the customer here would change nothing. Use “Add services” on the customer's page instead.",
+    );
+  }
+  let name: string | null = null;
+  let industry: string | null = null;
+  if (customerId) {
+    const { data: customer } = await db()
+      .from("customers")
+      .select("id,name,industry")
+      .eq("id", customerId)
+      .maybeSingle();
+    if (!customer) throw new Error("That customer no longer exists — pick another one");
+    name = String(customer.name);
+    industry = (customer.industry as string | null) ?? null;
+  }
+  const { readIntake, intakeAnswersSchema } = await import("./intake-answers");
+  const current = readIntake(deal.intake);
+  const next = intakeAnswersSchema.parse({
+    ...current,
+    existing_customer_id: customerId,
+    // Picking the customer says what kind of deal this is.
+    ...(customerId ? { path: "existing" } : {}),
+    // Their industry comes along when the deal has none yet.
+    ...(customerId && industry && !current.industry ? { industry } : {}),
+    updated_at: new Date().toISOString(),
+  });
+  const { error } = await db().from("portal_accounts").update({ intake: next }).eq("id", dealId);
+  if (error) throw new Error(error.message);
+  await audit({
+    actor_type: "user",
+    actor_id: userId,
+    action: "deal.existing_customer_linked",
+    entity_type: "account",
+    entity_id: dealId,
+    payload: { customer_id: customerId },
+  });
+  return { customerId, name };
 }
 
 export { WON_GATE_PREFIX } from "./won-gate";
@@ -505,12 +740,21 @@ export async function transitionDeal(
   if (result.changed && toStage === wonStage(pipeline).key) {
     const { data: row } = await db()
       .from("portal_accounts")
-      .select("customer_id")
+      .select("customer_id,intake")
       .eq("id", dealId)
       .maybeSingle();
     if (!row?.customer_id) {
       try {
-        const first = await startOnboardingAs({ kind: "user", profileId: userId }, dealId, {});
+        // An existing account names its customer on the deal page: the
+        // implementation joins that record, as "Add services" does.
+        const { existingCustomerAtClose } = await import("./deal-entry");
+        const { readIntake: readDealIntake } = await import("./intake-answers");
+        const picked = existingCustomerAtClose(readDealIntake(row?.intake), null);
+        const first = await startOnboardingAs(
+          { kind: "user", profileId: userId },
+          dealId,
+          picked ? { customerId: picked } : {},
+        );
         if (first.outcome === "needs_account_choice") {
           // No Salesforce match. A customer with the same name is a person's
           // call; nothing by that name means a new account, now.

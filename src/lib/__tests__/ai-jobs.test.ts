@@ -559,6 +559,8 @@ describe("runOneStep", () => {
       kind: "ai_job_failed",
       severity: "warning",
       dedupeOn: { key: "deal_id", value: DEAL },
+      // On /alerts and the deal's record, never in the managers' inboxes.
+      notify: false,
     });
     expect(reading()).toMatchObject({ status: "failed", job_id: job.id });
     expect(reading().error).toMatch(/did not finish/);
@@ -630,5 +632,78 @@ describe("the reads", () => {
     const { job } = await enqueueAiJob({ kind: "prepare_deal", dealId: DEAL, trigger: "t" });
     await advanceJob(job, "sources", { sourceHash: "abc" }, "sow");
     expect(jobs()[0]!.source_hash).toBe("abc");
+  });
+});
+
+describe("the fold, for the person waiting (QA 1.1, 1.3)", () => {
+  it("records every trigger the active job absorbed", async () => {
+    await enqueueAiJob({ kind: "prepare_deal", dealId: DEAL, trigger: "call_notes" });
+    await enqueueAiJob({ kind: "prepare_deal", dealId: DEAL, trigger: "sow_upload" });
+    await enqueueAiJob({ kind: "prepare_deal", dealId: DEAL, trigger: "closed_won_ui" });
+    await enqueueAiJob({ kind: "prepare_deal", dealId: DEAL, trigger: "sow_upload" });
+    expect(jobs()).toHaveLength(1);
+    const folds = (fake.store["portal_audit_log"] ?? []).filter(
+      (r: any) => r.action === "ai.job_folded",
+    );
+    expect(folds.map((r: any) => r.payload.trigger)).toEqual([
+      "sow_upload",
+      "closed_won_ui",
+      "sow_upload",
+    ]);
+    // The row's result is the runner's alone.
+    expect(jobs()[0]!.result).toEqual({});
+    expect(jobs()[0]!.rerun_requested).toBe(false);
+  });
+
+  it("revives a stale queued job's record when a person asks, backoff or not", async () => {
+    await enqueueAiJob({ kind: "prepare_deal", dealId: DEAL, trigger: "call_notes" });
+    // Due now (no backoff), untouched for five minutes, with a retry reason.
+    Object.assign(jobs()[0]!, { next_attempt_at: new Date(Date.now() - 5 * 60_000).toISOString() });
+    Object.assign(reading(), {
+      heartbeat_at: new Date(Date.now() - 5 * 60_000).toISOString(),
+      error: "Attempt 1 did not finish: overloaded; retrying in 1 min",
+    });
+    const before = Date.now();
+    await enqueueAiJob({ kind: "prepare_deal", dealId: DEAL, trigger: "manual", force: true });
+    expect(Date.parse(reading().heartbeat_at)).toBeGreaterThanOrEqual(before - 1000);
+    expect(reading().error).toBeNull();
+  });
+
+  it("an automatic trigger leaves the record as it is", async () => {
+    await enqueueAiJob({ kind: "prepare_deal", dealId: DEAL, trigger: "call_notes" });
+    const old = new Date(Date.now() - 5 * 60_000).toISOString();
+    Object.assign(reading(), { heartbeat_at: old });
+    await enqueueAiJob({ kind: "prepare_deal", dealId: DEAL, trigger: "sow_upload" });
+    expect(reading().heartbeat_at).toBe(old);
+  });
+
+  it("a fold during a step never undoes what the step wrote", async () => {
+    const { job } = await enqueueAiJob({ kind: "prepare_deal", dealId: DEAL, trigger: "t" });
+    Object.assign(jobs()[0]!, { status: "running", lock_token: "lock" });
+    const claimed = { ...jobs()[0]! };
+    // The step ends first; the fold read the row before it did.
+    await advanceJob(claimed, "sources", { filled: ["seats"] }, "sow");
+    await enqueueAiJob({ kind: "prepare_deal", dealId: DEAL, trigger: "sow_upload" });
+    expect(jobs()[0]!.result["filled"]).toEqual(["seats"]);
+    expect(jobs()[0]!.id).toBe(job.id);
+  });
+});
+
+describe("the failure alert links the account", () => {
+  it("names the deal's customer and implementation", async () => {
+    const CUSTOMER = "44444444-4444-4444-8444-444444444444";
+    fake.store["portal_accounts"]![0]!.customer_id = CUSTOMER;
+    fake.store["implementations"] = [
+      { id: "impl-old", deal_id: DEAL, customer_id: CUSTOMER, created_at: "2026-09-01T00:00:00Z" },
+      { id: "impl-new", deal_id: DEAL, customer_id: CUSTOMER, created_at: "2026-10-01T00:00:00Z" },
+    ];
+    const { job } = await enqueueAiJob({ kind: "prepare_deal", dealId: DEAL, trigger: "t" });
+    Object.assign(jobs()[0]!, { status: "running", attempts: 3, lock_token: "lock" });
+    await failJob({ ...jobs()[0]!, id: job.id }, "gave up");
+    expect(h.alerts[0]).toMatchObject({
+      customerId: CUSTOMER,
+      implementationId: "impl-new",
+      notify: false,
+    });
   });
 });

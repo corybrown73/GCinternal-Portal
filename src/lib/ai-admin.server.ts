@@ -230,17 +230,58 @@ export type AiStatus = {
   autoRead: boolean;
   lastJob: AiJobAdminRow | null;
   totals30d: AiTotals;
+  /** Whether the cron (and the kick) can authenticate at all. */
+  cronSecretSet: boolean;
+  /** The scheduler's last tick (SCHEDULER_TICK_KEY); null when it never ran. */
+  lastTickAt: string | null;
+  /** Readings due more than ten minutes ago and still queued: nothing is working the queue. */
+  overdue: { count: number; oldestMinutes: number };
 };
+
+/** A queued job due this long ago means nothing is working the queue. */
+export const OVERDUE_AFTER_MINUTES = 10;
+
+/**
+ * Read on demand, so it holds when the cron is the thing that is broken.
+ * Due time, not creation: a job waiting out a 5–10 minute backoff is not late.
+ */
+export async function overdueJobs(now: Date): Promise<{ count: number; oldestMinutes: number }> {
+  const cutoff = new Date(now.getTime() - OVERDUE_AFTER_MINUTES * 60_000).toISOString();
+  const { data } = await db()
+    .from("portal_ai_jobs")
+    .select("next_attempt_at")
+    .eq("status", "queued")
+    .lt("next_attempt_at", cutoff)
+    .order("next_attempt_at", { ascending: true });
+  const rows = (data ?? []) as Array<{ next_attempt_at: string }>;
+  const oldest = rows[0] ? Date.parse(rows[0].next_attempt_at) : NaN;
+  return {
+    count: rows.length,
+    oldestMinutes: Number.isFinite(oldest) ? Math.floor((now.getTime() - oldest) / 60_000) : 0,
+  };
+}
+
+async function lastSchedulerTick(): Promise<string | null> {
+  const { SCHEDULER_TICK_KEY } = await import("./server/ai/cron");
+  const { data } = await db()
+    .from("portal_app_config")
+    .select("value")
+    .eq("key", SCHEDULER_TICK_KEY)
+    .maybeSingle();
+  return typeof data?.value === "string" ? data.value : null;
+}
 
 export async function getAiStatus(userId: string): Promise<AiStatus> {
   await requireManager(userId);
   const now = new Date();
   const { isFlagOn } = await import("./app-config.server");
-  const [effort, autoRead, last, totals30d] = await Promise.all([
+  const [effort, autoRead, last, totals30d, lastTickAt, overdue] = await Promise.all([
     aiEffort("brief"),
     isFlagOn("ai_auto_read"),
     jobsWithNames(1, now),
     totalsForLast30Days(now),
+    lastSchedulerTick(),
+    overdueJobs(now),
   ]);
   return {
     configured: aiConfigured(),
@@ -249,6 +290,9 @@ export async function getAiStatus(userId: string): Promise<AiStatus> {
     autoRead,
     lastJob: last[0] ?? null,
     totals30d,
+    cronSecretSet: Boolean(process.env["CRON_SECRET"]),
+    lastTickAt,
+    overdue,
   };
 }
 
@@ -279,6 +323,8 @@ export async function rerunAiJob(
     requestedBy: profile.id,
     force: true,
   });
+  const { pumpAiJobsInProcess } = await import("./server/ai/pump");
+  pumpAiJobsInProcess("admin");
   await kickAiJobs();
   await audit({
     actor_type: "user",

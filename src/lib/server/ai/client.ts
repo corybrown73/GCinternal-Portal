@@ -18,6 +18,7 @@ import {
   type AiCallKind,
   type AiEffort,
 } from "./config";
+import { aiDeadline } from "./deadline";
 import { extractJsonObject } from "./json";
 
 /**
@@ -192,8 +193,8 @@ export async function runStructured<T>(
   let lastIssues = "";
   // One deadline for everything this call may spend: the reply, the repair
   // turn and the 400 retries share it, so a step never outlives the
-  // function it runs in.
-  const deadline = startedAt + AI_STEP_BUDGET_MS;
+  // function it runs in (nor a deadline the caller set, as the pump does).
+  const deadline = Math.min(startedAt + AI_STEP_BUDGET_MS, aiDeadline() ?? Infinity);
 
   const call = async (messages: BetaMessageParam[]): Promise<BetaMessage> => {
     const remaining = deadline - Date.now();

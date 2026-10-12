@@ -83,50 +83,97 @@ export async function loadPipelineReport(
 }
 
 /**
- * The morning email: today's report to every manager, once a day (the audit
- * log holds the day's stamp, so a re-run never sends twice). Skips weekends.
+ * The morning email: today's report to every manager, once a day. The
+ * day's stamp (`report.daily_sent`, keyed by the day) is written BEFORE
+ * the sends, as a claim — unique per day under 0081 — so a second run,
+ * even one overlapping this, finds it and sends nothing. A run where no
+ * send went through takes its claim back. Skips weekends.
  */
 export async function runDailyReport(): Promise<{ sent: number; skipped: string | null }> {
   const today = localIso();
   const day = new Date(`${today}T12:00:00Z`).getUTCDay();
   if (day === 0 || day === 6) return { sent: 0, skipped: "weekend" };
-  const { data: already } = await db()
+  // The day is a text key (entity_key), never the uuid entity_id. A read
+  // that fails is not "not sent yet": a second report is worse than none.
+  const { data: already, error: readError } = await db()
     .from("portal_audit_log")
     .select("id")
-    .eq("action", "report.daily_sent")
-    .eq("entity_id", today)
+    .eq("entity_key", today)
+    .eq("action", DAILY_SENT_ACTION)
     .limit(1);
+  if (readError) {
+    console.error("[daily report] could not check today's send; not sending", readError);
+    return { sent: 0, skipped: "could not check today's send" };
+  }
   if (already?.length) return { sent: 0, skipped: "already sent today" };
 
-  const report = await loadPipelineReport();
-  const { reportHtml } = await import("./pipeline-report");
-  const { managerProfiles } = await import("./tickets.server");
-  const { sendEmail } = await import("./server/email");
-  const { appUrl } = await import("./app-url");
-  const managers = (await managerProfiles()).map((p) => p.email).filter(Boolean) as string[];
-  const stuck = report.stuck.length + report.unclaimed.length;
-  let sent = 0;
-  for (const to of managers) {
-    try {
-      await sendEmail({
-        to,
-        kind: "requested",
-        subject: `Onboarding pipeline ${today}${stuck ? ` — ${stuck} need${stuck === 1 ? "s" : ""} attention` : ""}`,
-        html: reportHtml(report, `${appUrl()}/pipeline`),
-      });
-      sent += 1;
-    } catch (e) {
-      console.error("[daily report] could not send", e);
-    }
+  const { data: claimed, error: claimError } = await db()
+    .from("portal_audit_log")
+    .insert({
+      actor_type: "system",
+      actor_id: null,
+      action: DAILY_SENT_ACTION,
+      entity_type: "app",
+      entity_id: null,
+      entity_key: today,
+      payload: { claimed_at: new Date().toISOString() },
+    })
+    .select("id");
+  if (claimError) {
+    if (claimError.code === "23505") return { sent: 0, skipped: "already sent today" };
+    console.error("[daily report] could not claim today's send; not sending", claimError);
+    return { sent: 0, skipped: "could not claim today's send" };
   }
-  const { audit } = await import("./server/audit");
-  await audit({
-    actor_type: "system",
-    actor_id: null,
-    action: "report.daily_sent",
-    entity_type: "app",
-    entity_id: today,
-    payload: { sent, stuck: report.stuck.length, untouched: report.untouched.length },
-  });
+  const claimId = (claimed ?? [])[0]?.id as string | undefined;
+  const release = async () => {
+    if (!claimId) return;
+    const { error } = await db().from("portal_audit_log").delete().eq("id", claimId);
+    if (error) console.error("[daily report] could not take back today's claim", error);
+  };
+
+  let sent = 0;
+  let report: Awaited<ReturnType<typeof loadPipelineReport>>;
+  try {
+    report = await loadPipelineReport();
+    const { reportHtml } = await import("./pipeline-report");
+    const { managerProfiles } = await import("./tickets.server");
+    const { sendEmail } = await import("./server/email");
+    const { appUrl } = await import("./app-url");
+    const managers = (await managerProfiles()).map((p) => p.email).filter(Boolean) as string[];
+    const stuck = report.stuck.length + report.unclaimed.length;
+    for (const to of managers) {
+      try {
+        await sendEmail({
+          to,
+          kind: "requested",
+          subject: `Onboarding pipeline ${today}${stuck ? ` — ${stuck} need${stuck === 1 ? "s" : ""} attention` : ""}`,
+          html: reportHtml(report, `${appUrl()}/pipeline`),
+        });
+        sent += 1;
+      } catch (e) {
+        console.error("[daily report] could not send", e);
+      }
+    }
+  } catch (e) {
+    await release();
+    throw e;
+  }
+  // Nobody got it: the claim goes, so a later run today can try again.
+  if (sent === 0) {
+    await release();
+    return { sent: 0, skipped: "no send went through" };
+  }
+  if (claimId) {
+    const { error } = await db()
+      .from("portal_audit_log")
+      .update({
+        payload: { sent, stuck: report.stuck.length, untouched: report.untouched.length },
+      })
+      .eq("id", claimId);
+    if (error) console.error("[daily report] could not record what was sent", error);
+  }
   return { sent, skipped: null };
 }
+
+/** The day's stamp; one per day under 0081. */
+export const DAILY_SENT_ACTION = "report.daily_sent";

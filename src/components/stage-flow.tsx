@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useRef, useState } from "react";
-import { Link } from "@tanstack/react-router";
+import { Link, useSearch } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { ArrowRight, Check, Copy, Lock, Send, UserRoundCheck } from "lucide-react";
@@ -46,7 +46,7 @@ import { getParkingLot } from "@/lib/parking-lot.functions";
 import { getWelcome } from "@/lib/welcome.functions";
 import { getKickoffCadence } from "@/lib/kickoff-cadence.functions";
 import { wonStage } from "@/lib/pipeline-stages";
-import type { AccountStage } from "@/lib/presale-stages";
+import { isPreClose, type AccountStage } from "@/lib/presale-stages";
 import {
   finishImplementation,
   moveDealStage,
@@ -80,7 +80,9 @@ import {
 import { syncDealStageFn } from "@/lib/stage-flow.functions";
 import { stageGuidanceFor } from "@/lib/stage-guidance";
 import { parseWonGate, type WonGateMissing } from "@/lib/won-gate";
+import { liveWonGateMissing, parseGateParam } from "@/lib/deal-entry";
 import { ClosedWonGateNotice } from "@/components/closed-won-gate";
+import { ExistingCustomerLink } from "@/components/existing-customer-link";
 import { aeReplyDraft, googleCalendarLink } from "@/lib/ae-reply";
 import { customerLabel } from "@/lib/customer-labels";
 import { customerFacingName } from "@/lib/names";
@@ -498,7 +500,21 @@ export function StageFlow({ deal }: { deal: DealData }) {
               ? DEAL_TYPES.find((t) => t.path === intake.path)!.label
               : "Type of deal not set"}
           </button>
-          <b className="font-semibold">{stage.label}</b>
+          {/* One stage in the header: the deal's own. Working ahead on the
+              Closed Won list says so, rather than reading as the stage. */}
+          {shown !== flow.current &&
+          (flow.current === "prospect" || flow.current === "negotiate") ? (
+            <>
+              <b className="font-semibold">{flowLabel(flow.current)}</b>
+              <span className="text-muted-foreground">
+                {shown === "closed_won"
+                  ? `· getting ready for ${stage.label}`
+                  : `· looking ahead to ${stage.label}`}
+              </span>
+            </>
+          ) : (
+            <b className="font-semibold">{stage.label}</b>
+          )}
           {openTasks.length ? (
             <span className="text-muted-foreground">
               {" "}
@@ -1294,10 +1310,29 @@ function NotClosedBar({
   const { profile } = useProfile();
   const move = useServerFn(moveDealStage);
   const [error, setError] = useState<string | null>(null);
-  const [missing, setMissing] = useState<WonGateMissing[] | null>(null);
+  // Arriving from New account after the gate held the deal back, the
+  // refusal comes along (?gate=notes,sow) so the page says what is missing.
+  const search = useSearch({ strict: false }) as { gate?: unknown };
+  const [missing, setMissing] = useState<WonGateMissing[] | null>(() =>
+    parseGateParam(search.gate),
+  );
+  // What the refusal named, read through the record: the SOW or the notes
+  // added since clear their half of the notice without a refresh.
+  const live = liveWonGateMissing(missing, {
+    reports: deal.gong_reports.length,
+    sowPath: deal.account.sow_document_path,
+    sowReference: deal.account.sow_reference,
+  });
   // Closed Won creates the customer's page, the plan and the assignment,
   // then the page redirects: several seconds. The bar says so the whole way.
   const [closed, setClosed] = useState(false);
+  // Prospect → Negotiate & Finalize: no gate, and it is where the TIS comes in.
+  const toNegotiate = useMutation({
+    mutationFn: () => move({ data: { dealId: deal.account.id, toStage: "negotiate" } }),
+    onMutate: () => setError(null),
+    onSuccess: () => void qc.invalidateQueries(),
+    onError: (e) => setError((e as Error).message),
+  });
   const m = useMutation({
     mutationFn: (force: boolean) =>
       move({
@@ -1336,20 +1371,33 @@ function NotClosedBar({
           )}
         </span>
         {editable && !closed ? (
-          <button
-            type="button"
-            className="inline-flex h-8 items-center gap-1.5 rounded-sm bg-primary px-3 text-[12px] font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-            disabled={m.isPending}
-            onClick={() => m.mutate(false)}
-          >
-            {m.isPending ? "Closing…" : "Mark Closed Won"}
-          </button>
+          <span className="flex flex-wrap items-center gap-2">
+            {deal.account.stage === "prospect" ? (
+              <button
+                type="button"
+                className="inline-flex h-8 items-center rounded-sm border border-amber-700/40 px-3 text-[12px] hover:bg-amber-500/10 disabled:opacity-50"
+                disabled={toNegotiate.isPending || m.isPending}
+                onClick={() => toNegotiate.mutate()}
+                title="Sales is closing: the TIS can be assigned from here on."
+              >
+                {toNegotiate.isPending ? "Moving…" : "Move to Negotiate & Finalize"}
+              </button>
+            ) : null}
+            <button
+              type="button"
+              className="inline-flex h-8 items-center gap-1.5 rounded-sm bg-primary px-3 text-[12px] font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+              disabled={m.isPending || toNegotiate.isPending}
+              onClick={() => m.mutate(false)}
+            >
+              {m.isPending ? "Closing…" : "Mark Closed Won"}
+            </button>
+          </span>
         ) : null}
         {error ? <p className="w-full text-destructive">{error}</p> : null}
       </div>
-      {missing ? (
+      {live.length ? (
         <ClosedWonGateNotice
-          missing={missing}
+          missing={live}
           dealId={deal.account.id}
           onOpen={onOpenTask}
           canForce={canManage(profile?.role)}
@@ -2032,6 +2080,10 @@ function DealTypeBody({
         })}
       </div>
       <AiSource answers={intake} field="path" />
+      {/* Only the close reads the pick, so it is asked only before the close. */}
+      {intake.path === "existing" && !deal.account.customer_id && isPreClose(deal.account.stage) ? (
+        <ExistingCustomerLink deal={deal} intake={intake} editable={editable} />
+      ) : null}
       {m.isPending ? <p className="text-[12px] text-muted-foreground">Saving…</p> : null}
       {error ? <p className="text-[12px] text-destructive">{error}</p> : null}
     </div>

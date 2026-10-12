@@ -112,8 +112,28 @@ export const INDUSTRIES = [
   "Manufacturing",
   "Logistics",
   "Property Management",
+  "Electrical",
+  "Pest Control",
+  "Water/Wastewater",
+  "Education/Government",
   "Other",
 ] as const;
+
+/** One of the listed industries, as opposed to one somebody typed. */
+export function isListedIndustry(value: string | null | undefined): boolean {
+  return (INDUSTRIES as readonly string[]).includes(value ?? "");
+}
+
+/**
+ * Typed text as it is saved: a listed industry in any case is that listed
+ * industry ("electrical" is Electrical, with its icon and its forms);
+ * anything else is kept as typed, trimmed. Empty is null.
+ */
+export function canonicalIndustry(typed: string): string | null {
+  const t = typed.trim();
+  if (!t) return null;
+  return INDUSTRIES.find((i) => i.toLowerCase() === t.toLowerCase()) ?? t;
+}
 
 export const COMPANY_SIZES = ["1–10", "11–50", "51–200", "201–1,000", "1,000+"] as const;
 
@@ -222,6 +242,12 @@ export const intakeAnswersSchema = z.object({
         .default(null),
     })
     .default({}),
+  /**
+   * An existing account's customer, picked on the deal page before the
+   * close. The close joins the implementation to it, as "Add services"
+   * does, instead of making a second customer of the same name.
+   */
+  existing_customer_id: z.string().uuid().nullable().default(null),
   /**
    * No form to build: the crew just needs training. Phase 1 becomes the
    * training plan and the forms question is skipped. A Field Fusion account

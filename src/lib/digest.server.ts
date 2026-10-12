@@ -48,6 +48,23 @@ export async function composeDigestFor(
   const { buildQueue } = await import("./home-triage");
   const { loadDealInbox, loadPipeline, dealOwners } = await import("./presale.server");
   const { readIntake } = await import("./intake-answers");
+  const { isGuessBeforeKickoff, kickoffEntryDate, plannedBeforeKickoff } =
+    await import("./presale-stages");
+  const { isKickoffBooked } = await import("./stage-flow");
+  type Intake = ReturnType<typeof readIntake>;
+  /**
+   * A plan date that is the close's guess, not a promise: before Kickoff
+   * with the kickoff unbooked, or dated before the deal reached Kickoff
+   * with nothing booked (QA 13.2). Never late, never "this week".
+   */
+  const isGuess = (
+    d: { stage: string; stage_entered_at: string | null },
+    intake: Intake,
+    hist: ReadonlyArray<{ to_stage: string; occurred_at: string }>,
+    m: { date: string; time?: string | null },
+  ): boolean =>
+    isGuessBeforeKickoff(d.stage, m, isKickoffBooked(intake)) ||
+    plannedBeforeKickoff(m, kickoffEntryDate(d.stage, d.stage_entered_at, hist));
   const { closeDateFor, timelineFor } = await import("./onboarding-plan");
   const { terminalStage, wonStage } = await import("./pipeline-stages");
 
@@ -115,7 +132,8 @@ export async function composeDigestFor(
       if (t.allDone) continue;
       const steps = [...t.milestones, ...t.alongside.flatMap((s) => s.milestones)];
       for (const m of steps) {
-        if (m.doneOn || m.key === "close") continue;
+        if (m.doneOn || m.key === "close" || isGuess(d, intake, history.get(d.id) ?? [], m))
+          continue;
         const late = daysBetween(m.date, today);
         const row: DigestMilestone = {
           deal_id: d.id,
@@ -186,7 +204,11 @@ export async function composeDigestFor(
       const t = timelineFor(intake, close);
       if (t.allDone) continue;
       const late = [...t.milestones, ...t.alongside.flatMap((s) => s.milestones)].filter(
-        (m) => !m.doneOn && m.key !== "close" && daysBetween(m.date, today) > 0,
+        (m) =>
+          !m.doneOn &&
+          m.key !== "close" &&
+          !isGuess(d, intake, history.get(d.id) ?? [], m) &&
+          daysBetween(m.date, today) > 0,
       ).length;
       if (late) row(owner.name).overdue_milestones += late;
     }

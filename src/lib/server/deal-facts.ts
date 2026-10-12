@@ -4,8 +4,14 @@ import { readIntake } from "../intake-answers";
 import type { DealFacts } from "../needs-action";
 import { closeDateFor, timelineFor } from "../onboarding-plan";
 import { businessDaysBetween, localIso } from "../onboarding-timeline";
-import { isOnboardingStage, isStage } from "../presale-stages";
-import { nextChecklistTask, stageFlow } from "../stage-flow";
+import {
+  isOnboardingStage,
+  isStage,
+  isUnbookedBeforeKickoff,
+  kickoffEntryDate,
+  plannedBeforeKickoff,
+} from "../presale-stages";
+import { isKickoffBooked, nextChecklistTask, stageFlow } from "../stage-flow";
 import { watchOutsFor } from "../watch-outs";
 
 const db = () => supabaseAdmin as any;
@@ -143,6 +149,8 @@ export async function dealFactsFor(
       .find((s) => s.key === "pre_kickoff")
       ?.tasks.find((t) => t.key === "book_core" || t.key === "kickoff");
     const entered = String(d.stage_entered_at ?? today).slice(0, 10);
+    const kickoffOn = kickoffEntryDate(d.stage, d.stage_entered_at, stageHistory);
+    const kickoffBooked = isKickoffBooked(intake);
     out.set(d.id, {
       id: d.id,
       name: d.name,
@@ -155,17 +163,32 @@ export async function dealFactsFor(
       next_step: nextChecklistTask(input),
       overdue_calls: isOnboardingStage(d.stage)
         ? timeline.milestones
-            .filter((m) => m.kind === "call" && !m.doneOn && m.date < today)
+            .filter(
+              (m) =>
+                m.kind === "call" &&
+                !m.doneOn &&
+                m.date < today &&
+                !plannedBeforeKickoff(m, kickoffOn),
+            )
             .map((m) => ({
               label: m.label,
               date: m.date,
               businessDaysLate: businessDaysBetween(m.date, today),
             }))
         : [],
+      // Before Kickoff, with the kickoff unbooked, only booked sessions are
+      // events; an unbooked one's date is the playbook's guess from the close.
       upcoming_calls:
         isOnboardingStage(d.stage) || d.stage === "onboarding_kickoff"
           ? timeline.milestones
-              .filter((m) => m.kind === "call" && !m.serviceId && !m.doneOn && m.date >= today)
+              .filter(
+                (m) =>
+                  m.kind === "call" &&
+                  !m.serviceId &&
+                  !m.doneOn &&
+                  m.date >= today &&
+                  !isUnbookedBeforeKickoff(d.stage, m, kickoffBooked),
+              )
               .map((m) => ({
                 key: m.key,
                 label: m.label,

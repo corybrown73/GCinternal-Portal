@@ -313,7 +313,12 @@ export function ExternalSharePanel({ implementationId }: { implementationId: str
                 </div>
                 <p className="mt-0.5 font-mono text-[11px] text-muted-foreground">
                   expires {fmtDate(g.expires_at)} · opened {g.open_count}×
-                  {g.last_opened_at ? ` · last $<When value={g.last_opened_at} />` : ""}
+                  {g.last_opened_at ? (
+                    <>
+                      {" · last "}
+                      <When value={g.last_opened_at} />
+                    </>
+                  ) : null}
                   {g.created_by_name ? ` · issued by ${g.created_by_name}` : ""}
                 </p>
               </li>

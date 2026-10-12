@@ -87,7 +87,7 @@ describe("a prospect's checklist", () => {
     ]);
     expect(f.stages[0]!.done).toBe(false);
     const cw = f.stages.find((s) => s.key === "closed_won")!;
-    expect(cw.tasks.find((t) => t.key === "assign")!.locked).toMatch(/Closed Won/);
+    expect(cw.tasks.find((t) => t.key === "assign")!.locked).toMatch(/Negotiate & Finalize/);
     expect(cw.tasks.filter((t) => !t.locked).length).toBeGreaterThan(0);
     expect(f.advanceTo).toBeNull();
   });

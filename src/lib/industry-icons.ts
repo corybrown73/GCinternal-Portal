@@ -24,10 +24,17 @@ export const INDUSTRY_ICON: Record<string, string> = {
   Manufacturing: "Factory",
   Logistics: "Truck",
   "Property Management": "KeyRound",
+  Plumbing: "ShowerHead",
+  Mechanical: "Cog",
+  Electrical: "PlugZap",
+  "Pest Control": "Bug",
+  "Water/Wastewater": "Droplets",
+  "Education/Government": "Landmark",
   Other: "ClipboardCheck",
 };
 
+/** The industry's icon; a typed industry nobody listed gets the general one. */
 export function industryIcon(industry: string | null | undefined): string {
   if (!industry) return INDUSTRY_ICON["Other"]!;
-  return INDUSTRY_ICON[industry] ?? INDUSTRY_ICON["Other"]!;
+  return INDUSTRY_ICON[industry.trim()] ?? INDUSTRY_ICON["Other"]!;
 }

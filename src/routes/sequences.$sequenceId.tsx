@@ -14,7 +14,7 @@ import {
   toggleSequenceActive,
 } from "@/lib/sequences.functions";
 import { canManage, useProfile } from "@/lib/auth";
-import { humanize } from "@/lib/hub-format";
+import { fmtDateTime, humanize } from "@/lib/hub-format";
 import { cn } from "@/lib/utils";
 // Type-only imports — erased at build time.
 import type { SequenceDetail } from "@/lib/sequences.server";
@@ -593,7 +593,7 @@ function EnrollmentsPanel({
                             "rounded-sm px-1 py-0.5 font-mono text-[9px] uppercase tracking-wider",
                             EVENT_TONE[ev.event] ?? "bg-surface text-muted-foreground",
                           )}
-                          title={`${ev.event} · ${ev.step_id ? (stepTitle.get(ev.step_id) ?? "") : ""} · $<When value={ev.created_at} />`}
+                          title={`${ev.event} · ${ev.step_id ? (stepTitle.get(ev.step_id) ?? "") : ""} · ${fmtDateTime(ev.created_at)}`}
                         >
                           {ev.event}
                         </span>

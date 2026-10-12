@@ -178,8 +178,19 @@ export async function enqueueAiJob(args: EnqueueArgs): Promise<EnqueueResult> {
       // Finished meanwhile: the flag would be lost on a done row.
       if ((data ?? []).length === 0) return null;
     }
-    if (asked && waiting && active.deal_id) {
-      // The screen said "stalled" through the backoff; the click revives it.
+    // What the job absorbed goes to the log, not the row: `result` is the
+    // runner's to write, and a copy written here could undo a step's.
+    const { audit } = await import("../audit");
+    await audit({
+      actor_type: "system",
+      action: "ai.job_folded",
+      entity_type: "ai_job",
+      entity_id: active.id,
+      payload: { trigger: args.trigger, deal_id: active.deal_id, rerun: snapshotTaken },
+    });
+    if (asked && active.status === "queued" && active.deal_id) {
+      // The screen said "stalled" or "taking longer" while it waited; the
+      // click revives it, backoff or not.
       await touchReadingOf(active, {
         heartbeat_at: now.toISOString(),
         error: null,
@@ -330,11 +341,22 @@ export async function autoReadDeal(
   dealId: string,
   trigger: string,
   requestedBy: string | null = null,
+  /**
+   * `pump: false` from a caller that has already used much of its function
+   * (the Salesforce pull, one call per opportunity): the pump assumes a
+   * short request before it. The kick and the cron take the job instead.
+   */
+  opts: { pump?: boolean } = {},
 ): Promise<EnqueueResult | null> {
   try {
     const { isFlagOn } = await import("../../app-config.server");
     if (!(await isFlagOn("ai_auto_read"))) return null;
     const r = await enqueueAiJob({ kind: "prepare_deal", dealId, trigger, requestedBy });
+    if (opts.pump !== false) {
+      // Worked here, after the response, whether or not a scheduler runs.
+      const { pumpAiJobsInProcess } = await import("./pump");
+      pumpAiJobsInProcess(`auto:${trigger}`);
+    }
     await kickAiJobs();
     return r;
   } catch (e) {
@@ -460,6 +482,8 @@ export class LockLostError extends Error {
 export async function runOneStep(
   job: AiJobRow,
   ctx: StepContext = { now: () => new Date() },
+  /** `kick: false` when the caller runs the next step itself (the in-process pump). */
+  opts: { kick?: boolean } = {},
 ): Promise<RunOutcome> {
   const set = await stepSetFor(job.kind);
   const step = job.step ?? set.order[0]!;
@@ -490,10 +514,19 @@ export async function runOneStep(
   }
   if (next) {
     // The next step starts now, in a fresh invocation, not next minute.
-    await kickAiJobs();
+    if (opts.kick !== false) await kickAiJobs();
     return { outcome: "advanced", step, next };
   }
   return { outcome: "finished", step };
+}
+
+/**
+ * Give a claimed job back untouched: queued again, unlocked, no attempt
+ * counted. For a runner that claimed a step it has no time left to run.
+ */
+export async function releaseJob(job: AiJobRow): Promise<void> {
+  const { error } = await ownRow(job, { status: "queued", lock_token: null, locked_at: null });
+  if (error) console.error("[ai-jobs] could not release the job", job.id, error);
 }
 
 /** The advance write is tried this many times: a step is dear, the write is cheap. */
@@ -663,13 +696,18 @@ export async function failJob(job: AiJobRow, error: string): Promise<boolean> {
     return false;
   }
   const { safeCreateAlert } = await import("../events");
+  const subject = await alertSubjectOf(job);
+  // On /alerts and the deal's own record; it does not email (QA 12.6).
   await safeCreateAlert({
     kind: "ai_job_failed",
     severity: "warning",
     title: `The AI reading gave up after ${attempts} attempts`,
     detail: `${job.kind} · step ${job.step ?? "sources"} · ${message}`,
+    customerId: subject.customerId,
+    implementationId: subject.implementationId,
     payload: { job_id: job.id, deal_id: job.deal_id, kind: job.kind, step: job.step },
     ...(job.deal_id ? { dedupeOn: { key: "deal_id", value: job.deal_id } } : {}),
+    notify: false,
   });
   if (job.deal_id) {
     try {
@@ -682,6 +720,40 @@ export async function failJob(job: AiJobRow, error: string): Promise<boolean> {
   // screen ends on, with the new job's id.
   await queueRerunIfAsked(job, written);
   return true;
+}
+
+/** The customer and implementation a failed job belongs to, so its alert links. */
+async function alertSubjectOf(
+  job: AiJobRow,
+): Promise<{ customerId: string | null; implementationId: string | null }> {
+  try {
+    let customerId: string | null = null;
+    let implementationId = job.implementation_id ?? null;
+    if (job.deal_id) {
+      const [{ data: deal }, { data: impl }] = await Promise.all([
+        db().from("portal_accounts").select("customer_id").eq("id", job.deal_id).maybeSingle(),
+        db()
+          .from("implementations")
+          .select("id,customer_id")
+          .eq("deal_id", job.deal_id)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle(),
+      ]);
+      customerId = deal?.customer_id ?? impl?.customer_id ?? null;
+      implementationId ??= impl?.id ?? null;
+    } else if (implementationId) {
+      const { data: impl } = await db()
+        .from("implementations")
+        .select("customer_id")
+        .eq("id", implementationId)
+        .maybeSingle();
+      customerId = impl?.customer_id ?? null;
+    }
+    return { customerId, implementationId };
+  } catch {
+    return { customerId: null, implementationId: job.implementation_id ?? null };
+  }
 }
 
 async function markReadingFailed(job: AiJobRow, error: string): Promise<void> {

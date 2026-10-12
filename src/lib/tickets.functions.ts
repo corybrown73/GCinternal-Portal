@@ -293,6 +293,8 @@ export interface AlertListItem {
   notified_at: string | null;
   created_at: string;
   customer_name: string | null;
+  /** The deal the alert names, for one with no customer yet (a stuck closed deal). */
+  deal_id: string | null;
 }
 
 export const getAlerts = createServerFn({ method: "GET" })
@@ -305,11 +307,15 @@ export const getAlerts = createServerFn({ method: "GET" })
     const { data: alerts } = await admin
       .from("alerts")
       .select(
-        "id, kind, severity, title, detail, customer_id, implementation_id, source, acknowledged_at, acknowledged_by, notified_at, created_at",
+        "id, kind, severity, title, detail, customer_id, implementation_id, source, acknowledged_at, acknowledged_by, notified_at, created_at, payload",
       )
       .order("created_at", { ascending: false })
       .limit(200);
-    const rows = (alerts ?? []) as Array<Omit<AlertListItem, "customer_name">>;
+    // Only the deal id leaves the server, not the whole payload.
+    const rows = ((alerts ?? []) as Array<Record<string, any>>).map(({ payload, ...a }) => ({
+      ...(a as Omit<AlertListItem, "customer_name" | "deal_id">),
+      deal_id: typeof payload?.deal_id === "string" ? (payload.deal_id as string) : null,
+    }));
 
     const customerIds = [...new Set(rows.map((a) => a.customer_id).filter(Boolean))];
     const { data: customers } = customerIds.length

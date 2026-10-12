@@ -619,6 +619,58 @@ export interface AlertRow {
   acknowledged_by: string | null;
   notified_at: string | null;
   created_at: string;
+  /** Set when this visit's alert already existed (migration 0080); nothing was sent. */
+  already_raised?: boolean;
+}
+
+/**
+ * Who an alert is about, for the visit dedupe: the implementation, else the
+ * deal named in the payload. The same expression as 0080's unique index.
+ */
+export function alertSubject(row: {
+  implementation_id?: string | null;
+  payload?: Record<string, unknown> | null;
+}): string {
+  const deal = row.payload?.["deal_id"];
+  return row.implementation_id ?? (typeof deal === "string" ? deal : "");
+}
+
+/**
+ * Every (kind, subject, visit) already raised, acknowledged or not. An
+ * alert keyed by a visit is raised once per visit: acknowledging it ends it
+ * rather than inviting the next sweep to raise it again.
+ */
+export async function raisedVisits(kinds: string[]): Promise<Set<string>> {
+  // Only rows with a visit, page by page: PostgREST answers 1000 rows at most.
+  const rows: Array<Pick<AlertRow, "kind" | "implementation_id" | "payload">> = [];
+  for (let from = 0; ; from += RAISED_PAGE) {
+    const { data, error } = await db()
+      .from("alerts")
+      .select("id, kind, implementation_id, payload")
+      .in("kind", kinds)
+      .not("payload->>visit", "is", null)
+      .order("id", { ascending: true })
+      .range(from, from + RAISED_PAGE - 1);
+    if (error) throw new Error(`Could not read the raised alerts: ${error.message}`);
+    rows.push(...((data ?? []) as typeof rows));
+    if ((data ?? []).length < RAISED_PAGE) break;
+  }
+  const out = new Set<string>();
+  for (const a of rows) {
+    const visit = a.payload?.["visit"];
+    if (typeof visit !== "string") continue;
+    out.add(visitKey(a.kind, alertSubject(a), visit));
+    // A deal's alert matches by the deal too, before and after it has an implementation.
+    const deal = a.payload?.["deal_id"];
+    if (typeof deal === "string") out.add(visitKey(a.kind, deal, visit));
+  }
+  return out;
+}
+
+const RAISED_PAGE = 1000;
+
+export function visitKey(kind: string, subject: string, visit: string): string {
+  return `${kind}|${subject}|${visit}`;
 }
 
 export async function createAlert(input: {
@@ -649,6 +701,12 @@ export async function createAlert(input: {
     })
     .select("*")
     .single();
+  if (error?.code === "23505") {
+    // 0080's index: two sweeps raced to the same visit. The first one told
+    // the humans; this one says nothing.
+    const existing = await existingVisitAlert(input);
+    if (existing) return { ...existing, already_raised: true };
+  }
   if (error) throw new Error(`Could not create alert: ${error.message}`);
   let created = alert as AlertRow;
 
@@ -706,6 +764,25 @@ export async function createAlert(input: {
   });
 
   return created;
+}
+
+async function existingVisitAlert(input: {
+  kind: string;
+  implementationId?: string | null | undefined;
+  payload?: Record<string, unknown> | null | undefined;
+}): Promise<AlertRow | null> {
+  const visit = input.payload?.["visit"];
+  if (typeof visit !== "string") return null;
+  const subject = alertSubject({
+    implementation_id: input.implementationId ?? null,
+    payload: input.payload ?? null,
+  });
+  const { data } = await db()
+    .from("alerts")
+    .select("*")
+    .eq("kind", input.kind)
+    .eq("payload->>visit", visit);
+  return ((data ?? []) as AlertRow[]).find((a) => alertSubject(a) === subject) ?? null;
 }
 
 export async function acknowledgeAlert(alertId: string, profileId: string): Promise<AlertRow> {

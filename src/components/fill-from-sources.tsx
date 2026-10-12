@@ -5,7 +5,7 @@ import { RefreshCw, Sparkles } from "lucide-react";
 import { When } from "@/components/when";
 import type { DealData } from "@/lib/deal-query";
 import { readIntake, type IntakeAnswers } from "@/lib/intake-answers";
-import { readingInFlight } from "@/lib/stage-flow";
+import { readingInFlight, readingSlow } from "@/lib/stage-flow";
 import { prepareDealFn } from "@/lib/stage-flow.functions";
 import { cn } from "@/lib/utils";
 
@@ -77,6 +77,7 @@ export function ReadingStatus({ deal, editable }: { deal: DealData; editable: bo
   const r = intake.ai_reading;
   const start = useStartReading(deal.account.id);
   const running = readingInFlight(r);
+  const slow = running && readingSlow(r);
   const failures = Object.entries(r?.branches ?? {}).filter(([, b]) => b.status === "failed");
   const hasSources =
     deal.gong_reports.length > 0 ||
@@ -88,9 +89,13 @@ export function ReadingStatus({ deal, editable }: { deal: DealData; editable: bo
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px]">
       {running ? (
-        <span className="inline-flex items-center gap-1.5 text-primary">
+        <span className="inline-flex flex-wrap items-center gap-1.5 text-primary">
           <span className="h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent" />
-          {readingStepLabel(r?.step, r?.status)} You can leave this page.
+          {slow ? "Taking longer than usual." : readingStepLabel(r?.step, r?.status)}
+          {r?.error ? (
+            <span className="text-amber-700 dark:text-amber-400">({r.error})</span>
+          ) : null}{" "}
+          {slow ? "Read again to nudge it." : "You can leave this page."}
         </span>
       ) : r?.status === "failed" ? (
         <span role="alert" className="text-destructive">
@@ -126,7 +131,7 @@ export function ReadingStatus({ deal, editable }: { deal: DealData; editable: bo
       ) : (
         <span className="text-muted-foreground">Not read yet.</span>
       )}
-      {editable && !running ? (
+      {editable && (!running || slow) ? (
         <button
           type="button"
           onClick={() => start.mutate({ force: true })}

@@ -78,3 +78,76 @@ export function isPreClose(stage: string | null | undefined): boolean {
     stage !== null && stage !== undefined && (PRE_CLOSE_STAGES as readonly string[]).includes(stage)
   );
 }
+
+/** The deal has not reached Kickoff yet: any stage before it in STAGES. */
+export function isBeforeKickoff(stage: string | null | undefined): boolean {
+  const s = normalizeStage(stage);
+  return s !== null && STAGES.indexOf(s) < STAGES.indexOf("kickoff");
+}
+
+/**
+ * A plan session nobody has booked, on a deal not yet at Kickoff whose
+ * kickoff is not booked either. Its date is the playbook's guess from the
+ * close, not a meeting: Home and the Calendar leave it out. Once the
+ * kickoff is booked the dates follow it and show again (with Home's "not
+ * booked yet" tag). The deal page always shows the plan.
+ */
+export function isUnbookedBeforeKickoff(
+  stage: string | null | undefined,
+  m: { kind: string; time?: string | null | undefined },
+  kickoffBooked = false,
+): boolean {
+  return m.kind === "call" && isGuessBeforeKickoff(stage, m, kickoffBooked);
+}
+
+/**
+ * Any plan item (a call, homework, a build day) on a deal before Kickoff
+ * with the kickoff unbooked, and no time of its own: a date from the
+ * close, never late (QA 13.2).
+ */
+export function isGuessBeforeKickoff(
+  stage: string | null | undefined,
+  m: { time?: string | null | undefined },
+  kickoffBooked = false,
+): boolean {
+  return !m.time && !kickoffBooked && isBeforeKickoff(stage);
+}
+
+/**
+ * The day the deal entered Kickoff, once it is there or past it: its stage
+ * entry while in Kickoff, else the last move into Kickoff in its history
+ * (or the first move past it). Null before Kickoff, or when nothing
+ * records it.
+ */
+export function kickoffEntryDate(
+  stage: string | null | undefined,
+  enteredAt: string | null | undefined,
+  history: ReadonlyArray<{ to_stage: string; occurred_at: string }>,
+): string | null {
+  if (isBeforeKickoff(stage)) return null;
+  if (normalizeStage(stage) === "kickoff" && enteredAt) return enteredAt.slice(0, 10);
+  const day = (h: { occurred_at: string }) => h.occurred_at.slice(0, 10);
+  const intoKickoff = history
+    .filter((h) => h.to_stage === "kickoff")
+    .map(day)
+    .sort();
+  if (intoKickoff.length) return intoKickoff.at(-1)!;
+  // Moved past Kickoff without a recorded stop in it: the first move past it.
+  const past = history
+    .filter((h) => normalizeStage(h.to_stage) !== null && !isBeforeKickoff(h.to_stage))
+    .map(day)
+    .sort();
+  return past[0] ?? null;
+}
+
+/**
+ * An item the plan dated before the deal reached Kickoff, with no time
+ * booked: never overdue, it was the close's guess and not the team's to
+ * hold (QA 13.2). A booked one, held or not, still counts.
+ */
+export function plannedBeforeKickoff(
+  m: { date: string; time?: string | null | undefined },
+  kickoffOn: string | null,
+): boolean {
+  return kickoffOn !== null && !m.time && m.date < kickoffOn;
+}

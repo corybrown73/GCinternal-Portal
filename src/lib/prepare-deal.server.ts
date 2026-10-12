@@ -27,6 +27,8 @@ export async function prepareDeal(
     requestedBy: profile.id,
     force: Boolean(opts.force),
   });
+  const { pumpAiJobsInProcess } = await import("./server/ai/pump");
+  pumpAiJobsInProcess("manual");
   await kickAiJobs();
   return { status: "queued", filled: [], error: null };
 }

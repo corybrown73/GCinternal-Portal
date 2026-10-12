@@ -500,6 +500,8 @@ export async function queueTranscriptReading(args: {
       trigger: "upload",
       requestedBy: args.requestedBy,
     });
+    const { pumpAiJobsInProcess } = await import("./server/ai/pump");
+    pumpAiJobsInProcess("transcript_upload");
     await kickAiJobs();
     return { queued: true, reason: null };
   } catch (e) {

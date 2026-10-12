@@ -23,10 +23,9 @@ describe("the form library seed", () => {
     }
   });
 
-  it("has five or six forms per industry", () => {
+  it("has six forms per industry", () => {
     for (const [industry, entries] of Object.entries(FORM_LIBRARY_SEED)) {
-      expect(entries.length, industry).toBeGreaterThanOrEqual(5);
-      expect(entries.length, industry).toBeLessThanOrEqual(6);
+      expect(entries.length, industry).toBe(6);
     }
   });
 

@@ -129,7 +129,7 @@ describe("the stage checklist", () => {
     expect(stageFlow(input({ stage: "prospect" })).advanceTo).toBeNull();
     // Nothing to assign before the close makes the project.
     const pre = stageFlow(input({ stage: "prospect", owner: null }));
-    expect(cw(pre).tasks.find((t) => t.key === "assign")!.locked).toMatch(/Closed Won/);
+    expect(cw(pre).tasks.find((t) => t.key === "assign")!.locked).toMatch(/Negotiate & Finalize/);
     expect(stageFlow(input({ stage: "field_fusion_setup" })).advanceTo).toBeNull();
   });
 

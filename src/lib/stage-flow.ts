@@ -303,6 +303,20 @@ export function readingInFlight(r: IntakeAnswers["ai_reading"], now = Date.now()
   return Number.isFinite(last) && now - last < READING_STALE_MS;
 }
 
+/**
+ * A reading queued this long without a step is late. Display only: the
+ * screen says so and offers Read again; READING_STALE_MS still decides
+ * "in flight" for the Review gate and the polling.
+ */
+export const READING_SLOW_MS = 2 * 60 * 1000;
+
+/** Queued and untouched for two minutes. */
+export function readingSlow(r: IntakeAnswers["ai_reading"], now = Date.now()): boolean {
+  if (r?.status !== "queued") return false;
+  const last = Date.parse(r.heartbeat_at ?? r.started_at);
+  return Number.isFinite(last) && now - last > READING_SLOW_MS;
+}
+
 /** The tasks always present in Intake & Process; a Process Call is added only when needed. */
 export const PRE_KICKOFF_TASKS = [
   "intake_complete",
@@ -377,7 +391,7 @@ function closedWonTasks(
       action: "assign",
       // Sales brings the TIS in before the close: from Negotiate & Finalize
       // on. A bare Prospect has nobody to bring in yet.
-      locked: assignable ? null : "Assigned at Negotiate & Finalize or Closed Won",
+      locked: assignable ? null : "Move the deal to Negotiate & Finalize to bring the TIS in",
     },
     {
       key: "notes",
@@ -605,10 +619,15 @@ export function zoneShort(zone: string, isoDate: string): string {
 }
 
 /** Only Kickoff gets booked here — no fixed number of meetings. */
+/** The kickoff call has a date and a time on the plan. */
+export function isKickoffBooked(a: IntakeAnswers): boolean {
+  return Boolean(a.timeline.overrides["kickoff"] && a.timeline.times["kickoff"]);
+}
+
 function kickoffBookingTask(a: IntakeAnswers): FlowTask {
   const kickoffDate = a.timeline.overrides["kickoff"] ?? null;
   const kickoffTime = a.timeline.times["kickoff"] ?? null;
-  const booked = Boolean(kickoffDate && kickoffTime);
+  const booked = isKickoffBooked(a);
   return {
     key: "kickoff",
     label: "Book the kickoff call",
