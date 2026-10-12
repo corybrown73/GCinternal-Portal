@@ -213,7 +213,34 @@ export type WelcomeView = {
    * persisted — see kickoffFocusContent for the precedence rule.
    */
   implementationFocusFallback?: ImplementationFocusView["items"];
+  /**
+   * The agreed scope as the customer may read it: text and state only.
+   * Computed on the server from the same rules as Kickoff View (kickoffFocusContent),
+   * so no source, quote or review flag ever reaches a customer's page.
+   */
+  customerScope: { state: "empty" | "proposed" | "agreed"; items: string[] };
 };
+
+/**
+ * The customer's copy of the page. The customer's link reads this, never the
+ * internal record: the focus provenance and quotes (Gong, SOW, intake), the
+ * internal reasons on a solution's note and blocker, and who validated the
+ * workflow are all taken out. The internal preview reads the full record.
+ */
+export function customerWelcomeView(view: WelcomeView): WelcomeView {
+  return {
+    ...view,
+    implementationFocus: null,
+    implementationFocusFallback: [],
+    workflowStory: view.workflowStory ? { ...view.workflowStory, validatedBy: null } : null,
+    journey: view.journey
+      ? {
+          ...view.journey,
+          solutions: view.journey.solutions.map((s) => ({ ...s, note: null, blocked: null })),
+        }
+      : null,
+  };
+}
 
 /**
  * The lead's booking link is OFF unless it is switched on for this customer.

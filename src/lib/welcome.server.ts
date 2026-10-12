@@ -5,6 +5,7 @@ import { readIntake } from "./intake-answers";
 import { appUrl } from "@/lib/app-url";
 import { industryIcon } from "@/lib/industry-icons";
 import {
+  customerWelcomeView,
   HOMEWORK_KEYS,
   implementationFocusFallbackView,
   implementationFocusView,
@@ -12,6 +13,7 @@ import {
   type HomeworkKey,
   type WelcomeView,
 } from "@/lib/welcome";
+import { kickoffFocusContent } from "@/lib/kickoff-view";
 
 import { audit } from "./server/audit";
 import { hashToken } from "./server/plan-tokens";
@@ -222,6 +224,11 @@ async function viewFor(
     String(deal.id),
     deal.customer_id ? String(deal.customer_id) : null,
   );
+  const focus = implementationFocusView(intake);
+  const focusFallback = implementationFocusFallbackView(
+    (await import("./implementation-focus")).proposeImplementationFocus(intake),
+  );
+  const scope = kickoffFocusContent(focus, focusFallback);
   return {
     dealId: String(deal.id),
     clientName: input.clientName,
@@ -299,13 +306,12 @@ async function viewFor(
         : null,
     parkingLot: lot,
     workflowStory: workflowStoryView(readIntake(deal.intake)),
-    implementationFocus: implementationFocusView(readIntake(deal.intake)),
+    implementationFocus: focus,
     // Kickoff-only: a presentation-time proposal from existing structured
     // evidence, read fresh on every view and never written back — see
     // implementation-focus.ts's proposeImplementationFocus.
-    implementationFocusFallback: implementationFocusFallbackView(
-      (await import("./implementation-focus")).proposeImplementationFocus(readIntake(deal.intake)),
-    ),
+    implementationFocusFallback: focusFallback,
+    customerScope: { state: scope.state, items: scope.state === "empty" ? [] : scope.items },
     intake: (await import("./sales-handoff")).customerPrompt(readIntake(deal.intake)),
     journey: (await import("./welcome-journey")).customerJourney({
       stage: deal.stage ?? null,
@@ -449,7 +455,7 @@ export async function openWelcome(token: string): Promise<WelcomeView | null> {
       .update({ welcome_opened_at: new Date().toISOString() })
       .eq("id", deal.id);
   }
-  return viewFor(deal, { internal: false, token });
+  return customerWelcomeView(await viewFor(deal, { internal: false, token }));
 }
 
 /**

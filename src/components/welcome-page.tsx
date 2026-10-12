@@ -33,6 +33,7 @@ import { stampDay } from "@/lib/stage-flow";
 import type { HandoffValue } from "@/lib/sales-handoff";
 import { byLabel, dueLabel, journeyOverviewItems } from "@/lib/welcome-journey";
 import { kickoffScreenList } from "@/components/kickoff-view";
+import { CustomerDashboard } from "@/components/customer-dashboard";
 import {
   EditCtx,
   Frame,
@@ -121,6 +122,7 @@ export function WelcomePage({
 }) {
   const [present, setPresent] = useState(false);
   const [at, setAt] = useState(0);
+  const today = useToday();
   // WHAT experience is showing, distinct from `mode` (WHO is viewing).
   // Internal only in this PR: the toggle that sets this lives in the
   // Toolbar, which only renders for mode === "internal". The customer's
@@ -211,49 +213,57 @@ export function WelcomePage({
               setExperience((e) => (e === "plan" ? "kickoff" : "plan"));
               setAt(0);
             }}
-            onPresent={() => {
-              setAt(0);
-              setPresent(true);
-            }}
+            onPresent={
+              experience === "kickoff"
+                ? () => {
+                    setAt(0);
+                    setPresent(true);
+                  }
+                : undefined
+            }
             workspaceHref={workspaceHref}
             onCopyLink={experience === "plan" ? mintForQr : undefined}
             onMarkSent={experience === "plan" ? onMarkSent : undefined}
-            onExportPptx={async (report) => {
-              // Every visible screen, unzoomed, with the talk track as notes.
-              const notes = speakerNotes(view);
-              const byKey = new Map(notes.sections.map((sec) => [sec.key, sec]));
-              await exportWelcomePptx({
-                screens: visible.map((sc, i) =>
-                  sc.render({
-                    page: i + 1,
-                    qr: showQr ? qr : null,
-                    mode: "shared",
-                    onTick: undefined,
-                    onAnswer: undefined,
-                    onBall: undefined,
-                    icsBase: null,
-                  }),
-                ),
-                notes: visible.map((sc) => {
-                  const sec =
-                    byKey.get(sc.key) ??
-                    (sc.key.startsWith("phase-")
-                      ? byKey.get(`phase-${view.timeline.phases[0]?.phase}`)
-                      : undefined);
-                  if (!sec) return "";
-                  return [
-                    ...sec.say,
-                    "",
-                    `Why: ${sec.why}`,
-                    "",
-                    ...sec.ifTheyAsk.map((q) => `If they ask "${q.q}": ${q.a}`),
-                  ].join("\n");
-                }),
-                fileName: pptxFileName(view.clientName),
-                title: `${view.clientName} — onboarding plan`,
-                onProgress: report,
-              });
-            }}
+            onExportPptx={
+              experience === "kickoff"
+                ? async (report) => {
+                    // Every visible screen, unzoomed, with the talk track as notes.
+                    const notes = speakerNotes(view);
+                    const byKey = new Map(notes.sections.map((sec) => [sec.key, sec]));
+                    await exportWelcomePptx({
+                      screens: visible.map((sc, i) =>
+                        sc.render({
+                          page: i + 1,
+                          qr: showQr ? qr : null,
+                          mode: "shared",
+                          onTick: undefined,
+                          onAnswer: undefined,
+                          onBall: undefined,
+                          icsBase: null,
+                        }),
+                      ),
+                      notes: visible.map((sc) => {
+                        const sec =
+                          byKey.get(sc.key) ??
+                          (sc.key.startsWith("phase-")
+                            ? byKey.get(`phase-${view.timeline.phases[0]?.phase}`)
+                            : undefined);
+                        if (!sec) return "";
+                        return [
+                          ...sec.say,
+                          "",
+                          `Why: ${sec.why}`,
+                          "",
+                          ...sec.ifTheyAsk.map((q) => `If they ask "${q.q}": ${q.a}`),
+                        ].join("\n");
+                      }),
+                      fileName: pptxFileName(view.clientName),
+                      title: `${view.clientName} — onboarding plan`,
+                      onProgress: report,
+                    });
+                  }
+                : undefined
+            }
             qrReady={experience === "plan" && Boolean(qr)}
             showQr={showQr}
             onToggleQr={() => setShowQr((v) => !v)}
@@ -263,7 +273,17 @@ export function WelcomePage({
         ) : null}
         {mode === "shared" ? <SharedBar view={view} icsBase={icsBase ?? null} /> : null}
 
-        {present ? (
+        {experience === "plan" ? (
+          <CustomerDashboard
+            view={view}
+            today={today}
+            mode={mode}
+            onTick={onTick}
+            onAnswer={onAnswer}
+            onBall={onBall}
+            icsBase={icsBase ?? null}
+          />
+        ) : present ? (
           <div className="wp-present" onClick={() => setAt((i) => Math.min(total - 1, i + 1))}>
             <Stage key={at} fit="both">
               {screens[at]}
@@ -301,17 +321,6 @@ export function WelcomePage({
           </div>
         ) : (
           <div className="wp-shell">
-            {mode === "internal" && experience === "plan" ? (
-              <ScreenMenu
-                all={all}
-                hidden={hidden}
-                bookingOn={bookingShown(view.hiddenScreens)}
-                hasBooking={
-                  Boolean(view.team.leadCard?.bookingUrl) || !bookingShown(view.hiddenScreens)
-                }
-                onToggle={onToggleScreen}
-              />
-            ) : null}
             <div className="wp-scroll">
               {visible.map((sc, i) => (
                 <div key={sc.key} id={`wp-screen-${sc.key}`}>
@@ -429,6 +438,7 @@ export function screenList(view: WelcomeView): Screen[] {
  * off everywhere — the preview, present mode, the PDF and the customer's
  * link — because the page is one source.
  */
+/** The per-screen switches. Kept for the slide stack; the dashboard has no screens to switch. */
 function ScreenMenu({
   all,
   hidden,
@@ -602,7 +612,7 @@ function Toolbar({
   /** Internal: the presenter's own window, opened beside the presentation. */
   workspaceHref?: string | null | undefined;
   onToggleExperience: () => void;
-  onPresent: () => void;
+  onPresent?: (() => void) | undefined;
   onCopyLink?: (() => Promise<string>) | undefined;
   onMarkSent?: (() => Promise<void> | void) | undefined;
   /** Every visible screen as a full-bleed slide. Reports progress while it renders. */
@@ -656,7 +666,7 @@ function Toolbar({
         >
           {experience === "plan" ? "Kickoff View" : "Implementation Plan"}
         </button>
-        {experience === "plan" ? <DayChip view={view} /> : null}
+
         {experience === "kickoff" && workspaceHref ? (
           <a
             href={workspaceHref}
@@ -712,9 +722,11 @@ function Toolbar({
             <FileText className="h-3.5 w-3.5" /> Speaker notes
           </a>
         ) : null}
-        <button type="button" className="wp-tool" onClick={onPresent}>
-          <Play className="h-3.5 w-3.5" /> Present
-        </button>
+        {onPresent ? (
+          <button type="button" className="wp-tool" onClick={onPresent}>
+            <Play className="h-3.5 w-3.5" /> Present
+          </button>
+        ) : null}
         <button type="button" className="wp-tool" onClick={() => window.print()}>
           <Printer className="h-3.5 w-3.5" /> PDF
         </button>
@@ -796,7 +808,6 @@ function SharedBar({ view, icsBase }: { view: WelcomeView; icsBase: string | nul
     <div className="wp-toolbar is-shared print:hidden">
       <div className="wp-toolbar-left">
         <img src="/branding/gocanvas-wordmark-navy.png" alt="GoCanvas" className="h-5 w-auto" />
-        <DayChip view={view} />
         <span className="wp-toolbar-meta">
           {view.timeline.training
             ? "Your GoCanvas training plan"
