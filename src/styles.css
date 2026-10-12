@@ -4376,6 +4376,210 @@ body.gc-presenting {
   grid-template-columns: repeat(3, 1fr);
 }
 
+/* Kickoff deck: full, readable saved answers; the three-column working agreement;
+   the Form V1 screenshot; the Next Move cards. All sized to the 1280x720 frame. */
+.gc-welcome .wp-workflow-text {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--wp-ink);
+}
+.gc-welcome .wp-workflow-text.is-long {
+  font-size: 13px;
+  line-height: 1.45;
+}
+.gc-welcome .wp-agreement-list {
+  margin: 6px 0 0;
+  padding-left: 16px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--wp-body);
+}
+.gc-welcome .wp-agreement-list li + li {
+  margin-top: 4px;
+}
+.gc-welcome .wp-agreement-foot {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--wp-line);
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--wp-ink);
+}
+.gc-welcome .wp-agreement-foot p {
+  margin: 0;
+}
+.gc-welcome .wp-agreement-label {
+  display: block;
+  margin-bottom: 2px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--wp-blue-deep);
+}
+.gc-welcome .wp-shot-layout {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 1.5fr 1fr;
+  gap: 28px;
+  align-items: start;
+}
+.gc-welcome .wp-shot {
+  margin: 0;
+  height: 400px;
+  padding: 12px;
+  border: 1px solid var(--wp-line);
+  border-radius: 12px;
+  background: var(--wp-blue-soft);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+.gc-welcome .wp-shot img {
+  max-width: 100%;
+  max-height: 100%;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  border-radius: 6px;
+  box-shadow: 0 6px 18px rgba(7, 43, 87, 0.12);
+}
+.gc-welcome .wp-shot-side {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.gc-welcome .wp-form-steps {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.gc-welcome .wp-form-steps li {
+  display: flex;
+  gap: 10px;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--wp-ink);
+}
+.gc-welcome .wp-form-steps b {
+  display: block;
+  font-weight: 800;
+}
+.gc-welcome .wp-step-no {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  background: var(--wp-blue);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 800;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.gc-welcome .wp-testing-line {
+  margin: 0;
+  font-size: 13px;
+  color: var(--wp-body);
+}
+.gc-welcome .wp-changes h4 {
+  margin: 0 0 6px;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--wp-blue-deep);
+}
+.gc-welcome .wp-changes p {
+  margin: 0;
+  font-size: 13px;
+  color: var(--wp-body);
+}
+.gc-welcome .wp-change-meta {
+  color: var(--wp-muted);
+  font-size: 12px;
+}
+.gc-welcome .wp-next-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+.gc-welcome .wp-next-card {
+  min-height: 0;
+  padding: 12px 16px;
+  border: 1px solid var(--wp-line);
+  border-radius: 12px;
+  background: #fff;
+}
+.gc-welcome .wp-next-card h4 {
+  margin: 0 0 6px;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--wp-blue-deep);
+}
+.gc-welcome .wp-next-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--wp-ink);
+}
+.gc-welcome .wp-next-list li.is-open {
+  color: var(--wp-muted);
+}
+.gc-welcome .wp-next-meta {
+  color: var(--wp-muted);
+  font-size: 12px;
+}
+.gc-welcome .wp-next-line {
+  margin: 0;
+  font-size: 14px;
+  color: var(--wp-ink);
+}
+.gc-welcome .wp-next-note {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--wp-muted);
+}
+.gc-welcome .wp-next-tag {
+  display: inline-block;
+  margin-bottom: 6px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+}
+.gc-welcome .wp-next-tag.is-agreed {
+  background: rgba(29, 162, 92, 0.12);
+  color: #137a43;
+}
+.gc-welcome .wp-next-tag.is-proposed {
+  background: rgba(243, 112, 33, 0.12);
+  color: #b24f10;
+}
+.gc-welcome .wp-rail.is-six .wp-node-date {
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--wp-navy);
+}
+
 /* The cover's "today we'll" promise — pills, but tighter: a light touch
    under an already-full hero column, not a fourth headline. */
 .gc-welcome .wp-pills.is-compact {

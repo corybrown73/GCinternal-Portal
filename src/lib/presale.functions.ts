@@ -712,6 +712,31 @@ export const uploadIntakeForm = createServerFn({ method: "POST" })
     return uploadDealIntakeForm(context.profile.id, data);
   });
 
+/** A screenshot of the customer's first form, for Kickoff Slide 5. */
+export const uploadFormScreenshot = createServerFn({ method: "POST" })
+  .middleware([requireDealEditor])
+  .inputValidator((data: unknown) =>
+    z
+      .object({
+        dealId: z.string().uuid(),
+        fileName: z.string().trim().min(1).max(200),
+        dataBase64: z.string().min(1).max(11_200_000),
+      })
+      .parse(data),
+  )
+  .handler(async ({ data, context }) => {
+    const { uploadFormScreenshot: upload } = await import("./presale.server");
+    return upload(context.profile.id, data);
+  });
+
+export const removeFormScreenshot = createServerFn({ method: "POST" })
+  .middleware([requireDealEditor])
+  .inputValidator((data: unknown) => z.object({ dealId: z.string().uuid() }).parse(data))
+  .handler(async ({ data, context }) => {
+    const { removeFormScreenshot: remove } = await import("./presale.server");
+    return remove(context.profile.id, data.dealId);
+  });
+
 /** The signed contract, a PDF or Word file, onto the intake. Beside or instead of a SOW. */
 export const uploadContract = createServerFn({ method: "POST" })
   .middleware([requireDealEditor])

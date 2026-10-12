@@ -115,6 +115,16 @@ async function viewFor(
     );
     formArtifacts.push(...linked.filter((form): form is { name: string; url: string } => !!form));
   }
+  let formScreenshotUrl: string | null = null;
+  if (intake.first_form_screenshot) {
+    const { intakeFormLink } = await import("./presale.server");
+    try {
+      formScreenshotUrl = (await intakeFormLink(String(deal.id), intake.first_form_screenshot.path))
+        .url;
+    } catch (error) {
+      console.error("[welcome] could not sign the form screenshot", error);
+    }
+  }
 
   const readiness: WelcomeView["readiness"] = [];
   if (opts.internal) {
@@ -257,6 +267,7 @@ async function viewFor(
     },
     firstForm: input.firstForm,
     formArtifacts,
+    formScreenshotUrl,
     firstFormSource: input.firstForm ? (input.firstFormSource ?? "person") : null,
     nextUseCases: input.nextUseCases,
     photoUrl,
