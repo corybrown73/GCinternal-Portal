@@ -1023,6 +1023,17 @@ export interface DealDetail {
   >;
   notes: Array<OnboardingNote & { author_name: string | null; reviewed_by_name: string | null }>;
   stage_history: Array<StageTransition & { actor_name: string | null }>;
+  /** Each explicit milestone date change, from the append-only audit (0082). */
+  milestone_date_changes: Array<{
+    id: string;
+    milestone_key: string;
+    previous_date: string;
+    new_date: string;
+    reason: string | null;
+    created_at: string;
+    actor_name: string | null;
+    cascaded_count: number;
+  }>;
   /** The configured pipeline, so the record renders labels and the Closed Won
    *  control from the same list the board does. */
   stages: PipelineStage[];
@@ -1050,36 +1061,46 @@ export async function loadDeal(dealId: string): Promise<DealDetail | null> {
     .maybeSingle();
   if (!account) return null;
 
-  const [names, gong, briefs, tam, notes, history, stages, people] = await Promise.all([
-    profileNames(),
-    db()
-      .from("portal_gong_reports")
-      .select("*")
-      .eq("account_id", dealId)
-      .order("created_at", { ascending: false }),
-    db()
-      .from("portal_briefs")
-      .select("*")
-      .eq("account_id", dealId)
-      .order("created_at", { ascending: false }),
-    db()
-      .from("portal_tam_requests")
-      .select("*")
-      .eq("account_id", dealId)
-      .order("created_at", { ascending: false }),
-    db()
-      .from("portal_onboarding_notes")
-      .select("*")
-      .eq("account_id", dealId)
-      .order("created_at", { ascending: false }),
-    db()
-      .from("portal_stage_transitions")
-      .select("*")
-      .eq("account_id", dealId)
-      .order("occurred_at", { ascending: false }),
-    loadPipelineStages(),
-    profileDirectory(),
-  ]);
+  const [names, gong, briefs, tam, notes, history, dateChanges, stages, people] = await Promise.all(
+    [
+      profileNames(),
+      db()
+        .from("portal_gong_reports")
+        .select("*")
+        .eq("account_id", dealId)
+        .order("created_at", { ascending: false }),
+      db()
+        .from("portal_briefs")
+        .select("*")
+        .eq("account_id", dealId)
+        .order("created_at", { ascending: false }),
+      db()
+        .from("portal_tam_requests")
+        .select("*")
+        .eq("account_id", dealId)
+        .order("created_at", { ascending: false }),
+      db()
+        .from("portal_onboarding_notes")
+        .select("*")
+        .eq("account_id", dealId)
+        .order("created_at", { ascending: false }),
+      db()
+        .from("portal_stage_transitions")
+        .select("*")
+        .eq("account_id", dealId)
+        .order("occurred_at", { ascending: false }),
+      db()
+        .from("portal_milestone_date_changes")
+        .select(
+          "id,milestone_key,change_kind,previous_date,new_date,reason,actor_id,caused_by_change_id,created_at",
+        )
+        .eq("account_id", dealId)
+        .order("created_at", { ascending: false })
+        .limit(500),
+      loadPipelineStages(),
+      profileDirectory(),
+    ],
+  );
 
   const named = (id: string | null | undefined) => (id ? (names.get(id) ?? null) : null);
   const byRole = ownerOptionsByRole(people);
@@ -1131,6 +1152,18 @@ export async function loadDeal(dealId: string): Promise<DealDetail | null> {
           .maybeSingle(),
   ]);
 
+  const dateChangeRows = (dateChanges.data ?? []) as Array<{
+    id: string;
+    milestone_key: string;
+    change_kind: "direct" | "cascade";
+    previous_date: string;
+    new_date: string;
+    reason: string | null;
+    actor_id: string | null;
+    caused_by_change_id: string | null;
+    created_at: string;
+  }>;
+
   return {
     account: account as DealDetail["account"],
     logo_url: logoUrl,
@@ -1167,6 +1200,18 @@ export async function loadDeal(dealId: string): Promise<DealDetail | null> {
       ...t,
       actor_name: named(t.actor_profile_id),
     })),
+    milestone_date_changes: dateChangeRows
+      .filter((r) => r.change_kind === "direct")
+      .map((r) => ({
+        id: r.id,
+        milestone_key: r.milestone_key,
+        previous_date: r.previous_date,
+        new_date: r.new_date,
+        reason: r.reason,
+        created_at: r.created_at,
+        actor_name: named(r.actor_id),
+        cascaded_count: dateChangeRows.filter((c) => c.caused_by_change_id === r.id).length,
+      })),
     stages,
   };
 }
@@ -2708,25 +2753,128 @@ export async function saveDealIntake(
 }
 
 /**
+ * Move one milestone's date with a required reason, recorded atomically
+ * with the move itself (0082: portal_record_milestone_date_change). Unlike
+ * saveDealIntake, this is the one write path that can never leave the date
+ * changed with no record of why, or a record with no matching date — the
+ * override and the history land in the same database transaction.
+ *
+ * The cascade this one override causes on later, not-independently-moved
+ * milestones is computed here in JS, from the same buildTimeline() every
+ * screen uses (via planMilestoneDateChange) — the database function only
+ * records what this already computed, never re-derives the plan's cascade
+ * math.
+ *
+ * Returns null when the date given is the one already in effect: nothing
+ * changed, so nothing is recorded — a reason for a non-change is not a
+ * change's reason.
+ */
+export async function recordMilestoneDateChange(
+  userId: string,
+  dealId: string,
+  milestoneKey: string,
+  newDate: string,
+  reason: string,
+): Promise<{ changeId: string; syncError: string | null } | null> {
+  await requireSalesEditor(userId);
+  const trimmedReason = reason.trim();
+  if (!trimmedReason) throw new Error("A reason is required to change a milestone's date.");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(newDate)) throw new Error("newDate must be YYYY-MM-DD");
+
+  const { readIntake } = await import("./intake-answers");
+  const { closeDateFor, timelineFor } = await import("./onboarding-plan");
+  const { planMilestoneDateChange, wasOverdueAsOf } = await import("./milestone-history");
+  const { allMilestones, todayIn } = await import("./onboarding-timeline");
+
+  const { data: row } = await db()
+    .from("portal_accounts")
+    .select("intake")
+    .eq("id", dealId)
+    .maybeSingle();
+  if (!row) throw new Error("Deal not found");
+  const intake = readIntake((row as any).intake);
+
+  const [{ data: transitions }, stages] = await Promise.all([
+    db().from("portal_stage_transitions").select("to_stage,occurred_at").eq("account_id", dealId),
+    loadPipelineStages(),
+  ]);
+  const close = closeDateFor({
+    intake,
+    stageHistory: (transitions ?? []) as Array<{ to_stage: string; occurred_at: string }>,
+    wonStageKey: wonStage(stages).key,
+  }).date;
+
+  const before = timelineFor(intake, close);
+  if (allMilestones(before).find((m) => m.key === milestoneKey)?.doneOn) {
+    throw new Error(`"${milestoneKey}" is already done, so its date is kept.`);
+  }
+  const newOverrides = { ...intake.timeline.overrides, [milestoneKey]: newDate };
+  const after = timelineFor(
+    { ...intake, timeline: { ...intake.timeline, overrides: newOverrides } },
+    close,
+  );
+
+  const plan = planMilestoneDateChange(before, after, milestoneKey);
+  if (!plan) throw new Error(`Unknown milestone "${milestoneKey}"`);
+  if (plan.direct.previousDate === plan.direct.newDate) return null;
+
+  const today = todayIn(intake.timeline.timezone);
+  const { data: changeId, error } = await db().rpc("portal_record_milestone_date_change", {
+    p_account: dealId,
+    p_milestone_key: milestoneKey,
+    p_previous_date: plan.direct.previousDate,
+    p_new_date: plan.direct.newDate,
+    p_reason: trimmedReason,
+    p_actor: userId,
+    p_was_overdue: wasOverdueAsOf(plan.direct.previousDate, today),
+    p_cascades: plan.cascades.map((c) => ({
+      milestoneKey: c.milestoneKey,
+      previousDate: c.previousDate,
+      newDate: c.newDate,
+      wasOverdue: wasOverdueAsOf(c.previousDate, today),
+    })),
+  });
+  if (error) throw new Error(`Could not record the date change: ${error.message}`);
+
+  await audit({
+    actor_type: "user",
+    actor_id: userId,
+    action: "deal.milestone_date_changed",
+    entity_type: "account",
+    entity_id: dealId,
+    payload: { milestone_key: milestoneKey, cascaded: plan.cascades.length },
+  });
+
+  // The plan's last date may itself have just moved — keep "Functional" and
+  // the Customers list in step, exactly as a move through the timeline
+  // panel already would. The date is already saved, so a failure here is
+  // returned for the caller to report, never thrown as a failed save.
+  const syncError = await syncTargetLaunch(dealId, userId);
+
+  return { changeId: String(changeId), syncError };
+}
+
+/**
  * The project's target launch is the plan's last date: "Functional" (or the
  * last phase's end when the SOW bought more). Set at the handoff and kept
  * in step here, so a Stage 3 moved on the checklist moves the date the
- * Customers list shows. Never throws — the plan change already succeeded.
+ * Customers list shows. Never throws — the plan change already succeeded —
+ * but a failure is returned, so a caller that saved a date can say so.
  */
 export async function syncTargetLaunch(
   dealId: string,
   userId: string | null = null,
-): Promise<void> {
+): Promise<string | null> {
   try {
     const { data: account } = await db()
       .from("portal_accounts")
       .select("id,intake,customer_id")
       .eq("id", dealId)
       .maybeSingle();
-    if (!account) return;
+    if (!account) return null;
     const { implementationForDeal } = await import("./assignment.server");
     const implId = await implementationForDeal(dealId, account.customer_id ?? null);
-    if (!implId) return;
+    if (!implId) return null;
     const { data: impl } = await db()
       .from("implementations")
       .select("target_date,target_launch_date,baseline_locked_at")
@@ -2749,7 +2897,7 @@ export async function syncTargetLaunch(
       ? (t.phases[t.phases.length - 1]?.endsOn ?? t.liveDate)
       : t.liveDate;
     const was: string | null = impl?.target_date ?? impl?.target_launch_date ?? null;
-    if (was === target && impl?.target_date) return;
+    if (was === target && impl?.target_date) return null;
 
     // The one read of the latest change row, reused below for both the
     // override check and the existing dedup logic rather than queried twice.
@@ -2770,7 +2918,7 @@ export async function syncTargetLaunch(
     // action. That holds until a person moves it again; the plan's own
     // recompute must not quietly replace it.
     const { targetOverrideHolds } = await import("./complexity-tiers");
-    if (targetOverrideHolds(was, last)) return;
+    if (targetOverrideHolds(was, last)) return null;
 
     await db()
       .from("implementations")
@@ -2795,7 +2943,9 @@ export async function syncTargetLaunch(
     }
   } catch (e) {
     console.error("[plan] could not sync the target launch", e);
+    return e instanceof Error ? e.message : "The target launch could not be updated.";
   }
+  return null;
 }
 
 /**

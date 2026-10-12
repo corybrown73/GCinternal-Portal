@@ -657,6 +657,28 @@ export const saveIntake = createServerFn({ method: "POST" })
     return saveDealIntake(context.profile.id, data.dealId, data.patch);
   });
 
+/**
+ * Move one milestone's date with a required, non-empty reason, recorded
+ * atomically with the move (0082). The reason is enforced here — not only
+ * by a disabled Save button — and again in the database function itself.
+ */
+export const recordMilestoneDateChange = createServerFn({ method: "POST" })
+  .middleware([requireDealEditor])
+  .inputValidator((data: unknown) =>
+    z
+      .object({
+        dealId: z.string().uuid(),
+        milestoneKey: z.string().trim().min(1).max(60),
+        newDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+        reason: z.string().trim().min(1).max(500),
+      })
+      .parse(data),
+  )
+  .handler(async ({ data, context }) => {
+    const { recordMilestoneDateChange: record } = await import("./presale.server");
+    return record(context.profile.id, data.dealId, data.milestoneKey, data.newDate, data.reason);
+  });
+
 export const saveStageTarget = createServerFn({ method: "POST" })
   .middleware([requireDealEditor])
   .inputValidator((data: unknown) =>

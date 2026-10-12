@@ -4,10 +4,9 @@ import { useServerFn } from "@tanstack/react-start";
 import { ChevronRight } from "lucide-react";
 
 import { TIER_REASON_CODES, type TargetReasonCode } from "@/lib/complexity-tiers";
-import { addJournalEntry } from "@/lib/hub.functions";
 import type { IntakeAnswers } from "@/lib/intake-answers";
 import { timelineFor } from "@/lib/onboarding-plan";
-import { saveIntake, setTargetGraduationDate } from "@/lib/presale.functions";
+import { recordMilestoneDateChange, setTargetGraduationDate } from "@/lib/presale.functions";
 import { cn } from "@/lib/utils";
 
 const ISO_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -31,12 +30,9 @@ const NOT_ADJUSTABLE_HERE = new Set(["close"]);
  * override map `KickoffBody`'s "Reschedule" and the transcript-applied
  * proposals already write); every date that preview disagrees with today's
  * is exactly what the plan's own cascade shifted, which is why only
- * subsequent, not-yet-pinned milestones ever move. Saving sends that same
- * patch through `saveIntake` (the existing whole-timeline save every other
- * plan edit on this page already uses) and then a working note through
- * `addJournalEntry` — the account's existing history feed — carrying the
- * reason, so the change and why it was made both read back from mechanisms
- * that already exist.
+ * subsequent, not-yet-pinned milestones ever move. Saving calls
+ * `recordMilestoneDateChange`, which writes the override and its reason-bearing
+ * history (portal_record_milestone_date_change) in one transaction.
  *
  * Completed milestones (`doneOn` set) are never offered as the one to move.
  * `buildTimeline()`'s cascade itself now keeps a completed milestone's own
@@ -45,10 +41,8 @@ const NOT_ADJUSTABLE_HERE = new Set(["close"]);
  * below is a second, redundant guard against ever listing one as "moved",
  * not the only thing preventing it.
  *
- * The save and the reason cannot come apart: the journal note recording the
- * reason is written before the timeline save, so a failure to record the
- * reason stops the date change before it happens, and a date that did
- * change is always one a reason was successfully recorded for.
+ * The save and the reason cannot come apart: the date and its history are
+ * one database write, so a failed save changes neither.
  *
  * A second, separate option — "Change target graduation date" — sets
  * `implementations.target_date` directly, the field `ImplementationTargetSection`
@@ -82,14 +76,14 @@ export function AdjustPlanDatesPanel({
   editable: boolean;
 }) {
   const qc = useQueryClient();
-  const save = useServerFn(saveIntake);
-  const addNote = useServerFn(addJournalEntry);
+  const record = useServerFn(recordMilestoneDateChange);
   const setTarget = useServerFn(setTargetGraduationDate);
   const [open, setOpen] = useState(false);
   const [milestoneKey, setMilestoneKey] = useState("");
   const [newDate, setNewDate] = useState("");
   const [reason, setReason] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   const [targetOpen, setTargetOpen] = useState(false);
   const [targetNewDate, setTargetNewDate] = useState("");
@@ -133,37 +127,30 @@ export function AdjustPlanDatesPanel({
       if (!selected) throw new Error("Pick a milestone to move.");
       const trimmedReason = reason.trim();
       if (!trimmedReason) throw new Error("A reason is required.");
-      // The reason is written FIRST. If this fails, the date is never
-      // touched below — the one thing this panel must never produce is a
-      // moved date with no recorded reason, and the save that follows is
-      // the only step that can actually move it.
-      await addNote({
-        data: {
-          implementationId,
-          note: `Plan date adjusted: "${selected.label}" moved from ${selected.date} to ${newDate}. Reason: ${trimmedReason}`,
-          authorId: null,
-          links: null,
-          attachmentUrl: null,
-          attachmentName: null,
-          kind: "note",
-        } as never,
-      });
-      const t = intake.timeline;
-      await save({
-        data: {
-          dealId,
-          patch: { timeline: { ...t, overrides: { ...t.overrides, [milestoneKey]: newDate } } },
-        } as never,
+      // One database transaction moves the date and writes its history, so
+      // a date can never be saved without its reason or the reason without
+      // the date.
+      return record({
+        data: { dealId, milestoneKey, newDate, reason: trimmedReason } as never,
       });
     },
-    onMutate: () => setError(null),
-    onSuccess: () => {
+    onMutate: () => {
+      setError(null);
+      setNotice(null);
+    },
+    onSuccess: (saved) => {
       void qc.invalidateQueries({ queryKey: ["deal", dealId] });
       void qc.invalidateQueries({ queryKey: ["customer360", customerId] });
-      setOpen(false);
       setMilestoneKey("");
       setNewDate("");
       setReason("");
+      // The date and its history are already saved. A failed target-launch
+      // sync is reported beside them, so the panel stays open to show it.
+      if (saved?.syncError) {
+        setNotice(`Date saved. The target launch could not be updated: ${saved.syncError}`);
+      } else {
+        setOpen(false);
+      }
     },
     onError: (e) => setError(e instanceof Error ? e.message : "Could not save the change."),
   });
@@ -313,6 +300,14 @@ export function AdjustPlanDatesPanel({
                 </button>
                 {error ? <p className="text-[12px] text-destructive">{error}</p> : null}
               </div>
+              {notice ? (
+                <p
+                  role="status"
+                  className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-1.5 text-[12px] text-amber-800 dark:text-amber-300"
+                >
+                  {notice}
+                </p>
+              ) : null}
             </>
           )}
 

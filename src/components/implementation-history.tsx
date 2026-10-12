@@ -7,6 +7,7 @@ import type { DealData } from "@/lib/deal-query";
 import { HANDOFF_JOURNAL_MARKER } from "@/lib/field-fusion";
 import type { Customer360 } from "@/lib/hub-types";
 import { JOURNAL_KIND_LABEL } from "@/lib/journal-input";
+import { shortDay } from "@/lib/onboarding-timeline";
 import { FLOW_STAGES, stampDay } from "@/lib/stage-flow";
 import { attachmentIdFromDescription } from "@/lib/transcript-analysis";
 
@@ -63,6 +64,8 @@ function stageLabelFor(stage: string): string {
 
 export function ImplementationHistorySection({
   dealStageHistory,
+  milestoneDateChanges,
+  milestoneLabel,
   journal,
   risks,
   issues,
@@ -70,6 +73,8 @@ export function ImplementationHistorySection({
   evidence,
 }: {
   dealStageHistory: DealData["stage_history"];
+  milestoneDateChanges: DealData["milestone_date_changes"];
+  milestoneLabel: (key: string) => string;
   journal: Customer360["journal"];
   risks: Customer360["risks"];
   issues: Customer360["issues"];
@@ -106,6 +111,23 @@ export function ImplementationHistorySection({
           ? `${t.actor_name ?? "Someone"} handed the implementation to the GoCanvas implementation team.`
           : `Moved to ${stageLabelFor(t.to_stage)}`,
         meta: isHandoff ? null : (t.actor_name ?? t.note ?? null),
+        attachmentId: null,
+      });
+    }
+
+    // Read from the milestone-date audit (0082), never the journal: each
+    // explicit change once, with who made it and why.
+    for (const c of milestoneDateChanges) {
+      const later =
+        c.cascaded_count > 0
+          ? ` · ${c.cascaded_count} later date${c.cascaded_count === 1 ? "" : "s"} followed`
+          : "";
+      out.push({
+        key: `date-${c.id}`,
+        at: c.created_at,
+        title: "Milestone date moved",
+        body: `${milestoneLabel(c.milestone_key)}: ${shortDay(c.previous_date)} → ${shortDay(c.new_date)}`,
+        meta: `${c.actor_name ?? "Someone"} · ${c.reason ?? "No reason recorded"}${later}`,
         attachmentId: null,
       });
     }
@@ -171,7 +193,16 @@ export function ImplementationHistorySection({
     }
 
     return out.sort((a, b) => b.at.localeCompare(a.at));
-  }, [dealStageHistory, journal, risks, issues, decisions, evidence]);
+  }, [
+    dealStageHistory,
+    milestoneDateChanges,
+    milestoneLabel,
+    journal,
+    risks,
+    issues,
+    decisions,
+    evidence,
+  ]);
 
   const shown = expanded ? entries : entries.slice(0, DEFAULT_SHOWN);
 
