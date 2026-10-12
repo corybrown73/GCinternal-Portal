@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { formScreenshotSchema } from "./form-screenshot";
 import { stageTargetsSchema } from "./stage-targets";
 
 /**
@@ -319,8 +318,6 @@ export const intakeAnswersSchema = z.object({
   readiness_off: z.array(z.string().max(40)).max(20).default([]),
   /** When a person copied the customer's link to send it. Set by that click only. */
   welcome_shared_at: z.string().nullable().default(null),
-  /** A screenshot of the customer's first form, for Kickoff Slide 5. */
-  first_form_screenshot: formScreenshotSchema,
   /**
    * The editable GoCanvas form the TIS works in during the kickoff. Internal
    * only: the presenter workspace reads it, and no slide or export does.

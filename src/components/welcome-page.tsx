@@ -222,7 +222,7 @@ export function WelcomePage({
               // Every visible screen, unzoomed, with the talk track as notes.
               const notes = speakerNotes(view);
               const byKey = new Map(notes.sections.map((sec) => [sec.key, sec]));
-              return exportWelcomePptx({
+              await exportWelcomePptx({
                 screens: visible.map((sc, i) =>
                   sc.render({
                     page: i + 1,
@@ -606,7 +606,7 @@ function Toolbar({
   onCopyLink?: (() => Promise<string>) | undefined;
   onMarkSent?: (() => Promise<void> | void) | undefined;
   /** Every visible screen as a full-bleed slide. Reports progress while it renders. */
-  onExportPptx?: ((report: (done: number, total: number) => void) => Promise<string[]>) | undefined;
+  onExportPptx?: ((report: (done: number, total: number) => void) => Promise<void>) | undefined;
   backHref: string | null;
   notesHref: string | null;
   qrReady: boolean;
@@ -614,7 +614,7 @@ function Toolbar({
   onToggleQr: () => void;
 }) {
   const [copied, setCopied] = useState<"idle" | "busy" | "done" | "failed">("idle");
-  const [pptx, setPptx] = useState<"idle" | "busy" | "failed" | "partial">("idle");
+  const [pptx, setPptx] = useState<"idle" | "busy" | "failed">("idle");
   const [progress, setProgress] = useState<[number, number] | null>(null);
   const [sent, setSent] = useState<"idle" | "busy">("idle");
   const copy = async () => {
@@ -723,22 +723,13 @@ function Toolbar({
             type="button"
             className="wp-tool"
             disabled={pptx === "busy"}
-            title={
-              pptx === "partial"
-                ? "The form screenshot could not be fetched, so its picture is missing from Slide 5 in this file. Check the upload in Presenter Workspace and export again."
-                : "Every screen as a slide, exactly as it looks here — the talk track in the notes"
-            }
+            title="Every screen as a slide, exactly as it looks here — the talk track in the notes"
             onClick={async () => {
               setPptx("busy");
               setProgress(null);
               try {
-                const notEmbedded = await onExportPptx((done, total) => setProgress([done, total]));
-                if (notEmbedded.length) {
-                  setPptx("partial");
-                  setTimeout(() => setPptx("idle"), 8000);
-                } else {
-                  setPptx("idle");
-                }
+                await onExportPptx((done, total) => setProgress([done, total]));
+                setPptx("idle");
               } catch (e) {
                 console.error("[welcome] pptx export failed", e);
                 setPptx("failed");
@@ -755,9 +746,7 @@ function Toolbar({
                 : "Rendering…"
               : pptx === "failed"
                 ? "Could not build it"
-                : pptx === "partial"
-                  ? "Exported without the screenshot"
-                  : "PowerPoint"}
+                : "PowerPoint"}
           </button>
         ) : null}
         {onCopyLink ? (

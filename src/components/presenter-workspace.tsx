@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 
@@ -19,18 +19,7 @@ import { closeDateFor } from "@/lib/onboarding-plan";
 import { localIso, shortDay } from "@/lib/onboarding-timeline";
 import { getParkingLot, addParkingItemFn, updateParkingItemFn } from "@/lib/parking-lot.functions";
 import { wonStage } from "@/lib/pipeline-stages";
-import {
-  removeFormScreenshot,
-  saveHandoffAnswer,
-  saveIntake,
-  saveStageTarget,
-  uploadFormScreenshot,
-} from "@/lib/presale.functions";
-import {
-  FORM_SCREENSHOT_MAX_BYTES,
-  FORM_SCREENSHOT_TYPES,
-  type FormScreenshotType,
-} from "@/lib/form-screenshot";
+import { saveHandoffAnswer, saveIntake, saveStageTarget } from "@/lib/presale.functions";
 import { PRESENTER_GUIDES, PRESENTER_SECTIONS } from "@/lib/presenter-guides";
 import {
   announceWelcomeChanged,
@@ -219,12 +208,6 @@ function Workspace({
 
         <Section n={5} active={active} onStep={setActive}>
           <FormLinkSection dealId={dealId} intake={intake} onSaved={onSaved} />
-          <FormScreenshotControl
-            dealId={dealId}
-            screenshot={intake.first_form_screenshot}
-            previewUrl={view.formScreenshotUrl}
-            onSaved={onSaved}
-          />
           <RemainingChanges dealId={dealId} onSaved={onSaved} />
           <p className="text-[11px] text-muted-foreground">
             Testing owner and deadline are set in section 6.
@@ -624,113 +607,6 @@ function WorkflowEditor({
       </div>
       {m.error ? <p className="text-[11px] text-destructive">{m.error.message}</p> : null}
       {c.error ? <p className="text-[11px] text-destructive">{c.error.message}</p> : null}
-    </div>
-  );
-}
-
-function readBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const url = String(reader.result);
-      resolve(url.slice(url.indexOf(",") + 1));
-    };
-    reader.onerror = () => reject(new Error("Could not read that picture."));
-    reader.readAsDataURL(file);
-  });
-}
-
-/**
- * One screenshot of the customer's first form, shown on Kickoff Slide 5 in
- * place of the phone mockup. The file is checked here for type and size, and
- * again on the server against its actual bytes.
- */
-function FormScreenshotControl({
-  dealId,
-  screenshot,
-  previewUrl,
-  onSaved,
-}: {
-  dealId: string;
-  screenshot: IntakeAnswers["first_form_screenshot"];
-  previewUrl: string | null;
-  onSaved: () => void;
-}) {
-  const upload = useServerFn(uploadFormScreenshot);
-  const remove = useServerFn(removeFormScreenshot);
-  const inputRef = useRef<HTMLInputElement>(null);
-  const up = useMutation({
-    mutationFn: async (file: File) => {
-      if (!FORM_SCREENSHOT_TYPES.includes(file.type as FormScreenshotType)) {
-        throw new Error("Choose a PNG, JPG or WebP picture.");
-      }
-      if (file.size > FORM_SCREENSHOT_MAX_BYTES) {
-        throw new Error("That picture is over 8 MB — a screenshot of the form is enough.");
-      }
-      const dataBase64 = await readBase64(file);
-      return upload({ data: { dealId, fileName: file.name, dataBase64 } });
-    },
-    onSuccess: onSaved,
-  });
-  const rm = useMutation({
-    mutationFn: () => remove({ data: { dealId } }),
-    onSuccess: onSaved,
-  });
-  const busy = up.isPending || rm.isPending;
-  const error = up.error ?? rm.error;
-
-  return (
-    <div className="space-y-2">
-      <FieldLabel label="Screenshot of the form">
-        {screenshot ? (
-          <StatusChip tone="entered">On the slide</StatusChip>
-        ) : (
-          <StatusChip tone="missing">None yet — the phone is shown</StatusChip>
-        )}
-      </FieldLabel>
-      {screenshot && previewUrl ? (
-        <img
-          src={previewUrl}
-          alt="Preview of the form screenshot"
-          className="max-h-48 rounded-sm border border-border"
-        />
-      ) : null}
-      <div className="flex flex-wrap items-center gap-2">
-        <input
-          ref={inputRef}
-          type="file"
-          accept={FORM_SCREENSHOT_TYPES.join(",")}
-          aria-label="Choose a screenshot of the form"
-          className="sr-only"
-          onChange={(e) => {
-            const file = e.target.files?.[0];
-            e.target.value = "";
-            if (file) up.mutate(file);
-          }}
-        />
-        <button
-          type="button"
-          disabled={busy}
-          onClick={() => inputRef.current?.click()}
-          className="h-8 rounded-sm bg-primary px-3 text-[12px] font-medium text-primary-foreground disabled:opacity-50"
-        >
-          {up.isPending ? "Uploading…" : screenshot ? "Replace screenshot" : "Upload screenshot"}
-        </button>
-        {screenshot ? (
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => rm.mutate()}
-            className="h-8 rounded-sm border border-border px-3 text-[12px] font-medium disabled:opacity-50"
-          >
-            {rm.isPending ? "Removing…" : "Remove"}
-          </button>
-        ) : null}
-      </div>
-      <p className="text-[11px] text-muted-foreground">
-        PNG, JPG or WebP, up to 8 MB. Shown only on this deal's Kickoff slide.
-      </p>
-      {error ? <p className="text-[11px] text-destructive">{error.message}</p> : null}
     </div>
   );
 }
