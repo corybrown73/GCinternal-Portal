@@ -2322,8 +2322,8 @@ export async function saveDealIntake(
   // The Field Fusion block is patched one tick at a time; a tick must not
   // wipe the other tick, the note, or the handoff stamp.
   const merged: Record<string, unknown> = { ...patch };
-  if (patch.timeline && typeof patch.timeline === "object") {
-    const incomingTimeline = patch.timeline as Record<string, unknown>;
+  if (patch["timeline"] && typeof patch["timeline"] === "object") {
+    const incomingTimeline = patch["timeline"] as Record<string, unknown>;
     const { updateStageTarget } = await import("./stage-targets");
     const stageTargets = opts.stageTarget
       ? updateStageTarget(
@@ -2333,7 +2333,7 @@ export async function saveDealIntake(
           new Date().toISOString(),
         )
       : current.timeline.stage_targets;
-    merged.timeline = {
+    merged["timeline"] = {
       ...current.timeline,
       ...incomingTimeline,
       stage_targets: stageTargets,

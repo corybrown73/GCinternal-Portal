@@ -365,8 +365,7 @@ export function customerJourney(input: {
         what: p.request,
         by: p.target || null,
         kind: "parking",
-        ownerSide:
-          p.owner === "gocanvas" ? "gocanvas" : p.owner === "customer" ? "customer" : "both",
+        ownerSide: "customer",
         ownerName: null,
       });
     }

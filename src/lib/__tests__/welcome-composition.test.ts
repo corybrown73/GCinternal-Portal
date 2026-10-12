@@ -169,7 +169,13 @@ describe("the Kickoff composition — six fixed screens, always", () => {
         headline: "You are in Kickoff.",
         solutions: [],
         yours: [
-          { what: "Download the GoCanvas app and log in", by: "2026-09-25", kind: "homework" },
+          {
+            what: "Download the GoCanvas app and log in",
+            by: "2026-09-25",
+            kind: "homework",
+            ownerSide: "customer",
+            ownerName: null,
+          },
         ],
       },
     });
