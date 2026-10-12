@@ -177,6 +177,25 @@ export const fieldFusionRequestSchema = z.object({
 });
 export type FieldFusionRequest = z.infer<typeof fieldFusionRequestSchema>;
 
+/** An https link on gocanvas.com — the editable form, never a file or a mockup. */
+export function isGoCanvasFormUrl(raw: string): boolean {
+  try {
+    const url = new URL(raw);
+    return (
+      url.protocol === "https:" &&
+      (url.hostname === "gocanvas.com" || url.hostname.endsWith(".gocanvas.com"))
+    );
+  } catch {
+    return false;
+  }
+}
+
+export const formEditorUrlSchema = z
+  .string()
+  .trim()
+  .max(400)
+  .refine(isGoCanvasFormUrl, "Paste the editable GoCanvas form link (https, gocanvas.com).");
+
 export const intakeAnswersSchema = z.object({
   /**
    * Which path this is. A new logo builds its first form in seven days; an
@@ -299,6 +318,11 @@ export const intakeAnswersSchema = z.object({
   readiness_off: z.array(z.string().max(40)).max(20).default([]),
   /** When a person copied the customer's link to send it. Set by that click only. */
   welcome_shared_at: z.string().nullable().default(null),
+  /**
+   * The editable GoCanvas form the TIS works in during the kickoff. Internal
+   * only: the presenter workspace reads it, and no slide or export does.
+   */
+  form_editor_url: formEditorUrlSchema.nullable().default(null),
   /**
    * The pre-kickoff tasks that live nowhere else, by key ("reply_ae",
    * "cadence") → ISO timestamp they were ticked. See stage-flow.ts.

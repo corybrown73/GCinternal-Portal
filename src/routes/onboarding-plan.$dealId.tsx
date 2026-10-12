@@ -1,8 +1,11 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 
+import { PresenterWorkspace } from "@/components/presenter-workspace";
 import { WelcomePage } from "@/components/welcome-page";
+import { onWelcomeChanged } from "@/lib/presenter-workspace";
 import { saveIntake } from "@/lib/presale.functions";
 import { getWelcome, issueWelcomeLinkFn } from "@/lib/welcome.functions";
 import { toggleScreen } from "@/lib/welcome";
@@ -24,11 +27,14 @@ export const Route = createFileRoute("/onboarding-plan/$dealId")({
       },
     ],
   }),
+  validateSearch: (search: Record<string, unknown>): { workspace?: true } =>
+    search["workspace"] === "1" ? { workspace: true } : {},
   component: OnboardingPlanPage,
 });
 
 function OnboardingPlanPage() {
   const { dealId } = Route.useParams();
+  const { workspace } = Route.useSearch();
   const qc = useQueryClient();
   const load = useServerFn(getWelcome);
   const issue = useServerFn(issueWelcomeLinkFn);
@@ -40,7 +46,18 @@ function OnboardingPlanPage() {
     // Live while presenting: a homework box ticked on a phone in the room
     // shows on the big screen within ten seconds.
     refetchInterval: 10_000,
+    enabled: !workspace,
   });
+
+  // The presenter's workspace, in another window of this browser, saved
+  // something: re-read the plan now rather than on the next poll.
+  useEffect(
+    () =>
+      onWelcomeChanged(dealId, () => void qc.invalidateQueries({ queryKey: ["welcome", dealId] })),
+    [dealId, qc],
+  );
+
+  if (workspace) return <PresenterWorkspace dealId={dealId} />;
 
   if (query.isPending) {
     return <p className="p-6 text-[13px] text-muted-foreground">Loading the plan…</p>;
@@ -62,6 +79,7 @@ function OnboardingPlanPage() {
       mode="internal"
       backHref={`/deals/${dealId}`}
       notesHref={`/onboarding-notes/${dealId}`}
+      workspaceHref={`/onboarding-plan/${dealId}?workspace=1`}
       onCopyLink={async () => {
         // Minting a link is not sending it. The record says "sent" only when
         // the person says so below, or when the customer opens the page.

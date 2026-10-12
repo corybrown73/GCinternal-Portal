@@ -65,7 +65,7 @@ const STAGE_TARGET_LABELS: Record<StageTargetKey, string> = {
   complete: "Graduate",
 };
 
-function StageTargetsEditor({
+export function StageTargetsEditor({
   targets,
   disabled,
   actualDateFor,

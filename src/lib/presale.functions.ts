@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
 import { DOCUMENT_UPLOAD_TYPES } from "./document-upload";
+import { formEditorUrlSchema } from "./intake-answers";
 import {
   implementationFocusPatchSchema,
   timelinePatchSchema,
@@ -613,6 +614,7 @@ export const saveIntake = createServerFn({ method: "POST" })
             // One tick at a time, merged on the server; null unticks.
             handoff_tasks: z.record(z.string().max(40), z.string().max(40).nullable()).optional(),
             welcome_text: z.record(z.string().max(80), z.string().max(1200)).optional(),
+            form_editor_url: formEditorUrlSchema.nullable().optional(),
             help_picks: z
               .array(
                 z.object({

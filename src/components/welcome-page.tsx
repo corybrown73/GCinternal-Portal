@@ -91,11 +91,14 @@ export function WelcomePage({
   onEditText,
   backHref,
   notesHref,
+  workspaceHref,
   icsBase,
   onToggleScreen,
 }: {
   view: WelcomeView;
   mode: WelcomeMode;
+  /** Internal: the presenter workspace's address, offered in the toolbar on the Kickoff view. */
+  workspaceHref?: string | null;
   /** Internal: a line of the page rewritten in place. Null restores the page's own words. */
   onEditText?: ((key: string, text: string | null) => Promise<void> | void) | undefined;
   /** The customer's page ticks its homework; the internal preview shows the ticks. */
@@ -212,6 +215,7 @@ export function WelcomePage({
               setAt(0);
               setPresent(true);
             }}
+            workspaceHref={workspaceHref}
             onCopyLink={experience === "plan" ? mintForQr : undefined}
             onMarkSent={experience === "plan" ? onMarkSent : undefined}
             onExportPptx={async (report) => {
@@ -587,6 +591,7 @@ function Toolbar({
   onExportPptx,
   backHref,
   notesHref,
+  workspaceHref,
   qrReady,
   showQr,
   onToggleQr,
@@ -594,6 +599,8 @@ function Toolbar({
   view: WelcomeView;
   /** WHAT experience is showing — distinct from WHO is viewing (`mode`). */
   experience: "plan" | "kickoff";
+  /** Internal: the presenter's own window, opened beside the presentation. */
+  workspaceHref?: string | null | undefined;
   onToggleExperience: () => void;
   onPresent: () => void;
   onCopyLink?: (() => Promise<string>) | undefined;
@@ -650,6 +657,17 @@ function Toolbar({
           {experience === "plan" ? "Kickoff View" : "Implementation Plan"}
         </button>
         {experience === "plan" ? <DayChip view={view} /> : null}
+        {experience === "kickoff" && workspaceHref ? (
+          <a
+            href={workspaceHref}
+            target="_blank"
+            rel="noreferrer"
+            className="wp-tool"
+            title="Edit the dates, form link and sessions in its own window. Nothing in it is shown on the slides."
+          >
+            Presenter workspace
+          </a>
+        ) : null}
         {view.sharedAt || view.openedAt ? (
           <span className="wp-toolbar-meta">
             {view.sharedAt ? `Link sent ${stampDay(view.sharedAt)}` : "Link"}

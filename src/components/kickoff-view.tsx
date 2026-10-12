@@ -27,6 +27,7 @@ import {
   kickoffWorkflowToConfirm,
 } from "@/lib/kickoff-view";
 import { shortDay } from "@/lib/onboarding-timeline";
+import { sessionsAfterKickoff } from "@/lib/presenter-workspace";
 import { byLabel } from "@/lib/welcome-journey";
 import { cn } from "@/lib/utils";
 import type { WelcomeView } from "@/lib/welcome";
@@ -564,10 +565,8 @@ function KickoffFormV1({
 /* ----------------------------------------------------- 6. Your next move */
 
 function KickoffNextMove({ view, page }: { view: WelcomeView; page: number }) {
-  const calls = view.timeline.milestones
-    .filter((milestone) => milestone.kind === "call" && !milestone.serviceId)
-    .slice(0, 3);
-  const booked = calls.filter((milestone) => Boolean(milestone.time)).length;
+  const calls = sessionsAfterKickoff(view.timeline.milestones);
+  const booked = calls.filter((call) => call.booked).length;
   const actions = (view.journey?.yours ?? []).filter((item) => item.kind !== "meeting").slice(0, 4);
   const sideLabel = (side: "customer" | "gocanvas" | "both") =>
     side === "customer" ? "Customer team" : side === "gocanvas" ? "GoCanvas team" : "Both teams";
@@ -591,15 +590,19 @@ function KickoffNextMove({ view, page }: { view: WelcomeView; page: number }) {
           </h4>
           {calls.length ? (
             <ul className="wp-ticks">
-              {calls.map((call) => (
-                <Tick key={call.key}>
-                  {call.key === "kickoff" ? "TODAY · " : ""}
-                  {call.label} ·{" "}
-                  {call.time
-                    ? `${shortDay(call.date)} at ${call.time}${view.timeline.timezone ? ` ${view.timeline.timezone}` : ""}`
-                    : "Date and time not booked"}
-                </Tick>
-              ))}
+              {calls.map((call) =>
+                call.booked ? (
+                  <Tick key={call.key}>
+                    {call.label} · {shortDay(call.date)} at {call.time}
+                    {view.timeline.timezone ? ` ${view.timeline.timezone}` : ""}
+                  </Tick>
+                ) : (
+                  <li key={call.key} className="wp-tick">
+                    <span className="wp-tick-dot is-open" aria-hidden="true" />
+                    <span>{call.label} · Not booked yet</span>
+                  </li>
+                ),
+              )}
             </ul>
           ) : (
             <p>No working sessions are on this plan.</p>
