@@ -108,6 +108,7 @@ export type WelcomeView = {
   timeline: Timeline;
   lead: string | null;
   fieldTester: string | null;
+  fieldTesterDue: string | null;
   /** "person" when a person named them; "ai" when the reading proposed the name, shown as to confirm. */
   fieldTesterSource: "ai" | "person" | null;
   /** The process today, in their words. Null → a generic "paper and retyping". */
@@ -138,6 +139,8 @@ export type WelcomeView = {
   } | null;
   /** "person" when a person named or chose the first form; "ai" when the reading read it from the SOW or the calls, shown as to confirm. */
   firstFormSource: "ai" | "person" | null;
+  /** Uploaded source forms, signed for internal review only. */
+  formArtifacts: Array<{ name: string; url: string }>;
   nextUseCases: Array<{ name: string; objective: string | null }>;
   /** Signed, short-lived. null → the icon composition. */
   photoUrl: string | null;
