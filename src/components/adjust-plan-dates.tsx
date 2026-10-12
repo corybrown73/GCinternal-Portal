@@ -83,6 +83,7 @@ export function AdjustPlanDatesPanel({
   const [newDate, setNewDate] = useState("");
   const [reason, setReason] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   const [targetOpen, setTargetOpen] = useState(false);
   const [targetNewDate, setTargetNewDate] = useState("");
@@ -129,18 +130,27 @@ export function AdjustPlanDatesPanel({
       // One database transaction moves the date and writes its history, so
       // a date can never be saved without its reason or the reason without
       // the date.
-      await record({
+      return record({
         data: { dealId, milestoneKey, newDate, reason: trimmedReason } as never,
       });
     },
-    onMutate: () => setError(null),
-    onSuccess: () => {
+    onMutate: () => {
+      setError(null);
+      setNotice(null);
+    },
+    onSuccess: (saved) => {
       void qc.invalidateQueries({ queryKey: ["deal", dealId] });
       void qc.invalidateQueries({ queryKey: ["customer360", customerId] });
-      setOpen(false);
       setMilestoneKey("");
       setNewDate("");
       setReason("");
+      // The date and its history are already saved. A failed target-launch
+      // sync is reported beside them, so the panel stays open to show it.
+      if (saved?.syncError) {
+        setNotice(`Date saved. The target launch could not be updated: ${saved.syncError}`);
+      } else {
+        setOpen(false);
+      }
     },
     onError: (e) => setError(e instanceof Error ? e.message : "Could not save the change."),
   });
@@ -290,6 +300,14 @@ export function AdjustPlanDatesPanel({
                 </button>
                 {error ? <p className="text-[12px] text-destructive">{error}</p> : null}
               </div>
+              {notice ? (
+                <p
+                  role="status"
+                  className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-1.5 text-[12px] text-amber-800 dark:text-amber-300"
+                >
+                  {notice}
+                </p>
+              ) : null}
             </>
           )}
 

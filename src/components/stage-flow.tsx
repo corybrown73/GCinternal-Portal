@@ -1289,6 +1289,8 @@ export function CurrentImplementationTab({
 
       <ImplementationHistorySection
         dealStageHistory={deal.stage_history}
+        milestoneDateChanges={deal.milestone_date_changes}
+        milestoneLabel={(key) => timeline.milestones.find((m) => m.key === key)?.label ?? key}
         journal={record.journal}
         risks={record.risks}
         issues={record.issues}

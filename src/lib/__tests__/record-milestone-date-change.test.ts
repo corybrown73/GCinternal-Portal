@@ -34,6 +34,7 @@ const h = vi.hoisted(() => {
     rpcCalls: [] as Array<{ name: string; params: RpcParams }>,
     rpcError: null as { message: string } | null,
     audits: [] as Array<Record<string, unknown>>,
+    failAfterWrite: false,
     db: null as any,
   };
 
@@ -52,6 +53,10 @@ const h = vi.hoisted(() => {
             };
           }
           if (table === "portal_accounts") {
+            // The target-launch sync re-reads the account after the write.
+            if (state.failAfterWrite && state.rpcCalls.length > 0) {
+              throw new Error("sync boom");
+            }
             return { data: state.account, error: null };
           }
           return { data: null, error: null };
@@ -107,6 +112,7 @@ beforeEach(() => {
   h.rpcCalls = [];
   h.rpcError = null;
   h.audits = [];
+  h.failAfterWrite = false;
 });
 
 describe("recordMilestoneDateChange", () => {
@@ -195,6 +201,20 @@ describe("recordMilestoneDateChange", () => {
       recordMilestoneDateChange(PROFILE_ID, DEAL_ID, "not_a_real_key", "2026-09-15", "reason"),
     ).rejects.toThrow(/unknown milestone/i);
     expect(h.rpcCalls).toHaveLength(0);
+  });
+
+  it("a failed target-launch sync after the save is returned as partial success, not thrown", async () => {
+    h.failAfterWrite = true;
+    const result = await recordMilestoneDateChange(
+      PROFILE_ID,
+      DEAL_ID,
+      "kickoff",
+      "2026-09-15",
+      "customer asked",
+    );
+    expect(h.rpcCalls).toHaveLength(1);
+    expect(h.account!.intake.timeline.overrides.kickoff).toBe("2026-09-15");
+    expect(result).toEqual({ changeId: "change-1", syncError: "sync boom" });
   });
 
   it("refuses to move a milestone that is already done, and writes nothing", async () => {
