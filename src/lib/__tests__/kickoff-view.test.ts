@@ -1,15 +1,13 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  KICKOFF_HANDOFF,
+  KICKOFF_CHANGE_RULE,
+  KICKOFF_FORM_STEPS,
   KICKOFF_JOURNEY_BAND,
-  KICKOFF_PRINCIPLES,
   KICKOFF_PROMISE,
   KICKOFF_RESPONSIBILITY,
   KICKOFF_STAGE_OUTCOME,
-  KICKOFF_WORKFLOW_PROMPTS,
   kickoffBusinessOutcome,
-  kickoffConcise,
   kickoffFocusContent,
   kickoffFocusGroups,
   kickoffJourneyStages,
@@ -17,6 +15,7 @@ import {
   kickoffWorkflowFallback,
   kickoffWorkflowSlide,
   kickoffWorkflowStory,
+  stableSignedUrl,
 } from "../kickoff-view";
 
 /**
@@ -383,26 +382,6 @@ describe("kickoffFocusGroups — NOW dominant, NEXT/LATER secondary, capped not 
   });
 });
 
-describe("kickoffConcise — shortens without inventing or cutting mid-word", () => {
-  it("leaves a short string untouched", () => {
-    expect(kickoffConcise("Running the job.")).toBe("Running the job.");
-  });
-
-  it("leaves null as null", () => {
-    expect(kickoffConcise(null)).toBeNull();
-  });
-
-  it("trims a long string at a word boundary, never mid-word", () => {
-    const long =
-      "Three crews fill in a paper haul ticket on the truck and the office retypes them on Fridays and chases the missing signatures every single week without fail.";
-    const result = kickoffConcise(long, 60);
-    expect(result).not.toBeNull();
-    expect(result!.length).toBeLessThanOrEqual(61);
-    expect(result!.endsWith("…")).toBe(true);
-    expect(long.startsWith(result!.slice(0, -1))).toBe(true);
-  });
-});
-
 describe("kickoffWorkflowSlide — precedence plus the concise slide limit, in one call", () => {
   it("a saved workflow_story wins over the structured fallback", () => {
     expect(
@@ -449,7 +428,7 @@ describe("kickoffWorkflowSlide — precedence plus the concise slide limit, in o
     ).toBeNull();
   });
 
-  it("trims a long saved leg to a safe slide length rather than dumping it verbatim", () => {
+  it("passes a long saved leg through in full, never cut mid-sentence", () => {
     const longProcess =
       "Three crews fill in a paper haul ticket on the truck and the office retypes them on Fridays and chases the missing signatures every single week without fail, which is exhausting for everyone involved.";
     const result = kickoffWorkflowSlide({
@@ -458,7 +437,7 @@ describe("kickoffWorkflowSlide — precedence plus the concise slide limit, in o
       firstFormName: null,
       businessOutcome: null,
     });
-    expect(result!.before!.length).toBeLessThan(longProcess.length);
+    expect(result!.before).toBe(longProcess);
   });
 });
 
@@ -563,28 +542,6 @@ describe("the Kickoff conversation framework — static, never account-specific"
     }
   });
 
-  it("KICKOFF_WORKFLOW_PROMPTS has before/during/after prompts, not customer facts", () => {
-    expect(KICKOFF_WORKFLOW_PROMPTS.before.length).toBeGreaterThan(0);
-    expect(KICKOFF_WORKFLOW_PROMPTS.during.length).toBeGreaterThan(0);
-    expect(KICKOFF_WORKFLOW_PROMPTS.after.length).toBeGreaterThan(0);
-    // Every prompt is a question for the call, not an assertion of fact.
-    const all = [
-      ...KICKOFF_WORKFLOW_PROMPTS.before,
-      ...KICKOFF_WORKFLOW_PROMPTS.during,
-      ...KICKOFF_WORKFLOW_PROMPTS.after,
-    ];
-    for (const prompt of all) expect(prompt.trim().endsWith("?")).toBe(true);
-  });
-
-  it("KICKOFF_PRINCIPLES explains the implementation approach, not invented scope", () => {
-    expect(KICKOFF_PRINCIPLES).toHaveLength(3);
-    expect(KICKOFF_PRINCIPLES.map((p) => p.label)).toEqual([
-      "Make the work easy",
-      "Make the information useful",
-      "Connect what matters",
-    ]);
-  });
-
   it("KICKOFF_STAGE_OUTCOME covers exactly the six canonical stage keys", () => {
     expect(Object.keys(KICKOFF_STAGE_OUTCOME).sort()).toEqual(
       [
@@ -602,9 +559,45 @@ describe("the Kickoff conversation framework — static, never account-specific"
     }
   });
 
-  it("KICKOFF_RESPONSIBILITY and KICKOFF_HANDOFF are plain static copy", () => {
-    expect(KICKOFF_RESPONSIBILITY).toHaveLength(3);
-    expect(KICKOFF_HANDOFF.map((s) => s.label)).toEqual(["We refine", "You test", "We learn"]);
+  it("KICKOFF_RESPONSIBILITY names the three working-agreement categories, in plain words", () => {
+    expect(KICKOFF_RESPONSIBILITY.map((r) => r.label)).toEqual([
+      "GoCanvas",
+      "Together",
+      "Your team",
+    ]);
+    const all = KICKOFF_RESPONSIBILITY.flatMap((r) => [...r.items]).join(" ");
+    // A working agreement, not a contract: no response term is asserted here.
+    expect(all).not.toMatch(/business.day|response term|within \d+/i);
+    expect(all).toMatch(/blocker/i);
+    expect(KICKOFF_CHANGE_RULE).toMatch(/scope or dates/);
+  });
+
+  it("KICKOFF_FORM_STEPS are the three form-review steps, in order", () => {
+    expect(KICKOFF_FORM_STEPS.map((s) => s.label)).toEqual([
+      "Review the form together",
+      "Make agreed edits live",
+      "Prepare one real-world test",
+    ]);
+  });
+});
+
+describe("stableSignedUrl — a fresh link is reused, so a refresh does not reload the picture", () => {
+  it("keeps the first link while it is fresh, even when the view signs a new one", () => {
+    const first = stableSignedUrl("https://x.test/shot.png?token=a", 1_000);
+    const later = stableSignedUrl("https://x.test/shot.png?token=b", 1_000 + 10_000);
+    expect(later).toBe(first);
+  });
+
+  it("signs a new link once the held one is near expiry", () => {
+    stableSignedUrl("https://x.test/near-expiry.png?token=a", 0);
+    const renewed = stableSignedUrl("https://x.test/near-expiry.png?token=b", 51 * 60 * 1000);
+    expect(renewed).toBe("https://x.test/near-expiry.png?token=b");
+  });
+
+  it("keeps different pictures apart", () => {
+    const a = stableSignedUrl("https://x.test/a.png?token=1", 0);
+    const b = stableSignedUrl("https://x.test/b.png?token=2", 0);
+    expect(a).not.toBe(b);
   });
 });
 

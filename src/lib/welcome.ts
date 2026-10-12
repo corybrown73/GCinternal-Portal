@@ -141,6 +141,8 @@ export type WelcomeView = {
   firstFormSource: "ai" | "person" | null;
   /** Uploaded source forms, signed for internal review only. */
   formArtifacts: Array<{ name: string; url: string }>;
+  /** A short-lived link to the screenshot of the first form (Kickoff Slide 5), or null. */
+  formScreenshotUrl: string | null;
   nextUseCases: Array<{ name: string; objective: string | null }>;
   /** Signed, short-lived. null → the icon composition. */
   photoUrl: string | null;

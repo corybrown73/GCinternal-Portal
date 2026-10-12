@@ -121,21 +121,6 @@ export function kickoffWorkflowFallback(input: {
 }
 
 /**
- * Trims a presentation string to a safe slide length — never mid-word,
- * never inventing or paraphrasing content. Only shortens what is already
- * there, for the "concise, not paragraph-heavy" rule on the Workflow and
- * Focus slides.
- */
-export function kickoffConcise(text: string | null, maxLen = 130): string | null {
-  if (!text) return text;
-  const trimmed = text.trim();
-  if (trimmed.length <= maxLen) return trimmed;
-  const cut = trimmed.slice(0, maxLen);
-  const lastSpace = cut.lastIndexOf(" ");
-  return `${cut.slice(0, lastSpace > 40 ? lastSpace : maxLen)}…`;
-}
-
-/**
  * "Your workflow" — the merged recognition/validation screen's content, in
  * one call: saved workflow_story wins outright; otherwise the structured
  * fallback; either way, trimmed to a safe, concise slide length. Null
@@ -156,11 +141,7 @@ export function kickoffWorkflowSlide(input: {
       businessOutcome: input.businessOutcome,
     });
   if (!story) return null;
-  return {
-    before: kickoffConcise(story.before),
-    during: kickoffConcise(story.during),
-    after: kickoffConcise(story.after),
-  };
+  return { before: story.before, during: story.during, after: story.after };
 }
 
 /** The customer's stated business outcome, when the handoff has a shared, answered one. */
@@ -261,31 +242,6 @@ export const KICKOFF_PROMISE: ReadonlyArray<{ icon: string; text: string }> = [
   { icon: "Rocket", text: "Get you ready to test it on real work" },
 ];
 
-export type KickoffWorkflowPrompts = {
-  before: readonly string[];
-  during: readonly string[];
-  after: readonly string[];
-};
-
-/**
- * Screen 2: the TIS's own BEFORE/DURING/AFTER question framework, applied
- * to whatever workflow is on screen. Reusable and account-independent by
- * construction — these never read WelcomeView, so there is nowhere for an
- * account-specific branch to sneak in.
- */
-export const KICKOFF_WORKFLOW_PROMPTS: KickoffWorkflowPrompts = {
-  before: ["How does the worker know what to do?", "What do they need before they start?"],
-  during: ["What must they capture?", "What makes the job complete?"],
-  after: ["Who needs to see it?", "Does it drive another system or process?"],
-};
-
-/** Screen 3: why we get one workflow working well before expanding — the implementation approach, not invented scope. */
-export const KICKOFF_PRINCIPLES: ReadonlyArray<{ icon: string; label: string }> = [
-  { icon: "Smartphone", label: "Make the work easy" },
-  { icon: "ClipboardCheck", label: "Make the information useful" },
-  { icon: "Workflow", label: "Connect what matters" },
-];
-
 /**
  * Screen 4: a short outcome-oriented line per canonical stage. Presentation
  * copy only — the stage list, order and labels still come from
@@ -301,17 +257,68 @@ export const KICKOFF_STAGE_OUTCOME: Record<string, string> = {
   complete: "Confirm it is operational and hand off cleanly",
 };
 
-/** Screen 4: what working together actually feels like, day to day. */
-export const KICKOFF_RESPONSIBILITY: ReadonlyArray<{ icon: string; label: string; items: string }> =
-  [
-    { icon: "Wrench", label: "GoCanvas", items: "Prepare · Recommend · Configure · Guide" },
-    { icon: "Handshake", label: "Together", items: "Validate · Test · Refine" },
-    { icon: "HardHat", label: "Your team", items: "Decide · Adopt · Run" },
-  ];
-
-/** Screen 5: the handoff from this call into testing — what happens next, before the CTA. */
-export const KICKOFF_HANDOFF: ReadonlyArray<{ label: string; text: string }> = [
-  { label: "We refine", text: "We apply what we confirmed today to the working version." },
-  { label: "You test", text: "Your team uses it on real work." },
-  { label: "We learn", text: "You tell us what worked, what didn't, and what needs changing." },
+/**
+ * Screen 4: who does what, in plain words. Static working-agreement copy,
+ * never a contract term: a response deadline is shown only when it has been
+ * verified from the signed agreement, and this module has no such data.
+ */
+export const KICKOFF_RESPONSIBILITY: ReadonlyArray<{
+  icon: string;
+  label: string;
+  items: readonly string[];
+}> = [
+  {
+    icon: "Wrench",
+    label: "GoCanvas",
+    items: [
+      "Prepare the first working version of the form",
+      "Configure it and guide the changes",
+      "Answer questions and keep the build moving",
+    ],
+  },
+  {
+    icon: "Handshake",
+    label: "Together",
+    items: [
+      "Communicate through one named contact on each side",
+      "Test on real work, then refine",
+      "Decide on scope and timing as a pair",
+    ],
+  },
+  {
+    icon: "HardHat",
+    label: "Your team",
+    items: [
+      "Decide what the form should capture",
+      "Test it on real jobs and report back",
+      "Raise blockers early and name an owner for each next action",
+    ],
+  },
 ];
+
+/** Screen 4: what happens when a request changes what was agreed. */
+export const KICKOFF_CHANGE_RULE =
+  "New requests come in through the same contact. We review what they change in scope or dates before the work is redirected.";
+
+/** Screen 5: the three steps of the form review, in the order we take them. */
+export const KICKOFF_FORM_STEPS: ReadonlyArray<{ label: string; text: string }> = [
+  { label: "Review the form together", text: "Walk the first screens against the workflow." },
+  { label: "Make agreed edits live", text: "Change the form in GoCanvas while we are together." },
+  { label: "Prepare one real-world test", text: "Pick a real job, device and feedback route." },
+];
+
+/**
+ * A short-lived signed link, kept stable while it is still fresh. The view
+ * is re-read every few seconds, and each read signs the link again, so a new
+ * string each time would reload the picture on every refresh. The link is
+ * reused until it is close to expiring.
+ */
+const SIGNED_LINK_REUSE_MS = 50 * 60 * 1000;
+const heldSignedLinks = new Map<string, { url: string; at: number }>();
+export function stableSignedUrl(url: string, now = Date.now()): string {
+  const key = url.split("?")[0] ?? url;
+  const held = heldSignedLinks.get(key);
+  if (held && now - held.at < SIGNED_LINK_REUSE_MS) return held.url;
+  heldSignedLinks.set(key, { url, at: now });
+  return url;
+}

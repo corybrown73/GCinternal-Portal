@@ -1,4 +1,3 @@
-import { Fragment } from "react";
 import { Check, Cloud, ExternalLink, FileText } from "lucide-react";
 
 import {
@@ -11,13 +10,12 @@ import {
   type Screen,
 } from "@/components/welcome-primitives";
 import {
-  KICKOFF_HANDOFF,
+  KICKOFF_CHANGE_RULE,
+  KICKOFF_FORM_STEPS,
   KICKOFF_JOURNEY_BAND,
-  KICKOFF_PRINCIPLES,
   KICKOFF_PROMISE,
   KICKOFF_RESPONSIBILITY,
   KICKOFF_STAGE_OUTCOME,
-  KICKOFF_WORKFLOW_PROMPTS,
   kickoffBusinessOutcome,
   kickoffBusinessOutcomeConfirmed,
   kickoffFocusContent,
@@ -25,6 +23,7 @@ import {
   kickoffNextStepText,
   kickoffWorkflowSlide,
   kickoffWorkflowToConfirm,
+  stableSignedUrl,
 } from "@/lib/kickoff-view";
 import { shortDay } from "@/lib/onboarding-timeline";
 import { sessionsAfterKickoff } from "@/lib/presenter-workspace";
@@ -33,36 +32,22 @@ import { cn } from "@/lib/utils";
 import type { WelcomeView } from "@/lib/welcome";
 
 /**
- * KICKOFF VIEW — a TIS-led CONVERSATION SCAFFOLD for the first
- * implementation call, composed from the same WelcomeView the living Plan
- * already reads. One implementation, two views: this file adds the second
- * composition, never a second data model. Internal only — nothing here is
- * reachable from the customer's shared link.
+ * KICKOFF VIEW — the six customer-facing Kickoff slides, composed from the
+ * same WelcomeView the living Plan already reads. One implementation, two
+ * views: this file adds the second composition, never a second data model.
  *
  * SIX FIXED SCREENS, always, for every account: Welcome, Your workflow,
  * Your implementation journey, How we'll keep things moving, Form V1,
- * Your next move.
- * Complexity changes the CONTENT within a screen, never the number of
- * screens — see kickoffScreenList.
+ * Your next move. Complexity changes the CONTENT within a screen, never the
+ * number of screens — see kickoffScreenList.
  *
- * This is not primarily a customer summary deck — it is what the TIS uses
- * to RUN the call: it tells the customer what today accomplishes, carries
- * the TIS's own before/during/after question framework next to whatever
- * customer-specific evidence already exists, explains WHY we deliberately
- * get one workflow working well before expanding, and explains how
- * implementation actually proceeds after today. The reusable conversation
- * prompts and framing (KICKOFF_* in @/lib/kickoff-view) are static
- * Kickoff-methodology copy — never customer facts, never persisted, never
- * account-specific.
- *
- * Visually, every screen reuses the Plan deck's own grammar — Frame, Tile,
- * Tick, PhoneMock, the journey-flow columns, the milestone rail, the
- * orange "good" CTA — recomposed per screen rather than repeating one card
- * layout five times. The copy stays the Phase 3 narrative: no fixed call
- * counts, no "Functional", no provenance ever rendered to a customer. The
- * closing motion is USE IT → TEST IT → VALIDATE IT, never an
- * administrative ask.
+ * Every slide shows only what the Hub already holds. A missing answer is
+ * labelled as something to confirm together, never filled in. Internal
+ * instructions for the TIS live in the Presenter Workspace, not here.
  */
+
+/** Long saved answers keep their full text; the slide sets them smaller so they still fit. */
+const longText = (text: string | null) => (text && text.length > 240 ? "is-long" : undefined);
 
 /* ---------------------------------------------------------- 1. Welcome */
 
@@ -91,6 +76,25 @@ function KickoffCover({ view }: { view: WelcomeView }) {
             <T k="kickoff-cover.title-end">to life</T>
           </h1>
           <div className="wp-rule" />
+          <p className="wp-cover-name">
+            <T k="kickoff-cover.name">{view.clientName}</T>
+          </p>
+          {outcome ? (
+            <>
+              <p className="wp-eyebrow">Your goal</p>
+              <p className="wp-lede">
+                <T k="kickoff-cover.outcome">{outcome}</T>
+              </p>
+              {!outcomeConfirmed ? (
+                // Read from the calls, or typed by Sales: theirs to confirm today.
+                <p className="wp-prepared">
+                  <T k="kickoff-cover.outcome-confirm">
+                    What we heard — we&apos;ll confirm it today
+                  </T>
+                </p>
+              ) : null}
+            </>
+          ) : null}
           {view.firstForm && view.firstFormSource === "ai" ? (
             // Read from the SOW or the calls, never chosen by a person yet:
             // the customer hears it as a question, not a decision.
@@ -100,30 +104,14 @@ function KickoffCover({ view }: { view: WelcomeView }) {
               </T>
             </p>
           ) : null}
-          <p className="wp-cover-name">
-            <T k="kickoff-cover.name">{view.clientName}</T>
+          <p className="wp-prepared">
+            {[
+              view.timeline.liveDate ? `Target ${shortDay(view.timeline.liveDate)}` : null,
+              view.lead ? `Prepared by ${view.lead}, GoCanvas onboarding` : null,
+            ]
+              .filter(Boolean)
+              .join(" · ")}
           </p>
-          {outcome ? (
-            <p className="wp-lede">
-              <T k="kickoff-cover.outcome">{outcome}</T>
-            </p>
-          ) : null}
-          {outcome && !outcomeConfirmed ? (
-            // Read from the calls, or typed by Sales: theirs to confirm today.
-            <p className="wp-prepared">
-              <T k="kickoff-cover.outcome-confirm">What we heard — we&apos;ll confirm it today</T>
-            </p>
-          ) : null}
-          {view.timeline.liveDate ? (
-            <p className="wp-prepared">
-              <T k="kickoff-cover.target">{`Target: ${shortDay(view.timeline.liveDate)}`}</T>
-            </p>
-          ) : null}
-          {view.lead ? (
-            <p className="wp-prepared">
-              <T k="kickoff-cover.prepared">{`Prepared by ${view.lead}, GoCanvas onboarding`}</T>
-            </p>
-          ) : null}
           {/* What today's call accomplishes — a light promise, not an agenda. */}
           <div style={{ marginTop: 10 }}>
             <p className="wp-eyebrow" style={{ marginBottom: 6 }}>
@@ -183,7 +171,6 @@ function KickoffWorkflow({ view, page }: { view: WelcomeView; page: number }) {
     firstFormName: view.firstForm?.name ?? null,
     businessOutcome: kickoffBusinessOutcome(view),
   });
-  const confirm = KICKOFF_WORKFLOW_PROMPTS;
   const toConfirm = kickoffWorkflowToConfirm(view.workflowStory);
   return (
     <Frame
@@ -195,51 +182,39 @@ function KickoffWorkflow({ view, page }: { view: WelcomeView; page: number }) {
       lede={
         story
           ? toConfirm
-            ? "What we think we know, and what we'll confirm together — the foundation for your first working version."
-            : "How the work runs, in your words — the foundation for your first working version."
+            ? "What we understand so far. We'll check each part with you."
+            : "How the work runs, in your words."
           : "There's not enough yet to sketch this out — we'll build it on the call."
       }
     >
       {story ? (
         <div className="wp-journey">
           <div className="wp-journey-col is-now">
-            <span className="wp-journey-tag">{toConfirm ? "Today · to confirm" : "Today"}</span>
+            <span className="wp-journey-tag">Before</span>
             <div className="wp-journey-art">
               <div className="wp-paper">
                 <FileText className="h-7 w-7" />
               </div>
             </div>
             <h3>How it starts</h3>
-            <p className="wp-journey-quote">{story.before ?? "Let's confirm this together."}</p>
-            <div className="wp-journey-confirm">
-              <p className="wp-journey-confirm-label">We&apos;ll confirm</p>
-              <ul className="wp-journey-confirm-list">
-                {confirm.before.map((q, i) => (
-                  <li key={i}>{q}</li>
-                ))}
-              </ul>
-            </div>
+            <p className={cn("wp-workflow-text", longText(story.before))}>
+              {story.before ?? "To confirm together"}
+            </p>
           </div>
           <span className="wp-journey-arrow" />
           <div className="wp-journey-col is-then">
-            <span className="wp-journey-tag is-blue">In the field</span>
+            <span className="wp-journey-tag is-blue">During</span>
             <div className="wp-journey-art">
               <PhoneMock view={view} className="is-flow" />
             </div>
             <h3>Running the job</h3>
-            <p>{story.during ?? "Let's confirm this together."}</p>
-            <div className="wp-journey-confirm">
-              <p className="wp-journey-confirm-label">We&apos;ll confirm</p>
-              <ul className="wp-journey-confirm-list">
-                {confirm.during.map((q, i) => (
-                  <li key={i}>{q}</li>
-                ))}
-              </ul>
-            </div>
+            <p className={cn("wp-workflow-text", longText(story.during))}>
+              {story.during ?? "To confirm together"}
+            </p>
           </div>
           <span className="wp-journey-arrow" />
           <div className="wp-journey-col is-future">
-            <span className="wp-journey-tag is-navy">Business result</span>
+            <span className="wp-journey-tag is-navy">After</span>
             <div className="wp-journey-art">
               <div className="wp-office">
                 <span className="wp-office-tile">
@@ -248,15 +223,9 @@ function KickoffWorkflow({ view, page }: { view: WelcomeView; page: number }) {
               </div>
             </div>
             <h3>What changes</h3>
-            <p>{story.after ?? "Let's confirm this together."}</p>
-            <div className="wp-journey-confirm">
-              <p className="wp-journey-confirm-label">We&apos;ll confirm</p>
-              <ul className="wp-journey-confirm-list">
-                {confirm.after.map((q, i) => (
-                  <li key={i}>{q}</li>
-                ))}
-              </ul>
-            </div>
+            <p className={cn("wp-workflow-text", longText(story.after))}>
+              {story.after ?? "To confirm together"}
+            </p>
           </div>
         </div>
       ) : (
@@ -271,44 +240,7 @@ function KickoffWorkflow({ view, page }: { view: WelcomeView; page: number }) {
   );
 }
 
-/* ---------------------------------- 3. What we're getting working first */
-
-function KickoffScopeSummary({ view }: { view: WelcomeView }) {
-  const content = kickoffFocusContent(view.implementationFocus, view.implementationFocusFallback);
-  return (
-    <section className="wp-kickoff-scope">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="wp-focus-now-label">Kickoff scope · {content.state}</p>
-        <div className="wp-pills is-compact">
-          {KICKOFF_PRINCIPLES.map((p) => (
-            <span className="wp-pill" key={p.label}>
-              <Tile name={p.icon} size="sm" tone="blue" /> {p.label}
-            </span>
-          ))}
-        </div>
-      </div>
-      {content.state === "empty" ? (
-        <p className="wp-journey-quote">
-          No deliverables are recorded yet. Confirm the first objective together.
-        </p>
-      ) : (
-        <ul className="wp-ticks">
-          {content.items.map((text, index) => (
-            <Tick key={`${index}-${text}`}>{text}</Tick>
-          ))}
-        </ul>
-      )}
-      {content.state === "proposed" ? (
-        <p className="wp-focus-prompt">Review and confirm the deliverables for this kickoff.</p>
-      ) : null}
-      <p className="wp-prepared">
-        Kickoff scope confirmation is separate from formal Graduation acceptance.
-      </p>
-    </section>
-  );
-}
-
-/* --------------------------------------------------- 4. Your path to launch */
+/* --------------------------------------------------- 3. Your journey */
 
 /** The canonical six stages' icons — decoration only; the labels and order
  * still come from view.journey, never redefined here. */
@@ -329,9 +261,9 @@ function KickoffJourney({ view, page }: { view: WelcomeView; page: number }) {
       k="kickoff-journey"
       page={page}
       eyebrow="Your path to launch"
-      title="Dates create"
-      accent="accountability"
-      lede="Outcomes move stages. Meetings support the work."
+      title="Your journey from"
+      accent="kickoff to go-live"
+      lede="Each stage has one job. The dates are the targets we have agreed."
       {...(j ? { band: KICKOFF_JOURNEY_BAND, bandIcon: "Route" } : {})}
     >
       {j ? (
@@ -394,9 +326,9 @@ function KickoffKeepMoving({ view, page }: { view: WelcomeView; page: number }) 
       k="kickoff-communication"
       page={page}
       eyebrow="How we'll keep things moving"
-      title="Clear owners,"
-      accent="steady progress"
-      lede="We keep decisions, responsibilities and dates visible as the work moves."
+      title="What to expect"
+      accent="from one another"
+      lede="A working agreement: what each side brings, and how we decide together."
     >
       <div className="wp-responsibility is-three">
         {KICKOFF_RESPONSIBILITY.map((r) => (
@@ -404,43 +336,27 @@ function KickoffKeepMoving({ view, page }: { view: WelcomeView; page: number }) 
             <h4>
               <Tile name={r.icon} size="sm" tone="blue" /> {r.label}
             </h4>
-            <p>{r.items}</p>
+            <ul className="wp-agreement-list">
+              {r.items.map((item) => (
+                <li key={item}>{item}</li>
+              ))}
+            </ul>
           </div>
         ))}
       </div>
-      <div className="wp-focus-later">
-        <div className="wp-focus-later-col">
-          <h4>Communication</h4>
-          <ul className="wp-ticks">
-            <Tick>
-              {view.lead
-                ? `${view.lead} is your GoCanvas project lead.`
-                : "Confirm your GoCanvas project lead and first contact."}
-            </Tick>
-            <Tick>Raise blockers early; agree the next action, owner and date together.</Tick>
-            <Tick>
-              If a response delay affects a target, record the reason and agree the new target.
-              Meeting dates change only when rebooked.
-            </Tick>
-          </ul>
-        </div>
-        <div className="wp-focus-later-col">
-          <h4>Scope and response timing</h4>
-          <ul className="wp-ticks">
-            <Tick>
-              Kickoff confirms the initial deliverables; Graduation acceptance is a later, separate
-              decision.
-            </Tick>
-            <Tick>
-              Record new requests, review their impact, and agree any scope or target change before
-              work is redirected.
-            </Tick>
-            <Tick>
-              If the signed agreement includes a 10-business-day response term, confirm and use its
-              exact wording.
-            </Tick>
-          </ul>
-        </div>
+      <div className="wp-agreement-foot">
+        <p>
+          <span className="wp-agreement-label">Your GoCanvas lead</span>
+          {view.lead ?? "To be named on the call"}
+        </p>
+        <p>
+          <span className="wp-agreement-label">Blockers</span>
+          Raise them early. Every next action has an owner and a date.
+        </p>
+        <p>
+          <span className="wp-agreement-label">Changes</span>
+          {KICKOFF_CHANGE_RULE}
+        </p>
       </div>
     </Frame>
   );
@@ -458,6 +374,85 @@ function KickoffFormV1({
   internal: boolean;
 }) {
   const openChanges = (view.parkingLot ?? []).filter((item) => item.status !== "done");
+  const shot = view.formScreenshotUrl ? stableSignedUrl(view.formScreenshotUrl) : null;
+  const testerLine = view.fieldTester
+    ? `${view.fieldTester} tests the form${view.fieldTesterDue ? ` by ${shortDay(view.fieldTesterDue)}` : ""}.`
+    : "Testing owner not named yet.";
+  const changes = (
+    <div className="wp-changes">
+      <h4>Changes before the test</h4>
+      {openChanges.length ? (
+        <ul className="wp-ticks">
+          {openChanges.slice(0, 4).map((item, index) => (
+            <Tick key={`${item.request}-${index}`}>
+              {item.request}
+              <span className="wp-change-meta">
+                {" "}
+                · {item.status === "scheduled" ? "Scheduled" : "Open"}
+                {item.target ? ` · ${item.target}` : ""}
+              </span>
+            </Tick>
+          ))}
+        </ul>
+      ) : (
+        <p>No changes recorded yet.</p>
+      )}
+    </div>
+  );
+
+  if (shot) {
+    return (
+      <Frame
+        k="kickoff-form-v1"
+        page={page}
+        eyebrow="Let's work on Form V1"
+        title={view.firstForm?.name ?? "Form V1"}
+        accent=""
+      >
+        <div className="wp-shot-layout">
+          <figure className="wp-shot">
+            <img
+              src={shot}
+              data-form-screenshot="true"
+              alt={`Screenshot of ${view.firstForm?.name ?? "the first form"}`}
+            />
+          </figure>
+          <div className="wp-shot-side">
+            <ol className="wp-form-steps">
+              {KICKOFF_FORM_STEPS.map((step, index) => (
+                <li key={step.label}>
+                  <span className="wp-step-no">{index + 1}</span>
+                  <span>
+                    <b>{step.label}</b>
+                    {step.text}
+                  </span>
+                </li>
+              ))}
+            </ol>
+            <p className="wp-testing-line">{testerLine}</p>
+            {changes}
+            {view.formArtifacts.length && internal ? (
+              <ul className="wp-ticks">
+                {view.formArtifacts.map((file) => (
+                  <li key={file.url}>
+                    <a
+                      href={file.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-1 underline"
+                    >
+                      <ExternalLink className="h-3 w-3" /> Open {file.name}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+          </div>
+        </div>
+      </Frame>
+    );
+  }
+
   return (
     <Frame
       k="kickoff-form-v1"
@@ -472,11 +467,11 @@ function KickoffFormV1({
     >
       <div className="wp-journey">
         <div className="wp-journey-col is-now">
-          <span className="wp-journey-tag">Starting point</span>
+          <span className="wp-journey-tag">Step 1</span>
           <div className="wp-journey-art">
             <PhoneMock view={view} className="is-flow" />
           </div>
-          <h3>{view.firstForm?.name ?? "Form not named yet"}</h3>
+          <h3>{KICKOFF_FORM_STEPS[0]!.label}</h3>
           <p>
             {view.firstForm
               ? `Source: ${view.firstForm.source}`
@@ -505,71 +500,57 @@ function KickoffFormV1({
         </div>
         <span className="wp-journey-arrow" />
         <div className="wp-journey-col is-then">
-          <span className="wp-journey-tag is-blue">Review live</span>
-          <h3>Agree the V1 edits</h3>
-          <ul className="wp-ticks">
-            <Tick>Walk the fields and steps against the workflow you just confirmed.</Tick>
-            <Tick>Make the changes you agree in the GoCanvas form while you are together.</Tick>
-            <Tick>
-              Record anything remaining with an owner and deadline; do not treat it as accepted yet.
-            </Tick>
-          </ul>
+          <span className="wp-journey-tag is-blue">Step 2</span>
+          <h3>{KICKOFF_FORM_STEPS[1]!.label}</h3>
+          <p>{KICKOFF_FORM_STEPS[1]!.text}</p>
         </div>
         <span className="wp-journey-arrow" />
         <div className="wp-journey-col is-future">
-          <span className="wp-journey-tag is-navy">Real-world test</span>
-          <h3>Prepare one real job</h3>
-          <p>
-            {view.fieldTester
-              ? `${view.fieldTester} is named to test the form.`
-              : "Testing owner not named yet."}
-          </p>
-          <p>Confirm the job, device and feedback path before the test begins.</p>
+          <span className="wp-journey-tag is-navy">Step 3</span>
+          <h3>{KICKOFF_FORM_STEPS[2]!.label}</h3>
+          <p>{testerLine}</p>
+          <p>{KICKOFF_FORM_STEPS[2]!.text}</p>
         </div>
       </div>
-      <div className="wp-focus-later">
-        <div className="wp-focus-later-col">
-          <h4>Remaining changes already recorded</h4>
-          {openChanges.length ? (
-            <ul className="wp-ticks">
-              {openChanges.slice(0, 4).map((item, index) => (
-                <Tick key={`${item.request}-${index}`}>
-                  {item.request}
-                  {item.target ? ` · ${item.target}` : ""}
-                </Tick>
-              ))}
-            </ul>
-          ) : (
-            <p>No remaining form changes are recorded yet.</p>
-          )}
-        </div>
-        <div className="wp-focus-later-col">
-          <h4>Close this review</h4>
-          <div className="wp-handoff">
-            {KICKOFF_HANDOFF.map((step, index) => (
-              <Fragment key={step.label}>
-                <span className="wp-handoff-step">
-                  <b>{step.label}</b>
-                  {step.text}
-                </span>
-                {index < KICKOFF_HANDOFF.length - 1 ? <span className="wp-handoff-arrow" /> : null}
-              </Fragment>
-            ))}
-          </div>
-        </div>
-      </div>
+      {changes}
     </Frame>
   );
 }
 
 /* ----------------------------------------------------- 6. Your next move */
 
+/** The scope being agreed today: proposed until it is confirmed, never presented as settled. */
+function KickoffScope({ view }: { view: WelcomeView }) {
+  const content = kickoffFocusContent(view.implementationFocus, view.implementationFocusFallback);
+  if (content.state === "empty") {
+    return (
+      <p className="wp-next-note">Nothing recorded yet. We agree the first deliverables today.</p>
+    );
+  }
+  const agreed = content.state === "agreed";
+  const shown = content.items.slice(0, 4);
+  const more = content.items.length - shown.length;
+  return (
+    <>
+      <span className={cn("wp-next-tag", agreed ? "is-agreed" : "is-proposed")}>
+        {agreed ? "Agreed scope" : "Proposed · to confirm today"}
+      </span>
+      <ul className="wp-next-list">
+        {shown.map((text, index) => (
+          <li key={`${index}-${text}`}>{text}</li>
+        ))}
+      </ul>
+      {more > 0 ? <p className="wp-next-note">+{more} more</p> : null}
+    </>
+  );
+}
+
 function KickoffNextMove({ view, page }: { view: WelcomeView; page: number }) {
   const calls = sessionsAfterKickoff(view.timeline.milestones);
   const booked = calls.filter((call) => call.booked).length;
-  const actions = (view.journey?.yours ?? []).filter((item) => item.kind !== "meeting").slice(0, 4);
+  const actions = (view.journey?.yours ?? []).filter((item) => item.kind !== "meeting").slice(0, 3);
   const sideLabel = (side: "customer" | "gocanvas" | "both") =>
-    side === "customer" ? "Customer team" : side === "gocanvas" ? "GoCanvas team" : "Both teams";
+    side === "customer" ? "Your team" : side === "gocanvas" ? "GoCanvas" : "Both teams";
   const nextText = kickoffNextStepText(view.firstForm?.name ?? null);
 
   return (
@@ -577,73 +558,69 @@ function KickoffNextMove({ view, page }: { view: WelcomeView; page: number }) {
       k="kickoff-next"
       page={page}
       eyebrow="Your next move"
-      title="Leave with"
-      accent="clear commitments"
-      lede="Name the action, owner and deadline before the room wraps."
+      title="Who's doing what,"
+      accent="and by when"
+      lede="The sessions, owners and dates we are agreeing today."
     >
-      <div className="wp-focus-later">
-        <div className="wp-focus-later-col">
+      <div className="wp-next-grid">
+        <section className="wp-next-card">
           <h4>
             {calls.length
               ? `Working sessions · ${booked} of ${calls.length} booked`
-              : "Working sessions · not scheduled"}
+              : "Working sessions · none on the plan"}
           </h4>
-          {calls.length ? (
-            <ul className="wp-ticks">
-              {calls.map((call) =>
-                call.booked ? (
-                  <Tick key={call.key}>
-                    {call.label} · {shortDay(call.date)} at {call.time}
-                    {view.timeline.timezone ? ` ${view.timeline.timezone}` : ""}
-                  </Tick>
-                ) : (
-                  <li key={call.key} className="wp-tick">
-                    <span className="wp-tick-dot is-open" aria-hidden="true" />
-                    <span>{call.label} · Not booked yet</span>
-                  </li>
-                ),
-              )}
-            </ul>
-          ) : (
-            <p>No working sessions are on this plan.</p>
-          )}
-        </div>
-        <div className="wp-focus-later-col">
-          <h4>Actions</h4>
+          <ul className="wp-next-list">
+            {calls.map((call) =>
+              call.booked ? (
+                <li key={call.key}>
+                  <b>{call.label}</b> · {shortDay(call.date)} at {call.time}
+                  {view.timeline.timezone ? ` ${view.timeline.timezone}` : ""}
+                </li>
+              ) : (
+                <li key={call.key} className="is-open">
+                  <b>{call.label}</b> · Not booked yet
+                </li>
+              ),
+            )}
+          </ul>
+        </section>
+        <section className="wp-next-card">
+          <h4>Next actions</h4>
           {actions.length ? (
-            <ul className="wp-ticks">
+            <ul className="wp-next-list">
               {actions.map((action, index) => (
-                <Tick key={`${action.kind}-${index}`}>
-                  {action.what} ·{" "}
-                  {action.ownerName ?? `${sideLabel(action.ownerSide)} · person not named`} ·{" "}
-                  {action.by ? byLabel(action.by) : "Deadline not set"}
-                </Tick>
+                <li key={`${action.kind}-${index}`}>
+                  <b>{action.what}</b>
+                  <span className="wp-next-meta">
+                    {" "}
+                    · {action.ownerName ?? `${sideLabel(action.ownerSide)}, owner to name`} ·{" "}
+                    {action.by ? byLabel(action.by) : "Date to agree"}
+                  </span>
+                </li>
               ))}
             </ul>
           ) : (
-            <p>No follow-up actions are recorded yet.</p>
+            <p className="wp-next-note">No follow-up actions recorded yet.</p>
           )}
-        </div>
-      </div>
-      <div className="wp-responsibility is-three">
-        <div className="wp-responsibility-col">
-          <h4>Testing owner</h4>
-          <p>{view.fieldTester ?? "Not named"}</p>
-        </div>
-        <div className="wp-responsibility-col">
-          <h4>Testing deadline</h4>
-          <p>{view.fieldTesterDue ? shortDay(view.fieldTesterDue) : "Not set"}</p>
-        </div>
-        <div className="wp-responsibility-col">
-          <h4>Deliverables</h4>
-          <p>
-            {view.implementationFocus?.validatedAt
-              ? "Kickoff scope confirmed"
-              : "Review and confirm kickoff scope"}
+        </section>
+        <section className="wp-next-card">
+          <h4>Testing</h4>
+          <p className="wp-next-line">
+            <b>{view.fieldTester ?? "Owner to name"}</b>
+            <span className="wp-next-meta">
+              {" "}
+              · {view.fieldTesterDue ? shortDay(view.fieldTesterDue) : "Deadline to set"}
+            </span>
           </p>
-        </div>
+        </section>
+        <section className="wp-next-card">
+          <h4>Kickoff scope</h4>
+          <KickoffScope view={view} />
+          <p className="wp-next-note">
+            Agreeing scope today is separate from formal Graduation acceptance.
+          </p>
+        </section>
       </div>
-      <KickoffScopeSummary view={view} />
       <div className="wp-good-cta is-hero">
         <span className="wp-good-cta-label">Real-world test</span>
         <span className="wp-good-cta-text">{nextText}</span>
