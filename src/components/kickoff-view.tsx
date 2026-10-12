@@ -287,7 +287,9 @@ function KickoffScopeSummary({ view }: { view: WelcomeView }) {
         </div>
       </div>
       {content.state === "empty" ? (
-        <p className="wp-journey-quote">No deliverables are recorded yet. Confirm the first objective together.</p>
+        <p className="wp-journey-quote">
+          No deliverables are recorded yet. Confirm the first objective together.
+        </p>
       ) : (
         <ul className="wp-ticks">
           {content.items.map((text, index) => (
@@ -298,7 +300,9 @@ function KickoffScopeSummary({ view }: { view: WelcomeView }) {
       {content.state === "proposed" ? (
         <p className="wp-focus-prompt">Review and confirm the deliverables for this kickoff.</p>
       ) : null}
-      <p className="wp-prepared">Kickoff scope confirmation is separate from formal Graduation acceptance.</p>
+      <p className="wp-prepared">
+        Kickoff scope confirmation is separate from formal Graduation acceptance.
+      </p>
     </section>
   );
 }
@@ -336,15 +340,15 @@ function KickoffJourney({ view, page }: { view: WelcomeView; page: number }) {
             {stages.map((s) => (
               <div key={s.key} className={cn("wp-node", s.state === "now" && "is-today")}>
                 <span className="wp-node-day">
-              {j && stages.length ? (
+                  {s.state === "now" ? (
+                    <i className="wp-today-tag">{s.key === "kickoff" ? "TODAY" : "You are here"}</i>
+                  ) : null}
                 </span>
                 <span className={cn("wp-node-tile", s.state === "done" && "is-done")}>
                   <Tile
                     name={STAGE_ICON[s.key] ?? "Route"}
                     size="lg"
-                        {s.state === "now" ? (
-                          <i className="wp-today-tag">{s.key === "kickoff" ? "TODAY" : "You are here"}</i>
-                        ) : null}
+                    tone={s.state === "done" ? "navy" : s.state === "now" ? "blue" : "light"}
                   />
                   {s.state === "done" ? (
                     <span className="wp-done-badge">
@@ -407,17 +411,33 @@ function KickoffKeepMoving({ view, page }: { view: WelcomeView; page: number }) 
         <div className="wp-focus-later-col">
           <h4>Communication</h4>
           <ul className="wp-ticks">
-            <Tick>{view.lead ? `${view.lead} is your GoCanvas project lead.` : "Confirm your GoCanvas project lead and first contact."}</Tick>
+            <Tick>
+              {view.lead
+                ? `${view.lead} is your GoCanvas project lead.`
+                : "Confirm your GoCanvas project lead and first contact."}
+            </Tick>
             <Tick>Raise blockers early; agree the next action, owner and date together.</Tick>
-            <Tick>If a response delay affects a target, record the reason and agree the new target. Meeting dates change only when rebooked.</Tick>
+            <Tick>
+              If a response delay affects a target, record the reason and agree the new target.
+              Meeting dates change only when rebooked.
+            </Tick>
           </ul>
         </div>
         <div className="wp-focus-later-col">
           <h4>Scope and response timing</h4>
           <ul className="wp-ticks">
-            <Tick>Kickoff confirms the initial deliverables; Graduation acceptance is a later, separate decision.</Tick>
-            <Tick>Record new requests, review their impact, and agree any scope or target change before work is redirected.</Tick>
-            <Tick>If the signed agreement includes a 10-business-day response term, confirm and use its exact wording.</Tick>
+            <Tick>
+              Kickoff confirms the initial deliverables; Graduation acceptance is a later, separate
+              decision.
+            </Tick>
+            <Tick>
+              Record new requests, review their impact, and agree any scope or target change before
+              work is redirected.
+            </Tick>
+            <Tick>
+              If the signed agreement includes a 10-business-day response term, confirm and use its
+              exact wording.
+            </Tick>
           </ul>
         </div>
       </div>
@@ -444,7 +464,10 @@ function KickoffFormV1({
       eyebrow="Let's work on Form V1"
       title={view.firstForm?.name ?? "Form V1"}
       accent="review together"
-      lede={view.firstForm?.objective ?? "Review the actual form, make agreed edits in GoCanvas, and prepare a real-job test."}
+      lede={
+        view.firstForm?.objective ??
+        "Review the actual form, make agreed edits in GoCanvas, and prepare a real-job test."
+      }
     >
       <div className="wp-journey">
         <div className="wp-journey-col is-now">
@@ -453,19 +476,30 @@ function KickoffFormV1({
             <PhoneMock view={view} className="is-flow" />
           </div>
           <h3>{view.firstForm?.name ?? "Form not named yet"}</h3>
-          <p>{view.firstForm ? `Source: ${view.firstForm.source}` : "Name the form to review before making changes."}</p>
+          <p>
+            {view.firstForm
+              ? `Source: ${view.firstForm.source}`
+              : "Name the form to review before making changes."}
+          </p>
           {view.formArtifacts.length && internal ? (
             <ul className="wp-ticks">
               {view.formArtifacts.map((file) => (
                 <li key={file.url}>
-                  <a href={file.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 underline">
+                  <a
+                    href={file.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1 underline"
+                  >
                     <ExternalLink className="h-3 w-3" /> Open {file.name}
                   </a>
                 </li>
               ))}
             </ul>
           ) : view.firstForm?.source === "uploaded" ? (
-            <p className="wp-prepared">The uploaded form is not available to open from this view.</p>
+            <p className="wp-prepared">
+              The uploaded form is not available to open from this view.
+            </p>
           ) : null}
         </div>
         <span className="wp-journey-arrow" />
@@ -475,7 +509,9 @@ function KickoffFormV1({
           <ul className="wp-ticks">
             <Tick>Walk the fields and steps against the workflow you just confirmed.</Tick>
             <Tick>Make the changes you agree in the GoCanvas form while you are together.</Tick>
-            <Tick>Record anything remaining with an owner and deadline; do not treat it as accepted yet.</Tick>
+            <Tick>
+              Record anything remaining with an owner and deadline; do not treat it as accepted yet.
+            </Tick>
           </ul>
         </div>
         <span className="wp-journey-arrow" />
@@ -497,7 +533,8 @@ function KickoffFormV1({
             <ul className="wp-ticks">
               {openChanges.slice(0, 4).map((item, index) => (
                 <Tick key={`${item.request}-${index}`}>
-                  {item.request}{item.target ? ` · ${item.target}` : ""}
+                  {item.request}
+                  {item.target ? ` · ${item.target}` : ""}
                 </Tick>
               ))}
             </ul>
@@ -547,16 +584,17 @@ function KickoffNextMove({ view, page }: { view: WelcomeView; page: number }) {
     >
       <div className="wp-focus-later">
         <div className="wp-focus-later-col">
-                  <h4>
-                    {calls.length
-                      ? `Working sessions · ${booked} of ${calls.length} booked`
-                      : "Working sessions · not scheduled"}
-                  </h4>
+          <h4>
+            {calls.length
+              ? `Working sessions · ${booked} of ${calls.length} booked`
+              : "Working sessions · not scheduled"}
+          </h4>
           {calls.length ? (
             <ul className="wp-ticks">
               {calls.map((call) => (
                 <Tick key={call.key}>
-                  {call.key === "kickoff" ? "TODAY · " : ""}{call.label} ·{" "}
+                  {call.key === "kickoff" ? "TODAY · " : ""}
+                  {call.label} ·{" "}
                   {call.time
                     ? `${shortDay(call.date)} at ${call.time}${view.timeline.timezone ? ` ${view.timeline.timezone}` : ""}`
                     : "Date and time not booked"}
@@ -573,7 +611,8 @@ function KickoffNextMove({ view, page }: { view: WelcomeView; page: number }) {
             <ul className="wp-ticks">
               {actions.map((action, index) => (
                 <Tick key={`${action.kind}-${index}`}>
-                  {action.what} · {action.ownerName ?? `${sideLabel(action.ownerSide)} · person not named`} ·{" "}
+                  {action.what} ·{" "}
+                  {action.ownerName ?? `${sideLabel(action.ownerSide)} · person not named`} ·{" "}
                   {action.by ? byLabel(action.by) : "Deadline not set"}
                 </Tick>
               ))}
@@ -641,7 +680,12 @@ export function kickoffScreenList(view: WelcomeView): Screen[] {
       key: "kickoff-form-v1",
       label: "Let's work on Form V1",
       render: (a) => (
-        <KickoffFormV1 key="kickoff-form-v1" view={view} page={a.page} internal={a.mode === "internal"} />
+        <KickoffFormV1
+          key="kickoff-form-v1"
+          view={view}
+          page={a.page}
+          internal={a.mode === "internal"}
+        />
       ),
     },
     {

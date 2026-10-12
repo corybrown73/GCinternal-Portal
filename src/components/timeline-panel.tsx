@@ -160,7 +160,9 @@ function StageTargetRow({
                 value={category}
                 disabled={disabled}
                 onChange={(event) =>
-                  setCategory(event.target.value as (typeof stageTargetChangeCategories)[number] | "")
+                  setCategory(
+                    event.target.value as (typeof stageTargetChangeCategories)[number] | "",
+                  )
                 }
                 className="h-7 rounded-sm border border-border bg-background px-1.5 text-[11px] text-foreground"
                 required
@@ -208,8 +210,8 @@ function StageTargetRow({
           {target.history.map((change, index) => (
             <li key={`${change.changed_at}-${index}`}>
               {change.previous_date ? shortDay(change.previous_date) : "No prior target"} →{" "}
-              {shortDay(change.new_date)} · {change.category.replaceAll("_", " ")} · {change.reason} ·
-              {" "}user {change.changed_by} · {change.changed_at}
+              {shortDay(change.new_date)} · {change.category.replaceAll("_", " ")} · {change.reason}{" "}
+              · user {change.changed_by} · {change.changed_at}
             </li>
           ))}
         </ul>
@@ -392,8 +394,7 @@ export function TimelinePanel({
     onError: (e) => setError((e as Error).message),
   });
   const stageTargetMutation = useMutation({
-    mutationFn: (update: StageTargetUpdate) =>
-      saveStageTargetFn({ data: { dealId, update } }),
+    mutationFn: (update: StageTargetUpdate) => saveStageTargetFn({ data: { dealId, update } }),
     onMutate: () => setError(null),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["deal", dealId] });

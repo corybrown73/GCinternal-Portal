@@ -608,10 +608,7 @@ export const saveIntake = createServerFn({ method: "POST" })
 export const saveStageTarget = createServerFn({ method: "POST" })
   .middleware([requireDealEditor])
   .inputValidator((data: unknown) =>
-    z
-      .object({ dealId: z.string().uuid(), update: stageTargetUpdateSchema })
-      .strict()
-      .parse(data),
+    z.object({ dealId: z.string().uuid(), update: stageTargetUpdateSchema }).strict().parse(data),
   )
   .handler(async ({ data, context }) => {
     const { saveDealIntake } = await import("./presale.server");
