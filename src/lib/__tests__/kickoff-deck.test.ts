@@ -388,6 +388,75 @@ describe("Slide 4 — the same expectations for every implementation", () => {
     expect(slide(a, 3)).toBe(slide(b, 3));
   });
 
+  it("stays identical for a fully populated account, with a booked session, changes and a workflow", () => {
+    const bare = viewWith();
+    const populated = viewWith({
+      clientName: "Maverick Well Pluggers",
+      industry: "Oil & gas",
+      workflowStory: {
+        before: "Crews call in",
+        during: "Tickets filled on site",
+        after: "Invoices sent",
+        validatedAt: "2026-10-07T12:00:00Z",
+        validatedBy: "Priya",
+      },
+      journey: {
+        current: { key: "kickoff" },
+        stages: [],
+        solutions: [],
+        yours: [],
+        headline: "",
+      } as never,
+      parkingLot: [
+        {
+          request: "Add a photo field",
+          target: "2026-10-16",
+          status: "scheduled",
+          neededForLaunch: true,
+          owner: "gocanvas",
+        },
+      ],
+    });
+    expect(slide(populated, 3)).toBe(slide(bare, 3));
+  });
+
+  it("uses the approved wording for every responsibility, in order, with a blue check beside each", () => {
+    const markup = slide(viewWith(), 3);
+    const expected = [
+      "Come prepared with an initial solution and plan.",
+      "Lead working sessions and guide decisions.",
+      "Build and refine agreed functionality.",
+      "Provide training and practical guidance.",
+      "Communicate progress, risks and blockers.",
+      "Document agreed actions and decisions.",
+      "Attend and participate in working sessions.",
+      "Agree on actions, owners and deadlines.",
+      "Communicate blockers and delays early.",
+      "Discuss scope or timeline changes before proceeding.",
+      "Review progress and confirm readiness for the next stage.",
+      "Explain your real-world processes and requirements.",
+      "Provide necessary access and timely decisions.",
+      "Identify a decision-maker and form owner.",
+      "Test the solution using real work scenarios.",
+      "Provide clear, timely feedback.",
+      "Complete agreed actions between sessions.",
+      "Prepare your team for day-to-day use.",
+    ];
+    let cursor = 0;
+    for (const line of expected) {
+      const at = markup.indexOf(line, cursor);
+      expect(at, line).toBeGreaterThan(-1);
+      cursor = at + line.length;
+    }
+    expect(markup.match(/wp-kick-check/g)?.length).toBe(expected.length);
+    expect(markup).toContain("GoCanvas");
+    expect(markup).toContain("Together");
+    expect(markup).toContain("Your Team");
+    expect(markup).toContain(
+      "Test, share feedback and complete agreed actions between meetings. Raise blockers early so we can adjust the plan together.",
+    );
+  });
+
   it("carries the agreed headline, the three columns and the momentum statement, with no customer data", () => {
     const markup = slide(viewWith(), 3);
     expect(markup).toContain("We build it together.");

@@ -276,7 +276,7 @@ export const KICKOFF_EXPECTATIONS = {
       label: "GoCanvas",
       role: "We lead and guide",
       items: [
-        "Come prepared with a starting solution.",
+        "Come prepared with an initial solution and plan.",
         "Lead working sessions and guide decisions.",
         "Build and refine agreed functionality.",
         "Provide training and practical guidance.",
@@ -289,31 +289,31 @@ export const KICKOFF_EXPECTATIONS = {
       label: "Together",
       role: "We keep things moving",
       items: [
-        "Attend and participate in scheduled working sessions.",
+        "Attend and participate in working sessions.",
         "Agree on actions, owners and deadlines.",
         "Communicate blockers and delays early.",
-        "Discuss changes to scope or timelines before proceeding.",
+        "Discuss scope or timeline changes before proceeding.",
         "Review progress and confirm readiness for the next stage.",
       ],
     },
     {
       icon: "HardHat",
-      label: "Your team",
+      label: "Your Team",
       role: "You participate and own",
       items: [
         "Explain your real-world processes and requirements.",
         "Provide necessary access and timely decisions.",
-        "Identify a decision-maker and person responsible for maintaining forms.",
+        "Identify a decision-maker and form owner.",
         "Test the solution using real work scenarios.",
         "Provide clear, timely feedback.",
-        "Complete agreed actions between working sessions.",
-        "Prepare the team for day-to-day use.",
+        "Complete agreed actions between sessions.",
+        "Prepare your team for day-to-day use.",
       ],
     },
   ],
   momentum: {
     title: "Keep the momentum between sessions.",
-    text: "Working sessions are for reviewing progress, solving problems and making decisions. Between sessions, your team should test, provide feedback and complete agreed actions so implementation keeps moving. Delays may affect agreed dates, and additional requests may require reviewing scope.",
+    text: "Test, share feedback and complete agreed actions between meetings. Raise blockers early so we can adjust the plan together.",
   },
 } as const;
 
