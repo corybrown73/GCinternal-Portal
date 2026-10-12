@@ -1,21 +1,25 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  KICKOFF_CHANGE_RULE,
+  KICKOFF_EXPECTATIONS,
   KICKOFF_FORM_STEPS,
-  KICKOFF_JOURNEY_BAND,
   KICKOFF_PROMISE,
-  KICKOFF_RESPONSIBILITY,
   KICKOFF_STAGE_OUTCOME,
+  KICKOFF_TO_CONFIRM,
+  KICKOFF_UPCOMING,
+  KICKOFF_WORKFLOW_QUESTIONS,
   kickoffBusinessOutcome,
+  kickoffChanges,
   kickoffFocusContent,
-  kickoffFocusGroups,
+  kickoffGraduationTarget,
   kickoffJourneyStages,
+  kickoffMoveSources,
+  kickoffMoveSplit,
   kickoffNextStepText,
-  kickoffWorkflowFallback,
-  kickoffWorkflowSlide,
-  kickoffWorkflowStory,
-  stableSignedUrl,
+  kickoffUpcomingDetails,
+  kickoffWorkflowConfirmed,
+  kickoffWorkflowFields,
+  nextWorkingSession,
 } from "../kickoff-view";
 
 /**
@@ -286,161 +290,6 @@ describe("kickoffFocusContent — fallback customer-safety filter (Aquatic/Jobbe
   });
 });
 
-describe("kickoffWorkflowStory — Before/During/After, with a graceful fallback", () => {
-  it("is null when workflowStory is empty, so the caller falls back rather than showing three empty columns", () => {
-    expect(kickoffWorkflowStory(null)).toBeNull();
-    expect(kickoffWorkflowStory({ before: null, during: null, after: null })).toBeNull();
-  });
-
-  it("is the three-part story once any of before/during/after has useful content", () => {
-    expect(
-      kickoffWorkflowStory({
-        before: "A dispatch ticket from the office.",
-        during: null,
-        after: null,
-      }),
-    ).toEqual({ before: "A dispatch ticket from the office.", during: null, after: null });
-  });
-});
-
-describe("kickoffWorkflowFallback — a presentation-only hypothesis from existing structured facts", () => {
-  it("is null when there is no structured evidence for any leg, rather than inventing one", () => {
-    expect(
-      kickoffWorkflowFallback({ currentProcess: null, firstFormName: null, businessOutcome: null }),
-    ).toBeNull();
-  });
-
-  it("uses only the current process for Before when that is all that is known", () => {
-    expect(
-      kickoffWorkflowFallback({
-        currentProcess: "Paper ticket from the truck, retyped on Fridays.",
-        firstFormName: null,
-        businessOutcome: null,
-      }),
-    ).toEqual({
-      before: "Paper ticket from the truck, retyped on Fridays.",
-      during: null,
-      after: null,
-    });
-  });
-
-  it("builds a fuller hypothesis once the first form and business outcome are also known", () => {
-    expect(
-      kickoffWorkflowFallback({
-        currentProcess: "Paper ticket from the truck, retyped on Fridays.",
-        firstFormName: "Daily Water Haul Ticket",
-        businessOutcome: "Invoices go out the same day, not the following Friday.",
-      }),
-    ).toEqual({
-      before: "Paper ticket from the truck, retyped on Fridays.",
-      during: "Running Daily Water Haul Ticket on the job.",
-      after: "Invoices go out the same day, not the following Friday.",
-    });
-  });
-
-  it("leaves an individual missing leg null rather than inventing it, so the screen shows the existing 'To confirm on the call.' treatment", () => {
-    const hyp = kickoffWorkflowFallback({
-      currentProcess: null,
-      firstFormName: "Daily Water Haul Ticket",
-      businessOutcome: null,
-    });
-    expect(hyp).toEqual({
-      before: null,
-      during: "Running Daily Water Haul Ticket on the job.",
-      after: null,
-    });
-  });
-});
-
-describe("kickoffFocusGroups — NOW dominant, NEXT/LATER secondary, capped not invented", () => {
-  it("puts a single item in NOW and leaves NEXT/LATER empty", () => {
-    expect(kickoffFocusGroups(["Replace the paper ticket."])).toEqual({
-      now: ["Replace the paper ticket."],
-      next: [],
-      later: [],
-    });
-  });
-
-  it("groups items two and three into NEXT, not a fourth NOW/NEXT/LATER column", () => {
-    expect(kickoffFocusGroups(["A", "B", "C"])).toEqual({
-      now: ["A"],
-      next: ["B", "C"],
-      later: [],
-    });
-  });
-
-  it("caps the display at six items total rather than overflowing the slide or inventing structure", () => {
-    const items = ["A", "B", "C", "D", "E", "F", "G", "H"];
-    const groups = kickoffFocusGroups(items);
-    expect(groups).toEqual({
-      now: ["A"],
-      next: ["B", "C"],
-      later: ["D", "E", "F"],
-    });
-    // G and H are silently capped, not renamed into a fourth bucket.
-    expect([...groups.now, ...groups.next, ...groups.later]).toHaveLength(6);
-  });
-});
-
-describe("kickoffWorkflowSlide — precedence plus the concise slide limit, in one call", () => {
-  it("a saved workflow_story wins over the structured fallback", () => {
-    expect(
-      kickoffWorkflowSlide({
-        workflowStory: {
-          before: "Saved: a dispatch ticket from the office.",
-          during: null,
-          after: null,
-        },
-        currentProcess: "Fallback: paper ticket from the truck.",
-        firstFormName: "Daily Water Haul Ticket",
-        businessOutcome: "Fallback outcome.",
-      }),
-    ).toEqual({
-      before: "Saved: a dispatch ticket from the office.",
-      during: null,
-      after: null,
-    });
-  });
-
-  it("falls back to the structured hypothesis when nothing is saved", () => {
-    expect(
-      kickoffWorkflowSlide({
-        workflowStory: null,
-        currentProcess: "Paper ticket from the truck, retyped on Fridays.",
-        firstFormName: "Daily Water Haul Ticket",
-        businessOutcome: "Invoices go out the same day.",
-      }),
-    ).toEqual({
-      before: "Paper ticket from the truck, retyped on Fridays.",
-      during: "Running Daily Water Haul Ticket on the job.",
-      after: "Invoices go out the same day.",
-    });
-  });
-
-  it("is null when there is no saved story and no structured evidence either", () => {
-    expect(
-      kickoffWorkflowSlide({
-        workflowStory: null,
-        currentProcess: null,
-        firstFormName: null,
-        businessOutcome: null,
-      }),
-    ).toBeNull();
-  });
-
-  it("passes a long saved leg through in full, never cut mid-sentence", () => {
-    const longProcess =
-      "Three crews fill in a paper haul ticket on the truck and the office retypes them on Fridays and chases the missing signatures every single week without fail, which is exhausting for everyone involved.";
-    const result = kickoffWorkflowSlide({
-      workflowStory: { before: longProcess, during: null, after: null },
-      currentProcess: null,
-      firstFormName: null,
-      businessOutcome: null,
-    });
-    expect(result!.before).toBe(longProcess);
-  });
-});
-
 describe("kickoffNextStepText — testing-oriented, never administrative", () => {
   it("uses the customer's own first-form name when there is one", () => {
     expect(kickoffNextStepText("Daily Water Haul Ticket")).toBe(
@@ -518,17 +367,6 @@ describe("kickoffJourneyStages — Kickoff View is the presentation used during 
   });
 });
 
-describe("KICKOFF_JOURNEY_BAND — fixed Kickoff-presentation copy, never a stage's own blurb", () => {
-  it("is a plain static string, not a function of any journey/account data", () => {
-    expect(typeof KICKOFF_JOURNEY_BAND).toBe("string");
-    expect(KICKOFF_JOURNEY_BAND.length).toBeGreaterThan(0);
-  });
-
-  it("is not the pre-kickoff stage's own 'before we meet' blurb", () => {
-    expect(KICKOFF_JOURNEY_BAND).not.toMatch(/before we meet/i);
-  });
-});
-
 describe("the Kickoff conversation framework — static, never account-specific", () => {
   // These exist to prove, structurally, that none of the reusable
   // conversation copy takes a WelcomeView or any account-shaped input at
@@ -559,45 +397,34 @@ describe("the Kickoff conversation framework — static, never account-specific"
     }
   });
 
-  it("KICKOFF_RESPONSIBILITY names the three working-agreement categories, in plain words", () => {
-    expect(KICKOFF_RESPONSIBILITY.map((r) => r.label)).toEqual([
+  it("KICKOFF_EXPECTATIONS names the three responsibility columns in the agreed order", () => {
+    expect(KICKOFF_EXPECTATIONS.columns.map((c) => c.label)).toEqual([
       "GoCanvas",
       "Together",
       "Your team",
     ]);
-    const all = KICKOFF_RESPONSIBILITY.flatMap((r) => [...r.items]).join(" ");
-    // A working agreement, not a contract: no response term is asserted here.
-    expect(all).not.toMatch(/business.day|response term|within \d+/i);
+    expect(KICKOFF_EXPECTATIONS.columns.map((c) => c.role)).toEqual([
+      "We lead and guide",
+      "We keep things moving",
+      "You participate and own",
+    ]);
+  });
+
+  it("KICKOFF_EXPECTATIONS carries no response term, penalty or contract wording", () => {
+    const all = [
+      ...KICKOFF_EXPECTATIONS.columns.flatMap((c) => [...c.items]),
+      KICKOFF_EXPECTATIONS.momentum.text,
+    ].join(" ");
+    expect(all).not.toMatch(
+      /business.day|response term|within \d+|penalt|contract|signed|hours?\b/i,
+    );
     expect(all).toMatch(/blocker/i);
-    expect(KICKOFF_CHANGE_RULE).toMatch(/scope or dates/);
+    expect(KICKOFF_EXPECTATIONS.momentum.text).toMatch(/delays may affect agreed dates/i);
+    expect(KICKOFF_EXPECTATIONS.momentum.text).toMatch(/reviewing scope/i);
   });
 
   it("KICKOFF_FORM_STEPS are the three form-review steps, in order", () => {
-    expect(KICKOFF_FORM_STEPS.map((s) => s.label)).toEqual([
-      "Review the form together",
-      "Make agreed edits live",
-      "Prepare one real-world test",
-    ]);
-  });
-});
-
-describe("stableSignedUrl — a fresh link is reused, so a refresh does not reload the picture", () => {
-  it("keeps the first link while it is fresh, even when the view signs a new one", () => {
-    const first = stableSignedUrl("https://x.test/shot.png?token=a", 1_000);
-    const later = stableSignedUrl("https://x.test/shot.png?token=b", 1_000 + 10_000);
-    expect(later).toBe(first);
-  });
-
-  it("signs a new link once the held one is near expiry", () => {
-    stableSignedUrl("https://x.test/near-expiry.png?token=a", 0);
-    const renewed = stableSignedUrl("https://x.test/near-expiry.png?token=b", 51 * 60 * 1000);
-    expect(renewed).toBe("https://x.test/near-expiry.png?token=b");
-  });
-
-  it("keeps different pictures apart", () => {
-    const a = stableSignedUrl("https://x.test/a.png?token=1", 0);
-    const b = stableSignedUrl("https://x.test/b.png?token=2", 0);
-    expect(a).not.toBe(b);
+    expect(KICKOFF_FORM_STEPS.map((s) => s.label)).toEqual(["Review", "Refine", "Test"]);
   });
 });
 
@@ -623,11 +450,10 @@ describe("the 'to confirm' markers — nothing the AI or Sales wrote reads as th
     expect(kickoffBusinessOutcomeConfirmed(known(true))).toBe(true);
   });
 
-  it("marks the workflow story until a person validates it; the structured fallback always", async () => {
-    const { kickoffWorkflowToConfirm } = await import("../kickoff-view");
-    expect(kickoffWorkflowToConfirm(null)).toBe(true);
-    expect(kickoffWorkflowToConfirm({ validatedAt: null })).toBe(true);
-    expect(kickoffWorkflowToConfirm({ validatedAt: "2026-10-07T12:00:00Z" })).toBe(false);
+  it("marks the workflow as confirmed only once a person has validated it", () => {
+    expect(kickoffWorkflowConfirmed(null)).toBe(false);
+    expect(kickoffWorkflowConfirmed({ validatedAt: null })).toBe(false);
+    expect(kickoffWorkflowConfirmed({ validatedAt: "2026-10-07T12:00:00Z" })).toBe(true);
   });
 });
 

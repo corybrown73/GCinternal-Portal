@@ -26,7 +26,7 @@ export async function exportWelcomePptx(args: {
   fileName: string;
   title: string;
   onProgress?: (done: number, total: number) => void;
-}): Promise<string[]> {
+}): Promise<void> {
   const host = document.createElement("div");
   // Off-screen but rendered: display:none would give html-to-image nothing.
   host.style.cssText =
@@ -47,7 +47,6 @@ export async function exportWelcomePptx(args: {
     );
     await nextPaint();
     await document.fonts.ready;
-    const notEmbedded = await embedScreenshots(host);
     await settleImages(host);
 
     const [{ toPng }, pptxMod] = await Promise.all([import("html-to-image"), import("pptxgenjs")]);
@@ -74,7 +73,6 @@ export async function exportWelcomePptx(args: {
       args.onProgress?.(i + 1, nodes.length);
     }
     await pptx.writeFile({ fileName: args.fileName });
-    return notEmbedded;
   } finally {
     root.unmount();
     host.remove();
@@ -86,36 +84,6 @@ const BLANK_PNG =
 
 function nextPaint(): Promise<void> {
   return new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => r())));
-}
-
-function blobToDataUrl(blob: Blob): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result));
-    reader.onerror = () => reject(reader.error);
-    reader.readAsDataURL(blob);
-  });
-}
-
-/**
- * The form screenshot is a picture in storage. Fetch it and inline it before
- * the capture, so the slide does not depend on the rasteriser being allowed to
- * read it. Returns the names of any screenshot that could not be fetched — the
- * caller reports those, rather than the slide going out blank without a word.
- */
-async function embedScreenshots(root: HTMLElement): Promise<string[]> {
-  const missing: string[] = [];
-  const shots = Array.from(root.querySelectorAll<HTMLImageElement>("img[data-form-screenshot]"));
-  for (const img of shots) {
-    try {
-      const res = await fetch(img.src);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      img.src = await blobToDataUrl(await res.blob());
-    } catch {
-      missing.push(img.alt || "form screenshot");
-    }
-  }
-  return missing;
 }
 
 /** Wait for every image in the tree to load (or fail) so none is captured blank. */
