@@ -382,6 +382,24 @@ export type ClosedWonDeps = {
     /** The TIS the row named: an email or a name. The route resolves it. */
     owner: string | undefined,
   ) => Promise<{ assigneeName: string | null } | null>;
+  /**
+   * The opportunity's notes as a call-notes row on the deal, so the AI
+   * reading and "Read again" see them. Idempotent on replay: the same text
+   * is already there, an edited text replaces it. The ingest does not know
+   * the opportunity's id; a caller that does (the Salesforce pull) passes
+   * it in `source`, and the row is then per opportunity. Optional.
+   */
+  storeNotes?: (
+    dealId: string,
+    notes: string,
+    source?: { opportunityId?: string | null | undefined },
+  ) => Promise<void>;
+  /**
+   * Queue the AI reading of the deal and come straight back — never await
+   * the reading itself. `trigger` is the ingest's reason ("closed_won");
+   * the wiring names the channel it came in on. Optional, never fatal.
+   */
+  startReading?: (dealId: string, trigger: "closed_won") => Promise<void>;
 };
 
 export type DealIntakeFacts = {
@@ -470,11 +488,26 @@ export async function ingestClosedWon(
   if (deps.recordFacts && facts) {
     await deps.recordFacts(account.id, facts);
   }
+  if (deps.storeNotes && input.notes) {
+    await deps.storeNotes(account.id, input.notes);
+  }
+  // The reading is queued whichever way the rest goes: a replay with
+  // nothing new is a cheap no-op on the job's side, and a replay with new
+  // notes is exactly what should be read. Never fatal to the ingest.
+  const startReading = async () => {
+    if (!deps.startReading) return;
+    try {
+      await deps.startReading(account.id, "closed_won");
+    } catch (e) {
+      console.error("[closed-won] could not queue the AI reading", e);
+    }
+  };
 
   // Already onboarding: the second delivery of the same row, or a company
   // whose project a person had already started. Report what exists.
   if (account.customer_id) {
     const implementationId = await deps.existingImplementation(account.customer_id);
+    await startReading();
     return {
       assigned_to: null,
       deal_id: account.id,
@@ -488,6 +521,7 @@ export async function ingestClosedWon(
 
   const started = await deps.startOnboarding(account.id);
   if (started.outcome !== "started") {
+    await startReading();
     return {
       assigned_to: null,
       deal_id: account.id,
@@ -514,6 +548,9 @@ export async function ingestClosedWon(
       console.error("[closed-won] assignment failed; project left unassigned", e);
     }
   }
+  // After the assignment, so the reading's message reaches the TIS it was
+  // just handed to.
+  await startReading();
 
   return {
     assigned_to: assignedTo,

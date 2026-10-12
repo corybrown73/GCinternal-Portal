@@ -31,11 +31,14 @@ export function synthesisFromBrief(raw: unknown): WelcomeSynthesis | null {
   const b = raw as Partial<BriefJson> | null | undefined;
   if (!b || typeof b !== "object") return null;
 
+  // The checked reading's own summary first — it was verified against the
+  // sources — and the brief's bullets, joined, only when there is none.
+  const verified = clean(b.onboarding?.current_process?.summary) || null;
   const bullets = (b.current_process ?? [])
     .flatMap((s) => s.bullets ?? [])
     .map(clean)
     .filter(Boolean);
-  const currentProcess = bullets.length ? sentence(bullets.slice(0, 3)) : null;
+  const currentProcess = verified ?? (bullets.length ? sentence(bullets.slice(0, 3)) : null);
 
   const scope = b.kickoff?.scope ?? [];
   const nextUseCases = scope

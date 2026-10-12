@@ -91,11 +91,14 @@ export function WelcomePage({
   onEditText,
   backHref,
   notesHref,
+  workspaceHref,
   icsBase,
   onToggleScreen,
 }: {
   view: WelcomeView;
   mode: WelcomeMode;
+  /** Internal: the presenter workspace's address, offered in the toolbar on the Kickoff view. */
+  workspaceHref?: string | null;
   /** Internal: a line of the page rewritten in place. Null restores the page's own words. */
   onEditText?: ((key: string, text: string | null) => Promise<void> | void) | undefined;
   /** The customer's page ticks its homework; the internal preview shows the ticks. */
@@ -212,6 +215,7 @@ export function WelcomePage({
               setAt(0);
               setPresent(true);
             }}
+            workspaceHref={workspaceHref}
             onCopyLink={experience === "plan" ? mintForQr : undefined}
             onMarkSent={experience === "plan" ? onMarkSent : undefined}
             onExportPptx={async (report) => {
@@ -587,6 +591,7 @@ function Toolbar({
   onExportPptx,
   backHref,
   notesHref,
+  workspaceHref,
   qrReady,
   showQr,
   onToggleQr,
@@ -594,6 +599,8 @@ function Toolbar({
   view: WelcomeView;
   /** WHAT experience is showing — distinct from WHO is viewing (`mode`). */
   experience: "plan" | "kickoff";
+  /** Internal: the presenter's own window, opened beside the presentation. */
+  workspaceHref?: string | null | undefined;
   onToggleExperience: () => void;
   onPresent: () => void;
   onCopyLink?: (() => Promise<string>) | undefined;
@@ -650,6 +657,17 @@ function Toolbar({
           {experience === "plan" ? "Kickoff View" : "Implementation Plan"}
         </button>
         {experience === "plan" ? <DayChip view={view} /> : null}
+        {experience === "kickoff" && workspaceHref ? (
+          <a
+            href={workspaceHref}
+            target="_blank"
+            rel="noreferrer"
+            className="wp-tool"
+            title="Edit the dates, form link and sessions in its own window. Nothing in it is shown on the slides."
+          >
+            Presenter workspace
+          </a>
+        ) : null}
         {view.sharedAt || view.openedAt ? (
           <span className="wp-toolbar-meta">
             {view.sharedAt ? `Link sent ${stampDay(view.sharedAt)}` : "Link"}
@@ -1005,10 +1023,15 @@ function Team({ view, page }: { view: WelcomeView; page: number }) {
       side: "client",
     });
   }
+  // A name the reading proposed is a question to the customer, not a fact
+  // about them: it is shown, and marked as theirs to confirm.
+  const testerProposed = Boolean(view.fieldTester) && view.fieldTesterSource === "ai";
   people.push({
     name: view.fieldTester ?? "Your field tester",
-    role: `Field tester, ${view.clientName}`,
-    does: "One crew, real jobs, from the field-test day. What they say is what we fix.",
+    role: `Field tester${testerProposed ? " · to confirm" : ""}, ${view.clientName}`,
+    does: testerProposed
+      ? "We heard this is who will run it on real jobs — tell us if it is someone else. What they say is what we fix."
+      : "One crew, real jobs, from the field-test day. What they say is what we fix.",
     icon: "HardHat",
     side: "client",
   });
@@ -1054,8 +1077,9 @@ function Team({ view, page }: { view: WelcomeView; page: number }) {
           <PhoneMock view={view} className="is-team" />
           <span className="wp-team-photo-cap">
             <Icon name="Smartphone" className="h-3.5 w-3.5" />
-            {view.firstForm?.name ?? (view.timeline.training ? "Your jobs" : "Your first form")}, on
-            the crew&apos;s phone
+            {view.firstForm?.name ?? (view.timeline.training ? "Your jobs" : "Your first form")}
+            {view.firstForm && view.firstFormSource === "ai" ? " (to confirm)" : ""}, on the
+            crew&apos;s phone
           </span>
         </div>
       </div>
@@ -2324,14 +2348,14 @@ function FirstForm({ view, page }: { view: WelcomeView; page: number }) {
                 Reviewed together {at("kickoff") ? shortDay(at("kickoff")!.date) : "in Stage 1"},
                 adjusted by your hands{" "}
                 {at("working") ? shortDay(at("working")!.date) : "in Stage 2"}, run on real jobs by{" "}
-                {view.fieldTester ?? "your crew"}.
+                {testerName(view) ?? "your crew"}.
               </>
             ) : (
               <>
                 Built live {at("kickoff") ? shortDay(at("kickoff")!.date) : "on the kickoff"},
                 finished by your hands{" "}
                 {at("working") ? shortDay(at("working")!.date) : "in the working session"}, proven
-                by {view.fieldTester ?? "your field tester"} on real jobs.
+                by {testerName(view) ?? "your field tester"} on real jobs.
               </>
             )}
             {view.timeline.alongside.length
@@ -2670,6 +2694,15 @@ const OPS = /operations|\bops\b|manager|superintendent|foreman|supervisor|lead|c
 const OFFICE = /admin|office|dispatch|controller|accounting|billing|bookkeep|hr\b/i;
 const SYSTEMS = /\bit\b|systems|technology|erp|data|analyst|engineer|integration/i;
 const FIELD = /field|technician|tech\b|crew|inspector|assessor|driver/i;
+
+/**
+ * The field tester's name for the stage copy: only a name a person gave.
+ * One the reading proposed is marked on the team screen and left out of
+ * the sentences that would state it as fact.
+ */
+function testerName(view: Pick<WelcomeView, "fieldTester" | "fieldTesterSource">): string | null {
+  return view.fieldTester && view.fieldTesterSource !== "ai" ? view.fieldTester : null;
+}
 
 /**
  * One line on what a customer-side person does, from their title. Two people

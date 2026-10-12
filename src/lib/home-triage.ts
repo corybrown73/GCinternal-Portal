@@ -45,7 +45,15 @@ export type QueueRow = {
    */
   dependency: WaitingOn;
   /** Deep-link target tab on Customer 360. */
-  tab: "overview" | "journey" | "risks" | "requirements" | "solution" | "evidence" | "history";
+  tab:
+    | "overview"
+    | "journey"
+    | "implementation"
+    | "risks"
+    | "requirements"
+    | "solution"
+    | "evidence"
+    | "history";
   /** Lower sorts first within a section. */
   rank: number;
   /** The deal's own facts (plan calls, close and live dates), when the row has a deal. */

@@ -27,6 +27,8 @@ function baseView(over: Partial<WelcomeView> = {}): WelcomeView {
     timeline,
     lead: "Dana",
     fieldTester: null,
+    fieldTesterDue: null,
+    fieldTesterSource: null,
     currentProcess: null,
     currentProcessSource: null,
     team: {
@@ -38,6 +40,8 @@ function baseView(over: Partial<WelcomeView> = {}): WelcomeView {
       champion: null,
     },
     firstForm: { name: "Daily Job Report", objective: null, source: "typed" },
+    firstFormSource: "person",
+    formArtifacts: [],
     nextUseCases: [],
     photoUrl: null,
     clientLogoUrl: null,
@@ -77,19 +81,20 @@ describe("the Plan composition", () => {
   });
 });
 
-describe("the Kickoff composition — five fixed screens, always", () => {
-  it("is the five-screen sequence, in the fixed order, for a bare account", () => {
+describe("the Kickoff composition — six fixed screens, always", () => {
+  it("is the six-screen sequence, in the fixed order, for a bare account", () => {
     const view = baseView();
     expect(kickoffScreenList(view).map((s) => s.key)).toEqual([
       "kickoff-cover",
       "kickoff-workflow",
-      "kickoff-focus",
       "kickoff-journey",
+      "kickoff-communication",
+      "kickoff-form-v1",
       "kickoff-next",
     ]);
   });
 
-  it("is still five valid screens for a sparse account — nothing saved or known yet", () => {
+  it("is still six valid screens for a sparse account — nothing saved or known yet", () => {
     const view = baseView({
       currentProcess: null,
       workflowStory: null,
@@ -100,13 +105,14 @@ describe("the Kickoff composition — five fixed screens, always", () => {
     expect(kickoffScreenList(view).map((s) => s.key)).toEqual([
       "kickoff-cover",
       "kickoff-workflow",
-      "kickoff-focus",
       "kickoff-journey",
+      "kickoff-communication",
+      "kickoff-form-v1",
       "kickoff-next",
     ]);
   });
 
-  it("is still exactly five screens for a rich account — everything populated", () => {
+  it("is still exactly six screens for a rich account — everything populated", () => {
     const view = baseView({
       currentProcess: "Paper ticket from the truck, retyped on Fridays.",
       workflowStory: {
@@ -163,15 +169,22 @@ describe("the Kickoff composition — five fixed screens, always", () => {
         headline: "You are in Kickoff.",
         solutions: [],
         yours: [
-          { what: "Download the GoCanvas app and log in", by: "2026-09-25", kind: "homework" },
+          {
+            what: "Download the GoCanvas app and log in",
+            by: "2026-09-25",
+            kind: "homework",
+            ownerSide: "customer",
+            ownerName: null,
+          },
         ],
       },
     });
     expect(kickoffScreenList(view).map((s) => s.key)).toEqual([
       "kickoff-cover",
       "kickoff-workflow",
-      "kickoff-focus",
       "kickoff-journey",
+      "kickoff-communication",
+      "kickoff-form-v1",
       "kickoff-next",
     ]);
   });
@@ -183,6 +196,6 @@ describe("the Kickoff composition — five fixed screens, always", () => {
     const view = baseView({
       hiddenScreens: ["cover", "team", "overview", "plan", "together", "form", "business"],
     });
-    expect(kickoffScreenList(view).map((s) => s.key)).toHaveLength(5);
+    expect(kickoffScreenList(view).map((s) => s.key)).toHaveLength(6);
   });
 });

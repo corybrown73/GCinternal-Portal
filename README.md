@@ -35,7 +35,7 @@ Then optionally run `supabase/seed_demo.sql` for walkthrough data.
 Authentication → Providers → Email: **Confirm email ON**, min password length 12, leaked-password protection ON. URL Configuration: Site URL = your deployed URL; add `https://<app>/auth/callback` to redirect URLs.
 
 ### 3. Deploy (Vercel)
-Import the repo (framework: Other; build `npm run build`; the nitro `vercel` preset emits `.vercel/output`). Set env vars from `.env.example` — minimum: the four Supabase vars, `SUPABASE_SERVICE_ROLE_KEY`, `TAM_TOKEN_SECRET`, `CRON_SECRET`, `APP_URL`. Optional: `SALESFORCE_CLIENT_ID` + `SALESFORCE_CLIENT_SECRET` + `SALESFORCE_LOGIN_URL` (the Salesforce pull), `ANTHROPIC_API_KEY` (AI briefs), `RESEND_API_KEY` + `EMAIL_FROM` (real email; otherwise emails print to the function log — do not also set `EMAIL_MODE=log`, it overrides the key). `vercel.json` schedules the SLA cron (hourly) and sequence cron (every 30 min).
+Import the repo (framework: Other; build `npm run build`; the nitro `vercel` preset emits `.vercel/output`). Set env vars from `.env.example` — minimum: the four Supabase vars, `SUPABASE_SERVICE_ROLE_KEY`, `TAM_TOKEN_SECRET`, `CRON_SECRET`, `APP_URL`. Optional: `SALESFORCE_CLIENT_ID` + `SALESFORCE_CLIENT_SECRET` + `SALESFORCE_LOGIN_URL` (the Salesforce pull), `ANTHROPIC_API_KEY` (the AI reading; `ANTHROPIC_MODEL` optionally picks the model, default `claude-opus-5-5`), `RESEND_API_KEY` + `EMAIL_FROM` (real email; otherwise emails print to the function log — do not also set `EMAIL_MODE=log`, it overrides the key). `vercel.json` schedules the SLA cron (hourly) and sequence cron (every 30 min).
 
 ### 4. First run
 Sign up with your `@gocanvas.com` email → verify → you are super admin #1. Designate #2 in **Admin → Users**.
@@ -59,6 +59,17 @@ Sign up with your `@gocanvas.com` email → verify → you are super admin #1. D
 - **/access** — invite customer contacts to the portal (magic link, no passwords), see active portal users, revoke.
 - **/portal** — what customers see: stage tracker + progress %, next steps (their overdue items highlighted), and "ask a question" that files a routed ticket with a 24h response promise.
 - **/admin** — API keys (scoped, hashed, shown once), user roles.
+
+## AI reading
+
+Every deal is read once, in the background, by a job that walks `sources → sow → brief_core → brief_plan → verify → apply → finalize`, one step per tick of the minute cron (`/api/cron/ai-jobs`), so no step runs inside a web request and a cut-off function is just a retry. What the reading fills is marked as filled by the AI; a value a person typed is never overwritten.
+
+- **What runs it.** A SOW or contract upload on any path, call notes pasted or sent through the API or MCP, and a close — from Salesforce (push or pull), the API, or the board — each queue a reading. Nobody presses anything; the deal's Review step shows what was filled. **Read again** on the deal page forces one regardless.
+- **The flag.** `ai_auto_read` (Admin → Integrations → AI, "Read deals automatically"; default on) gates the automatic queue. Off, only "Read again" starts a reading.
+- **Effort.** `ai.effort` in `portal_app_config` (`low | medium | high | xhigh | max`, default `high`) says how hard the model thinks on every reading; the same tab has a select for it. Higher is slower and dearer; `xhigh` when a reading keeps missing things.
+- **Documents.** PDF and Word (`.docx`) are read; images are read as images; a legacy `.doc`, `.pptx` or `.xlsx` is refused with a one-line reason instead of a bare 400. Files over 20 MB are reported, not silently dropped.
+- **Where to watch it.** Admin → Integrations → AI: whether the key is set, the model and effort, the flag, the last 50 jobs with their step, duration, tokens and error (with a "Run again" per deal), and 30-day totals — jobs, calls, tokens in / out / cached, and the cost estimated at list price ($4 in, $20 out, $0.20 cache read, $5 cache write per million tokens). Every model call also leaves an `ai.call` row in the audit log.
+- **Env.** `ANTHROPIC_API_KEY` is required for any reading; `ANTHROPIC_MODEL` is optional and defaults to `claude-opus-5-5`.
 
 ## Open API (`/api/v1`, `Authorization: Bearer gcp_live_…`)
 

@@ -4,11 +4,37 @@ import { readIntake } from "../intake-answers";
 import type { DealFacts } from "../needs-action";
 import { closeDateFor, timelineFor } from "../onboarding-plan";
 import { businessDaysBetween, localIso } from "../onboarding-timeline";
-import { isOnboardingStage, isStage } from "../presale-stages";
-import { nextChecklistTask, stageFlow } from "../stage-flow";
+import {
+  isOnboardingStage,
+  isStage,
+  isUnbookedBeforeKickoff,
+  kickoffEntryDate,
+  plannedBeforeKickoff,
+} from "../presale-stages";
+import { isKickoffBooked, nextChecklistTask, stageFlow } from "../stage-flow";
 import { watchOutsFor } from "../watch-outs";
 
 const db = () => supabaseAdmin as any;
+
+/**
+ * The deal's facts with THIS implementation's pending transcript proposals
+ * on them. A deal may run several implementations; the proposals belong to
+ * one each, and Home's row (and its link) is per implementation, so the
+ * count is laid on here, not summed onto the deal in `dealFactsFor`.
+ */
+export async function withPendingProposals<T extends { id: string; deal_id: string | null }>(
+  implementations: ReadonlyArray<T>,
+  facts: Map<string, DealFacts>,
+): Promise<Map<string, DealFacts | null>> {
+  const { pendingProposalCounts } = await import("../transcript-proposals.server");
+  const pending = await pendingProposalCounts(implementations.map((i) => i.id));
+  const out = new Map<string, DealFacts | null>();
+  for (const i of implementations) {
+    const deal = i.deal_id ? (facts.get(i.deal_id) ?? null) : null;
+    out.set(i.id, deal ? { ...deal, pending_proposals: pending.get(i.id) ?? 0 } : null);
+  }
+  return out;
+}
 
 /**
  * The facts Home's triage reads about each deal, gathered once for a set of
@@ -45,7 +71,7 @@ export async function dealFactsFor(
         .order("created_at", { ascending: false }),
       db()
         .from("implementations")
-        .select("deal_id,owner_id,created_at")
+        .select("id,deal_id,owner_id,created_at")
         .in("deal_id", ids)
         .order("created_at", { ascending: false }),
       db()
@@ -69,7 +95,8 @@ export async function dealFactsFor(
   for (const b of (briefs ?? []) as Array<{ account_id: string; structured_json: unknown }>)
     if (!briefByDeal.has(b.account_id)) briefByDeal.set(b.account_id, b.structured_json ?? null);
   const ownerIdByDeal = new Map<string, string | null>();
-  for (const i of (impls ?? []) as Array<{ deal_id: string; owner_id: string | null }>)
+  const implRows = (impls ?? []) as Array<{ id: string; deal_id: string; owner_id: string | null }>;
+  for (const i of implRows)
     if (!ownerIdByDeal.has(i.deal_id)) ownerIdByDeal.set(i.deal_id, i.owner_id);
   const ownerIds = [...new Set([...ownerIdByDeal.values()].filter(Boolean))] as string[];
   const { data: members } = ownerIds.length
@@ -122,6 +149,8 @@ export async function dealFactsFor(
       .find((s) => s.key === "pre_kickoff")
       ?.tasks.find((t) => t.key === "book_core" || t.key === "kickoff");
     const entered = String(d.stage_entered_at ?? today).slice(0, 10);
+    const kickoffOn = kickoffEntryDate(d.stage, d.stage_entered_at, stageHistory);
+    const kickoffBooked = isKickoffBooked(intake);
     out.set(d.id, {
       id: d.id,
       name: d.name,
@@ -134,17 +163,32 @@ export async function dealFactsFor(
       next_step: nextChecklistTask(input),
       overdue_calls: isOnboardingStage(d.stage)
         ? timeline.milestones
-            .filter((m) => m.kind === "call" && !m.doneOn && m.date < today)
+            .filter(
+              (m) =>
+                m.kind === "call" &&
+                !m.doneOn &&
+                m.date < today &&
+                !plannedBeforeKickoff(m, kickoffOn),
+            )
             .map((m) => ({
               label: m.label,
               date: m.date,
               businessDaysLate: businessDaysBetween(m.date, today),
             }))
         : [],
+      // Before Kickoff, with the kickoff unbooked, only booked sessions are
+      // events; an unbooked one's date is the playbook's guess from the close.
       upcoming_calls:
         isOnboardingStage(d.stage) || d.stage === "onboarding_kickoff"
           ? timeline.milestones
-              .filter((m) => m.kind === "call" && !m.serviceId && !m.doneOn && m.date >= today)
+              .filter(
+                (m) =>
+                  m.kind === "call" &&
+                  !m.serviceId &&
+                  !m.doneOn &&
+                  m.date >= today &&
+                  !isUnbookedBeforeKickoff(d.stage, m, kickoffBooked),
+              )
               .map((m) => ({
                 key: m.key,
                 label: m.label,
@@ -155,6 +199,11 @@ export async function dealFactsFor(
           : [],
       close_date: timeline.closeDate,
       live_date: timeline.liveDate,
+      // Transcript proposals are an implementation's, not the deal's: the
+      // caller that knows which implementation it is rendering overlays the
+      // count (`withPendingProposals`), so a deal with two implementations
+      // does not show one's proposals on the other's row.
+      pending_proposals: 0,
       watch_outs: watchOutsFor({
         brief: briefByDeal.get(d.id) ?? null,
         notes: noteTexts,

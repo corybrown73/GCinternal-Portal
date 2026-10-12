@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { stageTargetsSchema } from "./stage-targets";
 
 /**
  * A date a source states, typed by the reader that read it — never parsed
@@ -111,8 +112,28 @@ export const INDUSTRIES = [
   "Manufacturing",
   "Logistics",
   "Property Management",
+  "Electrical",
+  "Pest Control",
+  "Water/Wastewater",
+  "Education/Government",
   "Other",
 ] as const;
+
+/** One of the listed industries, as opposed to one somebody typed. */
+export function isListedIndustry(value: string | null | undefined): boolean {
+  return (INDUSTRIES as readonly string[]).includes(value ?? "");
+}
+
+/**
+ * Typed text as it is saved: a listed industry in any case is that listed
+ * industry ("electrical" is Electrical, with its icon and its forms);
+ * anything else is kept as typed, trimmed. Empty is null.
+ */
+export function canonicalIndustry(typed: string): string | null {
+  const t = typed.trim();
+  if (!t) return null;
+  return INDUSTRIES.find((i) => i.toLowerCase() === t.toLowerCase()) ?? t;
+}
 
 export const COMPANY_SIZES = ["1–10", "11–50", "51–200", "201–1,000", "1,000+"] as const;
 
@@ -155,6 +176,25 @@ export const fieldFusionRequestSchema = z.object({
   requester_email: shortText,
 });
 export type FieldFusionRequest = z.infer<typeof fieldFusionRequestSchema>;
+
+/** An https link on gocanvas.com — the editable form, never a file or a mockup. */
+export function isGoCanvasFormUrl(raw: string): boolean {
+  try {
+    const url = new URL(raw);
+    return (
+      url.protocol === "https:" &&
+      (url.hostname === "gocanvas.com" || url.hostname.endsWith(".gocanvas.com"))
+    );
+  } catch {
+    return false;
+  }
+}
+
+export const formEditorUrlSchema = z
+  .string()
+  .trim()
+  .max(400)
+  .refine(isGoCanvasFormUrl, "Paste the editable GoCanvas form link (https, gocanvas.com).");
 
 export const intakeAnswersSchema = z.object({
   /**
@@ -202,6 +242,12 @@ export const intakeAnswersSchema = z.object({
         .default(null),
     })
     .default({}),
+  /**
+   * An existing account's customer, picked on the deal page before the
+   * close. The close joins the implementation to it, as "Add services"
+   * does, instead of making a second customer of the same name.
+   */
+  existing_customer_id: z.string().uuid().nullable().default(null),
   /**
    * No form to build: the crew just needs training. Phase 1 becomes the
    * training plan and the forms question is skipped. A Field Fusion account
@@ -273,6 +319,11 @@ export const intakeAnswersSchema = z.object({
   /** When a person copied the customer's link to send it. Set by that click only. */
   welcome_shared_at: z.string().nullable().default(null),
   /**
+   * The editable GoCanvas form the TIS works in during the kickoff. Internal
+   * only: the presenter workspace reads it, and no slide or export does.
+   */
+  form_editor_url: formEditorUrlSchema.nullable().default(null),
+  /**
    * The pre-kickoff tasks that live nowhere else, by key ("reply_ae",
    * "cadence") → ISO timestamp they were ticked. See stage-flow.ts.
    */
@@ -285,17 +336,32 @@ export const intakeAnswersSchema = z.object({
    */
   /**
    * The automatic reading's own state, so every screen can say "reading…"
-   * and a reload does not lose it. `again` asks for one more run when new
-   * notes or a new SOW arrived while one was in flight.
+   * and a reload does not lose it. The reading is a background job
+   * (server/ai/jobs.ts): `job_id` names it, `step` is where it stands,
+   * `heartbeat_at` is the last time a step touched the record, and
+   * `branches` says how each part (the SOW, the brief) went. `again` is
+   * the old in-request flag, kept so stored rows parse.
    */
   ai_reading: z
     .object({
-      status: z.enum(["running", "done", "failed"]),
+      status: z.enum(["queued", "running", "done", "failed"]),
       started_at: z.string(),
       finished_at: z.string().nullable().default(null),
       filled: z.array(z.string().max(120)).max(30).default([]),
       error: z.string().max(500).nullable().default(null),
       again: z.boolean().default(false),
+      job_id: z.string().max(40).nullable().default(null),
+      step: z.string().max(40).nullable().default(null),
+      heartbeat_at: z.string().max(40).nullable().default(null),
+      branches: z
+        .record(
+          z.string().max(40),
+          z.object({
+            status: z.enum(["ok", "failed", "skipped"]),
+            detail: z.string().max(500).nullable().default(null),
+          }),
+        )
+        .default({}),
     })
     .nullable()
     .default(null),
@@ -377,11 +443,19 @@ export const intakeAnswersSchema = z.object({
         .default(null),
       /** milestone key → YYYY-MM-DD, for dates moved by hand. */
       overrides: z.record(z.string(), z.string()).default({}),
+      /** Agreed stage completion targets, separate from meeting dates. */
+      stage_targets: stageTargetsSchema.default({}),
       holidays: z.array(z.string().regex(/^\d{4}-\d{2}-\d{2}$/)).default([]),
       integration_tier: z.number().int().min(0).max(5).default(0),
       integration_target: z.string().trim().max(120).nullable().default(null),
       /** Who at the customer runs the form on real jobs. */
       field_tester: z.string().trim().max(120).nullable().default(null),
+      /** The date the named field tester is expected to finish real-world testing. */
+      field_tester_due: z
+        .string()
+        .regex(/^\d{4}-\d{2}-\d{2}$/)
+        .nullable()
+        .default(null),
       /** The phase-2 gate: the day a person recorded the form as dialed in. */
       form_proven_on: z
         .string()
@@ -676,6 +750,14 @@ export const AI_OWNED_FIELDS = [
 export type AiOwnedField = (typeof AI_OWNED_FIELDS)[number];
 
 /**
+ * Blocks a person may take over from the reading besides the answers above:
+ * the Implementation Focus list, which the reading writes whole while it is
+ * still the proposal's own and must leave alone once a person edited it.
+ * Owned through `person_set` and `ai_filled` only; it has no quoted source.
+ */
+const PERSON_CLAIMABLE = [...AI_OWNED_FIELDS, "implementation_focus"] as const;
+
+/**
  * A person answered some of these: they are theirs from now on. The AI
  * stops refreshing them and their quoted source goes, because the answer
  * is no longer the model's.
@@ -684,7 +766,7 @@ export function claimByPerson(
   current: Pick<IntakeAnswers, "ai_filled" | "person_set" | "ai_sources">,
   patchKeys: readonly string[],
 ): Pick<IntakeAnswers, "ai_filled" | "person_set" | "ai_sources"> {
-  const touched = AI_OWNED_FIELDS.filter((f) => patchKeys.includes(f));
+  const touched = PERSON_CLAIMABLE.filter((f) => patchKeys.includes(f));
   // Only these three keys, ever: the caller spreads the result over its
   // patch, and a whole intake returned here would put every old answer back
   // on top of the new one.

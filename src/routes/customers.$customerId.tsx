@@ -2312,7 +2312,12 @@ function JourneyTab({ record, customerId }: { record: Customer360; customerId: s
                 <span className="font-medium">{stageLabel(h.stage)}</span>
                 <span className="text-[11px] text-muted-foreground">
                   <When value={h.entered_at} />
-                  {h.exited_at ? ` → $<When value={h.exited_at} />` : ""}
+                  {h.exited_at ? (
+                    <>
+                      {" → "}
+                      <When value={h.exited_at} />
+                    </>
+                  ) : null}
                 </span>
               </li>
             ))}

@@ -114,6 +114,14 @@ export const Route = createFileRoute("/api/v1/closed-won")({
                 .maybeSingle();
               return (data?.id as string | undefined) ?? null;
             },
+            storeNotes: async (dealId, notes) => {
+              const { storeOpportunityNotes } = await import("@/lib/server/opportunity-notes");
+              await storeOpportunityNotes(dealId, notes);
+            },
+            startReading: async (dealId) => {
+              const { autoReadDeal } = await import("@/lib/server/ai/jobs");
+              await autoReadDeal(dealId, "closed_won_api");
+            },
           });
 
           const origin = new URL(request.url).origin;

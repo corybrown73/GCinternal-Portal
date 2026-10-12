@@ -84,6 +84,35 @@ export async function buildDeckPrompt(dealId: string): Promise<string> {
     `- Value: ${ctx.sow.value != null ? `$${ctx.sow.value.toLocaleString()}` : "not recorded"}`,
     `- Document: ${ctx.sow.documentName ?? (ctx.sow.uploaded ? "uploaded" : "none")}`,
   );
+  const reading = ctx.sow.reading ?? null;
+  if (reading) {
+    // What the signed document says, as the reading kept it: the words
+    // scope, exclusions and acceptance are read from, not the PDF again.
+    const list = (title: string, items: Array<{ text: string; quote: string | null }>) => {
+      if (!items.length) return;
+      lines.push("", `**${title}**`);
+      for (const i of items) lines.push(`- ${i.text}${i.quote ? ` — "${i.quote}"` : ""}`);
+    };
+    lines.push("", "**What the signed SOW says (read by the AI, quotes verbatim)**");
+    if (reading.summary) lines.push(`- In one line: ${reading.summary}`);
+    if (reading.term) {
+      lines.push(
+        `- Term: ${[reading.term.start, reading.term.end].filter(Boolean).join(" to ") || "not dated"}${reading.term.months ? ` (${reading.term.months} months)` : ""}`,
+      );
+    }
+    list("Deliverables", reading.deliverables);
+    list("Out of scope", reading.out_of_scope);
+    list("What the customer must provide", reading.customer_responsibilities);
+    list("How completion is judged", reading.acceptance_criteria);
+    if (reading.contacts.length) {
+      lines.push("", "**People the SOW names**");
+      for (const c of reading.contacts) {
+        lines.push(
+          `- ${[c.name, c.role, c.email].filter(Boolean).join(" · ") || "unnamed"} (${c.side})`,
+        );
+      }
+    }
+  }
 
   h("What the intake found");
   if (intake.forms_built === null) {

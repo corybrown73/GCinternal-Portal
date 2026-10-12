@@ -29,4 +29,5 @@ export const DEFAULT_FLAGS_FOR_TEST = {
   presale_stage_config: false,
   conversations: false,
   lifecycle_stage_config: false,
+  ai_auto_read: true,
 } as const;

@@ -43,6 +43,11 @@ export async function getConfigNumber(key: string, fallback: number): Promise<nu
   return Number.isFinite(n) && n > 0 ? n : fallback;
 }
 
+/** The raw value of one key, cached like the numbers; null when unset. The caller validates. */
+export async function getConfigValue(key: string): Promise<unknown> {
+  return readConfig(key);
+}
+
 /** Test seam — drops the per-instance cache. */
 export function resetConfigCache(): void {
   cache.clear();
@@ -53,4 +58,6 @@ export const CONFIG_DEFAULTS = {
   external_plan_link_ttl_days: 60,
   external_plan_reassign_daily_limit: 10,
   snapshot_share_ttl_days: 30,
+  /** How hard the model thinks on every AI reading; `ai/config.ts` validates the enum. */
+  "ai.effort": "high",
 } as const;

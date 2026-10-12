@@ -4,6 +4,15 @@ import viteReact from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import tsconfigPaths from "vite-tsconfig-paths";
 import { nitro } from "nitro/vite";
+import { readFileSync } from "node:fs";
+
+// vercel-crons.json is the one list of schedules. This app deploys through
+// the Build Output API, so the list is handed to the Vercel preset, which
+// writes it into .vercel/output/config.json. Declaring the same crons in
+// vercel.json as well makes Vercel refuse the deployment.
+const crons = JSON.parse(
+  readFileSync(new URL("./vercel-crons.json", import.meta.url), "utf8"),
+) as Array<{ path: string; schedule: string }>;
 
 export default defineConfig({
   plugins: [
@@ -14,7 +23,10 @@ export default defineConfig({
     // Deploy target: Vercel (Build Output API). `npm run build` emits .vercel/output.
     // Five minutes: one "Fill in the rest" reads the calls and the SOW,
     // checks the reading, and picks the help articles — three model calls.
-    nitro({ preset: "vercel", vercel: { functions: { maxDuration: 300 } } }),
+    nitro({
+      preset: "vercel",
+      vercel: { functions: { maxDuration: 300 }, config: { version: 3, crons: crons ?? [] } },
+    }),
   ],
   resolve: {
     // One copy of React/TanStack across app + linked deps.

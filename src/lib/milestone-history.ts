@@ -3,7 +3,7 @@ import { allMilestones, type Timeline } from "./onboarding-timeline";
 /**
  * Auditable history of account-specific milestone date changes
  * (portal_milestone_date_changes / portal_milestone_date_baselines — see
- * migration 0078). Not to be confused with MilestoneOverride, the
+ * migration 0082). Not to be confused with MilestoneOverride, the
  * plan-template admin knob in onboarding-timeline.ts, or with
  * intake.timeline.overrides itself, which this never replaces: the override
  * stays the one place every scheduling calculation reads "what date is it

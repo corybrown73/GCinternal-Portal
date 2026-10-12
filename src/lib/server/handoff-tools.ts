@@ -446,6 +446,10 @@ export async function addCallNotes(args: {
     payload: { title, kind, characters: markdown.length, via: "mcp" },
   });
 
+  // Notes filed from a conversation are read like notes pasted on the deal.
+  const { autoReadDeal } = await import("./ai/jobs");
+  await autoReadDeal(String(deal["id"]), "call_notes_mcp");
+
   return {
     filed: true,
     dealId: deal["id"],

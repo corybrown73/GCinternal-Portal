@@ -467,7 +467,16 @@ export async function runPoll(deps: PullDeps): Promise<PullSummary> {
       if (!parsed.success) {
         throw new Error(parsed.error.issues.map((i) => i.message).join("; "));
       }
-      const outcome: ClosedWonOutcome = await ingestClosedWon(parsed.data, deps.ingestDeps);
+      // The ingest files the notes without knowing the opportunity; the
+      // poll does, so the row is kept per opportunity.
+      const storeNotes = deps.ingestDeps.storeNotes;
+      const ingestDeps: ClosedWonDeps = storeNotes
+        ? {
+            ...deps.ingestDeps,
+            storeNotes: (dealId, notes) => storeNotes(dealId, notes, { opportunityId: id }),
+          }
+        : deps.ingestDeps;
+      const outcome: ClosedWonOutcome = await ingestClosedWon(parsed.data, ingestDeps);
       const status = outcome.kicked_off ? "succeeded" : "replayed";
       await deps.log({
         external_id: id,

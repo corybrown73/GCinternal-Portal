@@ -29,6 +29,7 @@ import { Route as SequencesRouteImport } from "./routes/sequences";
 import { Route as SettingsRouteImport } from "./routes/settings";
 import { Route as SignalsRouteImport } from "./routes/signals";
 import { Route as SignupRouteImport } from "./routes/signup";
+import { Route as StageBackfillPreviewRouteImport } from "./routes/stage-backfill-preview";
 import { Route as TechnicalSolutionsRouteImport } from "./routes/technical-solutions";
 import { Route as TemplatesRouteImport } from "./routes/templates";
 import { Route as TicketsRouteImport } from "./routes/tickets";
@@ -68,9 +69,9 @@ import { Route as TicketsRoutingRouteImport } from "./routes/tickets.routing";
 import { Route as ViewTokenRouteImport } from "./routes/view.$token";
 import { Route as WelcomeTokenRouteImport } from "./routes/welcome.$token";
 import { Route as ApiCompletionRecordTokenRouteImport } from "./routes/api/completion-record.$token";
+import { Route as ApiCronAiJobsRouteImport } from "./routes/api/cron/ai-jobs";
 import { Route as ApiCronDailyReportRouteImport } from "./routes/api/cron/daily-report";
 import { Route as ApiCronDispatchRouteImport } from "./routes/api/cron/dispatch";
-import { Route as ApiCronJourneysRouteImport } from "./routes/api.cron.journeys";
 import { Route as ApiCronPlanSnapshotsRouteImport } from "./routes/api/cron/plan-snapshots";
 import { Route as ApiCronSalesforcePullRouteImport } from "./routes/api/cron/salesforce-pull";
 import { Route as ApiCronSequencesRouteImport } from "./routes/api.cron.sequences";
@@ -193,6 +194,11 @@ const SignalsRoute = SignalsRouteImport.update({
 const SignupRoute = SignupRouteImport.update({
   id: "/signup",
   path: "/signup",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const StageBackfillPreviewRoute = StageBackfillPreviewRouteImport.update({
+  id: "/stage-backfill-preview",
+  path: "/stage-backfill-preview",
   getParentRoute: () => rootRouteImport,
 } as any);
 const TechnicalSolutionsRoute = TechnicalSolutionsRouteImport.update({
@@ -390,6 +396,11 @@ const ApiCompletionRecordTokenRoute = ApiCompletionRecordTokenRouteImport.update
   path: "/api/completion-record/$token",
   getParentRoute: () => rootRouteImport,
 } as any);
+const ApiCronAiJobsRoute = ApiCronAiJobsRouteImport.update({
+  id: "/api/cron/ai-jobs",
+  path: "/api/cron/ai-jobs",
+  getParentRoute: () => rootRouteImport,
+} as any);
 const ApiCronDailyReportRoute = ApiCronDailyReportRouteImport.update({
   id: "/api/cron/daily-report",
   path: "/api/cron/daily-report",
@@ -398,11 +409,6 @@ const ApiCronDailyReportRoute = ApiCronDailyReportRouteImport.update({
 const ApiCronDispatchRoute = ApiCronDispatchRouteImport.update({
   id: "/api/cron/dispatch",
   path: "/api/cron/dispatch",
-  getParentRoute: () => rootRouteImport,
-} as any);
-const ApiCronJourneysRoute = ApiCronJourneysRouteImport.update({
-  id: "/api/cron/journeys",
-  path: "/api/cron/journeys",
   getParentRoute: () => rootRouteImport,
 } as any);
 const ApiCronPlanSnapshotsRoute = ApiCronPlanSnapshotsRouteImport.update({
@@ -542,6 +548,7 @@ export interface FileRoutesByFullPath {
   "/settings": typeof SettingsRoute;
   "/signals": typeof SignalsRoute;
   "/signup": typeof SignupRoute;
+  "/stage-backfill-preview": typeof StageBackfillPreviewRoute;
   "/technical-solutions": typeof TechnicalSolutionsRouteWithChildren;
   "/templates": typeof TemplatesRoute;
   "/tickets": typeof TicketsRouteWithChildren;
@@ -581,9 +588,9 @@ export interface FileRoutesByFullPath {
   "/technical-solutions/": typeof TechnicalSolutionsIndexRoute;
   "/tickets/": typeof TicketsIndexRoute;
   "/api/completion-record/$token": typeof ApiCompletionRecordTokenRoute;
+  "/api/cron/ai-jobs": typeof ApiCronAiJobsRoute;
   "/api/cron/daily-report": typeof ApiCronDailyReportRoute;
   "/api/cron/dispatch": typeof ApiCronDispatchRoute;
-  "/api/cron/journeys": typeof ApiCronJourneysRoute;
   "/api/cron/plan-snapshots": typeof ApiCronPlanSnapshotsRoute;
   "/api/cron/salesforce-pull": typeof ApiCronSalesforcePullRoute;
   "/api/cron/sequences": typeof ApiCronSequencesRoute;
@@ -625,6 +632,7 @@ export interface FileRoutesByTo {
   "/settings": typeof SettingsRoute;
   "/signals": typeof SignalsRoute;
   "/signup": typeof SignupRoute;
+  "/stage-backfill-preview": typeof StageBackfillPreviewRoute;
   "/templates": typeof TemplatesRoute;
   "/admin/analytics": typeof AdminAnalyticsRoute;
   "/admin/api-keys": typeof AdminApiKeysRoute;
@@ -662,9 +670,9 @@ export interface FileRoutesByTo {
   "/technical-solutions": typeof TechnicalSolutionsIndexRoute;
   "/tickets": typeof TicketsIndexRoute;
   "/api/completion-record/$token": typeof ApiCompletionRecordTokenRoute;
+  "/api/cron/ai-jobs": typeof ApiCronAiJobsRoute;
   "/api/cron/daily-report": typeof ApiCronDailyReportRoute;
   "/api/cron/dispatch": typeof ApiCronDispatchRoute;
-  "/api/cron/journeys": typeof ApiCronJourneysRoute;
   "/api/cron/plan-snapshots": typeof ApiCronPlanSnapshotsRoute;
   "/api/cron/salesforce-pull": typeof ApiCronSalesforcePullRoute;
   "/api/cron/sequences": typeof ApiCronSequencesRoute;
@@ -711,6 +719,7 @@ export interface FileRoutesById {
   "/settings": typeof SettingsRoute;
   "/signals": typeof SignalsRoute;
   "/signup": typeof SignupRoute;
+  "/stage-backfill-preview": typeof StageBackfillPreviewRoute;
   "/technical-solutions": typeof TechnicalSolutionsRouteWithChildren;
   "/templates": typeof TemplatesRoute;
   "/tickets": typeof TicketsRouteWithChildren;
@@ -750,9 +759,9 @@ export interface FileRoutesById {
   "/technical-solutions/": typeof TechnicalSolutionsIndexRoute;
   "/tickets/": typeof TicketsIndexRoute;
   "/api/completion-record/$token": typeof ApiCompletionRecordTokenRoute;
+  "/api/cron/ai-jobs": typeof ApiCronAiJobsRoute;
   "/api/cron/daily-report": typeof ApiCronDailyReportRoute;
   "/api/cron/dispatch": typeof ApiCronDispatchRoute;
-  "/api/cron/journeys": typeof ApiCronJourneysRoute;
   "/api/cron/plan-snapshots": typeof ApiCronPlanSnapshotsRoute;
   "/api/cron/salesforce-pull": typeof ApiCronSalesforcePullRoute;
   "/api/cron/sequences": typeof ApiCronSequencesRoute;
@@ -800,6 +809,7 @@ export interface FileRouteTypes {
     | "/settings"
     | "/signals"
     | "/signup"
+    | "/stage-backfill-preview"
     | "/technical-solutions"
     | "/templates"
     | "/tickets"
@@ -839,9 +849,9 @@ export interface FileRouteTypes {
     | "/technical-solutions/"
     | "/tickets/"
     | "/api/completion-record/$token"
+    | "/api/cron/ai-jobs"
     | "/api/cron/daily-report"
     | "/api/cron/dispatch"
-    | "/api/cron/journeys"
     | "/api/cron/plan-snapshots"
     | "/api/cron/salesforce-pull"
     | "/api/cron/sequences"
@@ -883,6 +893,7 @@ export interface FileRouteTypes {
     | "/settings"
     | "/signals"
     | "/signup"
+    | "/stage-backfill-preview"
     | "/templates"
     | "/admin/analytics"
     | "/admin/api-keys"
@@ -920,9 +931,9 @@ export interface FileRouteTypes {
     | "/technical-solutions"
     | "/tickets"
     | "/api/completion-record/$token"
+    | "/api/cron/ai-jobs"
     | "/api/cron/daily-report"
     | "/api/cron/dispatch"
-    | "/api/cron/journeys"
     | "/api/cron/plan-snapshots"
     | "/api/cron/salesforce-pull"
     | "/api/cron/sequences"
@@ -968,6 +979,7 @@ export interface FileRouteTypes {
     | "/settings"
     | "/signals"
     | "/signup"
+    | "/stage-backfill-preview"
     | "/technical-solutions"
     | "/templates"
     | "/tickets"
@@ -1007,9 +1019,9 @@ export interface FileRouteTypes {
     | "/technical-solutions/"
     | "/tickets/"
     | "/api/completion-record/$token"
+    | "/api/cron/ai-jobs"
     | "/api/cron/daily-report"
     | "/api/cron/dispatch"
-    | "/api/cron/journeys"
     | "/api/cron/plan-snapshots"
     | "/api/cron/salesforce-pull"
     | "/api/cron/sequences"
@@ -1056,6 +1068,7 @@ export interface RootRouteChildren {
   SettingsRoute: typeof SettingsRoute;
   SignalsRoute: typeof SignalsRoute;
   SignupRoute: typeof SignupRoute;
+  StageBackfillPreviewRoute: typeof StageBackfillPreviewRoute;
   TechnicalSolutionsRoute: typeof TechnicalSolutionsRouteWithChildren;
   TemplatesRoute: typeof TemplatesRoute;
   TicketsRoute: typeof TicketsRouteWithChildren;
@@ -1070,9 +1083,9 @@ export interface RootRouteChildren {
   ViewTokenRoute: typeof ViewTokenRoute;
   WelcomeTokenRoute: typeof WelcomeTokenRoute;
   ApiCompletionRecordTokenRoute: typeof ApiCompletionRecordTokenRoute;
+  ApiCronAiJobsRoute: typeof ApiCronAiJobsRoute;
   ApiCronDailyReportRoute: typeof ApiCronDailyReportRoute;
   ApiCronDispatchRoute: typeof ApiCronDispatchRoute;
-  ApiCronJourneysRoute: typeof ApiCronJourneysRoute;
   ApiCronPlanSnapshotsRoute: typeof ApiCronPlanSnapshotsRoute;
   ApiCronSalesforcePullRoute: typeof ApiCronSalesforcePullRoute;
   ApiCronSequencesRoute: typeof ApiCronSequencesRoute;
@@ -1235,6 +1248,13 @@ declare module "@tanstack/react-router" {
       path: "/signup";
       fullPath: "/signup";
       preLoaderRoute: typeof SignupRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/stage-backfill-preview": {
+      id: "/stage-backfill-preview";
+      path: "/stage-backfill-preview";
+      fullPath: "/stage-backfill-preview";
+      preLoaderRoute: typeof StageBackfillPreviewRouteImport;
       parentRoute: typeof rootRouteImport;
     };
     "/technical-solutions": {
@@ -1510,6 +1530,13 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof ApiCompletionRecordTokenRouteImport;
       parentRoute: typeof rootRouteImport;
     };
+    "/api/cron/ai-jobs": {
+      id: "/api/cron/ai-jobs";
+      path: "/api/cron/ai-jobs";
+      fullPath: "/api/cron/ai-jobs";
+      preLoaderRoute: typeof ApiCronAiJobsRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
     "/api/cron/daily-report": {
       id: "/api/cron/daily-report";
       path: "/api/cron/daily-report";
@@ -1522,13 +1549,6 @@ declare module "@tanstack/react-router" {
       path: "/api/cron/dispatch";
       fullPath: "/api/cron/dispatch";
       preLoaderRoute: typeof ApiCronDispatchRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
-    "/api/cron/journeys": {
-      id: "/api/cron/journeys";
-      path: "/api/cron/journeys";
-      fullPath: "/api/cron/journeys";
-      preLoaderRoute: typeof ApiCronJourneysRouteImport;
       parentRoute: typeof rootRouteImport;
     };
     "/api/cron/plan-snapshots": {
@@ -1850,6 +1870,7 @@ const rootRouteChildren: RootRouteChildren = {
   SettingsRoute: SettingsRoute,
   SignalsRoute: SignalsRoute,
   SignupRoute: SignupRoute,
+  StageBackfillPreviewRoute: StageBackfillPreviewRoute,
   TechnicalSolutionsRoute: TechnicalSolutionsRouteWithChildren,
   TemplatesRoute: TemplatesRoute,
   TicketsRoute: TicketsRouteWithChildren,
@@ -1864,9 +1885,9 @@ const rootRouteChildren: RootRouteChildren = {
   ViewTokenRoute: ViewTokenRoute,
   WelcomeTokenRoute: WelcomeTokenRoute,
   ApiCompletionRecordTokenRoute: ApiCompletionRecordTokenRoute,
+  ApiCronAiJobsRoute: ApiCronAiJobsRoute,
   ApiCronDailyReportRoute: ApiCronDailyReportRoute,
   ApiCronDispatchRoute: ApiCronDispatchRoute,
-  ApiCronJourneysRoute: ApiCronJourneysRoute,
   ApiCronPlanSnapshotsRoute: ApiCronPlanSnapshotsRoute,
   ApiCronSalesforcePullRoute: ApiCronSalesforcePullRoute,
   ApiCronSequencesRoute: ApiCronSequencesRoute,

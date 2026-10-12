@@ -21,7 +21,9 @@ export function isManagerRole(role: string | null | undefined): boolean {
  * - sales: an AE or AM selling. Home is "My deals": the handoff, the TIS,
  *   the first meeting, and what is on them next.
  * - tis: an implementation lead. Home is Today: what needs me, coming up.
- * - manager: everything, defaulting to the whole book.
+ * - manager: the same Today. It still defaults to their own book, like
+ *   everyone else — "All work" is one click away in the scope switch, not
+ *   the landing view.
  *
  * `am` is the legacy login whose surface has always been Sales (see
  * ROLE_LABELS); an Account Manager's own view keys on the customer's

@@ -281,3 +281,63 @@ describe("assignment on kickoff", () => {
     expect(out.note).toMatch(/pool/i);
   });
 });
+
+describe("the notes and the reading", () => {
+  const withNotes = closedWonSchema.parse({
+    company: "Maverick Well Pluggers",
+    notes: "Closed won! 3 crews, QuickBooks next year",
+  });
+
+  it("files the opportunity notes on the deal and queues the reading after the assignment", async () => {
+    const order: string[] = [];
+    const storeNotes = vi.fn(async () => {
+      order.push("notes");
+    });
+    const assign = vi.fn(async () => {
+      order.push("assign");
+      return { assigneeName: "Priya Nair" };
+    });
+    const startReading = vi.fn(async () => {
+      order.push("read");
+    });
+    const { d } = deps({ storeNotes, assign, startReading });
+    const out = await ingestClosedWon(withNotes, d);
+    expect(storeNotes).toHaveBeenCalledWith("deal-1", "Closed won! 3 crews, QuickBooks next year");
+    expect(startReading).toHaveBeenCalledWith("deal-1", "closed_won");
+    expect(startReading).toHaveBeenCalledTimes(1);
+    // The TIS is assigned before the reading is queued, so its message reaches them.
+    expect(order).toEqual(["notes", "assign", "read"]);
+    expect(out.kicked_off).toBe(true);
+  });
+
+  it("does not file notes the row did not carry", async () => {
+    const storeNotes = vi.fn(async () => {});
+    const { d } = deps({ storeNotes });
+    await ingestClosedWon(row, d);
+    expect(storeNotes).not.toHaveBeenCalled();
+  });
+
+  it("queues the reading on a replay too — the job decides whether anything is new", async () => {
+    const startReading = vi.fn(async () => {});
+    const { d } = deps({
+      startReading,
+      upsertAccount: vi.fn(async () => ({
+        account: { id: "deal-1", customer_id: "cust-1", stage: "onboarding_kickoff" },
+        created: false,
+      })),
+    });
+    const out = await ingestClosedWon(withNotes, d);
+    expect(out.kicked_off).toBe(false);
+    expect(startReading).toHaveBeenCalledWith("deal-1", "closed_won");
+  });
+
+  it("never fails the ingest when the reading cannot be queued", async () => {
+    const startReading = vi.fn(async () => {
+      throw new Error("queue is down");
+    });
+    const { d } = deps({ startReading });
+    const out = await ingestClosedWon(row, d);
+    expect(out.kicked_off).toBe(true);
+    expect(out.deal_id).toBe("deal-1");
+  });
+});

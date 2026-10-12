@@ -11,7 +11,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 const createAdminClient = () => supabaseAdmin as unknown as SupabaseClient;
 import { audit } from "../audit";
 import { buildTemplateBrief } from "./fallback";
-import type { Account, Brief, GongReport, OnboardingNote } from "../../presale-types";
+import type { Account, Brief, GongReport } from "../../presale-types";
 import type { BriefJson } from "../schemas";
 import { appUrl } from "@/lib/app-url";
 import { stageDefinition } from "@/lib/lifecycle";
@@ -179,18 +179,37 @@ async function loadHandoffContext(
   };
 }
 
-/** The signed SOW's bytes, when one is on file and small enough to read. Never throws. */
-async function sowBytes(admin: SupabaseClient, account: Account): Promise<Uint8Array | null> {
+/**
+ * The signed SOW, when one is on file, sniffed and turned into the block the
+ * model reads: a PDF as a PDF, a Word file as its text. Never throws; a file
+ * that cannot be read, or fetched, comes back with its `problem` so the
+ * brief can say so instead of silently reading the calls alone.
+ */
+export async function sowDocument(
+  admin: Pick<SupabaseClient, "storage">,
+  account: Account,
+): Promise<import("../ai/documents").PreparedDocument | null> {
   const path = (account as any).sow_document_path as string | null | undefined;
   if (!path) return null;
+  const name = ((account as any).sow_document_name as string | null) ?? path.split("/").pop()!;
+  const { prepareDocument, unreadableDocument } = await import("../ai/documents");
   try {
     const { data, error } = await admin.storage.from("attachments").download(path);
-    if (error || !data) return null;
-    const bytes = new Uint8Array(await data.arrayBuffer());
-    return bytes.byteLength > 0 && bytes.byteLength <= 8_000_000 ? bytes : null;
+    if (error || !data) {
+      return unreadableDocument(
+        name,
+        `${name} could not be downloaded from storage${error?.message ? ` (${error.message})` : ""}. Upload it again.`,
+      );
+    }
+    return await prepareDocument(new Uint8Array(await data.arrayBuffer()), name, null, {
+      title: "Signed Statement of Work",
+    });
   } catch (e) {
     console.error("[brief] could not read the SOW; the brief reads the calls alone", e);
-    return null;
+    return unreadableDocument(
+      name,
+      `${name} could not be opened (${e instanceof Error ? e.message : String(e)}).`,
+    );
   }
 }
 
@@ -262,9 +281,85 @@ async function customerLogoDataUri(
   }
 }
 
-// Synchronous within the request (Vercel route sets maxDuration=300).
-// The LLM call is the long pole; the deck build takes under a second.
-export async function generateBrief(accountId: string, createdBy: string): Promise<Brief> {
+/**
+ * The kickoff deck for a finished brief, drawn and filed: the pptx in
+ * storage, its path on the row. The deck IS the Client Kickoff Deck
+ * Template: what fills which of its 124 named fields is decided by
+ * buildKickoffData (pure, tested), and ./pptx draws the seventeen slides.
+ * Nothing about the layout is decided here. Drawn after the brief has been
+ * applied to the deal, so the intake it reads — the first form, the process,
+ * the contacts — is the merged one, a person's answers included. Returns the
+ * storage path.
+ */
+export async function buildAndStoreDeck(
+  accountId: string,
+  briefId: string,
+  json: BriefJson,
+): Promise<string> {
+  const admin = createAdminClient();
+  const { data: account } = await admin
+    .from("portal_accounts")
+    .select("*")
+    .eq("id", accountId)
+    .maybeSingle<Account>();
+  if (!account) throw new Error("Account not found");
+
+  // The two owners are team_members ids on the deal. A deck that prints a uuid
+  // where a name belongs is worse than one that prints nothing.
+  const ownerNames = await resolveOwnerNames(admin, account);
+  // Who takes over, and the plan they run. Null when the deal has not been
+  // handed off yet — the deck says so on the slide.
+  const handoff = await loadHandoffContext(admin, account, ownerNames);
+
+  const { buildKickoffData, kickoffFactsFromIntake } = await import("@/lib/kickoff-fields");
+  const { readIntake } = await import("@/lib/intake-answers");
+  const deckData = buildKickoffData({
+    clientName: account.name,
+    preparedAt: new Date().toISOString(),
+    brief: json,
+    intake: kickoffFactsFromIntake(readIntake((account as any).intake)),
+    team: handoff.team,
+    // The people the brief named at the customer. Roles come through as the
+    // brief recorded them; inventing a title for somebody is worse than a
+    // blank the AE fills in.
+    clientPeople: json.stakeholders.map((p) => ({ name: p.name, role: p.role })),
+    stages: handoff.stages,
+    customerTasks: handoff.customerTasks,
+    risks: handoff.risks,
+    successCriteria: handoff.successCriteria,
+    requirements: handoff.requirements,
+    solutions: handoff.solutions,
+    targetLaunchDate: handoff.targetLaunchDate,
+    // The deal's champion, only when their recorded role says they are the
+    // technical contact. Putting the ops director on the IT slide because
+    // they are the only contact we have is how a wrong name gets read out.
+    itContact: itContactFor(account),
+  });
+
+  const { buildKickoffDeckFile } = await import("./pptx");
+  const deck = await buildKickoffDeckFile(deckData, await customerLogoDataUri(admin, account));
+  const path = `${accountId}/${briefId}.pptx`;
+  const { error: uploadError } = await admin.storage.from("portal-briefs").upload(path, deck, {
+    contentType: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    upsert: true,
+  });
+  if (uploadError) throw new Error(`Storage upload failed: ${uploadError.message}`);
+  const { error } = await admin
+    .from("portal_briefs")
+    .update({ pptx_storage_path: path })
+    .eq("id", briefId);
+  if (error) throw new Error(error.message);
+  return path;
+}
+
+/**
+ * A person's brief, in one go: the three passes of the pipeline (core,
+ * plan, check) over one cached prefix. The background job runs the same
+ * passes as separate steps; `createdBy` is null there, and the audit row
+ * says the system did it. The deck is not drawn here: applyBriefToDeal
+ * draws it once the brief is on the deal, from the merged intake.
+ */
+export async function generateBrief(accountId: string, createdBy: string | null): Promise<Brief> {
   const admin = createAdminClient();
 
   // Crash recovery: anything stuck "generating" for >10 minutes is dead.
@@ -275,38 +370,16 @@ export async function generateBrief(accountId: string, createdBy: string): Promi
     .eq("status", "generating")
     .lt("updated_at", new Date(Date.now() - 10 * 60 * 1000).toISOString());
 
-  const { data: account } = await admin
-    .from("portal_accounts")
-    .select("*")
-    .eq("id", accountId)
-    .maybeSingle<Account>();
-  if (!account) throw new Error("Account not found");
-
-  const [{ data: reports }, { data: notes }] = await Promise.all([
-    admin
-      .from("portal_gong_reports")
-      .select("*")
-      .eq("account_id", accountId)
-      .order("created_at", { ascending: false })
-      .returns<GongReport[]>(),
-    admin
-      .from("portal_onboarding_notes")
-      .select("*")
-      .eq("account_id", accountId)
-      .eq("review_status", "reviewed")
-      .order("created_at", { ascending: false })
-      .returns<OnboardingNote[]>(),
-  ]);
-  if (!reports || reports.length === 0) {
+  const { buildBriefContext, briefHasSources, runBriefPipeline } = await import("./pipeline");
+  const ctx = await buildBriefContext(accountId);
+  // No call notes: the record's summary stands in as one report (never
+  // inserted), or the reviewed notes carry the reading on their own.
+  // Nothing at all is still nothing to read.
+  if (!briefHasSources(ctx)) {
     throw new Error("Add at least one Gong report before generating a brief");
   }
-
-  // The two owners are team_members ids on the deal. A deck that prints a uuid
-  // where a name belongs is worse than one that prints nothing.
-  const ownerNames = await resolveOwnerNames(admin, account);
-  // Who takes over, and the plan they run. Null when the deal has not been
-  // handed off yet — the deck says so on the slide.
-  const handoff = await loadHandoffContext(admin, account, ownerNames);
+  const account = ctx.sources.account as Account;
+  const reports = ctx.sources.reports;
 
   const { data: briefRow, error: insertError } = await admin
     .from("portal_briefs")
@@ -325,70 +398,29 @@ export async function generateBrief(accountId: string, createdBy: string): Promi
     let generator: "llm" | "template" = "template";
     let llmError: string | null = null;
 
-    const { generateBriefWithLLM, llmAvailable } = await import("./llm");
-    const { describeLlmError } = await import("./llm-error");
+    const { llmAvailable } = await import("./llm");
+    const { describeAiError, AiParseError, AiRefusedError } = await import("../ai/client");
     if (llmAvailable()) {
-      // The SOW is read WITH the calls, so what was sold and how they work
-      // come out of one reading instead of two that disagree.
-      const sowPdf = await sowBytes(admin, account);
+      // A SOW that cannot be read is said so on the brief, not dropped.
+      const sowProblem = ctx.sources.sow?.problem
+        ? `The SOW was not read: ${ctx.sources.sow.problem}`
+        : null;
       try {
-        json = await generateBriefWithLLM(account, reports, notes ?? [], sowPdf);
-        if (json) generator = "llm";
-        else llmError = "LLM declined or returned unparseable output; used template";
+        json = (await runBriefPipeline(ctx)).brief;
+        generator = "llm";
       } catch (e) {
-        llmError = describeLlmError(e);
+        llmError =
+          e instanceof AiRefusedError || e instanceof AiParseError
+            ? "LLM declined or returned unparseable output; used template"
+            : describeAiError(e);
       }
-      // Then a second reading checks the onboarding facts against the same
-      // sources, and the code rules run on its answer.
-      if (json) {
-        const { verifyOnboarding } = await import("./verify");
-        const onboarding = await verifyOnboarding({
-          reading: json.onboarding,
-          callsText: reports.map((r: GongReport) => `${r.title}\n${r.content_md}`).join("\n\n"),
-          sowPdf,
-        });
-        json = { ...json, ...(onboarding ? { onboarding } : {}) };
-      }
+      if (sowProblem) llmError = [llmError, sowProblem].filter(Boolean).join(" ");
     }
     if (!json) {
-      json = buildTemplateBrief(account, reports);
+      const { summaryAsReport } = await import("./prompt");
+      const synthetic = reports.length ? null : summaryAsReport(account);
+      json = buildTemplateBrief(account, reports.length ? reports : synthetic ? [synthetic] : []);
     }
-
-    // The deck IS the Client Kickoff Deck Template: what fills which of its
-    // 124 named fields is decided by buildKickoffData (pure, tested), and
-    // ./pptx draws the seventeen slides. Nothing about the layout is decided
-    // here.
-    const { buildKickoffData } = await import("@/lib/kickoff-fields");
-    const deckData = buildKickoffData({
-      clientName: account.name,
-      preparedAt: new Date().toISOString(),
-      brief: json,
-      team: handoff.team,
-      // The people the brief named at the customer. Roles come through as the
-      // brief recorded them; inventing a title for somebody is worse than a
-      // blank the AE fills in.
-      clientPeople: json.stakeholders.map((p) => ({ name: p.name, role: p.role })),
-      stages: handoff.stages,
-      customerTasks: handoff.customerTasks,
-      risks: handoff.risks,
-      successCriteria: handoff.successCriteria,
-      requirements: handoff.requirements,
-      solutions: handoff.solutions,
-      targetLaunchDate: handoff.targetLaunchDate,
-      // The deal's champion, only when their recorded role says they are the
-      // technical contact. Putting the ops director on the IT slide because
-      // they are the only contact we have is how a wrong name gets read out.
-      itContact: itContactFor(account),
-    });
-
-    const { buildKickoffDeckFile } = await import("./pptx");
-    const deck = await buildKickoffDeckFile(deckData, await customerLogoDataUri(admin, account));
-    const path = `${accountId}/${briefRow.id}.pptx`;
-    const { error: uploadError } = await admin.storage.from("portal-briefs").upload(path, deck, {
-      contentType: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-      upsert: true,
-    });
-    if (uploadError) throw new Error(`Storage upload failed: ${uploadError.message}`);
 
     const { data: done, error: updateError } = await admin
       .from("portal_briefs")
@@ -396,7 +428,6 @@ export async function generateBrief(accountId: string, createdBy: string): Promi
         status: "complete",
         generator,
         structured_json: json,
-        pptx_storage_path: path,
         error: llmError,
       })
       .eq("id", briefRow.id)
@@ -405,7 +436,7 @@ export async function generateBrief(accountId: string, createdBy: string): Promi
     if (updateError) throw new Error(updateError.message);
 
     await audit({
-      actor_type: "user",
+      actor_type: createdBy ? "user" : "system",
       actor_id: createdBy,
       action: "brief.generate",
       entity_type: "brief",

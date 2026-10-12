@@ -4,6 +4,7 @@ import { useServerFn } from "@tanstack/react-start";
 
 import { getAttachmentLink, setImplementation, uploadAttachment } from "@/lib/hub.functions";
 import { fileToBase64, MAX_ATTACHMENT_BYTES } from "@/lib/attachment-client";
+import { documentUploadType } from "@/lib/document-upload";
 import type { EditableImplementation } from "@/components/implementation-write";
 
 const inputClass =
@@ -94,7 +95,9 @@ export function SowPanel({
           data: {
             folder: "sow" as const,
             fileName: file.name,
-            contentType: file.type || "application/octet-stream",
+            // The browser's type is a guess from the extension, and empty for
+            // a .docx on some of them; the server sniffs the bytes as well.
+            contentType: documentUploadType(file) ?? (file.type || "application/octet-stream"),
             dataBase64: await fileToBase64(file),
           },
         });
@@ -181,6 +184,7 @@ export function SowPanel({
               <span className={labelClass}>SOW document</span>
               <input
                 type="file"
+                accept=".pdf,.docx,.txt,.md,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain"
                 className="w-full text-[11px]"
                 aria-label="SOW document"
                 disabled={disabled}

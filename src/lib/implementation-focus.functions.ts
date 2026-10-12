@@ -14,6 +14,15 @@ export const generateImplementationFocusFn = createServerFn({ method: "POST" })
     return generateImplementationFocus(context.profile.id, data.dealId);
   });
 
+/** "Confirm workflow story" — see implementation-focus.server.ts. */
+export const confirmWorkflowStoryFn = createServerFn({ method: "POST" })
+  .middleware([requireDealEditor])
+  .inputValidator(dealIdInput)
+  .handler(async ({ data, context }) => {
+    const { confirmWorkflowStory } = await import("./implementation-focus.server");
+    return confirmWorkflowStory(context.profile.id, data.dealId);
+  });
+
 /** "Confirm implementation focus" — see implementation-focus.server.ts. */
 export const confirmImplementationFocusFn = createServerFn({ method: "POST" })
   .middleware([requireDealEditor])

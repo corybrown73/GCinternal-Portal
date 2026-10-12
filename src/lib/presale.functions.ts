@@ -1,7 +1,14 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
-import { implementationFocusPatchSchema, timelinePatchSchema } from "./intake-patch";
+import { DOCUMENT_UPLOAD_TYPES } from "./document-upload";
+import { formEditorUrlSchema } from "./intake-answers";
+import {
+  implementationFocusPatchSchema,
+  timelinePatchSchema,
+  workflowStoryPatchSchema,
+} from "./intake-patch";
+import { stageTargetUpdateSchema } from "./stage-targets";
 import { EDITABLE_DEAL_FIELDS, type EditableDealField } from "./presale-fields";
 
 import {
@@ -71,6 +78,8 @@ export const addDeal = createServerFn({ method: "POST" })
         stage: z.enum(STAGES).optional(),
         /** The team member being covered for: the deal is theirs from the start. */
         coverFor: z.string().uuid().optional(),
+        /** The AE (sales owner). */
+        amOwnerId: z.string().uuid().nullable().optional(),
       })
       .parse(data),
   )
@@ -86,7 +95,55 @@ export const addDeal = createServerFn({ method: "POST" })
       industry: data.industry ?? null,
       stage: data.stage ?? null,
       coverForTeamMemberId: data.coverFor ?? null,
+      amOwnerId: data.amOwnerId ?? null,
     });
+  });
+
+/** New account: who can be named as the AE and, for a manager, the TIS. */
+export const getNewDealOwnerOptions = createServerFn({ method: "GET" })
+  .middleware([requireDealEditor])
+  .handler(async ({ context }) => {
+    const { newDealOwnerOptions } = await import("./presale.server");
+    const { canManage } = await import("@/lib/auth");
+    const canAssign = canManage(context.profile.role as import("@/lib/auth").PortalRole);
+    return { ...(await newDealOwnerOptions(context.userId, canAssign)), canAssign };
+  });
+
+/**
+ * New account, after the notes and the SOW are saved: the TIS, then the
+ * stage it was entered in. A refused Closed Won comes back as data — the
+ * deal exists, held at Negotiate & Finalize, and the dialog says why.
+ */
+export const settleNewDealFn = createServerFn({ method: "POST" })
+  .middleware([requireDealEditor])
+  .inputValidator((data: unknown) =>
+    z
+      .object({
+        dealId: z.string().uuid(),
+        stage: z.enum(STAGES),
+        implementationOwnerId: z.string().uuid().nullable().optional(),
+      })
+      .parse(data),
+  )
+  .handler(async ({ data, context }) => {
+    const { settleNewDeal } = await import("./presale.server");
+    const { canManage } = await import("@/lib/auth");
+    return settleNewDeal(context.userId, data.dealId, {
+      stage: data.stage,
+      implementationOwnerId: data.implementationOwnerId ?? null,
+      canAssign: canManage(context.profile.role as import("@/lib/auth").PortalRole),
+    });
+  });
+
+/** An existing account's customer, picked on the deal page; null clears it. */
+export const linkExistingCustomerFn = createServerFn({ method: "POST" })
+  .middleware([requireDealEditor])
+  .inputValidator((data: unknown) =>
+    z.object({ dealId: z.string().uuid(), customerId: z.string().uuid().nullable() }).parse(data),
+  )
+  .handler(async ({ data, context }) => {
+    const { linkExistingCustomer } = await import("./presale.server");
+    return linkExistingCustomer(context.userId, data.dealId, data.customerId);
   });
 
 export const moveDealStage = createServerFn({ method: "POST" })
@@ -117,6 +174,36 @@ export const moveDealStage = createServerFn({ method: "POST" })
     return transitionDeal(context.userId, data.dealId, data.toStage, data.note, data.force);
   });
 
+/**
+ * A TIS moving straight to Graduation, skipping whatever stages are still
+ * open — Current Implementation's own "Skip to Graduation" action, not
+ * `moveDealStage`'s generic forced move. That one keeps requiring a manager
+ * (deliberately — it also covers the Closed Won gate and every other forced
+ * move on the board); this one is scoped to exactly one target stage and one
+ * caller, so the deal's own editor can use it on their own implementation.
+ * The reason is mandatory, unlike moveDealStage's optional note, and reaches
+ * transitionDeal()'s existing force path unchanged — same RPC, same
+ * audit, same stage-transition history, same journey mirror.
+ */
+export const moveToGraduation = createServerFn({ method: "POST" })
+  .middleware([requireDealEditor])
+  .inputValidator((data: unknown) =>
+    z
+      .object({
+        dealId: z.string().uuid(),
+        reason: z
+          .string()
+          .trim()
+          .min(1, "Say why the remaining stages are being skipped")
+          .max(2000),
+      })
+      .parse(data),
+  )
+  .handler(async ({ data, context }) => {
+    const { transitionDeal } = await import("./presale.server");
+    return transitionDeal(context.userId, data.dealId, "onboarding_complete", data.reason, true);
+  });
+
 export const uploadSow = createServerFn({ method: "POST" })
   .middleware([requireDealEditor])
   .inputValidator((data: unknown) =>
@@ -124,11 +211,11 @@ export const uploadSow = createServerFn({ method: "POST" })
       .object({
         dealId: z.string().uuid(),
         fileName: z.string().trim().min(1).max(200),
-        // PDF only. A signed contract is a PDF, and accepting anything else
-        // means accepting a document format that can carry script from a
-        // signed URL on our own origin.
-        contentType: z.literal("application/pdf"),
-        /** ~34 MB of base64 is ~25 MB of PDF. */
+        // A PDF or a Word file. Nothing that can carry script from a signed
+        // URL on our own origin; the server sniffs the bytes and refuses
+        // anything that is not what it says it is.
+        contentType: z.enum(DOCUMENT_UPLOAD_TYPES),
+        /** ~34 MB of base64 is ~25 MB of file. */
         dataBase64: z.string().min(1).max(34_000_000),
       })
       .parse(data),
@@ -222,14 +309,6 @@ export const removeReport = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const { deleteGongReport } = await import("./presale.server");
     return deleteGongReport(context.userId, data.reportId);
-  });
-
-export const generateBriefForDeal = createServerFn({ method: "POST" })
-  .middleware([requireDealEditor])
-  .inputValidator((data: unknown) => z.object({ dealId: z.string().uuid() }).parse(data))
-  .handler(async ({ data, context }) => {
-    const { generateDealBrief } = await import("./presale.server");
-    return generateDealBrief(context.userId, data.dealId);
   });
 
 export const getBriefDownloadUrl = createServerFn({ method: "POST" })
@@ -535,6 +614,7 @@ export const saveIntake = createServerFn({ method: "POST" })
             // One tick at a time, merged on the server; null unticks.
             handoff_tasks: z.record(z.string().max(40), z.string().max(40).nullable()).optional(),
             welcome_text: z.record(z.string().max(80), z.string().max(1200)).optional(),
+            form_editor_url: formEditorUrlSchema.nullable().optional(),
             help_picks: z
               .array(
                 z.object({
@@ -566,6 +646,7 @@ export const saveIntake = createServerFn({ method: "POST" })
             // complete object so a cleared override is a cleared override.
             timeline: timelinePatchSchema.optional(),
             implementation_focus: implementationFocusPatchSchema.optional(),
+            workflow_story: workflowStoryPatchSchema.optional(),
           })
           .strict(),
       })
@@ -578,7 +659,7 @@ export const saveIntake = createServerFn({ method: "POST" })
 
 /**
  * Move one milestone's date with a required, non-empty reason, recorded
- * atomically with the move (0078). The reason is enforced here — not only
+ * atomically with the move (0082). The reason is enforced here — not only
  * by a disabled Save button — and again in the database function itself.
  */
 export const recordMilestoneDateChange = createServerFn({ method: "POST" })
@@ -596,6 +677,21 @@ export const recordMilestoneDateChange = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const { recordMilestoneDateChange: record } = await import("./presale.server");
     return record(context.profile.id, data.dealId, data.milestoneKey, data.newDate, data.reason);
+  });
+
+export const saveStageTarget = createServerFn({ method: "POST" })
+  .middleware([requireDealEditor])
+  .inputValidator((data: unknown) =>
+    z.object({ dealId: z.string().uuid(), update: stageTargetUpdateSchema }).strict().parse(data),
+  )
+  .handler(async ({ data, context }) => {
+    const { saveDealIntake } = await import("./presale.server");
+    return saveDealIntake(
+      context.profile.id,
+      data.dealId,
+      { timeline: {} },
+      { stageTarget: data.update },
+    );
   });
 
 export const uploadIntakeForm = createServerFn({ method: "POST" })
@@ -616,7 +712,7 @@ export const uploadIntakeForm = createServerFn({ method: "POST" })
     return uploadDealIntakeForm(context.profile.id, data);
   });
 
-/** The signed contract, PDF only, onto the intake. Beside or instead of a SOW. */
+/** The signed contract, a PDF or Word file, onto the intake. Beside or instead of a SOW. */
 export const uploadContract = createServerFn({ method: "POST" })
   .middleware([requireDealEditor])
   .inputValidator((data: unknown) =>
@@ -624,7 +720,7 @@ export const uploadContract = createServerFn({ method: "POST" })
       .object({
         dealId: z.string().uuid(),
         fileName: z.string().trim().min(1).max(200),
-        contentType: z.literal("application/pdf"),
+        contentType: z.enum(DOCUMENT_UPLOAD_TYPES),
         dataBase64: z.string().min(1).max(34_000_000),
       })
       .parse(data),
@@ -634,6 +730,7 @@ export const uploadContract = createServerFn({ method: "POST" })
     return uploadDealContract(context.profile.id, {
       dealId: data.dealId,
       fileName: data.fileName,
+      contentType: data.contentType,
       dataBase64: data.dataBase64,
     });
   });
@@ -738,6 +835,37 @@ export const explainTargetChange = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const { explainTargetChange: explain } = await import("./presale.server");
     return explain(context.profile.id, data.changeId, data.reasonCode, data.note);
+  });
+
+/** A TIS setting the target graduation date directly, with a mandatory reason. */
+export const setTargetGraduationDate = createServerFn({ method: "POST" })
+  .middleware([requireDealEditor])
+  .inputValidator((data: unknown) =>
+    z
+      .object({
+        implementationId: z.string().uuid(),
+        date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+        reasonCode: z.enum([
+          "tier_mismatch",
+          "mis_scope",
+          "expansion",
+          "internal_delivery",
+          "customer",
+          "feasibility_outcome",
+        ]),
+        note: z.string().trim().max(500).nullable(),
+      })
+      .parse(data),
+  )
+  .handler(async ({ data, context }) => {
+    const { setTargetGraduationDate: setDate } = await import("./presale.server");
+    return setDate(
+      context.profile.id,
+      data.implementationId,
+      data.date,
+      data.reasonCode,
+      data.note,
+    );
   });
 
 /* ---------- purchased solutions ---------- */

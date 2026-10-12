@@ -161,6 +161,15 @@ export const FLAG_CATALOGUE: FlagInfo[] = [
     group: "integrations",
   },
 
+  {
+    key: "ai_auto_read",
+    label: "Automatic AI reading",
+    description:
+      "A SOW upload, pasted call notes or a close queues the AI reading of the deal on its own — the SOW's services and facts, the brief, the intake blanks, the customer's link. Off, only \"Read again\" on the deal starts one. Needs ANTHROPIC_API_KEY on the deployment.",
+    group: "integrations",
+    needsMigration: "0078",
+  },
+
   /* ---------------- Platform ---------------- */
   {
     key: "signals_alerts",

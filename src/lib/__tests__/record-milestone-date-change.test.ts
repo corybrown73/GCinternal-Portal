@@ -1,15 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
- * recordMilestoneDateChange() (0078) is the one write path that can move a
+ * recordMilestoneDateChange() (0082) is the one write path that can move a
  * milestone's date AND leave a required, non-empty, append-only reason —
  * in one atomic database call. These tests are mostly about what it
  * REFUSES (a blank reason, writing anything when the atomic call fails) and
  * about what it hands the database function to record (the previous and
  * new dates, which cascaded, whether the old date was already overdue) —
- * the database function's own constraints (0078's migration) are the ones
+ * the database function's own constraints (0082's migration) are the ones
  * actually enforcing atomicity and append-only history; see
- * supabase/tests/0078_milestone_date_history.sql for those.
+ * supabase/tests/0082_milestone_date_history.sql for those.
  */
 
 type AccountRow = { id: string; intake: any };
@@ -63,7 +63,7 @@ const h = vi.hoisted(() => {
     rpc: async (name: string, params: RpcParams) => {
       state.rpcCalls.push({ name, params });
       if (state.rpcError) return { data: null, error: state.rpcError };
-      // Emulates 0078's atomic write: the override lands in the stored
+      // Emulates 0082's atomic write: the override lands in the stored
       // intake exactly as the real function would land it.
       const account = state.account!;
       const timeline = account.intake.timeline ?? {};
@@ -194,6 +194,20 @@ describe("recordMilestoneDateChange", () => {
     await expect(
       recordMilestoneDateChange(PROFILE_ID, DEAL_ID, "not_a_real_key", "2026-09-15", "reason"),
     ).rejects.toThrow(/unknown milestone/i);
+    expect(h.rpcCalls).toHaveLength(0);
+  });
+
+  it("refuses to move a milestone that is already done, and writes nothing", async () => {
+    h.account = {
+      id: DEAL_ID,
+      intake: {
+        ...freshIntake(),
+        timeline: { ...freshIntake().timeline, completed: { kickoff: "2026-09-11" } },
+      },
+    };
+    await expect(
+      recordMilestoneDateChange(PROFILE_ID, DEAL_ID, "kickoff", "2026-09-15", "too late"),
+    ).rejects.toThrow(/already done/);
     expect(h.rpcCalls).toHaveLength(0);
   });
 

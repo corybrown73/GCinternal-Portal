@@ -18,16 +18,25 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 
 // The scope is part of the key: switching whose accounts you are looking at
 // has to refetch, and two scopes must never share a cache entry.
+//
+// Today is the one page where nothing-specified means "mine" for every
+// internal user, admins and managers included — not resolveScope()'s usual
+// default of "all" for an admin or for someone who owns nothing yet, which
+// is the right default for /customers, /pipeline and the rest and stays
+// exactly as it is there. Sending "mine" explicitly (rather than omitting
+// scope) is what skips that admin/owns-nothing override: resolveScope()
+// only applies it when nothing was asked for. "All work" is still one click
+// away in the scope switch, same as on every other scoped page.
 const homeQuery = (scope: string | null) =>
   queryOptions({
     queryKey: ["home", scope],
-    queryFn: () => getHome({ data: scope ? { scope } : {} }),
+    queryFn: () => getHome({ data: { scope: scope ?? "mine" } }),
   });
 
 const dealInboxQuery = (scope: string | null) =>
   queryOptions({
     queryKey: ["deal-inbox", scope],
-    queryFn: () => getDealInbox({ data: scope ? { scope } : {} }),
+    queryFn: () => getDealInbox({ data: { scope: scope ?? "mine" } }),
   });
 
 export const Route = createFileRoute("/")({
@@ -488,7 +497,11 @@ function Rows({ rows }: { rows: NeedsMeRow[] }) {
             <Link
               to="/customers/$customerId"
               params={{ customerId: r.link.customerId }}
-              search={r.link.implementationId ? { impl: r.link.implementationId } : {}}
+              search={
+                r.link.implementationId
+                  ? { tab: "implementation", impl: r.link.implementationId }
+                  : {}
+              }
               className="inline-flex items-center gap-1 justify-self-end rounded-md border border-border px-3 py-1.5 text-[12px] font-medium hover:bg-muted"
             >
               Open <ArrowRight className="h-3.5 w-3.5" />

@@ -4,7 +4,13 @@ import { nextChecklistTask, stageFlow } from "./stage-flow";
 import { TERM_LABELS } from "./terms";
 import { resolveAccountId, transitionStage, upsertAccount } from "./server/accounts";
 import { accountUpsertSchema } from "./server/schemas";
-import { isOnboardingStage, isStage, STAGE_LABELS, type AccountStage } from "./presale-stages";
+import {
+  isOnboardingStage,
+  isPreClose,
+  isStage,
+  STAGE_LABELS,
+  type AccountStage,
+} from "./presale-stages";
 import { isSolutionKind, launchCriticalOpen, normalizeServices } from "./onboarding-services";
 import { MANAGE_ROLES } from "./roles";
 import { handoffChecks } from "./sales-handoff";
@@ -364,9 +370,23 @@ export async function createDeal(
     stage?: AccountStage | null;
     /** Created while covering for this team member: the deal is theirs. */
     coverForTeamMemberId?: string | null;
+    /** The AE (sales owner): a seller or a manager. */
+    amOwnerId?: string | null;
   },
-): Promise<{ account: Account; created: boolean }> {
+): Promise<{
+  account: Account;
+  created: boolean;
+  /** Where a deal entered in a later stage was held, and why, when the gate refused. */
+  entry?: DealEntryResult;
+}> {
   await requireSalesEditor(userId);
+  // Checked before anything is written: a wrong pick must not leave a deal behind.
+  if (input.amOwnerId) {
+    const allowed = ownerOptionsByRole(await profileDirectory()).am;
+    if (!allowed.some((o) => o.value === input.amOwnerId)) {
+      throw new Error("The sales owner must be a seller or a manager.");
+    }
+  }
   const parsed = accountUpsertSchema.parse({
     name: input.name,
     ...(input.domain ? { domain: input.domain } : {}),
@@ -390,9 +410,14 @@ export async function createDeal(
     }
   }
   const result = await upsertAccount(parsed, { source: "ui", actorProfileId: userId });
-  // Who entered it: their board shows it until an owner is assigned.
+  // Who entered it: their board shows it until an owner is assigned. The
+  // AE picked at entry is the deal's sales owner from the first minute.
   if (result.created) {
-    await db().from("portal_accounts").update({ created_by: userId }).eq("id", result.account.id);
+    await db()
+      .from("portal_accounts")
+      .update({ created_by: userId, ...(input.amOwnerId ? { am_owner_id: input.amOwnerId } : {}) })
+      .eq("id", result.account.id);
+    if (input.amOwnerId) result.account = { ...result.account, am_owner_id: input.amOwnerId };
   }
   // Entered while covering for a colleague: it is their account, so it goes
   // on their board (and their card shows their name) rather than vanishing
@@ -434,12 +459,222 @@ export async function createDeal(
   // A deal entered where it already is: the same move a person would make
   // from the board — the Closed Won gate applies, and so does everything the
   // close starts (the customer's page, the assignment). The dialog attaches
-  // the notes and the SOW first and moves the deal after, for that reason.
+  // the notes and the SOW first and moves the deal after (settleNewDeal).
   if (input.stage && input.stage !== result.account.stage && result.created) {
-    await transitionDeal(userId, result.account.id, input.stage, "Created in this stage");
-    result.account = { ...result.account, stage: input.stage };
+    const entry = await enterDealAtStage(userId, result.account.id, input.stage);
+    result.account = { ...result.account, stage: entry.stage };
+    return { account: result.account, created: result.created, entry };
   }
   return { account: result.account, created: result.created };
+}
+
+/** Where a hand-entered deal ended up, and what the Closed Won gate said if it refused. */
+export interface DealEntryResult {
+  stage: AccountStage;
+  refused: { missing: import("./won-gate").WonGateMissing[]; message: string } | null;
+}
+
+/**
+ * Move a freshly entered deal to the stage it was entered in, through
+ * transitionDeal — the gate and everything the close starts apply as they
+ * do for "Mark Closed Won". Refused at the gate, the deal is held at the
+ * furthest stage it may hold (Negotiate & Finalize) and the refusal is
+ * returned, never swallowed.
+ */
+export async function enterDealAtStage(
+  userId: string,
+  dealId: string,
+  stage: AccountStage,
+): Promise<DealEntryResult> {
+  const { isNewDealStage } = await import("./deal-entry");
+  if (!isNewDealStage(stage)) {
+    throw new Error(
+      `A new deal starts at Prospect, Negotiate & Finalize or Closed Won — not ${STAGE_LABELS[stage] ?? stage}.`,
+    );
+  }
+  if (stage === "prospect") return { stage: "prospect", refused: null };
+  const pipeline = await loadPipelineStages();
+  const target = stage === "closed_won" ? (wonStage(pipeline).key as AccountStage) : stage;
+  try {
+    await transitionDeal(userId, dealId, target, "Created in this stage");
+    return { stage: target, refused: null };
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    const { gateTarget, parseWonGate, WON_GATE_LABEL } = await import("./won-gate");
+    const missing = parseWonGate(message);
+    if (!missing || gateTarget(message) !== "closed_won") throw e;
+    const hold = findStage(pipeline, "negotiate") ? ("negotiate" as const) : null;
+    if (hold) {
+      // Stage history shows the note as written: the missing pieces in
+      // words, not the gate's message with its machine tag.
+      const { heldNote } = await import("./deal-entry");
+      await transitionDeal(
+        userId,
+        dealId,
+        hold,
+        heldNote(STAGE_LABELS[target] ?? target, STAGE_LABELS[hold], missing, WON_GATE_LABEL),
+      );
+    }
+    return { stage: hold ?? "prospect", refused: { missing, message } };
+  }
+}
+
+/**
+ * The New account dialog's last step, after the notes and the SOW are on
+ * the deal: the TIS (from Negotiate & Finalize on, through assignDeal like
+ * the Assign step), then the stage. The TIS goes first so the close finds
+ * an owner and does not hand the deal to the rotation as well.
+ */
+export async function settleNewDeal(
+  userId: string,
+  dealId: string,
+  input: { stage: AccountStage; implementationOwnerId?: string | null; canAssign: boolean },
+): Promise<DealEntryResult & { assignee: string | null }> {
+  await requireSalesEditor(userId);
+  const { isNewDealStage, canAssignAtEntry, ALREADY_STAGED } = await import("./deal-entry");
+  if (!isNewDealStage(input.stage)) {
+    throw new Error(
+      `A new deal starts at Prospect, Negotiate & Finalize or Closed Won — not ${STAGE_LABELS[input.stage] ?? input.stage}.`,
+    );
+  }
+  const { data: deal } = await db()
+    .from("portal_accounts")
+    .select("id,stage,created_by")
+    .eq("id", dealId)
+    .maybeSingle();
+  if (!deal) throw new Error("Deal not found");
+  // Only the deal just entered, by the person who entered it: anything else
+  // has a stage of its own and moves from the board.
+  if (deal.created_by !== userId || deal.stage !== "prospect") {
+    throw new Error(ALREADY_STAGED);
+  }
+  let assignee: string | null = null;
+  if (input.implementationOwnerId) {
+    if (!input.canAssign) throw new Error("Only a manager can assign the TIS.");
+    if (!canAssignAtEntry(input.stage)) {
+      throw new Error("The TIS is assigned from Negotiate & Finalize on.");
+    }
+    const { assignDeal, loadPool } = await import("./assignment.server");
+    // The pick must still be on the team. assignDeal would otherwise fall
+    // back to the rule (or the claim email) while the ledger said this
+    // person was chosen.
+    const member = (await loadPool()).find((p) => p.teamMemberId === input.implementationOwnerId);
+    if (!member) throw new Error("That TIS is no longer on the team — pick another.");
+    // A retry after a failure part-way: the TIS is already on the deal, so
+    // they are not assigned (and emailed) a second time.
+    const { data: last } = await db()
+      .from("portal_assignments")
+      .select("team_member_id")
+      .eq("deal_id", dealId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (last && String(last.team_member_id) === member.teamMemberId) {
+      assignee = member.name;
+    } else {
+      const assigned = await assignDeal({
+        dealId,
+        teamMemberId: member.teamMemberId,
+        actorProfileId: userId,
+        note: "Chosen when the account was entered",
+      });
+      assignee = assigned?.assigneeName ?? null;
+    }
+  }
+  const entry = await enterDealAtStage(userId, dealId, input.stage);
+  return { ...entry, assignee };
+}
+
+/** Who the New account dialog can name: the AEs, and (for a manager) the TIS list the Assign step shows. */
+export async function newDealOwnerOptions(
+  userId: string,
+  canAssign: boolean,
+): Promise<{
+  am: Array<{ value: string; label: string }>;
+  me: string;
+  members: import("./assignment.server").DealAssignment["members"];
+}> {
+  await requireSalesEditor(userId);
+  const am = ownerOptionsByRole(await profileDirectory()).am;
+  let members: import("./assignment.server").DealAssignment["members"] = [];
+  if (canAssign) {
+    const { loadPool } = await import("./assignment.server");
+    members = (await loadPool()).map((p) => ({
+      teamMemberId: p.teamMemberId,
+      name: p.name,
+      email: p.email,
+      inPool: p.inPool && p.active,
+      rank: p.rank,
+      load: p.load,
+      assignments: p.assignments,
+    }));
+  }
+  return { am, me: userId, members };
+}
+
+/**
+ * An existing account's customer, named on the deal page before the close.
+ * Kept on the intake rather than portal_accounts.customer_id: a linked deal
+ * is shown as its customer's page, and this one is still being sold. The
+ * close reads it (transitionDeal) and joins the implementation to that
+ * customer, as "Add services" does. null clears it.
+ */
+export async function linkExistingCustomer(
+  userId: string,
+  dealId: string,
+  customerId: string | null,
+): Promise<{ customerId: string | null; name: string | null }> {
+  await requireSalesEditor(userId);
+  const { data: deal } = await db()
+    .from("portal_accounts")
+    .select("id,stage,intake,customer_id")
+    .eq("id", dealId)
+    .maybeSingle();
+  if (!deal) throw new Error("Deal not found");
+  if (deal.customer_id) {
+    throw new Error("This deal is already on its customer's page.");
+  }
+  // Only the close reads the pick. A deal past it would save the choice and
+  // do nothing with it.
+  if (!isPreClose(String(deal.stage))) {
+    throw new Error(
+      "This deal has already closed, so picking the customer here would change nothing. Use “Add services” on the customer's page instead.",
+    );
+  }
+  let name: string | null = null;
+  let industry: string | null = null;
+  if (customerId) {
+    const { data: customer } = await db()
+      .from("customers")
+      .select("id,name,industry")
+      .eq("id", customerId)
+      .maybeSingle();
+    if (!customer) throw new Error("That customer no longer exists — pick another one");
+    name = String(customer.name);
+    industry = (customer.industry as string | null) ?? null;
+  }
+  const { readIntake, intakeAnswersSchema } = await import("./intake-answers");
+  const current = readIntake(deal.intake);
+  const next = intakeAnswersSchema.parse({
+    ...current,
+    existing_customer_id: customerId,
+    // Picking the customer says what kind of deal this is.
+    ...(customerId ? { path: "existing" } : {}),
+    // Their industry comes along when the deal has none yet.
+    ...(customerId && industry && !current.industry ? { industry } : {}),
+    updated_at: new Date().toISOString(),
+  });
+  const { error } = await db().from("portal_accounts").update({ intake: next }).eq("id", dealId);
+  if (error) throw new Error(error.message);
+  await audit({
+    actor_type: "user",
+    actor_id: userId,
+    action: "deal.existing_customer_linked",
+    entity_type: "account",
+    entity_id: dealId,
+    payload: { customer_id: customerId },
+  });
+  return { customerId, name };
 }
 
 export { WON_GATE_PREFIX } from "./won-gate";
@@ -505,12 +740,21 @@ export async function transitionDeal(
   if (result.changed && toStage === wonStage(pipeline).key) {
     const { data: row } = await db()
       .from("portal_accounts")
-      .select("customer_id")
+      .select("customer_id,intake")
       .eq("id", dealId)
       .maybeSingle();
     if (!row?.customer_id) {
       try {
-        const first = await startOnboardingAs({ kind: "user", profileId: userId }, dealId, {});
+        // An existing account names its customer on the deal page: the
+        // implementation joins that record, as "Add services" does.
+        const { existingCustomerAtClose } = await import("./deal-entry");
+        const { readIntake: readDealIntake } = await import("./intake-answers");
+        const picked = existingCustomerAtClose(readDealIntake(row?.intake), null);
+        const first = await startOnboardingAs(
+          { kind: "user", profileId: userId },
+          dealId,
+          picked ? { customerId: picked } : {},
+        );
         if (first.outcome === "needs_account_choice") {
           // No Salesforce match. A customer with the same name is a person's
           // call; nothing by that name means a new account, now.
@@ -570,6 +814,10 @@ export async function transitionDeal(
         console.error("[close] could not hand the deal to the rotation", e);
       }
     }
+    // The close is when the reading pays off: whatever is on the record —
+    // the SOW, the notes, the summary — is read now, in the background.
+    const { autoReadDeal } = await import("./server/ai/jobs");
+    await autoReadDeal(dealId, "closed_won_ui", userId);
   }
   return result;
 }
@@ -607,6 +855,7 @@ export async function pickHelpForDeal(
     intake: current,
     brief,
     notesText,
+    dealId,
   });
   const kept = current.help_picks.filter((p) => p.source === "person");
   const merged = [
@@ -924,15 +1173,33 @@ export async function loadDeal(dealId: string): Promise<DealDetail | null> {
 
 /* ---------- the signed SOW ---------- */
 
-/** ~34 MB of base64 is ~25 MB of PDF, the same ceiling account uploads use. */
+/** ~34 MB of base64 is ~25 MB of file, the same ceiling account uploads use. */
 const SOW_MAX_BASE64 = 34_000_000;
+
+/**
+ * The bytes decide what a signed document is. The browser's type is a guess
+ * from the extension, and one dialog once stored a Word file as a PDF that
+ * every reader then choked on. Returns the real content type, or throws a
+ * message naming what was sent.
+ */
+async function sniffSignedDocument(binary: Buffer, what: string): Promise<string> {
+  const { sniffDocumentType } = await import("./server/ai/documents");
+  const real = sniffDocumentType(new Uint8Array(binary));
+  if (!real) {
+    throw new Error(
+      `The ${what} should be a PDF or a Word document (.docx) — this file is neither.`,
+    );
+  }
+  return real;
+}
 
 /**
  * Upload the countersigned SOW against a deal.
  *
- * A FILE, NOT A LINK. What an AE has after close is the PDF; asking them to
- * park it somewhere else first and paste a URL is why the field stayed empty.
- * `sow_document_url` survives for a SOW that genuinely lives in Docusign.
+ * A FILE, NOT A LINK. What an AE has after close is the PDF or the Word
+ * file; asking them to park it somewhere else first and paste a URL is why
+ * the field stayed empty. `sow_document_url` survives for a SOW that
+ * genuinely lives in Docusign.
  *
  * Into the PRIVATE attachments bucket, like every other customer document
  * here. A contract must never sit behind a URL that works for anyone who has
@@ -944,9 +1211,6 @@ export async function uploadDealSow(
 ): Promise<{ ok: true; path: string; name: string }> {
   await requireSalesEditor(userId);
 
-  if (args.contentType !== "application/pdf") {
-    throw new Error("The signed SOW should be a PDF");
-  }
   if (args.dataBase64.length > SOW_MAX_BASE64) {
     throw new Error("That file is over 25MB — link to it instead");
   }
@@ -959,12 +1223,13 @@ export async function uploadDealSow(
   if (!before) throw new Error("Deal not found");
 
   const binary = Buffer.from(args.dataBase64, "base64");
+  const contentType = await sniffSignedDocument(binary, "signed SOW");
   const safe = args.fileName.replace(/[^A-Za-z0-9._-]+/g, "-").slice(-120) || "sow.pdf";
   const path = `deals/${args.dealId}/${crypto.randomUUID()}-${safe}`;
 
   const { error: upErr } = await db()
     .storage.from("attachments")
-    .upload(path, binary, { contentType: args.contentType, upsert: false });
+    .upload(path, binary, { contentType, upsert: false });
   if (upErr) throw new Error(`Could not upload the SOW: ${upErr.message}`);
 
   const { error } = await db()
@@ -1021,6 +1286,11 @@ export async function uploadDealSow(
     payload: { file_name: args.fileName, replaced: previous ?? null },
   });
 
+  // The document is the reading's reason to exist: queue it from here,
+  // whichever screen uploaded, and never wait on it.
+  const { autoReadDeal } = await import("./server/ai/jobs");
+  await autoReadDeal(args.dealId, "sow_upload", userId);
+
   return { ok: true, path, name: args.fileName };
 }
 
@@ -1069,48 +1339,52 @@ export async function addGongReport(
       call_date: input.callDate ?? null,
     });
   if (error) throw new Error(`Could not save the report: ${error.message}`);
-  // The brief is NOT written here. Saving notes took a minute while the
-  // model read them, which looked like a hang on the create dialog; the
-  // caller starts the brief as its own request and shows it running.
+  // The reading is queued, not run: the notes are saved in a moment and the
+  // job reads them in the background, from here or from the MCP server.
+  const { autoReadDeal } = await import("./server/ai/jobs");
+  await autoReadDeal(input.dealId, "call_notes", userId);
   return { ok: true };
 }
 
 /**
  * The signed contract, beside or instead of a SOW: a three-seat deal has no
- * SOW, but its contract says how many seats and for how long. PDF only,
- * same bucket and same rule as the forms.
+ * SOW, but its contract says how many seats and for how long. A PDF or a
+ * Word file, same bucket and same rule as the SOW.
  */
 export async function uploadDealContract(
   userId: string,
-  args: { dealId: string; fileName: string; dataBase64: string },
+  args: { dealId: string; fileName: string; contentType?: string | undefined; dataBase64: string },
 ): Promise<import("./intake-answers").IntakeAnswers> {
   await requireSalesEditor(userId);
   if (args.dataBase64.length > SOW_MAX_BASE64) throw new Error("That file is over 25MB");
-  const { readIntake, intakeAnswersSchema } = await import("./intake-answers");
+  const { readIntake } = await import("./intake-answers");
   const { data: before } = await db()
     .from("portal_accounts")
-    .select("intake")
+    .select("id")
     .eq("id", args.dealId)
     .maybeSingle();
   if (!before) throw new Error("Deal not found");
   const binary = Buffer.from(args.dataBase64, "base64");
+  const contentType = await sniffSignedDocument(binary, "signed contract");
   const safe = args.fileName.replace(/[^A-Za-z0-9._-]+/g, "-").slice(-120) || "contract.pdf";
   const path = `deals/${args.dealId}/contract/${crypto.randomUUID()}-${safe}`;
   const { error: upErr } = await db()
     .storage.from("attachments")
-    .upload(path, binary, { contentType: "application/pdf", upsert: false });
+    .upload(path, binary, { contentType, upsert: false });
   if (upErr) throw new Error(`Could not upload the contract: ${upErr.message}`);
-  const current = readIntake((before as any).intake);
-  const next = intakeAnswersSchema.parse({
-    ...current,
+  // Merged, never the whole intake written back: the upload took seconds,
+  // and the background reading (or a person) may have written the intake
+  // meanwhile — a SOW's services, the reading's own status.
+  const { mergeIntake } = await import("./server/intake-merge");
+  await mergeIntake(args.dealId, {
     contract: { path, name: args.fileName, uploaded_at: new Date().toISOString() },
-    updated_at: new Date().toISOString(),
   });
-  const { error } = await db()
+  const { data: after } = await db()
     .from("portal_accounts")
-    .update({ intake: next, updated_at: new Date().toISOString() })
-    .eq("id", args.dealId);
-  if (error) throw new Error(`Could not record the contract: ${error.message}`);
+    .select("intake")
+    .eq("id", args.dealId)
+    .maybeSingle();
+  const next = readIntake((after as any)?.intake);
   await audit({
     actor_type: "user",
     actor_id: userId,
@@ -1119,6 +1393,8 @@ export async function uploadDealContract(
     entity_id: args.dealId,
     payload: { name: args.fileName },
   });
+  const { autoReadDeal } = await import("./server/ai/jobs");
+  await autoReadDeal(args.dealId, "contract_upload", userId);
   return next;
 }
 
@@ -1140,19 +1416,39 @@ export async function deleteGongReport(userId: string, reportId: string): Promis
 
 /* ---------- briefs ---------- */
 
-export async function generateDealBrief(
-  userId: string,
+/** Who asked for the brief: a person, or the background reading (`label` names it). */
+export type BriefActor = { kind: "user"; userId: string } | { kind: "system"; label: string };
+
+/*
+ * There is no inline "generate the brief" any more: the three passes
+ * (core, plan, verify) each take up to a model call's worth of time, and
+ * three in one web request would outlive the function. A person's "Read
+ * again" queues the background job (prepareDeal, force), which runs them
+ * as steps and applies the result through `applyBriefToDeal` below.
+ */
+
+/** What `applyBriefToDeal` needs of a brief row. */
+export type BriefToApply = Pick<
+  Brief,
+  "id" | "status" | "generator" | "structured_json" | "pptx_storage_path"
+>;
+
+/**
+ * Everything a finished brief does to the deal: the journey move, the
+ * intake prefill, the handoff prefill, the welcome page's own facts (the
+ * workflow story, the focus items, the field tester), the help picks, the
+ * header fill, and last the deck — drawn from the merged intake, so it
+ * says what the deal says. One function, so the background job's apply
+ * step and a person's "Generate brief" land the same writes. Every write
+ * is a blanks-or-AI-owned merge; a person's answers stand. Returns what
+ * was filled, in words for the record.
+ */
+export async function applyBriefToDeal(
+  actor: BriefActor,
   dealId: string,
-): Promise<{
-  id: string;
-  status: string;
-  generator: "llm" | "template" | null;
-  error: string | null;
-  filled: string[];
-}> {
-  await requireInternal(userId);
-  const { generateBrief } = await import("./server/brief/generate");
-  const brief = await generateBrief(dealId, userId);
+  brief: BriefToApply,
+): Promise<string[]> {
+  const userId = actor.kind === "user" ? actor.userId : null;
 
   // A brief on file is the first fact the journey reads: the account moves
   // from Handoff to Kickoff on its own.
@@ -1167,7 +1463,7 @@ export async function generateDealBrief(
   if (brief.status === "complete" && brief.generator === "llm" && brief.structured_json) {
     try {
       const { readIntake, intakeAnswersSchema } = await import("./intake-answers");
-      const { prefillFromSynthesis } = await import("./intake-prefill");
+      const { prefillFromSynthesis, prefillWelcomeFromBrief } = await import("./intake-prefill");
       const { data: row } = await db()
         .from("portal_accounts")
         .select("intake")
@@ -1181,7 +1477,17 @@ export async function generateDealBrief(
       const notesText = ((notes ?? []) as Array<{ content_md: string }>)
         .map((r) => r.content_md)
         .join("\n\n");
-      const result = prefillFromSynthesis(current, brief.structured_json, notesText);
+      // The kept SOW reading stands behind the calls for the seats and the
+      // forms. By path, not by hash: the document is not downloaded here.
+      const sowReading = await import("./server/ai/readings")
+        .then(({ loadSowReading }) => loadSowReading(dealId, { fetch: false }))
+        .then(
+          (kept) => kept?.reading ?? null,
+          () => null,
+        );
+      const result = prefillFromSynthesis(current, brief.structured_json, notesText, {
+        sowReading,
+      });
       // The Sales handoff's blanks, from the same reading. Merged in code,
       // because the merge RPC replaces a top-level key whole.
       {
@@ -1196,23 +1502,43 @@ export async function generateDealBrief(
           result.filled.push(...h.filled);
         }
       }
-      if (Object.keys(result.patch).length) {
+      // The welcome page's own facts, over the intake as it stands after
+      // the prefill, so the ownership lists carry both sets of writes.
+      const welcome = prefillWelcomeFromBrief(
+        readIntake({ ...current, ...result.patch }),
+        brief.structured_json,
+      );
+      Object.assign(result.patch, welcome.patch);
+      result.filled.push(...welcome.filled);
+      if (Object.keys(result.patch).length || welcome.timeline) {
         // Validated whole, written as a merge of only what changed.
-        intakeAnswersSchema.parse({ ...current, ...result.patch });
+        intakeAnswersSchema.parse({
+          ...current,
+          ...result.patch,
+          timeline: { ...current.timeline, ...(welcome.timeline ?? {}) },
+        });
         const { mergeIntake } = await import("./server/intake-merge");
-        const error = await mergeIntake(dealId, result.patch as Record<string, unknown>).then(
+        const error = await mergeIntake(
+          dealId,
+          result.patch as Record<string, unknown>,
+          welcome.timeline,
+        ).then(
           () => null,
           (e: unknown) => e,
         );
         if (!error) {
           filled = result.filled;
           await audit({
-            actor_type: "user",
+            actor_type: userId ? "user" : "system",
             actor_id: userId,
             action: "deal.intake_prefilled",
             entity_type: "account",
             entity_id: dealId,
-            payload: { brief_id: brief.id, filled },
+            payload: {
+              brief_id: brief.id,
+              filled,
+              ...(actor.kind === "system" ? { by: actor.label } : {}),
+            },
           });
         }
       }
@@ -1223,9 +1549,9 @@ export async function generateDealBrief(
     }
 
     // "Get started on your own": the help articles for what the calls
-    // flagged. Only while nobody has picked any — a person's list stands.
+    // flagged, picked again on every reading. A person's own picks stand.
     try {
-      await pickHelpForDeal(dealId, userId, brief.structured_json, false);
+      await pickHelpForDeal(dealId, userId, brief.structured_json, true);
     } catch (e) {
       console.error("[brief] could not pick the help articles", e);
     }
@@ -1264,13 +1590,20 @@ export async function generateDealBrief(
       console.error("[brief] could not fill the deal header", e);
     }
   }
-  return {
-    id: brief.id,
-    status: brief.status,
-    generator: brief.generator,
-    error: brief.error,
-    filled,
-  };
+
+  // The deck last, from the deal as it now stands: the merged intake, the
+  // header, the records — not the raw brief.
+  if (brief.status === "complete" && brief.structured_json) {
+    try {
+      const { buildAndStoreDeck } = await import("./server/brief/generate");
+      const { briefJsonSchema } = await import("./server/schemas");
+      const parsed = briefJsonSchema.safeParse(brief.structured_json);
+      if (parsed.success) await buildAndStoreDeck(dealId, brief.id, parsed.data);
+    } catch (e) {
+      console.error("[brief] could not draw the deck", e);
+    }
+  }
+  return filled;
 }
 
 export async function briefDownloadUrl(userId: string, briefId: string): Promise<{ url: string }> {
@@ -2207,6 +2540,17 @@ export async function saveDealIntake(
   userId: string,
   dealId: string,
   patch: Record<string, unknown>,
+  opts: {
+    /**
+     * The Implementation Focus written as a fresh proposal ("Generate",
+     * "Refresh"): the list is the proposal's own again, not the person's,
+     * so the reading may still add its items to it. An edit, a removal or
+     * an addition on the panel is a person's and claims the list.
+     */
+    proposal?: boolean | undefined;
+    /** The only authorized path for changing stage targets. */
+    stageTarget?: import("./stage-targets").StageTargetUpdate | undefined;
+  } = {},
 ): Promise<import("./intake-answers").IntakeAnswers> {
   await requireSalesEditor(userId);
   const { readIntake, intakeAnswersSchema } = await import("./intake-answers");
@@ -2222,6 +2566,23 @@ export async function saveDealIntake(
   // The Field Fusion block is patched one tick at a time; a tick must not
   // wipe the other tick, the note, or the handoff stamp.
   const merged: Record<string, unknown> = { ...patch };
+  if (patch["timeline"] && typeof patch["timeline"] === "object") {
+    const incomingTimeline = patch["timeline"] as Record<string, unknown>;
+    const { updateStageTarget } = await import("./stage-targets");
+    const stageTargets = opts.stageTarget
+      ? updateStageTarget(
+          current.timeline.stage_targets,
+          opts.stageTarget,
+          userId,
+          new Date().toISOString(),
+        )
+      : current.timeline.stage_targets;
+    merged["timeline"] = {
+      ...current.timeline,
+      ...incomingTimeline,
+      stage_targets: stageTargets,
+    };
+  }
   for (const block of ["field_fusion", "existing"] as const) {
     if (patch[block] && typeof patch[block] === "object") {
       merged[block] = { ...current[block], ...(patch[block] as Record<string, unknown>) };
@@ -2230,7 +2591,33 @@ export async function saveDealIntake(
   // A person's answer is theirs: the AI reading stops refreshing it.
   {
     const { claimByPerson } = await import("./intake-answers");
-    Object.assign(merged, claimByPerson(current, Object.keys(patch)));
+    const claimed = opts.proposal
+      ? Object.keys(patch).filter((k) => k !== "implementation_focus")
+      : Object.keys(patch);
+    const own = claimByPerson(current, claimed);
+    if (opts.proposal && "implementation_focus" in patch) {
+      own.person_set = own.person_set.filter((f) => f !== "implementation_focus");
+      own.ai_filled = own.ai_filled.filter((f) => f !== "implementation_focus");
+    }
+    Object.assign(merged, own);
+  }
+  // The field tester lives on the plan, which is saved whole on every
+  // knob: only a changed name is a person's word, and from then on the
+  // pages show it as theirs rather than as the reading's proposal.
+  {
+    const timeline = patch["timeline"] as { field_tester?: string | null } | undefined;
+    if (
+      timeline &&
+      "field_tester" in timeline &&
+      (timeline.field_tester ?? null) !== current.timeline.field_tester &&
+      current.ai_filled.includes("field_tester")
+    ) {
+      const own = merged as Pick<typeof current, "ai_filled" | "ai_sources">;
+      own.ai_filled = (own.ai_filled ?? current.ai_filled).filter((f) => f !== "field_tester");
+      const sources = { ...(own.ai_sources ?? current.ai_sources) };
+      delete sources["field_tester"];
+      own.ai_sources = sources;
+    }
   }
   // The handoff: one answer at a time, a null stamp removes one, the flags
   // take the patch's value.
@@ -2281,7 +2668,7 @@ export async function saveDealIntake(
   // A re-booked meeting moves "Functional": the project's target launch,
   // which the Customers list and "At a glance" read, follows the plan. Then
   // the dates the operating model keeps: a locked baseline, a Go-Live.
-  if (patch["timeline"]) {
+  if (patch["timeline"] && !opts.stageTarget) {
     await syncTargetLaunch(dealId, userId);
     await stampDealDates(dealId, current.timeline.completed, next.timeline.completed);
   }
@@ -2322,7 +2709,7 @@ export async function saveDealIntake(
 
 /**
  * Move one milestone's date with a required reason, recorded atomically
- * with the move itself (0078: portal_record_milestone_date_change). Unlike
+ * with the move itself (0082: portal_record_milestone_date_change). Unlike
  * saveDealIntake, this is the one write path that can never leave the date
  * changed with no record of why, or a record with no matching date — the
  * override and the history land in the same database transaction.
@@ -2352,7 +2739,7 @@ export async function recordMilestoneDateChange(
   const { readIntake } = await import("./intake-answers");
   const { closeDateFor, timelineFor } = await import("./onboarding-plan");
   const { planMilestoneDateChange, wasOverdueAsOf } = await import("./milestone-history");
-  const { todayIn } = await import("./onboarding-timeline");
+  const { allMilestones, todayIn } = await import("./onboarding-timeline");
 
   const { data: row } = await db()
     .from("portal_accounts")
@@ -2373,6 +2760,9 @@ export async function recordMilestoneDateChange(
   }).date;
 
   const before = timelineFor(intake, close);
+  if (allMilestones(before).find((m) => m.key === milestoneKey)?.doneOn) {
+    throw new Error(`"${milestoneKey}" is already done, so its date is kept.`);
+  }
   const newOverrides = { ...intake.timeline.overrides, [milestoneKey]: newDate };
   const after = timelineFor(
     { ...intake, timeline: { ...intake.timeline, overrides: newOverrides } },
@@ -2461,6 +2851,28 @@ export async function syncTargetLaunch(
       : t.liveDate;
     const was: string | null = impl?.target_date ?? impl?.target_launch_date ?? null;
     if (was === target && impl?.target_date) return;
+
+    // The one read of the latest change row, reused below for both the
+    // override check and the existing dedup logic rather than queried twice.
+    const last =
+      was &&
+      (
+        await db()
+          .from("target_date_changes")
+          .select("id,reason_code,from_date,to_date,changed_at,explained_at")
+          .eq("implementation_id", implId)
+          .order("changed_at", { ascending: false })
+          .limit(1)
+          .maybeSingle()
+      ).data;
+
+    // A person changed the target directly — "Change target graduation
+    // date" on Current Implementation — and gave the reason in the same
+    // action. That holds until a person moves it again; the plan's own
+    // recompute must not quietly replace it.
+    const { targetOverrideHolds } = await import("./complexity-tiers");
+    if (targetOverrideHolds(was, last)) return;
+
     await db()
       .from("implementations")
       .update({ target_launch_date: target, target_date: target })
@@ -2468,13 +2880,6 @@ export async function syncTargetLaunch(
     // After the baseline is locked, every move of the target is a row that
     // asks for its reason. Two nudges before anyone answers stay one row.
     if (impl?.baseline_locked_at && was && was !== target) {
-      const { data: last } = await db()
-        .from("target_date_changes")
-        .select("id,reason_code,from_date")
-        .eq("implementation_id", implId)
-        .order("changed_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
       if (last && !last.reason_code) {
         await db()
           .from("target_date_changes")
@@ -2575,6 +2980,65 @@ export async function explainTargetChange(
     payload: { change_id: changeId, reason_code: reasonCode },
   });
   return { ok: true };
+}
+
+/**
+ * A TIS setting the target graduation date directly, not through a plan
+ * milestone — "Change target graduation date" on Current Implementation.
+ *
+ * Writes the same two places `syncTargetLaunch()` and `explainTargetChange()`
+ * already write — `implementations.target_date`/`target_launch_date`, and a
+ * `target_date_changes` row — except the reason is given in the same action
+ * that makes the change, never attached later. That is what
+ * `targetOverrideHolds()` reads to tell this apart from a plan-driven shift,
+ * and is why `changed_at` and `explained_at` are stamped identically here
+ * rather than left to separate defaults.
+ */
+export async function setTargetGraduationDate(
+  userId: string,
+  implementationId: string,
+  newDate: string,
+  reasonCode: string,
+  note: string | null,
+): Promise<{ ok: true; from: string | null; to: string }> {
+  await requireSalesEditor(userId);
+  const { data: impl } = await db()
+    .from("implementations")
+    .select("id,target_date,target_launch_date")
+    .eq("id", implementationId)
+    .maybeSingle();
+  if (!impl) throw new Error("Implementation not found.");
+  const was: string | null = impl.target_date ?? impl.target_launch_date ?? null;
+  if (was === newDate) return { ok: true, from: was, to: newDate };
+  const { error } = await db()
+    .from("implementations")
+    .update({ target_date: newDate, target_launch_date: newDate })
+    .eq("id", implementationId);
+  if (error) throw new Error(`Could not save the target date: ${error.message}`);
+  const at = new Date().toISOString();
+  const { error: historyError } = await db()
+    .from("target_date_changes")
+    .insert({
+      implementation_id: implementationId,
+      from_date: was,
+      to_date: newDate,
+      reason_code: reasonCode,
+      note: note?.trim() ?? "",
+      changed_by: userId,
+      explained_by: userId,
+      changed_at: at,
+      explained_at: at,
+    });
+  if (historyError) throw new Error(`Could not record the change: ${historyError.message}`);
+  await audit({
+    actor_type: "user",
+    actor_id: userId,
+    action: "implementation.target_date_changed",
+    entity_type: "implementation",
+    entity_id: implementationId,
+    payload: { from: was, to: newDate, reason_code: reasonCode },
+  });
+  return { ok: true, from: was, to: newDate };
 }
 
 /**

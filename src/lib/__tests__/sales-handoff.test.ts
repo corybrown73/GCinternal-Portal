@@ -169,6 +169,35 @@ describe("the Sales → TIS handoff", () => {
     expect(sales.customerReady.done).toBe(false);
     expect(sales.status).toBe("outstanding");
 
+    // What was promised, drafted by the AI, is a draft: a person says it.
+    const promised = handoffChecks(
+      readIntake({
+        handoff: {
+          ...salesDone.handoff,
+          commitments_none: false,
+          answers: {
+            ...salesDone.handoff.answers,
+            commitments: { value: "A free PDF", source: "ai", at, by: null, quote: "free PDF" },
+          },
+        },
+      }),
+    );
+    expect(promised.salesComplete.done).toBe(false);
+    expect(promised.salesComplete.missing.map((q) => q.key)).toEqual(["commitments"]);
+    const stated = handoffChecks(
+      readIntake({
+        handoff: {
+          ...salesDone.handoff,
+          commitments_none: false,
+          answers: {
+            ...salesDone.handoff.answers,
+            commitments: { value: "A free PDF", source: "sales", at, by: null, quote: null },
+          },
+        },
+      }),
+    );
+    expect(stated.salesComplete.done).toBe(true);
+
     // Sent to the customer: with them until their answers come back.
     const sent = handoffChecks(
       readIntake({
@@ -241,6 +270,76 @@ describe("the Sales → TIS handoff", () => {
     expect(defaultAsk(readIntake({}))).toEqual(
       HANDOFF_QUESTIONS.filter((q) => q.side === "customer").map((q) => q.key),
     );
+  });
+
+  it("shows what the AI drafted for the customer as theirs to confirm, and counts it outstanding until they do", () => {
+    const drafted = readIntake({
+      ...salesDone,
+      current_process: "Paper tickets",
+      current_process_source: "ai",
+      field_users: 12,
+      handoff: {
+        ...salesDone.handoff,
+        sent_to_customer_at: at,
+        asked: ["kickoff_attendees"],
+        answers: {
+          ...salesDone.handoff.answers,
+          kickoff_attendees: {
+            value: "Pat, Sam and two crew leads",
+            source: "ai",
+            at,
+            by: null,
+            quote: "Pat and Sam will be on",
+          },
+          devices: { value: "Company iPads", source: "ai", at, by: null, quote: "iPads" },
+        },
+      },
+    });
+    const p = customerPrompt(drafted)!;
+    // On their page as an answer to confirm, not as something they said.
+    expect(p.known.find((k) => k.key === "kickoff_attendees")).toMatchObject({
+      value: "Pat, Sam and two crew leads",
+      confirmed: false,
+    });
+    expect(p.known.find((k) => k.key === "devices")).toMatchObject({ confirmed: false });
+    expect(p.needed.map((n) => n.key)).not.toContain("kickoff_attendees");
+    // The readiness check waits for their word.
+    const checks = handoffChecks(drafted);
+    expect(checks.customerReady.done).toBe(false);
+    expect(checks.customerReady.missing.map((q) => q.key)).toEqual([
+      "current_process",
+      "kickoff_attendees",
+    ]);
+    expect(checks.status).toBe("sent");
+
+    const confirmed = readIntake({
+      ...drafted,
+      handoff: {
+        ...drafted.handoff,
+        answers: {
+          ...drafted.handoff.answers,
+          current_process: {
+            value: "Paper tickets",
+            source: "customer",
+            at,
+            by: null,
+            quote: null,
+          },
+          kickoff_attendees: {
+            value: "Pat, Sam and two crew leads",
+            source: "customer",
+            at,
+            by: null,
+            quote: null,
+          },
+        },
+      },
+    });
+    expect(
+      customerPrompt(confirmed)!.known.find((k) => k.key === "kickoff_attendees"),
+    ).toMatchObject({ confirmed: true });
+    expect(handoffChecks(confirmed).customerReady.done).toBe(true);
+    expect(handoffChecks(confirmed).status).toBe("complete");
   });
 
   it("maps a role to the source it implies", () => {

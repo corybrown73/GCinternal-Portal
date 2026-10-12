@@ -1,9 +1,11 @@
 import { Fragment, useEffect, useRef, useState } from "react";
-import { Link } from "@tanstack/react-router";
+import { Link, useSearch } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { ArrowRight, Check, Copy, Lock, Send, UserRoundCheck } from "lucide-react";
 
+import { AdjustPlanDatesPanel } from "@/components/adjust-plan-dates";
+import { attachmentsQuery } from "@/components/attachments-panel";
 import { FieldFusionGate } from "@/components/field-fusion-gate";
 import { AiSource, ReadingStatus } from "@/components/fill-from-sources";
 import { ImplementationFocusPanel } from "@/components/implementation-focus-panel";
@@ -12,10 +14,13 @@ import { ParkingLot } from "@/components/parking-lot";
 import { Field, StatusDot } from "@/components/record";
 import { SolutionsCard } from "@/components/solutions-card";
 import { TranscriptUpdatePanel } from "@/components/transcript-update-panel";
+import { WorkflowStoryPanel } from "@/components/workflow-story-panel";
 import { ImplementationUpdatePanel } from "@/components/implementation-update-panel";
 import { ImplementationHistorySection } from "@/components/implementation-history";
 import { FactsStep, FlowStep, NotesIn, SowStep } from "@/components/intake-panel";
 import { assignDealFn, claimDealFn, getDealAssignment } from "@/lib/assignment.functions";
+import { fileToBase64 } from "@/lib/attachment-client";
+import { uploadAttachment } from "@/lib/attachments.functions";
 import { MemberOptions } from "@/components/member-options";
 import { fieldFusionChecklist } from "@/lib/field-fusion";
 import { handToImplementationFn } from "@/lib/field-fusion.functions";
@@ -26,6 +31,7 @@ import { reasonLabel } from "@/lib/complexity-tiers";
 import { deriveHealth } from "@/lib/customer360-derive";
 import { dealQuery, type DealData } from "@/lib/deal-query";
 import type { Customer360 } from "@/lib/hub-types";
+import { HEALTH_LABEL } from "@/lib/leadership";
 import {
   firstFormName,
   flowAnswered,
@@ -34,13 +40,25 @@ import {
   type IntakeAnswers,
 } from "@/lib/intake-answers";
 import { closeDateFor, timelineFor } from "@/lib/onboarding-plan";
-import { coreWindowEnd, dayCounter, localIso, shortDay } from "@/lib/onboarding-timeline";
+import {
+  coreWindowEnd,
+  dayCounter,
+  localIso,
+  shortDay,
+  type Timeline,
+} from "@/lib/onboarding-timeline";
+import { getHandover, saveHandoverRecord } from "@/lib/hygiene.functions";
 import { getParkingLot } from "@/lib/parking-lot.functions";
 import { getWelcome } from "@/lib/welcome.functions";
 import { getKickoffCadence } from "@/lib/kickoff-cadence.functions";
 import { wonStage } from "@/lib/pipeline-stages";
-import type { AccountStage } from "@/lib/presale-stages";
-import { finishImplementation, moveDealStage, saveIntake } from "@/lib/presale.functions";
+import { isPreClose, type AccountStage } from "@/lib/presale-stages";
+import {
+  finishImplementation,
+  moveDealStage,
+  moveToGraduation,
+  saveIntake,
+} from "@/lib/presale.functions";
 import { ask } from "@/components/ui/ask";
 import {
   CANONICAL_JOURNEY_KEYS,
@@ -50,7 +68,9 @@ import {
   completedAfterTick,
   FLOW_STAGES,
   flowLabel,
+  GRADUATION_BRIEF_TITLE,
   isWorkingStageKey,
+  journeyStageDate,
   KICKOFF_CADENCE,
   latestStageTransition,
   PREP_ITEMS,
@@ -67,7 +87,9 @@ import {
 import { syncDealStageFn } from "@/lib/stage-flow.functions";
 import { stageGuidanceFor } from "@/lib/stage-guidance";
 import { parseWonGate, type WonGateMissing } from "@/lib/won-gate";
+import { liveWonGateMissing, parseGateParam } from "@/lib/deal-entry";
 import { ClosedWonGateNotice } from "@/components/closed-won-gate";
+import { ExistingCustomerLink } from "@/components/existing-customer-link";
 import { aeReplyDraft, googleCalendarLink } from "@/lib/ae-reply";
 import { customerLabel } from "@/lib/customer-labels";
 import { customerFacingName } from "@/lib/names";
@@ -485,7 +507,21 @@ export function StageFlow({ deal }: { deal: DealData }) {
               ? DEAL_TYPES.find((t) => t.path === intake.path)!.label
               : "Type of deal not set"}
           </button>
-          <b className="font-semibold">{stage.label}</b>
+          {/* One stage in the header: the deal's own. Working ahead on the
+              Closed Won list says so, rather than reading as the stage. */}
+          {shown !== flow.current &&
+          (flow.current === "prospect" || flow.current === "negotiate") ? (
+            <>
+              <b className="font-semibold">{flowLabel(flow.current)}</b>
+              <span className="text-muted-foreground">
+                {shown === "closed_won"
+                  ? `· getting ready for ${stage.label}`
+                  : `· looking ahead to ${stage.label}`}
+              </span>
+            </>
+          ) : (
+            <b className="font-semibold">{stage.label}</b>
+          )}
           {openTasks.length ? (
             <span className="text-muted-foreground">
               {" "}
@@ -914,10 +950,17 @@ export function CurrentImplementationTab({
     queryKey: ["welcome", dealId],
     queryFn: () => getWelcome({ data: { dealId } }),
   });
+  const files = useQuery(attachmentsQuery(implementationId));
   const [today, setToday] = useState<string | null>(null);
   useEffect(() => setToday(localIso()), []);
   const [viewing, setViewing] = useState<FlowStageKey | null>(null);
   const [manual, setManual] = useState<{ key: string; wasDone: boolean } | null>(null);
+  const qc = useQueryClient();
+  const skipToGraduation = useServerFn(moveToGraduation);
+  const skip = useMutation({
+    mutationFn: (reason: string) => skipToGraduation({ data: { dealId, reason } }),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ["deal", dealId] }),
+  });
 
   if (!q.data) return null;
   const deal = q.data;
@@ -930,6 +973,9 @@ export function CurrentImplementationTab({
     today: nowIso,
   });
   const timeline = timelineFor(intake, close.date);
+  const hasGraduationBrief = (files.data ?? []).some(
+    (f) => f.kind === "doc" && f.title === GRADUATION_BRIEF_TITLE,
+  );
   const flow = stageFlow({
     stage: deal.account.stage,
     intake,
@@ -939,6 +985,7 @@ export function CurrentImplementationTab({
     hasBrief: deal.briefs.some((b) => b.status === "complete" && b.generator === "llm"),
     hasLink: Boolean((deal.account as { welcome_share_url?: string | null }).welcome_share_url),
     timeline,
+    hasGraduationBrief,
   });
   const ws = workspaceFor({
     flow,
@@ -951,6 +998,11 @@ export function CurrentImplementationTab({
       ? { sharedAt: welcome.data.sharedAt ?? null, openedAt: welcome.data.openedAt ?? null }
       : null,
   });
+  // Same computation ImplementationTargetSection's StatusDot already makes —
+  // read again here so the status row below can say WHY, not just show the
+  // colour. No new rule: deriveHealth() already carries a `reason` for every
+  // level; this is the one place that was discarding it.
+  const health = record.implementation ? deriveHealth(record, record.implementation) : null;
 
   const canonicalStages = flow.stages.filter((s) => CANONICAL_JOURNEY_KEYS.includes(s.key));
   const currentInCanon =
@@ -988,11 +1040,11 @@ export function CurrentImplementationTab({
           Update the implementation
         </div>
         <div className="space-y-2.5">
-          {/* Every implementation on this tab came from a deal, so its target is the plan's. */}
+          {/* An implementation that came from a deal has its target on the plan; a proposed date moves the plan's live date. */}
           <TranscriptUpdatePanel
             customerId={customerId}
             implementationId={implementationId}
-            planOwnsTarget
+            planOwnsTarget={Boolean(dealId)}
             kickoffOutcome={kickoffOutcome}
           />
           <ImplementationUpdatePanel implementationId={implementationId} />
@@ -1000,6 +1052,16 @@ export function CurrentImplementationTab({
       </div>
 
       <ImplementationTargetSection record={record} />
+
+      <AdjustPlanDatesPanel
+        dealId={dealId}
+        implementationId={implementationId}
+        customerId={customerId}
+        intake={intake}
+        closeDate={close.date}
+        targetDate={record.implementation?.dates.target ?? null}
+        editable={editable}
+      />
 
       <section
         className="rounded-md border border-border bg-card px-4 py-3"
@@ -1042,6 +1104,35 @@ export function CurrentImplementationTab({
             </span>
           </span>
         </div>
+        {/* UAT: the row above named a count and a status word with nowhere
+            to see what either actually meant. Both lines below are already
+            computed — deriveHealth()'s own `reason`, every workspaceFor()
+            `waiting` entry's `who` — just not read until now. */}
+        {health && health.level !== "on_track" ? (
+          <p className="mt-1.5 border-t border-border pt-1.5 text-[11px] text-muted-foreground">
+            <span className="font-medium text-foreground">
+              Why {HEALTH_LABEL[health.level].toLowerCase()}:
+            </span>{" "}
+            {health.reason ?? "No specific reason recorded"}
+          </p>
+        ) : null}
+        {ws.waiting.length > 1 ? (
+          <ul
+            className={cn(
+              "mt-1 space-y-0.5 text-[11px] text-muted-foreground",
+              !(health && health.level !== "on_track") && "border-t border-border pt-1.5",
+            )}
+          >
+            {ws.waiting.map((w, i) => (
+              <li key={i}>
+                <span className="font-medium text-foreground">
+                  {w.who === "customer" ? "Customer" : "GoCanvas"}:
+                </span>{" "}
+                {w.what}
+              </li>
+            ))}
+          </ul>
+        ) : null}
       </section>
 
       <section
@@ -1092,7 +1183,42 @@ export function CurrentImplementationTab({
               setViewing(k === currentInCanon ? null : k);
               setManual(null);
             }}
+            history={deal.stage_history}
+            timeline={timeline}
+            outcomeAt={intake.outcome?.at ?? null}
           />
+          {editable && currentInCanon !== null && currentInCanon !== "complete" ? (
+            <div className="flex items-center justify-end border-b border-border px-4 py-1.5">
+              <button
+                type="button"
+                className="text-[11px] text-muted-foreground underline decoration-dotted hover:text-foreground disabled:opacity-50"
+                disabled={skip.isPending}
+                onClick={async () => {
+                  const why = await ask({
+                    title: "Skip to Graduation?",
+                    body: "Moves the implementation straight to Graduation. Every stage between here and there is left exactly as it is — not marked done, shown as skipped — and nothing here closes the implementation on its own. Say why the remaining stages are being skipped.",
+                    confirmLabel: "Skip to Graduation",
+                    destructive: true,
+                    prompt: {
+                      label: "Why",
+                      placeholder:
+                        "Customer is self-sufficient already; rest is being tracked separately",
+                      required: true,
+                    },
+                  });
+                  if (typeof why !== "string" || !why.trim()) return;
+                  skip.mutate(why.trim());
+                }}
+              >
+                {skip.isPending ? "Moving…" : "Skip to Graduation…"}
+              </button>
+              {skip.isError ? (
+                <span className="ml-2 text-[11px] text-destructive">
+                  {(skip.error as Error).message}
+                </span>
+              ) : null}
+            </div>
+          ) : null}
           {viewingOther ? (
             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-amber-500/10 px-4 py-1.5 text-[12px]">
               <span>
@@ -1130,6 +1256,7 @@ export function CurrentImplementationTab({
               editable={editable}
               stageKey={shown}
               current={flow.current}
+              implementationId={implementationId}
             />
           ) : stage.tasks.length > 0 ? (
             <ol className="divide-y divide-border">
@@ -1157,6 +1284,8 @@ export function CurrentImplementationTab({
       <SolutionsCard deal={deal} editable={editable} />
 
       <ImplementationFocusPanel dealId={dealId} intake={intake} />
+
+      <WorkflowStoryPanel dealId={dealId} intake={intake} />
 
       <ImplementationHistorySection
         dealStageHistory={deal.stage_history}
@@ -1191,10 +1320,29 @@ function NotClosedBar({
   const { profile } = useProfile();
   const move = useServerFn(moveDealStage);
   const [error, setError] = useState<string | null>(null);
-  const [missing, setMissing] = useState<WonGateMissing[] | null>(null);
+  // Arriving from New account after the gate held the deal back, the
+  // refusal comes along (?gate=notes,sow) so the page says what is missing.
+  const search = useSearch({ strict: false }) as { gate?: unknown };
+  const [missing, setMissing] = useState<WonGateMissing[] | null>(() =>
+    parseGateParam(search.gate),
+  );
+  // What the refusal named, read through the record: the SOW or the notes
+  // added since clear their half of the notice without a refresh.
+  const live = liveWonGateMissing(missing, {
+    reports: deal.gong_reports.length,
+    sowPath: deal.account.sow_document_path,
+    sowReference: deal.account.sow_reference,
+  });
   // Closed Won creates the customer's page, the plan and the assignment,
   // then the page redirects: several seconds. The bar says so the whole way.
   const [closed, setClosed] = useState(false);
+  // Prospect → Negotiate & Finalize: no gate, and it is where the TIS comes in.
+  const toNegotiate = useMutation({
+    mutationFn: () => move({ data: { dealId: deal.account.id, toStage: "negotiate" } }),
+    onMutate: () => setError(null),
+    onSuccess: () => void qc.invalidateQueries(),
+    onError: (e) => setError((e as Error).message),
+  });
   const m = useMutation({
     mutationFn: (force: boolean) =>
       move({
@@ -1233,20 +1381,33 @@ function NotClosedBar({
           )}
         </span>
         {editable && !closed ? (
-          <button
-            type="button"
-            className="inline-flex h-8 items-center gap-1.5 rounded-sm bg-primary px-3 text-[12px] font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-            disabled={m.isPending}
-            onClick={() => m.mutate(false)}
-          >
-            {m.isPending ? "Closing…" : "Mark Closed Won"}
-          </button>
+          <span className="flex flex-wrap items-center gap-2">
+            {deal.account.stage === "prospect" ? (
+              <button
+                type="button"
+                className="inline-flex h-8 items-center rounded-sm border border-amber-700/40 px-3 text-[12px] hover:bg-amber-500/10 disabled:opacity-50"
+                disabled={toNegotiate.isPending || m.isPending}
+                onClick={() => toNegotiate.mutate()}
+                title="Sales is closing: the TIS can be assigned from here on."
+              >
+                {toNegotiate.isPending ? "Moving…" : "Move to Negotiate & Finalize"}
+              </button>
+            ) : null}
+            <button
+              type="button"
+              className="inline-flex h-8 items-center gap-1.5 rounded-sm bg-primary px-3 text-[12px] font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+              disabled={m.isPending || toNegotiate.isPending}
+              onClick={() => m.mutate(false)}
+            >
+              {m.isPending ? "Closing…" : "Mark Closed Won"}
+            </button>
+          </span>
         ) : null}
         {error ? <p className="w-full text-destructive">{error}</p> : null}
       </div>
-      {missing ? (
+      {live.length ? (
         <ClosedWonGateNotice
-          missing={missing}
+          missing={live}
           dealId={deal.account.id}
           onOpen={onOpenTask}
           canForce={canManage(profile?.role)}
@@ -1308,11 +1469,22 @@ function Stepper({
   current,
   shown,
   onShow,
+  history,
+  timeline,
+  outcomeAt,
 }: {
   stages: ReturnType<typeof stageFlow>["stages"];
   current: FlowStageKey | null;
   shown: FlowStageKey;
   onShow: (k: FlowStageKey) => void;
+  /**
+   * Only the canonical journey (Current Implementation) passes these: the
+   * rail's other caller shows Closed Won's own non-canonical stages, which
+   * `journeyStageDate` was not built to date.
+   */
+  history?: DealData["stage_history"];
+  timeline?: Timeline | null;
+  outcomeAt?: string | null;
 }) {
   const at = stages.findIndex((s) => s.key === current);
   return (
@@ -1320,6 +1492,25 @@ function Stepper({
       {stages.map((s, i) => {
         const past = at >= 0 && i < at;
         const isCurrent = s.key === current;
+        // A forced move (Skip to Graduation, or any other forward override)
+        // can put `current` past a stage whose own tasks were never done.
+        // Index position alone used to read as "done" here — a skipped stage
+        // got the same green checkmark as a finished one. `s.done` is the
+        // one fact that actually says which; skipped stays visibly distinct.
+        const skipped = past && !s.done;
+        // `s.done` decides completed over position: Implementation Complete
+        // can be both "current" (nothing comes after it) and done once it
+        // has an outcome, and that's a completed date, not a target.
+        const status = skipped
+          ? "skipped"
+          : s.done
+            ? "completed"
+            : isCurrent
+              ? "current"
+              : "upcoming";
+        const date = history
+          ? journeyStageDate(s.key, status, history, timeline ?? null, outcomeAt ?? null)
+          : null;
         return (
           <li key={s.key} className="flex items-center gap-1">
             <button
@@ -1330,14 +1521,25 @@ function Stepper({
                 "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[12px] font-medium transition-colors",
                 isCurrent
                   ? "border-primary bg-primary text-primary-foreground"
-                  : past
-                    ? "border-status-ontrack-foreground/40 bg-status-ontrack/60 text-status-ontrack-foreground"
-                    : "border-border text-muted-foreground hover:text-foreground",
+                  : skipped
+                    ? "border-amber-500/40 bg-amber-500/10 text-amber-800 dark:text-amber-300"
+                    : past
+                      ? "border-status-ontrack-foreground/40 bg-status-ontrack/60 text-status-ontrack-foreground"
+                      : "border-border text-muted-foreground hover:text-foreground",
                 s.key === shown && !isCurrent && "ring-2 ring-primary/40",
               )}
             >
-              {past ? <Check className="h-3 w-3" strokeWidth={3} /> : null}
+              {skipped ? (
+                <span className="text-[10px] uppercase tracking-wide">Skipped</span>
+              ) : past ? (
+                <Check className="h-3 w-3" strokeWidth={3} />
+              ) : null}
               {s.label}
+              {date ? (
+                <span className="font-normal opacity-75">
+                  · {date.label} {date.text}
+                </span>
+              ) : null}
             </button>
             {i < stages.length - 1 ? (
               <ArrowRight className="h-3 w-3 text-muted-foreground" />
@@ -1917,6 +2119,10 @@ function DealTypeBody({
         })}
       </div>
       <AiSource answers={intake} field="path" />
+      {/* Only the close reads the pick, so it is asked only before the close. */}
+      {intake.path === "existing" && !deal.account.customer_id && isPreClose(deal.account.stage) ? (
+        <ExistingCustomerLink deal={deal} intake={intake} editable={editable} />
+      ) : null}
       {m.isPending ? <p className="text-[12px] text-muted-foreground">Saving…</p> : null}
       {error ? <p className="text-[12px] text-destructive">{error}</p> : null}
     </div>
@@ -2598,6 +2804,7 @@ function OnboardingList({
   editable,
   stageKey,
   current,
+  implementationId,
 }: {
   deal: DealData;
   intake: IntakeAnswers;
@@ -2606,6 +2813,10 @@ function OnboardingList({
   /** Which of the working stages this list is. */
   stageKey: FlowStageKey;
   current: FlowStageKey | null;
+  /** Absent on the Closed Won board fallback, which has no implementation
+   * yet; the brief upload and Mark as Graduated need one, so both stay off
+   * there and the rest of this list renders exactly as it always has. */
+  implementationId?: string;
 }) {
   const qc = useQueryClient();
   const save = useServerFn(saveIntake);
@@ -2685,6 +2896,70 @@ function OnboardingList({
     onError: (e) => setError((e as Error).message),
   });
   void move;
+
+  // The Graduation task: upload the post-implementation brief. Same
+  // attachment storage AttachmentsPanel uses, with a fixed title/kind so
+  // "is it attached" never depends on what somebody happened to type.
+  const uploadBrief = useServerFn(uploadAttachment);
+  const [briefError, setBriefError] = useState<string | null>(null);
+  const briefUpload = useMutation({
+    mutationFn: async (file: File) => {
+      if (!implementationId) throw new Error("No implementation to attach this to.");
+      return uploadBrief({
+        data: {
+          implementationId,
+          title: GRADUATION_BRIEF_TITLE,
+          kind: "doc",
+          fileName: file.name,
+          contentType: file.type || "application/octet-stream",
+          dataBase64: await fileToBase64(file),
+        },
+      });
+    },
+    onMutate: () => setBriefError(null),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["account-files", implementationId] });
+      void qc.invalidateQueries({ queryKey: ["deal", deal.account.id] });
+    },
+    onError: (e) => setBriefError(e instanceof Error ? e.message : "Could not upload the brief."),
+  });
+
+  // Mark as Graduated: stamps the handover record's date, the same record
+  // (cs_handoffs) and write path (saveHandoverRecord) the Overview tab's
+  // Handover record panel already uses. A record, not a gate: it moves no
+  // stage and, per that record's own rule, never overwrites a field a
+  // person already filled in — only handoff_date is set here.
+  const handover = useQuery({
+    queryKey: ["handover", implementationId],
+    queryFn: () => getHandover({ data: { implementationId: implementationId! } }),
+    enabled: Boolean(implementationId),
+  });
+  const saveHandover = useServerFn(saveHandoverRecord);
+  const graduate = useMutation({
+    mutationFn: () => {
+      if (!implementationId) throw new Error("No implementation to graduate.");
+      const r = handover.data?.record ?? null;
+      return saveHandover({
+        data: {
+          implementationId,
+          handoff_date: localIso(),
+          cs_owner_id: r?.cs_owner_id ?? null,
+          summary: r?.summary ?? null,
+          open_items: r?.open_items ?? null,
+          account_context: r?.account_context ?? null,
+          health_at_handover:
+            (r?.health_at_handover as "on_track" | "at_risk" | "blocked" | null) ?? null,
+          notes: r?.notes ?? null,
+        },
+      });
+    },
+    onMutate: () => setError(null),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["handover", implementationId] });
+      void qc.invalidateQueries({ queryKey: ["customer360"] });
+    },
+    onError: (e) => setError(e instanceof Error ? e.message : "Could not mark this graduated."),
+  });
   const [recapFor, setRecapFor] = useState<string | null>(null);
   const playbook = intake.path === "new_logo";
   const meetingWhen = (k: string) => {
@@ -2725,12 +3000,22 @@ function OnboardingList({
                 <input
                   type="checkbox"
                   className="mt-0.5 h-4 w-4 shrink-0"
-                  checked={t.action === "graduate" ? grad.isOn(t.key, t.done) : isDone(t)}
-                  disabled={!editable}
+                  checked={
+                    t.action === "graduate"
+                      ? grad.isOn(t.key, t.done)
+                      : t.action === "upload_brief"
+                        ? t.done
+                        : isDone(t)
+                  }
+                  // Ticked by the upload succeeding, never by hand: there is
+                  // nothing to toggle back to once a document is attached.
+                  disabled={!editable || t.action === "upload_brief"}
                   onChange={(e) =>
                     t.action === "graduate"
                       ? grad.mutate({ key: t.key, on: e.target.checked })
-                      : tick({ doneKey: t.doneKey!, on: e.target.checked, hasLaterPhases })
+                      : t.action === "upload_brief"
+                        ? undefined
+                        : tick({ doneKey: t.doneKey!, on: e.target.checked, hasLaterPhases })
                   }
                   aria-label={t.label}
                 />
@@ -2764,6 +3049,35 @@ function OnboardingList({
                   </div>
                   {t.key === nextKey || (t.optional && !t.done) ? (
                     <p className="mt-0.5 text-[12px] text-muted-foreground">{t.hint}</p>
+                  ) : null}
+                  {t.action === "upload_brief" && !t.done ? (
+                    <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                      <input
+                        type="file"
+                        disabled={!editable || !implementationId || briefUpload.isPending}
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) briefUpload.mutate(file);
+                          e.target.value = "";
+                        }}
+                        className={cn(
+                          "text-[12px] text-muted-foreground",
+                          "file:mr-2 file:rounded-md file:border file:border-input file:bg-background",
+                          "file:px-2 file:py-1 file:text-[12px] file:text-foreground",
+                        )}
+                      />
+                      {briefUpload.isPending ? (
+                        <span className="text-[11px] text-muted-foreground">Uploading…</span>
+                      ) : null}
+                      {!implementationId ? (
+                        <span className="text-[11px] text-muted-foreground">
+                          Not available here.
+                        </span>
+                      ) : null}
+                      {briefError ? (
+                        <span className="text-[11px] text-destructive">{briefError}</span>
+                      ) : null}
+                    </div>
                   ) : null}
                   {playbook && CORE_MEETINGS.some((c) => c.key === t.key) ? (
                     <button
@@ -2866,6 +3180,45 @@ function OnboardingList({
           )
         ) : null}
       </div>
+      {/* Mark as Graduated: a different fact from Finish — Proven/Not
+          Proven above (that is the TTV outcome; this is the CS handover),
+          and from reaching this stage at all — moving here, forced or not,
+          never sets handoff_date by itself. Renders nothing while
+          handover_record is off, same as the Overview tab's own panel. */}
+      {stageKey === "complete" &&
+      current === "complete" &&
+      implementationId &&
+      handover.data?.enabled ? (
+        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border px-4 py-2.5">
+          <p className="text-[12px] text-muted-foreground">
+            {allDone
+              ? "Every Graduation task is done."
+              : "Blocked until every Graduation task above — the brief included — is done."}
+          </p>
+          {handover.data.record?.handoff_date ? (
+            <span className="text-[12px] font-medium">
+              Graduated {shortDay(handover.data.record.handoff_date)}
+              {handover.data.record.recorded_by_name
+                ? ` · ${handover.data.record.recorded_by_name}`
+                : ""}
+            </span>
+          ) : (
+            <button
+              type="button"
+              className="inline-flex h-8 items-center gap-1.5 rounded-sm bg-primary px-3 text-[12px] font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+              disabled={!editable || !allDone || graduate.isPending}
+              title={
+                allDone
+                  ? "Record the graduation date on the handover record"
+                  : "Every Graduation task must be done first"
+              }
+              onClick={() => graduate.mutate()}
+            >
+              {graduate.isPending ? "Saving…" : "Mark as Graduated"}
+            </button>
+          )}
+        </div>
+      ) : null}
       {error ? <p className="px-4 pb-2 text-[12px] text-destructive">{error}</p> : null}
     </div>
   );

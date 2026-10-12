@@ -31,19 +31,8 @@ let warned = false;
  * exists to make visible — and it is invisible in every other way.
  */
 export function appUrl(): string {
-  // PUBLIC_APP_URL is the one setting: the domain customers know. APP_URL is
-  // its older name and still honoured. Neither ever comes from the request:
-  // a link minted while somebody browsed the deployment's vercel.app alias
-  // went out to customers on that alias for weeks.
-  const configured = process.env["PUBLIC_APP_URL"] || process.env["APP_URL"];
-  if (configured) return configured.replace(/\/+$/, "");
-
-  // Vercel names the production domain itself; on any Vercel deploy that is
-  // the right origin, whatever host the request came in on.
-  const production = process.env["VERCEL_PROJECT_PRODUCTION_URL"];
-  if (production) {
-    return `https://${production.replace(/^https?:\/\//, "").replace(/\/+$/, "")}`;
-  }
+  const configured = configuredAppUrl();
+  if (configured) return configured;
 
   // Outside Vercel and unconfigured: the request's own host, never an alias.
   const fromRequest = requestOrigin();
@@ -57,6 +46,29 @@ export function appUrl(): string {
     );
   }
   return DEV_FALLBACK;
+}
+
+/**
+ * The origin the deployment itself is configured with, or null: never the
+ * request's host. For anything that sends a secret to "ourselves" (the
+ * cron self-kick), where a request-derived origin would let the caller
+ * choose who receives it.
+ */
+export function configuredAppUrl(): string | null {
+  // PUBLIC_APP_URL is the one setting: the domain customers know. APP_URL is
+  // its older name and still honoured. Neither ever comes from the request:
+  // a link minted while somebody browsed the deployment's vercel.app alias
+  // went out to customers on that alias for weeks.
+  const configured = process.env["PUBLIC_APP_URL"] || process.env["APP_URL"];
+  if (configured) return configured.replace(/\/+$/, "");
+
+  // Vercel names the production domain itself; on any Vercel deploy that is
+  // the right origin, whatever host the request came in on.
+  const production = process.env["VERCEL_PROJECT_PRODUCTION_URL"];
+  if (production) {
+    return `https://${production.replace(/^https?:\/\//, "").replace(/\/+$/, "")}`;
+  }
+  return null;
 }
 
 function requestOrigin(): string | null {

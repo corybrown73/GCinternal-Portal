@@ -4,7 +4,7 @@ import { normalizeStage } from "./hub-format";
 import { dealStageFor } from "./deal-stage";
 import { dealValue } from "./deal-value";
 import { dealStagesFor } from "./server/deal-stage";
-import { dealFactsFor } from "./server/deal-facts";
+import { dealFactsFor, withPendingProposals } from "./server/deal-facts";
 import { nextLifecycleStage } from "./stage-advance-input";
 import { LAUNCH_STAGE, launchAcceptanceGate, launchGateMessage } from "./launch-gate";
 import type {
@@ -378,10 +378,12 @@ export async function loadHome(scope?: ResolvedScope | null): Promise<HomeData> 
   const dealFacts = await dealFactsFor(
     implementations.map((i) => i.deal_id).filter(Boolean) as string[],
   );
+  // The pending transcript proposals are each implementation's own.
+  const factsByImpl = await withPendingProposals(implementations, dealFacts);
 
   const triage = implementations.map((i) => ({
     implementation_id: i.id,
-    deal: i.deal_id ? (dealFacts.get(i.deal_id) ?? null) : null,
+    deal: factsByImpl.get(i.id) ?? null,
     commitments: commitments.filter((c) => c.implementation_id === i.id),
     risks: forImpl(riskRows, i.id),
     issues: forImpl(issueRows, i.id),
@@ -528,7 +530,8 @@ export async function loadCustomer360(
   let dealFacts: DealFacts | null = null;
   if (impl?.deal_id) {
     try {
-      dealFacts = (await dealFactsFor([impl.deal_id])).get(impl.deal_id) ?? null;
+      const facts = await dealFactsFor([impl.deal_id]);
+      dealFacts = (await withPendingProposals([impl], facts)).get(impl.id) ?? null;
     } catch (e) {
       console.error("[360] could not read deal facts", e);
     }
@@ -2819,9 +2822,13 @@ export async function storeAttachment(args: {
   const binary = Buffer.from(args.dataBase64, "base64");
   const safe = args.fileName.replace(/[^A-Za-z0-9._-]+/g, "-").slice(-120);
   const path = `${args.folder}/${crypto.randomUUID()}-${safe}`;
+  // The bytes say whether this is a PDF or a Word file; the browser's type
+  // is kept only for everything else.
+  const { sniffDocumentType } = await import("./server/ai/documents");
+  const contentType = sniffDocumentType(new Uint8Array(binary)) ?? args.contentType;
   const { error } = await db()
     .storage.from(ATTACHMENT_BUCKET)
-    .upload(path, binary, { contentType: args.contentType, upsert: false });
+    .upload(path, binary, { contentType, upsert: false });
   if (error) throw new Error(`Could not upload the file: ${error.message}`);
   return { path, name: args.fileName };
 }

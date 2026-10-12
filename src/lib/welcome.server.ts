@@ -97,7 +97,24 @@ async function viewFor(
   const leadName = leadCard?.name ?? input.lead;
   if (leadCard?.email) leadEmail = leadCard.email;
   const { bookingShown } = await import("./welcome");
-  const bookingOn = bookingShown(readIntake(deal.intake).welcome_hidden_screens);
+  const intake = readIntake(deal.intake);
+  const bookingOn = bookingShown(intake.welcome_hidden_screens);
+  const formArtifacts: WelcomeView["formArtifacts"] = [];
+  if (opts.internal && intake.uploaded_forms.length) {
+    const { intakeFormLink } = await import("./presale.server");
+    const linked = await Promise.all(
+      intake.uploaded_forms.map(async (form) => {
+        try {
+          const { url } = await intakeFormLink(String(deal.id), form.path);
+          return { name: form.name, url };
+        } catch (error) {
+          console.error("[welcome] could not sign an uploaded form", error);
+          return null;
+        }
+      }),
+    );
+    formArtifacts.push(...linked.filter((form): form is { name: string; url: string } => !!form));
+  }
 
   const readiness: WelcomeView["readiness"] = [];
   if (opts.internal) {
@@ -121,6 +138,12 @@ async function viewFor(
         label: "First form",
         hint: "Onboarding intake → pick a library card or upload what they have.",
       });
+    else if (input.firstForm && input.firstFormSource === "ai")
+      readiness.push({
+        key: "form_words",
+        label: "First form — confirm it",
+        hint: "Onboarding intake → the forms they named. The AI reading took this one from the SOW or the calls; the cover and the phone show it as “to confirm” until you change it or pick it yourself.",
+      });
     if (!input.currentProcess)
       readiness.push({
         key: "process",
@@ -133,6 +156,13 @@ async function viewFor(
         label: "The process today — confirm it is their words",
         hint: "Onboarding intake → the brief wrote this line from the call notes. Retype it as they said it, or press “These are their words”. Until then the page shows it without quotation marks.",
       });
+    const story = readIntake(deal.intake).workflow_story;
+    if ((story.before || story.during || story.after) && !story.validated_at)
+      readiness.push({
+        key: "story",
+        label: "The workflow story — confirm it is their words",
+        hint: "Customer 360 → Current Implementation → Workflow story. The AI reading drafted it from the calls; Kickoff View shows it as “to confirm” until you confirm or retype it.",
+      });
     if (!input.team?.champion)
       readiness.push({
         key: "champion",
@@ -144,6 +174,12 @@ async function viewFor(
         key: "tester",
         label: "Their field tester",
         hint: "Onboarding plan → field tester. The most important name on the page.",
+      });
+    else if (input.fieldTesterSource === "ai")
+      readiness.push({
+        key: "tester_words",
+        label: "Their field tester — confirm it",
+        hint: "Onboarding plan → field tester. The AI reading proposed this name from the calls; the page shows it as “to confirm” until you retype it (or correct it) as theirs.",
       });
     if (!leadName)
       readiness.push({
@@ -182,6 +218,10 @@ async function viewFor(
   }
 
   const lot = await parkingLotFor(String(deal.id));
+  const stageHistory = await implementationStageHistoryForDeal(
+    String(deal.id),
+    deal.customer_id ? String(deal.customer_id) : null,
+  );
   return {
     dealId: String(deal.id),
     clientName: input.clientName,
@@ -190,6 +230,8 @@ async function viewFor(
     timeline: input.timeline,
     lead: leadName,
     fieldTester: input.fieldTester,
+    fieldTesterDue: intake.timeline.field_tester_due,
+    fieldTesterSource: input.fieldTesterSource ?? null,
     currentProcess: input.currentProcess ?? null,
     currentProcessSource: input.currentProcessSource ?? null,
     team: {
@@ -214,6 +256,8 @@ async function viewFor(
         : null,
     },
     firstForm: input.firstForm,
+    formArtifacts,
+    firstFormSource: input.firstForm ? (input.firstFormSource ?? "person") : null,
     nextUseCases: input.nextUseCases,
     photoUrl,
     toolMarks,
@@ -270,8 +314,30 @@ async function viewFor(
       homeworkDone,
       parkingLot: lot,
       leadName,
+      stageHistory,
     }),
   };
+}
+
+async function implementationStageHistoryForDeal(
+  dealId: string,
+  customerId: string | null,
+): Promise<import("./welcome-journey").ImplementationStageHistoryEntry[]> {
+  try {
+    const { implementationForDeal } = await import("./assignment.server");
+    const implementationId = await implementationForDeal(dealId, customerId);
+    if (!implementationId) return [];
+    const { data, error } = await db()
+      .from("implementation_stage_history")
+      .select("stage,entered_at,exited_at")
+      .eq("implementation_id", implementationId)
+      .order("entered_at", { ascending: true });
+    if (error) throw error;
+    return (data ?? []) as import("./welcome-journey").ImplementationStageHistoryEntry[];
+  } catch (error) {
+    console.error("[welcome] could not read implementation stage history", error);
+    return [];
+  }
 }
 
 /** The parking lot for the customer's page. Never throws: an empty lot is a quiet page. */

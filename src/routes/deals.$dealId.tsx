@@ -21,6 +21,10 @@ export const Route = createFileRoute("/deals/$dealId")({
       },
     ],
   }),
+  // ?gate=notes,sow: New account created the deal but the Closed Won gate
+  // held it back; the page opens on what is missing (NotClosedBar).
+  validateSearch: (search: Record<string, unknown>): { gate?: string } =>
+    typeof search["gate"] === "string" && search["gate"] ? { gate: search["gate"] } : {},
   // Awaited, so the route can show a skeleton while the record loads. Before,
   // Create deal blanked the screen for the whole fetch and people clicked it
   // twice.

@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { claimByPerson, readIntake } from "../intake-answers";
 import { groundOnboarding } from "../onboarding-grounding";
 import { prefillFromSynthesis } from "../intake-prefill";
+import { READING_STALE_MS, readingInFlight } from "../stage-flow";
 
 const calls = `Discovery call. Ray: "Every tech fills a paper Service Ticket at the end of each job."
 Priya: "We also do a weekly Safety Audit on every site."
@@ -128,6 +129,46 @@ describe("filling from the reading", () => {
     expect(next.ai_sources).toEqual({});
   });
 
+  it("parses the reading's state as the job writes it, and an older row as it was", () => {
+    // A row from before the job queue: no job, no step, no branches.
+    const old = readIntake({
+      ai_reading: { status: "done", started_at: "2026-10-01T00:00:00Z", filled: ["the forms"] },
+    }).ai_reading!;
+    expect(old).toMatchObject({
+      status: "done",
+      filled: ["the forms"],
+      job_id: null,
+      step: null,
+      heartbeat_at: null,
+      branches: {},
+      again: false,
+    });
+
+    const fresh = readIntake({
+      ai_reading: {
+        status: "queued",
+        started_at: "2026-10-08T10:00:00Z",
+        job_id: "job-1",
+        step: "sow",
+        heartbeat_at: "2026-10-08T10:01:00Z",
+        branches: {
+          sow: { status: "ok", detail: "2 services" },
+          brief: { status: "failed", detail: "rate limited" },
+          verify: { status: "skipped" },
+        },
+      },
+    }).ai_reading!;
+    expect(fresh.status).toBe("queued");
+    expect(fresh.branches["sow"]).toEqual({ status: "ok", detail: "2 services" });
+    expect(fresh.branches["verify"]).toEqual({ status: "skipped", detail: null });
+
+    // A status nobody defined is not a reading: the whole block is dropped,
+    // never thrown.
+    expect(
+      readIntake({ ai_reading: { status: "pending", started_at: "x" } }).ai_reading,
+    ).toBeNull();
+  });
+
   it("treats what an older reading wrote as the AI's, so the first refresh replaces it", () => {
     const old = readIntake({
       wanted_forms: [
@@ -143,5 +184,46 @@ describe("filling from the reading", () => {
     });
     expect(patch.wanted_forms?.[0]?.name).toBe("Service Ticket");
     expect(patch.current_process).toMatch(/retypes them/);
+  });
+});
+
+describe("readingInFlight", () => {
+  const now = Date.parse("2026-10-08T10:10:00Z");
+  const ago = (minutes: number) => new Date(now - minutes * 60_000).toISOString();
+  const reading = (over: Record<string, unknown>) =>
+    readIntake({ ai_reading: { started_at: ago(1), ...over } }).ai_reading;
+
+  it("is true while queued or running with a recent heartbeat", () => {
+    expect(readingInFlight(reading({ status: "queued" }), now)).toBe(true);
+    expect(readingInFlight(reading({ status: "running" }), now)).toBe(true);
+    expect(
+      readingInFlight(
+        reading({ status: "running", started_at: ago(30), heartbeat_at: ago(2) }),
+        now,
+      ),
+    ).toBe(true);
+  });
+
+  it("goes quiet eight minutes after the last heartbeat — the job is not coming back", () => {
+    expect(READING_STALE_MS).toBe(8 * 60 * 1000);
+    expect(readingInFlight(reading({ status: "running", started_at: ago(9) }), now)).toBe(false);
+    expect(
+      readingInFlight(
+        reading({ status: "queued", started_at: ago(30), heartbeat_at: ago(9) }),
+        now,
+      ),
+    ).toBe(false);
+    expect(
+      readingInFlight(
+        reading({ status: "running", started_at: ago(30), heartbeat_at: ago(7) }),
+        now,
+      ),
+    ).toBe(true);
+  });
+
+  it("is false once the reading is done or failed, and with no reading at all", () => {
+    expect(readingInFlight(reading({ status: "done" }), now)).toBe(false);
+    expect(readingInFlight(reading({ status: "failed" }), now)).toBe(false);
+    expect(readingInFlight(null, now)).toBe(false);
   });
 });

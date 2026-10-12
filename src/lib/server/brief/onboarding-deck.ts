@@ -44,6 +44,8 @@ export type OnboardingDeckInput = {
   lead: string | null;
   /** Who at the customer runs the form on real jobs. */
   fieldTester: string | null;
+  /** Who named them: a person, or the AI reading of the calls — shown as a proposal until a person retypes it. */
+  fieldTesterSource?: "ai" | "person" | null;
   /** The process today, in the customer's words, from the intake. */
   currentProcess?: string | null;
   /** Who wrote currentProcess: a person, or the brief's synthesis. */
@@ -62,6 +64,8 @@ export type OnboardingDeckInput = {
     objective: string | null;
     source: "library" | "uploaded" | "typed" | "tbd";
   } | null;
+  /** Who named the first form: a person, or the AI reading of the SOW and the calls — a proposal until a person confirms it. */
+  firstFormSource?: "ai" | "person" | null;
   /** From the library, for their industry, when there is no integration. */
   nextUseCases: Array<{ name: string; objective: string | null }>;
   /** Data URI, when the customer's logo is on file. */
@@ -676,14 +680,18 @@ function slideFirstForm(pptx: Pptx, d: OnboardingDeckInput) {
     color: BRAND.fg2,
     fontFace: FONT,
   });
+  // A form the reading took from the SOW or the calls is a proposal: the
+  // slide never says the customer described it to us.
   const source =
-    d.firstForm?.source === "uploaded"
-      ? "Starting point: the form you already run today"
-      : d.firstForm?.source === "library"
-        ? "Starting point: from the GoCanvas form library"
-        : d.firstForm?.source === "typed"
-          ? "Starting point: the form you described to us"
-          : "Starting point: chosen together on the kickoff call";
+    d.firstForm && d.firstFormSource === "ai"
+      ? "Starting point: named in your statement of work and calls — we confirm it together"
+      : d.firstForm?.source === "uploaded"
+        ? "Starting point: the form you already run today"
+        : d.firstForm?.source === "library"
+          ? "Starting point: from the GoCanvas form library"
+          : d.firstForm?.source === "typed"
+            ? "Starting point: the form you described to us"
+            : "Starting point: chosen together on the kickoff call";
   s.addText(source.toUpperCase(), {
     x: PAD + 0.22,
     y: top + 2.15,
@@ -715,7 +723,9 @@ function slideFirstForm(pptx: Pptx, d: OnboardingDeckInput) {
     {
       icon: "HardHat",
       head: `Proven on real jobs · from ${at("fieldtest") ? shortDay(at("fieldtest")!.date) : "the field test"}`,
-      body: `${d.fieldTester ? d.fieldTester : "Your field tester"} runs it on real work. We watch the submissions and fix what the field says.`,
+      // A name the reading proposed is not put on the customer's slide as
+      // their choice: the generic line stands until a person names them.
+      body: `${d.fieldTester && d.fieldTesterSource !== "ai" ? d.fieldTester : "Your field tester"} runs it on real work. We watch the submissions and fix what the field says.`,
     },
   ];
   rows.forEach((r, i) => {

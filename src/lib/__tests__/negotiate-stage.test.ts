@@ -46,7 +46,7 @@ describe("Negotiate & Finalize", () => {
 
   it("opens the Assign task at Negotiate, keeps it locked for a bare Prospect", () => {
     expect(assign(stageFlow(input({ stage: "prospect" }))).locked).toBe(
-      "Assigned at Negotiate & Finalize or Closed Won",
+      "Move the deal to Negotiate & Finalize to bring the TIS in",
     );
     expect(assign(stageFlow(input())).locked).toBeNull();
     expect(assign(stageFlow(input({ owner: "Dana" }))).done).toBe(true);

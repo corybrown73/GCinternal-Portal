@@ -3,7 +3,13 @@ import { describe, expect, it } from "vitest";
 import { readIntake } from "../intake-answers";
 import { timelineFor } from "../onboarding-plan";
 import { shortDay } from "../onboarding-timeline";
-import { byLabel, customerJourney, dueLabel, journeyOverviewItems } from "../welcome-journey";
+import {
+  actualStageCompletionDate,
+  byLabel,
+  customerJourney,
+  dueLabel,
+  journeyOverviewItems,
+} from "../welcome-journey";
 
 /**
  * The customer's "where we are": the five stages from the deal's stage,
@@ -167,6 +173,58 @@ describe("the customer's journey", () => {
     expect(byLabel("2026-10-09")).toMatch(/^by /);
     expect(byLabel("Week 4")).toBe("by Week 4");
     expect(byLabel(null)).toBe("");
+  });
+
+  it("shows only explicitly agreed targets and history-derived actual completion dates", () => {
+    const intake = readIntake({
+      path: "new_logo",
+      timeline: {
+        stage_targets: {
+          get_it_working: {
+            original_date: "2026-10-20",
+            current_date: "2026-10-23",
+            history: [],
+          },
+        },
+      },
+    });
+    const journey = customerJourney({
+      stage: "make_it_yours",
+      intake,
+      timeline: timelineFor(intake, CLOSE),
+      homeworkDone: {},
+      parkingLot: [],
+      leadName: null,
+      stageHistory: [
+        { stage: "build", entered_at: "2026-10-15T09:00:00Z", exited_at: "2026-10-19T12:00:00Z" },
+      ],
+    })!;
+
+    expect(journey.stages.find((stage) => stage.key === "get_it_working")?.target).toEqual({
+      originalDate: "2026-10-20",
+      currentDate: "2026-10-23",
+      actualDate: "2026-10-19",
+    });
+    expect(journey.stages.find((stage) => stage.key === "make_it_yours")?.target).toEqual({
+      originalDate: null,
+      currentDate: null,
+      actualDate: null,
+    });
+  });
+
+  it("uses the lifecycle's graduate entry as actual completion, not a planned date", () => {
+    expect(
+      actualStageCompletionDate(
+        [
+          {
+            stage: "graduate_to_cs",
+            entered_at: "2026-10-27T15:00:00Z",
+            exited_at: null,
+          },
+        ],
+        "complete",
+      ),
+    ).toBe("2026-10-27");
   });
 });
 

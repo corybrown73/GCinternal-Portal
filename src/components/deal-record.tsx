@@ -13,6 +13,7 @@ import ReactMarkdown from "react-markdown";
 
 import { PageBody, PageHeader } from "@/components/page";
 import { dealQuery, type DealData } from "@/lib/deal-query";
+import { DOCUMENT_UPLOAD_ACCEPT, PDF_TYPE, documentUploadType } from "@/lib/document-upload";
 import { CustomerLogo } from "@/components/customer-logo";
 import { Field, NoRows, Panel } from "@/components/record";
 import { EditableField } from "@/components/editable-field";
@@ -37,7 +38,6 @@ import {
   addNote,
   addReport,
   createTamRequestForDeal,
-  generateBriefForDeal,
   getBriefDownloadUrl,
   getDeal,
   getHandoffOptions,
@@ -63,6 +63,7 @@ import { Working } from "@/components/working";
 import type { EditableDealField } from "@/lib/presale-fields";
 import { parseWonGate, type WonGateMissing } from "@/lib/won-gate";
 import { ClosedWonGateNotice } from "@/components/closed-won-gate";
+import { liveWonGateMissing } from "@/lib/deal-entry";
 import type { AccountStage } from "@/lib/presale-stages";
 import { cn } from "@/lib/utils";
 
@@ -95,11 +96,14 @@ function StageControl({
   stage,
   stages,
   editable,
+  gateFacts,
 }: {
   dealId: string;
   stage: string;
   stages: readonly PipelineStage[];
   editable: boolean;
+  /** What the record holds now, so a refusal's notice clears once the piece is added. */
+  gateFacts: { reports: number; sowPath: string | null; sowReference: string | null };
 }) {
   const move = useServerFn(moveDealStage);
   const queryClient = useQueryClient();
@@ -148,10 +152,10 @@ function StageControl({
           ))}
       </select>
       {error ? <span className="mt-0.5 text-[11px] text-destructive">{error}</span> : null}
-      {gate ? (
+      {gate && liveWonGateMissing(gate.missing, gateFacts).length ? (
         <span className="mt-1 block">
           <ClosedWonGateNotice
-            missing={gate.missing}
+            missing={liveWonGateMissing(gate.missing, gateFacts)}
             dealId={dealId}
             toStage={gate.toStage}
             canForce={canManage(profile?.role)}
@@ -412,6 +416,11 @@ export function DealRecord({ deal, embedded = false }: { deal: DealData; embedde
                       stage={account.stage}
                       stages={deal.stages}
                       editable={canManage(profile?.role)}
+                      gateFacts={{
+                        reports: deal.gong_reports.length,
+                        sowPath: account.sow_document_path,
+                        sowReference: account.sow_reference,
+                      }}
                     />
                     {!(counter && onPlan) ? (
                       <span className="font-mono text-[11px] text-muted-foreground">
@@ -717,7 +726,9 @@ function SowPanel({
   return (
     <Panel
       title="Statement of work"
-      meta={onFile ? "On file" : recorded ? "Details only — upload the signed PDF" : "Not recorded"}
+      meta={
+        onFile ? "On file" : recorded ? "Details only — upload the signed document" : "Not recorded"
+      }
       collapsible
       defaultOpen={!recorded}
       collapseKey="deal:sow"
@@ -788,7 +799,7 @@ function SowPanel({
 /**
  * The signed SOW itself.
  *
- * An upload, not a URL: what an AE has after close is the PDF, and asking them
+ * An upload, not a URL: what an AE has after close is the PDF or Word file, and asking them
  * to park it somewhere else first and paste a link is why the field stayed
  * empty. Into the private attachments bucket, opened through a short-lived
  * signed link — a countersigned contract must never sit behind a URL that
@@ -813,13 +824,16 @@ function SowDocument({ deal, editable }: { deal: DealData; editable: boolean }) 
         data: {
           dealId: account.id,
           fileName: file.name,
-          contentType: "application/pdf",
+          contentType: documentUploadType(file) ?? PDF_TYPE,
           dataBase64,
         },
       });
     },
     onSuccess: async () => {
       setError(null);
+      // The deal feeds the Closed Won notice; the welcome page reads the SOW too.
+      void qc.invalidateQueries({ queryKey: ["welcome", account.id] });
+      void qc.invalidateQueries({ queryKey: ["pipeline"] });
       await qc.invalidateQueries({ queryKey: ["deal", account.id] });
     },
     onError: (e: unknown) => setError(e instanceof Error ? e.message : "Upload failed."),
@@ -829,8 +843,8 @@ function SowDocument({ deal, editable }: { deal: DealData; editable: boolean }) 
     if (!file) return;
     // Checked here as well as on the server so the person gets the reason
     // immediately rather than after uploading 20MB.
-    if (file.type !== "application/pdf") {
-      setError("The signed SOW should be a PDF.");
+    if (!documentUploadType(file)) {
+      setError(`The signed SOW should be a PDF or a Word document (.docx).`);
       return;
     }
     if (file.size > 25_000_000) {
@@ -863,7 +877,7 @@ function SowDocument({ deal, editable }: { deal: DealData; editable: boolean }) 
         <input
           ref={inputRef}
           type="file"
-          accept="application/pdf"
+          accept={DOCUMENT_UPLOAD_ACCEPT}
           className="sr-only"
           onChange={(e) => {
             pick(e.target.files?.[0]);
@@ -878,7 +892,7 @@ function SowDocument({ deal, editable }: { deal: DealData; editable: boolean }) 
           onClick={() => inputRef.current?.click()}
         >
           <Upload className="h-3 w-3" aria-hidden />
-          {mutation.isPending ? "Uploading…" : deal.sow_url ? "Replace" : "Upload PDF"}
+          {mutation.isPending ? "Uploading…" : deal.sow_url ? "Replace" : "Upload PDF or Word"}
         </button>
       </div>
       {error ? (

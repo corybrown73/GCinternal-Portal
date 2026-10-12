@@ -30,9 +30,14 @@ export async function generateImplementationFocus(
   const proposed = proposeImplementationFocus(current);
   if (proposed === null) return current;
   const { saveDealIntake } = await import("./presale.server");
-  return saveDealIntake(userId, dealId, {
-    implementation_focus: { items: proposed, validated_at: null, validated_by: null },
-  });
+  // A fresh proposal is the proposal's own, not the person's: the reading
+  // may still add the brief's items behind these anchors.
+  return saveDealIntake(
+    userId,
+    dealId,
+    { implementation_focus: { items: proposed, validated_at: null, validated_by: null } },
+    { proposal: true },
+  );
 }
 
 /**
@@ -97,4 +102,31 @@ export async function confirmImplementationFocus(
   }
 
   return next;
+}
+
+/**
+ * "Confirm workflow story": the TIS read the three beats — the AI reading's
+ * draft, or their own edit of it — with the customer and says these are
+ * the customer's words. Stamped as its own fact, never inferred from a
+ * meeting held or a stage moved; Kickoff View and the welcome page show the
+ * story as "to confirm" until it is.
+ */
+export async function confirmWorkflowStory(userId: string, dealId: string): Promise<IntakeAnswers> {
+  const { requireSalesEditor } = await import("./presale.server");
+  await requireSalesEditor(userId);
+  const { data: row } = await db()
+    .from("portal_accounts")
+    .select("intake")
+    .eq("id", dealId)
+    .maybeSingle();
+  if (!row) throw new Error("Deal not found");
+  const current = readIntake(row.intake);
+  const story = current.workflow_story;
+  if (!(story.before || story.during || story.after)) {
+    throw new Error("There is no workflow story to confirm yet");
+  }
+  const { saveDealIntake } = await import("./presale.server");
+  return saveDealIntake(userId, dealId, {
+    workflow_story: { ...story, validated_at: new Date().toISOString(), validated_by: userId },
+  });
 }

@@ -137,6 +137,31 @@ describe("kickoffFocusContent — presentation-only fallback precedence", () => 
     });
   });
 
+  it("keeps flagged items off the slide while the saved list is the AI reading's own and unconfirmed", () => {
+    // Saved by the automatic apply, nobody pressed Generate: a Gong-only or
+    // conflicting item has had no review, so it is held back exactly like a
+    // flagged fallback candidate.
+    const aiList = { items: fallbackItems, validatedAt: null, aiFilled: true };
+    expect(kickoffFocusContent(aiList, [])).toEqual({
+      state: "proposed",
+      items: [fallbackItems[0]!.text],
+    });
+    // Nothing safe on it: empty, not the fallback (the same anchors again).
+    expect(
+      kickoffFocusContent({ items: [fallbackItems[1]!], validatedAt: null, aiFilled: true }, [
+        fallbackItems[0]!,
+      ]),
+    ).toEqual({ state: "empty" });
+    // A person's save lifts the hold; so does Confirm.
+    expect(kickoffFocusContent({ ...aiList, aiFilled: false }, [])).toEqual({
+      state: "proposed",
+      items: fallbackItems.map((i) => i.text),
+    });
+    expect(
+      kickoffFocusContent({ ...aiList, validatedAt: "2026-10-07T12:00:00Z" }, []),
+    ).toMatchObject({ state: "agreed" });
+  });
+
   it("falls back to the presentation-only proposal, always as proposed, when nothing is saved", () => {
     // fallbackItems[1] is review_flag: "gong_only" — excluded automatically;
     // see the dedicated customer-safety describe block below.
@@ -580,6 +605,36 @@ describe("the Kickoff conversation framework — static, never account-specific"
   it("KICKOFF_RESPONSIBILITY and KICKOFF_HANDOFF are plain static copy", () => {
     expect(KICKOFF_RESPONSIBILITY).toHaveLength(3);
     expect(KICKOFF_HANDOFF.map((s) => s.label)).toEqual(["We refine", "You test", "We learn"]);
+  });
+});
+
+describe("the 'to confirm' markers — nothing the AI or Sales wrote reads as the customer's word", () => {
+  const known = (confirmed: boolean) => ({
+    intake: {
+      known: [
+        {
+          key: "business_outcome",
+          ask: "What success looks like for you",
+          value: "Same day",
+          confirmed,
+        },
+      ],
+      needed: [],
+    },
+  });
+
+  it("marks the business outcome until the customer confirms it on their page", async () => {
+    const { kickoffBusinessOutcomeConfirmed } = await import("../kickoff-view");
+    expect(kickoffBusinessOutcomeConfirmed({ intake: null })).toBe(false);
+    expect(kickoffBusinessOutcomeConfirmed(known(false))).toBe(false);
+    expect(kickoffBusinessOutcomeConfirmed(known(true))).toBe(true);
+  });
+
+  it("marks the workflow story until a person validates it; the structured fallback always", async () => {
+    const { kickoffWorkflowToConfirm } = await import("../kickoff-view");
+    expect(kickoffWorkflowToConfirm(null)).toBe(true);
+    expect(kickoffWorkflowToConfirm({ validatedAt: null })).toBe(true);
+    expect(kickoffWorkflowToConfirm({ validatedAt: "2026-10-07T12:00:00Z" })).toBe(false);
   });
 });
 

@@ -3,16 +3,21 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { ArrowUp, Check, ExternalLink, ListPlus, Upload, X } from "lucide-react";
 
-import { AiSource, useStartReading } from "@/components/fill-from-sources";
+import { AiSource } from "@/components/fill-from-sources";
+import { IndustrySelect } from "@/components/industry-select";
 import { TemplateCard } from "@/components/template-card";
 import { suggestFormTemplatesFn } from "@/lib/form-templates.functions";
 import type { DealData } from "@/lib/deal-query";
+import {
+  DOCUMENT_UPLOAD_ACCEPT,
+  DOCUMENT_UPLOAD_HINT,
+  documentUploadType,
+} from "@/lib/document-upload";
 import {
   addWantedForm,
   chosenFrom,
   COMPANY_SIZES,
   formsOnly,
-  INDUSTRIES,
   isTrainingOnly,
   makeFirstWantedForm,
   readIntake,
@@ -390,7 +395,6 @@ function ExistingQuestions({
 export function NotesIn({ deal, editable }: { deal: DealData; editable: boolean }) {
   const qc = useQueryClient();
   const create = useServerFn(addReport);
-  const reading = useStartReading(deal.account.id);
   const [content, setContent] = useState("");
   const [title, setTitle] = useState("");
   const [callDate, setCallDate] = useState("");
@@ -414,11 +418,12 @@ export function NotesIn({ deal, editable }: { deal: DealData; editable: boolean 
       setContent("");
       setTitle("");
       setCallDate("");
+      // The reading is the server's to start: addGongReport queues it when
+      // the auto-read flag allows, and the record already says "queued" by
+      // the time this refetch lands. A second request from here would start
+      // one with the flag off, which the admin switch promises it does not.
       void qc.invalidateQueries({ queryKey: ["deal", deal.account.id] });
       void qc.invalidateQueries({ queryKey: ["welcome", deal.account.id] });
-      // Every new Gong brief is read on its own: the flow, the forms, the
-      // process and the plan refresh, and a person's own answers stand.
-      reading.mutate();
     },
     onError: (e) => setError((e as Error).message),
   });
@@ -538,7 +543,7 @@ export function NotesIn({ deal, editable }: { deal: DealData; editable: boolean 
   );
 }
 
-/** A PDF onto the deal: the SOW onto the record, or the contract onto the intake. */
+/** A PDF or Word file onto the deal: the SOW onto the record, or the contract onto the intake. */
 function PdfUpload({
   dealId,
   kind,
@@ -558,12 +563,12 @@ function PdfUpload({
   const sow = useServerFn(uploadSow);
   const contract = useServerFn(uploadContract);
   const link = useServerFn(getIntakeFormLink);
-  const reading = useStartReading(dealId);
   const inputRef = useRef<HTMLInputElement>(null);
   const [error, setError] = useState<string | null>(null);
   const upload = useMutation({
     mutationFn: async (file: File) => {
-      if (file.type !== "application/pdf") throw new Error("A PDF, please.");
+      const contentType = documentUploadType(file);
+      if (!contentType) throw new Error(DOCUMENT_UPLOAD_HINT);
       const dataBase64 = await new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
         reader.onerror = () => reject(new Error("Could not read that file."));
@@ -573,16 +578,19 @@ function PdfUpload({
       const data = {
         dealId,
         fileName: file.name,
-        contentType: "application/pdf" as const,
+        contentType,
         dataBase64,
       };
       return kind === "sow" ? sow({ data }) : contract({ data });
     },
     onMutate: () => setError(null),
     onSuccess: () => {
+      // The upload queued the reading server-side (flag permitting); the
+      // record says so on this refetch. The deal also feeds the Closed Won
+      // notice, and the board shows the SOW on the card.
       void qc.invalidateQueries({ queryKey: ["deal", dealId] });
-      // A new SOW is read on its own, with the calls: services onto the plan.
-      if (kind === "sow") reading.mutate();
+      void qc.invalidateQueries({ queryKey: ["welcome", dealId] });
+      void qc.invalidateQueries({ queryKey: ["pipeline"] });
     },
     onError: (e) => setError((e as Error).message),
   });
@@ -618,7 +626,7 @@ function PdfUpload({
           <input
             ref={inputRef}
             type="file"
-            accept="application/pdf"
+            accept={DOCUMENT_UPLOAD_ACCEPT}
             className="hidden"
             onChange={(e) => {
               const f = e.target.files?.[0];
@@ -822,19 +830,12 @@ function NoForms({
       <div className="grid grid-cols-1 gap-2 rounded-md border border-border bg-muted/20 p-2.5 sm:grid-cols-3">
         <label className="space-y-1 text-[11px] text-muted-foreground">
           Industry
-          <select
+          <IndustrySelect
             className={cn(input, "w-full")}
-            value={answers.industry ?? ""}
+            value={answers.industry}
             disabled={!editable || busy}
-            onChange={(e) => onSet({ industry: e.target.value || null })}
-          >
-            <option value="">—</option>
-            {INDUSTRIES.map((i) => (
-              <option key={i} value={i}>
-                {i}
-              </option>
-            ))}
-          </select>
+            onChange={(industry) => onSet({ industry })}
+          />
         </label>
         <label className="space-y-1 text-[11px] text-muted-foreground">
           Company size

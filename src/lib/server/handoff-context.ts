@@ -44,6 +44,12 @@ export type HandoffContext = {
     documentUrl: string | null;
     /** True when the SOW is a file we hold rather than a link somewhere else. */
     uploaded: boolean;
+    /**
+     * What the signed SOW says, as the AI reading kept it: what is
+     * delivered, what is excluded, what the customer owes, how done is
+     * judged, the term and the people. Null until a reading has run.
+     */
+    reading: ReturnType<typeof import("../sow-plan").sowReadingSummary> | null;
   };
   /** Gong reports and account maps, verbatim. */
   callNotes: Array<{ title: string; kind: string; recordedAt: string; markdown: string }>;
@@ -113,6 +119,23 @@ export async function loadHandoffContext(dealId: string): Promise<HandoffContext
     }
   }
 
+  // The kept reading of the document, so a model sees what was sold
+  // without reading the PDF again. Never fatal: a context without it is
+  // today's context.
+  let reading: HandoffContext["sow"]["reading"] = null;
+  try {
+    const { loadSowReading } = await import("./ai/readings");
+    // By the file's path, not its bytes: this read serves pages, and a
+    // download per page view is not worth the one case a path misses.
+    const kept = await loadSowReading(dealId, { fetch: false });
+    if (kept?.reading.readable) {
+      const { sowReadingSummary } = await import("../sow-plan");
+      reading = sowReadingSummary(kept.reading);
+    }
+  } catch (e) {
+    console.error("[handoff-context] could not load the SOW reading", e);
+  }
+
   const project = await loadProject(deal.customer_id as string | null);
   const priorImplementations = deal.customer_id
     ? Math.max(0, (await countImplementations(deal.customer_id as string)) - (project ? 1 : 0))
@@ -161,6 +184,7 @@ export async function loadHandoffContext(dealId: string): Promise<HandoffContext
       documentName: deal.sow_document_name ?? null,
       documentUrl: sowUrl ?? deal.sow_document_url ?? null,
       uploaded: Boolean(deal.sow_document_path),
+      reading,
     },
     callNotes: (reports ?? []).map((r: any) => ({
       title: r.title,

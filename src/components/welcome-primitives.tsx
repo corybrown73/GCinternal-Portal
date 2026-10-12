@@ -2,6 +2,7 @@ import { createContext, useContext, type ReactNode } from "react";
 import {
   AirVent,
   BookOpen,
+  Bug,
   Building2,
   Camera,
   Check,
@@ -9,6 +10,8 @@ import {
   CalendarDays,
   ClipboardCheck,
   Cloud,
+  Cog,
+  Droplets,
   Factory,
   FileText,
   Flag,
@@ -18,13 +21,16 @@ import {
   HardHat,
   Home,
   KeyRound,
+  Landmark,
   Leaf,
   PenLine,
   Pickaxe,
   PhoneCall,
+  PlugZap,
   Rocket,
   Route,
   Search,
+  ShowerHead,
   Smartphone,
   Sun,
   Table2,
@@ -152,6 +158,13 @@ const ICONS: Record<string, LucideIcon> = {
   GraduationCap,
   Search,
   Handshake,
+  // The industries added later; anything else falls back below.
+  ShowerHead,
+  Cog,
+  PlugZap,
+  Bug,
+  Droplets,
+  Landmark,
 };
 
 export function Icon({

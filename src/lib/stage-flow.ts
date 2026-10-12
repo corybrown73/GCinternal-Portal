@@ -190,6 +190,47 @@ export function latestStageTransition<T extends { to_stage: string; occurred_at:
 }
 
 /**
+ * The one date Current Implementation's journey rail shows per canonical
+ * stage, reusing the same sources StageTiming already reads — never a
+ * stored per-stage field, never invented:
+ *
+ *   completed  when the deal actually moved past it — the next stage's own
+ *              transition row, the same record StageHistory reads, so a
+ *              scheduled call never passes for the stage's real close.
+ *              Complete has no next stage to read, so it reads the
+ *              operating model's own finish stamp (`intake.outcome.at`)
+ *              instead.
+ *   current    the plan's own target for it (stageTargetDate) — "Target".
+ *   upcoming   the same plan date, ahead of it — "Planned".
+ *   skipped    none: its badge already says "Skipped".
+ *
+ * Null whenever the source it would read does not exist (no transition
+ * recorded yet, or the plan has no milestone to date that stage) — the
+ * caller shows nothing rather than guess.
+ */
+export function journeyStageDate(
+  key: FlowStageKey,
+  status: "completed" | "current" | "upcoming" | "skipped",
+  history: readonly { to_stage: string; occurred_at: string }[],
+  timeline: Timeline | null,
+  outcomeAt: string | null,
+): { label: string; text: string } | null {
+  if (status === "skipped") return null;
+  if (status === "completed") {
+    if (key === "complete") {
+      return outcomeAt ? { label: "Completed", text: stampDay(outcomeAt) } : null;
+    }
+    const nextKey = CANONICAL_JOURNEY_KEYS[CANONICAL_JOURNEY_KEYS.indexOf(key) + 1];
+    const nextStage = nextKey ? FLOW_STAGES.find((s) => s.key === nextKey)?.stage : undefined;
+    const t = latestStageTransition(history, nextStage);
+    return t ? { label: "Completed", text: stampDay(t.occurred_at) } : null;
+  }
+  const target = stageTargetDate(key, timeline);
+  if (!target) return null;
+  return { label: status === "current" ? "Target" : "Planned", text: shortDay(target) };
+}
+
+/**
  * Whether the implementation's target has moved from its agreed baseline —
  * the trigger for showing "Target changed". False whenever either date is
  * unknown: a baseline that was never locked is not a disagreement.
@@ -218,7 +259,8 @@ export type TaskAction =
   | "process_call"
   | "solution"
   | "tick"
-  | "graduate";
+  | "graduate"
+  | "upload_brief";
 
 export type FlowTask = {
   key: string;
@@ -254,7 +296,18 @@ export type StageFlowInput = {
   hasLink: boolean;
   /** The plan, for the Onboarding stage's tasks. Optional: the server does not need it. */
   timeline?: Timeline | null;
+  /**
+   * The post-implementation brief is attached (an account_files row titled
+   * GRADUATION_BRIEF_TITLE) — read by the caller, which has the attachments
+   * query; this module stays pure. Optional: callers that never render the
+   * Graduate stage (the digest, the board) do not need to check.
+   */
+  hasGraduationBrief?: boolean;
 };
+
+/** The exact, fixed title the Graduation task's upload looks for — never a
+ * title a person types, so "is it attached" never depends on word choice. */
+export const GRADUATION_BRIEF_TITLE = "Post-implementation brief";
 
 export type StageFlow = {
   /** Where the deal is, in the checklist's terms. Null before Closed Won. */
@@ -277,15 +330,32 @@ export const KICKOFF_CADENCE: ReadonlyArray<{ day: string; step: string }> = [
 ];
 
 /**
- * A reading that started this long ago and never finished died with its
- * request: the function it ran in is cut off at five minutes, so a spinner
- * past this is a spinner for nothing.
+ * A reading whose job has not touched the record for this long is not
+ * coming back: a step runs under five minutes and the cron reclaims a
+ * stale lock after six, so a spinner past eight minutes without a
+ * heartbeat is a spinner for nothing.
  */
-export const READING_STALE_MS = 4.5 * 60 * 1000;
+export const READING_STALE_MS = 8 * 60 * 1000;
 
-/** The automatic reading is running right now (and has not quietly died). */
+/** The automatic reading is queued or running right now (and has not quietly died). */
 export function readingInFlight(r: IntakeAnswers["ai_reading"], now = Date.now()): boolean {
-  return r?.status === "running" && now - Date.parse(r.started_at) < READING_STALE_MS;
+  if (r?.status !== "queued" && r?.status !== "running") return false;
+  const last = Date.parse(r.heartbeat_at ?? r.started_at);
+  return Number.isFinite(last) && now - last < READING_STALE_MS;
+}
+
+/**
+ * A reading queued this long without a step is late. Display only: the
+ * screen says so and offers Read again; READING_STALE_MS still decides
+ * "in flight" for the Review gate and the polling.
+ */
+export const READING_SLOW_MS = 2 * 60 * 1000;
+
+/** Queued and untouched for two minutes. */
+export function readingSlow(r: IntakeAnswers["ai_reading"], now = Date.now()): boolean {
+  if (r?.status !== "queued") return false;
+  const last = Date.parse(r.heartbeat_at ?? r.started_at);
+  return Number.isFinite(last) && now - last > READING_SLOW_MS;
 }
 
 /** The tasks always present in Intake & Process; a Process Call is added only when needed. */
@@ -362,7 +432,7 @@ function closedWonTasks(
       action: "assign",
       // Sales brings the TIS in before the close: from Negotiate & Finalize
       // on. A bare Prospect has nobody to bring in yet.
-      locked: assignable ? null : "Assigned at Negotiate & Finalize or Closed Won",
+      locked: assignable ? null : "Move the deal to Negotiate & Finalize to bring the TIS in",
     },
     {
       key: "notes",
@@ -590,10 +660,15 @@ export function zoneShort(zone: string, isoDate: string): string {
 }
 
 /** Only Kickoff gets booked here — no fixed number of meetings. */
+/** The kickoff call has a date and a time on the plan. */
+export function isKickoffBooked(a: IntakeAnswers): boolean {
+  return Boolean(a.timeline.overrides["kickoff"] && a.timeline.times["kickoff"]);
+}
+
 function kickoffBookingTask(a: IntakeAnswers): FlowTask {
   const kickoffDate = a.timeline.overrides["kickoff"] ?? null;
   const kickoffTime = a.timeline.times["kickoff"] ?? null;
-  const booked = Boolean(kickoffDate && kickoffTime);
+  const booked = isKickoffBooked(a);
   return {
     key: "kickoff",
     label: "Book the kickoff call",
@@ -997,6 +1072,21 @@ export function stageFlow(input: StageFlowInput): StageFlow {
   const cw = closedWonTasks(a, input, closed || current === "negotiate");
   const pk = preKickoffTasks(a);
   const ob = tasksByStage(a, input.timeline);
+  // The one Graduation task this module cannot compute itself — whether the
+  // brief is attached lives in account_files, which this pure function never
+  // reads. First in the stage: the brief is written reviewing the whole
+  // engagement, before the close-out and the graduation checks below it.
+  const graduationBrief: FlowTask = {
+    key: "graduation_brief",
+    label: "Upload the post-implementation brief",
+    hint: "Attach a brief if one is needed for the Customer Success handoff.",
+    done: Boolean(input.hasGraduationBrief),
+    summary: input.hasGraduationBrief ? "Attached" : null,
+    action: "upload_brief",
+    locked: null,
+    optional: true,
+  };
+  const completeTasks = [graduationBrief, ...ob.complete];
   // Without the plan the middle stages have no tasks to judge; they are not
   // passed through on that account.
   const hasPlan = Boolean(input.timeline);
@@ -1076,7 +1166,7 @@ export function stageFlow(input: StageFlowInput): StageFlow {
     {
       key: "complete",
       label: flowLabel("complete"),
-      tasks: ob.complete,
+      tasks: completeTasks,
       done: current === "complete" && a.outcome !== null,
     },
   ];

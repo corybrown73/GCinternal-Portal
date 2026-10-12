@@ -1,11 +1,14 @@
-import { requireInternalAuth } from "@/integrations/supabase/internal-middleware";
+import {
+  requireDealEditor,
+  requireInternalAuth,
+} from "@/integrations/supabase/internal-middleware";
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
 import { EDITABLE_RECORD_FIELD_KEYS, type EditableRecordField } from "./record-fields";
 import { advanceStageInput } from "./stage-advance-input";
 import { analyzeSowInput, applySowProposalInput, setSowDocumentInput } from "./sow-analysis";
-import { analyzeTranscriptInput } from "./transcript-analysis";
+import { analyzeTranscriptInput, proposalDecisionInput } from "./transcript-analysis";
 import { SOLUTION_STATUSES } from "./solution-enums";
 import {
   createFieldMappingInput,
@@ -609,17 +612,38 @@ export const setCommitment = createServerFn({ method: "POST" })
 
 export const addEvidence = createServerFn({ method: "POST" })
   .middleware([requireInternalAuth])
-  .inputValidator((data: unknown) => createEvidenceInput.parse(data))
+  .inputValidator((data: unknown) => ({
+    ...createEvidenceInput.parse(data),
+    // A transcript is read in the background unless the caller says not to.
+    ...z.object({ autoAnalyze: z.boolean().optional() }).parse(data),
+  }))
   .handler(async ({ data, context }) => {
     const { createEvidence } = await import("./hub.server");
-    const { implementationId, ...rest } = data;
+    const { implementationId, autoAnalyze, ...rest } = data;
     // evidence.uploaded_by references team_members, not portal_profiles — the
     // server resolves it through the same bridge advanceImplementationStage
     // and setImplementation use, rather than trusting the client's actor id.
-    return createEvidence(
+    const created = await createEvidence(
       implementationId,
       toEvidencePatch({ ...rest, uploadedBy: context.profile.team_member_id ?? null }),
     );
+    // A transcript is read the moment it is recorded: the evidence row
+    // carries the uploaded file's reference, and the reading runs as a
+    // background job rather than inside this request.
+    const { attachmentIdFromDescription } = await import("./transcript-analysis");
+    const attachmentId = attachmentIdFromDescription(rest.description ?? null);
+    let analysisQueued = false;
+    if (attachmentId && autoAnalyze !== false) {
+      const { queueTranscriptReading } = await import("./transcript-analysis.server");
+      analysisQueued = (
+        await queueTranscriptReading({
+          implementationId,
+          attachmentId,
+          requestedBy: context.profile.id,
+        })
+      ).queued;
+    }
+    return { ...created, analysis_queued: analysisQueued };
   });
 
 export const setEvidence = createServerFn({ method: "POST" })
@@ -722,9 +746,37 @@ export const setSowDocumentForImplementation = createServerFn({ method: "POST" }
 export const analyzeTranscriptDocument = createServerFn({ method: "POST" })
   .middleware([requireInternalAuth])
   .inputValidator((data: unknown) => analyzeTranscriptInput.parse(data))
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
     const { analyzeTranscript } = await import("./transcript-analysis.server");
-    return analyzeTranscript(data.implementationId, data.attachmentId);
+    return analyzeTranscript(data.implementationId, data.attachmentId, {
+      actor: { type: "user", profileId: context.profile.id },
+    });
+  });
+
+/** The readings in flight and every kept proposal for one implementation. */
+export const pendingTranscriptWork = createServerFn({ method: "GET" })
+  .middleware([requireInternalAuth])
+  .inputValidator((data: unknown) => z.object({ implementationId: z.string().uuid() }).parse(data))
+  .handler(async ({ data }) => {
+    const { loadTranscriptWork } = await import("./transcript-proposals.server");
+    return loadTranscriptWork(data.implementationId);
+  });
+
+export const applyEvidenceProposal = createServerFn({ method: "POST" })
+  .middleware([requireDealEditor])
+  .inputValidator((data: unknown) => proposalDecisionInput.parse(data))
+  .handler(async ({ data, context }) => {
+    const { applyProposal } = await import("./transcript-proposals.server");
+    const { id, ...picks } = data;
+    return applyProposal(id, picks, { profileId: context.profile.id });
+  });
+
+export const dismissEvidenceProposal = createServerFn({ method: "POST" })
+  .middleware([requireDealEditor])
+  .inputValidator((data: unknown) => z.object({ id: z.string().uuid() }).parse(data))
+  .handler(async ({ data, context }) => {
+    const { dismissProposal } = await import("./transcript-proposals.server");
+    return dismissProposal(data.id, { profileId: context.profile.id });
   });
 
 /** Customers and open deals by name, for the new-account dialog. */

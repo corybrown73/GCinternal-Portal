@@ -99,3 +99,36 @@ export type TargetReasonCode = (typeof TIER_REASON_CODES)[number]["code"];
 export function reasonLabel(code: string | null): string {
   return TIER_REASON_CODES.find((r) => r.code === code)?.label ?? "Reason not given yet";
 }
+
+/** The one row of `target_date_changes` this decision needs. */
+export type TargetDateChangeRecord = {
+  to_date: string | null;
+  reason_code: string | null;
+  changed_at: string | null;
+  explained_at: string | null;
+};
+
+/**
+ * Whether the implementation's current target is a deliberate, reasoned
+ * override that the plan's own recompute must not quietly replace.
+ *
+ * There is no column that says "a person set this on purpose" — so this
+ * reads the one signal that already tells the two cases apart. A plan-driven
+ * shift is recorded with no reason and explained, if at all, later:
+ * `changed_at` and `explained_at` land apart. A person changing the target
+ * directly gives the reason in the same action, so a row this holds true for
+ * always has them equal. Stops holding the moment a person moves the target
+ * again, which writes a new row.
+ */
+export function targetOverrideHolds(
+  current: string | null,
+  last: TargetDateChangeRecord | null | undefined,
+): boolean {
+  return Boolean(
+    last &&
+    last.to_date === current &&
+    last.reason_code &&
+    last.changed_at &&
+    last.changed_at === last.explained_at,
+  );
+}
