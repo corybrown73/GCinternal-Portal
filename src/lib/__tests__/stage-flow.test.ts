@@ -6,6 +6,7 @@ import { buildTimeline, type Timeline } from "../onboarding-timeline";
 import {
   completedAfterTick,
   isWorkingStageKey,
+  journeyStageDate,
   latestStageTransition,
   showKickoffOutcomePrompt,
   stageFlow,
@@ -478,6 +479,57 @@ describe("latestStageTransition", () => {
   it("is null with no account stage to match", () => {
     const history = [{ to_stage: "kickoff", occurred_at: "2026-10-01T10:00:00Z" }];
     expect(latestStageTransition(history, null)).toBeNull();
+  });
+});
+
+describe("journeyStageDate", () => {
+  const timeline = (milestones: Array<{ key: string; date: string }>) =>
+    ({ milestones }) as unknown as Timeline;
+
+  it("a completed stage reads when the deal moved into the next one, not a milestone tick", () => {
+    const history = [{ to_stage: "get_it_working", occurred_at: "2026-10-05T10:00:00Z" }];
+    const date = journeyStageDate("kickoff", "completed", history, null, null);
+    expect(date).toEqual({ label: "Completed", text: expect.stringContaining("Oct") });
+  });
+
+  it("a completed stage with no recorded transition into the next one shows no date", () => {
+    expect(journeyStageDate("kickoff", "completed", [], null, null)).toBeNull();
+  });
+
+  it("Implementation Complete, once done, reads the recorded outcome date — it has no next stage", () => {
+    const date = journeyStageDate("complete", "completed", [], null, "2026-10-20T10:00:00Z");
+    expect(date).toEqual({ label: "Completed", text: expect.stringContaining("Oct") });
+  });
+
+  it("Implementation Complete with no outcome recorded yet shows no date", () => {
+    expect(journeyStageDate("complete", "completed", [], null, null)).toBeNull();
+  });
+
+  it("the current stage reads the plan's target, labeled Target", () => {
+    const t = timeline([{ key: "working", date: "2026-10-12" }]);
+    expect(journeyStageDate("make_it_yours", "current", [], t, null)).toEqual({
+      label: "Target",
+      text: shortDay("2026-10-12"),
+    });
+  });
+
+  it("an upcoming stage reads the same plan date, labeled Planned", () => {
+    const t = timeline([{ key: "working", date: "2026-10-12" }]);
+    expect(journeyStageDate("make_it_yours", "upcoming", [], t, null)).toEqual({
+      label: "Planned",
+      text: shortDay("2026-10-12"),
+    });
+  });
+
+  it("a stage the plan never schedules shows no date, current or upcoming", () => {
+    const t = timeline([{ key: "kickoff", date: "2026-10-05" }]);
+    expect(journeyStageDate("get_it_working", "current", [], t, null)).toBeNull();
+    expect(journeyStageDate("pre_kickoff", "upcoming", [], t, null)).toBeNull();
+  });
+
+  it("a skipped stage never shows a date, even if one is available", () => {
+    const t = timeline([{ key: "working", date: "2026-10-12" }]);
+    expect(journeyStageDate("make_it_yours", "skipped", [], t, null)).toBeNull();
   });
 });
 
