@@ -32,6 +32,7 @@ import { bookMeetingPatch } from "@/lib/stage-flow";
 import type { StageTargetUpdate } from "@/lib/stage-targets";
 import type { WelcomeView } from "@/lib/welcome";
 import { getWelcome } from "@/lib/welcome.functions";
+import { cn } from "@/lib/utils";
 
 const ISO_RE = /^\d{4}-\d{2}-\d{2}$/;
 const TIME_RE = /^\d{2}:\d{2}$/;
@@ -84,8 +85,10 @@ function Workspace({
     today: localIso(),
   }).date;
 
+  const [active, setActive] = useState<SectionN>(1);
+
   return (
-    <div className="mx-auto max-w-3xl p-4 text-[13px]">
+    <div className="mx-auto max-w-5xl p-4 text-[13px]">
       <header className="mb-2">
         <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
           Presenter workspace · internal
@@ -97,23 +100,34 @@ function Workspace({
         </p>
       </header>
 
-      <nav
+      <div
+        role="tablist"
         aria-label="Workspace sections"
         className="sticky top-0 z-10 -mx-4 mb-4 flex gap-1 overflow-x-auto border-b border-border bg-background/95 px-4 py-2 backdrop-blur"
       >
         {PRESENTER_SECTIONS.map((s) => (
-          <a
+          <button
             key={s.n}
-            href={`#ws-${s.n}`}
-            className="shrink-0 rounded-full border border-border px-2.5 py-1 text-[12px] font-medium text-muted-foreground hover:text-foreground"
+            type="button"
+            role="tab"
+            id={`ws-tab-${s.n}`}
+            aria-selected={active === s.n}
+            aria-controls={`ws-panel-${s.n}`}
+            onClick={() => setActive(s.n)}
+            className={cn(
+              "shrink-0 rounded-full border px-2.5 py-1 text-[12px] font-medium",
+              active === s.n
+                ? "border-primary bg-primary text-primary-foreground"
+                : "border-border text-muted-foreground hover:text-foreground",
+            )}
           >
             {s.n}. {s.short}
-          </a>
+          </button>
         ))}
-      </nav>
+      </div>
 
-      <div className="space-y-4">
-        <Section n={1}>
+      <div>
+        <Section n={1} active={active} onStep={setActive}>
           <HandoffText
             dealId={dealId}
             intake={intake}
@@ -136,7 +150,7 @@ function Workspace({
           </GapNote>
         </Section>
 
-        <Section n={2}>
+        <Section n={2} active={active} onStep={setActive}>
           <WorkflowEditor dealId={dealId} intake={intake} onSaved={onSaved} />
           <HandoffText
             dealId={dealId}
@@ -148,11 +162,11 @@ function Workspace({
           />
         </Section>
 
-        <Section n={3}>
+        <Section n={3} active={active} onStep={setActive}>
           <StageTargetsSection dealId={dealId} intake={intake} view={view} onSaved={onSaved} />
         </Section>
 
-        <Section n={4}>
+        <Section n={4} active={active} onStep={setActive}>
           <HandoffText
             dealId={dealId}
             intake={intake}
@@ -192,7 +206,7 @@ function Workspace({
           </GapNote>
         </Section>
 
-        <Section n={5}>
+        <Section n={5} active={active} onStep={setActive}>
           <FormLinkSection dealId={dealId} intake={intake} onSaved={onSaved} />
           <RemainingChanges dealId={dealId} onSaved={onSaved} />
           <p className="text-[11px] text-muted-foreground">
@@ -200,7 +214,7 @@ function Workspace({
           </p>
         </Section>
 
-        <Section n={6}>
+        <Section n={6} active={active} onStep={setActive}>
           <SessionsSection
             dealId={dealId}
             intake={intake}
@@ -218,44 +232,95 @@ function Workspace({
   );
 }
 
-function Section({ n, children }: { n: 1 | 2 | 3 | 4 | 5 | 6; children: ReactNode }) {
+type SectionN = 1 | 2 | 3 | 4 | 5 | 6;
+
+function Section({
+  n,
+  active,
+  onStep,
+  children,
+}: {
+  n: SectionN;
+  active: SectionN;
+  onStep: (next: SectionN) => void;
+  children: ReactNode;
+}) {
   const meta = PRESENTER_SECTIONS.find((s) => s.n === n)!;
   const guide = PRESENTER_GUIDES[n];
+  const prev = PRESENTER_SECTIONS.find((s) => s.n === n - 1);
+  const next = PRESENTER_SECTIONS.find((s) => s.n === n + 1);
   return (
-    <section id={`ws-${n}`} className="scroll-mt-16 rounded-md border border-border bg-card">
+    <section
+      id={`ws-panel-${n}`}
+      role="tabpanel"
+      aria-labelledby={`ws-tab-${n}`}
+      hidden={active !== n}
+      className="rounded-md border border-border bg-card"
+    >
       <header className="flex items-baseline gap-2 border-b border-border px-4 py-2">
         <span className="text-[11px] font-semibold text-muted-foreground">{n}</span>
         <h2 className="text-[14px] font-semibold">{meta.title}</h2>
       </header>
-      <details open className="border-b border-border bg-muted/20 px-4 py-2">
-        <summary className="cursor-pointer select-none text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-          Conversation guide
-        </summary>
-        <div className="mt-2 space-y-1.5 text-[12px] leading-relaxed">
-          <p>
-            <span className="font-semibold">Objective.</span> {guide.objective}
-          </p>
-          <p>
-            <span className="font-semibold">Open with.</span> “{guide.opening}”
-          </p>
-          <div>
-            <span className="font-semibold">Ask.</span>
-            <ul className="ml-4 list-disc">
-              {guide.questions.map((q) => (
-                <li key={q}>{q}</li>
-              ))}
-            </ul>
-          </div>
-          <p>
-            <span className="font-semibold">Capture.</span> {guide.capture}
-          </p>
-          <p>
-            <span className="font-semibold">Move on when.</span> {guide.ready}
-          </p>
-        </div>
-      </details>
-      <div className="space-y-4 px-4 py-3">{children}</div>
+      <div className="grid md:grid-cols-[2fr_3fr]">
+        <details
+          open
+          className="border-b border-border bg-muted/20 px-4 py-3 md:border-b-0 md:border-r"
+        >
+          <summary className="cursor-pointer select-none text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+            Conversation guide
+          </summary>
+          <dl className="mt-2.5 space-y-2.5 text-[12px] leading-relaxed">
+            <GuideRow term="Objective">{guide.objective}</GuideRow>
+            <GuideRow term="Open with">
+              <span className="italic">“{guide.opening}”</span>
+            </GuideRow>
+            <GuideRow term="Ask">
+              <ol className="ml-4 list-decimal space-y-0.5">
+                {guide.questions.map((q) => (
+                  <li key={q}>{q}</li>
+                ))}
+              </ol>
+            </GuideRow>
+            <GuideRow term="Capture">{guide.capture}</GuideRow>
+            <GuideRow term="Move on when">{guide.ready}</GuideRow>
+          </dl>
+        </details>
+        <div className="space-y-4 px-4 py-3">{children}</div>
+      </div>
+      <footer className="flex items-center justify-between gap-2 border-t border-border px-4 py-2 text-[12px]">
+        {prev ? (
+          <button
+            type="button"
+            onClick={() => onStep(prev.n)}
+            className="font-medium text-primary underline-offset-2 hover:underline"
+          >
+            ← Previous: {prev.short}
+          </button>
+        ) : (
+          <span />
+        )}
+        {next ? (
+          <button
+            type="button"
+            onClick={() => onStep(next.n)}
+            className="font-medium text-primary underline-offset-2 hover:underline"
+          >
+            Next: {next.short} →
+          </button>
+        ) : null}
+      </footer>
     </section>
+  );
+}
+
+function GuideRow({ term, children }: { term: string; children: ReactNode }) {
+  return (
+    <div>
+      <dt className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+        {term}
+      </dt>
+      <dd className="mt-0.5">{children}</dd>
+    </div>
   );
 }
 
