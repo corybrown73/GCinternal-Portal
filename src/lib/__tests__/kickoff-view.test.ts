@@ -401,7 +401,7 @@ describe("the Kickoff conversation framework — static, never account-specific"
     expect(KICKOFF_EXPECTATIONS.columns.map((c) => c.label)).toEqual([
       "GoCanvas",
       "Together",
-      "Your team",
+      "Your Team",
     ]);
     expect(KICKOFF_EXPECTATIONS.columns.map((c) => c.role)).toEqual([
       "We lead and guide",
@@ -419,8 +419,9 @@ describe("the Kickoff conversation framework — static, never account-specific"
       /business.day|response term|within \d+|penalt|contract|signed|hours?\b/i,
     );
     expect(all).toMatch(/blocker/i);
-    expect(KICKOFF_EXPECTATIONS.momentum.text).toMatch(/delays may affect agreed dates/i);
-    expect(KICKOFF_EXPECTATIONS.momentum.text).toMatch(/reviewing scope/i);
+    expect(KICKOFF_EXPECTATIONS.momentum.text).toBe(
+      "Test, share feedback and complete agreed actions between meetings. Raise blockers early so we can adjust the plan together.",
+    );
   });
 
   it("KICKOFF_FORM_STEPS are the three form-review steps, in order", () => {

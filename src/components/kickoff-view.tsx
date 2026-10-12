@@ -333,7 +333,10 @@ function KickoffExpectations({ page }: { page: number }) {
             </header>
             <ul>
               {column.items.map((item) => (
-                <li key={item}>{item}</li>
+                <li key={item}>
+                  <Check className="wp-kick-check" strokeWidth={3} aria-hidden="true" />
+                  <span>{item}</span>
+                </li>
               ))}
             </ul>
           </section>
