@@ -1,4 +1,5 @@
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import { isPartnerJourney } from "./partner-implementation";
 import { technicalSolutionNextAction } from "./customer360-derive";
 import { normalizeStage } from "./hub-format";
 import { dealStageFor } from "./deal-stage";
@@ -2334,10 +2335,27 @@ export async function advanceStage(args: {
 }) {
   const { data: impl, error: readError } = await db()
     .from("implementations")
-    .select("id,current_stage")
+    .select("id,current_stage,journey_type,partner_key,deal_id")
     .eq("id", args.implementationId)
     .single();
   if (readError || !impl) throw new Error(readError?.message ?? "Implementation not found");
+
+  // A partner implementation moves through its own transactional path (0084).
+  // Standard and legacy implementations take the path below, unchanged.
+  if (isPartnerJourney(impl)) {
+    const { advancePartnerFor } = await import("./partner-progression.server");
+    const { appUrl } = await import("./app-url");
+    return advancePartnerFor(db(), {
+      implementationId: args.implementationId,
+      dealId: (impl.deal_id as string | null) ?? null,
+      currentStage: (impl.current_stage as string | null) ?? null,
+      toStage: args.toStage,
+      enteredBy: args.enteredBy,
+      actorProfile: args.actorProfileId ?? null,
+      notes: args.notes,
+      appUrl: appUrl(),
+    });
+  }
 
   // The same list the button was drawn from: the configured order, minus
   // the stages an admin hid. Computed from the compiled-in eight, "next"
