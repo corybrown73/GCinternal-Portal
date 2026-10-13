@@ -30,6 +30,7 @@ const partnerNext: PartnerMoveView = {
     legacyDealStages: [],
   } as PartnerMoveView["next"] & object,
   handoff: false,
+  graduation: null,
 };
 
 function panel(
@@ -97,5 +98,77 @@ describe("StageGatesPanel for a partner stage", () => {
     const markup = panel(OPEN, "blocking", null, LIFECYCLE_STAGES[0]!.id);
     expect(markup).toContain("Override to advance");
     expect(markup).not.toContain("cannot be overridden");
+  });
+});
+
+/* ------------------------------------------------ Complete & Graduate (Roll Out) */
+
+const ROLL_OUT: PartnerMoveView = {
+  currentLabel: "Roll Out & Graduation",
+  next: null,
+  handoff: false,
+  graduation: "available",
+};
+
+/** The opening tag of the button that carries the graduation label, or null. */
+function graduateButtonTag(markup: string): string | null {
+  const at = markup.indexOf("Complete &amp; Graduate");
+  if (at < 0) return null;
+  const start = markup.lastIndexOf("<button", at);
+  return markup.slice(start, markup.indexOf(">", start) + 1);
+}
+
+function rollOutItems(statuses: [string, string, string, string]): GateItem[] {
+  return [
+    gate("ro1", "Go-live completed", statuses[0]),
+    gate("ro2", "Training delivered", statuses[1]),
+    gate("ro3", "Acceptance confirmed", statuses[2]),
+    gate("ro4", "Support handoff confirmed", statuses[3]),
+  ];
+}
+
+describe("Complete & Graduate on Roll Out", () => {
+  it("shows the action disabled, naming the open criterion, until all four are done", () => {
+    const markup = panel(
+      rollOutItems(["done", "done", "not_started", "done"]),
+      "blocking",
+      ROLL_OUT,
+    );
+    expect(markup).toContain("Complete &amp; Graduate");
+    expect(graduateButtonTag(markup)).toContain('disabled=""');
+    expect(markup).toContain("Waiting on: Acceptance confirmed");
+  });
+
+  it("offers the action enabled once all four criteria are done", () => {
+    const markup = panel(rollOutItems(["done", "done", "done", "done"]), "blocking", ROLL_OUT);
+    expect(graduateButtonTag(markup)).not.toBeNull();
+    expect(graduateButtonTag(markup)).not.toContain('disabled=""');
+    expect(markup).not.toContain("Waiting on");
+  });
+
+  it("does not count a skipped criterion as done, matching the database rule", () => {
+    const markup = panel(rollOutItems(["done", "done", "skipped", "done"]), "blocking", ROLL_OUT);
+    expect(graduateButtonTag(markup)).toContain('disabled=""');
+    expect(markup).toContain("Waiting on: Acceptance confirmed");
+  });
+
+  it("shows no graduation action once the implementation has graduated, so it cannot be sent twice", () => {
+    const markup = panel(rollOutItems(["done", "done", "done", "done"]), "blocking", {
+      ...ROLL_OUT,
+      graduation: "graduated",
+    });
+    expect(markup).not.toContain("Complete &amp; Graduate");
+    expect(markup).toContain("Graduated. Roll Out &amp; Graduation is complete");
+  });
+
+  it("never offers graduation on a standard panel, nor on a legacy Field Fusion one", () => {
+    const markup = panel(
+      rollOutItems(["done", "done", "done", "done"]),
+      "blocking",
+      null,
+      LIFECYCLE_STAGES[0]!.id,
+    );
+    expect(markup).not.toContain("Complete &amp; Graduate");
+    expect(markup).not.toContain("Graduated.");
   });
 });

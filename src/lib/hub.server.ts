@@ -2366,6 +2366,47 @@ export async function handOffPartner(args: {
   });
 }
 
+/**
+ * Complete & Graduate for a Partner Implementation at Roll Out & Graduation. One
+ * transaction in the database: the stage and its milestone complete, and the deal
+ * moves to onboarding_complete. The database is the authority on the four
+ * criteria and on a second graduation; this only checks the stage and the journey,
+ * and turns a refusal into a readable message.
+ */
+export async function graduatePartner(args: {
+  implementationId: string;
+  actorTeamMember: string | null;
+  actorProfileId: string | null;
+}): Promise<{ graduated: true }> {
+  const { data: impl, error } = await db()
+    .from("implementations")
+    .select("id,current_stage,journey_type,partner_key")
+    .eq("id", args.implementationId)
+    .maybeSingle();
+  if (error) throw new Error(`Could not read the implementation: ${error.message}`);
+  if (!impl || !isPartnerJourney(impl)) {
+    throw new Error("This implementation does not run the partner journey.");
+  }
+  if (impl.current_stage !== "roll_out") {
+    throw new Error(
+      "Graduation is completed at Roll Out & Graduation; this implementation is at a different stage.",
+    );
+  }
+  const { graduatePartnerImplementation, graduationRefusal } =
+    await import("./partner-progression.server");
+  try {
+    await graduatePartnerImplementation(db(), {
+      implementationId: args.implementationId,
+      actorTeamMember: args.actorTeamMember,
+      actorProfile: args.actorProfileId,
+      at: new Date().toISOString(),
+    });
+  } catch (e) {
+    throw new Error(graduationRefusal((e as Error).message));
+  }
+  return { graduated: true };
+}
+
 export async function advanceStage(args: {
   implementationId: string;
   toStage: string;

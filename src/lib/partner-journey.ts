@@ -1,5 +1,6 @@
 import {
   PARTNER_JOURNEY,
+  type PartnerGraduation,
   type PartnerStageKey,
   type StageOwner,
   type StageVisibility,
@@ -235,6 +236,17 @@ export function partnerProgress(input: PartnerProgressInput): PartnerProgress {
 }
 
 /* ------------------------------------------------------------ Current Implementation */
+
+/**
+ * Roll Out & Graduation's completion, read from the stage's own status. The
+ * completion itself is the transactional graduation (partner_implementation_graduate);
+ * nothing here writes it.
+ */
+export function partnerGraduation(progress: PartnerProgress): PartnerGraduation {
+  if (progress.current !== "roll_out") return null;
+  const stage = progress.stages.find((s) => s.key === "roll_out");
+  return stage?.status === "completed" ? "graduated" : "available";
+}
 
 /**
  * The seven partner stages, shaped for the existing stepper. Dates are the

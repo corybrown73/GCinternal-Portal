@@ -223,3 +223,16 @@ export async function advancePartnerFor(
   });
   return { ok: true, stage: moved.stage, enteredAt: at, overridden: false };
 }
+
+/**
+ * The copy a person sees when a graduation is refused. The database raises
+ * `closed_gate` while a Roll Out criterion is open and `duplicate_graduation`
+ * once the stage is done; anything else is passed on as it came.
+ */
+export function graduationRefusal(message: string): string {
+  if (message.includes("duplicate_graduation")) return "This implementation has already graduated.";
+  if (message.includes("closed_gate")) {
+    return "Roll Out & Graduation is not complete yet. Every criterion must be done before graduating.";
+  }
+  return message;
+}

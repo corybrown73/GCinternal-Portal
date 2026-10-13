@@ -11,6 +11,7 @@ import { getDealAssignment } from "@/lib/assignment.functions";
 import { handOffPartnerImplementation } from "@/lib/hub.functions";
 import { partnerMoveFrom, type PartnerMoveView } from "@/lib/partner-implementation";
 import {
+  partnerGraduation,
   partnerStepperStages,
   type PartnerProgress,
   type PartnerWorkItem,
@@ -47,6 +48,7 @@ export function PartnerJourney({
     currentLabel: progress.currentLabel ?? "",
     next: move.next,
     handoff: move.handoff,
+    graduation: partnerGraduation(progress),
   };
   return (
     <>

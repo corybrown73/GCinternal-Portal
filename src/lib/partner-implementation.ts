@@ -292,11 +292,18 @@ export function liveTemplateId(
   return live?.id ?? null;
 }
 
+/**
+ * Roll Out & Graduation's completion: "available" while the implementation is at
+ * that stage and not yet done, "graduated" once it is complete. Null everywhere else.
+ */
+export type PartnerGraduation = "available" | "graduated" | null;
+
 /** A Partner Implementation's move: where it is now, and the next partner stage (null at the end or at the handoff). */
 export type PartnerMoveView = {
   currentLabel: string;
   next: PartnerStage | null;
   handoff: boolean;
+  graduation: PartnerGraduation;
 };
 
 /**
