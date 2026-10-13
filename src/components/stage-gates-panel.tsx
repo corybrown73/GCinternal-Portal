@@ -48,6 +48,7 @@ export function StageGatesPanel({
   stageGateMode,
   items,
   partner,
+  focus = false,
 }: {
   customerId: string;
   implementationId: string;
@@ -57,7 +58,14 @@ export function StageGatesPanel({
   items: GateItem[];
   /** A Partner Implementation's move, from the partner order. Replaces the lifecycle step. */
   partner?: PartnerMoveView | null;
+  /**
+   * Focus Mode: show only the next open criterion, in the order the stage gives
+   * them, with the rest one click away. The move and graduate controls are the
+   * same either way.
+   */
+  focus?: boolean;
 }) {
+  const [showAll, setShowAll] = useState(false);
   const status = stageGateStatus(items);
   // A partner implementation moves along its own order; the house lifecycle has none of its stages.
   const next: string | null = partner
@@ -167,7 +175,7 @@ export function StageGatesPanel({
       }
     >
       <ul className="divide-y divide-border">
-        {status.gates.map((g) => {
+        {(focus && !showAll ? status.remaining.slice(0, 1) : status.gates).map((g) => {
           const done = optimistic[g.id] ?? isSettled(g.status);
           return (
             <li key={g.id} className="flex items-center gap-3 px-3 py-2">
@@ -219,14 +227,28 @@ export function StageGatesPanel({
       </ul>
 
       <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border bg-surface px-3 py-2">
-        <p className="flex items-center gap-1.5 text-[12px] text-muted-foreground">
-          {status.ready ? (
-            <Check className="h-3.5 w-3.5 text-status-ontrack-foreground" />
-          ) : (
-            <CircleDashed className="h-3.5 w-3.5" />
-          )}
-          {gateSummary(status)}
-        </p>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+          <p className="flex items-center gap-1.5 text-[12px] text-muted-foreground">
+            {status.ready ? (
+              <Check className="h-3.5 w-3.5 text-status-ontrack-foreground" />
+            ) : (
+              <CircleDashed className="h-3.5 w-3.5" />
+            )}
+            {gateSummary(status)}
+          </p>
+          {focus && status.gates.length > 1 ? (
+            <button
+              type="button"
+              aria-expanded={showAll}
+              onClick={() => setShowAll((o) => !o)}
+              className="text-[12px] font-medium text-primary underline-offset-2 hover:underline"
+            >
+              {showAll
+                ? "Show only the next criterion"
+                : `View all ${status.gates.length} criteria`}
+            </button>
+          ) : null}
+        </div>
 
         {next && partnerBlocked ? (
           <p className="text-[12px] font-medium text-status-risk-foreground">

@@ -105,12 +105,14 @@ import { PartnerChoice } from "@/components/partner-choice";
 import { partnerDashboardView, partnerWorkspace } from "@/lib/partner-journey";
 import { currentImplementationLayout } from "@/lib/current-implementation-layout";
 import {
+  JourneyBar,
   KeyDatesCard,
   NeedsAttentionCard,
-  NextActionCard,
-  ParkingLotSummary,
-  QuickActions,
+  OwnershipCard,
+  ProgressLine,
+  ToolsCard,
 } from "@/components/current-implementation-context";
+import { journeyPosition, taskFocusFor } from "@/lib/current-implementation-focus";
 import { getPartnerProgress } from "@/lib/hub.functions";
 import { stageGuidanceFor } from "@/lib/stage-guidance";
 import { parseWonGate, type WonGateMissing } from "@/lib/won-gate";
@@ -284,10 +286,7 @@ function ImplementationTargetSection({
     agreed.current && agreed.original && agreed.current !== agreed.original,
   );
   return (
-    <section
-      className="rounded-md border border-border bg-card px-4 py-3"
-      aria-label="Implementation target"
-    >
+    <section className="border-t border-border pt-3" aria-label="Implementation target">
       <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
         {partner ? "Graduation target · partner" : "Target graduation · what the customer sees"}
       </p>
@@ -369,7 +368,14 @@ function ImplementationTargetSection({
  * TIS mid-call can see what's wrong and what to do about it without hunting
  * for it.
  */
-function StageGuidancePanel({ shown }: { shown: FlowStageKey }) {
+function StageGuidancePanel({
+  shown,
+  showObjective = true,
+}: {
+  shown: FlowStageKey;
+  /** The objective is drawn as the stage's heading when the focus view already shows it. */
+  showObjective?: boolean;
+}) {
   const [openIssue, setOpenIssue] = useState<string | null>(null);
   const guidance = stageGuidanceFor(shown);
   if (!guidance) return null;
@@ -379,8 +385,10 @@ function StageGuidancePanel({ shown }: { shown: FlowStageKey }) {
       className="border-t border-border bg-card px-4 py-3.5 text-[12.5px]"
       aria-label="Stage guidance"
     >
-      <p className="font-semibold text-foreground">{guidance.objective}</p>
-      <p className="mt-0.5 text-muted-foreground">{guidance.objectiveDetail}</p>
+      {showObjective ? <p className="font-semibold text-foreground">{guidance.objective}</p> : null}
+      <p className={cn("text-muted-foreground", showObjective && "mt-0.5")}>
+        {guidance.objectiveDetail}
+      </p>
 
       <div className="mt-3.5">
         <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
@@ -1048,6 +1056,9 @@ export function CurrentImplementationTab({
   const [manual, setManual] = useState<{ key: string; wasDone: boolean } | null>(null);
   const [openPanel, setOpenPanel] = useState<"meeting" | "update" | "dates" | null>(null);
   const [parkingOpen, setParkingOpen] = useState(false);
+  // Focus Mode: the journey and the full stage checklist are collapsed by default.
+  const [journeyOpen, setJourneyOpen] = useState(false);
+  const [allTasksOpen, setAllTasksOpen] = useState(false);
   const qc = useQueryClient();
   const skipToGraduation = useServerFn(moveToGraduation);
   const skip = useMutation({
@@ -1110,7 +1121,13 @@ export function CurrentImplementationTab({
 
   const shown = viewing ?? currentInCanon ?? "pre_kickoff";
   const stage = canonicalStages.find((s) => s.key === shown) ?? canonicalStages[0]!;
-  const next = stage.tasks.find((t) => !t.done && !t.locked && !t.optional) ?? null;
+  // Focus Mode's task rule, shared with the tests: the viewed stage's next task.
+  const viewFocus = taskFocusFor(stage.tasks);
+  const next = viewFocus.state === "next" ? viewFocus.next : null;
+  const stageKeys = canonicalStages.map((s) => s.key);
+  const journeyPos = journeyPosition(stageKeys, shown);
+  const currentPos = currentInCanon ? journeyPosition(stageKeys, currentInCanon) : null;
+  const guidance = stageGuidanceFor(shown);
   const manualTask = manual ? stage.tasks.find((t) => t.key === manual.key) : undefined;
   const openTask = manualTask && (manual!.wasDone || !manualTask.done) ? manualTask : next;
 
@@ -1140,9 +1157,6 @@ export function CurrentImplementationTab({
   const layout = currentImplementationLayout({ partner, currentStage: flow.current });
   const canonicalView = layout.journeyStrip;
   const parkingAccess = layout.parkingAccess;
-  const openParking = (parking.data ?? []).filter(
-    (i) => i.status === "open" || i.status === "scheduled",
-  );
   const nextLine =
     layout.nextLine === "milestone"
       ? partnerView
@@ -1160,79 +1174,71 @@ export function CurrentImplementationTab({
               ? `${m.label} · ${whenLabel(m.date, m.time, intake.timeline.timezone)}`
               : "None scheduled",
         };
+  // The skip control is the same action as before, shown on the journey bar.
+  const skipControl =
+    editable && currentInCanon !== null && currentInCanon !== "complete" ? (
+      <span className="flex items-center gap-2">
+        <button
+          type="button"
+          className="text-[11px] text-muted-foreground underline decoration-dotted hover:text-foreground disabled:opacity-50"
+          disabled={skip.isPending}
+          onClick={async () => {
+            const why = await ask({
+              title: "Skip to Graduation?",
+              body: "Moves the implementation straight to Graduation. Every stage between here and there is left exactly as it is — not marked done, shown as skipped — and nothing here closes the implementation on its own. Say why the remaining stages are being skipped.",
+              confirmLabel: "Skip to Graduation",
+              destructive: true,
+              prompt: {
+                label: "Why",
+                placeholder:
+                  "Customer is self-sufficient already; rest is being tracked separately",
+                required: true,
+              },
+            });
+            if (typeof why !== "string" || !why.trim()) return;
+            skip.mutate(why.trim());
+          }}
+        >
+          {skip.isPending ? "Moving…" : "Skip to Graduation…"}
+        </button>
+        {skip.isError ? (
+          <span className="text-[11px] text-destructive">{(skip.error as Error).message}</span>
+        ) : null}
+      </span>
+    ) : null;
+
   return (
     <div className="space-y-4">
       {canonicalView ? (
-        <section
-          id="current-implementation-journey"
-          className="overflow-hidden rounded-md border border-border bg-card"
-          aria-label="Implementation journey"
-        >
-          <Stepper
-            stages={canonicalStages}
-            current={currentInCanon}
-            shown={shown}
-            onShow={(k) => {
-              setViewing(k === currentInCanon ? null : k);
-              setManual(null);
-            }}
-            history={deal.stage_history}
-            timeline={timeline}
-            outcomeAt={intake.outcome?.at ?? null}
+        <>
+          <JourneyBar
+            position={currentPos}
+            fallbackLabel="Before the journey starts"
+            expanded={journeyOpen}
+            onToggle={() => setJourneyOpen((o) => !o)}
+            skip={skipControl}
           />
-          {editable && currentInCanon !== null && currentInCanon !== "complete" ? (
-            <div className="flex items-center justify-end border-b border-border px-4 py-1.5">
-              <button
-                type="button"
-                className="text-[11px] text-muted-foreground underline decoration-dotted hover:text-foreground disabled:opacity-50"
-                disabled={skip.isPending}
-                onClick={async () => {
-                  const why = await ask({
-                    title: "Skip to Graduation?",
-                    body: "Moves the implementation straight to Graduation. Every stage between here and there is left exactly as it is — not marked done, shown as skipped — and nothing here closes the implementation on its own. Say why the remaining stages are being skipped.",
-                    confirmLabel: "Skip to Graduation",
-                    destructive: true,
-                    prompt: {
-                      label: "Why",
-                      placeholder:
-                        "Customer is self-sufficient already; rest is being tracked separately",
-                      required: true,
-                    },
-                  });
-                  if (typeof why !== "string" || !why.trim()) return;
-                  skip.mutate(why.trim());
-                }}
-              >
-                {skip.isPending ? "Moving…" : "Skip to Graduation…"}
-              </button>
-              {skip.isError ? (
-                <span className="ml-2 text-[11px] text-destructive">
-                  {(skip.error as Error).message}
-                </span>
-              ) : null}
-            </div>
-          ) : null}
-          {viewingOther ? (
-            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-amber-500/10 px-4 py-1.5 text-[12px]">
-              <span>
-                <span className="font-medium text-foreground">Viewing: {stage.label}</span>
-                {viewingPosition ? (
-                  <span className="text-muted-foreground"> · {viewingPosition}</span>
-                ) : null}
-              </span>
-              <button
-                type="button"
-                onClick={() => {
-                  setViewing(null);
+          {journeyOpen ? (
+            <section
+              id="current-implementation-journey"
+              className="overflow-hidden rounded-md border border-border bg-card"
+              aria-label="Implementation journey"
+            >
+              <Stepper
+                stages={canonicalStages}
+                current={currentInCanon}
+                shown={shown}
+                onShow={(k) => {
+                  setViewing(k === currentInCanon ? null : k);
                   setManual(null);
                 }}
-                className="font-medium text-primary underline-offset-2 hover:underline"
-              >
-                Back to current stage
-              </button>
-            </div>
+                history={deal.stage_history}
+                timeline={timeline}
+                outcomeAt={intake.outcome?.at ?? null}
+              />
+            </section>
           ) : null}
-        </section>
+        </>
       ) : null}
 
       <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1.85fr)_minmax(0,1fr)]">
@@ -1271,58 +1277,176 @@ export function CurrentImplementationTab({
               className="overflow-hidden rounded-md border border-border bg-card"
               aria-label={`${stage.label} stage`}
             >
+              <div className="px-4 pb-3 pt-4">
+                {viewingOther ? (
+                  <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-sm bg-amber-500/10 px-3 py-1.5 text-[12px]">
+                    <span>
+                      <span className="font-medium text-foreground">Viewing: {stage.label}</span>
+                      {viewingPosition ? (
+                        <span className="text-muted-foreground"> · {viewingPosition}</span>
+                      ) : null}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setViewing(null);
+                        setManual(null);
+                      }}
+                      className="font-medium text-primary underline-offset-2 hover:underline"
+                    >
+                      Back to current stage
+                    </button>
+                  </div>
+                ) : null}
+                <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                  {journeyPos ? `Stage ${journeyPos.index} of ${journeyPos.total}` : "Stage"}
+                  {viewingOther ? " · viewing" : " · current"}
+                </p>
+                <h2 className="mt-0.5 text-[20px] font-semibold tracking-tight text-foreground">
+                  {stage.label}
+                </h2>
+                {guidance ? (
+                  <p className="mt-1 text-[13px] text-foreground/80">{guidance.objective}</p>
+                ) : null}
+                {viewFocus.progress.total > 0 ? (
+                  <div className="mt-3">
+                    <ProgressLine
+                      done={viewFocus.progress.done}
+                      total={viewFocus.progress.total}
+                      label="tasks done"
+                    />
+                  </div>
+                ) : null}
+              </div>
               <StageTiming
                 shown={shown}
                 history={deal.stage_history}
                 targetDate={stageTargetDate(shown, timeline)}
               />
-              {isWorkingStageKey(shown) ? (
-                // The working stages are ticks (meetings held, the plan's steps,
-                // readiness, Go-Live, graduation) — the same list the deal page
-                // runs, with its checkboxes. TaskBody has no body for a tick, so
-                // routing these through TaskRow left every one of them unclickable.
-                <OnboardingList
-                  deal={deal}
-                  intake={intake}
-                  tasks={stage.tasks}
-                  editable={editable}
-                  stageKey={shown}
-                  current={flow.current}
-                  implementationId={implementationId}
-                />
-              ) : stage.tasks.length > 0 ? (
-                <ol className="divide-y divide-border">
-                  {stage.tasks.map((t, i) => (
-                    <TaskRow
-                      key={t.key}
-                      n={i + 1}
-                      task={t}
-                      open={openTask?.key === t.key}
-                      onOpen={() => setManual({ key: t.key, wasDone: t.done })}
-                    >
-                      <TaskBody task={t} deal={deal} intake={intake} editable={editable} />
-                    </TaskRow>
-                  ))}
-                </ol>
+              {allTasksOpen ? (
+                // The complete stage checklist, with its true statuses and controls.
+                isWorkingStageKey(shown) ? (
+                  // The working stages are ticks (meetings held, the plan's steps,
+                  // readiness, Go-Live, graduation) — the same list the deal page
+                  // runs, with its checkboxes. TaskBody has no body for a tick, so
+                  // routing these through TaskRow left every one of them unclickable.
+                  <OnboardingList
+                    deal={deal}
+                    intake={intake}
+                    tasks={stage.tasks}
+                    editable={editable}
+                    stageKey={shown}
+                    current={flow.current}
+                    implementationId={implementationId}
+                  />
+                ) : stage.tasks.length > 0 ? (
+                  <ol className="divide-y divide-border">
+                    {stage.tasks.map((t, i) => (
+                      <TaskRow
+                        key={t.key}
+                        n={i + 1}
+                        task={t}
+                        open={openTask?.key === t.key}
+                        onOpen={() => setManual({ key: t.key, wasDone: t.done })}
+                      >
+                        <TaskBody task={t} deal={deal} intake={intake} editable={editable} />
+                      </TaskRow>
+                    ))}
+                  </ol>
+                ) : (
+                  <p className="px-4 py-3 text-[13px] text-muted-foreground">
+                    Nothing to do yet at this stage.
+                  </p>
+                )
+              ) : viewFocus.state === "next" ? (
+                // Focus Mode: the one task the stage logic says is next, with its own control.
+                <div>
+                  <p className="px-4 pt-3 text-[10px] font-semibold uppercase tracking-[0.12em] text-primary">
+                    Next task
+                  </p>
+                  {isWorkingStageKey(shown) ? (
+                    <OnboardingList
+                      deal={deal}
+                      intake={intake}
+                      tasks={stage.tasks}
+                      editable={editable}
+                      stageKey={shown}
+                      current={flow.current}
+                      implementationId={implementationId}
+                      only={viewFocus.next.key}
+                    />
+                  ) : (
+                    <ol>
+                      <TaskRow
+                        n={stage.tasks.indexOf(viewFocus.next) + 1}
+                        task={viewFocus.next}
+                        open
+                        onOpen={() => undefined}
+                      >
+                        <TaskBody
+                          task={viewFocus.next}
+                          deal={deal}
+                          intake={intake}
+                          editable={editable}
+                        />
+                      </TaskRow>
+                    </ol>
+                  )}
+                </div>
+              ) : viewFocus.state === "waiting" ? (
+                <div className="px-4 pb-3 text-[13px]">
+                  <p className="font-medium text-foreground">
+                    Waiting on: {viewFocus.blocker.label}
+                  </p>
+                  {viewFocus.blocker.locked ? (
+                    <p className="mt-0.5 text-[12px] text-muted-foreground">
+                      {viewFocus.blocker.locked}.
+                    </p>
+                  ) : null}
+                </div>
+              ) : viewFocus.state === "complete" ? (
+                <p className="px-4 pb-3 text-[13px] text-muted-foreground">
+                  Every task in this stage is done. {stageFooter(shown, flow.current, intake.path)}
+                </p>
               ) : (
-                <p className="px-4 py-3 text-[13px] text-muted-foreground">
+                <p className="px-4 pb-3 text-[13px] text-muted-foreground">
                   Nothing to do yet at this stage.
                 </p>
               )}
+              {stage.tasks.length > 0 ? (
+                <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border px-4 py-2.5 text-[12px]">
+                  <span className="text-muted-foreground">
+                    {!allTasksOpen && viewFocus.state === "next" && viewFocus.others > 0
+                      ? `${viewFocus.others} more open in this stage`
+                      : null}
+                  </span>
+                  <button
+                    type="button"
+                    aria-expanded={allTasksOpen}
+                    onClick={() => setAllTasksOpen((o) => !o)}
+                    className="font-medium text-primary underline-offset-2 hover:underline"
+                  >
+                    {allTasksOpen ? "Show only the next task" : "View all stage tasks"}
+                  </button>
+                </div>
+              ) : null}
               {parkingAccess && parkingOpen ? (
                 <div className="border-t border-border">
                   <ParkingLot dealId={dealId} editable={editable} />
                 </div>
               ) : null}
-              <StageGuidancePanel shown={shown} />
+              {guidance ? (
+                <SupportingSection title="Stage guidance" persistKey="guidance">
+                  <StageGuidancePanel shown={shown} showObjective={false} />
+                </SupportingSection>
+              ) : null}
             </section>
           )}
         </div>
 
         <div className="min-w-0 space-y-3">
           <NeedsAttentionCard record={record} dealId={dealId} />
-          <NextActionCard
-            nextAction={strip ? strip.nextAction : ws.nextStep ? ws.nextStep.label : "Nothing open"}
+          <OwnershipCard
             owner={ownerName}
             ball={!strip && ws.ball ? { who: ws.ball.who, detail: ws.ball.detail } : null}
             waiting={strip ? [] : ws.waiting.map((w) => ({ who: w.who, what: w.what }))}
@@ -1352,24 +1476,25 @@ export function CurrentImplementationTab({
               partner ? { graduationTarget: partnerView?.graduationTarget ?? null } : undefined
             }
           />
-          {parkingAccess ? (
-            <ParkingLotSummary
-              openCount={ws.ourOpen}
-              items={openParking.map((i) => ({ id: i.id, request: i.request }))}
-              open={parkingOpen}
-              onToggle={() => setParkingOpen((o) => !o)}
-            />
-          ) : null}
-          <QuickActions
+          <ToolsCard
             open={openPanel}
             onOpen={(which) => setOpenPanel((o) => (o === which ? null : which))}
             showPlanDates={layout.showPlanDates}
+            parking={
+              parkingAccess
+                ? {
+                    openCount: ws.ourOpen,
+                    expanded: parkingOpen,
+                    onToggle: () => setParkingOpen((o) => !o),
+                  }
+                : null
+            }
             dashboardLink={
               <Link
                 to="/customer-dashboard-preview/$dealId"
                 params={{ dealId }}
                 search={{ customer: customerId, impl: implementationId }}
-                className="rounded-sm border border-primary/40 px-2.5 py-1.5 text-left text-[12px] font-medium text-primary hover:bg-primary/5"
+                className="text-[12px] font-medium text-muted-foreground hover:text-foreground"
               >
                 Preview the customer dashboard →
               </Link>
@@ -1403,16 +1528,16 @@ export function CurrentImplementationTab({
       </div>
 
       <div className="space-y-2">
-        <SupportingSection title="Solutions">
+        <SupportingSection title="Solutions" persistKey="solutions">
           <SolutionsCard deal={deal} editable={editable} />
         </SupportingSection>
-        <SupportingSection title="Implementation focus">
+        <SupportingSection title="Implementation focus" persistKey="focus">
           <ImplementationFocusPanel dealId={dealId} intake={intake} />
         </SupportingSection>
-        <SupportingSection title="Workflow story">
+        <SupportingSection title="Workflow story" persistKey="story">
           <WorkflowStoryPanel dealId={dealId} intake={intake} />
         </SupportingSection>
-        <SupportingSection title="Implementation history">
+        <SupportingSection title="Implementation history" persistKey="history">
           <ImplementationHistorySection
             dealStageHistory={deal.stage_history}
             milestoneDateChanges={deal.milestone_date_changes}
@@ -1429,10 +1554,46 @@ export function CurrentImplementationTab({
   );
 }
 
-/** A disclosure for a supporting section: closed by default, so the working stage stays first. */
-function SupportingSection({ title, children }: { title: string; children: React.ReactNode }) {
+const OPEN_PREF = "ci-open:";
+
+/**
+ * A disclosure for a supporting section: closed by default, so the working stage
+ * stays first. A `persistKey` remembers this viewer's last choice for it, on this
+ * device only; storage that is unavailable falls back to closed.
+ */
+function SupportingSection({
+  title,
+  children,
+  persistKey,
+}: {
+  title: string;
+  children: React.ReactNode;
+  persistKey?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    if (!persistKey) return;
+    try {
+      setOpen(window.localStorage.getItem(OPEN_PREF + persistKey) === "1");
+    } catch {
+      // Storage blocked: stay closed.
+    }
+  }, [persistKey]);
   return (
-    <details className="group rounded-md border border-border bg-card">
+    <details
+      className="group rounded-md border border-border bg-card"
+      open={open}
+      onToggle={(e) => {
+        const next = e.currentTarget.open;
+        setOpen(next);
+        if (!persistKey) return;
+        try {
+          window.localStorage.setItem(OPEN_PREF + persistKey, next ? "1" : "0");
+        } catch {
+          // Storage blocked: the choice lasts for this view only.
+        }
+      }}
+    >
       <summary className="flex cursor-pointer list-none items-center justify-between px-4 py-2.5 text-[13px] font-medium text-foreground hover:bg-muted/50">
         {title}
         <span className="text-[11px] font-normal text-muted-foreground group-open:hidden">
@@ -3058,6 +3219,7 @@ function OnboardingList({
   stageKey,
   current,
   implementationId,
+  only,
 }: {
   deal: DealData;
   intake: IntakeAnswers;
@@ -3066,6 +3228,11 @@ function OnboardingList({
   /** Which of the working stages this list is. */
   stageKey: FlowStageKey;
   current: FlowStageKey | null;
+  /**
+   * Focus Mode: render just this one row, with its own checkbox and controls.
+   * Absent, the whole checklist renders as it always has.
+   */
+  only?: string;
   /** Absent on the Closed Won board fallback, which has no implementation
    * yet; the brief upload and Mark as Graduated need one, so both stay off
    * there and the rest of this list renders exactly as it always has. */
@@ -3223,13 +3390,17 @@ function OnboardingList({
   const hasLaterPhases = tasks.some((t) => t.key.startsWith("svc:"));
   const allDone = tasks.length > 0 && tasks.every((t) => t.done || t.optional);
   const nextKey = tasks.find((t) => !t.done && !t.optional)?.key ?? null;
+  // Focus Mode shows the focused task's hint and highlight, which follow the
+  // stage's focus rule rather than this list's first open row.
+  const focusKey = only ?? nextKey;
+  const rows = only ? tasks.filter((t) => t.key === only) : tasks;
   const today = localIso();
   return (
     <div>
       <ul className="divide-y divide-border">
-        {tasks.map((t, i) => {
+        {rows.map((t, i) => {
           const late = !t.done && !t.optional && t.date && t.date < today;
-          const heading = t.group && t.group !== tasks[i - 1]?.group ? t.group : null;
+          const heading = !only && t.group && t.group !== tasks[i - 1]?.group ? t.group : null;
           return (
             <Fragment key={t.key}>
               {heading ? (
@@ -3247,7 +3418,7 @@ function OnboardingList({
               <li
                 className={cn(
                   "flex items-start gap-2.5 px-4 py-2",
-                  t.key === nextKey && "bg-primary/5",
+                  t.key === focusKey && "bg-primary/5",
                 )}
               >
                 <input
@@ -3276,7 +3447,7 @@ function OnboardingList({
                   <div className="flex flex-wrap items-baseline justify-between gap-x-3">
                     <span
                       className={cn(
-                        "text-[13px]",
+                        only ? "text-[15px] font-semibold" : "text-[13px]",
                         isDone(t) && "text-muted-foreground line-through",
                       )}
                     >
@@ -3300,7 +3471,7 @@ function OnboardingList({
                           : ""}
                     </span>
                   </div>
-                  {t.key === nextKey || (t.optional && !t.done) ? (
+                  {t.key === focusKey || (t.optional && !t.done) ? (
                     <p className="mt-0.5 text-[12px] text-muted-foreground">{t.hint}</p>
                   ) : null}
                   {editable && isReadinessKey(t.key) && !t.done ? (

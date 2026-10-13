@@ -4,13 +4,19 @@ import { useServerFn } from "@tanstack/react-start";
 import { Send } from "lucide-react";
 
 import { StageStepper } from "@/components/stage-stepper";
+import { JourneyBar } from "@/components/current-implementation-context";
 import { StageGatesPanel } from "@/components/stage-gates-panel";
 import { Button } from "@/components/ui/button";
 import { MemberOptions } from "@/components/member-options";
 import { ask } from "@/components/ui/ask";
 import { getDealAssignment } from "@/lib/assignment.functions";
 import { handOffPartnerImplementation } from "@/lib/hub.functions";
-import { partnerMoveFrom, type PartnerMoveView } from "@/lib/partner-implementation";
+import {
+  PARTNER_JOURNEY,
+  partnerMoveFrom,
+  type PartnerMoveView,
+} from "@/lib/partner-implementation";
+import { journeyPosition } from "@/lib/current-implementation-focus";
 import {
   partnerGraduation,
   partnerStepperStages,
@@ -43,7 +49,22 @@ export function PartnerJourney({
   dealId: string;
   editable: boolean;
 }) {
+  // Focus Mode: the full journey is collapsed until asked for. Viewing another
+  // stage is read-only; the controls below apply to the current stage only.
+  const [journeyOpen, setJourneyOpen] = useState(false);
+  const [viewing, setViewing] = useState<string | null>(null);
   const current = progress.stages.find((s) => s.key === progress.current) ?? null;
+  const shownKey = viewing ?? progress.current ?? "";
+  const shown = progress.stages.find((s) => s.key === shownKey) ?? null;
+  const viewingOther = viewing !== null && viewing !== progress.current && shown !== null;
+  const stageKeys: string[] = progress.stages.map((s) => s.key);
+  const position = progress.current ? journeyPosition(stageKeys, progress.current) : null;
+  const shownPosition =
+    viewingOther && progress.current
+      ? stageKeys.indexOf(shownKey) < stageKeys.indexOf(progress.current)
+        ? "Completed stage"
+        : "Upcoming stage"
+      : null;
   const move = partnerMoveFrom(progress.current);
   const moveView: PartnerMoveView = {
     currentLabel: progress.currentLabel ?? "",
@@ -51,16 +72,39 @@ export function PartnerJourney({
     handoff: move.handoff,
     graduation: partnerGraduation(progress),
   };
+  const definition = (key: string | null) =>
+    key ? (PARTNER_JOURNEY.find((s) => s.key === key)?.description ?? null) : null;
   return (
     <>
-      <section
-        id="current-implementation-journey"
-        className="overflow-hidden rounded-md border border-border bg-card"
-        aria-label="Implementation journey"
-      >
-        <StageStepper stages={partnerStepperStages(progress)} shown={progress.current ?? ""} />
-      </section>
-      {progress.current === "partner_setup" ? (
+      <JourneyBar
+        position={position}
+        fallbackLabel="Partner journey"
+        expanded={journeyOpen}
+        onToggle={() => setJourneyOpen((o) => !o)}
+        skip={null}
+      />
+      {journeyOpen ? (
+        <section
+          id="current-implementation-journey"
+          className="overflow-hidden rounded-md border border-border bg-card"
+          aria-label="Implementation journey"
+        >
+          <StageStepper
+            stages={partnerStepperStages(progress)}
+            shown={shownKey}
+            onShow={(k) => setViewing(k === progress.current ? null : k)}
+          />
+        </section>
+      ) : null}
+      {viewingOther && shown ? (
+        <PartnerStageReadOnly
+          label={shown.label}
+          description={definition(shown.key)}
+          items={shown.items}
+          position={shownPosition}
+          onBack={() => setViewing(null)}
+        />
+      ) : progress.current === "partner_setup" ? (
         <PartnerHandoffSection
           dealId={dealId}
           implementationId={implementationId}
@@ -68,16 +112,101 @@ export function PartnerJourney({
           editable={editable}
         />
       ) : current ? (
-        <StageGatesPanel
-          customerId={customerId}
-          implementationId={implementationId}
-          currentStage={null}
-          stageGateMode={current.gateMode}
-          items={gateItemsFor(current.items)}
-          partner={moveView}
-        />
+        <>
+          <div className="px-1">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+              {position ? `Stage ${position.index} of ${position.total}` : "Stage"} · current
+            </p>
+            <h2 className="mt-0.5 text-[20px] font-semibold tracking-tight text-foreground">
+              {current.label}
+            </h2>
+            {definition(current.key) ? (
+              <p className="mt-1 text-[13px] text-foreground/80">{definition(current.key)}</p>
+            ) : null}
+          </div>
+          <StageGatesPanel
+            customerId={customerId}
+            implementationId={implementationId}
+            currentStage={null}
+            stageGateMode={current.gateMode}
+            items={gateItemsFor(current.items)}
+            partner={moveView}
+            focus
+          />
+        </>
       ) : null}
     </>
+  );
+}
+
+/**
+ * A stage other than the current one, read for what it recorded. Read only: no
+ * ticks and no move, because the partner's controls apply to the current stage.
+ */
+function PartnerStageReadOnly({
+  label,
+  description,
+  items,
+  position,
+  onBack,
+}: {
+  label: string;
+  description: string | null;
+  items: readonly PartnerWorkItem[];
+  position: string | null;
+  onBack: () => void;
+}) {
+  const criteria = items.filter((i) => i.isGate);
+  return (
+    <section
+      className="overflow-hidden rounded-md border border-border bg-card"
+      aria-label={`${label} stage, read only`}
+    >
+      <div className="flex flex-wrap items-center justify-between gap-2 bg-amber-500/10 px-4 py-2 text-[12px]">
+        <span>
+          <span className="font-medium text-foreground">Viewing: {label}</span>
+          {position ? <span className="text-muted-foreground"> · {position}</span> : null}
+          <span className="text-muted-foreground"> · read only</span>
+        </span>
+        <button
+          type="button"
+          onClick={onBack}
+          className="font-medium text-primary underline-offset-2 hover:underline"
+        >
+          Back to current stage
+        </button>
+      </div>
+      <div className="px-4 pb-3 pt-3">
+        {description ? <p className="text-[13px] text-foreground/80">{description}</p> : null}
+        {criteria.length === 0 ? (
+          <p className="mt-2 text-[12px] text-muted-foreground">No criteria recorded here.</p>
+        ) : (
+          <ul className="mt-2 divide-y divide-border">
+            {criteria.map((c) => (
+              <li key={c.id} className="flex flex-wrap items-baseline justify-between gap-2 py-1.5">
+                <span
+                  className={cn(
+                    "text-[13px]",
+                    c.status === "done" && "text-muted-foreground line-through",
+                  )}
+                >
+                  {c.title}
+                </span>
+                <span className="text-[11px] text-muted-foreground">
+                  {c.status === "done"
+                    ? c.verified
+                      ? "Verified"
+                      : "Done, not verified"
+                    : c.status === "skipped"
+                      ? "Skipped"
+                      : "Open"}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </section>
   );
 }
 
@@ -180,6 +309,7 @@ function PartnerHandoffSection({
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
   const [optimistic, setOptimistic] = useState<Record<string, boolean>>({});
+  const [showAll, setShowAll] = useState(false);
 
   const refresh = () => {
     void qc.invalidateQueries({ queryKey: ["partner-progress", implementationId] });
@@ -219,6 +349,9 @@ function PartnerHandoffSection({
   const gateItems = gateItemsFor(gates);
   const status = stageGateStatus(gateItems);
   const ready = status.ready;
+  // Focus Mode: the next open criterion, in the order given, with the rest one click away.
+  const isChecked = (g: GateItem) => optimistic[g.id] ?? g.status === "done";
+  const visibleGates = showAll ? gateItems : gateItems.filter((g) => !isChecked(g)).slice(0, 1);
   const busy = toggle.isPending || handoff.isPending;
   const ownerName = assignment.data?.owner?.name ?? null;
   const members = assignment.data?.members ?? [];
@@ -239,13 +372,25 @@ function PartnerHandoffSection({
         </p>
       </div>
       <div className="space-y-3 px-4 py-3">
-        <p className="text-[12px] text-muted-foreground">
-          Complete the Partner Setup criteria below, then hand it over to start the GoCanvas
-          implementation.
-        </p>
+        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+          <p className="text-[12px] text-muted-foreground">
+            Complete the Partner Setup criteria, then hand it over to start the GoCanvas
+            implementation.
+          </p>
+          {gateItems.length > 1 ? (
+            <button
+              type="button"
+              aria-expanded={showAll}
+              onClick={() => setShowAll((o) => !o)}
+              className="text-[12px] font-medium text-primary underline-offset-2 hover:underline"
+            >
+              {showAll ? "Show only the next criterion" : `View all ${gateItems.length} criteria`}
+            </button>
+          ) : null}
+        </div>
         <ul className="space-y-1.5">
-          {gateItems.map((g) => {
-            const checked = optimistic[g.id] ?? g.status === "done";
+          {visibleGates.map((g) => {
+            const checked = isChecked(g);
             return (
               <li key={g.id}>
                 <label

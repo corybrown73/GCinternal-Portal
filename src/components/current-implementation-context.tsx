@@ -62,19 +62,17 @@ export function NeedsAttentionCard({ record, dealId }: { record: Customer360; de
 }
 
 /**
- * Who holds the next step, and what the implementation is waiting on. Standard
- * journeys pass the workspace's own next step and waiting list; partner journeys
- * pass the partner's own values, so the card never mixes the two.
+ * Who holds the next move, and what is waiting on whom. The task to do is the
+ * focus on the left, so it is not repeated here. A risk only appears when the
+ * implementation is genuinely flagged.
  */
-export function NextActionCard({
-  nextAction,
+export function OwnershipCard({
   owner,
   ball,
   waiting,
   waitingText,
   healthWhy,
 }: {
-  nextAction: string;
   owner: string | null;
   ball: { who: "customer" | "us"; detail: string } | null;
   waiting: Array<{ who: "customer" | "gocanvas"; what: string }>;
@@ -83,55 +81,49 @@ export function NextActionCard({
   healthWhy: string | null;
 }) {
   return (
-    <section className="rounded-md border border-border bg-card px-4 py-3" aria-label="Next action">
+    <section className="border-t border-border pt-3" aria-label="Ownership">
       <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-        Next action
+        Owner
       </p>
-      <p className="mt-1 text-[14px] font-semibold text-foreground">{nextAction}</p>
-      <p className="mt-1 text-[12px] text-muted-foreground">
-        Owner <span className="text-foreground">{owner ?? "Nobody yet"}</span>
+      <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-foreground">
+        <span className="font-medium">{owner ?? "Nobody yet"}</span>
         {ball ? (
-          <>
-            {" · "}
-            <span
-              className={cn(
-                "rounded-full px-2 py-0.5 text-[11px] font-medium",
-                ball.who === "customer"
-                  ? "bg-amber-500/15 text-amber-800 dark:text-amber-300"
-                  : "bg-primary/10 text-primary",
-              )}
-              title={ball.detail}
-            >
-              {ball.who === "customer" ? "With the customer" : "With us"}
-            </span>
-          </>
+          <span
+            className={cn(
+              "rounded-full px-2 py-0.5 text-[11px] font-medium",
+              ball.who === "customer"
+                ? "bg-amber-500/15 text-amber-800 dark:text-amber-300"
+                : "bg-primary/10 text-primary",
+            )}
+            title={ball.detail}
+          >
+            {ball.who === "customer" ? "With the customer" : "With us"}
+          </span>
         ) : null}
       </p>
 
-      <div className="mt-3 border-t border-border pt-2.5">
-        <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-          Waiting on
-        </p>
-        {waitingText !== null ? (
-          <p className="mt-1 text-[12px] text-foreground">{waitingText}</p>
-        ) : waiting.length === 0 ? (
-          <p className="mt-1 text-[12px] text-muted-foreground">Nothing on anyone's desk</p>
-        ) : (
-          <ul className="mt-1 space-y-0.5 text-[12px]">
-            {waiting.map((w, i) => (
-              <li key={i}>
-                <span className="font-medium text-foreground">
-                  {w.who === "customer" ? "Customer" : "GoCanvas"}:
-                </span>{" "}
-                {w.what}
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
+      <p className="mt-3 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+        Waiting on
+      </p>
+      {waitingText !== null ? (
+        <p className="mt-1 text-[12px] text-foreground">{waitingText}</p>
+      ) : waiting.length === 0 ? (
+        <p className="mt-1 text-[12px] text-muted-foreground">Nothing on anyone&apos;s desk</p>
+      ) : (
+        <ul className="mt-1 space-y-0.5 text-[12px]">
+          {waiting.map((w, i) => (
+            <li key={i}>
+              <span className="font-medium text-foreground">
+                {w.who === "customer" ? "Customer" : "GoCanvas"}:
+              </span>{" "}
+              {w.what}
+            </li>
+          ))}
+        </ul>
+      )}
 
       {healthWhy ? (
-        <p className="mt-3 border-t border-border pt-2.5 text-[12px] text-muted-foreground">
+        <p className="mt-3 text-[12px] text-muted-foreground">
           <span className="font-medium text-foreground">Why it is flagged:</span> {healthWhy}
         </p>
       ) : null}
@@ -172,7 +164,7 @@ export function KeyDatesCard({
     });
   }
   return (
-    <section className="rounded-md border border-border bg-card px-4 py-3" aria-label="Key dates">
+    <section className="border-t border-border pt-3" aria-label="Key dates">
       <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
         Key dates
       </p>
@@ -285,106 +277,143 @@ export function TargetMoveNotice({ impl, customerId }: { impl: Impl; customerId:
   );
 }
 
-/**
- * Outstanding parking-lot items for this implementation, visible from the
- * workspace. The full editor opens in the stage column, so the list here stays
- * a short summary rather than a second place to edit.
- */
-export function ParkingLotSummary({
-  openCount,
-  items,
-  open,
-  onToggle,
+/** One line of progress: "2 of 5 tasks done", with a bar that only shows actual completion. */
+export function ProgressLine({
+  done,
+  total,
+  label,
 }: {
-  openCount: number;
-  items: Array<{ id: string; request: string }>;
-  open: boolean;
+  done: number;
+  total: number;
+  label: string;
+}) {
+  const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+  return (
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] text-muted-foreground">
+      <span className="tabular-nums">
+        {done} of {total} {label}
+      </span>
+      <span aria-hidden className="block h-1 w-28 overflow-hidden rounded-full bg-muted">
+        <span className="block h-full rounded-full bg-primary" style={{ width: `${pct}%` }} />
+      </span>
+    </div>
+  );
+}
+
+/**
+ * The journey in Focus Mode: where the implementation is, how far its current
+ * stage has got, and the full journey one click away. The skip control stays
+ * here so it is never hidden behind the expanded journey.
+ */
+export function JourneyBar({
+  position,
+  fallbackLabel,
+  expanded,
+  onToggle,
+  skip,
+}: {
+  /** Where the current stage sits on the journey. Null before the journey starts. */
+  position: { index: number; total: number } | null;
+  fallbackLabel: string;
+  expanded: boolean;
   onToggle: () => void;
+  skip: ReactNode;
 }) {
   return (
-    <section className="rounded-md border border-border bg-card px-4 py-3" aria-label="Parking lot">
-      <div className="flex items-center justify-between gap-2">
+    <section
+      className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2 rounded-md border border-border bg-card px-4 py-3"
+      aria-label="Implementation journey summary"
+    >
+      <div className="min-w-0">
         <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-          Parking lot
+          Implementation journey
         </p>
+        <p className="mt-0.5 text-[14px] font-semibold text-foreground">
+          {position ? `Stage ${position.index} of ${position.total}` : fallbackLabel}
+        </p>
+      </div>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+        {skip}
         <button
           type="button"
           onClick={onToggle}
-          aria-expanded={open}
-          className="text-[12px] font-medium text-primary hover:underline"
+          aria-expanded={expanded}
+          aria-controls="current-implementation-journey"
+          className="rounded-sm border border-primary/40 px-2.5 py-1 text-[12px] font-medium text-primary hover:bg-primary/5"
         >
-          {open ? "Hide the parking lot" : "Manage the parking lot"}
+          {expanded ? "Hide full journey" : "View full journey"}
         </button>
       </div>
-      {openCount === 0 ? (
-        <p className="mt-1 flex items-center gap-1.5 text-[12px] text-muted-foreground">
-          <Check className="h-3 w-3" aria-hidden /> Nothing open on our side
-        </p>
-      ) : (
-        <>
-          <p className="mt-1 text-[12px] text-foreground">{openCount} open on our side</p>
-          <ul className="mt-1 space-y-0.5 text-[12px] text-muted-foreground">
-            {items.slice(0, 3).map((i) => (
-              <li key={i.id} className="truncate">
-                {i.request}
-              </li>
-            ))}
-          </ul>
-          {openCount > 3 ? (
-            <p className="mt-1 text-[11px] text-muted-foreground">
-              +{openCount - 3} more in the lot
-            </p>
-          ) : null}
-        </>
-      )}
     </section>
   );
 }
 
 /**
- * The quick actions into the update panels and the customer preview. Each
- * opens its existing panel in place; the panels stay mounted, so a half-written
- * recap or update is not lost when the panel is closed.
+ * The tools that sit beside the work, compact: updates, plan dates, the Parking
+ * Lot and the customer dashboard preview. Each opens its existing panel in place.
+ * The panels stay mounted, so a half-written update survives closing the panel.
  */
-export function QuickActions({
+export function ToolsCard({
   open,
   onOpen,
   showPlanDates,
+  parking,
   dashboardLink,
 }: {
   open: "meeting" | "update" | "dates" | null;
   onOpen: (which: "meeting" | "update" | "dates") => void;
   showPlanDates: boolean;
+  /** Null when the Parking Lot is not offered on this journey. */
+  parking: { openCount: number; expanded: boolean; onToggle: () => void } | null;
   dashboardLink: ReactNode;
 }) {
-  const btn = (which: "meeting" | "update" | "dates", label: string) => (
+  const row = (which: "meeting" | "update" | "dates", label: string) => (
     <button
       type="button"
       onClick={() => onOpen(which)}
       aria-expanded={open === which}
       className={cn(
-        "rounded-sm border px-2.5 py-1.5 text-left text-[12px] font-medium transition-colors",
-        open === which
-          ? "border-primary bg-primary/10 text-foreground"
-          : "border-border text-muted-foreground hover:border-primary/40 hover:text-foreground",
+        "flex w-full items-center justify-between gap-2 py-1.5 text-left text-[12px] font-medium transition-colors",
+        open === which ? "text-foreground" : "text-muted-foreground hover:text-foreground",
       )}
     >
       {label}
+      <span aria-hidden className="text-[11px]">
+        {open === which ? "Close" : "Open"}
+      </span>
     </button>
   );
   return (
-    <section
-      className="rounded-md border border-border bg-card px-4 py-3"
-      aria-label="Quick actions"
-    >
+    <section className="border-t border-border pt-3" aria-label="Updates and tools">
       <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-        Update
+        Updates and tools
       </p>
-      <div className="mt-2 grid gap-1.5">
-        {btn("meeting", "Update from a customer meeting")}
-        {btn("update", "Add an implementation update")}
-        {showPlanDates ? btn("dates", "Adjust plan dates") : null}
-        {dashboardLink}
+      <div className="mt-1 divide-y divide-border">
+        {row("meeting", "Update from a customer meeting")}
+        {row("update", "Add an implementation update")}
+        {showPlanDates ? row("dates", "Adjust plan dates") : null}
+        {parking ? (
+          <button
+            type="button"
+            onClick={parking.onToggle}
+            aria-expanded={parking.expanded}
+            className={cn(
+              "flex w-full items-center justify-between gap-2 py-1.5 text-left text-[12px] font-medium transition-colors",
+              parking.expanded ? "text-foreground" : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            <span>
+              Parking Lot
+              <span className="ml-2 font-normal text-muted-foreground">
+                · {parking.openCount === 0 ? "none open" : `${parking.openCount} open on our side`}
+              </span>
+            </span>
+            <span aria-hidden className="text-[11px]">
+              {parking.expanded ? "Close" : "Open"}
+            </span>
+          </button>
+        ) : null}
+        <div className="py-1.5">{dashboardLink}</div>
       </div>
     </section>
   );
