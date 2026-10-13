@@ -13,6 +13,7 @@ import {
   type DragStartEvent,
 } from "@dnd-kit/core";
 
+import { isUnclaimed } from "@/lib/claimed-owner";
 import type { AccountStage } from "@/lib/presale-stages";
 import {
   BUILTIN_PIPELINE_STAGES,
@@ -43,6 +44,8 @@ export type BoardDeal = Account & {
   has_sow?: boolean;
   /** A Field Fusion proof of concept, from the GoCanvas request form. */
   ff_poc?: boolean;
+  /** A test account (0085); only on the board when "Show test accounts" is on. */
+  is_test?: boolean;
   owner_name?: string | null;
   /** The Sales → TIS handoff's state, from the deal's record. */
   handoff_status?: HandoffStatus;
@@ -92,6 +95,14 @@ function DealCard({
         {deal.path ? (
           <span className="rounded-sm border border-border px-1 py-px uppercase tracking-wider text-muted-foreground">
             {PATH_CHIP[deal.path]}
+          </span>
+        ) : null}
+        {deal.is_test ? (
+          <span
+            title="A test account: left out of every count"
+            className="rounded-sm border border-dashed border-border px-1 py-px uppercase tracking-wider text-muted-foreground"
+          >
+            Test
           </span>
         ) : null}
         {deal.ff_poc ? (
@@ -158,7 +169,8 @@ function DealCard({
       ) : null}
       <div className="mt-1 flex items-center justify-between font-mono text-[11px] text-muted-foreground">
         <span>{fmtArr(dealValue(deal))}</span>
-        {deal.business_days_in_stage !== undefined ? (
+        {/* Graduate is the end: no clock, nothing to be late for. */}
+        {deal.stage === terminalKey ? null : deal.business_days_in_stage !== undefined ? (
           <span
             title="Business days in this stage"
             className={cn(
@@ -170,22 +182,21 @@ function DealCard({
             {deal.business_days_in_stage}bd in stage
           </span>
         ) : (
-          <span
-            title="Days in stage"
-            className={cn(days > 14 && deal.stage !== terminalKey && "text-status-risk-foreground")}
-          >
+          <span title="Days in stage" className={cn(days > 14 && "text-status-risk-foreground")}>
             {days}d in stage
           </span>
         )}
       </div>
       <p className="mt-0.5 truncate text-[11px] text-muted-foreground/70">
+        {/* The claimed owner, and "unclaimed" by the rule Home and Reports
+            use (src/lib/claimed-owner.ts). */}
         {deal.owner_name
           ? `TIS: ${deal.owner_name}`
-          : deal.customer_id
-            ? "Unclaimed"
-            : deal.stage === "negotiate"
+          : isUnclaimed(deal.stage, null)
+            ? deal.stage === "negotiate"
               ? "Needs a TIS"
-              : (deal.am_owner_name ?? "")}
+              : "Unclaimed"
+            : (deal.am_owner_name ?? "")}
       </p>
     </div>
   );
@@ -280,12 +291,14 @@ function Column({
   terminalKey: string;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: stage.key, disabled: !stage.enterable });
-  const arrTotal = deals.reduce((sum, d) => sum + (dealValue(d) ?? 0), 0);
+  // Test accounts shown on the board are not counted (0085), as in the header.
+  const real = deals.filter((d) => !d.is_test);
+  const arrTotal = real.reduce((sum, d) => sum + (dealValue(d) ?? 0), 0);
   return (
     <div className="flex w-64 flex-none flex-col">
       <ColumnHeading
         label={stage.label}
-        count={deals.length}
+        count={real.length}
         arrTotal={arrTotal}
         dotClass={STAGE_COLOR_DOT_CLASS[stage.color]}
         // Honest rather than hidden: until the stage key is an account stage in
@@ -322,8 +335,8 @@ function OrphanColumn({ stageKey, deals }: { stageKey: string; deals: BoardDeal[
     <div className="flex w-64 flex-none flex-col">
       <ColumnHeading
         label={stageKey}
-        count={deals.length}
-        arrTotal={deals.reduce((sum, d) => sum + (dealValue(d) ?? 0), 0)}
+        count={deals.filter((d) => !d.is_test).length}
+        arrTotal={deals.filter((d) => !d.is_test).reduce((sum, d) => sum + (dealValue(d) ?? 0), 0)}
         dotClass={null}
         note="Not in the configured pipeline"
       />

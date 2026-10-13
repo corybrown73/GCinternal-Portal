@@ -1,3 +1,4 @@
+import { isUnclaimed } from "./claimed-owner";
 import { businessDaysBetween } from "./onboarding-timeline";
 import { STAGE_LABELS, type AccountStage } from "./presale-stages";
 
@@ -53,7 +54,13 @@ export type PipelineReport = {
     withBrief: number;
     without: Array<{ name: string; label: string; owner: string | null }>;
   };
-  unclaimed: Array<{ name: string; businessDaysInStage: number }>;
+  /** Nobody owns it where somebody should (isUnclaimed, src/lib/claimed-owner.ts). */
+  unclaimed: Array<{
+    name: string;
+    stage: AccountStage;
+    label: string;
+    businessDaysInStage: number;
+  }>;
   timeToOnboarding: Timing;
   timeToFirstFormLive: Timing;
 };
@@ -152,9 +159,16 @@ export function buildPipelineReport(
       .map((d) => ({ name: d.name, label: label(d.stage), owner: d.owner })),
   };
 
+  // The same "unclaimed" Home and Reports count: Negotiate & Finalize to Make
+  // it run, with no claimed owner (the deal's owner comes from loadPipeline).
   const unclaimed = deals
-    .filter((d) => d.stage === "closed_won" && !d.owner)
-    .map((d) => ({ name: d.name, businessDaysInStage: d.businessDaysInStage }));
+    .filter((d) => isUnclaimed(d.stage, d.owner))
+    .map((d) => ({
+      name: d.name,
+      stage: d.stage,
+      label: label(d.stage),
+      businessDaysInStage: d.businessDaysInStage,
+    }));
 
   const since = opts.since ?? null;
   const inWindow = (d: ReportDeal) => !since || (d.closedAt ?? "") >= since;
@@ -218,8 +232,7 @@ export function reportMarkdown(r: PipelineReport): string {
   out.push("");
   if (r.unclaimed.length) {
     out.push(`## Unclaimed (${r.unclaimed.length})`);
-    for (const u of r.unclaimed)
-      out.push(`- ${u.name} — closed ${u.businessDaysInStage} business days ago`);
+    for (const u of r.unclaimed) out.push(`- ${u.name} — ${unclaimedLine(u)}`);
     out.push("");
   }
   out.push(`## Stuck or slow (${r.stuck.length})`);
@@ -241,6 +254,12 @@ export function reportMarkdown(r: PipelineReport): string {
   for (const g of r.gong.without)
     out.push(`- Missing: **${g.name}** — ${g.label} · ${g.owner ?? "no owner"}`);
   return out.join("\n");
+}
+
+/** "closed 3 business days ago", or how long it has sat in the stage it is in. */
+function unclaimedLine(u: PipelineReport["unclaimed"][number]): string {
+  const days = `${u.businessDaysInStage} business day${u.businessDaysInStage === 1 ? "" : "s"}`;
+  return u.stage === "closed_won" ? `closed ${days} ago` : `${u.label} for ${days}`;
 }
 
 function fmtTiming(t: Timing): string {
@@ -276,9 +295,7 @@ export function reportHtml(r: PipelineReport, boardUrl: string): string {
   ${
     r.unclaimed.length
       ? `<h3 style="margin:0;color:#b91c1c;font-size:14px">Unclaimed (${r.unclaimed.length})</h3>${list(
-          r.unclaimed.map(
-            (u) => `<b>${esc(u.name)}</b> — closed ${u.businessDaysInStage} business days ago`,
-          ),
+          r.unclaimed.map((u) => `<b>${esc(u.name)}</b> — ${esc(unclaimedLine(u))}`),
           "",
         )}`
       : ""

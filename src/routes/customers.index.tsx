@@ -16,11 +16,16 @@ import { businessDaysBetween, localIso } from "@/lib/onboarding-timeline";
 import { datePace, dwellPace } from "@/lib/pace";
 import { cn } from "@/lib/utils";
 import { errorMessage } from "@/lib/error-message";
+import { GRADUATED_STAGE } from "@/lib/claimed-owner";
+import { readShowTests } from "@/lib/test-accounts";
+import { ShowTestsToggle } from "@/components/show-tests-toggle";
 
-const implementationsQuery = (scope: string | null) =>
+// Home's cache entry by default; the test-account view is its own entry.
+const implementationsQuery = (scope: string | null, tests = false) =>
   queryOptions({
-    queryKey: ["home", scope],
-    queryFn: () => getHome({ data: scope ? { scope } : {} }),
+    queryKey: tests ? ["home", scope, "tests"] : ["home", scope],
+    queryFn: () =>
+      getHome({ data: { ...(scope ? { scope } : {}), ...(tests ? { includeTests: true } : {}) } }),
   });
 
 const SORTS = ["customer", "stage", "status", "owner", "tier", "launch", "days"] as const;
@@ -32,6 +37,8 @@ type CustomerSearch = {
   sort: SortKey;
   dir: "asc" | "desc";
   scope?: string;
+  /** "Show test accounts" (0085). */
+  tests?: boolean;
 };
 
 export const Route = createFileRoute("/customers/")({
@@ -57,6 +64,7 @@ export const Route = createFileRoute("/customers/")({
       sort?: unknown;
       dir?: unknown;
       scope?: unknown;
+      tests?: unknown;
     };
     const out: CustomerSearch = {
       sort: (SORTS as readonly string[]).includes(String(raw.sort))
@@ -67,11 +75,15 @@ export const Route = createFileRoute("/customers/")({
     if (typeof raw.stage === "string") out.stage = raw.stage;
     if (typeof raw.status === "string") out.status = raw.status;
     if (typeof raw.scope === "string") out.scope = raw.scope;
+    if (readShowTests(raw.tests)) out.tests = true;
     return out;
   },
-  loaderDeps: ({ search }: { search: CustomerSearch }) => ({ scope: search.scope ?? null }),
+  loaderDeps: ({ search }: { search: CustomerSearch }) => ({
+    scope: search.scope ?? null,
+    tests: search.tests === true,
+  }),
   loader: ({ context, deps }) => {
-    context.queryClient.ensureQueryData(implementationsQuery(deps.scope));
+    context.queryClient.ensureQueryData(implementationsQuery(deps.scope, deps.tests));
   },
   errorComponent: ({ error }) => (
     <div role="alert" className="p-6 text-[13px] text-destructive">
@@ -91,10 +103,18 @@ function businessDaysIn(enteredAt: string | null | undefined): number {
   return Math.max(0, businessDaysBetween(String(enteredAt).slice(0, 10), localIso()));
 }
 
+/**
+ * The "days" sort's key. Graduate has no dwell clock (the column shows "—"),
+ * so graduated rows sort as -1: last when longest-first, first otherwise.
+ */
+function daysForSort(r: { deal_stage: string | null; stage_entered_at: string | null }): number {
+  return r.deal_stage === GRADUATED_STAGE ? -1 : businessDaysIn(r.stage_entered_at);
+}
+
 function CustomersPage() {
   const { param, setScope } = useScope();
-  const { data } = useSuspenseQuery(implementationsQuery(param));
-  const { stage, status, sort, dir, scope } = Route.useSearch();
+  const { stage, status, sort, dir, scope, tests } = Route.useSearch();
+  const { data } = useSuspenseQuery(implementationsQuery(param, tests === true));
   const navigate = useNavigate({ from: Route.fullPath });
 
   const setSearch = (patch: Record<string, unknown>) =>
@@ -128,9 +148,15 @@ function CustomersPage() {
             factor * (a.target_launch_date ?? "9999").localeCompare(b.target_launch_date ?? "9999")
           );
         default:
-          return factor * (businessDaysIn(a.stage_entered_at) - businessDaysIn(b.stage_entered_at));
+          return factor * (daysForSort(a) - daysForSort(b));
       }
     });
+
+  // The count is the real book; test accounts shown are counted apart, in
+  // the shown rows as in the total, so the numerator never passes it.
+  const testCount = data.implementations.filter((r) => r.is_test).length;
+  const realCount = data.implementations.length - testCount;
+  const realShown = rows.filter((r) => !r.is_test).length;
 
   const Th = ({ label, sortKey }: { label: string; sortKey: SortKey }) => (
     <th className="px-3 py-1.5 font-medium">
@@ -159,8 +185,13 @@ function CustomersPage() {
         actions={
           <div className="flex items-center gap-2">
             <span className="font-mono text-[11px] text-muted-foreground">
-              {rows.length} / {data.implementations.length}
+              {realShown} / {realCount}
+              {testCount ? ` · +${testCount} test` : ""}
             </span>
+            <ShowTestsToggle
+              checked={tests === true}
+              onChange={(on) => setSearch({ tests: on ? true : undefined })}
+            />
           </div>
         }
       />
@@ -246,6 +277,14 @@ function CustomersPage() {
                       className="block text-[13px] font-medium hover:underline"
                     >
                       {r.customer_name}
+                      {r.is_test ? (
+                        <span
+                          title="A test account: left out of every count"
+                          className="ml-2 rounded-sm border border-dashed border-border px-1 py-px text-[10px] font-normal uppercase tracking-wider text-muted-foreground"
+                        >
+                          Test
+                        </span>
+                      ) : null}
                       <span className="ml-2 text-[11px] font-normal text-muted-foreground">
                         {r.name && r.name !== r.customer_name
                           ? r.name
@@ -283,11 +322,16 @@ function CustomersPage() {
                       stage_instances, and inventing a target would be worse
                       than naming the fallback. The 360 uses the real one. */}
                   <td className="px-3 py-1.5 font-mono text-[12px]">
-                    <PaceChip
-                      quiet
-                      pace={dwellPace(r.stage_entered_at, null)}
-                      label={`${businessDaysIn(r.stage_entered_at)}bd`}
-                    />
+                    {/* Graduate is the end: no clock to run. */}
+                    {r.deal_stage === GRADUATED_STAGE ? (
+                      <span className="text-muted-foreground">—</span>
+                    ) : (
+                      <PaceChip
+                        quiet
+                        pace={dwellPace(r.stage_entered_at, null)}
+                        label={`${businessDaysIn(r.stage_entered_at)}bd`}
+                      />
+                    )}
                   </td>
                 </tr>
               ))}

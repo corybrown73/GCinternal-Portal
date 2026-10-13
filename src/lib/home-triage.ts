@@ -1,3 +1,4 @@
+import { GRADUATED_STAGE } from "./claimed-owner";
 import type { Customer360, ImplementationRow, TriageBundle } from "./hub-types";
 import {
   deriveHealth,
@@ -143,7 +144,7 @@ export function triageRow(impl: ImplementationRow, bundle: TriageBundle | undefi
     reason: next
       ? `Nothing open · next: ${next}`
       : `Nothing open against it in ${dealStageLabel(impl.deal_stage)}`,
-    impact: impactLine(impl, `${stalledDays}d in stage`),
+    impact: impactLine(impl, dwellPart(impl, stalledDays)),
     record,
     bundle,
     ...(next ? { next } : {}),
@@ -271,7 +272,7 @@ function signalRow(impl: ImplementationRow, bundle: TriageBundle | undefined): Q
   if (impl.status === "blocked") {
     return row(impl, "act_now", 0.5, "overview", {
       reason: `Blocked in ${dealStageLabel(impl.deal_stage)} — ${whatMattersNow(record)}`,
-      impact: impactLine(impl, `${stalledDays}d in stage`),
+      impact: impactLine(impl, dwellPart(impl, stalledDays)),
       record,
       bundle,
       next: `Resolve it — ${whatMattersNow(record)}`,
@@ -322,7 +323,8 @@ function signalRow(impl: ImplementationRow, bundle: TriageBundle | undefined): Q
   // ---------- NEEDS ATTENTION ----------
   const midRisk = topRisk && severityRank(topRisk.severity) <= 2 ? topRisk : null;
   const midIssue = topIssue && severityRank(topIssue.severity) <= 2 ? topIssue : null;
-  const stalled = stalledDays > STAGE_FLAG_DAYS;
+  // Graduate is the end: time spent there is not a stall.
+  const stalled = stalledDays > STAGE_FLAG_DAYS && impl.deal_stage !== GRADUATED_STAGE;
   const csStalled = stalled && isCsStage(impl.current_stage);
   const stalledCounts = stalled && (!csStalled || hasOtherOpenSignal(record));
 
@@ -430,7 +432,7 @@ function signalRow(impl: ImplementationRow, bundle: TriageBundle | undefined): Q
   if (acceptanceGate.blocked) {
     return row(impl, "needs_attention", 3.55, "solution", {
       reason: `Solution acceptance is preventing the move to Launch — ${acceptanceGate.reason}`,
-      impact: impactLine(impl, `${stalledDays}d in ${dealStageLabel(impl.deal_stage)}`),
+      impact: impactLine(impl, dwellPart(impl, stalledDays, true)),
       record,
       bundle,
       next: acceptanceGate.outstanding[0] ?? "Record solution acceptance before moving to Launch",
@@ -439,7 +441,7 @@ function signalRow(impl: ImplementationRow, bundle: TriageBundle | undefined): Q
   if (impl.status === "at_risk") {
     return row(impl, "needs_attention", 3.6, "overview", {
       reason: `Flagged at risk — ${whatMattersNow(record)}`,
-      impact: impactLine(impl, `${stalledDays}d in ${dealStageLabel(impl.deal_stage)}`),
+      impact: impactLine(impl, dwellPart(impl, stalledDays, true)),
       record,
       bundle,
       next: `Resolve it — ${whatMattersNow(record)}`,
@@ -447,6 +449,16 @@ function signalRow(impl: ImplementationRow, bundle: TriageBundle | undefined): Q
   }
 
   return null;
+}
+
+/**
+ * "12d in stage" for the impact line, or nothing for a graduated project:
+ * Graduate is the end, so it has no dwell clock (the Customers column shows
+ * "—" there too).
+ */
+function dwellPart(impl: ImplementationRow, days: number, named = false): string | null {
+  if (impl.deal_stage === GRADUATED_STAGE) return null;
+  return named ? `${days}d in ${dealStageLabel(impl.deal_stage)}` : `${days}d in stage`;
 }
 
 function impactLine(impl: ImplementationRow, extra: string | null) {

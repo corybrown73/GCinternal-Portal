@@ -20,13 +20,18 @@ import type {
   TraceStep,
 } from "./hub-types";
 import type { DealFacts } from "./needs-action";
+import { resolveClaimedOwner } from "./claimed-owner";
 import { matchesScope } from "./ownership";
+import { excludeTests, isTestAccount } from "./test-accounts";
 import type { ResolvedScope } from "./ownership.server";
 
 import { EDITABLE_RECORD_FIELDS, type EditableRecordField } from "./record-fields";
 import { SOLUTION_COMPLETE_STATUS } from "./solution-enums";
 
 const db = () => supabaseAdmin as any;
+
+/** What a book loader leaves out: test accounts, unless asked for (0085). */
+export type BookOptions = { includeTests?: boolean };
 
 /**
  * Phase 7 demo mode. The flag lookup lives here rather than in demo-mode.ts so
@@ -83,6 +88,7 @@ async function loadTeam() {
  */
 export async function loadImplementations(
   scope?: ResolvedScope | null,
+  opts: BookOptions = {},
 ): Promise<ImplementationRow[]> {
   const team = await loadTeam();
   const [{ data: impls }, { data: customers }, { data: commitments }, { data: escalations }] =
@@ -95,6 +101,12 @@ export async function loadImplementations(
 
   const customerMap = new Map((customers ?? []).map((c: any) => [c.id, c]));
   const dealStages = await dealStagesFor((impls ?? []) as any[]);
+  // One owner rule for every surface (src/lib/claimed-owner.ts): every row
+  // here is a project, and a project's owner_id decides, empty included —
+  // the claim ledger only speaks for a deal with no project yet.
+  const ownerOf = (i: any) => resolveClaimedOwner({ implementation: i })?.id ?? null;
+  const isTest = (i: any) =>
+    isTestAccount(customerMap.get(i.customer_id) as any, dealStages.get(i.id));
 
   // The pre-sale account owners (am/se) live on portal_accounts and are
   // profile ids, not team ids. Read only when a scope actually needs them.
@@ -127,7 +139,7 @@ export async function loadImplementations(
     const c: any = customerMap.get(i.customer_id) ?? {};
     return matchesScope(
       {
-        implementationOwnerId: i.owner_id ?? null,
+        implementationOwnerId: ownerOf(i),
         csmOwnerId: c.csm_owner_id ?? null,
         amOwnerProfileId: account?.am ?? null,
         seOwnerProfileId: account?.se ?? null,
@@ -141,53 +153,63 @@ export async function loadImplementations(
     );
   };
 
-  return (impls ?? []).filter(inScope).map((i: any) => {
-    const c: any = customerMap.get(i.customer_id) ?? {};
-    return {
-      id: i.id,
-      name: i.name,
-      customer_id: i.customer_id,
-      customer_name: c.name ? demo.org(c.name, c.id) : "Unknown customer",
-      segment: c.segment ?? null,
-      industry: c.industry ?? null,
-      // The deal's own value when the project came from one; the customer's
-      // ARR otherwise. One number per card, the same one the pipeline shows.
-      arr: demo.arr(dealStages.get(i.id)?.value ?? c.arr ?? null),
-      current_stage: i.current_stage,
-      deal_stage:
-        dealStages.get(i.id)?.stage ??
-        dealStageFor({ deal_stage: null, current_stage: i.current_stage }),
-      deal_id: i.deal_id ?? null,
-      // The deal's clock when there is a deal: the same field the pipeline
-      // counts from, so "days in stage" is one number on every page.
-      stage_entered_at: dealStages.get(i.id)?.stage_entered_at ?? i.stage_entered_at,
-      status: i.status,
-      health_recorded: i.health_recorded ?? null,
-      health_recorded_reason: i.health_recorded_reason ?? null,
-      owner_name: i.owner_id ? (team.get(i.owner_id)?.name ?? null) : null,
-      tier: i.tier,
-      target_launch_date: i.target_launch_date,
-      actual_launch_date: i.actual_launch_date,
-      overdue_commitments: (commitments ?? []).filter(
-        (m: any) => m.implementation_id === i.id && m.status === "open" && isOverdue(m.due_date),
-      ).length,
-      open_escalations: (escalations ?? []).filter(
-        (e: any) => e.implementation_id === i.id && e.status === "open",
-      ).length,
-    };
-  });
+  return excludeTests(impls ?? [], isTest, opts.includeTests)
+    .filter(inScope)
+    .map((i: any) => {
+      const c: any = customerMap.get(i.customer_id) ?? {};
+      const ownerId = ownerOf(i);
+      return {
+        id: i.id,
+        name: i.name,
+        customer_id: i.customer_id,
+        customer_name: c.name ? demo.org(c.name, c.id) : "Unknown customer",
+        segment: c.segment ?? null,
+        industry: c.industry ?? null,
+        // The deal's own value when the project came from one; the customer's
+        // ARR otherwise. One number per card, the same one the pipeline shows.
+        arr: demo.arr(dealStages.get(i.id)?.value ?? c.arr ?? null),
+        current_stage: i.current_stage,
+        deal_stage:
+          dealStages.get(i.id)?.stage ??
+          dealStageFor({ deal_stage: null, current_stage: i.current_stage }),
+        deal_id: i.deal_id ?? null,
+        // The deal's clock when there is a deal: the same field the pipeline
+        // counts from, so "days in stage" is one number on every page.
+        stage_entered_at: dealStages.get(i.id)?.stage_entered_at ?? i.stage_entered_at,
+        status: i.status,
+        health_recorded: i.health_recorded ?? null,
+        health_recorded_reason: i.health_recorded_reason ?? null,
+        owner_name: ownerId ? (team.get(ownerId)?.name ?? null) : null,
+        is_test: isTest(i),
+        superseded: Boolean(i.superseded_by_implementation_id),
+        tier: i.tier,
+        target_launch_date: i.target_launch_date,
+        actual_launch_date: i.actual_launch_date,
+        overdue_commitments: (commitments ?? []).filter(
+          (m: any) => m.implementation_id === i.id && m.status === "open" && isOverdue(m.due_date),
+        ).length,
+        open_escalations: (escalations ?? []).filter(
+          (e: any) => e.implementation_id === i.id && e.status === "open",
+        ).length,
+      };
+    });
 }
 
-export async function loadHome(scope?: ResolvedScope | null): Promise<HomeData> {
-  const [implementations, team] = await Promise.all([loadImplementations(scope), loadTeam()]);
+export async function loadHome(
+  scope?: ResolvedScope | null,
+  opts: BookOptions = {},
+): Promise<HomeData> {
+  const [implementations, team] = await Promise.all([loadImplementations(scope, opts), loadTeam()]);
   const implById = new Map(implementations.map((i) => [i.id, i]));
   // Everything below joins through implById, so narrowing the implementation
   // set narrows the whole page. The `keep` predicate is what stops a commitment
   // or a risk from an account outside the scope arriving as an orphan row with
   // "Unknown customer" next to it — which reads as data loss, not as a filter.
   const scoped = Boolean(scope && scope.scope.mode !== "all");
+  // A row on a project that is not in the set — out of scope, or a test
+  // account (0085) — stays off the page in every scope.
   const keep = (implementationId: string | null | undefined) =>
-    !scoped || (implementationId != null && implById.has(implementationId));
+    implementationId != null ? implById.has(implementationId) : !scoped;
 
   const { data: commitmentRows } = await db()
     .from("commitments")
@@ -404,8 +426,11 @@ export async function loadHome(scope?: ResolvedScope | null): Promise<HomeData> 
  * Leadership layer loader. Built entirely on the Home query set plus stage
  * history durations and a scoped full-record fetch for graduation candidates.
  */
-export async function loadLeadership(scope?: ResolvedScope | null): Promise<LeadershipData> {
-  const home = await loadHome(scope);
+export async function loadLeadership(
+  scope?: ResolvedScope | null,
+  opts: BookOptions = {},
+): Promise<LeadershipData> {
+  const home = await loadHome(scope, opts);
 
   const { data: history } = await db()
     .from("implementation_stage_history")
@@ -427,11 +452,40 @@ export async function loadLeadership(scope?: ResolvedScope | null): Promise<Lead
   return {
     ...home,
     stage_history: (history ?? []) as LeadershipData["stage_history"],
+    unclaimed_deals: await unclaimedDealsBeforeProject(scope ?? null, opts, home.implementations),
     graduation_candidates: records.filter(
       (r): r is { implementation_id: string; customer_id: string; record: Customer360 } =>
         r.record != null,
     ),
   };
+}
+
+/**
+ * Deals nobody has claimed, in a stage where somebody should own them, that
+ * have no project yet (QA 7.5). Projects are counted from the book itself;
+ * these are the rest, so Reports' "Unassigned" agrees with the Pipeline card,
+ * Home's inbox and pipeline_report. Same scope and test-account rule as the
+ * board. A failed read leaves them out rather than failing Reports.
+ */
+async function unclaimedDealsBeforeProject(
+  scope: ResolvedScope | null,
+  opts: BookOptions,
+  implementations: ImplementationRow[],
+): Promise<NonNullable<LeadershipData["unclaimed_deals"]>> {
+  try {
+    const { loadPipeline } = await import("./presale.server");
+    const { isUnclaimed } = await import("./claimed-owner");
+    const { deals } = await loadPipeline(scope, opts);
+    const withProject = new Set(implementations.map((i) => i.deal_id).filter(Boolean));
+    return deals
+      .filter(
+        (d) => !d.implementation_id && !withProject.has(d.id) && isUnclaimed(d.stage, d.owner_name),
+      )
+      .map((d) => ({ deal_id: d.id, name: d.name, stage: d.stage }));
+  } catch (e) {
+    console.error("[leadership] could not read the unclaimed deals", e);
+    return [];
+  }
 }
 
 function label(entityType: string, row: any): string {

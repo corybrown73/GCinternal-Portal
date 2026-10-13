@@ -1,3 +1,4 @@
+import { GRADUATED_STAGE } from "./claimed-owner";
 import type { Customer360 } from "./hub-types";
 import { dealStageLabel } from "./deal-stage";
 import { LIFECYCLE_STAGES, LIFECYCLE_STAGE_MAP } from "./lifecycle";
@@ -146,6 +147,8 @@ export type ImplHealth = "blocked" | "at_risk" | "on_track" | "no_signal";
 
 type HealthImpl = {
   current_stage?: string | null;
+  /** The deal's stage; a graduated deal has no days-in-stage clock. */
+  deal_stage?: string | null;
   stage_entered_at?: string | null;
   target_launch_date?: string | null;
   actual_launch_date?: string | null;
@@ -307,7 +310,8 @@ export function deriveHealth(record: Customer360, impl: HealthImpl): HealthResul
       "launch_overdue",
     );
   }
-  const stalled = stalledDays > STAGE_FLAG_DAYS;
+  // Graduate is the end: time spent there is not a stall.
+  const stalled = stalledDays > STAGE_FLAG_DAYS && impl.deal_stage !== GRADUATED_STAGE;
   if (stalled && (!isCsStage(impl.current_stage) || hasOtherOpenSignal(record))) {
     return decide("at_risk", `Stalled ${stalledDays} days in current stage`, "stalled_stage");
   }

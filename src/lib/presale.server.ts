@@ -195,8 +195,10 @@ export interface PipelineDeal extends Account {
   has_sow: boolean;
   /** A Field Fusion proof of concept: opened by the New FF Client Request form, not yet won. */
   ff_poc: boolean;
-  /** The implementation owner, once somebody owns it. */
+  /** The claimed owner (src/lib/claimed-owner.ts), once somebody owns it. */
   owner_name: string | null;
+  /** A test account: the deal or its customer is flagged (0085). */
+  is_test: boolean;
   /** The Sales → TIS handoff: outstanding, with the customer, or complete. */
   handoff_status: import("./sales-handoff").HandoffStatus;
   /** YYYY-MM-DD of the booked first meeting, once Sales or the TIS has booked it. */
@@ -220,6 +222,7 @@ export interface PipelineDeal extends Account {
  */
 export async function loadPipeline(
   scope?: ResolvedScope | null,
+  opts: { includeTests?: boolean } = {},
 ): Promise<{ deals: PipelineDeal[]; stages: PipelineStage[] }> {
   // Loaded alongside the deals rather than after them: the board needs both to
   // render one column per configured stage, and a waterfall here is a second
@@ -233,6 +236,7 @@ export async function loadPipeline(
     { data: briefed },
     { data: members },
     { data: ledger },
+    { data: customers },
   ] = await Promise.all([
     db().from("portal_accounts").select("*").order("name"),
     profileNames(),
@@ -250,25 +254,32 @@ export async function loadPipeline(
       .from("portal_assignments")
       .select("deal_id,team_member_id,created_at")
       .order("created_at", { ascending: false }),
+    db().from("customers").select("*"),
   ]);
   const implByDeal = new Map<string, string>();
-  const implOwnerByDeal = new Map<string, string | null>();
-  for (const i of (impls ?? []) as Array<{
-    id: string;
-    deal_id: string;
-    owner_id: string | null;
-  }>) {
-    if (!implByDeal.has(i.deal_id)) {
-      implByDeal.set(i.deal_id, String(i.id));
-      implOwnerByDeal.set(i.deal_id, i.owner_id ?? null);
-    }
+  for (const i of (impls ?? []) as Array<{ id: string; deal_id: string }>) {
+    if (!implByDeal.has(i.deal_id)) implByDeal.set(i.deal_id, String(i.id));
   }
-  // An owner assigned at the close, before the project exists, is only in
-  // the ledger; the board shows the same owner the deal page does.
-  for (const l of (ledger ?? []) as Array<{ deal_id: string; team_member_id: string }>) {
-    if (!implOwnerByDeal.get(l.deal_id)) implOwnerByDeal.set(l.deal_id, String(l.team_member_id));
-  }
+  // The one owner rule (src/lib/claimed-owner.ts): the project's owner, else
+  // the claim ledger's — an owner assigned at the close, before the project
+  // exists, is only there. The board shows the owner the deal page does.
+  const { claimedOwnersByDeal } = await import("./claimed-owner");
+  const claimed = claimedOwnersByDeal(impls ?? [], ledger ?? []);
+  const implOwnerByDeal = new Map<string, string | null>(
+    [...claimed].map(([dealId, o]) => [dealId, o.id]),
+  );
   if (error) throw new Error(error.message);
+  const { isTestAccount } = await import("./test-accounts");
+  const customerById = new Map(
+    ((customers ?? []) as Array<{ id: string; is_test?: boolean | null }>).map((c) => [
+      String(c.id),
+      c,
+    ]),
+  );
+  // Test accounts (0085) are off the board and out of every count built on
+  // it — the reports, the inbox, the digest — unless asked for.
+  const isTest = (a: Account & { customer_id?: string | null }) =>
+    isTestAccount(a, a.customer_id ? customerById.get(a.customer_id) : null);
   const withNotes = new Set(
     ((noted ?? []) as Array<{ account_id: string }>).map((r) => r.account_id),
   );
@@ -302,6 +313,7 @@ export async function loadPipeline(
     );
 
   const deals = ((accounts ?? []) as Array<Account & { customer_id?: string | null }>)
+    .filter((a) => opts.includeTests || !isTest(a))
     .filter(inScope)
     .map((a) => {
       const ownerId = implOwnerByDeal.get(a.id) ?? null;
@@ -323,6 +335,7 @@ export async function loadPipeline(
       return {
         ...a,
         customer_id: a.customer_id ?? null,
+        is_test: isTest(a),
         implementation_id: implByDeal.get(a.id) ?? null,
         am_owner_name: a.am_owner_id ? (names.get(a.am_owner_id) ?? null) : null,
         se_owner_name: a.se_owner_id ? (names.get(a.se_owner_id) ?? null) : null,
@@ -608,8 +621,9 @@ export async function newDealOwnerOptions(
   const am = ownerOptionsByRole(await profileDirectory()).am;
   let members: import("./assignment.server").DealAssignment["members"] = [];
   if (canAssign) {
-    const { loadPool } = await import("./assignment.server");
-    members = (await loadPool()).map((p) => ({
+    const { loadPool, pickerMembers } = await import("./assignment.server");
+    // The same people the Assign step offers (pickerMembers); nobody owns a new deal yet.
+    members = pickerMembers(await loadPool(), null).map((p) => ({
       teamMemberId: p.teamMemberId,
       name: p.name,
       email: p.email,
@@ -617,6 +631,7 @@ export async function newDealOwnerOptions(
       rank: p.rank,
       load: p.load,
       assignments: p.assignments,
+      owned: p.owned,
     }));
   }
   return { am, me: userId, members };
@@ -1061,6 +1076,11 @@ export interface DealDetail {
   implementation_id: string | null;
   /** Why onboarding did not start by itself at Closed Won, when it did not. */
   onboarding_deferred: string | null;
+  /**
+   * The test flag as every count reads it (0085): the deal's own, or its
+   * customer's, and how many other deals of that customer keep it marked.
+   */
+  test_account: import("./test-accounts").TestFlagState;
 }
 
 export async function loadDeal(dealId: string): Promise<DealDetail | null> {
@@ -1141,7 +1161,8 @@ export async function loadDeal(dealId: string): Promise<DealDetail | null> {
     }
   }
 
-  const [{ data: implRow }, { data: deferredRow }] = await Promise.all([
+  const { loadTestFlagState } = await import("./test-accounts.server");
+  const [{ data: implRow }, { data: deferredRow }, testAccount] = await Promise.all([
     db()
       .from("implementations")
       .select("id")
@@ -1160,6 +1181,7 @@ export async function loadDeal(dealId: string): Promise<DealDetail | null> {
           .order("created_at", { ascending: false })
           .limit(1)
           .maybeSingle(),
+    loadTestFlagState(account as { id: string; customer_id?: string | null; is_test?: boolean }),
   ]);
 
   const dateChangeRows = (dateChanges.data ?? []) as Array<{
@@ -1176,6 +1198,7 @@ export async function loadDeal(dealId: string): Promise<DealDetail | null> {
 
   return {
     account: account as DealDetail["account"],
+    test_account: testAccount,
     logo_url: logoUrl,
     sow_url: sowUrl,
     implementation_id: implRow?.id ? String(implRow.id) : null,
@@ -3308,7 +3331,7 @@ export type DealInboxRow = {
   stage_entered_at: string;
   path:
     "new_logo" | "existing" | "dm_conversion" | "field_fusion" | "partner_implementation" | null;
-  /** The implementation owner from the claim ledger, when somebody has claimed it. */
+  /** The claimed owner (src/lib/claimed-owner.ts), when somebody has claimed it. */
   owner_name: string | null;
   /** The viewer is that owner. */
   mine: boolean;
@@ -3333,12 +3356,12 @@ export async function loadDealInbox(scope: ResolvedScope | null): Promise<DealIn
   if (open.length === 0) return [];
   const ids = open.map((d) => d.id);
 
-  const [{ data: ledger }, { data: briefs }] = await Promise.all([
-    db()
-      .from("portal_assignments")
-      .select("deal_id, team_member_id, created_at, team_members(name)")
-      .in("deal_id", ids)
-      .order("created_at", { ascending: false }),
+  const { loadClaimedOwners } = await import("./claimed-owner.server");
+  const { isUnclaimed } = await import("./claimed-owner");
+  const [owner, { data: briefs }] = await Promise.all([
+    // The one owner rule: the project's owner, else the claim ledger's. A
+    // deal whose project has an owner but no ledger row is not unclaimed.
+    loadClaimedOwners(ids),
     db()
       .from("portal_briefs")
       .select("account_id")
@@ -3349,7 +3372,6 @@ export async function loadDealInbox(scope: ResolvedScope | null): Promise<DealIn
   const briefed = new Set(
     ((briefs ?? []) as Array<{ account_id: string }>).map((r) => r.account_id),
   );
-  const owner = ownersFromLedger(ledger);
 
   const labels = new Map(stages.map((s) => [s.key, s.label]));
   const me = scope?.viewer.teamMemberId ?? null;
@@ -3395,7 +3417,7 @@ export async function loadDealInbox(scope: ResolvedScope | null): Promise<DealIn
           path: d.path,
           owner_name: ownerId ? (o?.name ?? null) : null,
           mine: Boolean(me) && ownerId === me,
-          unclaimed: !ownerId,
+          unclaimed: isUnclaimed(d.stage, ownerId),
           next_step: next,
         },
       ];
@@ -3413,39 +3435,17 @@ export async function loadDealInbox(scope: ResolvedScope | null): Promise<DealIn
     );
 }
 
-type LedgerRow = {
-  deal_id: string | null;
-  team_member_id: string | null;
-  team_members: { name: string } | { name: string }[] | null;
-};
-
-/** Latest ledger row per deal wins; a null team member is an unassignment. */
-function ownersFromLedger(
-  ledger: unknown,
-): Map<string, { id: string | null; name: string | null }> {
-  const owner = new Map<string, { id: string | null; name: string | null }>();
-  for (const row of (ledger ?? []) as LedgerRow[]) {
-    if (!row.deal_id || owner.has(row.deal_id)) continue;
-    const tm = Array.isArray(row.team_members) ? row.team_members[0] : row.team_members;
-    owner.set(row.deal_id, {
-      id: row.team_member_id ? String(row.team_member_id) : null,
-      name: tm?.name ?? null,
-    });
-  }
-  return owner;
-}
-
-/** Who owns each deal today, from the claim ledger. Deals with no row are absent. */
+/**
+ * Who owns each deal today, by the one owner rule (src/lib/claimed-owner.ts):
+ * the project's owner, else the claim ledger's. Deals nobody owns are absent.
+ */
 export async function dealOwners(
   dealIds: string[],
 ): Promise<Map<string, { id: string | null; name: string | null }>> {
   if (dealIds.length === 0) return new Map();
-  const { data } = await db()
-    .from("portal_assignments")
-    .select("deal_id, team_member_id, created_at, team_members(name)")
-    .in("deal_id", dealIds)
-    .order("created_at", { ascending: false });
-  return ownersFromLedger(data);
+  const { loadClaimedOwners } = await import("./claimed-owner.server");
+  const owners = await loadClaimedOwners(dealIds);
+  return new Map([...owners].map(([dealId, o]) => [dealId, { id: o.id, name: o.name }]));
 }
 
 /**

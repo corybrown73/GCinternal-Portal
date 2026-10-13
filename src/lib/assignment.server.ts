@@ -50,6 +50,12 @@ export type PoolRow = PoolMember & {
   effectiveLoad: number;
   /** Accounts handed to them inside the window — a count, where load is a weight. */
   assignments: number;
+  /**
+   * What they own today: the active book by claimed owner
+   * (src/lib/claimed-owner.ts) — the same count as Reports' "Who carries
+   * what". The window's `load` still ranks the rotation.
+   */
+  owned: number;
   /** Position in the rotation as it stands: 1 is next. Null when not active. */
   rank: number | null;
 };
@@ -58,13 +64,18 @@ export type PoolRow = PoolMember & {
 export async function loadPool(rules?: AssignmentRules): Promise<PoolRow[]> {
   const r = rules ?? (await loadRules());
   const since = new Date(Date.now() - r.window_days * 86_400_000).toISOString();
-  const [{ data: members }, { data: pool }, { data: ledger }] = await Promise.all([
+  const { loadActiveWorkload } = await import("./claimed-owner.server");
+  const [{ data: members }, { data: pool }, { data: ledger }, owned] = await Promise.all([
     db().from("team_members").select("id,name,email,role").eq("active", true).order("name"),
     db().from("portal_assignment_pool").select("team_member_id,active,capacity"),
     db()
       .from("portal_assignments")
       .select("team_member_id,weight,created_at")
       .gte("created_at", since),
+    loadActiveWorkload().catch((e: unknown) => {
+      console.error("[assignment] could not count what each person owns", e);
+      return new Map<string, number>();
+    }),
   ]);
   const poolBy = new Map<string, { active: boolean; capacity: number }>(
     ((pool ?? []) as any[]).map((p) => [
@@ -98,6 +109,7 @@ export async function loadPool(rules?: AssignmentRules): Promise<PoolRow[]> {
       active: Boolean(p?.active),
       effectiveLoad: l / capacity,
       assignments: count.get(String(m.id)) ?? 0,
+      owned: owned.get(String(m.id)) ?? 0,
       rank: null,
     };
   });
@@ -601,7 +613,12 @@ export type DealAssignment = {
     rank: number | null;
     load: number;
   }>;
-  /** Every active team member, rotation or not, so a picker can always name the owner. */
+  /**
+   * Who the owner picker offers (QA 20.1): the rotation, team members whose
+   * role owns implementations (OWNER_ROLES), anyone carrying active-book
+   * work, and whoever owns this deal now — so the picker never hides the
+   * name the header shows.
+   */
   members: Array<{
     teamMemberId: string;
     name: string;
@@ -611,6 +628,8 @@ export type DealAssignment = {
     load: number;
     /** Accounts handed to them in the window. */
     assignments: number;
+    /** What they own today, the active book (src/lib/claimed-owner.ts). */
+    owned: number;
   }>;
   steps: Array<{ key: "gong" | "sow" | "welcome"; label: string; done: boolean }>;
 };
@@ -644,30 +663,40 @@ export async function dealAssignment(dealId: string): Promise<DealAssignment> {
     }
   }
 
-  const [{ data: ledger }, { count: reports }, { data: dealRow }] = await Promise.all([
-    db()
-      .from("portal_assignments")
-      .select(
-        "id,deal_id,implementation_id,team_member_id,weight,breakdown,source,note,created_at,team_members(name)",
-      )
-      .eq("deal_id", dealId)
-      .order("created_at", { ascending: false })
-      .limit(1),
-    db()
-      .from("portal_gong_reports")
-      .select("id", { count: "exact", head: true })
-      .eq("account_id", dealId),
-    db()
-      .from("portal_accounts")
-      .select("sow_document_path,sow_reference,welcome_issued_at")
-      .eq("id", dealId)
-      .maybeSingle(),
-  ]);
+  const [{ data: ledger }, { count: reports }, { data: dealRow }, { data: liveProjects }] =
+    await Promise.all([
+      db()
+        .from("portal_assignments")
+        .select(
+          "id,deal_id,implementation_id,team_member_id,weight,breakdown,source,note,created_at,team_members(name)",
+        )
+        .eq("deal_id", dealId)
+        .order("created_at", { ascending: false })
+        .limit(1),
+      db()
+        .from("portal_gong_reports")
+        .select("id", { count: "exact", head: true })
+        .eq("account_id", dealId),
+      db()
+        .from("portal_accounts")
+        .select("sow_document_path,sow_reference,welcome_issued_at")
+        .eq("id", dealId)
+        .maybeSingle(),
+      db()
+        .from("implementations")
+        .select("id")
+        .eq("deal_id", dealId)
+        .is("superseded_by_implementation_id", null)
+        .limit(1),
+    ]);
   const l = (ledger ?? [])[0] as any;
   // Before Start onboarding there is no project to carry the owner, so a
   // claim or a hand-pick lives only in the ledger. Read it from there, or
-  // the person who just claimed sees "Unassigned" and clicks again.
-  if (!owner && l?.team_member_id) {
+  // the person who just claimed sees "Unassigned" and clicks again. Once the
+  // deal has its own project, that project's owner decides, empty included
+  // (the one owner rule, src/lib/claimed-owner.ts): an owner cleared on the
+  // customer page stays cleared.
+  if (!owner && l?.team_member_id && (liveProjects ?? []).length === 0) {
     const id = String(l.team_member_id);
     const m = pool.find((p) => p.teamMemberId === id);
     owner = {
@@ -708,7 +737,7 @@ export async function dealAssignment(dealId: string): Promise<DealAssignment> {
         rank: p.rank,
         load: p.load,
       })),
-    members: pool.map((p) => ({
+    members: pickerMembers(pool, owner?.teamMemberId ?? null).map((p) => ({
       teamMemberId: p.teamMemberId,
       name: p.name,
       email: p.email,
@@ -716,6 +745,7 @@ export async function dealAssignment(dealId: string): Promise<DealAssignment> {
       rank: p.rank,
       load: p.load,
       assignments: p.assignments,
+      owned: p.owned,
     })),
     steps: [
       { key: "gong", label: "Gong recording on the deal", done: (reports ?? 0) > 0 },
@@ -731,6 +761,39 @@ export async function dealAssignment(dealId: string): Promise<DealAssignment> {
       },
     ],
   };
+}
+
+/** Team roles that own implementations, besides whoever is in the rotation. */
+export const OWNER_ROLES: ReadonlyArray<string> = [
+  "tis",
+  "implementation",
+  "onboarding",
+  "manager",
+];
+
+/**
+ * The owner picker's people: the rotation, the implementation roles, anyone
+ * who owns active-book work today (`owned`, by the one owner rule: an admin
+ * who carries projects is an owner whatever their team role says), and the
+ * current owner wherever they sit (a Field Fusion setup owner who is an SE).
+ * Sales, TAMs and admins outside the rotation who own nothing are not offered.
+ */
+export function pickerMembers<
+  T extends {
+    teamMemberId: string;
+    role: string | null;
+    inPool: boolean;
+    active: boolean;
+    owned?: number;
+  },
+>(pool: ReadonlyArray<T>, currentOwnerId: string | null): T[] {
+  return pool.filter(
+    (p) =>
+      (p.inPool && p.active) ||
+      OWNER_ROLES.includes((p.role ?? "").trim().toLowerCase()) ||
+      (p.owned ?? 0) > 0 ||
+      p.teamMemberId === currentOwnerId,
+  );
 }
 
 /* ------------------------------------------------------------- claim */
@@ -838,9 +901,14 @@ export async function removeTeamMember(
       .neq("current_stage", "graduate-to-cs"),
     db().from("portal_profiles").select("id").eq("team_member_id", teamMemberId).maybeSingle(),
   ]);
-  if ((owned ?? 0) > 0) {
+  // A deal claimed before its project exists is owned only through the
+  // ledger (the one owner rule, src/lib/claimed-owner.ts). Count those too,
+  // or the removed person stays the deal's TIS on every page.
+  const claimedOnly = await ledgerOnlyDealsOwnedBy(teamMemberId);
+  const total = (owned ?? 0) + claimedOnly;
+  if (total > 0) {
     throw new Error(
-      `${name} still owns ${owned} account${owned === 1 ? "" : "s"}. Reassign them first, then remove.`,
+      `${name} still owns ${total} account${total === 1 ? "" : "s"}. Reassign them first, then remove.`,
     );
   }
   if (login) {
@@ -863,4 +931,32 @@ export async function removeTeamMember(
     payload: { name },
   });
   return { removed: true, name };
+}
+
+/**
+ * Deals not yet graduated whose claimed owner is this person through the
+ * ledger alone (no project yet). Projects are counted by owner_id already.
+ */
+async function ledgerOnlyDealsOwnedBy(teamMemberId: string): Promise<number> {
+  const { data: ledger, error } = await db()
+    .from("portal_assignments")
+    .select("deal_id")
+    .eq("team_member_id", teamMemberId);
+  if (error) throw new Error(`Could not read the claim ledger: ${error.message}`);
+  const dealIds = [
+    ...new Set(((ledger ?? []) as Array<{ deal_id: string | null }>).map((r) => r.deal_id)),
+  ].filter((id): id is string => Boolean(id));
+  if (dealIds.length === 0) return 0;
+  const [{ loadClaimedOwners }, { GRADUATED_STAGE }, { data: deals, error: dealError }] =
+    await Promise.all([
+      import("./claimed-owner.server"),
+      import("./claimed-owner"),
+      db().from("portal_accounts").select("id,stage").in("id", dealIds),
+    ]);
+  if (dealError) throw new Error(`Could not read the deals: ${dealError.message}`);
+  const owners = await loadClaimedOwners(dealIds);
+  return ((deals ?? []) as Array<{ id: string; stage: string | null }>).filter((d) => {
+    const o = owners.get(String(d.id));
+    return o?.source === "ledger" && o.id === teamMemberId && d.stage !== GRADUATED_STAGE;
+  }).length;
 }

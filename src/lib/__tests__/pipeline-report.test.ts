@@ -96,4 +96,21 @@ describe("the pipeline report", () => {
     expect(md).toContain("**Kenvirons** — Intake & Process, 9 business days");
     expect(reportHtml(r, "https://x/pipeline")).toContain("Unclaimed (1)");
   });
+
+  it("calls unclaimed what Home and Reports do: Negotiate to Make it run, never Graduate", () => {
+    const u = buildPipelineReport(
+      [
+        { ...base, id: "a", name: "Closing Co", stage: "negotiate", owner: null },
+        { ...base, id: "b", name: "Waiting Co", stage: "onboarding_kickoff", owner: null },
+        { ...base, id: "c", name: "Done Co", stage: "onboarding_complete", owner: null },
+        { ...base, id: "d", name: "Early Co", stage: "prospect", owner: null },
+        { ...base, id: "e", name: "Peakhill", stage: "closed_won", owner: null },
+      ],
+      "2026-09-23",
+    );
+    expect(u.unclaimed.map((x) => x.name)).toEqual(["Closing Co", "Waiting Co", "Peakhill"]);
+    const md = reportMarkdown(u);
+    expect(md).toContain("- Peakhill — closed 1 business day ago");
+    expect(md).toContain("- Waiting Co — Intake & Process for 1 business day");
+  });
 });

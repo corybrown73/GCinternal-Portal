@@ -28,7 +28,9 @@ async function loadHealthInputs(implementationId: string) {
   ] = await Promise.all([
     db()
       .from("implementations")
-      .select("id, current_stage, stage_entered_at, target_launch_date, actual_launch_date")
+      .select(
+        "id, deal_id, current_stage, stage_entered_at, target_launch_date, actual_launch_date",
+      )
       .eq("id", implementationId)
       .maybeSingle(),
     db().from("risks").select("*").eq("implementation_id", implementationId),
@@ -38,6 +40,10 @@ async function loadHealthInputs(implementationId: string) {
     db().from("milestones").select("*").eq("implementation_id", implementationId),
   ]);
   if (!impl) return null;
+  // The deal's stage, so a graduated deal is never "stalled" (QA 21.2).
+  const { data: deal } = impl.deal_id
+    ? await db().from("portal_accounts").select("stage").eq("id", impl.deal_id).maybeSingle()
+    : { data: null };
 
   // deriveHealth reads exactly these collections off the record.
   const record = {
@@ -48,7 +54,7 @@ async function loadHealthInputs(implementationId: string) {
     milestones: milestones ?? [],
   } as unknown as Customer360;
 
-  return { impl, record };
+  return { impl: { ...impl, deal_stage: (deal?.stage as string | undefined) ?? null }, record };
 }
 
 /** Recompute and cache health for one implementation. Returns null if it is gone. */

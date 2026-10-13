@@ -1,5 +1,6 @@
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 
+import { claimedOwnersByDeal } from "../claimed-owner";
 import { readIntake } from "../intake-answers";
 import { isPartnerJourney } from "../partner-implementation";
 import type { DealFacts } from "../needs-action";
@@ -51,35 +52,48 @@ export async function dealFactsFor(
   const ids = Array.from(new Set(dealIds.filter(Boolean)));
   if (!ids.length) return out;
 
-  const [{ data: deals }, { data: notes }, { data: briefs }, { data: impls }, { data: history }] =
-    await Promise.all([
-      db()
-        .from("portal_accounts")
-        .select(
-          "id,name,stage,stage_entered_at,intake,sow_document_path,sow_reference,welcome_share_url",
-        )
-        .in("id", ids),
-      db()
-        .from("portal_gong_reports")
-        .select("account_id,content_md,call_date,created_at")
-        .in("account_id", ids),
-      db()
-        .from("portal_briefs")
-        .select("account_id,structured_json,created_at")
-        .eq("status", "complete")
-        .eq("generator", "llm")
-        .in("account_id", ids)
-        .order("created_at", { ascending: false }),
-      db()
-        .from("implementations")
-        .select("id,deal_id,owner_id,created_at,journey_type,partner_key")
-        .in("deal_id", ids)
-        .order("created_at", { ascending: false }),
-      db()
-        .from("portal_stage_transitions")
-        .select("account_id,to_stage,occurred_at")
-        .in("account_id", ids),
-    ]);
+  const [
+    { data: deals },
+    { data: notes },
+    { data: briefs },
+    { data: impls },
+    { data: history },
+    { data: ledger },
+  ] = await Promise.all([
+    db()
+      .from("portal_accounts")
+      .select(
+        "id,name,stage,stage_entered_at,intake,sow_document_path,sow_reference,welcome_share_url",
+      )
+      .in("id", ids),
+    db()
+      .from("portal_gong_reports")
+      .select("account_id,content_md,call_date,created_at")
+      .in("account_id", ids),
+    db()
+      .from("portal_briefs")
+      .select("account_id,structured_json,created_at")
+      .eq("status", "complete")
+      .eq("generator", "llm")
+      .in("account_id", ids)
+      .order("created_at", { ascending: false }),
+    db()
+      .from("implementations")
+      .select(
+        "id,deal_id,owner_id,superseded_by_implementation_id,created_at,journey_type,partner_key",
+      )
+      .in("deal_id", ids)
+      .order("created_at", { ascending: false }),
+    db()
+      .from("portal_stage_transitions")
+      .select("account_id,to_stage,occurred_at")
+      .in("account_id", ids),
+    db()
+      .from("portal_assignments")
+      .select("deal_id,team_member_id,created_at")
+      .in("deal_id", ids)
+      .order("created_at", { ascending: false }),
+  ]);
 
   const notesByDeal = new Map<string, Array<{ text: string; date: string | null }>>();
   for (const n of (notes ?? []) as Array<{
@@ -95,7 +109,11 @@ export async function dealFactsFor(
   const briefByDeal = new Map<string, unknown>();
   for (const b of (briefs ?? []) as Array<{ account_id: string; structured_json: unknown }>)
     if (!briefByDeal.has(b.account_id)) briefByDeal.set(b.account_id, b.structured_json ?? null);
-  const ownerIdByDeal = new Map<string, string | null>();
+  // The one owner rule (src/lib/claimed-owner.ts): the project's owner, else
+  // the claim ledger's, so "Nobody owns it" agrees with the board's "TIS:".
+  const ownerIdByDeal = new Map<string, string | null>(
+    [...claimedOwnersByDeal(impls ?? [], ledger ?? [])].map(([dealId, o]) => [dealId, o.id]),
+  );
   const partnerByDeal = new Map<string, boolean>();
   const implRows = (impls ?? []) as Array<{
     id: string;
@@ -104,10 +122,8 @@ export async function dealFactsFor(
     journey_type: string | null;
     partner_key: string | null;
   }>;
-  for (const i of implRows) {
-    if (!ownerIdByDeal.has(i.deal_id)) ownerIdByDeal.set(i.deal_id, i.owner_id);
+  for (const i of implRows)
     if (!partnerByDeal.has(i.deal_id)) partnerByDeal.set(i.deal_id, isPartnerJourney(i));
-  }
   const ownerIds = [...new Set([...ownerIdByDeal.values()].filter(Boolean))] as string[];
   const { data: members } = ownerIds.length
     ? await db().from("team_members").select("id,name").in("id", ownerIds)

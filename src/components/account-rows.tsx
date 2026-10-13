@@ -2,6 +2,7 @@ import { Link } from "@tanstack/react-router";
 import { ArrowRight } from "lucide-react";
 
 import { NoRows, StageBadge, StatusChip } from "@/components/record";
+import { GRADUATED_STAGE } from "@/lib/claimed-owner";
 import { WAITING_ON_LABEL } from "@/lib/customer360-derive";
 import { daysSince, fmtDate, fmtMoney } from "@/lib/hub-format";
 import { LEADERSHIP_ACTION_LABEL, type OwnerAccountRow } from "@/lib/leadership";
@@ -62,7 +63,7 @@ export function AccountRowList({
                 <span className="font-mono text-[11px] text-destructive">Unassigned</span>
               )
             ) : null}
-            {showDaysInStage ? (
+            {showDaysInStage && row.impl.deal_stage !== GRADUATED_STAGE ? (
               <span className="font-mono text-[11px] text-muted-foreground">
                 {daysSince(row.impl.stage_entered_at) ?? 0}d in stage
               </span>

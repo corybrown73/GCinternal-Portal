@@ -184,9 +184,14 @@ describe("the stage checklist", () => {
 
   it("calls a deal stuck by the same limits everywhere", async () => {
     const { stuckLevel } = await import("../stage-flow");
-    expect(stuckLevel("onboarding_kickoff", 2)).toBe("ok");
-    expect(stuckLevel("onboarding_kickoff", 3)).toBe("warn");
-    expect(stuckLevel("onboarding_kickoff", 5)).toBe("escalate");
+    // The agreed limits (QA 21.1): Intake & Process 5/8, Closed Won 3/5.
+    expect(stuckLevel("onboarding_kickoff", 4)).toBe("ok");
+    expect(stuckLevel("onboarding_kickoff", 5)).toBe("warn");
+    expect(stuckLevel("onboarding_kickoff", 8)).toBe("escalate");
+    expect(stuckLevel("closed_won", 2)).toBe("ok");
+    expect(stuckLevel("closed_won", 3)).toBe("warn");
+    expect(stuckLevel("closed_won", 5)).toBe("escalate");
+    // Graduate never counts days in stage.
     expect(stuckLevel("onboarding_complete", 90)).toBe("ok");
   });
 });
@@ -380,7 +385,7 @@ describe("nudges", () => {
     const slow = nudgesFor({
       name: "Maverick",
       stage: "onboarding_kickoff",
-      businessDaysInStage: 3,
+      businessDaysInStage: 5,
       enteredAt: "2026-09-21T15:00:00Z",
       flow: stageFlow(input({ stage: "onboarding_kickoff" })),
     });
@@ -389,7 +394,7 @@ describe("nudges", () => {
     const stuck = nudgesFor({
       name: "Maverick",
       stage: "onboarding_kickoff",
-      businessDaysInStage: 5,
+      businessDaysInStage: 8,
       enteredAt: "2026-09-21T15:00:00Z",
       flow: stageFlow(input({ stage: "onboarding_kickoff" })),
     });

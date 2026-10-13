@@ -1,6 +1,7 @@
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 
 import { appUrl } from "./app-url";
+import { claimedOwnersByDeal } from "./claimed-owner";
 import { readIntake } from "./intake-answers";
 import { isOnboardingStage, kickoffEntryDate, plannedBeforeKickoff } from "./presale-stages";
 import { closeDateFor, timelineFor } from "./onboarding-plan";
@@ -12,6 +13,7 @@ import {
   partnerOverdueByImplementation,
   type PartnerOverdue,
 } from "./partner-attention";
+import { isTestAccount } from "./test-accounts";
 
 const db = () => supabaseAdmin as any;
 
@@ -130,15 +132,29 @@ async function nudgeRun(
     sow_document_path: string | null;
     welcome_share_url: string | null;
     customer_id: string | null;
+    is_test?: boolean | null;
   };
-  const rows = must<DealRow[]>(
+  // `*`: is_test (0085) reads as unset before the migration rather than
+  // failing the run.
+  const watched = must<DealRow[]>(
     "the deals",
-    await db()
-      .from("portal_accounts")
-      .select(
-        "id,name,stage,stage_entered_at,intake,sow_document_path,welcome_share_url,customer_id",
-      )
-      .in("stage", WATCHED),
+    await db().from("portal_accounts").select("*").in("stage", WATCHED),
+  );
+  // Test accounts (0085) are nobody's reminder: a deal flagged, or one whose
+  // customer is.
+  const customerIds = [...new Set(watched.map((d) => d.customer_id).filter(Boolean))] as string[];
+  const testCustomers = new Set(
+    must<Array<{ id: string; is_test?: boolean | null }>>(
+      "the customers",
+      customerIds.length
+        ? await db().from("customers").select("*").in("id", customerIds)
+        : { data: [], error: null },
+    )
+      .filter((c) => isTestAccount(c))
+      .map((c) => String(c.id)),
+  );
+  const rows = watched.filter(
+    (d) => !isTestAccount(d) && !(d.customer_id && testCustomers.has(String(d.customer_id))),
   );
   const ids = rows.map((d) => String(d.id));
 
@@ -153,7 +169,9 @@ async function nudgeRun(
           .in("account_id", ids),
         db()
           .from("implementations")
-          .select("id,deal_id,owner_id,created_at,journey_type,partner_key")
+          .select(
+            "id,deal_id,owner_id,superseded_by_implementation_id,created_at,journey_type,partner_key",
+          )
           .in("deal_id", ids)
           .order("created_at", { ascending: false }),
         db()
@@ -165,6 +183,11 @@ async function nudgeRun(
           .from("portal_stage_transitions")
           .select("account_id,to_stage,occurred_at")
           .in("account_id", ids),
+        db()
+          .from("portal_assignments")
+          .select("deal_id,team_member_id,created_at")
+          .in("deal_id", ids)
+          .order("created_at", { ascending: false }),
       ])
     : [];
   const empty = { data: [], error: null };
@@ -175,6 +198,7 @@ async function nudgeRun(
       id: string;
       deal_id: string;
       owner_id: string | null;
+      superseded_by_implementation_id?: string | null;
       journey_type: string | null;
       partner_key: string | null;
     }>
@@ -184,12 +208,18 @@ async function nudgeRun(
     "the stage history",
     reads[4] ?? empty,
   );
+  const ledger = must<Array<{ deal_id: string; team_member_id: string | null }>>(
+    "the claim ledger",
+    reads[5] ?? empty,
+  );
 
   const noteCount = new Map<string, number>();
   for (const n of notes) noteCount.set(n.account_id, (noteCount.get(n.account_id) ?? 0) + 1);
   const briefed = new Set(briefs.map((b) => b.account_id));
-  const ownerByDeal = new Map<string, string | null>();
-  for (const i of impls) if (!ownerByDeal.has(i.deal_id)) ownerByDeal.set(i.deal_id, i.owner_id);
+  // The one owner rule (src/lib/claimed-owner.ts): the project's, else the ledger's.
+  const ownerByDeal = new Map<string, string | null>(
+    [...claimedOwnersByDeal(impls, ledger)].map(([dealId, o]) => [dealId, o.id]),
+  );
   // A deal whose newest implementation runs the partner journey: its nudges come
   // from its own milestones and work items, never the standard checklist.
   const partnerImplByDeal = new Map<string, string>();

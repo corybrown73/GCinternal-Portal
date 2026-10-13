@@ -63,7 +63,7 @@ describe("stallFindings", () => {
     const links = new Map([
       ["deal-1", { implementationId: "impl-1", customerName: "Summit Plumbing" }],
     ]);
-    // Thu Oct 1 → Fri Oct 9: 6 business days; Closed Won escalates at 4.
+    // Thu Oct 1 → Fri Oct 9: 6 business days; Closed Won escalates at 5.
     const [f] = stallFindings([deal({})], links, TODAY);
     expect(f).toMatchObject({
       dealId: "deal-1",
@@ -84,6 +84,10 @@ describe("stallFindings", () => {
     // Graduate and pre-close stages have no limit; no entered date, no visit.
     expect(stallFindings([deal({ stage: "onboarding_complete" })], links, TODAY)).toEqual([]);
     expect(stallFindings([deal({ stage_entered_at: null })], links, TODAY)).toEqual([]);
+  });
+
+  it("never raises a test account (0085)", () => {
+    expect(stallFindings([deal({ is_test: true })], new Map(), TODAY)).toEqual([]);
   });
 
   it("names Intake & Process, never the enum", () => {
@@ -122,6 +126,12 @@ describe("runStallAlerts", () => {
     alerts()[0]!.acknowledged_at = "2026-10-09T10:00:00Z";
     expect(await runStallAlerts(TODAY)).toEqual({ raised: 0, already: 1 });
     expect(alerts()).toHaveLength(1);
+  });
+
+  it("leaves out a deal whose customer is a test account", async () => {
+    fake.store["customers"]![0]!.is_test = true;
+    expect(await runStallAlerts(TODAY)).toEqual({ raised: 0, already: 0 });
+    expect(alerts()).toHaveLength(0);
   });
 
   it("a new visit of the stage is a new alert", async () => {

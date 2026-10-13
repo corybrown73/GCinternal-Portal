@@ -21,7 +21,12 @@ export type ImplementationRow = {
   /** The owner's own statement of health (0010). Null = never recorded. */
   health_recorded: string | null;
   health_recorded_reason: string | null;
+  /** The claimed owner (src/lib/claimed-owner.ts): the project's, else the deal's ledger. */
   owner_name: string | null;
+  /** A test account (0085); only present on a list that asked for them. */
+  is_test?: boolean;
+  /** Replaced by a later project for the same deal; out of the active book. */
+  superseded?: boolean;
   tier: string | null;
   target_launch_date: string | null;
   actual_launch_date: string | null;
@@ -92,8 +97,16 @@ export type StageHistoryRow = {
 };
 
 /** Leadership layer: the Home query set plus stage dwell and graduation records. */
+/**
+ * A deal in an owned stage with no claimed owner and no project yet (QA 7.5):
+ * Reports' "Unassigned" counts it beside the projects, as pipeline_report does.
+ */
+export type UnclaimedDeal = { deal_id: string; name: string; stage: string };
+
 export type LeadershipData = HomeData & {
   stage_history: StageHistoryRow[];
+  /** Unclaimed deals before their project exists (src/lib/claimed-owner.ts). */
+  unclaimed_deals?: UnclaimedDeal[];
   /** Full records, scoped to implementations in Adopt or Handover to Customer Success. */
   graduation_candidates: Array<{
     implementation_id: string;

@@ -1391,9 +1391,11 @@ export function nextChecklistTask(input: StageFlowInput): string | null {
  * are nudged separately.
  */
 export const STAGE_LIMITS: Readonly<Record<string, { warn: number; escalate: number }>> = {
-  closed_won: { warn: 2, escalate: 4 },
+  // Agreed limits (QA 21.1): Closed Won 3/5, Intake & Process 5/8. Graduate
+  // has no entry: a graduated deal is never stuck.
+  closed_won: { warn: 3, escalate: 5 },
   field_fusion_setup: { warn: 3, escalate: 5 },
-  onboarding_kickoff: { warn: 3, escalate: 5 },
+  onboarding_kickoff: { warn: 5, escalate: 8 },
   // Kickoff itself should be brief: booked and held within days.
   kickoff: { warn: 3, escalate: 5 },
   // The three stages inside the 15-business-day plan; placeholders until the

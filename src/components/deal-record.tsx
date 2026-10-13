@@ -34,6 +34,7 @@ import { openPlanSection } from "@/components/timeline-panel";
 import { openPanel } from "@/lib/panel-open";
 import type { Deliverable } from "@/lib/deliverables";
 import { canEditDeal, canManage, isSuperAdmin, useProfile } from "@/lib/auth";
+import { TestAccountSwitch, testAccountLabel } from "@/components/test-account-switch";
 import {
   addNote,
   addReport,
@@ -428,6 +429,13 @@ export function DealRecord({ deal, embedded = false }: { deal: DealData; embedde
                       </span>
                     ) : null}
                   </div>
+                  {canManage(profile?.role) ? (
+                    <TestAccountSwitch dealId={account.id} state={deal.test_account} />
+                  ) : testAccountLabel(deal.test_account) ? (
+                    <span className="text-[11px] text-muted-foreground">
+                      {testAccountLabel(deal.test_account)}
+                    </span>
+                  ) : null}
                   {counter && onPlan ? (
                     <span
                       className={cn(

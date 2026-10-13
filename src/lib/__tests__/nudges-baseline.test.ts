@@ -138,6 +138,26 @@ describe("runDealNudges — the first sweep", () => {
     expect(noSleep).toHaveBeenCalledWith(NUDGE_SEND_GAP_MS);
   });
 
+  it("never nudges about a test account, and reads the owner from the claim ledger too", async () => {
+    await runDealNudges({ sleep: noSleep });
+    fake.store["portal_accounts"]!.push(
+      { ...unclaimed("deal-t", "Tst fieldfusion"), is_test: true },
+      { ...unclaimed("deal-c", "FF Test Nikki"), customer_id: "cust-t" },
+      unclaimed("deal-l", "Ledger Owned"),
+    );
+    fake.store["customers"] = [{ id: "cust-t", name: "FF Test Nikki", is_test: true }];
+    fake.store["portal_assignments"] = [
+      { deal_id: "deal-l", team_member_id: "tm-1", created_at: daysAgo(6) },
+    ];
+    fake.store["team_members"] = [{ id: "tm-1", name: "Teya", email: "teya@gocanvas.com" }];
+    await runDealNudges({ sleep: noSleep });
+    const subjects = h.sent.map((m) => m.subject);
+    expect(subjects.some((s) => /Tst fieldfusion|FF Test Nikki/.test(s))).toBe(false);
+    // Owned through the ledger: not "unclaimed", whatever else it is.
+    expect(subjects).not.toContain("Unclaimed: Ledger Owned");
+    expect(nudged().some((r) => ["deal-t", "deal-c"].includes(r.entity_id))).toBe(false);
+  });
+
   it("records a manager-only nudge even when no manager can be found yet", async () => {
     fake.store["portal_profiles"] = [];
     const run = await runDealNudges({ sleep: noSleep });

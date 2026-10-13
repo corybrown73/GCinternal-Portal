@@ -39,7 +39,11 @@ export const getPipeline = createServerFn({ method: "GET" })
   .inputValidator(
     (data: unknown) =>
       z
-        .object({ scope: z.string().trim().max(60).optional() })
+        .object({
+          scope: z.string().trim().max(60).optional(),
+          /** "Show test accounts" (0085): off the board unless asked for. */
+          includeTests: z.boolean().optional(),
+        })
         .optional()
         .parse(data) ?? {},
   )
@@ -49,7 +53,7 @@ export const getPipeline = createServerFn({ method: "GET" })
     const { describeScope } = await import("./ownership");
     // Who is asking comes from the request context, never from `data`.
     const resolved = await resolveScope(context.profile.id, data?.scope ?? null);
-    const pipeline = await loadPipeline(resolved);
+    const pipeline = await loadPipeline(resolved, { includeTests: data?.includeTests === true });
     return {
       ...pipeline,
       scope: {
@@ -270,6 +274,20 @@ export const importDeals = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const { importDealsCsv } = await import("./presale.server");
     return importDealsCsv(context.userId, data.csv);
+  });
+
+/**
+ * Mark a deal, and the customer it became, as a test account (0085) or as
+ * real again. A manager's call: it takes the account out of every count.
+ */
+export const setDealTestFlag = createServerFn({ method: "POST" })
+  .middleware([requireManager])
+  .inputValidator((data: unknown) =>
+    z.object({ dealId: z.string().uuid(), isTest: z.boolean() }).parse(data),
+  )
+  .handler(async ({ data, context }) => {
+    const { setTestAccount } = await import("./test-accounts.server");
+    return setTestAccount(context.userId, data.dealId, data.isTest);
   });
 
 /* ---------- deal record ---------- */

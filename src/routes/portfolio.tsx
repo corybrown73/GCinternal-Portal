@@ -36,6 +36,7 @@ import {
 import type { ImplementationRow } from "@/lib/hub-types";
 import { cn } from "@/lib/utils";
 import { errorMessage } from "@/lib/error-message";
+import { dealStageLabel } from "@/lib/deal-stage";
 
 const leadershipQuery = (scope: string | null) =>
   queryOptions({
@@ -304,7 +305,7 @@ function LeadershipPage() {
           title={
             filter ? `${PORTFOLIO_FILTER_LABEL[filter]} accounts` : "Accounts needing attention"
           }
-          count={accounts.length}
+          count={accounts.length + (filter === "unassigned" ? rollup.unassigned_deals : 0)}
           meta={
             <span className="flex items-center gap-2">
               <span>
@@ -334,6 +335,27 @@ function LeadershipPage() {
                 : "No account currently needs lead-level attention."
             }
           />
+          {filter === "unassigned" && data.unclaimed_deals?.length ? (
+            <div className="border-t border-border px-3 py-2.5 text-[12px]">
+              <p className="text-muted-foreground">
+                Before onboarding, no TIS yet ({data.unclaimed_deals.length}):
+              </p>
+              <ul className="mt-1 flex flex-wrap gap-x-3 gap-y-1">
+                {data.unclaimed_deals.map((d) => (
+                  <li key={d.deal_id}>
+                    <Link
+                      to="/deals/$dealId"
+                      params={{ dealId: d.deal_id }}
+                      className="font-semibold hover:underline"
+                    >
+                      {d.name}
+                    </Link>
+                    <span className="text-muted-foreground"> · {dealStageLabel(d.stage)}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
         </Panel>
 
         {/* 3. Owner load */}
@@ -358,8 +380,12 @@ function LeadershipPage() {
                     </Link>
                   )}
                   <span className="font-mono text-[11px] text-muted-foreground">
-                    {o.implementations.length} impl · {o.act_now} act now · {o.blocked} blocked ·{" "}
-                    {o.at_risk} at risk · {o.launches_30d} launch ≤30d
+                    {o.implementations.length} impl
+                    {o.pending_deals.length
+                      ? ` + ${o.pending_deals.length} deal${o.pending_deals.length === 1 ? "" : "s"}`
+                      : ""}{" "}
+                    · {o.act_now} act now · {o.blocked} blocked · {o.at_risk} at risk ·{" "}
+                    {o.launches_30d} launch ≤30d
                   </span>
                   <span className="ml-auto font-mono text-[11px] text-muted-foreground">
                     {o.arr != null ? `${fmtMoney(o.arr)} ARR` : "ARR not recorded"}

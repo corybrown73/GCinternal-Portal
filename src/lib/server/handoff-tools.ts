@@ -3,6 +3,8 @@ import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { deckKindFor } from "@/lib/deck-kind";
 import { TEMPLATE_FIELDS } from "@/lib/kickoff-fields";
 
+import { startOnboardingAtClose } from "./start-at-close";
+
 const db = () => supabaseAdmin as any;
 
 /**
@@ -392,11 +394,40 @@ export async function createDeal(args: {
     payload: { name, stage, via: "mcp" },
   });
 
+  // A deal created closed starts onboarding the way a close on the page does
+  // (QA 18.1): the customer, the project, the rotation, the reading. Without
+  // it the deal sat on Pipeline with no customer page, and the two lists
+  // disagreed. No gate is added: integrations close ungated by design.
+  let onboarding: Awaited<ReturnType<typeof startOnboardingAtClose>> | null = null;
+  {
+    const { loadPipelineStages } = await import("@/lib/pipeline-stages.server");
+    const { isAtOrPast, wonStage } = await import("@/lib/pipeline-stages");
+    const stages = await loadPipelineStages();
+    if (isAtOrPast(stages, stage, wonStage(stages).key)) {
+      onboarding = await startOnboardingAtClose(
+        { kind: "system", label: "the MCP create_deal tool" },
+        String(created["id"]),
+        "closed_won_mcp",
+      );
+    }
+  }
+
   const { intakeBrief } = await import("@/lib/intake");
   return {
     dealId: created["id"],
     name: created["name"],
     stage: created["stage"],
+    ...(onboarding
+      ? {
+          onboarding: onboarding.started
+            ? {
+                started: true,
+                customerId: onboarding.customerId,
+                implementationId: onboarding.implementationId,
+              }
+            : { started: false, reason: onboarding.reason },
+        }
+      : {}),
     nextStep:
       "Ask the intake questions below, then record the answers with add_call_notes (the transcript, verbatim) " +
       "and update_deal (the SOW and commercial facts). Generate the deck last.",

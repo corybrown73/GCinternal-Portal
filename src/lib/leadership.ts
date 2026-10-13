@@ -7,7 +7,13 @@
  * names the management decision attached to them. It introduces no new rules,
  * no scores, no averages and no forecasting.
  */
-import type { ImplementationRow, LeadershipData, StageHistoryRow, TriageBundle } from "./hub-types";
+import type {
+  ImplementationRow,
+  LeadershipData,
+  StageHistoryRow,
+  TriageBundle,
+  UnclaimedDeal,
+} from "./hub-types";
 import {
   ADOPTION_LEVEL_LABEL,
   adoptionAreaLevel,
@@ -23,6 +29,7 @@ import {
   type ImplHealth,
   type WaitingOn,
 } from "./customer360-derive";
+import { GRADUATED_STAGE, inActiveBook, isUnclaimed } from "./claimed-owner";
 import { buildQueue, healthByImplementation, triageRow, type QueueRow } from "./home-triage";
 import {
   graduationReadiness,
@@ -38,6 +45,20 @@ const DAY = 86_400_000;
 // two ended up agreeing with each other and disagreeing with pace.ts.
 const daysUntil = (date: string | null | undefined) => daysUntilDate(date);
 
+/** A project as the active-book rule reads it. */
+const bookRow = (i: ImplementationRow) => ({
+  stage: i.deal_stage,
+  superseded: i.superseded ?? false,
+  is_test: i.is_test ?? false,
+});
+
+/**
+ * A project counted as "Unassigned": in the active book, in an owned stage,
+ * with no claimed owner. The tile, its filter and "Who carries what" share it.
+ */
+export const isUnassignedProject = (i: ImplementationRow) =>
+  inActiveBook(bookRow(i)) && isUnclaimed(i.deal_stage, i.owner_name);
+
 const bundleFor = (triage: TriageBundle[], id: string) =>
   triage.find((t) => t.implementation_id === id);
 
@@ -49,7 +70,10 @@ export type PortfolioRollup = {
   act_now: number;
   needs_attention: number;
   moving: number;
+  /** Unclaimed projects plus unclaimed deals that have no project yet. */
   unassigned: number;
+  /** Of `unassigned`, the deals before their project exists. */
+  unassigned_deals: number;
   owners: number;
 };
 
@@ -72,8 +96,19 @@ export function portfolioRollup(data: LeadershipData): PortfolioRollup {
     act_now: queue.act_now.length,
     needs_attention: queue.needs_attention.length,
     moving: queue.moving.length,
-    unassigned: data.implementations.filter((i) => !i.owner_name).length,
-    owners: new Set(data.implementations.map((i) => i.owner_name).filter(Boolean)).size,
+    // "Unclaimed" by the shared rule (src/lib/claimed-owner.ts): a graduated
+    // project with no owner is not waiting for one, and a deal at Negotiate &
+    // Finalize or Closed Won with no TIS counts before its project exists, so
+    // this agrees with the Pipeline card, Home's inbox and pipeline_report.
+    unassigned:
+      data.implementations.filter(isUnassignedProject).length + (data.unclaimed_deals ?? []).length,
+    unassigned_deals: (data.unclaimed_deals ?? []).length,
+    owners: new Set(
+      data.implementations
+        .filter((i) => inActiveBook(bookRow(i)))
+        .map((i) => i.owner_name)
+        .filter(Boolean),
+    ).size,
   };
 }
 
@@ -222,6 +257,8 @@ export type OwnerLoadRow = {
   owner: string;
   unassigned: boolean;
   implementations: ImplementationRow[];
+  /** Unassigned only: unclaimed deals with no project yet. */
+  pending_deals: UnclaimedDeal[];
   act_now: number;
   blocked: number;
   at_risk: number;
@@ -235,11 +272,16 @@ export function ownerLoad(data: LeadershipData): OwnerLoadRow[] {
   const queue = buildQueue(data.implementations, data.triage);
   const actNow = new Set(queue.act_now.map((r) => r.impl.id));
 
+  // What each person carries: the active book (src/lib/claimed-owner.ts),
+  // the same count the Assign picker's "N active" shows.
   const groups = new Map<string, ImplementationRow[]>();
   for (const impl of data.implementations) {
+    if (!inActiveBook(bookRow(impl))) continue;
     const key = impl.owner_name ?? "Unassigned";
     groups.set(key, [...(groups.get(key) ?? []), impl]);
   }
+  const pending = data.unclaimed_deals ?? [];
+  if (pending.length && !groups.has("Unassigned")) groups.set("Unassigned", []);
 
   const rows: OwnerLoadRow[] = [...groups.entries()].map(([owner, impls]) => {
     const arrValues = impls.map((i) => i.arr).filter((v): v is number => v != null);
@@ -250,6 +292,7 @@ export function ownerLoad(data: LeadershipData): OwnerLoadRow[] {
       owner,
       unassigned: owner === "Unassigned",
       implementations: impls,
+      pending_deals: owner === "Unassigned" ? pending : [],
       act_now: act,
       blocked,
       at_risk,
@@ -265,6 +308,10 @@ export function ownerLoad(data: LeadershipData): OwnerLoadRow[] {
   const totalBlocked = rows.reduce((n, r) => n + r.blocked, 0);
   for (const r of rows) {
     if (r.unassigned) r.flags.push("No owner recorded — assign before anything else");
+    if (r.pending_deals.length)
+      r.flags.push(
+        `${r.pending_deals.length} deal${r.pending_deals.length === 1 ? "" : "s"} before onboarding with no TIS`,
+      );
     if (r.act_now > 1) r.flags.push(`Carrying ${r.act_now} act-now accounts alone`);
     if (r.blocked > 0 && r.blocked === totalBlocked && totalBlocked > 0 && !r.unassigned)
       r.flags.push("Holds every blocked account in the portfolio");
@@ -292,10 +339,17 @@ export type StageDistributionRow = {
   over_flag: number;
 };
 
+/** The lifecycle's last stage, the project-side Graduate. */
+const TERMINAL_LIFECYCLE_STAGE = LIFECYCLE_STAGES[LIFECYCLE_STAGES.length - 1]!.id;
+
 export function stageDistribution(data: LeadershipData): StageDistributionRow[] {
   return LIFECYCLE_STAGES.map((stage) => {
     const impls = data.implementations.filter((i) => normalizeStage(i.current_stage) === stage.id);
-    const dwell = impls
+    // Graduate is the end: time there is not dwell, and never over the flag.
+    const clocked = impls.filter(
+      (i) => stage.id !== TERMINAL_LIFECYCLE_STAGE && i.deal_stage !== GRADUATED_STAGE,
+    );
+    const dwell = clocked
       .map((i) => ({ days: daysSince(i.stage_entered_at) ?? 0, customer: i.customer_name }))
       .sort((a, b) => b.days - a.days)[0];
     return {
@@ -305,7 +359,8 @@ export function stageDistribution(data: LeadershipData): StageDistributionRow[] 
       implementations: impls,
       longest_dwell_days: dwell ? dwell.days : null,
       longest_dwell_customer: dwell ? dwell.customer : null,
-      over_flag: impls.filter((i) => (daysSince(i.stage_entered_at) ?? 0) > STAGE_FLAG_DAYS).length,
+      over_flag: clocked.filter((i) => (daysSince(i.stage_entered_at) ?? 0) > STAGE_FLAG_DAYS)
+        .length,
     };
   });
 }
@@ -726,7 +781,7 @@ export function portfolioFilterAccounts(
       case "needs_attention":
         return queue.needs_attention.some((r) => r.impl.id === impl.id);
       case "unassigned":
-        return !impl.owner_name;
+        return isUnassignedProject(impl);
       default:
         return health.get(impl.id)?.level === filter;
     }

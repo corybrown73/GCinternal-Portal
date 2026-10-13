@@ -3,6 +3,7 @@ import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { businessDaysBetween, localIso } from "./onboarding-timeline";
 import { STAGE_LABELS, isStage } from "./presale-stages";
 import { STAGE_LIMITS, stuckLevel } from "./stage-flow";
+import { isTestAccount } from "./test-accounts";
 
 const db = () => supabaseAdmin as any;
 
@@ -14,6 +15,8 @@ export type StallDeal = {
   stage: string;
   stage_entered_at: string | null;
   customer_id: string | null;
+  /** A test account (0085): never raised. */
+  is_test?: boolean | null;
 };
 
 export type StallFinding = {
@@ -40,6 +43,7 @@ export function stallFindings(
 ): StallFinding[] {
   const out: StallFinding[] = [];
   for (const d of deals) {
+    if (isTestAccount(d)) continue;
     if (!d.stage_entered_at || !STAGE_LIMITS[d.stage]) continue;
     const days = Math.max(0, businessDaysBetween(d.stage_entered_at.slice(0, 10), today));
     if (stuckLevel(d.stage, days) !== "escalate") continue;
@@ -70,14 +74,15 @@ export async function runStallAlerts(today = localIso()): Promise<{
   raised: number;
   already: number;
 }> {
+  // `*`: is_test (0085) reads as unset before the migration.
   const { data: deals, error } = await db()
     .from("portal_accounts")
-    .select("id,name,stage,stage_entered_at,customer_id")
+    .select("*")
     .in("stage", Object.keys(STAGE_LIMITS));
   if (error) throw new Error(`Could not read the deals: ${error.message}`);
-  const rows = (deals ?? []) as StallDeal[];
-  const ids = rows.map((d) => d.id);
-  const customerIds = [...new Set(rows.map((d) => d.customer_id).filter(Boolean))] as string[];
+  const all = (deals ?? []) as StallDeal[];
+  const customerIds = [...new Set(all.map((d) => d.customer_id).filter(Boolean))] as string[];
+  const ids = all.map((d) => d.id);
   const [{ data: impls }, { data: customers }] = await Promise.all([
     ids.length
       ? db()
@@ -86,15 +91,22 @@ export async function runStallAlerts(today = localIso()): Promise<{
           .in("deal_id", ids)
           .order("created_at", { ascending: false })
       : { data: [] },
-    customerIds.length
-      ? db().from("customers").select("id,name").in("id", customerIds)
-      : { data: [] },
+    customerIds.length ? db().from("customers").select("*").in("id", customerIds) : { data: [] },
   ]);
   const implByDeal = new Map<string, string>();
   for (const i of (impls ?? []) as Array<{ id: string; deal_id: string }>)
     if (!implByDeal.has(i.deal_id)) implByDeal.set(i.deal_id, i.id);
   const customerName = new Map(
     ((customers ?? []) as Array<{ id: string; name: string }>).map((c) => [c.id, c.name]),
+  );
+  // A deal whose customer is a test account is one too.
+  const testCustomers = new Set(
+    ((customers ?? []) as Array<{ id: string; is_test?: boolean | null }>)
+      .filter((c) => isTestAccount(c))
+      .map((c) => c.id),
+  );
+  const rows = all.map((d) =>
+    d.customer_id && testCustomers.has(d.customer_id) ? { ...d, is_test: true } : d,
   );
   const links = new Map(
     rows.map((d) => [

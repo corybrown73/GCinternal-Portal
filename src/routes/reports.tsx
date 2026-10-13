@@ -1,8 +1,9 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { queryOptions, useQuery, useSuspenseQuery } from "@tanstack/react-query";
 import { ArrowRight } from "lucide-react";
 
 import { PageBody, PageHeader } from "@/components/page";
+import { ShowTestsToggle } from "@/components/show-tests-toggle";
 import { Panel, NoRows } from "@/components/record";
 import { getLeadership } from "@/lib/hub.functions";
 import { getPipelineReport } from "@/lib/pipeline-report.functions";
@@ -12,13 +13,20 @@ import { ownerLoad, portfolioRollup } from "@/lib/leadership";
 import type { Timing } from "@/lib/pipeline-report";
 import { fmtMoney } from "@/lib/hub-format";
 import { useScope } from "@/lib/use-scope";
+import { SHOW_TESTS_PARAM, readShowTests } from "@/lib/test-accounts";
 import { cn } from "@/lib/utils";
 
-const leadershipQuery = (scope: string | null) =>
+// The test-account view (0085) is its own cache entry.
+const leadershipQuery = (scope: string | null, tests = false) =>
   queryOptions({
-    queryKey: ["leadership", scope],
-    queryFn: () => getLeadership({ data: scope ? { scope } : {} }),
+    queryKey: tests ? ["leadership", scope, "tests"] : ["leadership", scope],
+    queryFn: () =>
+      getLeadership({
+        data: { ...(scope ? { scope } : {}), ...(tests ? { includeTests: true } : {}) },
+      }),
   });
+
+type ReportsSearch = { scope?: string; tests?: boolean };
 
 const reportQuery = queryOptions({
   queryKey: ["pipeline-report"],
@@ -43,13 +51,18 @@ export const Route = createFileRoute("/reports")({
       },
     ],
   }),
-  validateSearch: (search: Record<string, unknown>): { scope?: string } =>
-    typeof search["scope"] === "string" ? { scope: search["scope"] as string } : {},
-  loaderDeps: ({ search }: { search: { scope?: string } }) => ({ scope: search.scope ?? null }),
+  validateSearch: (search: Record<string, unknown>): ReportsSearch => ({
+    ...(typeof search["scope"] === "string" ? { scope: search["scope"] as string } : {}),
+    ...(readShowTests(search[SHOW_TESTS_PARAM]) ? { tests: true } : {}),
+  }),
+  loaderDeps: ({ search }: { search: ReportsSearch }) => ({
+    scope: search.scope ?? null,
+    tests: search.tests === true,
+  }),
   loader: ({ context, deps }) => {
     void context.queryClient.prefetchQuery(reportQuery);
     void context.queryClient.prefetchQuery(ttvQuery);
-    return context.queryClient.ensureQueryData(leadershipQuery(deps.scope));
+    return context.queryClient.ensureQueryData(leadershipQuery(deps.scope, deps.tests));
   },
   component: ReportsPage,
 });
@@ -64,18 +77,34 @@ const HEALTH = [
 
 function ReportsPage() {
   const { param } = useScope();
-  const { data } = useSuspenseQuery(leadershipQuery(param));
+  const { tests } = Route.useSearch();
+  const navigate = useNavigate({ from: Route.fullPath });
+  const { data } = useSuspenseQuery(leadershipQuery(param, tests === true));
   const report = useQuery(reportQuery);
   const ttv = useQuery(ttvQuery);
   const rollup = portfolioRollup(data);
   const owners = ownerLoad(data);
-  const maxOwner = Math.max(1, ...owners.map((o) => o.implementations.length));
+  // An owner's count: their projects, plus (Unassigned only) the deals with
+  // no TIS that have no project yet, so the row agrees with the tile.
+  const carried = (o: (typeof owners)[number]) => o.implementations.length + o.pending_deals.length;
+  const maxOwner = Math.max(1, ...owners.map(carried));
 
   return (
     <>
       <PageHeader
         title="Reports"
         description="Team & portfolio: the book as numbers. Health, where the accounts sit, who carries what, and how long a deal takes."
+        actions={
+          <ShowTestsToggle
+            checked={tests === true}
+            onChange={(on) =>
+              void navigate({
+                search: (prev: ReportsSearch): ReportsSearch =>
+                  on ? { ...prev, tests: true } : prev.scope ? { scope: prev.scope } : {},
+              })
+            }
+          />
+        }
       />
       <PageBody className="space-y-4">
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
@@ -95,7 +124,11 @@ function ReportsPage() {
           <Stat
             label="Unassigned"
             value={rollup.unassigned}
-            sub="No owner yet"
+            sub={
+              rollup.unassigned_deals
+                ? `No owner yet · ${rollup.unassigned_deals} before onboarding`
+                : "No owner yet"
+            }
             tone={rollup.unassigned ? "critical" : "muted"}
           />
         </div>
@@ -211,12 +244,12 @@ function ReportsPage() {
                       <span
                         className="ml-px h-full bg-[#2a78d6]"
                         style={{
-                          width: `${((o.implementations.length - o.act_now) / maxOwner) * 100}%`,
+                          width: `${((carried(o) - o.act_now) / maxOwner) * 100}%`,
                         }}
                       />
                     </span>
                     <span className="text-right tabular-nums">
-                      <span className="font-semibold">{o.implementations.length}</span>
+                      <span className="font-semibold">{carried(o)}</span>
                       <span className="text-muted-foreground"> · {fmtMoney(o.arr)}</span>
                     </span>
                     {o.flags.length ? (

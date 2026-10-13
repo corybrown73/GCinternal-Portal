@@ -174,7 +174,8 @@ export const TOOLS: ToolDefinition[] = [
             "make_it_run",
             "onboarding_complete",
           ],
-          description: "Defaults to prospect.",
+          description:
+            "Defaults to prospect. At closed_won or later the deal starts onboarding as a close on the deal page does: its customer page and project are created (unless a customer with the same name already exists — then a person picks it on the deal), it goes to the assignment rotation and the AI reading starts. The result's `onboarding` says which.",
         },
         primaryContactName: { type: "string" },
         primaryContactEmail: { type: "string" },

@@ -96,7 +96,11 @@ import {
  */
 const scopeInput = (data: unknown) =>
   z
-    .object({ scope: z.string().trim().max(60).optional() })
+    .object({
+      scope: z.string().trim().max(60).optional(),
+      /** "Show test accounts" (0085): left out of every count unless asked for. */
+      includeTests: z.boolean().optional(),
+    })
     .optional()
     .parse(data) ?? {};
 
@@ -108,7 +112,7 @@ export const getHome = createServerFn({ method: "GET" })
     const { resolveScope } = await import("./ownership.server");
     const { describeScope } = await import("./ownership");
     const resolved = await resolveScope(context.profile.id, data?.scope ?? null);
-    const home = await loadHome(resolved);
+    const home = await loadHome(resolved, { includeTests: data?.includeTests === true });
     return {
       ...home,
       scope: {
@@ -128,7 +132,9 @@ export const getLeadership = createServerFn({ method: "GET" })
     const { resolveScope } = await import("./ownership.server");
     const { describeScope } = await import("./ownership");
     const resolved = await resolveScope(context.profile.id, data?.scope ?? null);
-    const leadership = await loadLeadership(resolved);
+    const leadership = await loadLeadership(resolved, {
+      includeTests: data?.includeTests === true,
+    });
     return {
       ...leadership,
       scope: {
