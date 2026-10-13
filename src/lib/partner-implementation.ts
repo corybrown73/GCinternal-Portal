@@ -1,3 +1,4 @@
+import { FIELD_FUSION_TEMPLATE_KEY } from "./field-fusion";
 import type { IntakeAnswers } from "./intake-answers";
 import { isStage, type AccountStage } from "./presale-stages";
 
@@ -27,6 +28,11 @@ export type Partner = {
   legacyIntakePath: "field_fusion" | null;
 };
 
+/**
+ * The partners, as code. A new partner is one entry here and in PARTNER_KEYS:
+ * no migration. The database checks only that a key is a well-formed slug, so
+ * every registered key is accepted there (see migration 0083).
+ */
 export const PARTNERS: Readonly<Record<PartnerKey, Partner>> = {
   field_fusion_iq: {
     key: "field_fusion_iq",
@@ -61,14 +67,19 @@ export type PartnerStage = {
   /** Internal stages are the two commercial ones; the customer sees the rest. */
   visibility: StageVisibility;
   /**
-   * The deal stages that hold this partner stage today. Empty where storage has
-   * no equivalent yet (see the dependencies in the PR): the stage exists in the
-   * configuration, and nothing maps a deal to it.
+   * LEGACY COMPATIBILITY ONLY. The deal stages that existing Field Fusion
+   * records already sit in, read for display of those records. This is not
+   * how partner progress is stored: Phase 2 persists each partner stage's own
+   * record and completion. Empty where no legacy equivalent exists.
    */
-  dealStages: readonly AccountStage[];
+  legacyDealStages: readonly AccountStage[];
 };
 
-/** The canonical seven-stage partner journey, in order. */
+/**
+ * The canonical seven-stage partner journey, in order. `legacyDealStages` below
+ * is a read-only bridge for existing Field Fusion records; it never marks a
+ * partner stage complete.
+ */
 export const PARTNER_JOURNEY: readonly PartnerStage[] = [
   {
     key: "pre_sale_poc",
@@ -76,7 +87,7 @@ export const PARTNER_JOURNEY: readonly PartnerStage[] = [
     label: "Pre-Sale & POC",
     description: "Partner-led solution validation and proof of value.",
     visibility: "internal",
-    dealStages: ["prospect", "negotiate"],
+    legacyDealStages: ["prospect", "negotiate"],
   },
   {
     key: "closed_won_planning",
@@ -84,7 +95,7 @@ export const PARTNER_JOURNEY: readonly PartnerStage[] = [
     label: "Closed Won & Planning",
     description: "Confirm requirements, stakeholders and implementation planning.",
     visibility: "internal",
-    dealStages: ["closed_won"],
+    legacyDealStages: ["closed_won"],
   },
   {
     key: "partner_setup",
@@ -92,7 +103,7 @@ export const PARTNER_JOURNEY: readonly PartnerStage[] = [
     label: "Partner Setup & Connection",
     description: "Partner configures the solution and establishes the technical connection.",
     visibility: "customer",
-    dealStages: ["field_fusion_setup"],
+    legacyDealStages: ["field_fusion_setup"],
   },
   {
     key: "form_finalisation",
@@ -100,7 +111,7 @@ export const PARTNER_JOURNEY: readonly PartnerStage[] = [
     label: "Form Finalisation & Data Readiness",
     description: "TIS leads GoCanvas form and dataset preparation.",
     visibility: "customer",
-    dealStages: ["onboarding_kickoff"],
+    legacyDealStages: ["onboarding_kickoff"],
   },
   {
     key: "pilot",
@@ -108,7 +119,7 @@ export const PARTNER_JOURNEY: readonly PartnerStage[] = [
     label: "Pilot",
     description: "Customer tests; TIS supports and refines.",
     visibility: "customer",
-    dealStages: [],
+    legacyDealStages: [],
   },
   {
     key: "trial_run",
@@ -116,7 +127,7 @@ export const PARTNER_JOURNEY: readonly PartnerStage[] = [
     label: "Trial Run",
     description: "End users test; TIS supports and refines.",
     visibility: "customer",
-    dealStages: [],
+    legacyDealStages: [],
   },
   {
     key: "roll_out",
@@ -124,7 +135,7 @@ export const PARTNER_JOURNEY: readonly PartnerStage[] = [
     label: "Roll Out & Graduation",
     description: "Go live, training, acceptance and transition to support.",
     visibility: "customer",
-    dealStages: [],
+    legacyDealStages: [],
   },
 ];
 
@@ -166,10 +177,17 @@ export function stageOwner(key: PartnerStageKey): StageOwner {
   return partnerStage(key).position <= readyAt ? "partner" : "gocanvas_tis";
 }
 
-/** The partner stage a deal stage corresponds to today, or null where none does. */
-export function partnerStageForDealStage(stage: AccountStage | string | null | undefined) {
+/**
+ * LEGACY COMPATIBILITY ONLY: the partner stage an existing deal stage is shown
+ * under, or null where there is no legacy equivalent. This is an entry read,
+ * not progress. `onboarding_kickoff` marks the move into GoCanvas implementation
+ * (the handoff), so it does not mean Form Finalisation & Data Readiness is done.
+ */
+export function legacyPartnerStageForDealStage(stage: AccountStage | string | null | undefined) {
   if (!stage || !isStage(stage)) return null;
-  return PARTNER_JOURNEY.find((s) => (s.dealStages as readonly string[]).includes(stage)) ?? null;
+  return (
+    PARTNER_JOURNEY.find((s) => (s.legacyDealStages as readonly string[]).includes(stage)) ?? null
+  );
 }
 
 export type ImplementationTypeInfo =
@@ -192,4 +210,84 @@ export function implementationTypeFor(
   const legacy = PARTNER_KEYS.find((k) => PARTNERS[k].legacyIntakePath === intake.path);
   if (legacy) return { type: "partner_implementation", partner: legacy, legacy: true };
   return { type: "standard", partner: null, legacy: false };
+}
+
+/** The journey template a Partner Implementation is built from (migration 0083). Any partner uses it. */
+export const PARTNER_TEMPLATE_KEY = "partner-implementation";
+
+/** The stage a Partner Implementation opens on: Closed Won & Planning, the template's first stage. */
+export const PARTNER_INITIAL_STAGE: PartnerStageKey = "closed_won_planning";
+
+/** The template's stages, in order: the partner journey from Closed Won & Planning onward. */
+export const PARTNER_TEMPLATE_STAGE_KEYS: readonly PartnerStageKey[] = PARTNER_JOURNEY.filter(
+  (s) => s.position >= 2,
+).map((s) => s.key);
+
+/** The partner an explicitly partner-led implementation names; null for legacy and standard. */
+export function explicitPartnerKeyFor(
+  intake: Pick<IntakeAnswers, "path" | "partner_implementation">,
+): PartnerKey | null {
+  const t = implementationTypeFor(intake);
+  return t.type === "partner_implementation" && !t.legacy ? t.partner : null;
+}
+
+/**
+ * The journey template a new implementation is built from. Legacy Field Fusion
+ * keeps its own template; a new partner uses the partner template; standard
+ * accounts keep the existing rules (no preferred template).
+ */
+export function templateKeyFor(
+  intake: Pick<IntakeAnswers, "path" | "partner_implementation">,
+): string | null {
+  const t = implementationTypeFor(intake);
+  if (t.type === "standard") return null;
+  return t.legacy ? FIELD_FUSION_TEMPLATE_KEY : PARTNER_TEMPLATE_KEY;
+}
+
+/**
+ * A new explicitly-partnered implementation must use the partner template. If
+ * it is not published, the start is refused: never a silent standard fallback.
+ */
+export function requiresPartnerTemplate(
+  intake: Pick<IntakeAnswers, "path" | "partner_implementation">,
+): boolean {
+  const t = implementationTypeFor(intake);
+  return t.type === "partner_implementation" && !t.legacy;
+}
+
+/** The stage a new implementation opens on, when its journey is the partner one; null keeps the standard start. */
+export function initialStageFor(
+  intake: Pick<IntakeAnswers, "path" | "partner_implementation">,
+): PartnerStageKey | null {
+  return requiresPartnerTemplate(intake) ? PARTNER_INITIAL_STAGE : null;
+}
+
+/**
+ * Whether an implementation runs the partner journey. Read from its stored
+ * journey type or partner, so partner progress is never judged by the deal stage.
+ */
+export function isPartnerJourney(impl: {
+  journey_type?: string | null;
+  partner_key?: string | null;
+}): boolean {
+  return impl.journey_type === "partner_implementation" || Boolean(impl.partner_key);
+}
+
+/** The next stage in the template's own order, or null at the end. A step forward only. */
+export function nextPartnerStage(order: readonly string[], current: string | null): string | null {
+  if (!current) return null;
+  const i = order.indexOf(current);
+  if (i < 0 || i === order.length - 1) return null;
+  return order[i + 1]!;
+}
+
+/** The live partner template id from rows read for it: published and not superseded. Null if none. */
+export function liveTemplateId(
+  rows: ReadonlyArray<{ id: string; key: string; status: string; superseded_by_id: string | null }>,
+): string | null {
+  const live = rows.find(
+    (r) =>
+      r.key === PARTNER_TEMPLATE_KEY && r.status === "published" && r.superseded_by_id === null,
+  );
+  return live?.id ?? null;
 }
