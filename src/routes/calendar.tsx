@@ -1,265 +1,519 @@
-import { useState } from "react";
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type RefObject } from "react";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { queryOptions, useSuspenseQuery } from "@tanstack/react-query";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
+  CircleDashed,
+  Clock,
+  Flag,
+  Rocket,
+  XCircle,
+  type LucideIcon,
+} from "lucide-react";
 
 import { PageBody, PageHeader } from "@/components/page";
-import { getHome } from "@/lib/hub.functions";
-import { buildQueue } from "@/lib/home-triage";
-import { addDaysIso, collectEvents, type UpcomingEvent } from "@/lib/home-today";
-import { localIso } from "@/lib/onboarding-timeline";
-import { shortMeeting } from "@/lib/workspace";
+import { ShowTestsToggle } from "@/components/show-tests-toggle";
+import { getCalendar } from "@/lib/hub.functions";
+import {
+  addDaysIso,
+  addMonthsIso,
+  customerLinkFor,
+  dayLabel,
+  defaultSelectedDay,
+  detailRows,
+  eventsByDay,
+  KIND_LABEL,
+  monthStartIso,
+  monthWeeks,
+  STATUS_LABEL,
+  type CalendarEvent,
+  type CalendarKind,
+  type CalendarStatus,
+} from "@/lib/calendar-events";
+import { readShowTests, SHOW_TESTS_PARAM } from "@/lib/test-accounts";
 import { useScope } from "@/lib/use-scope";
 import { cn } from "@/lib/utils";
 
-const homeQuery = (scope: string | null) =>
+const calendarQuery = (scope: string | null, tests: boolean) =>
   queryOptions({
-    queryKey: ["home", scope],
-    queryFn: () => getHome({ data: scope ? { scope } : {} }),
+    // The test-account view (0085) is its own cache entry.
+    queryKey: tests ? ["calendar", scope, "tests"] : ["calendar", scope],
+    queryFn: () =>
+      getCalendar({
+        data: { ...(scope ? { scope } : {}), ...(tests ? { includeTests: true } : {}) },
+      }),
   });
+
+type CalendarSearch = { scope?: string; tests?: boolean };
 
 export const Route = createFileRoute("/calendar")({
   head: () => ({
     meta: [
-      { title: "Calendar — Key dates & meetings | GoCanvas Handoff Hub" },
+      { title: "Calendar — Implementation dates | GoCanvas Handoff Hub" },
       {
         name: "description",
         content:
-          "Every customer meeting, commitment and target launch across your accounts, by day.",
+          "What happened, what is happening and what is coming next across your implementations: meetings, commitments, milestones and go-live dates.",
       },
     ],
   }),
-  validateSearch: (search: Record<string, unknown>): { scope?: string } =>
-    typeof search["scope"] === "string" ? { scope: search["scope"] as string } : {},
-  loaderDeps: ({ search }: { search: { scope?: string } }) => ({ scope: search.scope ?? null }),
-  loader: ({ context, deps }) => context.queryClient.ensureQueryData(homeQuery(deps.scope)),
+  validateSearch: (raw: Record<string, unknown>): CalendarSearch => {
+    const out: CalendarSearch = {};
+    if (typeof raw["scope"] === "string") out.scope = raw["scope"];
+    if (readShowTests(raw[SHOW_TESTS_PARAM])) out.tests = true;
+    return out;
+  },
+  loaderDeps: ({ search }: { search: CalendarSearch }) => ({
+    scope: search.scope ?? null,
+    tests: search.tests === true,
+  }),
+  loader: ({ context, deps }) =>
+    context.queryClient.ensureQueryData(calendarQuery(deps.scope, deps.tests)),
   component: CalendarPage,
 });
 
-const KIND: Record<UpcomingEvent["kind"], { label: string; dot: string }> = {
-  meeting: { label: "Meeting", dot: "bg-[#2a78d6]" },
-  commitment: { label: "Due", dot: "bg-[#eda100]" },
-  launch: { label: "Launch", dot: "bg-[#4a3aa7]" },
+/** Each kind has its own shape as well as its colour, so it never rests on colour alone. */
+const KIND_SHAPE: Record<CalendarKind, string> = {
+  meeting: "rounded-full",
+  commitment: "rounded-[2px]",
+  milestone: "rotate-45 rounded-[1px]",
+  go_live: "[clip-path:polygon(50%_0,100%_100%,0_100%)]",
 };
 
-/** The shortest existing label that still means something, for the compact
- * grid cell: "Stage 1 — Get it working" → "Stage 1" (via the same
- * `shortMeeting` the workspace page already uses), "Target launch" → the
- * kind's own short word, "Launch" — a commitment's description is already
- * short. Never a new label, only a shorter cut of the existing one. */
-function shortEventLabel(e: UpcomingEvent): string {
-  if (e.kind === "meeting") return shortMeeting(e.label);
-  if (e.kind === "launch") return KIND.launch.label;
-  return e.label;
+function KindMark({ kind, className }: { kind: CalendarKind; className?: string }) {
+  return (
+    <span
+      aria-hidden="true"
+      className={cn("inline-block shrink-0", KIND_SHAPE[kind], KIND_DOT[kind], className)}
+    />
+  );
 }
+
+const KIND_DOT: Record<CalendarKind, string> = {
+  meeting: "bg-[#2a78d6]",
+  commitment: "bg-[#eda100]",
+  milestone: "bg-[#0f8a7a]",
+  go_live: "bg-[#4a3aa7]",
+};
+
+const STATUS_ICON: Record<CalendarStatus, LucideIcon> = {
+  completed: CheckCircle2,
+  planned: Clock,
+  due: Clock,
+  overdue: AlertTriangle,
+  completion_not_recorded: CircleDashed,
+  cancelled: XCircle,
+  target_passed: Flag,
+  target_date: Flag,
+  went_live: Rocket,
+};
+
+const STATUS_TONE: Record<CalendarStatus, string> = {
+  completed: "text-status-ontrack-foreground",
+  went_live: "text-status-ontrack-foreground",
+  planned: "text-foreground",
+  due: "text-foreground",
+  overdue: "text-status-risk-foreground",
+  target_passed: "text-status-risk-foreground",
+  target_date: "text-foreground",
+  completion_not_recorded: "text-muted-foreground",
+  cancelled: "text-muted-foreground line-through",
+};
 
 const WEEKDAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+const MAX_CHIPS = 3;
 
-/** Month-grid date math, local to this presentation layer only — none of it
- * touches how an event is generated, just which day it's drawn on. */
-function monthStart(iso: string): string {
-  return `${iso.slice(0, 7)}-01`;
-}
-function addMonths(iso: string, n: number): string {
-  const d = new Date(`${monthStart(iso)}T12:00:00Z`);
-  d.setUTCMonth(d.getUTCMonth() + n);
-  return d.toISOString().slice(0, 10);
-}
-/** Monday = 0 .. Sunday = 6, so the grid can start on a Monday. */
-function isoWeekday(iso: string): number {
-  return (new Date(`${iso}T12:00:00Z`).getUTCDay() + 6) % 7;
-}
-function monthYearLabel(iso: string): string {
-  return new Date(`${iso}T12:00:00Z`).toLocaleDateString("en-US", {
+function monthLabel(iso: string): string {
+  return new Date(`${iso}T12:00:00Z`).toLocaleDateString("en-GB", {
     month: "long",
     year: "numeric",
     timeZone: "UTC",
   });
 }
-const MAX_VISIBLE_PER_DAY = 3;
 
-/**
- * The calendar: a real month grid of customer meetings, commitments and
- * target launches across the accounts in scope. Read from the same plans
- * the customer pages show, so a meeting moved on a plan moves here.
- * Navigating months only changes which date range the existing event list
- * is asked for — the same `collectEvents` this page always called, with no
- * change to what counts as an event or how one is dated.
- */
+function cellLabel(day: string, count: number, isToday: boolean): string {
+  const n = count === 0 ? "No events" : `${count} ${count === 1 ? "event" : "events"}`;
+  return `${dayLabel(day)}. ${n}${isToday ? ". Today" : ""}`;
+}
+
+/** The status as text and an icon, with its recorded detail beneath. Never colour alone. */
+function StatusTag({ status, detail }: { status: CalendarStatus; detail?: string | null }) {
+  const Icon = STATUS_ICON[status];
+  return (
+    <span className="flex flex-col gap-0.5">
+      <span
+        className={cn(
+          "inline-flex items-center gap-1.5 text-[13px] font-medium",
+          STATUS_TONE[status],
+        )}
+      >
+        <Icon className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+        {STATUS_LABEL[status]}
+      </span>
+      {detail ? <span className="text-[12px] text-muted-foreground">{detail}</span> : null}
+    </span>
+  );
+}
+
 function CalendarPage() {
   const { param } = useScope();
-  const { data } = useSuspenseQuery(homeQuery(param));
-  const queue = buildQueue(data.implementations, data.triage);
-  const rows = [...queue.act_now, ...queue.needs_attention, ...queue.moving];
-  const today = localIso();
+  const search = Route.useSearch();
+  const tests = search.tests === true;
+  const navigate = useNavigate({ from: Route.fullPath });
+  const setSearch = (patch: Record<string, unknown>) =>
+    navigate({ search: (prev: CalendarSearch) => ({ ...prev, ...patch }) });
 
-  const [viewedMonth, setViewedMonth] = useState(() => monthStart(today));
-  const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
-  const toggleExpanded = (day: string) =>
-    setExpanded((prev) => {
-      const next = new Set(prev);
-      if (next.has(day)) next.delete(day);
-      else next.add(day);
-      return next;
-    });
+  const { data } = useSuspenseQuery(calendarQuery(param, tests));
+  const today = data.today;
+  const events = data.events;
+  const byDay = useMemo(() => eventsByDay(events), [events]);
 
-  const gridStart = addDaysIso(viewedMonth, -isoWeekday(viewedMonth));
-  const nextMonth = addMonths(viewedMonth, 1);
-  const lastOfMonth = addDaysIso(nextMonth, -1);
-  const gridEnd = addDaysIso(lastOfMonth, 6 - isoWeekday(lastOfMonth));
+  const [viewedMonth, setViewedMonth] = useState(() => monthStartIso(today));
+  const [selectedDay, setSelectedDay] = useState(() => defaultSelectedDay(today, viewedMonth));
+  const [openKey, setOpenKey] = useState<string | null>(null);
+  const [focusDay, setFocusDay] = useState<string | null>(null);
+  const gridRef = useRef<HTMLDivElement>(null);
+  const detailsRef = useRef<HTMLElement>(null);
 
-  const events = collectEvents(rows, data.commitments, gridStart, gridEnd);
-  const eventsByDay = new Map<string, UpcomingEvent[]>();
-  for (const e of events) eventsByDay.set(e.date, [...(eventsByDay.get(e.date) ?? []), e]);
+  const weeks = useMemo(() => monthWeeks(viewedMonth), [viewedMonth]);
+  const dayEvents = byDay.get(selectedDay) ?? [];
+  const selected = openKey ? (events.find((e) => e.key === openKey) ?? null) : null;
 
-  const days: string[] = [];
-  for (let d = gridStart; d <= gridEnd; d = addDaysIso(d, 1)) days.push(d);
-  const weeks: string[][] = [];
-  for (let i = 0; i < days.length; i += 7) weeks.push(days.slice(i, i + 7));
+  const goToMonth = (month: string, day: string) => {
+    setViewedMonth(month);
+    setSelectedDay(day);
+    setOpenKey(null);
+  };
+
+  // Arrow keys move the selected day; the grid holds one tab stop, the selected day.
+  const onGridKey = (e: KeyboardEvent<HTMLDivElement>) => {
+    const step: Record<string, number> = {
+      ArrowLeft: -1,
+      ArrowRight: 1,
+      ArrowUp: -7,
+      ArrowDown: 7,
+    };
+    const delta = step[e.key];
+    if (delta === undefined) return;
+    e.preventDefault();
+    // Move from the day that has focus, so the key follows the cell the user is on.
+    const origin = (e.target as HTMLElement).closest<HTMLElement>("[data-day]")?.dataset["day"];
+    const next = addDaysIso(origin ?? selectedDay, delta);
+    if (next.slice(0, 7) !== viewedMonth.slice(0, 7)) setViewedMonth(monthStartIso(next));
+    setSelectedDay(next);
+    setFocusDay(next);
+  };
+
+  useEffect(() => {
+    if (!focusDay) return;
+    gridRef.current?.querySelector<HTMLButtonElement>(`[data-day="${focusDay}"]`)?.focus();
+    setFocusDay(null);
+  }, [focusDay, viewedMonth]);
+
+  useEffect(() => {
+    if (openKey) detailsRef.current?.focus();
+  }, [openKey]);
 
   return (
     <>
       <PageHeader
         title="Calendar"
-        description="Key dates and meetings across your accounts: the plan's calls, commitments due, target launches."
+        description={`Implementation dates across your accounts: what happened, what is happening and what is coming next. Read-only: change a date or a status in Current Implementation.${data.scope?.label ? ` Showing ${data.scope.label}.` : ""}`}
       />
       <PageBody className="space-y-4">
-        <div className="flex flex-wrap items-center gap-3 text-[11px] text-muted-foreground">
-          {(Object.keys(KIND) as Array<keyof typeof KIND>).map((k) => (
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-[12px] text-muted-foreground">
+          {(Object.keys(KIND_LABEL) as CalendarKind[]).map((k) => (
             <span key={k} className="inline-flex items-center gap-1.5">
-              <span className={cn("h-2 w-2 rounded-full", KIND[k].dot)} /> {KIND[k].label}
+              <KindMark kind={k} className="h-2 w-2" />
+              {KIND_LABEL[k]}
             </span>
           ))}
-          <span className="ml-auto">A planned call with no time is shown as its planned day.</span>
+          <span className="ml-auto">
+            <ShowTestsToggle
+              checked={tests}
+              onChange={(on) => setSearch({ tests: on ? true : undefined })}
+            />
+          </span>
         </div>
 
-        <div className="flex items-center justify-between">
-          <h2 className="text-[16px] font-semibold">{monthYearLabel(viewedMonth)}</h2>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-[16px] font-semibold">{monthLabel(viewedMonth)}</h2>
           <div className="flex items-center gap-1.5">
             <button
               type="button"
-              onClick={() => setViewedMonth((m) => addMonths(m, -1))}
+              onClick={() =>
+                goToMonth(
+                  addMonthsIso(viewedMonth, -1),
+                  defaultSelectedDay(today, addMonthsIso(viewedMonth, -1)),
+                )
+              }
               aria-label="Previous month"
               className="flex h-8 w-8 items-center justify-center rounded-md border border-border hover:bg-muted"
             >
-              <ChevronLeft className="h-4 w-4" />
+              <ChevronLeft className="h-4 w-4" aria-hidden="true" />
             </button>
             <button
               type="button"
-              onClick={() => setViewedMonth(monthStart(today))}
-              className="rounded-md border border-border px-2.5 py-1.5 text-[12px] font-medium hover:bg-muted"
+              onClick={() => goToMonth(monthStartIso(today), today)}
+              className="rounded-md border border-border px-2.5 py-1.5 text-[13px] font-medium hover:bg-muted"
             >
               Today
             </button>
             <button
               type="button"
-              onClick={() => setViewedMonth((m) => addMonths(m, 1))}
+              onClick={() =>
+                goToMonth(
+                  addMonthsIso(viewedMonth, 1),
+                  defaultSelectedDay(today, addMonthsIso(viewedMonth, 1)),
+                )
+              }
               aria-label="Next month"
               className="flex h-8 w-8 items-center justify-center rounded-md border border-border hover:bg-muted"
             >
-              <ChevronRight className="h-4 w-4" />
+              <ChevronRight className="h-4 w-4" aria-hidden="true" />
             </button>
           </div>
         </div>
 
-        <div className="overflow-hidden rounded-lg border border-border">
-          <div className="grid grid-cols-7 border-b border-border bg-muted/40">
-            {WEEKDAY_LABELS.map((label) => (
-              <div
-                key={label}
-                className="px-2 py-1.5 text-center text-[11px] font-semibold uppercase tracking-wide text-muted-foreground"
-              >
-                {label}
-              </div>
-            ))}
-          </div>
-          <div className="grid grid-cols-7">
-            {weeks.flatMap((week) =>
-              week.map((d) => {
-                const inMonth = d.slice(0, 7) === viewedMonth.slice(0, 7);
-                const isToday = d === today;
-                const dayEvents = eventsByDay.get(d) ?? [];
-                const isExpanded = expanded.has(d);
-                const visible = isExpanded ? dayEvents : dayEvents.slice(0, MAX_VISIBLE_PER_DAY);
-                const hiddenCount = dayEvents.length - visible.length;
-                return (
-                  <div
-                    key={d}
-                    className={cn(
-                      "min-h-[92px] border-b border-r border-border p-1.5 last:border-r-0",
-                      !inMonth && "bg-muted/20",
-                    )}
-                  >
-                    <span
+        {events.length === 0 ? (
+          <p className="rounded-md border border-dashed border-border px-4 py-6 text-center text-[13px] text-muted-foreground">
+            No implementation dates are recorded for the accounts in this scope yet.
+          </p>
+        ) : null}
+
+        <div className="overflow-x-auto rounded-lg border border-border">
+          <div className="sm:min-w-[640px]">
+            <div className="grid grid-cols-7 border-b border-border bg-muted/40">
+              {WEEKDAY_LABELS.map((label) => (
+                <div
+                  key={label}
+                  className="px-1 py-1.5 text-center text-[12px] font-semibold uppercase tracking-wide text-muted-foreground sm:px-2"
+                >
+                  <span className="sm:hidden">{label.slice(0, 1)}</span>
+                  <span className="hidden sm:inline">{label}</span>
+                </div>
+              ))}
+            </div>
+            <div
+              ref={gridRef}
+              role="group"
+              aria-label={`${monthLabel(viewedMonth)} calendar. Use the arrow keys to move between days.`}
+              onKeyDown={onGridKey}
+              className="grid grid-cols-7"
+            >
+              {weeks.flatMap((week) =>
+                week.map((d) => {
+                  const inMonth = d.slice(0, 7) === viewedMonth.slice(0, 7);
+                  const isToday = d === today;
+                  const isSelected = d === selectedDay;
+                  const items = byDay.get(d) ?? [];
+                  return (
+                    <button
+                      key={d}
+                      type="button"
+                      data-day={d}
+                      aria-pressed={isSelected}
+                      aria-current={isToday ? "date" : undefined}
+                      aria-label={cellLabel(d, items.length, isToday)}
+                      tabIndex={isSelected ? 0 : -1}
+                      onClick={() => {
+                        setSelectedDay(d);
+                        setOpenKey(null);
+                      }}
                       className={cn(
-                        "mb-1 inline-flex h-5 w-5 items-center justify-center rounded-full text-[12px]",
-                        isToday
-                          ? "bg-primary font-semibold text-primary-foreground"
-                          : inMonth
-                            ? "text-foreground"
-                            : "text-muted-foreground",
+                        "flex min-h-[56px] flex-col items-stretch border-b border-r border-border p-1 text-left last:border-r-0 hover:bg-muted/50 focus-visible:relative focus-visible:z-10 focus-visible:outline-2 focus-visible:outline-primary sm:min-h-[104px] sm:p-1.5",
+                        !inMonth && "bg-muted/20",
+                        isSelected && "bg-primary/5 ring-2 ring-inset ring-primary",
                       )}
                     >
-                      {Number(d.slice(8, 10))}
-                    </span>
-                    <ul className="space-y-0.5">
-                      {visible.map((e) => {
-                        const content = (
-                          <>
-                            <span
-                              className={cn("h-1.5 w-1.5 shrink-0 rounded-full", KIND[e.kind].dot)}
-                            />
-                            <span className="truncate">
-                              {e.account} · {shortEventLabel(e)}
-                            </span>
-                          </>
-                        );
-                        return (
-                          <li key={e.key}>
-                            {"customerId" in e.link ? (
-                              <Link
-                                to="/customers/$customerId"
-                                params={{ customerId: e.link.customerId }}
-                                search={
-                                  e.link.implementationId ? { impl: e.link.implementationId } : {}
-                                }
-                                className="flex items-center gap-1 rounded px-1 py-0.5 text-[11px] hover:bg-muted"
-                              >
-                                {content}
-                              </Link>
-                            ) : (
-                              <span className="flex items-center gap-1 px-1 py-0.5 text-[11px] text-muted-foreground">
-                                {content}
-                              </span>
+                      <span
+                        className={cn(
+                          "mb-1 inline-flex h-6 min-w-6 items-center justify-center self-start rounded-full px-1 text-[13px]",
+                          isToday
+                            ? "bg-primary font-semibold text-primary-foreground"
+                            : inMonth
+                              ? "text-foreground"
+                              : "text-muted-foreground",
+                        )}
+                      >
+                        {Number(d.slice(8, 10))}
+                      </span>
+                      <span className="flex flex-wrap gap-1 sm:hidden" aria-hidden="true">
+                        {items.slice(0, MAX_CHIPS).map((e) => (
+                          <KindMark key={e.key} kind={e.kind} className="h-1.5 w-1.5" />
+                        ))}
+                        {items.length > MAX_CHIPS ? (
+                          <span className="text-[10px] leading-none text-primary">
+                            +{items.length - MAX_CHIPS}
+                          </span>
+                        ) : null}
+                      </span>
+                      <span className="hidden space-y-0.5 sm:block">
+                        {items.slice(0, MAX_CHIPS).map((e) => (
+                          <span
+                            key={e.key}
+                            className={cn(
+                              "flex items-center gap-1 truncate text-[12px] leading-5",
+                              e.status === "cancelled" && "line-through text-muted-foreground",
                             )}
-                          </li>
-                        );
-                      })}
-                    </ul>
-                    {hiddenCount > 0 ? (
-                      <button
-                        type="button"
-                        onClick={() => toggleExpanded(d)}
-                        className="mt-0.5 px-1 text-[11px] text-primary hover:underline"
-                      >
-                        +{hiddenCount} more
-                      </button>
-                    ) : isExpanded && dayEvents.length > MAX_VISIBLE_PER_DAY ? (
-                      <button
-                        type="button"
-                        onClick={() => toggleExpanded(d)}
-                        className="mt-0.5 px-1 text-[11px] text-muted-foreground hover:underline"
-                      >
-                        Show less
-                      </button>
-                    ) : null}
-                  </div>
-                );
-              }),
-            )}
+                            title={`${KIND_LABEL[e.kind]}: ${e.customerName} · ${e.title}`}
+                          >
+                            <KindMark kind={e.kind} className="h-1.5 w-1.5" />
+                            <span className="sr-only">{KIND_LABEL[e.kind]}: </span>
+                            <span className="truncate">
+                              {e.customerName} · {e.title}
+                            </span>
+                          </span>
+                        ))}
+                        {items.length > MAX_CHIPS ? (
+                          <span className="block px-1 text-[12px] text-primary">
+                            +{items.length - MAX_CHIPS} more
+                          </span>
+                        ) : null}
+                      </span>
+                    </button>
+                  );
+                }),
+              )}
+            </div>
           </div>
         </div>
+
+        <section
+          aria-labelledby="calendar-agenda-heading"
+          className="scroll-mt-72 space-y-2 sm:scroll-mt-40"
+        >
+          <h3 id="calendar-agenda-heading" className="text-[15px] font-semibold">
+            {dayLabel(selectedDay)}
+            {selectedDay === today ? (
+              <span className="ml-2 rounded-full bg-primary px-2 py-0.5 align-middle text-[11px] font-semibold text-primary-foreground">
+                Today
+              </span>
+            ) : null}
+          </h3>
+          {dayEvents.length === 0 ? (
+            <p className="text-[13px] text-muted-foreground">Nothing recorded for this day.</p>
+          ) : (
+            <ul className="divide-y divide-border rounded-lg border border-border">
+              {dayEvents.map((e) => (
+                <li key={e.key}>
+                  <button
+                    type="button"
+                    aria-pressed={openKey === e.key}
+                    onClick={() => setOpenKey(e.key)}
+                    className={cn(
+                      "flex w-full flex-col gap-1 px-3 py-2.5 text-left hover:bg-muted/50 sm:grid sm:grid-cols-[120px_1fr_auto] sm:items-start sm:gap-3",
+                      openKey === e.key && "bg-primary/5",
+                    )}
+                  >
+                    <span className="text-[13px] text-muted-foreground">
+                      {e.time ?? "No time recorded"}
+                    </span>
+                    <span className="min-w-0">
+                      <span className="flex items-center gap-1.5 text-[12px] text-muted-foreground">
+                        <KindMark kind={e.kind} className="h-1.5 w-1.5" />
+                        {KIND_LABEL[e.kind]}
+                      </span>
+                      <span className="block break-words text-[14px] font-medium">{e.title}</span>
+                      <span className="block break-words text-[13px] text-muted-foreground">
+                        {e.customerName} · {e.implementationName}
+                      </span>
+                    </span>
+                    <StatusTag status={e.status} />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+
+        {selected ? (
+          <EventDetails event={selected} detailsRef={detailsRef} onClose={() => setOpenKey(null)} />
+        ) : null}
       </PageBody>
     </>
+  );
+}
+
+function EventDetails({
+  event,
+  detailsRef,
+  onClose,
+}: {
+  event: CalendarEvent;
+  detailsRef: RefObject<HTMLElement | null>;
+  onClose: () => void;
+}) {
+  const link = customerLinkFor(event);
+  return (
+    <section
+      ref={detailsRef}
+      tabIndex={-1}
+      aria-labelledby="calendar-event-title"
+      className="scroll-mt-72 space-y-4 rounded-lg border border-border bg-card p-4 outline-none sm:scroll-mt-40"
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-[12px] font-medium uppercase tracking-wide text-muted-foreground">
+            {KIND_LABEL[event.kind]}
+          </p>
+          <h3 id="calendar-event-title" className="text-[16px] font-semibold">
+            {event.title}
+          </h3>
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          className="rounded-md border border-border px-2.5 py-1 text-[13px] hover:bg-muted"
+        >
+          Close details
+        </button>
+      </div>
+
+      <StatusTag status={event.status} detail={event.statusDetail} />
+
+      <dl className="grid grid-cols-1 gap-x-4 gap-y-1 text-[13px] sm:grid-cols-[140px_1fr] sm:gap-y-2">
+        {detailRows(event).map((row) => (
+          <div key={row.label} className="contents">
+            <dt className="text-muted-foreground">{row.label}</dt>
+            <dd className="min-w-0 break-words">{row.value}</dd>
+          </div>
+        ))}
+      </dl>
+
+      {event.facts.length ? (
+        <ul className="list-disc space-y-1 pl-5 text-[13px] text-muted-foreground">
+          {event.facts.map((f) => (
+            <li key={f}>{f}</li>
+          ))}
+        </ul>
+      ) : null}
+
+      {event.missing.length ? (
+        <p className="text-[13px] text-muted-foreground">
+          <span className="font-medium text-foreground">Not recorded: </span>
+          {event.missing.join("; ")}.
+        </p>
+      ) : null}
+
+      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-3">
+        <p className="text-[12px] text-muted-foreground">
+          To change this date or status, use Current Implementation.
+        </p>
+        {link ? (
+          <Link
+            to="/customers/$customerId"
+            params={{ customerId: link.customerId }}
+            search={link.implementationId ? { impl: link.implementationId } : {}}
+            className="rounded-md border border-border px-3 py-1.5 text-[13px] font-medium hover:bg-muted"
+          >
+            Open Customer 360
+          </Link>
+        ) : null}
+      </div>
+    </section>
   );
 }

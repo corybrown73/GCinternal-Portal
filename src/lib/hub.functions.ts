@@ -124,6 +124,27 @@ export const getHome = createServerFn({ method: "GET" })
     };
   });
 
+/**
+ * The Calendar's events: read-only, from the same scope and test-account rule
+ * Home uses. Getting a day's events never changes a record.
+ */
+export const getCalendar = createServerFn({ method: "GET" })
+  .middleware([requireInternalAuth])
+  .inputValidator(scopeInput)
+  .handler(async ({ data, context }) => {
+    const { loadCalendar } = await import("./calendar.server");
+    const { resolveScope } = await import("./ownership.server");
+    const { describeScope } = await import("./ownership");
+    const resolved = await resolveScope(context.profile.id, data?.scope ?? null);
+    const calendar = await loadCalendar(resolved, { includeTests: data?.includeTests === true });
+    return {
+      ...calendar,
+      scope: {
+        label: describeScope(resolved.scope, resolved.viewer, resolved.personName),
+      },
+    };
+  });
+
 export const getLeadership = createServerFn({ method: "GET" })
   .middleware([requireInternalAuth])
   .inputValidator(scopeInput)
