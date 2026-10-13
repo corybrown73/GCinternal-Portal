@@ -26,6 +26,11 @@ export type DealFacts = {
   owner_name: string | null;
   /** The pre-kickoff booking task (all core meetings, or the kickoff) is done. */
   core_booked: boolean;
+  /**
+   * The deal's implementation runs the generic partner journey. Its kickoff
+   * warning is a standard rule, so it does not apply; the other signals do.
+   */
+  partner?: boolean;
   /** The checklist's next task, when there is one. */
   next_step: string | null;
   /** Plan calls past their date and not ticked, on Onboarding. */
@@ -179,7 +184,7 @@ export function needsAction(deal: DealFacts | null | undefined): ActionReason[] 
     });
   }
 
-  if (deal.stage === "onboarding_kickoff" && !deal.core_booked) {
+  if (deal.stage === "onboarding_kickoff" && !deal.core_booked && !deal.partner) {
     out.push({
       bucket: "needs_attention",
       rank: 3.3,

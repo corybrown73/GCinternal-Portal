@@ -1410,6 +1410,23 @@ export function nudgesFor(args: {
       line: `${args.name} has been in ${where} for ${args.businessDaysInStage} business days${next ? `. Next: ${next}.` : "."}`,
     });
   }
+  out.push(...overdueNudges({ name: args.name, visit, overdueCalls: args.overdueCalls }));
+  return out;
+}
+
+/**
+ * The overdue rule, shared by the standard checklist and a partner's own
+ * milestones and work items: an item two business days late or more, to its
+ * owner, once per visit to the stage.
+ */
+export function overdueNudges(args: {
+  name: string;
+  visit: string;
+  overdueCalls?:
+    Array<{ key: string; label: string; date: string; businessDaysLate: number }> | undefined;
+}): Nudge[] {
+  const out: Nudge[] = [];
+  const visit = args.visit;
   for (const c of args.overdueCalls ?? []) {
     if (c.businessDaysLate < 2) continue;
     out.push({
