@@ -35,6 +35,8 @@ export type PartnerWorkItemRow = {
   status: string;
   is_gate: boolean;
   due_at: string | null;
+  /** The completion stamp the status writer sets when a criterion is done. */
+  completed_at?: string | null;
 };
 
 export type PartnerMilestoneRow = {
@@ -71,7 +73,22 @@ export type PartnerWorkItem = {
   status: string;
   isGate: boolean;
   dueAt: string | null;
+  /**
+   * A gate criterion is verified only when it is done AND carries its
+   * completion stamp: the same rule the database uses to satisfy a gate
+   * (partner_gate_outstanding). A done criterion without a stamp is not verified.
+   */
+  verified: boolean;
 };
+
+/** The verification rule for a gate criterion, the one the database enforces. */
+export function gateVerified(w: {
+  isGate: boolean;
+  status: string;
+  completedAt: string | null;
+}): boolean {
+  return w.isGate && w.status === "done" && w.completedAt !== null;
+}
 
 export type PartnerStageProgress = {
   key: PartnerStageKey;
@@ -193,6 +210,11 @@ export function partnerProgress(input: PartnerProgressInput): PartnerProgress {
         status: w.status,
         isGate: w.is_gate,
         dueAt: w.due_at,
+        verified: gateVerified({
+          isGate: w.is_gate,
+          status: w.status,
+          completedAt: w.completed_at ?? null,
+        }),
       }));
     const customerTasks = items
       .filter((w) => w.party === "customer" && w.visibility === "shared" && w.status !== "skipped")

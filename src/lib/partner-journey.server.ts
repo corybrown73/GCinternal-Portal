@@ -41,7 +41,7 @@ export async function loadPartnerProgress(
       .eq("implementation_id", impl.id),
     db()
       .from("work_items")
-      .select("id,stage_instance_id,title,party,visibility,status,is_gate,due_at")
+      .select("id,stage_instance_id,title,party,visibility,status,is_gate,due_at,completed_at")
       .eq("implementation_id", impl.id),
     impl.deal_id
       ? db()
@@ -82,6 +82,7 @@ export async function loadPartnerProgress(
       status: w.status,
       is_gate: w.is_gate,
       due_at: w.due_at,
+      completed_at: w.completed_at ?? null,
     })),
   });
 }

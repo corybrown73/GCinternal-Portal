@@ -17,6 +17,12 @@ export type GateItem = {
   party: string;
   owner_name?: string | null;
   due_at?: string | null;
+  /**
+   * Set only where the record can prove it: a partner gate criterion that is
+   * done and stamped. Absent (not false) everywhere else, so a box ticked by
+   * hand is never labelled verified.
+   */
+  verified?: boolean;
 };
 
 export type StageGateStatus = {
