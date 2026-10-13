@@ -225,6 +225,12 @@ async function viewFor(
     deal.customer_id ? String(deal.customer_id) : null,
   );
   const railStatuses = await railStatusesForDeal(String(deal.id));
+  const partnerProgress = await (
+    await import("./partner-journey.server")
+  ).loadPartnerProgressForDeal(String(deal.id));
+  const partner = partnerProgress
+    ? (await import("./partner-journey")).partnerDashboardView(partnerProgress)
+    : null;
   const focus = implementationFocusView(intake);
   const focusFallback = implementationFocusFallbackView(
     (await import("./implementation-focus")).proposeImplementationFocus(intake),
@@ -314,16 +320,21 @@ async function viewFor(
     implementationFocusFallback: focusFallback,
     customerScope: { state: scope.state, items: scope.state === "empty" ? [] : scope.items },
     intake: (await import("./sales-handoff")).customerPrompt(readIntake(deal.intake)),
-    journey: (await import("./welcome-journey")).customerJourney({
-      stage: deal.stage ?? null,
-      intake: readIntake(deal.intake),
-      timeline: input.timeline,
-      homeworkDone,
-      parkingLot: lot,
-      leadName,
-      stageHistory,
-      railStatuses,
-    }),
+    // A partner deal runs its own journey: the six-stage one (read from the deal
+    // stage) is left off, and the partner dashboard is read from its records instead.
+    journey: partner
+      ? null
+      : (await import("./welcome-journey")).customerJourney({
+          stage: deal.stage ?? null,
+          intake: readIntake(deal.intake),
+          timeline: input.timeline,
+          homeworkDone,
+          parkingLot: lot,
+          leadName,
+          stageHistory,
+          railStatuses,
+        }),
+    partner,
   };
 }
 

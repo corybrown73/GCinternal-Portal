@@ -24,6 +24,7 @@ import {
 import { userMessage } from "@/lib/errors";
 import { cn } from "@/lib/utils";
 import { ask } from "@/components/ui/ask";
+import type { PartnerMoveView } from "@/components/stage-advance-write";
 
 /**
  * The three things that have to be true before this project moves on.
@@ -45,6 +46,7 @@ export function StageGatesPanel({
   currentStage,
   stageGateMode,
   items,
+  partner,
 }: {
   customerId: string;
   implementationId: string;
@@ -52,15 +54,22 @@ export function StageGatesPanel({
   stageGateMode: string | null;
   /** The work items belonging to the CURRENT stage only. */
   items: GateItem[];
+  /** A Partner Implementation's move, from the partner order. Replaces the lifecycle step. */
+  partner?: PartnerMoveView | null;
 }) {
   const status = stageGateStatus(items);
-  const next = nextLifecycleStage(currentStage);
+  // A partner implementation moves along its own order; the house lifecycle has none of its stages.
+  const next: string | null = partner
+    ? (partner.next?.key ?? null)
+    : nextLifecycleStage(currentStage);
+  const nextName = partner ? (partner.next?.label ?? "") : stageLabel(next);
   const queryClient = useQueryClient();
 
   const tick = useServerFn(setTaskStatus);
   const advance = useServerFn(advanceImplementationStage);
 
   const refresh = () => {
+    void queryClient.invalidateQueries({ queryKey: ["partner-progress", implementationId] });
     void queryClient.invalidateQueries({ queryKey: ["plan", implementationId] });
     void queryClient.invalidateQueries({ queryKey: ["customer360", customerId] });
   };
@@ -197,9 +206,9 @@ export function StageGatesPanel({
               // reason is what turns "clicked through a dialog" into
               // "somebody said why", and it is required on a blocking gate.
               const answer = await ask({
-                title: `Move to ${stageLabel(next)} anyway?`,
-                body: overridePrompt(status, stageLabel(next)),
-                confirmLabel: `Move to ${stageLabel(next)}`,
+                title: `Move to ${nextName} anyway?`,
+                body: overridePrompt(status, nextName),
+                confirmLabel: `Move to ${nextName}`,
                 ...(mustExplain
                   ? {
                       prompt: {
@@ -217,14 +226,19 @@ export function StageGatesPanel({
             // paragraph somewhere else on the page.
             title={
               outcome === "clear"
-                ? `Move to ${stageLabel(next)}`
+                ? `Move to ${nextName}`
                 : `${gateSummary(status)} — you will be asked to confirm${
                     mustExplain ? " and say why" : ""
                   }`
             }
           >
-            {advanceLabel(outcome, stageLabel(next))} <ArrowRight />
+            {advanceLabel(outcome, nextName)} <ArrowRight />
           </Button>
+        ) : partner?.handoff ? (
+          <p className="text-[11px] text-muted-foreground">
+            Partner Setup ends with the handoff to the GoCanvas implementation team, from the
+            handoff panel above.
+          </p>
         ) : null}
       </div>
 

@@ -22,8 +22,15 @@ const h = vi.hoisted(() => {
     select: () => Query;
     in: () => Query;
     eq: (col: string, val: unknown) => Query;
+    is: (col: string, val: unknown) => Query;
+    order: () => Query;
+    limit: () => Query;
     update: (patch: Record<string, unknown>) => Query;
     maybeSingle: () => Promise<{ data: Record<string, unknown> | null; error: null }>;
+    then: (
+      resolve: (v: { data: unknown[]; error: null }) => unknown,
+      reject?: (e: unknown) => unknown,
+    ) => Promise<unknown>;
   };
   const builder = (table: string): Query => {
     let rows = state.tables[table] ?? [];
@@ -35,11 +42,19 @@ const h = vi.hoisted(() => {
         rows = rows.filter((r) => r[col] === val);
         return api;
       },
+      is: (col, val) => {
+        rows = rows.filter((r) => (r[col] ?? null) === val);
+        return api;
+      },
+      order: () => api,
+      limit: () => api,
       update: (patch) => {
         state.updates.push({ table, patch });
         return api;
       },
       maybeSingle: async () => ({ data: rows[0] ?? null, error: null }),
+      // A filtered list read is awaited directly, as the partner progress loader does.
+      then: (resolve, reject) => Promise.resolve({ data: rows, error: null }).then(resolve, reject),
     };
     return api;
   };
@@ -206,5 +221,114 @@ describe("the TIS preview of the customer's dashboard", () => {
     const customer = await openWelcome(TOKEN);
     expect(customer?.dealId).toBe("");
     expect(JSON.stringify(customer)).not.toContain("deal-1");
+  });
+});
+
+describe("a partner deal's customer link", () => {
+  beforeEach(() => {
+    seed();
+    h.state.tables["implementations"] = [
+      {
+        id: "impl-p",
+        deal_id: "deal-1",
+        customer_id: "cust-1",
+        name: "Partner implementation",
+        journey_type: "partner_implementation",
+        partner_key: "field_fusion_iq",
+        current_stage: "partner_setup",
+        superseded_by_implementation_id: null,
+        created_at: "2026-03-01T00:00:00Z",
+      },
+    ];
+    h.state.tables["stage_instances"] = [
+      ["closed_won_planning", "done", "advisory"],
+      ["partner_setup", "active", "blocking"],
+      ["form_finalisation", "pending", "advisory"],
+      ["pilot", "pending", "advisory"],
+      ["trial_run", "pending", "advisory"],
+      ["roll_out", "pending", "blocking"],
+    ].map(([stage_key, status, gate_mode], i) => ({
+      id: `si-${i}`,
+      implementation_id: "impl-p",
+      stage_key,
+      status,
+      gate_mode,
+    }));
+    h.state.tables["work_items"] = [
+      {
+        id: "wi-connection",
+        implementation_id: "impl-p",
+        stage_instance_id: "si-1",
+        title: "Connection verified",
+        party: "customer",
+        visibility: "shared",
+        status: "not_started",
+        is_gate: true,
+        due_at: null,
+      },
+      {
+        id: "wi-internal",
+        implementation_id: "impl-p",
+        stage_instance_id: "si-1",
+        title: "Partner-only checklist step",
+        party: "partner",
+        visibility: "internal",
+        status: "not_started",
+        is_gate: true,
+        due_at: null,
+      },
+    ];
+    h.state.tables["milestones"] = [];
+    h.state.tables["implementation_stage_history"] = [];
+    h.state.tables["portal_stage_transitions"] = [
+      { account_id: "deal-1", to_stage: "closed_won", occurred_at: "2026-03-01T09:00:00Z" },
+    ];
+  });
+
+  it("gets the partner dashboard, and no six-stage journey is forced on it", async () => {
+    const view = await openWelcome(TOKEN);
+    expect(view?.journey).toBeNull();
+    expect(view?.partner?.stages.map((s) => s.key)).toEqual([
+      "partner_setup",
+      "form_finalisation",
+      "pilot",
+      "trial_run",
+      "roll_out",
+    ]);
+    expect(view?.partner?.currentLabel).toBe("Partner Setup & Connection");
+  });
+
+  it("shows the customer only the customer's shared action, never the partner-only item", async () => {
+    const view = await openWelcome(TOKEN);
+    expect(view?.partner?.actions.map((a) => a.title)).toEqual(["Connection verified"]);
+    expect(JSON.stringify(view?.partner)).not.toContain("Partner-only checklist step");
+  });
+
+  it("leaves a legacy Field Fusion deal on its own journey, with no partner view", async () => {
+    // Legacy Field Fusion keeps the standard journey type and no partner key; its
+    // intake path is what identifies it, and its six-stage journey is unchanged.
+    h.state.tables["implementations"] = [
+      {
+        id: "impl-ff",
+        deal_id: "deal-1",
+        customer_id: "cust-1",
+        name: "Legacy Field Fusion",
+        journey_type: "standard",
+        partner_key: null,
+        current_stage: "get_it_working",
+        superseded_by_implementation_id: null,
+        created_at: "2026-03-01T00:00:00Z",
+      },
+    ];
+    const view = await openWelcome(TOKEN);
+    expect(view?.partner).toBeNull();
+    expect(view?.journey).not.toBeNull();
+  });
+
+  it("leaves a standard deal's view unchanged: no partner view, its journey stays", async () => {
+    h.state.tables["implementations"] = [];
+    const view = await openWelcome(TOKEN);
+    expect(view?.partner).toBeNull();
+    expect(view?.journey).not.toBeNull();
   });
 });

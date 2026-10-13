@@ -143,6 +143,50 @@ describe("the Implementation Ready handoff", () => {
     expect(result).toMatchObject({ ok: true, stage: "form_finalisation", overridden: false });
   });
 
+  it("a handoff takes the team member the person picked, and reports that someone was named", async () => {
+    vi.mocked(chooseAssignee).mockResolvedValue(chosen() as never);
+    const { client, rpc } = fakeClient(() => ({
+      data: { stage: "form_finalisation", assigned: true },
+      error: null,
+    }));
+    const result = await advancePartnerFor(client, {
+      implementationId: IMPL,
+      dealId: DEAL,
+      currentStage: "partner_setup",
+      toStage: "form_finalisation",
+      enteredBy: null,
+      actorProfile: null,
+      notes: null,
+      appUrl: APP,
+      teamMemberId: "tm-picked",
+    });
+    expect(vi.mocked(chooseAssignee)).toHaveBeenCalledWith({
+      dealId: DEAL,
+      teamMemberId: "tm-picked",
+    });
+    expect(rpc).toHaveBeenCalledTimes(1);
+    expect(result).toMatchObject({ ok: true, stage: "form_finalisation", assigned: true });
+  });
+
+  it("a handoff with no one picked lets the rule choose, as before", async () => {
+    vi.mocked(chooseAssignee).mockResolvedValue(chosen() as never);
+    const { client } = fakeClient(() => ({
+      data: { stage: "form_finalisation", assigned: true },
+      error: null,
+    }));
+    await advancePartnerFor(client, {
+      implementationId: IMPL,
+      dealId: DEAL,
+      currentStage: "partner_setup",
+      toStage: "form_finalisation",
+      enteredBy: null,
+      actorProfile: null,
+      notes: null,
+      appUrl: APP,
+    });
+    expect(vi.mocked(chooseAssignee)).toHaveBeenCalledWith({ dealId: DEAL, teamMemberId: null });
+  });
+
   it("a handoff with no one to pick (the account is open to claim) queues one notice per pool member and assigns no one", async () => {
     vi.mocked(chooseAssignee).mockResolvedValue({
       kind: "claim",

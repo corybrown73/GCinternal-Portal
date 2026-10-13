@@ -2325,6 +2325,47 @@ async function syncStageInstances(
  * is closed at the same instant the destination row is opened, and
  * implementations.stage_entered_at matches that instant.
  */
+/**
+ * The Implementation Ready handoff for a Partner Implementation: Partner Setup
+ * to Form Finalisation. It runs the same transactional path as any partner move
+ * (advancePartnerFor), with the team member the person picked, if they picked
+ * one. Only a partner implementation at Partner Setup can be handed off here.
+ */
+export async function handOffPartner(args: {
+  implementationId: string;
+  teamMemberId: string | null;
+  enteredBy: string | null;
+  actorProfileId: string | null;
+}) {
+  const { data: impl, error } = await db()
+    .from("implementations")
+    .select("id,current_stage,journey_type,partner_key,deal_id")
+    .eq("id", args.implementationId)
+    .maybeSingle();
+  if (error) throw new Error(`Could not read the implementation: ${error.message}`);
+  if (!impl || !isPartnerJourney(impl)) {
+    throw new Error("This implementation does not run the partner journey.");
+  }
+  if (impl.current_stage !== "partner_setup") {
+    throw new Error(
+      "The handoff is made from Partner Setup & Connection; this implementation is at a different stage.",
+    );
+  }
+  const { advancePartnerFor } = await import("./partner-progression.server");
+  const { appUrl } = await import("./app-url");
+  return advancePartnerFor(db(), {
+    implementationId: args.implementationId,
+    dealId: (impl.deal_id as string | null) ?? null,
+    currentStage: impl.current_stage as string,
+    toStage: "form_finalisation",
+    enteredBy: args.enteredBy,
+    actorProfile: args.actorProfileId,
+    notes: null,
+    appUrl: appUrl(),
+    teamMemberId: args.teamMemberId,
+  });
+}
+
 export async function advanceStage(args: {
   implementationId: string;
   toStage: string;

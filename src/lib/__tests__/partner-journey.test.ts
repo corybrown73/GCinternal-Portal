@@ -2,9 +2,20 @@ import { describe, expect, it } from "vitest";
 import { isPartnerJourney } from "../partner-implementation";
 import {
   customerPartnerStages,
+  partnerDashboardView,
   partnerProgress,
+  partnerStepperStages,
+  partnerWorkspace,
+  TO_BE_CONFIRMED,
   type PartnerProgressInput,
 } from "../partner-journey";
+import {
+  partnerAttentionItems,
+  partnerBlockerItems,
+  partnerDashboardHeader,
+} from "../customer-dashboard";
+
+type Item = PartnerProgressInput["workItems"][number];
 
 /** A generic partner implementation, partway through partner setup. */
 function midSetup(overrides: Partial<PartnerProgressInput> = {}): PartnerProgressInput {
@@ -16,12 +27,12 @@ function midSetup(overrides: Partial<PartnerProgressInput> = {}): PartnerProgres
       { to_stage: "closed_won", occurred_at: "2026-03-01T09:00:00Z" },
     ],
     stageInstances: [
-      { stage_key: "closed_won_planning", status: "done" },
-      { stage_key: "partner_setup", status: "active" },
-      { stage_key: "form_finalisation", status: "pending" },
-      { stage_key: "pilot", status: "pending" },
-      { stage_key: "trial_run", status: "pending" },
-      { stage_key: "roll_out", status: "pending" },
+      { stage_key: "closed_won_planning", status: "done", gate_mode: "advisory" },
+      { stage_key: "partner_setup", status: "active", gate_mode: "blocking" },
+      { stage_key: "form_finalisation", status: "pending", gate_mode: "advisory" },
+      { stage_key: "pilot", status: "pending", gate_mode: "advisory" },
+      { stage_key: "trial_run", status: "pending", gate_mode: "advisory" },
+      { stage_key: "roll_out", status: "pending", gate_mode: "blocking" },
     ],
     stageHistory: [
       { stage: "closed_won_planning", exited_at: "2026-03-10T16:00:00Z" },
@@ -29,6 +40,7 @@ function midSetup(overrides: Partial<PartnerProgressInput> = {}): PartnerProgres
     ],
     milestones: [
       {
+        name: "Implementation Ready",
         stage: "partner_setup",
         status: "not_started",
         target_date: "2026-05-01",
@@ -36,29 +48,47 @@ function midSetup(overrides: Partial<PartnerProgressInput> = {}): PartnerProgres
       },
     ],
     workItems: [
-      {
+      item({
+        id: "w-solution",
         stage_key: "partner_setup",
         title: "Solution configured",
         party: "partner",
         visibility: "internal",
         status: "done",
-      },
-      {
+        is_gate: true,
+      }),
+      item({
+        id: "w-connection",
         stage_key: "partner_setup",
         title: "Connection verified",
         party: "customer",
         visibility: "shared",
         status: "not_started",
-      },
-      {
+        is_gate: true,
+      }),
+      item({
+        id: "w-ready",
         stage_key: "partner_setup",
         title: "Partner lead confirms readiness",
         party: "internal",
         visibility: "internal",
         status: "not_started",
-      },
+        is_gate: true,
+      }),
     ],
     ...overrides,
+  };
+}
+
+function item(over: Partial<Item> & Pick<Item, "id" | "title">): Item {
+  return {
+    stage_key: null,
+    party: "internal",
+    visibility: "internal",
+    status: "not_started",
+    is_gate: false,
+    due_at: null,
+    ...over,
   };
 }
 
@@ -124,17 +154,29 @@ describe("partnerProgress — generic partner implementation", () => {
       midSetup({
         workItems: [
           ...midSetup().workItems,
-          {
+          item({
+            id: "w-old",
             stage_key: "partner_setup",
             title: "Old customer step",
             party: "customer",
             visibility: "shared",
             status: "skipped",
-          },
+          }),
         ],
       }),
     ).stages.find((s) => s.key === "partner_setup")!;
-    expect(setup.customerTasks).toEqual([{ title: "Connection verified", done: false }]);
+    expect(setup.customerTasks).toEqual([
+      { id: "w-connection", title: "Connection verified", done: false, blocked: false },
+    ]);
+  });
+
+  it("keeps every work item for the TIS, with its party, gate flag and status", () => {
+    const setup = partnerProgress(midSetup()).stages.find((s) => s.key === "partner_setup")!;
+    expect(setup.items.map((i) => [i.id, i.party, i.isGate])).toEqual([
+      ["w-solution", "partner", true],
+      ["w-connection", "customer", true],
+      ["w-ready", "internal", true],
+    ]);
   });
 });
 
@@ -164,12 +206,12 @@ describe("customerPartnerStages", () => {
         midSetup({
           currentStage: "trial_run",
           stageInstances: [
-            { stage_key: "closed_won_planning", status: "done" },
-            { stage_key: "partner_setup", status: "done" },
-            { stage_key: "form_finalisation", status: "done" },
-            { stage_key: "pilot", status: "pending" },
-            { stage_key: "trial_run", status: "active" },
-            { stage_key: "roll_out", status: "pending" },
+            { stage_key: "closed_won_planning", status: "done", gate_mode: "advisory" },
+            { stage_key: "partner_setup", status: "done", gate_mode: "blocking" },
+            { stage_key: "form_finalisation", status: "done", gate_mode: "advisory" },
+            { stage_key: "pilot", status: "pending", gate_mode: "advisory" },
+            { stage_key: "trial_run", status: "active", gate_mode: "advisory" },
+            { stage_key: "roll_out", status: "pending", gate_mode: "blocking" },
           ],
         }),
       ),
@@ -184,56 +226,202 @@ describe("customerPartnerStages", () => {
   });
 });
 
-describe("partnerProgress — graduation", () => {
-  const graduated: PartnerProgressInput = {
-    currentStage: "roll_out",
-    dealStage: "onboarding_complete",
-    dealTransitions: [
-      { to_stage: "closed_won", occurred_at: "2026-03-01T09:00:00Z" },
-      { to_stage: "onboarding_complete", occurred_at: "2026-09-30T12:00:00Z" },
-    ],
-    stageInstances: [
-      { stage_key: "closed_won_planning", status: "done" },
-      { stage_key: "partner_setup", status: "done" },
-      { stage_key: "form_finalisation", status: "done" },
-      { stage_key: "pilot", status: "done" },
-      { stage_key: "trial_run", status: "done" },
-      { stage_key: "roll_out", status: "done" },
-    ],
-    stageHistory: [{ stage: "roll_out", exited_at: null }],
-    milestones: [
-      {
-        stage: "roll_out",
-        status: "completed",
-        target_date: null,
-        completed_date: "2026-09-30",
-      },
-    ],
-    workItems: [],
-  };
-
-  it("keeps Roll Out & Graduation completed, dated from its completion", () => {
-    const roll = partnerProgress(graduated).stages.find((s) => s.key === "roll_out")!;
-    expect(roll.status).toBe("completed");
-    expect(roll.completedDate).toBe("2026-09-30");
+describe("partnerStepperStages — the generic stepper's partner input", () => {
+  it("draws all seven stages, with the actual stage current and the passed stages checked", () => {
+    const stages = partnerStepperStages(partnerProgress(midSetup()));
+    expect(stages).toHaveLength(7);
+    expect(stages.find((s) => s.isCurrent)!.key).toBe("partner_setup");
+    expect(stages.filter((s) => s.passed).map((s) => s.key)).toEqual([
+      "pre_sale_poc",
+      "closed_won_planning",
+    ]);
   });
 
-  it("reads the same on every read: a refresh does not change a graduated journey", () => {
-    expect(partnerProgress(graduated)).toEqual(partnerProgress(graduated));
-    const stages = customerPartnerStages(partnerProgress(graduated));
-    expect(stages.every((s) => s.status === "completed")).toBe(true);
-  });
-
-  it("would show it as current if its stage were reset to active (what the resync rule prevents)", () => {
-    // Negative control for the partner-aware resync (migration 0084): a done
-    // current stage that is reset to active would re-open the journey.
-    const reset = partnerProgress({
-      ...graduated,
-      stageInstances: graduated.stageInstances.map((s) =>
-        s.stage_key === "roll_out" ? { ...s, status: "active" } : s,
-      ),
+  it("dates completed stages from their completion, and open stages from their target", () => {
+    const stages = partnerStepperStages(partnerProgress(midSetup()));
+    expect(stages.find((s) => s.key === "closed_won_planning")!.date).toEqual({
+      label: "Completed",
+      text: "2026-03-10",
     });
-    expect(reset.stages.find((s) => s.key === "roll_out")!.status).toBe("current");
+    expect(stages.find((s) => s.key === "partner_setup")!.date).toEqual({
+      label: "Target",
+      text: "2026-05-01",
+    });
+  });
+
+  it("says To be confirmed wherever no date is recorded, rather than leaving the stage undated", () => {
+    const stages = partnerStepperStages(partnerProgress(midSetup({ milestones: [] })));
+    expect(stages.find((s) => s.key === "partner_setup")!.date).toEqual({
+      label: "Target",
+      text: TO_BE_CONFIRMED,
+    });
+    expect(stages.find((s) => s.key === "pilot")!.date).toEqual({
+      label: "Planned",
+      text: TO_BE_CONFIRMED,
+    });
+  });
+});
+
+describe("partnerWorkspace — the status strip", () => {
+  it("names the open gate criterion first, and what is waiting", () => {
+    const strip = partnerWorkspace(partnerProgress(midSetup()));
+    expect(strip.stageLabel).toBe("Partner Setup & Connection");
+    expect(strip.nextAction).toBe("Connection verified");
+    expect(strip.waitingOn).toBe("Connection verified (+1 more)");
+  });
+
+  it("reads Nothing open once the stage's items are settled", () => {
+    const strip = partnerWorkspace(
+      partnerProgress(
+        midSetup({
+          workItems: midSetup().workItems.map((w) => ({ ...w, status: "done" })),
+        }),
+      ),
+    );
+    expect(strip.nextAction).toBe("Nothing open");
+    expect(strip.waitingOn).toBe("Nothing on anyone's desk");
+  });
+});
+
+describe("partnerDashboardView — the customer's dashboard", () => {
+  it("shows five stages with the bar's states, and the actions on the current stage only", () => {
+    const view = partnerDashboardView(partnerProgress(midSetup()));
+    expect(view.stages.map((s) => [s.key, s.state])).toEqual([
+      ["partner_setup", "now"],
+      ["form_finalisation", "later"],
+      ["pilot", "later"],
+      ["trial_run", "later"],
+      ["roll_out", "later"],
+    ]);
+    expect(view.currentLabel).toBe("Partner Setup & Connection");
+    expect(view.actions).toEqual([
+      { id: "w-connection", title: "Connection verified", blocked: false },
+    ]);
+  });
+
+  it("never includes an internal or partner-party item, even on the current stage", () => {
+    const view = partnerDashboardView(partnerProgress(midSetup()));
+    const titles = view.actions.map((a) => a.title);
+    expect(titles).not.toContain("Solution configured");
+    expect(titles).not.toContain("Partner lead confirms readiness");
+  });
+
+  it("shows a blocked customer action as a blocker, not as an open action", () => {
+    const view = partnerDashboardView(
+      partnerProgress(
+        midSetup({
+          workItems: midSetup().workItems.map((w) =>
+            w.id === "w-connection" ? { ...w, status: "blocked" } : w,
+          ),
+        }),
+      ),
+    );
+    expect(view.actions).toEqual([]);
+    expect(view.blockers).toEqual([{ id: "w-connection", title: "Connection verified" }]);
+  });
+
+  it("uses the planning label while the implementation is still in its internal planning stage", () => {
+    const view = partnerDashboardView(
+      partnerProgress(midSetup({ currentStage: "closed_won_planning" })),
+    );
+    expect(view.currentLabel).toBe("Planning with you");
+    expect(view.stages.every((s) => s.state !== "now")).toBe(true);
+  });
+
+  it("names the earliest recorded milestone still ahead, and nothing when none is recorded", () => {
+    const ahead = partnerDashboardView(
+      partnerProgress(
+        midSetup({
+          milestones: [
+            {
+              name: "Later",
+              stage: "pilot",
+              status: "not_started",
+              target_date: "2026-08-01",
+              completed_date: null,
+            },
+            {
+              name: "Sooner",
+              stage: "partner_setup",
+              status: "not_started",
+              target_date: "2026-06-01",
+              completed_date: null,
+            },
+          ],
+        }),
+      ),
+    );
+    expect(ahead.nextMilestone).toEqual({ name: "Sooner", date: "2026-06-01" });
+
+    const none = partnerDashboardView(partnerProgress(midSetup({ milestones: [] })));
+    expect(none.nextMilestone).toBeNull();
+  });
+
+  it("keeps Roll Out & Graduation completed after graduation, with its recorded target", () => {
+    const graduated: PartnerProgressInput = {
+      currentStage: "roll_out",
+      dealStage: "onboarding_complete",
+      dealTransitions: [{ to_stage: "closed_won", occurred_at: "2026-03-01T09:00:00Z" }],
+      stageInstances: [
+        "closed_won_planning",
+        "partner_setup",
+        "form_finalisation",
+        "pilot",
+        "trial_run",
+        "roll_out",
+      ].map((k) => ({ stage_key: k, status: "done", gate_mode: null })),
+      stageHistory: [{ stage: "roll_out", exited_at: "2026-09-30T12:00:00Z" }],
+      milestones: [
+        {
+          name: "Roll Out & Graduation",
+          stage: "roll_out",
+          status: "completed",
+          target_date: "2026-09-30",
+          completed_date: "2026-09-30",
+        },
+      ],
+      workItems: [],
+    };
+    const view = partnerDashboardView(partnerProgress(graduated));
+    expect(view.stages.every((s) => s.state === "done")).toBe(true);
+    expect(view.currentLabel).toBe("Roll Out & Graduation");
+    expect(view.graduationTarget).toBe("2026-09-30");
+    // Re-reading the same records gives the same journey: a refresh changes nothing.
+    expect(partnerDashboardView(partnerProgress(graduated))).toEqual(view);
+  });
+
+  it("returns the same header shape the existing dashboard bar reads", () => {
+    const header = partnerDashboardHeader(partnerDashboardView(partnerProgress(midSetup())));
+    expect(header.started).toBe(true);
+    expect(header.currentLabel).toBe("Partner Setup & Connection");
+    expect(header.stages.map((s) => s.state)).toEqual(["now", "later", "later", "later", "later"]);
+    expect(header.graduation).toEqual({ current: null, original: null, moved: false });
+  });
+
+  it("gives the customer only their own change items and open actions, never kickoff items", () => {
+    const view = partnerDashboardView(partnerProgress(midSetup()));
+    const items = partnerAttentionItems({
+      partner: view,
+      parkingLot: [
+        {
+          request: "Add a second site",
+          target: "2026-11-01",
+          status: "open",
+          neededForLaunch: false,
+          owner: "customer",
+        },
+        {
+          request: "Internal idea",
+          target: "",
+          status: "open",
+          neededForLaunch: false,
+          owner: "gocanvas",
+        },
+      ],
+    });
+    expect(items.map((i) => i.kind)).toEqual(["action", "change"]);
+    expect(items.map((i) => i.what)).toEqual(["Connection verified", "Add a second site"]);
+    expect(partnerBlockerItems(view)).toEqual([]);
   });
 });
 

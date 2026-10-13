@@ -74,7 +74,7 @@ import {
   KICKOFF_CADENCE,
   latestStageTransition,
   PREP_ITEMS,
-  railStatuses,
+  flowStepperStages,
   readingInFlight,
   showKickoffOutcomePrompt,
   stageFlow,
@@ -86,6 +86,11 @@ import {
   type FlowTask,
 } from "@/lib/stage-flow";
 import { syncDealStageFn } from "@/lib/stage-flow.functions";
+import { StageStepper } from "@/components/stage-stepper";
+import { PartnerJourney } from "@/components/partner-journey-panels";
+import { isPartnerJourney } from "@/lib/partner-implementation";
+import { partnerWorkspace } from "@/lib/partner-journey";
+import { getPartnerProgress } from "@/lib/hub.functions";
 import { stageGuidanceFor } from "@/lib/stage-guidance";
 import { parseWonGate, type WonGateMissing } from "@/lib/won-gate";
 import { liveWonGateMissing, parseGateParam } from "@/lib/deal-entry";
@@ -988,6 +993,13 @@ export function CurrentImplementationTab({
     queryFn: () => getWelcome({ data: { dealId } }),
   });
   const files = useQuery(attachmentsQuery(implementationId));
+  // A Partner Implementation reads its own progress, never the deal stage or the standard checklist.
+  const partner = isPartnerJourney(record.implementation ?? {});
+  const partnerQ = useQuery({
+    queryKey: ["partner-progress", implementationId],
+    queryFn: () => getPartnerProgress({ data: { implementationId } }),
+    enabled: partner,
+  });
   const [today, setToday] = useState<string | null>(null);
   useEffect(() => setToday(localIso()), []);
   const [viewing, setViewing] = useState<FlowStageKey | null>(null);
@@ -1024,6 +1036,7 @@ export function CurrentImplementationTab({
     timeline,
     hasGraduationBrief,
   });
+  const strip = partner && partnerQ.data ? partnerWorkspace(partnerQ.data) : null;
   const ws = workspaceFor({
     flow,
     intake,
@@ -1133,7 +1146,13 @@ export function CurrentImplementationTab({
             <span className="text-muted-foreground">Owner</span>{" "}
             <span className="text-foreground">{ownerName ?? "Nobody yet"}</span>
           </span>
-          {ws.ball ? (
+          {strip ? (
+            <span>
+              <span className="text-muted-foreground">Stage</span>{" "}
+              <span className="text-foreground">{strip.stageLabel}</span>
+            </span>
+          ) : null}
+          {ws.ball && !strip ? (
             <span className="inline-flex items-center gap-1.5" title={ws.ball.detail}>
               <span className="text-muted-foreground">Ball</span>
               <span
@@ -1151,17 +1170,19 @@ export function CurrentImplementationTab({
           <span>
             <span className="text-muted-foreground">Next action</span>{" "}
             <span className="text-foreground">
-              {ws.nextStep ? ws.nextStep.label : "Nothing open"}
+              {strip ? strip.nextAction : ws.nextStep ? ws.nextStep.label : "Nothing open"}
             </span>
           </span>
           <span>
             <span className="text-muted-foreground">Waiting on</span>{" "}
             <span className="text-foreground">
-              {ws.waiting.length === 0
-                ? "Nothing on anyone's desk"
-                : ws.waiting.length === 1
-                  ? ws.waiting[0]!.what
-                  : `${ws.waiting[0]!.what} (+${ws.waiting.length - 1} more)`}
+              {strip
+                ? strip.waitingOn
+                : ws.waiting.length === 0
+                  ? "Nothing on anyone's desk"
+                  : ws.waiting.length === 1
+                    ? ws.waiting[0]!.what
+                    : `${ws.waiting[0]!.what} (+${ws.waiting.length - 1} more)`}
             </span>
           </span>
         </div>
@@ -1177,7 +1198,7 @@ export function CurrentImplementationTab({
             {health.reason ?? "No specific reason recorded"}
           </p>
         ) : null}
-        {ws.waiting.length > 1 ? (
+        {ws.waiting.length > 1 && !strip ? (
           <ul
             className={cn(
               "mt-1 space-y-0.5 text-[11px] text-muted-foreground",
@@ -1218,7 +1239,17 @@ export function CurrentImplementationTab({
         )}
       </section>
 
-      {flow.current === "field_fusion" ? (
+      {partner ? (
+        partnerQ.data ? (
+          <PartnerJourney
+            progress={partnerQ.data}
+            customerId={customerId}
+            implementationId={implementationId}
+            dealId={dealId}
+            editable={editable}
+          />
+        ) : null
+      ) : flow.current === "field_fusion" ? (
         // With a Partner Implementation Lead, before the handoff: its own
         // surface, never the Closed Won fallback below.
         <PartnerHandoffPanel deal={deal} editable={editable} />
@@ -1549,56 +1580,12 @@ function Stepper({
   timeline?: Timeline | null;
   outcomeAt?: string | null;
 }) {
-  const at = stages.findIndex((s) => s.key === current);
-  // The status rule lives in railStatuses(), which the customer's journey reads too.
-  const statusByKey = new Map(railStatuses(stages, current).map((r) => [r.key, r.status]));
   return (
-    <ol className="flex flex-wrap items-center gap-1 px-4 py-2.5">
-      {stages.map((s, i) => {
-        const past = at >= 0 && i < at;
-        const isCurrent = s.key === current;
-        const status = statusByKey.get(s.key)!;
-        const skipped = status === "skipped";
-        const date = history
-          ? journeyStageDate(s.key, status, history, timeline ?? null, outcomeAt ?? null)
-          : null;
-        return (
-          <li key={s.key} className="flex items-center gap-1">
-            <button
-              type="button"
-              onClick={() => onShow(s.key)}
-              aria-current={isCurrent ? "step" : undefined}
-              className={cn(
-                "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[12px] font-medium transition-colors",
-                isCurrent
-                  ? "border-primary bg-primary text-primary-foreground"
-                  : skipped
-                    ? "border-amber-500/40 bg-amber-500/10 text-amber-800 dark:text-amber-300"
-                    : past
-                      ? "border-status-ontrack-foreground/40 bg-status-ontrack/60 text-status-ontrack-foreground"
-                      : "border-border text-muted-foreground hover:text-foreground",
-                s.key === shown && !isCurrent && "ring-2 ring-primary/40",
-              )}
-            >
-              {skipped ? (
-                <span className="text-[10px] uppercase tracking-wide">Skipped</span>
-              ) : past ? (
-                <Check className="h-3 w-3" strokeWidth={3} />
-              ) : null}
-              {s.label}
-              {date ? (
-                <span className="font-normal opacity-75">
-                  · {date.label} {date.text}
-                </span>
-              ) : null}
-            </button>
-            {i < stages.length - 1 ? (
-              <ArrowRight className="h-3 w-3 text-muted-foreground" />
-            ) : null}
-          </li>
-        );
-      })}
-    </ol>
+    <StageStepper
+      stages={flowStepperStages(stages, current, { history, timeline, outcomeAt })}
+      shown={shown}
+      onShow={(k) => onShow(k as FlowStageKey)}
+    />
   );
 }
 

@@ -93,6 +93,7 @@ export function AdvanceStage({
       }),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["customer360", customerId] });
+      await queryClient.invalidateQueries({ queryKey: ["partner-progress", implementationId] });
       await queryClient.invalidateQueries({ queryKey: ["home"] });
       setOpen(false);
       setConfirming(false);

@@ -13,6 +13,9 @@ import {
   homeworkTexts,
   ideasForLater,
   nextBookedSession,
+  partnerAttentionItems,
+  partnerBlockerItems,
+  partnerDashboardHeader,
   tisContact,
   type AttentionItem,
   type BlockerItem,
@@ -55,7 +58,9 @@ export function CustomerDashboard({
   icsBase: string | null;
 }) {
   const interactive = mode === "shared";
-  const header = dashboardHeader(view, today);
+  // A partner implementation has its own header and its own cards; the standard
+  // six-stage journey and its kickoff items never apply to it.
+  const header = view.partner ? partnerDashboardHeader(view.partner) : dashboardHeader(view, today);
   const questionsOpen = view.intake ? view.intake.needed.length > 0 : false;
   return (
     <main className="gc-dash" aria-labelledby="gc-dash-title">
@@ -74,7 +79,7 @@ export function CustomerDashboard({
             <Attention view={view} interactive={interactive} onTick={onTick} onBall={onBall} />
           </Card>
 
-          {view.intake ? (
+          {view.intake && !view.partner ? (
             <Card
               id="answers"
               title="Your answers before kickoff"
@@ -95,7 +100,12 @@ export function CustomerDashboard({
             <Blockers view={view} />
           </Card>
 
-          <Card id="agreements" title="Our kickoff agreements" order="agreements" wide>
+          <Card
+            id="agreements"
+            title={view.partner ? "Ideas and requests" : "Our kickoff agreements"}
+            order="agreements"
+            wide
+          >
             <Agreements view={view} />
           </Card>
         </div>
@@ -109,9 +119,11 @@ export function CustomerDashboard({
             <Contact view={view} />
           </Card>
 
-          <Card id="gocanvas" title="What GoCanvas is working on" order="gocanvas">
-            <GocanvasWork view={view} />
-          </Card>
+          {view.partner ? null : (
+            <Card id="gocanvas" title="What GoCanvas is working on" order="gocanvas">
+              <GocanvasWork view={view} />
+            </Card>
+          )}
 
           <Card id="resources" title="Resources" order="resources">
             <Resources view={view} />
@@ -294,6 +306,7 @@ function FullJourney({
   view: WelcomeView;
   header: ReturnType<typeof dashboardHeader>;
 }) {
+  if (view.partner) return <PartnerFullJourney partner={view.partner} header={header} />;
   const stages = view.journey?.stages ?? [];
   const delivered = (view.journey?.solutions ?? []).filter(
     (s) => s.who === "done" && s.status === CUSTOMER_SOLUTION_STATUS.accepted,
@@ -358,6 +371,47 @@ function FullJourney({
 
 /* --------------------------------------------------- what needs your attention */
 
+/** A partner implementation's five stages, with recorded dates only; each date reads To be confirmed where none is recorded. */
+function PartnerFullJourney({
+  partner,
+  header,
+}: {
+  partner: NonNullable<WelcomeView["partner"]>;
+  header: ReturnType<typeof dashboardHeader>;
+}) {
+  return (
+    <details className="gc-dash-journey">
+      <summary>View full journey</summary>
+      <ol className="gc-dash-stages">
+        {partner.stages.map((s) => {
+          const state = header.stages.find((h) => h.key === s.key)?.state ?? "later";
+          return (
+            <li key={s.key} className={cn("gc-dash-stage-row", `is-${state}`)}>
+              <div className="gc-dash-stage-head">
+                <StageIcon state={state} />
+                <span className="gc-dash-stage-name">{s.label}</span>
+                <span className="gc-dash-stage-state">
+                  {state === "done" ? "Completed" : state === "now" ? "Current" : "Upcoming"}
+                </span>
+              </div>
+              <p className="gc-dash-stage-dates">
+                {s.completedDate ? (
+                  <span>Completed {shortDay(s.completedDate)}</span>
+                ) : (
+                  <span>
+                    {state === "done" ? "Completed" : "Target"}:{" "}
+                    {s.targetDate ? shortDay(s.targetDate) : "To be confirmed"}
+                  </span>
+                )}
+              </p>
+            </li>
+          );
+        })}
+      </ol>
+    </details>
+  );
+}
+
 function Attention({
   view,
   interactive,
@@ -369,7 +423,7 @@ function Attention({
   onTick?: ((key: HomeworkKey, done: boolean) => Promise<void> | void) | undefined;
   onBall?: ((solutionId: string) => Promise<void> | void) | undefined;
 }) {
-  const items = attentionItems(view);
+  const items = view.partner ? partnerAttentionItems(view) : attentionItems(view);
   const actions = items.filter((i) => i.kind !== "homework");
   const homework = items.filter((i) => i.kind === "homework");
   const waiting = actions.length > 0 || homework.some((h) => !h.done);
@@ -474,7 +528,9 @@ function AttentionRow({
 /* ------------------------------------------------------- progress and blockers */
 
 function Blockers({ view }: { view: WelcomeView }) {
-  const blockers: BlockerItem[] = blockerItems(view);
+  const blockers: BlockerItem[] = view.partner
+    ? partnerBlockerItems(view.partner)
+    : blockerItems(view);
   if (!blockers.length) {
     return <p className="gc-dash-empty">No blockers recorded. Nothing is holding the work up.</p>;
   }
@@ -624,47 +680,54 @@ function Agreements({ view }: { view: WelcomeView }) {
   const ideas = ideasForLater(view.parkingLot);
   return (
     <div className="gc-dash-agreements">
-      <div className="gc-dash-block">
-        <h3 className="gc-dash-h4">Agreed deliverables</h3>
-        {scope.state === "empty" ? (
-          <p className="gc-dash-empty">
-            Nothing recorded yet. We agree the first deliverables together.
-          </p>
-        ) : (
-          <>
-            <span
-              className={cn("gc-dash-tag", scope.state === "agreed" ? "is-agreed" : "is-proposed")}
-            >
-              {scope.state === "agreed" ? "Agreed" : "Proposed · to confirm together"}
-            </span>
-            <ul className="gc-dash-bullets">
-              {scope.items.map((text, index) => (
-                <li key={`${index}-${text}`}>{text}</li>
-              ))}
-            </ul>
-          </>
-        )}
-      </div>
-
-      <Disclosure label="How we'll work together">
-        <div className="gc-dash-expect">
-          {KICKOFF_EXPECTATIONS.columns.map((column) => (
-            <section key={column.label} className="gc-dash-expect-col">
-              <h4>
-                {column.label} <span className="gc-dash-muted">· {column.role}</span>
-              </h4>
-              <ul>
-                {column.items.map((item) => (
-                  <li key={item}>
-                    <Check className="gc-dash-icon" strokeWidth={3} aria-hidden="true" />
-                    <span>{item}</span>
-                  </li>
+      {view.partner ? null : (
+        <div className="gc-dash-block">
+          <h3 className="gc-dash-h4">Agreed deliverables</h3>
+          {scope.state === "empty" ? (
+            <p className="gc-dash-empty">
+              Nothing recorded yet. We agree the first deliverables together.
+            </p>
+          ) : (
+            <>
+              <span
+                className={cn(
+                  "gc-dash-tag",
+                  scope.state === "agreed" ? "is-agreed" : "is-proposed",
+                )}
+              >
+                {scope.state === "agreed" ? "Agreed" : "Proposed · to confirm together"}
+              </span>
+              <ul className="gc-dash-bullets">
+                {scope.items.map((text, index) => (
+                  <li key={`${index}-${text}`}>{text}</li>
                 ))}
               </ul>
-            </section>
-          ))}
+            </>
+          )}
         </div>
-      </Disclosure>
+      )}
+
+      {view.partner ? null : (
+        <Disclosure label="How we'll work together">
+          <div className="gc-dash-expect">
+            {KICKOFF_EXPECTATIONS.columns.map((column) => (
+              <section key={column.label} className="gc-dash-expect-col">
+                <h4>
+                  {column.label} <span className="gc-dash-muted">· {column.role}</span>
+                </h4>
+                <ul>
+                  {column.items.map((item) => (
+                    <li key={item}>
+                      <Check className="gc-dash-icon" strokeWidth={3} aria-hidden="true" />
+                      <span>{item}</span>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            ))}
+          </div>
+        </Disclosure>
+      )}
 
       <Disclosure label={`Ideas and requests for later (${ideas.length})`}>
         {ideas.length ? (
@@ -702,6 +765,18 @@ function NextSession({
   today: string | null;
   icsBase: string | null;
 }) {
+  if (view.partner) {
+    // A partner plan has no kickoff calls: the next thing on it is its next recorded milestone.
+    const next = view.partner.nextMilestone;
+    return next ? (
+      <article className="gc-dash-session">
+        <p className="gc-dash-session-label">{next.name}</p>
+        <p className="gc-dash-session-when">{shortDay(next.date)}</p>
+      </article>
+    ) : (
+      <p className="gc-dash-empty">Next milestone to be confirmed.</p>
+    );
+  }
   if (today === null) {
     return <p className="gc-dash-empty">Checking your next session…</p>;
   }

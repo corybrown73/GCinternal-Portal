@@ -1,16 +1,10 @@
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { isPartnerJourney } from "./partner-implementation";
-import { partnerProgress, type PartnerProgress } from "./partner-journey";
+import { partnerProgress, type PartnerProgress, type PartnerWorkItemRow } from "./partner-journey";
 
 const db = () => supabaseAdmin as any;
 
-type WorkItemRow = {
-  stage_instance_id: string;
-  title: string;
-  party: string;
-  visibility: string;
-  status: string;
-};
+type WorkItemRow = Omit<PartnerWorkItemRow, "stage_key"> & { stage_instance_id: string };
 
 /**
  * The partner progress for an implementation, read from its records. Null for
@@ -33,18 +27,21 @@ export async function loadPartnerProgress(
     impl.deal_id
       ? db().from("portal_accounts").select("stage").eq("id", impl.deal_id).maybeSingle()
       : Promise.resolve({ data: null, error: null }),
-    db().from("stage_instances").select("id,stage_key,status").eq("implementation_id", impl.id),
+    db()
+      .from("stage_instances")
+      .select("id,stage_key,status,gate_mode")
+      .eq("implementation_id", impl.id),
     db()
       .from("implementation_stage_history")
       .select("stage,exited_at")
       .eq("implementation_id", impl.id),
     db()
       .from("milestones")
-      .select("stage,status,target_date,completed_date")
+      .select("name,stage,status,target_date,completed_date")
       .eq("implementation_id", impl.id),
     db()
       .from("work_items")
-      .select("stage_instance_id,title,party,visibility,status")
+      .select("id,stage_instance_id,title,party,visibility,status,is_gate,due_at")
       .eq("implementation_id", impl.id),
     impl.deal_id
       ? db()
@@ -57,31 +54,58 @@ export async function loadPartnerProgress(
     if (r.error) throw new Error(`Could not read the partner progress: ${r.error.message}`);
   }
 
-  const keyById = new Map<string, string>(
-    ((stages.data ?? []) as Array<{ id: string; stage_key: string }>).map((s) => [
-      s.id,
-      s.stage_key,
-    ]),
-  );
+  const stageRows = (stages.data ?? []) as Array<{
+    id: string;
+    stage_key: string;
+    status: string;
+    gate_mode: string | null;
+  }>;
+  const keyById = new Map(stageRows.map((s) => [s.id, s.stage_key]));
 
   return partnerProgress({
     currentStage: impl.current_stage ?? null,
     dealStage: (deal.data as { stage: string } | null)?.stage ?? null,
     dealTransitions: transitions.data ?? [],
-    stageInstances: ((stages.data ?? []) as Array<{ stage_key: string; status: string }>).map(
-      (s) => ({
-        stage_key: s.stage_key,
-        status: s.status,
-      }),
-    ),
+    stageInstances: stageRows.map((s) => ({
+      stage_key: s.stage_key,
+      status: s.status,
+      gate_mode: s.gate_mode,
+    })),
     stageHistory: history.data ?? [],
     milestones: milestones.data ?? [],
     workItems: ((items.data ?? []) as WorkItemRow[]).map((w) => ({
+      id: w.id,
       stage_key: keyById.get(w.stage_instance_id) ?? null,
       title: w.title,
       party: w.party,
       visibility: w.visibility,
       status: w.status,
+      is_gate: w.is_gate,
+      due_at: w.due_at,
     })),
   });
+}
+
+/**
+ * The partner progress for a deal's partner implementation, or null when the
+ * deal has none. The newest non-superseded implementation decides, as it does
+ * for every other deal-level read.
+ */
+export async function loadPartnerProgressForDeal(dealId: string): Promise<PartnerProgress | null> {
+  const { data, error } = await db()
+    .from("implementations")
+    .select("id,journey_type,partner_key")
+    .eq("deal_id", dealId)
+    .is("superseded_by_implementation_id", null)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw new Error(`Could not read the implementation for the deal: ${error.message}`);
+  if (
+    !data ||
+    !isPartnerJourney(data as { journey_type: string | null; partner_key: string | null })
+  ) {
+    return null;
+  }
+  return loadPartnerProgress((data as { id: string }).id);
 }

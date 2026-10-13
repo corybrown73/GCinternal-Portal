@@ -171,13 +171,25 @@ export async function advancePartnerFor(
     actorProfile: string | null;
     notes: string | null;
     appUrl: string;
+    /** The team member taking the handoff, when one is picked. Null lets the rule choose. */
+    teamMemberId?: string | null;
   },
-): Promise<{ ok: true; stage: string; enteredAt: string; overridden: false }> {
+): Promise<{
+  ok: true;
+  stage: string;
+  enteredAt: string;
+  overridden: false;
+  /** Set on the handoff only: whether a team member was named, or the team was asked to claim it. */
+  assigned?: boolean;
+}> {
   const at = new Date().toISOString();
   if (args.currentStage === "partner_setup" && args.toStage === "form_finalisation") {
     if (!args.dealId)
       throw new Error("This implementation has no deal, so the handoff cannot run.");
-    const choice = await chooseAssignee({ dealId: args.dealId });
+    const choice = await chooseAssignee({
+      dealId: args.dealId,
+      teamMemberId: args.teamMemberId ?? null,
+    });
     const plan = handoffPlan({
       choice,
       implementationId: args.implementationId,
@@ -193,7 +205,13 @@ export async function advancePartnerFor(
       actorProfile: args.actorProfile,
       at,
     });
-    return { ok: true, stage: handed.stage, enteredAt: at, overridden: false };
+    return {
+      ok: true,
+      stage: handed.stage,
+      enteredAt: at,
+      overridden: false,
+      assigned: handed.assigned,
+    };
   }
   const moved = await advancePartnerStage(client, {
     implementationId: args.implementationId,
