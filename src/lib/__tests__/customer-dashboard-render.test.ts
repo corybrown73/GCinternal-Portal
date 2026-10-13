@@ -292,6 +292,7 @@ describe("what needs your attention, what GoCanvas is working on, and the next s
               name: "Integration",
               who: "us",
               status: "Being built",
+              statusKey: "build",
               when: null,
               responsiblePerson: null,
               canConfirm: false,
@@ -303,7 +304,7 @@ describe("what needs your attention, what GoCanvas is working on, and the next s
       }),
     );
     expect(markup).toContain("Integration");
-    expect(markup).toContain("Being built");
+    expect(markup).toContain("Work in progress");
   });
 });
 

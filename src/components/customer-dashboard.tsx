@@ -8,6 +8,7 @@ import {
   blockerItems,
   dashboardHeader,
   dashboardResources,
+  GOCANVAS_WORK_STATE_LABEL,
   gocanvasWork,
   homeworkTexts,
   ideasForLater,
@@ -741,7 +742,7 @@ function NextSession({
 function GocanvasWork({ view }: { view: WelcomeView }) {
   const items = gocanvasWork(view);
   if (!items.length) {
-    return <p className="gc-dash-empty">Nothing is recorded for GoCanvas right now.</p>;
+    return <p className="gc-dash-empty">No GoCanvas work status is recorded yet.</p>;
   }
   return (
     <ul className="gc-dash-list is-compact">
@@ -752,8 +753,8 @@ function GocanvasWork({ view }: { view: WelcomeView }) {
               {item.what}
               {item.shared ? <span className="gc-dash-tag">Shared</span> : null}
             </span>
-            <span className="gc-dash-muted">
-              {item.status}
+            <span className="gc-dash-muted" data-state={item.state}>
+              {GOCANVAS_WORK_STATE_LABEL[item.state]}
               {item.owner ? ` · ${item.owner}` : ""}
               {item.due
                 ? ` · wanted by ${shortDay(item.due)}`

@@ -277,11 +277,24 @@ export function blockerItems(view: Pick<WelcomeView, "journey">): BlockerItem[] 
     }));
 }
 
+/**
+ * Where a piece of GoCanvas's work stands, from what is recorded. Only these
+ * four states exist. Proposed scope is "not started", never underway, and a
+ * step with no recorded status says so rather than guessing.
+ */
+export type GocanvasWorkState = "not_started" | "in_progress" | "completed" | "no_status";
+
+export const GOCANVAS_WORK_STATE_LABEL: Record<GocanvasWorkState, string> = {
+  not_started: "Not started yet",
+  in_progress: "Work in progress",
+  completed: "Completed",
+  no_status: "No work status recorded",
+};
+
 export type GocanvasWorkItem = {
   id: string;
   what: string;
-  /** The customer-words status for a solution, or the change's state for a change. */
-  status: string;
+  state: GocanvasWorkState;
   owner: string | null;
   due: string | null;
   dueText: string | null;
@@ -289,38 +302,68 @@ export type GocanvasWorkItem = {
   shared: boolean;
 };
 
+/** A solution's recorded stage, read as GoCanvas work. Accept is the customer's turn, so it is not GoCanvas work. */
+const SOLUTION_WORK_STATE: Partial<Record<string, GocanvasWorkState>> = {
+  feasibility: "not_started",
+  define: "not_started",
+  build: "in_progress",
+  accepted: "completed",
+};
+
 /**
- * GoCanvas-owned work from the solutions and the change list. Internal notes
- * and blockers never appear here: the customer's view has already removed them,
- * and this reads only the name, the customer's status and the recorded date.
+ * GoCanvas's work, from the recorded solutions, the change list and the plan's
+ * GoCanvas-owned milestones. Internal notes, issues, risks and blockers never
+ * appear here: this reads only the name, the recorded stage or done stamp, the
+ * named person and the recorded date.
  */
 export function gocanvasWork(
-  view: Pick<WelcomeView, "journey" | "parkingLot">,
+  view: Pick<WelcomeView, "journey" | "parkingLot" | "timeline">,
 ): GocanvasWorkItem[] {
   const items: GocanvasWorkItem[] = [];
   for (const s of view.journey?.solutions ?? []) {
-    if (s.who !== "us") continue;
+    const stage = s.statusKey;
+    const state = stage ? SOLUTION_WORK_STATE[stage] : s.who === "us" ? "no_status" : undefined;
+    if (!state) continue;
     items.push({
       id: `solution:${s.id}`,
       what: s.name,
-      status: s.status,
+      state,
       owner: s.responsiblePerson,
-      due: isIsoDate(s.when) ? s.when : null,
+      due: state === "completed" ? null : isIsoDate(s.when) ? s.when : null,
       dueText: null,
       shared: false,
     });
   }
   for (const [index, p] of (view.parkingLot ?? []).entries()) {
     if (p.owner !== "gocanvas" && p.owner !== "both") continue;
-    if (p.status !== "open" && p.status !== "scheduled") continue;
+    const state: GocanvasWorkState | null =
+      p.status === "done"
+        ? "completed"
+        : p.status === "open" || p.status === "scheduled"
+          ? "not_started"
+          : null;
+    if (!state) continue;
     items.push({
       id: `change:${index}`,
       what: p.request,
-      status: p.status === "scheduled" ? "Scheduled" : "Open",
+      state,
       owner: null,
-      due: isIsoDate(p.target) ? p.target : null,
-      dueText: p.target && !isIsoDate(p.target) ? p.target : null,
+      due: state !== "completed" && isIsoDate(p.target) ? p.target : null,
+      dueText: state !== "completed" && p.target && !isIsoDate(p.target) ? p.target : null,
       shared: p.owner === "both",
+    });
+  }
+  // The plan's own GoCanvas steps. The sales close is history, never work.
+  for (const m of view.timeline?.milestones ?? []) {
+    if (m.owner !== "gocanvas" || SALES_MILESTONE_KEYS.has(m.key)) continue;
+    items.push({
+      id: `milestone:${m.key}`,
+      what: m.label,
+      state: m.doneOn ? "completed" : "no_status",
+      owner: null,
+      due: null,
+      dueText: null,
+      shared: false,
     });
   }
   return items.sort((a, b) =>

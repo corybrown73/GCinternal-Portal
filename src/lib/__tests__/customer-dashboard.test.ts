@@ -408,6 +408,7 @@ describe("gocanvasWork — GoCanvas's work, in customer words, with no internal 
               name: "Integration",
               who: "us",
               status: "Being built",
+              statusKey: "build",
               when: "2026-10-20",
               responsiblePerson: "Lee Build",
               note: "internal note",
@@ -421,7 +422,7 @@ describe("gocanvasWork — GoCanvas's work, in customer words, with no internal 
       {
         id: "solution:s2",
         what: "Integration",
-        status: "Being built",
+        state: "in_progress",
         owner: "Lee Build",
         due: "2026-10-20",
         dueText: null,
@@ -459,9 +460,9 @@ describe("gocanvasWork — GoCanvas's work, in customer words, with no internal 
         ],
       }),
     );
-    expect(work.map((w) => [w.what, w.status, w.shared])).toEqual([
-      ["Map the export", "Scheduled", false],
-      ["Pick users", "Open", true],
+    expect(work.map((w) => [w.what, w.state, w.shared])).toEqual([
+      ["Map the export", "not_started", false],
+      ["Pick users", "not_started", true],
     ]);
   });
 });
@@ -964,5 +965,108 @@ describe("the testing preparation and the recorded tester are one commitment, no
         .filter((i) => i.kind === "homework")
         .every((i) => i.coveredBy === null && i.due === "2026-10-08"),
     ).toBe(true);
+  });
+});
+
+describe("gocanvasWork — four recorded states, and an honest empty state", () => {
+  const sol = (id: string, statusKey: string | undefined, who = "us") => ({
+    id,
+    name: `Solution ${id}`,
+    status: "customer words",
+    statusKey,
+    who,
+    responsiblePerson: null,
+    when: null,
+    blocked: null,
+  });
+  const milestone = (key: string, label: string, owner: string, doneOn: string | null) => ({
+    key,
+    label,
+    owner,
+    kind: "milestone",
+    date: "2026-10-20",
+    doneOn,
+  });
+
+  it("maps feasibility and define to not started, build to in progress, accepted to completed", () => {
+    const work = gocanvasWork(
+      viewWith({
+        journey: {
+          solutions: [
+            sol("a", "feasibility"),
+            sol("b", "define"),
+            sol("c", "build"),
+            sol("d", "accepted", "done"),
+          ],
+        } as never,
+      }),
+    );
+    expect(work.map((w) => [w.id, w.state])).toEqual([
+      ["solution:a", "not_started"],
+      ["solution:b", "not_started"],
+      ["solution:c", "in_progress"],
+      ["solution:d", "completed"],
+    ]);
+  });
+
+  it("a GoCanvas solution with no recorded stage says no status is recorded, never a guess", () => {
+    const work = gocanvasWork(viewWith({ journey: { solutions: [sol("x", undefined)] } as never }));
+    expect(work).toEqual([expect.objectContaining({ id: "solution:x", state: "no_status" })]);
+  });
+
+  it("the customer's own turn and finished-without-going-ahead solutions are not GoCanvas work", () => {
+    const work = gocanvasWork(
+      viewWith({
+        journey: {
+          solutions: [
+            sol("y", "accept", "you"),
+            sol("z", "descoped", "done"),
+            sol("w", "transferred", "done"),
+          ],
+        } as never,
+      }),
+    );
+    expect(work).toEqual([]);
+  });
+
+  it("GoCanvas-owned milestones are completed when done, else no status is recorded; the sales close is never work", () => {
+    const work = gocanvasWork(
+      viewWith({
+        timeline: {
+          ...viewWith().timeline,
+          milestones: [
+            milestone("close", "Deal closes", "gocanvas", "2026-07-01"),
+            milestone("live", "Functional", "gocanvas", null),
+            milestone("fieldtest", "Field test", "gocanvas", "2026-10-02"),
+            milestone("kickoff", "Kickoff", "both", null),
+          ],
+        } as never,
+      }),
+    );
+    expect(work.map((w) => [w.what, w.state])).toEqual([
+      ["Functional", "no_status"],
+      ["Field test", "completed"],
+    ]);
+  });
+
+  it("a done change is completed; nothing recorded gives an empty list", () => {
+    const work = gocanvasWork(
+      viewWith({
+        parkingLot: [
+          {
+            request: "Export fix",
+            target: "",
+            status: "done",
+            neededForLaunch: false,
+            owner: "gocanvas",
+          },
+        ],
+        timeline: { ...viewWith().timeline, milestones: [] } as never,
+      }),
+    );
+    expect(work.map((w) => [w.what, w.state])).toEqual([["Export fix", "completed"]]);
+    expect(
+      gocanvasWork(viewWith({ timeline: { ...viewWith().timeline, milestones: [] } as never })),
+    ).toEqual([]);
   });
 });

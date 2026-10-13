@@ -70,6 +70,8 @@ export type SolutionBallView = {
   kind: string;
   /** In the customer's words. */
   status: string;
+  /** The recorded stage itself, for work-state reading (never shown as-is). */
+  statusKey: ReturnType<typeof solutionStatus>;
   /** Who holds it: us, you, or nobody because it is finished. */
   who: "us" | "you" | "done";
   /** The date it is wanted by, when one is set — ball.date, else the solution's own due date. */
@@ -331,6 +333,7 @@ export function customerJourney(input: {
       name: s.name,
       kind: SOLUTION_LABEL[s.kind] ?? s.kind,
       status: CUSTOMER_SOLUTION_STATUS[status],
+      statusKey: status,
       who,
       when: ball?.date ?? s.due ?? null,
       canConfirm: who === "you" && status === "accept" && !completed[`${s.id}:review`],
