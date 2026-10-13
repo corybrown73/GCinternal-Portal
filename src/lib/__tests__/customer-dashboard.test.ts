@@ -676,7 +676,8 @@ describe("dashboardHeader — the next milestone is the next one still ahead of 
       date: "2026-10-26",
       status: "planned",
     });
-    expect(dashboardHeader(view, null).nextMilestone?.label).toBe("Deal closes");
+    // With today unknown, the close is still history: the next step is Functional.
+    expect(dashboardHeader(view, null).nextMilestone?.label).toBe("Functional");
   });
 });
 
@@ -814,5 +815,78 @@ describe("the recorded tester responsibility is not merged with plan copy", () =
     expect(
       items.filter((i) => i.what === "Test the form on real jobs" && i.kind === "testing"),
     ).toEqual([]);
+  });
+});
+
+describe("dashboardHeader — sales milestones are never the next milestone", () => {
+  const sales = {
+    key: "close",
+    kind: "milestone",
+    label: "Deal closes",
+    date: "2026-07-01",
+    doneOn: null,
+  };
+  const stage = (currentDate: string | null, current = "make_it_run") =>
+    ({
+      stages: [
+        {
+          key: current,
+          state: "now",
+          label: "Make it run",
+          target: { originalDate: currentDate, currentDate, actualDate: null },
+        },
+      ],
+      current: {
+        key: current,
+        label: "Make it run",
+        state: "now",
+        target: { originalDate: currentDate, currentDate, actualDate: null },
+      },
+    }) as never;
+
+  it("an unticked close from months ago is never shown as the next milestone", () => {
+    const view = viewWith({
+      journey: stage(null),
+      timeline: { ...viewWith().timeline, milestones: [sales] } as never,
+    });
+    expect(dashboardHeader(view, "2026-10-13").nextMilestone).toBeNull();
+  });
+
+  it("with no unfinished implementation step, the current stage's recorded target is shown", () => {
+    const view = viewWith({
+      journey: stage("2026-11-02"),
+      timeline: { ...viewWith().timeline, milestones: [sales] } as never,
+    });
+    expect(dashboardHeader(view, "2026-10-13").nextMilestone).toEqual({
+      label: "Make it run target",
+      date: "2026-11-02",
+      status: "planned",
+    });
+  });
+
+  it("an unfinished implementation step ahead of today wins over the stage target", () => {
+    const view = viewWith({
+      journey: stage("2026-11-02"),
+      timeline: {
+        ...viewWith().timeline,
+        milestones: [
+          sales,
+          { key: "live", kind: "milestone", label: "Functional", date: "2026-10-26", doneOn: null },
+        ],
+      } as never,
+    });
+    expect(dashboardHeader(view, "2026-10-13").nextMilestone).toEqual({
+      label: "Functional",
+      date: "2026-10-26",
+      status: "planned",
+    });
+  });
+
+  it("nothing recorded at all is an honest empty state, never an invented date", () => {
+    const view = viewWith({
+      journey: null,
+      timeline: { ...viewWith().timeline, milestones: [sales] } as never,
+    });
+    expect(dashboardHeader(view, "2026-10-13").nextMilestone).toBeNull();
   });
 });

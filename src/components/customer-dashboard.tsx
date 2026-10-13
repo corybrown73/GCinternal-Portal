@@ -268,7 +268,7 @@ function DashHeader({
                 </span>
               </>
             ) : (
-              <span className="gc-dash-muted">None recorded yet</span>
+              <span className="gc-dash-muted">Next milestone to be confirmed.</span>
             )}
           </span>
         </div>

@@ -32,6 +32,9 @@ export type DashboardStage = {
   state: "done" | "now" | "later";
 };
 
+/** The plan's sales step. It describes the close, so it is never the next milestone. */
+const SALES_MILESTONE_KEYS: ReadonlySet<string> = new Set(["close"]);
+
 export type DashboardHeader = {
   /** False before the account is set up: there is no stage to show yet. */
   started: boolean;
@@ -47,9 +50,10 @@ export type DashboardHeader = {
 };
 
 /**
- * Progress for the six-segment bar, from the stage journey. The next milestone
- * is the earliest step not done that is still ahead today; when none is ahead
- * (or today is not known yet), it is the earliest step not done.
+ * Progress for the segment bar, from the stage journey. The next milestone is
+ * the earliest unfinished implementation step still ahead today; failing that,
+ * the current stage's recorded target; failing that, the earliest unfinished
+ * implementation step. Null when none of those is recorded.
  */
 export function dashboardHeader(
   view: Pick<WelcomeView, "journey" | "timeline">,
@@ -67,20 +71,30 @@ export function dashboardHeader(
       }))
     : DASHBOARD_STAGES.map((s) => ({ key: s.key, label: s.label, state: "later" as const }));
 
+  // The next milestone is an implementation step. The sales step that closed
+  // the deal is history, never "next", whether or not it was ticked.
   const open = view.timeline.milestones
-    .filter((m) => !m.doneOn)
+    .filter((m) => !m.doneOn && !SALES_MILESTONE_KEYS.has(m.key))
     .sort((a, b) => a.date.localeCompare(b.date));
   const ahead = today ? open.filter((m) => m.date >= today) : [];
-  const next = ahead[0] ?? open[0];
-  const nextMilestone = next
-    ? next.kind === "call" && !next.time
-      ? { label: next.label, date: null, status: "to_schedule" as const }
+  const next = ahead[0];
+  const currentStage = journey?.current ?? null;
+  const stageTarget = currentStage?.target?.currentDate ?? null;
+  const milestoneFact = (m: Milestone): DashboardHeader["nextMilestone"] =>
+    m.kind === "call" && !m.time
+      ? { label: m.label, date: null, status: "to_schedule" }
       : {
-          label: next.label,
-          date: next.date,
-          status: next.kind === "call" ? ("booked" as const) : ("planned" as const),
-        }
-    : null;
+          label: m.label,
+          date: m.date,
+          status: m.kind === "call" ? "booked" : "planned",
+        };
+  const nextMilestone: DashboardHeader["nextMilestone"] = next
+    ? milestoneFact(next)
+    : currentStage && isIsoDate(stageTarget)
+      ? { label: `${currentStage.label} target`, date: stageTarget, status: "planned" }
+      : open[0]
+        ? milestoneFact(open[0])
+        : null;
 
   const complete = journey?.stages.find((s) => s.key === "complete")?.target ?? null;
   const current = kickoffGraduationTarget(journey);
