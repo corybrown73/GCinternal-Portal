@@ -1205,6 +1205,42 @@ export function stageFlow(input: StageFlowInput): StageFlow {
 }
 
 /**
+ * What a stage shows on the Current Implementation rail. The one rule the rail
+ * and the customer's journey both read, so they cannot disagree:
+ *
+ *   skipped    before the current stage, and not done
+ *   completed  done (a done stage is completed even when it is also current)
+ *   current    the stage the deal is in
+ *   upcoming   everything else
+ *
+ * `hasRecords` says whether the stage has its own checklist to judge it by.
+ * A stage with no records is never skipped on the customer's side, because
+ * its status then rests on missing data rather than on a judgement.
+ */
+export type RailStatus = "completed" | "current" | "upcoming" | "skipped";
+
+export function railStatuses<
+  T extends { key: FlowStageKey; done: boolean; tasks: readonly unknown[] },
+>(
+  stages: ReadonlyArray<T>,
+  current: FlowStageKey | null,
+): Array<{ key: FlowStageKey; status: RailStatus; hasRecords: boolean }> {
+  const at = stages.findIndex((s) => s.key === current);
+  return stages.map((s, i) => {
+    const past = at >= 0 && i < at;
+    const status: RailStatus =
+      past && !s.done
+        ? "skipped"
+        : s.done
+          ? "completed"
+          : s.key === current
+            ? "current"
+            : "upcoming";
+    return { key: s.key, status, hasRecords: s.tasks.length > 0 };
+  });
+}
+
+/**
  * The steps still open on the stages a move would skip past: everything
  * from the current stage up to (not including) the target, required and
  * not done. Empty means the move is earned. Pre-Kickoff onward only — the

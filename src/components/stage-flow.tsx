@@ -74,6 +74,7 @@ import {
   KICKOFF_CADENCE,
   latestStageTransition,
   PREP_ITEMS,
+  railStatuses,
   readingInFlight,
   showKickoffOutcomePrompt,
   stageFlow,
@@ -1549,27 +1550,15 @@ function Stepper({
   outcomeAt?: string | null;
 }) {
   const at = stages.findIndex((s) => s.key === current);
+  // The status rule lives in railStatuses(), which the customer's journey reads too.
+  const statusByKey = new Map(railStatuses(stages, current).map((r) => [r.key, r.status]));
   return (
     <ol className="flex flex-wrap items-center gap-1 px-4 py-2.5">
       {stages.map((s, i) => {
         const past = at >= 0 && i < at;
         const isCurrent = s.key === current;
-        // A forced move (Skip to Graduation, or any other forward override)
-        // can put `current` past a stage whose own tasks were never done.
-        // Index position alone used to read as "done" here — a skipped stage
-        // got the same green checkmark as a finished one. `s.done` is the
-        // one fact that actually says which; skipped stays visibly distinct.
-        const skipped = past && !s.done;
-        // `s.done` decides completed over position: Implementation Complete
-        // can be both "current" (nothing comes after it) and done once it
-        // has an outcome, and that's a completed date, not a target.
-        const status = skipped
-          ? "skipped"
-          : s.done
-            ? "completed"
-            : isCurrent
-              ? "current"
-              : "upcoming";
+        const status = statusByKey.get(s.key)!;
+        const skipped = status === "skipped";
         const date = history
           ? journeyStageDate(s.key, status, history, timeline ?? null, outcomeAt ?? null)
           : null;

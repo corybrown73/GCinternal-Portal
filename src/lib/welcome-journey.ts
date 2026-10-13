@@ -170,33 +170,15 @@ export type YourItem = {
 };
 
 /**
- * The template stage keys (stage_instances.stage_key) behind each customer
- * stage — the same groups COMPLETION_BOUNDARIES reads. Kickoff has none of
- * its own, so it is never hidden.
+ * One customer stage's status on the Current Implementation rail (railStatuses
+ * in stage-flow.ts). The customer's journey reads that same rule, never a
+ * second source.
  */
-const TEMPLATE_STAGES_BY_JOURNEY: Partial<Record<JourneyStageKey, readonly string[]>> = {
-  pre_kickoff: ["handoff", "plan-internal", "align-external"],
-  get_it_working: ["build", "get-it-working"],
-  make_it_yours: ["validate-iterate", "make-it-yours"],
-  make_it_run: ["adopt", "make-it-run"],
-  complete: ["graduate-to-cs", "complete", "onboarding-complete"],
+export type RailStageStatus = {
+  key: string;
+  status: "completed" | "current" | "upcoming" | "skipped";
+  hasRecords: boolean;
 };
-
-/**
- * The customer stages whose plan rows are ALL explicitly marked 'skipped' in
- * stage_instances. Only that status hides a stage: a missing row, a pending
- * or done row, or a mixed group never hides anything, and missing dates or
- * completion records are never read as a skip.
- */
-export function skippedJourneyStages(
-  rows: ReadonlyArray<{ stage_key: string; status: string }>,
-): JourneyStageKey[] {
-  return (Object.keys(TEMPLATE_STAGES_BY_JOURNEY) as JourneyStageKey[]).filter((key) => {
-    const members = TEMPLATE_STAGES_BY_JOURNEY[key] ?? [];
-    const found = rows.filter((r) => members.includes(r.stage_key));
-    return found.length > 0 && found.every((r) => r.status === "skipped");
-  });
-}
 
 export type CustomerJourney = {
   stages: JourneyStage[];
@@ -276,8 +258,8 @@ export function customerJourney(input: {
   parkingLot: ReadonlyArray<{ request: string; target: string; status: string; owner?: string }>;
   leadName: string | null;
   stageHistory?: readonly ImplementationStageHistoryEntry[];
-  /** Explicitly skipped customer stages (skippedJourneyStages). Never the current one. */
-  skippedStages?: readonly JourneyStageKey[];
+  /** The rail's status for each stage (railStatuses). Absent: the stage dates alone decide. */
+  railStatuses?: readonly RailStageStatus[];
 }): CustomerJourney | null {
   const stage = input.stage ? normalizeStage(String(input.stage)) : null;
   if (!stage || isPreClose(stage)) return null;
@@ -290,12 +272,16 @@ export function customerJourney(input: {
     complete: "complete",
   };
   const targets: StageTargets = input.intake.timeline.stage_targets;
+  const railByKey = new Map((input.railStatuses ?? []).map((r) => [r.key, r]));
   const stages: JourneyStage[] = JOURNEY.map((s, i) => {
     const key = targetKey[s.key];
     const target = key ? targets[key] : null;
+    const rail = railByKey.get(s.key);
     return {
       ...s,
-      state: i < at ? "done" : i === at ? "now" : "later",
+      // Completed on the rail is done, even when it sits after the stage the
+      // deal is in. Before the current stage is done, as it always was.
+      state: i === at ? "now" : i < at || rail?.status === "completed" ? "done" : "later",
       ...(key && target
         ? {
             target: {
@@ -308,11 +294,13 @@ export function customerJourney(input: {
     };
   });
   const current = stages[at]!;
-  // A skipped stage is left out of the customer's journey entirely: it is
-  // not a stage they are "done" with, and it is not shown as one. The stage
-  // they are in is never hidden, whatever the plan says.
-  const skipped = new Set(input.skippedStages ?? []);
-  const visible = stages.filter((s, i) => i === at || !skipped.has(s.key));
+  // A stage the rail shows as Skipped is left out of the customer's journey,
+  // and so is never shown as done. Only a stage with its own records is judged
+  // that way; the stage they are in is always kept.
+  const visible = stages.filter((s, i) => {
+    const rail = railByKey.get(s.key);
+    return i === at || !(rail?.status === "skipped" && rail.hasRecords);
+  });
 
   const completed = input.intake.timeline.completed;
   const services = normalizeServices(
