@@ -238,7 +238,13 @@ export function customerWelcomeView(view: WelcomeView): WelcomeView {
     journey: view.journey
       ? {
           ...view.journey,
-          solutions: view.journey.solutions.map((s) => ({ ...s, note: null, blocked: null })),
+          // A blocker waiting on the customer is theirs to see; one recorded on
+          // the GoCanvas side is internal and never leaves the server.
+          solutions: view.journey.solutions.map((s) => ({
+            ...s,
+            note: null,
+            blocked: s.blocked === "customer" ? "customer" : null,
+          })),
         }
       : null,
   };

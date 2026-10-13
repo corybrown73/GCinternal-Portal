@@ -233,10 +233,10 @@ describe("the dashboard's opening overview", () => {
 });
 
 describe("what needs your attention, what GoCanvas is working on, and the next session", () => {
-  it("shows the plan's homework copy with its due date", () => {
+  it("shows the plan's homework copy with the plan date, not as an owner-set due date", () => {
     const markup = html(viewWith());
     expect(markup).toContain("Run one job");
-    expect(markup).toContain(`Due ${shortDay("2026-10-12")}`);
+    expect(markup).toContain(`Plan date ${shortDay("2026-10-12")}`);
   });
 
   it("says nothing waits on the customer when there is nothing to do", () => {
@@ -385,5 +385,92 @@ describe("kickoff agreements and resources", () => {
     const markup = html(viewWith({ team: { leadEmail: null } }));
     expect(markup).not.toContain("Email your TIS");
     expect(markup).toContain("No email address is on file");
+  });
+});
+
+describe("layout — two columns, the important things first, and supporting detail collapsed", () => {
+  const started = viewWith({
+    journey: {
+      current: { key: "get_it_working", label: "Get it working" },
+      headline: "",
+      yours: [],
+      solutions: [],
+      stages: [
+        { key: "pre_kickoff", label: "Intake & Process", state: "done", blurb: "" },
+        { key: "kickoff", label: "Kickoff", state: "done", blurb: "" },
+        { key: "get_it_working", label: "Get it working", state: "now", blurb: "" },
+        { key: "make_it_yours", label: "Make it yours", state: "later", blurb: "" },
+        { key: "make_it_run", label: "Make it run", state: "later", blurb: "" },
+        { key: "complete", label: "Graduate", state: "later", blurb: "" },
+      ],
+    },
+    intake: { known: [], needed: [{ key: "q", ask: "Crew size?", hint: "", kind: "text" }] },
+    parkingLot: [
+      {
+        request: "Extra line",
+        target: "",
+        status: "open",
+        neededForLaunch: false,
+        owner: "customer",
+      },
+    ],
+  });
+
+  it("puts the main column (what needs attention) before the secondary column", () => {
+    const markup = html(started);
+    const body = markup.indexOf("gc-dash-body");
+    const main = markup.indexOf("gc-dash-main");
+    const side = markup.indexOf("gc-dash-side");
+    expect(body).toBeGreaterThan(-1);
+    expect(main).toBeGreaterThan(body);
+    expect(side).toBeGreaterThan(main);
+    expect(markup.indexOf("What needs your attention")).toBeLessThan(
+      markup.indexOf("Next working session"),
+    );
+  });
+
+  it("keeps the next working session and the TIS near the top of the secondary column", () => {
+    const markup = html(started);
+    const side = markup.slice(markup.indexOf("gc-dash-side"));
+    expect(side.indexOf("Next working session")).toBeLessThan(
+      side.indexOf("What GoCanvas is working on"),
+    );
+    expect(side.indexOf("Contact your TIS")).toBeLessThan(
+      side.indexOf("What GoCanvas is working on"),
+    );
+    expect(side.indexOf("What GoCanvas is working on")).toBeLessThan(side.indexOf(">Resources<"));
+  });
+
+  it("collapses the full journey, the expectations, the requests and the resource details by default", () => {
+    const markup = html(started);
+    expect(markup).toMatch(/<details class="gc-dash-journey">/);
+    expect(markup).not.toMatch(/<details class="gc-dash-journey" open/);
+    const disclosures = [...markup.matchAll(/<details class="gc-dash-disclosure"( open)?>/g)];
+    expect(disclosures.length).toBeGreaterThan(0);
+    expect(disclosures.every((m) => !m[1])).toBe(true);
+    expect(markup).toContain("How we&#x27;ll work together");
+    expect(markup).toContain("Ideas and requests for later (1)");
+  });
+
+  it("keeps the agreed deliverables visible without opening anything", () => {
+    const markup = html(viewWith({ customerScope: { state: "agreed", items: ["Ticket form"] } }));
+    const block = markup.slice(markup.indexOf("Agreed deliverables"));
+    expect(block.slice(0, 600)).toContain("Ticket form");
+  });
+
+  it("says when the next session cannot yet be worked out, rather than guessing", () => {
+    const markup = renderToStaticMarkup(
+      createElement(CustomerDashboard, {
+        view: started,
+        today: null,
+        mode: "shared",
+        icsBase: null,
+        onTick: noop,
+        onAnswer: noop,
+        onBall: noop,
+      }),
+    );
+    expect(markup).toContain("Checking your next session…");
+    expect(markup).not.toContain("to be scheduled");
   });
 });
