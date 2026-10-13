@@ -91,6 +91,13 @@ describe("MCP create_deal", () => {
     expect(h.assignment.assignDeal).not.toHaveBeenCalled();
   });
 
+  it("at Field Fusion setup leaves the deal with its setup owner, as the page does", async () => {
+    const r = await createDeal({ name: "Setup Co", stage: "field_fusion_setup" });
+    expect(r.onboarding).toMatchObject({ started: true });
+    expect(h.assignment.assignDeal).not.toHaveBeenCalled();
+    expect(h.jobs.autoReadDeal).toHaveBeenCalledWith(r.dealId, "closed_won_mcp");
+  });
+
   it("below the close starts nothing", async () => {
     const r = await createDeal({ name: "Early Co", stage: "negotiate" });
     expect(r).not.toHaveProperty("onboarding");

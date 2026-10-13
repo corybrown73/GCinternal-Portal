@@ -63,11 +63,17 @@ export async function startOnboardingAtClose(
   }
 
   // The rotation, as a close on the page hands it: by rule, or the pool is
-  // asked to claim it.
+  // asked to claim it. Not at Field Fusion setup: there, as on the page, the
+  // person who does the setup owns the deal until "Hand to implementation".
   try {
     const { assignDeal, dealAssignment } = await import("../assignment.server");
+    const { data: deal } = await db()
+      .from("portal_accounts")
+      .select("stage")
+      .eq("id", dealId)
+      .maybeSingle();
     const current = await dealAssignment(dealId);
-    if (!current.owner) {
+    if (!current.owner && deal?.stage !== "field_fusion_setup") {
       await assignDeal({ dealId, implementationId: result.implementationId || null });
     }
   } catch (e) {
