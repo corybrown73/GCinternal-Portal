@@ -232,10 +232,131 @@ const STAGE_ICON: Record<string, string> = {
   complete: "GraduationCap",
 };
 
+/** The copy for a stage: its standard explanation, or its outcome line if it has none. */
+function kickoffStageText(stageKey: string): string {
+  return (
+    KICKOFF_UPCOMING.find((s) => s.key === stageKey)?.text ?? KICKOFF_STAGE_OUTCOME[stageKey] ?? ""
+  );
+}
+
+/**
+ * The date under a stage on the rail. A recorded date is shown as it is; a
+ * stage with no date yet says so. Nothing is ever invented, and a finished
+ * stage with no completion date shows nothing rather than a placeholder.
+ */
+function stageDate(s: {
+  state: string;
+  target?: { currentDate: string | null; actualDate: string | null } | null;
+}): { text: string; tone: "done" | "set" | "pending" } | null {
+  if (s.target?.actualDate) {
+    return { text: `Completed ${shortDay(s.target.actualDate)}`, tone: "done" };
+  }
+  if (s.target?.currentDate) {
+    return { text: `Target ${shortDay(s.target.currentDate)}`, tone: "set" };
+  }
+  return s.state === "done" ? null : { text: "Date to be agreed", tone: "pending" };
+}
+
+/** A "Label: value" line from kickoffUpcomingDetails, split for display. */
+function factParts(line: string): { label: string; value: string } {
+  const at = line.indexOf(": ");
+  return at < 0
+    ? { label: "", value: line }
+    : { label: line.slice(0, at), value: line.slice(at + 2) };
+}
+
+/**
+ * One recorded fact. Scope is shown one workflow name per row, so a list of
+ * workflows reads as names rather than a sentence.
+ */
+function KickoffFact({ line }: { line: string }) {
+  const { label, value } = factParts(line);
+  if (label === "Scope") {
+    return (
+      <div className="wp-kick-fact">
+        <span className="wp-kick-fact-label">Scope</span>
+        <ul className="wp-kick-fact-list">
+          {value.split("; ").map((name, i) => (
+            <li key={`${i}-${name}`}>{name}</li>
+          ))}
+        </ul>
+      </div>
+    );
+  }
+  return (
+    <div className="wp-kick-fact">
+      <span className="wp-kick-fact-label">{label || "Note"}</span>
+      <span className="wp-kick-fact-value">{value}</span>
+    </div>
+  );
+}
+
+/** The stage the customer is in now: the focus of the slide. Its stage comes from the journey, never a fixed name. */
+function KickoffNowPanel({
+  stageKey,
+  label,
+  facts,
+}: {
+  stageKey: string;
+  label: string;
+  facts: string[];
+}) {
+  return (
+    <article
+      className={cn("wp-kick-now", !facts.length && "is-bare")}
+      aria-label={`Current stage: ${label}`}
+    >
+      <div className="wp-kick-now-copy">
+        <span className="wp-kick-now-tag">You are here</span>
+        <h3>{label}</h3>
+        <p>{kickoffStageText(stageKey)}</p>
+      </div>
+      {facts.length ? (
+        <div className="wp-kick-now-facts">
+          {facts.map((line) => (
+            <KickoffFact key={line} line={line} />
+          ))}
+        </div>
+      ) : null}
+    </article>
+  );
+}
+
+/** A stage still ahead: a smaller preview with its icon, what it is for, and what is recorded for it. */
+function KickoffNextCard({
+  stageKey,
+  label,
+  facts,
+}: {
+  stageKey: string;
+  label: string;
+  facts: string[];
+}) {
+  return (
+    <section className="wp-kick-next-card">
+      <header className="wp-kick-next-head">
+        <Tile name={STAGE_ICON[stageKey] ?? "Route"} size="sm" tone="light" />
+        <h4>{label}</h4>
+      </header>
+      <p>{kickoffStageText(stageKey)}</p>
+      {facts.map((line) => (
+        <KickoffFact key={line} line={line} />
+      ))}
+    </section>
+  );
+}
+
 function KickoffJourney({ view, page }: { view: WelcomeView; page: number }) {
   const j = view.journey;
   const stages = j ? kickoffJourneyStages(j) : [];
-  const details = kickoffUpcomingDetails(view);
+  const details: Partial<Record<string, string[]>> = kickoffUpcomingDetails(view);
+  const now = stages.find((s) => s.state === "now") ?? null;
+  // Every stage that is not finished and not the current one, in journey order.
+  const next = j
+    ? stages
+        .filter((s) => s.state !== "done" && s.state !== "now")
+        .map((s) => ({ key: s.key, label: s.label }))
+    : KICKOFF_UPCOMING.map((s) => ({ key: s.key, label: s.label }));
   return (
     <Frame
       k="kickoff-journey"
@@ -243,63 +364,65 @@ function KickoffJourney({ view, page }: { view: WelcomeView; page: number }) {
       eyebrow="Your path to launch"
       title="Your journey from"
       accent="kickoff to go-live"
-      lede="Each stage has one job. The dates are the targets we have agreed."
+      lede="Each stage has a clear outcome. Together, we'll agree on the dates."
     >
       {j ? (
         <div className="wp-rail is-six">
           <div className="wp-rail-line" />
-          {stages.map((s) => (
-            <div key={s.key} className={cn("wp-node", s.state === "now" && "is-today")}>
-              <span className="wp-node-day">
-                {s.state === "now" ? (
-                  <i className="wp-today-tag">{s.key === "kickoff" ? "TODAY" : "You are here"}</i>
-                ) : null}
-              </span>
-              <span className={cn("wp-node-tile", s.state === "done" && "is-done")}>
-                <Tile
-                  name={STAGE_ICON[s.key] ?? "Route"}
-                  size="lg"
-                  tone={s.state === "done" ? "navy" : s.state === "now" ? "blue" : "light"}
-                />
-                {s.state === "done" ? (
-                  <span className="wp-done-badge">
-                    <Check className="h-3 w-3" strokeWidth={3} />
+          {stages.map((s) => {
+            const date = stageDate(s);
+            return (
+              <div key={s.key} className={cn("wp-node", s.state === "now" && "is-today")}>
+                <span className="wp-node-day">
+                  {s.state === "now" ? (
+                    <i className="wp-today-tag">{s.key === "kickoff" ? "TODAY" : "You are here"}</i>
+                  ) : null}
+                </span>
+                <span className={cn("wp-node-tile", s.state === "done" && "is-done")}>
+                  <Tile
+                    name={STAGE_ICON[s.key] ?? "Route"}
+                    size="lg"
+                    tone={s.state === "done" ? "navy" : s.state === "now" ? "blue" : "light"}
+                  />
+                  {s.state === "done" ? (
+                    <span className="wp-done-badge">
+                      <Check className="h-3 w-3" strokeWidth={3} />
+                    </span>
+                  ) : null}
+                </span>
+                <span className="wp-node-label">{s.label}</span>
+                {date ? (
+                  <span
+                    className={cn(
+                      "wp-node-date",
+                      date.tone === "done" && "is-done",
+                      date.tone === "pending" && "is-pending",
+                    )}
+                  >
+                    {date.text}
                   </span>
                 ) : null}
-              </span>
-              <span className="wp-node-label">{s.label}</span>
-              {KICKOFF_STAGE_OUTCOME[s.key] ? (
-                <span className="wp-node-detail">{KICKOFF_STAGE_OUTCOME[s.key]}</span>
-              ) : null}
-              {s.target ? (
-                <span className="wp-node-date">
-                  {s.target.currentDate
-                    ? `Target ${shortDay(s.target.currentDate)}`
-                    : "Target to agree"}
-                  {s.target.actualDate ? ` · Completed ${shortDay(s.target.actualDate)}` : ""}
-                </span>
-              ) : null}
-            </div>
-          ))}
+              </div>
+            );
+          })}
         </div>
       ) : null}
-      <div className="wp-kick-upcoming">
-        {KICKOFF_UPCOMING.map((stage) => {
-          const facts = details[stage.key] ?? [];
-          return (
-            <section key={stage.key} className="wp-kick-up-card">
-              <h4>{stage.label}</h4>
-              <p>{stage.text}</p>
-              {facts.length ? (
-                <ul>
-                  {facts.map((fact) => (
-                    <li key={fact}>{fact}</li>
-                  ))}
-                </ul>
-              ) : null}
-            </section>
-          );
-        })}
+      <div className="wp-kick-focus">
+        {now ? (
+          <KickoffNowPanel stageKey={now.key} label={now.label} facts={details[now.key] ?? []} />
+        ) : null}
+        {next.length ? (
+          <div className="wp-kick-next">
+            {next.map((s) => (
+              <KickoffNextCard
+                key={s.key}
+                stageKey={s.key}
+                label={s.label}
+                facts={details[s.key] ?? []}
+              />
+            ))}
+          </div>
+        ) : null}
       </div>
     </Frame>
   );

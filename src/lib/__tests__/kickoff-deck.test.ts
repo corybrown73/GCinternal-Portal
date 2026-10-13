@@ -299,7 +299,7 @@ describe("Slide 3 — the timeline keeps its agreed dates; the lower section exp
       viewWith({ journey: journeyWith("2026-12-04", "2026-10-23") as never }),
       2,
     );
-    const lower = markup.slice(markup.indexOf("wp-kick-upcoming"));
+    const lower = markup.slice(markup.indexOf("wp-kick-focus"));
     expect(lower).not.toContain("Target ");
     expect(lower).not.toContain(shortDay("2026-12-04"));
   });

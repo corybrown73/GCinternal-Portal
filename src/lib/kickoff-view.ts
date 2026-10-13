@@ -143,7 +143,7 @@ export const KICKOFF_UPCOMING: ReadonlyArray<{
   {
     key: "get_it_working",
     label: "Get It Working",
-    text: "Get the first working form built and review it together.",
+    text: "Get the first working form ready to test together.",
   },
   {
     key: "make_it_yours",
@@ -153,12 +153,12 @@ export const KICKOFF_UPCOMING: ReadonlyArray<{
   {
     key: "make_it_run",
     label: "Make It Run",
-    text: "Test the solution in real-world situations and prepare the team for ongoing use.",
+    text: "Test the solution in real-world conditions, capture feedback and make final agreed improvements.",
   },
   {
     key: "complete",
     label: "Graduate",
-    text: "Confirm the agreed solution is operational, address remaining items and hand over ownership.",
+    text: "Confirm the solution is operational, record acceptance and hand over ongoing ownership.",
   },
 ];
 
