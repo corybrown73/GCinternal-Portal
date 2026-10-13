@@ -67,6 +67,7 @@ import {
   bookMeetingPatch,
   completedAfterTick,
   FLOW_STAGES,
+  FUNCTIONAL,
   flowLabel,
   GRADUATION_BRIEF_TITLE,
   isWorkingStageKey,
@@ -76,6 +77,7 @@ import {
   PREP_ITEMS,
   flowStepperStages,
   readingInFlight,
+  readinessFor,
   showKickoffOutcomePrompt,
   stageFlow,
   stageTargetDate,
@@ -100,7 +102,15 @@ import {
   type PartnerKey,
 } from "@/lib/partner-implementation";
 import { PartnerChoice } from "@/components/partner-choice";
-import { partnerWorkspace } from "@/lib/partner-journey";
+import { partnerDashboardView, partnerWorkspace } from "@/lib/partner-journey";
+import { currentImplementationLayout } from "@/lib/current-implementation-layout";
+import {
+  KeyDatesCard,
+  NeedsAttentionCard,
+  NextActionCard,
+  ParkingLotSummary,
+  QuickActions,
+} from "@/components/current-implementation-context";
 import { getPartnerProgress } from "@/lib/hub.functions";
 import { stageGuidanceFor } from "@/lib/stage-guidance";
 import { parseWonGate, type WonGateMissing } from "@/lib/won-gate";
@@ -250,11 +260,18 @@ function ImplementationTargetSection({
   record,
   dealId,
   agreed,
+  partner,
 }: {
   record: Customer360;
   dealId: string;
   /** The agreed Graduate target in the Hub's stage targets: the date the customer's dashboard shows. */
   agreed: { current: string | null; original: string | null };
+  /**
+   * A Partner Implementation: its graduation target is the partner's own recorded
+   * Roll Out target, never the standard stage targets, and the standard presenter
+   * workspace does not apply. The recorded go-live target is still shown.
+   */
+  partner?: { graduationTarget: string | null } | undefined;
 }) {
   const impl = record.implementation;
   const [open, setOpen] = useState(false);
@@ -272,30 +289,38 @@ function ImplementationTargetSection({
       aria-label="Implementation target"
     >
       <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-        Target graduation · what the customer sees
+        {partner ? "Graduation target · partner" : "Target graduation · what the customer sees"}
       </p>
       <p className="mt-0.5 text-[14px] font-semibold text-foreground">
-        {agreed.current ? shortDay(agreed.current) : "Not agreed yet"}
+        {partner
+          ? partner.graduationTarget
+            ? shortDay(partner.graduationTarget)
+            : "To be confirmed"
+          : agreed.current
+            ? shortDay(agreed.current)
+            : "Not agreed yet"}
       </p>
-      {agreedMoved ? (
+      {!partner && agreedMoved ? (
         <p className="mt-0.5 text-[11px] text-muted-foreground">
           First agreed {shortDay(agreed.original!)}
         </p>
       ) : null}
-      <p className="mt-1 text-[11px] text-muted-foreground">
-        Set in the{" "}
-        <a
-          href={`/onboarding-plan/${dealId}?workspace=1`}
-          target="_blank"
-          rel="noreferrer"
-          className="font-medium text-primary hover:underline"
-        >
-          presenter workspace
-        </a>
-        .
-      </p>
+      {!partner ? (
+        <p className="mt-1 text-[11px] text-muted-foreground">
+          Set in the{" "}
+          <a
+            href={`/onboarding-plan/${dealId}?workspace=1`}
+            target="_blank"
+            rel="noreferrer"
+            className="font-medium text-primary hover:underline"
+          >
+            presenter workspace
+          </a>
+          .
+        </p>
+      ) : null}
       <p className="mt-2 border-t border-border pt-2 text-[11px] text-muted-foreground">
-        Plan end:{" "}
+        {partner ? "Recorded go-live target: " : "Plan end: "}
         <span className="inline-flex items-center gap-1 font-medium text-foreground">
           {plan ? shortDay(plan) : "Not set"}
           {plan ? <StatusDot status={health.level} className="text-[12px] font-normal" /> : null}
@@ -359,12 +384,18 @@ function StageGuidancePanel({ shown }: { shown: FlowStageKey }) {
 
       <div className="mt-3.5">
         <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-          Before you move on, confirm
+          Check before you move on
+          <span className="ml-1.5 normal-case tracking-normal font-normal">
+            · guidance, not tracked here
+          </span>
         </div>
         <ul className="mt-1.5 space-y-1 text-foreground">
           {guidance.checks.map((c) => (
             <li key={c} className="flex items-start gap-2">
-              <Check className="mt-0.5 h-3 w-3 shrink-0 text-muted-foreground" aria-hidden />
+              <span
+                className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-muted-foreground"
+                aria-hidden
+              />
               {c}
             </li>
           ))}
@@ -449,8 +480,8 @@ function StageGuidancePanel({ shown }: { shown: FlowStageKey }) {
         <ul className="mt-1.5 space-y-1 text-foreground">
           {guidance.readyWhen.map((r) => (
             <li key={r} className="flex items-start gap-2">
-              <Check
-                className="mt-0.5 h-3 w-3 shrink-0 text-status-ontrack-foreground"
+              <span
+                className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-muted-foreground"
                 aria-hidden
               />
               {r}
@@ -1015,6 +1046,8 @@ export function CurrentImplementationTab({
   useEffect(() => setToday(localIso()), []);
   const [viewing, setViewing] = useState<FlowStageKey | null>(null);
   const [manual, setManual] = useState<{ key: string; wasDone: boolean } | null>(null);
+  const [openPanel, setOpenPanel] = useState<"meeting" | "update" | "dates" | null>(null);
+  const [parkingOpen, setParkingOpen] = useState(false);
   const qc = useQueryClient();
   const skipToGraduation = useServerFn(moveToGraduation);
   const skip = useMutation({
@@ -1100,192 +1133,36 @@ export function CurrentImplementationTab({
         : "Upcoming stage"
       : null;
 
+  // The partner's own dates: its next milestone and its Roll Out target, both read from its records.
+  const partnerView = partner && partnerQ.data ? partnerDashboardView(partnerQ.data) : null;
+  // Which parts of this tab apply to this implementation. The rules live in
+  // current-implementation-layout.ts, where they are tested.
+  const layout = currentImplementationLayout({ partner, currentStage: flow.current });
+  const canonicalView = layout.journeyStrip;
+  const parkingAccess = layout.parkingAccess;
+  const openParking = (parking.data ?? []).filter(
+    (i) => i.status === "open" || i.status === "scheduled",
+  );
+  const nextLine =
+    layout.nextLine === "milestone"
+      ? partnerView
+        ? {
+            label: "Next milestone",
+            detail: partnerView.nextMilestone
+              ? `${partnerView.nextMilestone.name} · ${shortDay(partnerView.nextMilestone.date)}`
+              : "None dated yet",
+          }
+        : null
+      : {
+          label: "Next meeting",
+          detail:
+            m?.booked && m.time
+              ? `${m.label} · ${whenLabel(m.date, m.time, intake.timeline.timezone)}`
+              : "None scheduled",
+        };
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-border bg-card px-4 py-2.5">
-        <div className="min-w-0">
-          <p className="text-[13px] font-medium text-foreground">The customer's dashboard</p>
-          <p className="text-[11px] text-muted-foreground">
-            A read-only preview of what the customer sees on their link, from the information saved
-            on this implementation.
-          </p>
-        </div>
-        <Link
-          to="/customer-dashboard-preview/$dealId"
-          params={{ dealId }}
-          search={{ customer: customerId, impl: implementationId }}
-          className="shrink-0 rounded-sm border border-primary/40 px-3 py-1.5 text-[12px] font-medium text-primary hover:bg-primary/5"
-        >
-          Preview customer dashboard →
-        </Link>
-      </div>
-      <div className="space-y-2">
-        <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-          Update the implementation
-        </div>
-        <div className="space-y-2.5">
-          {/* An implementation that came from a deal has its target on the plan; a proposed date moves the plan's live date. */}
-          <TranscriptUpdatePanel
-            customerId={customerId}
-            implementationId={implementationId}
-            planOwnsTarget={Boolean(dealId)}
-            kickoffOutcome={kickoffOutcome}
-          />
-          <ImplementationUpdatePanel implementationId={implementationId} />
-        </div>
-      </div>
-
-      <ImplementationTargetSection
-        record={record}
-        dealId={dealId}
-        agreed={{
-          current: intake.timeline.stage_targets.complete.current_date,
-          original: intake.timeline.stage_targets.complete.original_date,
-        }}
-      />
-
-      <AdjustPlanDatesPanel
-        dealId={dealId}
-        implementationId={implementationId}
-        customerId={customerId}
-        intake={intake}
-        closeDate={close.date}
-        targetDate={record.implementation?.dates.target ?? null}
-        editable={editable}
-      />
-
-      <section
-        className="rounded-md border border-border bg-card px-4 py-3"
-        aria-label="Implementation status"
-      >
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[12px]">
-          <span>
-            <span className="text-muted-foreground">Owner</span>{" "}
-            <span className="text-foreground">{ownerName ?? "Nobody yet"}</span>
-          </span>
-          {strip ? (
-            <span>
-              <span className="text-muted-foreground">Stage</span>{" "}
-              <span className="text-foreground">{strip.stageLabel}</span>
-            </span>
-          ) : null}
-          {ws.ball && !strip ? (
-            <span className="inline-flex items-center gap-1.5" title={ws.ball.detail}>
-              <span className="text-muted-foreground">Ball</span>
-              <span
-                className={cn(
-                  "rounded-full px-2 py-0.5 text-[11px] font-medium",
-                  ws.ball.who === "customer"
-                    ? "bg-amber-500/15 text-amber-800 dark:text-amber-300"
-                    : "bg-primary/10 text-primary",
-                )}
-              >
-                {ws.ball.who === "customer" ? "With the customer" : "With us"}
-              </span>
-            </span>
-          ) : null}
-          <span>
-            <span className="text-muted-foreground">Next action</span>{" "}
-            <span className="text-foreground">
-              {strip ? strip.nextAction : ws.nextStep ? ws.nextStep.label : "Nothing open"}
-            </span>
-          </span>
-          <span>
-            <span className="text-muted-foreground">Waiting on</span>{" "}
-            <span className="text-foreground">
-              {strip
-                ? strip.waitingOn
-                : ws.waiting.length === 0
-                  ? "Nothing on anyone's desk"
-                  : ws.waiting.length === 1
-                    ? ws.waiting[0]!.what
-                    : `${ws.waiting[0]!.what} (+${ws.waiting.length - 1} more)`}
-            </span>
-          </span>
-        </div>
-        {/* UAT: the row above named a count and a status word with nowhere
-            to see what either actually meant. Both lines below are already
-            computed — deriveHealth()'s own `reason`, every workspaceFor()
-            `waiting` entry's `who` — just not read until now. */}
-        {health && health.level !== "on_track" ? (
-          <p className="mt-1.5 border-t border-border pt-1.5 text-[11px] text-muted-foreground">
-            <span className="font-medium text-foreground">
-              Why {HEALTH_LABEL[health.level].toLowerCase()}:
-            </span>{" "}
-            {health.reason ?? "No specific reason recorded"}
-          </p>
-        ) : null}
-        {ws.waiting.length > 1 && !strip ? (
-          <ul
-            className={cn(
-              "mt-1 space-y-0.5 text-[11px] text-muted-foreground",
-              !(health && health.level !== "on_track") && "border-t border-border pt-1.5",
-            )}
-          >
-            {ws.waiting.map((w, i) => (
-              <li key={i}>
-                <span className="font-medium text-foreground">
-                  {w.who === "customer" ? "Customer" : "GoCanvas"}:
-                </span>{" "}
-                {w.what}
-              </li>
-            ))}
-          </ul>
-        ) : null}
-      </section>
-
-      <section
-        className="rounded-md border border-border bg-card px-4 py-3"
-        aria-label="Next customer meeting"
-      >
-        <h2 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-          Next customer meeting
-        </h2>
-        {m?.booked && m.time ? (
-          <>
-            <p className="mt-1.5 text-[14px] font-semibold">{m.label}</p>
-            <p className="text-[13px]">
-              {whenLabel(m.date, m.time, intake.timeline.timezone)}
-              {m.minutes ? <span className="text-muted-foreground"> · {m.minutes} min</span> : null}
-            </p>
-          </>
-        ) : (
-          <p className="mt-1.5 text-[13px] text-muted-foreground">
-            No upcoming customer meeting scheduled
-          </p>
-        )}
-      </section>
-
-      {partner ? (
-        partnerQ.data ? (
-          <PartnerJourney
-            progress={partnerQ.data}
-            customerId={customerId}
-            implementationId={implementationId}
-            dealId={dealId}
-            editable={editable}
-          />
-        ) : (
-          // Not the standard stage controls: a clear state, and a way to try again.
-          <PartnerProgressStatus
-            state={partnerBodyState(partnerQ)}
-            retrying={partnerQ.isFetching}
-            onRetry={() => void partnerQ.refetch()}
-          />
-        )
-      ) : flow.current === "field_fusion" ? (
-        // With a Partner Implementation Lead, before the handoff: its own
-        // surface, never the Closed Won fallback below.
-        <PartnerHandoffPanel deal={deal} editable={editable} />
-      ) : flow.current === "closed_won" ? (
-        // Closed Won's own gate tasks (assign an owner, the Gong brief, the
-        // SOW, the sales handoff) are outside the canonical journey below
-        // and would otherwise be unreachable from here — the same full
-        // checklist the deal page runs, so completing them is never a dead
-        // end: do it here and the canonical journey below picks up the
-        // moment the deal moves on.
-        <StageFlow deal={deal} />
-      ) : (
+      {canonicalView ? (
         <section
           id="current-implementation-journey"
           className="overflow-hidden rounded-md border border-border bg-card"
@@ -1355,65 +1232,218 @@ export function CurrentImplementationTab({
               </button>
             </div>
           ) : null}
-          <StageTiming
-            shown={shown}
-            history={deal.stage_history}
-            targetDate={stageTargetDate(shown, timeline)}
-          />
-          {isWorkingStageKey(shown) ? (
-            // The working stages are ticks (meetings held, the plan's steps,
-            // readiness, Go-Live, graduation) — the same list the deal page
-            // runs, with its checkboxes. TaskBody has no body for a tick, so
-            // routing these through TaskRow left every one of them unclickable.
-            <OnboardingList
-              deal={deal}
-              intake={intake}
-              tasks={stage.tasks}
-              editable={editable}
-              stageKey={shown}
-              current={flow.current}
-              implementationId={implementationId}
-            />
-          ) : stage.tasks.length > 0 ? (
-            <ol className="divide-y divide-border">
-              {stage.tasks.map((t, i) => (
-                <TaskRow
-                  key={t.key}
-                  n={i + 1}
-                  task={t}
-                  open={openTask?.key === t.key}
-                  onOpen={() => setManual({ key: t.key, wasDone: t.done })}
-                >
-                  <TaskBody task={t} deal={deal} intake={intake} editable={editable} />
-                </TaskRow>
-              ))}
-            </ol>
-          ) : (
-            <p className="px-4 py-3 text-[13px] text-muted-foreground">
-              Nothing to do yet at this stage.
-            </p>
-          )}
-          <StageGuidancePanel shown={shown} />
         </section>
-      )}
+      ) : null}
 
-      <SolutionsCard deal={deal} editable={editable} />
+      <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1.85fr)_minmax(0,1fr)]">
+        <div className="min-w-0 space-y-4">
+          {partner ? (
+            partnerQ.data ? (
+              <PartnerJourney
+                progress={partnerQ.data}
+                customerId={customerId}
+                implementationId={implementationId}
+                dealId={dealId}
+                editable={editable}
+              />
+            ) : (
+              // Not the standard stage controls: a clear state, and a way to try again.
+              <PartnerProgressStatus
+                state={partnerBodyState(partnerQ)}
+                retrying={partnerQ.isFetching}
+                onRetry={() => void partnerQ.refetch()}
+              />
+            )
+          ) : flow.current === "field_fusion" ? (
+            // With a Partner Implementation Lead, before the handoff: its own
+            // surface, never the Closed Won fallback below.
+            <PartnerHandoffPanel deal={deal} editable={editable} />
+          ) : flow.current === "closed_won" ? (
+            // Closed Won's own gate tasks (assign an owner, the Gong brief, the
+            // SOW, the sales handoff) are outside the canonical journey below
+            // and would otherwise be unreachable from here — the same full
+            // checklist the deal page runs, so completing them is never a dead
+            // end: do it here and the canonical journey below picks up the
+            // moment the deal moves on.
+            <StageFlow deal={deal} />
+          ) : (
+            <section
+              className="overflow-hidden rounded-md border border-border bg-card"
+              aria-label={`${stage.label} stage`}
+            >
+              <StageTiming
+                shown={shown}
+                history={deal.stage_history}
+                targetDate={stageTargetDate(shown, timeline)}
+              />
+              {isWorkingStageKey(shown) ? (
+                // The working stages are ticks (meetings held, the plan's steps,
+                // readiness, Go-Live, graduation) — the same list the deal page
+                // runs, with its checkboxes. TaskBody has no body for a tick, so
+                // routing these through TaskRow left every one of them unclickable.
+                <OnboardingList
+                  deal={deal}
+                  intake={intake}
+                  tasks={stage.tasks}
+                  editable={editable}
+                  stageKey={shown}
+                  current={flow.current}
+                  implementationId={implementationId}
+                />
+              ) : stage.tasks.length > 0 ? (
+                <ol className="divide-y divide-border">
+                  {stage.tasks.map((t, i) => (
+                    <TaskRow
+                      key={t.key}
+                      n={i + 1}
+                      task={t}
+                      open={openTask?.key === t.key}
+                      onOpen={() => setManual({ key: t.key, wasDone: t.done })}
+                    >
+                      <TaskBody task={t} deal={deal} intake={intake} editable={editable} />
+                    </TaskRow>
+                  ))}
+                </ol>
+              ) : (
+                <p className="px-4 py-3 text-[13px] text-muted-foreground">
+                  Nothing to do yet at this stage.
+                </p>
+              )}
+              {parkingAccess && parkingOpen ? (
+                <div className="border-t border-border">
+                  <ParkingLot dealId={dealId} editable={editable} />
+                </div>
+              ) : null}
+              <StageGuidancePanel shown={shown} />
+            </section>
+          )}
+        </div>
 
-      <ImplementationFocusPanel dealId={dealId} intake={intake} />
+        <div className="min-w-0 space-y-3">
+          <NeedsAttentionCard record={record} dealId={dealId} />
+          <NextActionCard
+            nextAction={strip ? strip.nextAction : ws.nextStep ? ws.nextStep.label : "Nothing open"}
+            owner={ownerName}
+            ball={!strip && ws.ball ? { who: ws.ball.who, detail: ws.ball.detail } : null}
+            waiting={strip ? [] : ws.waiting.map((w) => ({ who: w.who, what: w.what }))}
+            waitingText={strip ? strip.waitingOn : null}
+            healthWhy={
+              health && health.level !== "on_track"
+                ? (health.reason ?? "No specific reason recorded")
+                : null
+            }
+          />
+          {record.implementation ? (
+            <KeyDatesCard
+              impl={record.implementation}
+              customerId={customerId}
+              next={nextLine}
+              showTierExpected={layout.showTierExpected}
+            />
+          ) : null}
+          <ImplementationTargetSection
+            record={record}
+            dealId={dealId}
+            agreed={{
+              current: intake.timeline.stage_targets.complete.current_date,
+              original: intake.timeline.stage_targets.complete.original_date,
+            }}
+            partner={
+              partner ? { graduationTarget: partnerView?.graduationTarget ?? null } : undefined
+            }
+          />
+          {parkingAccess ? (
+            <ParkingLotSummary
+              openCount={ws.ourOpen}
+              items={openParking.map((i) => ({ id: i.id, request: i.request }))}
+              open={parkingOpen}
+              onToggle={() => setParkingOpen((o) => !o)}
+            />
+          ) : null}
+          <QuickActions
+            open={openPanel}
+            onOpen={(which) => setOpenPanel((o) => (o === which ? null : which))}
+            showPlanDates={layout.showPlanDates}
+            dashboardLink={
+              <Link
+                to="/customer-dashboard-preview/$dealId"
+                params={{ dealId }}
+                search={{ customer: customerId, impl: implementationId }}
+                className="rounded-sm border border-primary/40 px-2.5 py-1.5 text-left text-[12px] font-medium text-primary hover:bg-primary/5"
+              >
+                Preview the customer dashboard →
+              </Link>
+            }
+          />
+          <div hidden={openPanel !== "meeting"}>
+            <TranscriptUpdatePanel
+              customerId={customerId}
+              implementationId={implementationId}
+              planOwnsTarget={Boolean(dealId)}
+              kickoffOutcome={kickoffOutcome}
+            />
+          </div>
+          <div hidden={openPanel !== "update"}>
+            <ImplementationUpdatePanel implementationId={implementationId} />
+          </div>
+          {layout.showPlanDates ? (
+            <div hidden={openPanel !== "dates"}>
+              <AdjustPlanDatesPanel
+                dealId={dealId}
+                implementationId={implementationId}
+                customerId={customerId}
+                intake={intake}
+                closeDate={close.date}
+                targetDate={record.implementation?.dates.target ?? null}
+                editable={editable}
+              />
+            </div>
+          ) : null}
+        </div>
+      </div>
 
-      <WorkflowStoryPanel dealId={dealId} intake={intake} />
-
-      <ImplementationHistorySection
-        dealStageHistory={deal.stage_history}
-        milestoneDateChanges={deal.milestone_date_changes}
-        milestoneLabel={(key) => timeline.milestones.find((m) => m.key === key)?.label ?? key}
-        journal={record.journal}
-        risks={record.risks}
-        issues={record.issues}
-        decisions={record.decisions}
-        evidence={record.evidence}
-      />
+      <div className="space-y-2">
+        <SupportingSection title="Solutions">
+          <SolutionsCard deal={deal} editable={editable} />
+        </SupportingSection>
+        <SupportingSection title="Implementation focus">
+          <ImplementationFocusPanel dealId={dealId} intake={intake} />
+        </SupportingSection>
+        <SupportingSection title="Workflow story">
+          <WorkflowStoryPanel dealId={dealId} intake={intake} />
+        </SupportingSection>
+        <SupportingSection title="Implementation history">
+          <ImplementationHistorySection
+            dealStageHistory={deal.stage_history}
+            milestoneDateChanges={deal.milestone_date_changes}
+            milestoneLabel={(key) => timeline.milestones.find((m) => m.key === key)?.label ?? key}
+            journal={record.journal}
+            risks={record.risks}
+            issues={record.issues}
+            decisions={record.decisions}
+            evidence={record.evidence}
+          />
+        </SupportingSection>
+      </div>
     </div>
+  );
+}
+
+/** A disclosure for a supporting section: closed by default, so the working stage stays first. */
+function SupportingSection({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <details className="group rounded-md border border-border bg-card">
+      <summary className="flex cursor-pointer list-none items-center justify-between px-4 py-2.5 text-[13px] font-medium text-foreground hover:bg-muted/50">
+        {title}
+        <span className="text-[11px] font-normal text-muted-foreground group-open:hidden">
+          Show
+        </span>
+        <span className="hidden text-[11px] font-normal text-muted-foreground group-open:inline">
+          Hide
+        </span>
+      </summary>
+      <div className="border-t border-border">{children}</div>
+    </details>
   );
 }
 
@@ -2915,6 +2945,111 @@ function BookCoreBody({
  * The Onboarding stage: the plan's steps and every service the SOW bought,
  * each one tick on its own row. No rows to open — a tick is the whole job.
  */
+/** Whether a checklist row is a readiness item: a capability this account either has or has taken off. */
+function isReadinessKey(key: string): boolean {
+  return FUNCTIONAL.some((f) => f.key === key);
+}
+
+/**
+ * Takes a readiness item off this account: it is not part of this implementation.
+ * Ported from the retired workspace file; the same intake write, `readiness_off`.
+ */
+function ReadinessOff({
+  deal,
+  intake,
+  itemKey,
+}: {
+  deal: DealData;
+  intake: IntakeAnswers;
+  itemKey: string;
+}) {
+  const qc = useQueryClient();
+  const save = useServerFn(saveIntake);
+  const m = useMutation({
+    mutationFn: () =>
+      save({
+        data: {
+          dealId: deal.account.id,
+          patch: {
+            readiness_off: [
+              ...new Set([...intake.readiness_off.filter((k) => k !== `+${itemKey}`), itemKey]),
+            ],
+          },
+        },
+      } as never),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ["deal", deal.account.id] }),
+  });
+  return (
+    <button
+      type="button"
+      className="mt-1 text-[11px] text-muted-foreground underline decoration-dotted hover:text-foreground disabled:opacity-50"
+      disabled={m.isPending}
+      onClick={() => m.mutate()}
+    >
+      Not part of this account
+    </button>
+  );
+}
+
+/** Puts one readiness item back on this account; a data item needs its "+key" flag. */
+function ReadinessOn({
+  deal,
+  intake,
+  itemKey,
+  label,
+}: {
+  deal: DealData;
+  intake: IntakeAnswers;
+  itemKey: string;
+  label: string;
+}) {
+  const qc = useQueryClient();
+  const save = useServerFn(saveIntake);
+  const needsData = FUNCTIONAL.find((f) => f.key === itemKey)?.needs === "data";
+  const m = useMutation({
+    mutationFn: () =>
+      save({
+        data: {
+          dealId: deal.account.id,
+          patch: {
+            readiness_off: [
+              ...intake.readiness_off.filter((k) => k !== itemKey),
+              ...(needsData ? [`+${itemKey}`] : []),
+            ],
+          },
+        },
+      } as never),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ["deal", deal.account.id] }),
+  });
+  return (
+    <button
+      type="button"
+      className="underline decoration-dotted hover:text-foreground disabled:opacity-50"
+      disabled={m.isPending}
+      onClick={() => m.mutate()}
+    >
+      Add {label} back
+    </button>
+  );
+}
+
+/** The readiness items taken off this account, offered back. Shown only where readiness items are listed. */
+function ReadinessAddBack({ deal, intake }: { deal: DealData; intake: IntakeAnswers }) {
+  const off = FUNCTIONAL.filter((f) => !readinessFor(intake).some((r) => r.key === f.key));
+  if (off.length === 0) return null;
+  return (
+    <p className="border-t border-border px-4 py-2 text-[11px] text-muted-foreground">
+      {off.length} item{off.length === 1 ? "" : "s"} not part of this implementation:{" "}
+      {off.map((f, i) => (
+        <span key={f.key}>
+          {i ? " · " : ""}
+          <ReadinessOn deal={deal} intake={intake} itemKey={f.key} label={f.label} />
+        </span>
+      ))}
+    </p>
+  );
+}
+
 function OnboardingList({
   deal,
   intake,
@@ -3168,6 +3303,9 @@ function OnboardingList({
                   {t.key === nextKey || (t.optional && !t.done) ? (
                     <p className="mt-0.5 text-[12px] text-muted-foreground">{t.hint}</p>
                   ) : null}
+                  {editable && isReadinessKey(t.key) && !t.done ? (
+                    <ReadinessOff deal={deal} intake={intake} itemKey={t.key} />
+                  ) : null}
                   {t.action === "upload_brief" && !t.done ? (
                     <div className="mt-1.5 flex flex-wrap items-center gap-2">
                       <input
@@ -3232,6 +3370,9 @@ function OnboardingList({
           );
         })}
       </ul>
+      {editable && tasks.some((t) => isReadinessKey(t.key)) ? (
+        <ReadinessAddBack deal={deal} intake={intake} />
+      ) : null}
       <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border px-4 py-2.5">
         <p className="text-[12px] text-muted-foreground">
           {tasks.length === 0

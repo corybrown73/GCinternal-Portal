@@ -147,6 +147,7 @@ function gateItemsFor(items: readonly PartnerWorkItem[]): GateItem[] {
     party: i.party,
     owner_name: null,
     due_at: i.dueAt,
+    verified: i.verified,
   }));
 }
 

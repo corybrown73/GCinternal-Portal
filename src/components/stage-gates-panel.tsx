@@ -196,6 +196,17 @@ export function StageGatesPanel({
                 >
                   {g.title}
                 </span>
+                {done && g.verified !== undefined ? (
+                  g.verified ? (
+                    <span className="shrink-0 rounded-full border border-status-ontrack-foreground/40 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-status-ontrack-foreground">
+                      Verified
+                    </span>
+                  ) : (
+                    <span className="shrink-0 rounded-full border border-border px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                      Done, not verified
+                    </span>
+                  )
+                ) : null}
                 {g.party === "customer" ? (
                   <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-muted-foreground">
                     Customer
