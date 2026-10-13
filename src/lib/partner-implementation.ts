@@ -291,3 +291,34 @@ export function liveTemplateId(
   );
   return live?.id ?? null;
 }
+
+/**
+ * Roll Out & Graduation's completion: "available" while the implementation is at
+ * that stage and not yet done, "graduated" once it is complete. Null everywhere else.
+ */
+export type PartnerGraduation = "available" | "graduated" | null;
+
+/** A Partner Implementation's move: where it is now, and the next partner stage (null at the end or at the handoff). */
+export type PartnerMoveView = {
+  currentLabel: string;
+  next: PartnerStage | null;
+  handoff: boolean;
+  graduation: PartnerGraduation;
+};
+
+/**
+ * The move a Partner Implementation can make from its current stage, in the
+ * partner order. The Implementation Ready boundary is `handoff`: that move is
+ * recorded by the handoff itself (its checks and the team member taking it),
+ * never by a plain stage advance, so no advance control offers it.
+ */
+export function partnerMoveFrom(current: string | null): {
+  next: PartnerStage | null;
+  handoff: boolean;
+} {
+  if (!current || !PARTNER_JOURNEY.some((s) => s.key === current))
+    return { next: null, handoff: false };
+  if (current === IMPLEMENTATION_READY.afterStage) return { next: null, handoff: true };
+  const key = nextPartnerStage(PARTNER_TEMPLATE_STAGE_KEYS, current);
+  return { next: key ? partnerStage(key as PartnerStageKey) : null, handoff: false };
+}

@@ -984,6 +984,8 @@ export async function loadCustomer360(
       name: impl.name,
       current_stage: impl.current_stage,
       deal_stage: dealStageOf(impl),
+      journey_type: impl.journey_type ?? null,
+      partner_key: impl.partner_key ?? null,
       stage_entered_at: impl.stage_entered_at,
       status: impl.status,
       health_recorded: impl.health_recorded ?? null,
@@ -2323,6 +2325,88 @@ async function syncStageInstances(
  * is closed at the same instant the destination row is opened, and
  * implementations.stage_entered_at matches that instant.
  */
+/**
+ * The Implementation Ready handoff for a Partner Implementation: Partner Setup
+ * to Form Finalisation. It runs the same transactional path as any partner move
+ * (advancePartnerFor), with the team member the person picked, if they picked
+ * one. Only a partner implementation at Partner Setup can be handed off here.
+ */
+export async function handOffPartner(args: {
+  implementationId: string;
+  teamMemberId: string | null;
+  enteredBy: string | null;
+  actorProfileId: string | null;
+}) {
+  const { data: impl, error } = await db()
+    .from("implementations")
+    .select("id,current_stage,journey_type,partner_key,deal_id")
+    .eq("id", args.implementationId)
+    .maybeSingle();
+  if (error) throw new Error(`Could not read the implementation: ${error.message}`);
+  if (!impl || !isPartnerJourney(impl)) {
+    throw new Error("This implementation does not run the partner journey.");
+  }
+  if (impl.current_stage !== "partner_setup") {
+    throw new Error(
+      "The handoff is made from Partner Setup & Connection; this implementation is at a different stage.",
+    );
+  }
+  const { advancePartnerFor } = await import("./partner-progression.server");
+  const { appUrl } = await import("./app-url");
+  return advancePartnerFor(db(), {
+    implementationId: args.implementationId,
+    dealId: (impl.deal_id as string | null) ?? null,
+    currentStage: impl.current_stage as string,
+    toStage: "form_finalisation",
+    enteredBy: args.enteredBy,
+    actorProfile: args.actorProfileId,
+    notes: null,
+    appUrl: appUrl(),
+    teamMemberId: args.teamMemberId,
+  });
+}
+
+/**
+ * Complete & Graduate for a Partner Implementation at Roll Out & Graduation. One
+ * transaction in the database: the stage and its milestone complete, and the deal
+ * moves to onboarding_complete. The database is the authority on the four
+ * criteria and on a second graduation; this only checks the stage and the journey,
+ * and turns a refusal into a readable message.
+ */
+export async function graduatePartner(args: {
+  implementationId: string;
+  actorTeamMember: string | null;
+  actorProfileId: string | null;
+}): Promise<{ graduated: true }> {
+  const { data: impl, error } = await db()
+    .from("implementations")
+    .select("id,current_stage,journey_type,partner_key")
+    .eq("id", args.implementationId)
+    .maybeSingle();
+  if (error) throw new Error(`Could not read the implementation: ${error.message}`);
+  if (!impl || !isPartnerJourney(impl)) {
+    throw new Error("This implementation does not run the partner journey.");
+  }
+  if (impl.current_stage !== "roll_out") {
+    throw new Error(
+      "Graduation is completed at Roll Out & Graduation; this implementation is at a different stage.",
+    );
+  }
+  const { graduatePartnerImplementation, graduationRefusal } =
+    await import("./partner-progression.server");
+  try {
+    await graduatePartnerImplementation(db(), {
+      implementationId: args.implementationId,
+      actorTeamMember: args.actorTeamMember,
+      actorProfile: args.actorProfileId,
+      at: new Date().toISOString(),
+    });
+  } catch (e) {
+    throw new Error(graduationRefusal((e as Error).message));
+  }
+  return { graduated: true };
+}
+
 export async function advanceStage(args: {
   implementationId: string;
   toStage: string;

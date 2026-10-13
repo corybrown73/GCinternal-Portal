@@ -2,6 +2,7 @@ import { kickoffGraduationTarget } from "./kickoff-view";
 import { TESTING_HOMEWORK_COPY, type Milestone } from "./onboarding-timeline";
 import { HOMEWORK_TEXT } from "./welcome-journey";
 import { HOMEWORK_KEYS, type HomeworkKey, type WelcomeView } from "./welcome";
+import type { PartnerDashboardView } from "./partner-journey";
 
 /**
  * The customer's living implementation dashboard, as plain data. Every value
@@ -126,7 +127,8 @@ export function homeworkTexts(view: Pick<WelcomeView, "timeline">): Record<Homew
 
 export type AttentionItem = {
   id: string;
-  kind: "homework" | "testing" | "solution" | "change";
+  /** "action" is a partner implementation's customer action on the current stage. */
+  kind: "homework" | "testing" | "solution" | "change" | "action";
   what: string;
   /** A named person, only when one is recorded. */
   owner: string | null;
@@ -227,22 +229,102 @@ export function attentionItems(
     });
   }
 
-  for (const [index, p] of (view.parkingLot ?? []).entries()) {
-    if (p.owner !== "customer" || (p.status !== "open" && p.status !== "scheduled")) continue;
-    items.push({
-      ...blank,
-      id: `change:${index}`,
-      kind: "change",
-      what: p.request,
-      due: isIsoDate(p.target) ? p.target : null,
-      dueText: p.target && !isIsoDate(p.target) ? p.target : null,
-    });
-  }
+  items.push(...changeAttention(view.parkingLot));
 
   // Dated items first, earliest first; undated items keep the order above.
   return items.sort((a, b) =>
     a.due && b.due ? a.due.localeCompare(b.due) : a.due ? -1 : b.due ? 1 : 0,
   );
+}
+
+/** The change list items whose owner is the customer and that are still open. Shared by both journeys. */
+function changeAttention(parkingLot: WelcomeView["parkingLot"]): AttentionItem[] {
+  const blank = {
+    owner: null,
+    due: null,
+    dueText: null,
+    done: false,
+    homeworkKey: null,
+    solutionId: null,
+    canConfirm: false,
+    toConfirm: false,
+    coveredBy: null,
+  };
+  return (parkingLot ?? []).flatMap((p, index) => {
+    if (p.owner !== "customer" || (p.status !== "open" && p.status !== "scheduled")) return [];
+    return [
+      {
+        ...blank,
+        id: `change:${index}`,
+        kind: "change" as const,
+        what: p.request,
+        due: isIsoDate(p.target) ? p.target : null,
+        dueText: p.target && !isIsoDate(p.target) ? p.target : null,
+      },
+    ];
+  });
+}
+
+/* --------------------------------------------- Partner implementations */
+
+/**
+ * The header for a partner implementation, in the same shape the standard
+ * header takes, so the existing bar, facts and full-journey card read it
+ * unchanged. Dates are recorded targets only; the rest says To be confirmed.
+ */
+export function partnerDashboardHeader(partner: PartnerDashboardView): DashboardHeader {
+  return {
+    started: partner.stages.length > 0,
+    currentLabel: partner.currentLabel,
+    stages: partner.stages.map((s) => ({ key: s.key, label: s.label, state: s.state })),
+    nextMilestone: partner.nextMilestone
+      ? { label: partner.nextMilestone.name, date: partner.nextMilestone.date, status: "planned" }
+      : null,
+    graduation: {
+      current: isIsoDate(partner.graduationTarget) ? partner.graduationTarget : null,
+      original: null,
+      moved: false,
+    },
+  };
+}
+
+/**
+ * What needs the customer on a partner implementation: their open actions on
+ * the current stage, and the change list items they own. Homework, testing and
+ * the standard solutions are kickoff-only and do not apply to a partner.
+ */
+export function partnerAttentionItems(
+  view: Pick<WelcomeView, "partner" | "parkingLot">,
+): AttentionItem[] {
+  const actions = (view.partner?.actions ?? []).map((a) => ({
+    id: `action:${a.id}`,
+    kind: "action" as const,
+    what: a.title,
+    owner: null,
+    due: null,
+    dueText: null,
+    done: false,
+    homeworkKey: null,
+    solutionId: null,
+    canConfirm: false,
+    toConfirm: false,
+    coveredBy: null,
+  }));
+  return [...actions, ...changeAttention(view.parkingLot)];
+}
+
+/** Partner blockers: the customer's own actions recorded as blocked on the current stage. */
+export function partnerBlockerItems(
+  partner: PartnerDashboardView | null | undefined,
+): BlockerItem[] {
+  return (partner?.blockers ?? []).map((b) => ({
+    id: `action:${b.id}`,
+    what: b.title,
+    status: "Recorded as blocked",
+    owner: null,
+    due: null,
+    dueText: null,
+  }));
 }
 
 /* ------------------------------------------------ What GoCanvas is working on */

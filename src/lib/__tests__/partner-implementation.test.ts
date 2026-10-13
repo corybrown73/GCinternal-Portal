@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { intakeAnswersSchema, readIntake } from "../intake-answers";
+import { partnerMoveFrom } from "../partner-implementation";
 import {
   customerStages,
   PARTNER_KEYS,
@@ -323,5 +324,28 @@ describe("a partner's start refuses rather than falling back", () => {
     expect(liveTemplateId([row({ superseded_by_id: "t2" })])).toBeNull();
     expect(liveTemplateId([row({ key: "field-fusion" })])).toBeNull();
     expect(liveTemplateId([])).toBeNull();
+  });
+});
+
+describe("partnerMoveFrom — the one move a partner stage can make", () => {
+  it("moves one step forward along the partner order", () => {
+    expect(partnerMoveFrom("closed_won_planning")).toEqual({
+      next: expect.objectContaining({ key: "partner_setup" }),
+      handoff: false,
+    });
+    expect(partnerMoveFrom("form_finalisation").next?.key).toBe("pilot");
+    expect(partnerMoveFrom("pilot").next?.key).toBe("trial_run");
+    expect(partnerMoveFrom("trial_run").next?.key).toBe("roll_out");
+  });
+
+  it("never offers the Implementation Ready handoff as a plain move", () => {
+    expect(partnerMoveFrom("partner_setup")).toEqual({ next: null, handoff: true });
+  });
+
+  it("offers nothing at the end, before the journey, or for a non-partner stage", () => {
+    expect(partnerMoveFrom("roll_out")).toEqual({ next: null, handoff: false });
+    expect(partnerMoveFrom("pre_sale_poc")).toEqual({ next: null, handoff: false });
+    expect(partnerMoveFrom("get_it_working")).toEqual({ next: null, handoff: false });
+    expect(partnerMoveFrom(null)).toEqual({ next: null, handoff: false });
   });
 });

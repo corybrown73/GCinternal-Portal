@@ -6,11 +6,12 @@ import { ArrowRight, Check, CircleDashed } from "lucide-react";
 import { Panel } from "@/components/record";
 import { Button } from "@/components/ui/button";
 import { setTaskStatus } from "@/lib/plan.functions";
-import { advanceImplementationStage } from "@/lib/hub.functions";
+import { advanceImplementationStage, graduatePartnerImplementationFn } from "@/lib/hub.functions";
 import { nextLifecycleStage } from "@/lib/stage-advance-input";
 import { stageLabel } from "@/lib/hub-format";
 import type { LifecycleStageId } from "@/lib/lifecycle";
 import {
+  partnerMoveBlocked,
   advanceLabel,
   gateOutcome,
   overridePrompt,
@@ -24,6 +25,7 @@ import {
 import { userMessage } from "@/lib/errors";
 import { cn } from "@/lib/utils";
 import { ask } from "@/components/ui/ask";
+import type { PartnerMoveView } from "@/lib/partner-implementation";
 
 /**
  * The three things that have to be true before this project moves on.
@@ -45,6 +47,7 @@ export function StageGatesPanel({
   currentStage,
   stageGateMode,
   items,
+  partner,
 }: {
   customerId: string;
   implementationId: string;
@@ -52,15 +55,22 @@ export function StageGatesPanel({
   stageGateMode: string | null;
   /** The work items belonging to the CURRENT stage only. */
   items: GateItem[];
+  /** A Partner Implementation's move, from the partner order. Replaces the lifecycle step. */
+  partner?: PartnerMoveView | null;
 }) {
   const status = stageGateStatus(items);
-  const next = nextLifecycleStage(currentStage);
+  // A partner implementation moves along its own order; the house lifecycle has none of its stages.
+  const next: string | null = partner
+    ? (partner.next?.key ?? null)
+    : nextLifecycleStage(currentStage);
+  const nextName = partner ? (partner.next?.label ?? "") : stageLabel(next);
   const queryClient = useQueryClient();
 
   const tick = useServerFn(setTaskStatus);
   const advance = useServerFn(advanceImplementationStage);
 
   const refresh = () => {
+    void queryClient.invalidateQueries({ queryKey: ["partner-progress", implementationId] });
     void queryClient.invalidateQueries({ queryKey: ["plan", implementationId] });
     void queryClient.invalidateQueries({ queryKey: ["customer360", customerId] });
   };
@@ -93,6 +103,29 @@ export function StageGatesPanel({
     },
   });
 
+  // A partner stage's blocking gates are mandatory: the move is refused while any
+  // is open and cannot be overridden, so no override control is offered for it.
+  const partnerBlocked =
+    Boolean(partner) && partnerMoveBlocked(status, stageGateMode, next !== null);
+
+  // Complete & Graduate is its own transactional action, never the stage advance. It
+  // also refreshes the deal, the dashboard and the home list, which the deal moves to
+  // Graduate and the customer's journey reads.
+  const graduateNow = useServerFn(graduatePartnerImplementationFn);
+  const refreshGraduation = () => {
+    refresh();
+    void queryClient.invalidateQueries({ queryKey: ["deal"] });
+    void queryClient.invalidateQueries({ queryKey: ["welcome"] });
+    void queryClient.invalidateQueries({ queryKey: ["home"] });
+  };
+  const graduate = useMutation({
+    mutationFn: () => graduateNow({ data: { implementationId } }),
+    onSuccess: refreshGraduation,
+  });
+  // The database's rule: every Roll Out criterion must be done (not skipped).
+  const openCriteria = status.gates.filter((g) => g.status !== "done");
+  const graduationReady = status.gates.length > 0 && openCriteria.length === 0;
+
   const move = useMutation({
     mutationFn: (v: { reason: string | null }) =>
       advance({
@@ -102,9 +135,13 @@ export function StageGatesPanel({
           // Null: the server resolves the actor from the authenticated caller
           // rather than asking the client who it is.
           enteredBy: null,
+          // A partner advance has no override field: a reason given on an advisory
+          // partner gap is recorded as the move's note, so it is not lost.
           notes: status.ready
             ? "All core criteria complete"
-            : `Advanced with ${status.remaining.length} core criteria outstanding`,
+            : partner && v.reason
+              ? v.reason
+              : `Advanced with ${status.remaining.length} core criteria outstanding`,
           override: status.ready ? null : { reason: v.reason },
         },
       }),
@@ -180,7 +217,11 @@ export function StageGatesPanel({
           {gateSummary(status)}
         </p>
 
-        {next ? (
+        {next && partnerBlocked ? (
+          <p className="text-[12px] font-medium text-status-risk-foreground">
+            Mandatory for this stage: {gateSummary(status)}. This move cannot be overridden.
+          </p>
+        ) : next ? (
           <Button
             size="sm"
             // Demoted whenever anything is outstanding. A primary button is a
@@ -197,9 +238,9 @@ export function StageGatesPanel({
               // reason is what turns "clicked through a dialog" into
               // "somebody said why", and it is required on a blocking gate.
               const answer = await ask({
-                title: `Move to ${stageLabel(next)} anyway?`,
-                body: overridePrompt(status, stageLabel(next)),
-                confirmLabel: `Move to ${stageLabel(next)}`,
+                title: `Move to ${nextName} anyway?`,
+                body: overridePrompt(status, nextName),
+                confirmLabel: `Move to ${nextName}`,
                 ...(mustExplain
                   ? {
                       prompt: {
@@ -217,20 +258,65 @@ export function StageGatesPanel({
             // paragraph somewhere else on the page.
             title={
               outcome === "clear"
-                ? `Move to ${stageLabel(next)}`
+                ? `Move to ${nextName}`
                 : `${gateSummary(status)} — you will be asked to confirm${
                     mustExplain ? " and say why" : ""
                   }`
             }
           >
-            {advanceLabel(outcome, stageLabel(next))} <ArrowRight />
+            {advanceLabel(outcome, nextName)} <ArrowRight />
           </Button>
+        ) : partner?.graduation === "graduated" ? (
+          <p className="text-[12px] font-medium text-status-ontrack-foreground">
+            Graduated. Roll Out &amp; Graduation is complete and the deal is at Graduate.
+          </p>
+        ) : partner?.graduation === "available" ? (
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              size="sm"
+              disabled={!graduationReady || graduate.isPending}
+              title={
+                graduationReady
+                  ? "Completes Roll Out & Graduation and moves the deal to Graduate"
+                  : "Every Roll Out criterion must be done first"
+              }
+              onClick={async () => {
+                if (
+                  await ask({
+                    title: "Complete & graduate this implementation?",
+                    body: "This completes Roll Out & Graduation and moves the deal to Graduate. It is recorded in the change history.",
+                    confirmLabel: "Complete & Graduate",
+                  })
+                )
+                  graduate.mutate();
+              }}
+            >
+              {graduate.isPending ? "Graduating…" : "Complete & Graduate"}
+            </Button>
+            {!graduationReady ? (
+              <span className="text-[11px] text-muted-foreground">
+                {openCriteria.length === 1
+                  ? `Waiting on: ${openCriteria[0]!.title}`
+                  : `${openCriteria.length} criteria still open.`}
+              </span>
+            ) : null}
+          </div>
+        ) : partner?.handoff ? (
+          <p className="text-[11px] text-muted-foreground">
+            Partner Setup ends with the handoff to the GoCanvas implementation team, from the
+            handoff panel above.
+          </p>
         ) : null}
       </div>
 
       {/* Both go through userMessage: a server function can still surface a
           driver message if a write fails somewhere that has not been wrapped
           yet, and this is the last place before it reaches a person. */}
+      {graduate.error ? (
+        <p role="alert" className="px-3 py-2 text-[12px] text-destructive">
+          {userMessage("graduate this implementation", graduate.error)}
+        </p>
+      ) : null}
       {move.error ? (
         <p className="px-3 py-2 text-[12px] text-destructive">
           {userMessage("move this project on", move.error)}

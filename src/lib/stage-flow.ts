@@ -1219,12 +1219,72 @@ export function stageFlow(input: StageFlowInput): StageFlow {
  */
 export type RailStatus = "completed" | "current" | "upcoming" | "skipped";
 
+/**
+ * One stage as the stepper draws it. The stepper is generic: the standard
+ * flow and the partner flow each map their own stages into this shape, so the
+ * visual never needs to know which journey it is showing. `date` is recorded
+ * data only; null draws nothing.
+ */
+export type StepperStage = {
+  key: string;
+  label: string;
+  status: RailStatus;
+  /** The stage the implementation is in. A done current stage is still the current one. */
+  isCurrent: boolean;
+  /** Before the current stage: the check mark. Kept separate from status, as the standard rail always has. */
+  passed: boolean;
+  date: { label: string; text: string } | null;
+};
+
+/**
+ * The standard rail's stages, shaped for the stepper. Statuses come from
+ * railStatuses(); dates are recorded history and targets only (journeyStageDate).
+ * The stepper itself knows nothing about the standard flow.
+ */
+export function flowStepperStages(
+  stages: ReadonlyArray<{
+    key: FlowStageKey;
+    label: string;
+    done: boolean;
+    tasks: readonly unknown[];
+  }>,
+  current: FlowStageKey | null,
+  options: {
+    history?: ReadonlyArray<{ to_stage: string; occurred_at: string }> | undefined;
+    timeline?: Timeline | null | undefined;
+    outcomeAt?: string | null | undefined;
+  } = {},
+): StepperStage[] {
+  const at = stages.findIndex((s) => s.key === current);
+  const statusByKey = new Map(railStatuses(stages, current).map((r) => [r.key, r.status]));
+  return stages.map((s, i) => {
+    const status = statusByKey.get(s.key)!;
+    return {
+      key: s.key,
+      label: s.label,
+      status,
+      isCurrent: s.key === current,
+      passed: at >= 0 && i < at,
+      date: options.history
+        ? journeyStageDate(
+            s.key,
+            status,
+            options.history,
+            options.timeline ?? null,
+            options.outcomeAt ?? null,
+          )
+        : null,
+    };
+  });
+}
+
 export function railStatuses<
-  T extends { key: FlowStageKey; done: boolean; tasks: readonly unknown[] },
+  K extends string,
+  T extends { key: K; done: boolean; tasks: readonly unknown[] },
 >(
   stages: ReadonlyArray<T>,
-  current: FlowStageKey | null,
-): Array<{ key: FlowStageKey; status: RailStatus; hasRecords: boolean }> {
+  current: K | null,
+): Array<{ key: K; status: RailStatus; hasRecords: boolean }> {
   const at = stages.findIndex((s) => s.key === current);
   return stages.map((s, i) => {
     const past = at >= 0 && i < at;

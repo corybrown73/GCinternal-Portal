@@ -94,6 +94,7 @@ import { triageRowForCustomer360 } from "@/lib/home-triage";
 import type { Customer360, TraceStep } from "@/lib/hub-types";
 import { dealStageLabel, dealStageProgress } from "@/lib/deal-stage";
 import { LIFECYCLE_STAGES } from "@/lib/lifecycle";
+import { isPartnerJourney } from "@/lib/partner-implementation";
 import { FLOW_STAGES } from "@/lib/stage-flow";
 import { readIntake } from "@/lib/intake-answers";
 import { normalizeServices, SOLUTION_LABEL, type ServiceSpec } from "@/lib/onboarding-services";
@@ -2170,18 +2171,29 @@ function JourneyTab({ record, customerId }: { record: Customer360; customerId: s
       </div>
 
       <div className="rounded-md bg-surface px-4 py-3.5">
-        <div className="text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
-          Move to next stage
-        </div>
-        <div className="mt-2">
-          <AdvanceStage
-            customerId={customerId}
-            implementationId={impl.id}
-            currentStage={activeStage}
-            team={record.team}
-            gate={launchGate}
-          />
-        </div>
+        {/* A partner implementation has one stage control: Current Implementation's
+            gates panel, which holds its gate items and its move. */}
+        {isPartnerJourney(impl) ? (
+          <p className="text-[12px] text-muted-foreground">
+            This is a partner implementation. Its stage moves are made in Current Implementation,
+            where its gates and handoff are.
+          </p>
+        ) : (
+          <>
+            <div className="text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+              Move to next stage
+            </div>
+            <div className="mt-2">
+              <AdvanceStage
+                customerId={customerId}
+                implementationId={impl.id}
+                currentStage={activeStage}
+                team={record.team}
+                gate={launchGate}
+              />
+            </div>
+          </>
+        )}
       </div>
 
       {/* The sales → delivery handoff gate, next to the stage move it gates.

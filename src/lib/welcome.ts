@@ -192,6 +192,12 @@ export type WelcomeView = {
    * each thing they bought, what is theirs to do. Null before the close.
    */
   journey?: CustomerJourney | null;
+  /**
+   * A Partner Implementation's dashboard, from its own progress. Set only for
+   * the partner journey; a partner deal has no six-stage journey (journey is
+   * null), so the partner stages are never forced through it.
+   */
+  partner?: import("./partner-journey").PartnerDashboardView | null;
   parkingLot?: Array<{
     request: string;
     target: string;

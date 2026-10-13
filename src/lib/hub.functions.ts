@@ -458,6 +458,57 @@ export const setImplementation = createServerFn({ method: "POST" })
     );
   });
 
+/** A Partner Implementation's progress, read from its records. Null for any other implementation. */
+export const getPartnerProgress = createServerFn({ method: "GET" })
+  .middleware([requireInternalAuth])
+  .inputValidator((data: unknown) => z.object({ implementationId: z.string().uuid() }).parse(data))
+  .handler(async ({ data }) => {
+    const { loadPartnerProgress } = await import("./partner-journey.server");
+    return loadPartnerProgress(data.implementationId);
+  });
+
+/**
+ * The Implementation Ready handoff, from Current Implementation. Partner Setup
+ * to Form Finalisation through the transactional partner path; the team member
+ * is the one picked, or the rule's choice when none is picked.
+ */
+/**
+ * Complete & Graduate, from Roll Out & Graduation in Current Implementation. Not
+ * the stage-advance action: it completes the partner implementation and moves the
+ * deal to onboarding_complete through the transactional partner path.
+ */
+export const graduatePartnerImplementationFn = createServerFn({ method: "POST" })
+  .middleware([requireInternalAuth])
+  .inputValidator((data: unknown) => z.object({ implementationId: z.string().uuid() }).parse(data))
+  .handler(async ({ data, context }) => {
+    const { graduatePartner } = await import("./hub.server");
+    return graduatePartner({
+      implementationId: data.implementationId,
+      actorTeamMember: context.profile.team_member_id ?? null,
+      actorProfileId: context.profile.id,
+    });
+  });
+
+export const handOffPartnerImplementation = createServerFn({ method: "POST" })
+  .middleware([requireInternalAuth])
+  .inputValidator((data: unknown) =>
+    z
+      .object({
+        implementationId: z.string().uuid(),
+        teamMemberId: z.string().uuid().nullable(),
+      })
+      .parse(data),
+  )
+  .handler(async ({ data, context }) => {
+    const { handOffPartner } = await import("./hub.server");
+    return handOffPartner({
+      implementationId: data.implementationId,
+      teamMemberId: data.teamMemberId,
+      enteredBy: context.profile.team_member_id ?? null,
+      actorProfileId: context.profile.id,
+    });
+  });
+
 export const advanceImplementationStage = createServerFn({ method: "POST" })
   .middleware([requireInternalAuth])
   .inputValidator((data: unknown) => advanceStageInput.parse(data))
