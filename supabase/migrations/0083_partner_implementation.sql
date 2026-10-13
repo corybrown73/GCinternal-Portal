@@ -13,10 +13,10 @@
 --    no task is dated from the launch date or any other basis.
 -- 4. The seven-stage partner template (stages 2–7). Published through the same
 --    path as the Field Fusion template (0058): drafted, then frozen.
--- 5. create_partner_implementation: inserts the implementation, its first
---    history row, and applies the template in ONE transaction. If the template
---    is missing or does not apply, everything rolls back. No partial
---    implementation can be left behind.
+-- 5. create_partner_implementation: creates the customer when the deal has
+--    none, then the implementation, its first history row, and the template's
+--    stages and tasks, in ONE transaction. If anything fails, everything rolls
+--    back, the customer included. No partial record can be left behind.
 --
 -- No existing stage, task, template or implementation row is touched.
 
@@ -112,11 +112,17 @@ begin
   update journey_templates set status = 'published', published_at = now() where id = v_tid;
 end $$;
 
--- Start a partner implementation in one transaction. A missing or unapplied
--- template raises here, so the implementation and its history are rolled back
--- with it. Returns the new implementation id.
+-- Start a partner implementation in one transaction. The customer is created
+-- here too when the deal has none: a missing or unapplied template, a bad
+-- customer, or any other failure rolls back the customer, the implementation,
+-- its history and its plan together. Nothing can be left behind.
+-- Returns the implementation id, the customer id, and whether this call
+-- created the customer.
+drop function if exists create_partner_implementation(uuid, uuid, text, text, jsonb, uuid, uuid, timestamptz);
+
 create or replace function create_partner_implementation(
   p_customer_id uuid,
+  p_new_customer jsonb,
   p_deal_id uuid,
   p_name text,
   p_partner_key text,
@@ -124,14 +130,16 @@ create or replace function create_partner_implementation(
   p_entered_by uuid,
   p_actor_profile uuid,
   p_at timestamptz
-) returns uuid
+) returns jsonb
 language plpgsql
 security definer
 set search_path = public
 as $$
 declare
   v_tpl uuid;
+  v_cust uuid;
   v_impl uuid;
+  v_created boolean := false;
   v_start text := 'closed_won_planning';
   v_res jsonb;
 begin
@@ -141,12 +149,30 @@ begin
     raise exception 'The partner implementation journey is not published, so nothing was started.';
   end if;
 
+  if p_customer_id is not null then
+    v_cust := p_customer_id;
+  else
+    if coalesce(p_new_customer ->> 'name', '') = '' then
+      raise exception 'A new customer needs a name, so nothing was started.';
+    end if;
+    insert into customers (name, arr, industry, salesforce_account_id, logo_path)
+    values (
+      p_new_customer ->> 'name',
+      (p_new_customer ->> 'arr')::numeric,
+      p_new_customer ->> 'industry',
+      p_new_customer ->> 'salesforce_account_id',
+      p_new_customer ->> 'logo_path'
+    )
+    returning id into v_cust;
+    v_created := true;
+  end if;
+
   insert into implementations (
     customer_id, deal_id, name, current_stage, stage_entered_at, partner_key,
     status, source, sow_reference, sow_signed_date, sow_value,
     sow_document_url, sow_document_name, sow_document_path
   ) values (
-    p_customer_id, p_deal_id, p_name, v_start, p_at, p_partner_key,
+    v_cust, p_deal_id, p_name, v_start, p_at, p_partner_key,
     'on_track', 'presale',
     p_sow ->> 'sow_reference',
     (p_sow ->> 'sow_signed_date')::date,
@@ -165,10 +191,14 @@ begin
     raise exception 'The partner journey did not apply, so nothing was started: %', v_res;
   end if;
 
-  return v_impl;
+  return jsonb_build_object(
+    'implementation_id', v_impl,
+    'customer_id', v_cust,
+    'customer_created', v_created
+  );
 end $$;
 
-revoke execute on function create_partner_implementation(uuid, uuid, text, text, jsonb, uuid, uuid, timestamptz)
+revoke execute on function create_partner_implementation(uuid, jsonb, uuid, text, text, jsonb, uuid, uuid, timestamptz)
   from public, anon, authenticated;
-grant execute on function create_partner_implementation(uuid, uuid, text, text, jsonb, uuid, uuid, timestamptz)
+grant execute on function create_partner_implementation(uuid, jsonb, uuid, text, text, jsonb, uuid, uuid, timestamptz)
   to service_role;

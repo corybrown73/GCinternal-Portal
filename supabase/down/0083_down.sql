@@ -9,7 +9,7 @@ begin
      or exists (select 1 from work_items where due_basis = 'unscheduled') then
     raise exception 'Partner implementations exist; they must be completed or moved before 0083 is reversed';
   end if;
-  drop function if exists create_partner_implementation(uuid, uuid, text, text, jsonb, uuid, uuid, timestamptz);
+  drop function if exists create_partner_implementation(uuid, jsonb, uuid, text, text, jsonb, uuid, uuid, timestamptz);
   delete from journey_templates where key = 'partner-implementation';
   alter table work_items drop constraint if exists work_items_due_basis_check;
   alter table work_items add constraint work_items_due_basis_check

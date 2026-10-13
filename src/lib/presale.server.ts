@@ -38,6 +38,7 @@ import {
   requiresPartnerTemplate,
   templateKeyFor,
 } from "./partner-implementation";
+import { startPartnerImplementation } from "./partner-start.server";
 import { LIFECYCLE_STAGES } from "./lifecycle";
 import type {
   Account,
@@ -1929,54 +1930,16 @@ export async function startOnboardingAs(
   }
 
   // (a) customer + implementation records in the hub's post-sale tables.
-  let customerId: string;
-  let customerCreated = false;
-  if (decision.action === "use_existing") {
-    const { data: existing } = await db()
-      .from("customers")
-      .select("id")
-      .eq("id", decision.customerId)
-      .maybeSingle();
-    if (!existing) throw new Error("That account no longer exists — pick another one");
-    customerId = decision.customerId;
-  } else {
-    const { data: customer, error: customerError } = await db()
-      .from("customers")
-      .insert({
-        name: account.name,
-        arr: account.arr ?? null,
-        // The industry chosen on "New account" lives on the deal's intake;
-        // the customer is where the header, the list and the photo read it.
-        industry:
-          (await import("./intake-answers")).readIntake((account as { intake?: unknown }).intake)
-            .industry ?? null,
-        // Stamp the identity so the next handoff matches instead of duplicating.
-        ...(flagOn && account.salesforce_id
-          ? { salesforce_account_id: sfId18(account.salesforce_id) }
-          : {}),
-        // 0045: the same bucket and the same column name on both sides, so
-        // this is a path copy and not a re-upload. Only on a customer being
-        // created — a logo carried onto an existing account would silently
-        // replace one somebody already chose there.
-        ...(account.logo_path ? { logo_path: account.logo_path } : {}),
-      })
-      .select("id")
-      .single();
-    if (customerError || !customer) {
-      throw new Error(customerError?.message ?? "Could not create the customer record");
-    }
-    customerId = customer.id as string;
-    customerCreated = true;
-  }
-
+  // A standard start creates the customer here. A partner start creates the
+  // customer inside its own transaction (see startPartnerImplementation), so a
+  // failed start cannot leave a customer behind.
+  const { readIntake: readIntakeFor } = await import("./intake-answers");
+  const { teamMemberIdForProfile } = await import("./activity.server");
   const firstStage = LIFECYCLE_STAGES[0]!.id;
   const now = new Date().toISOString();
-  const { readIntake: readIntakeFor } = await import("./intake-answers");
-  // A partner implementation opens on its own first stage and names its partner.
-  // Every other start is unchanged.
-  const startStage = initialStageFor(startIntake) ?? firstStage;
   const partnerKey = explicitPartnerKeyFor(startIntake);
-  const partnerStart = requiresPartnerTemplate(startIntake);
+  const partnerStart = partnerKey !== null;
+  const startStage = initialStageFor(startIntake) ?? firstStage;
   const implName = implementationNameFor(readIntakeFor(account.intake), String(account.name));
   // What was sold, carried from the deal (0045). Delivery keeps its own copy:
   // correcting the reference on the project must not rewrite what the deal says
@@ -1989,36 +1952,67 @@ export async function startOnboardingAs(
     sow_document_name: account.sow_document_name ?? null,
     sow_document_path: account.sow_document_path ?? null,
   };
-  const { teamMemberIdForProfile } = await import("./activity.server");
+  const newCustomer = {
+    name: account.name,
+    arr: account.arr ?? null,
+    // The industry chosen on "New account" lives on the deal's intake; the
+    // customer is where the header, the list and the photo read it.
+    industry: startIntake.industry ?? null,
+    // Stamp the identity so the next handoff matches instead of duplicating.
+    ...(flagOn && account.salesforce_id
+      ? { salesforce_account_id: sfId18(account.salesforce_id) }
+      : {}),
+    // 0045: the same bucket and the same column name on both sides, so this is
+    // a path copy and not a re-upload. Only on a customer being created — a logo
+    // carried onto an existing account would silently replace one somebody
+    // already chose there.
+    ...(account.logo_path ? { logo_path: account.logo_path } : {}),
+  };
+
+  let customerId: string | null = null;
+  let customerCreated = false;
+  if (decision.action === "use_existing") {
+    const { data: existing } = await db()
+      .from("customers")
+      .select("id")
+      .eq("id", decision.customerId)
+      .maybeSingle();
+    if (!existing) throw new Error("That account no longer exists — pick another one");
+    customerId = decision.customerId;
+  } else if (!partnerStart) {
+    const { data: customer, error: customerError } = await db()
+      .from("customers")
+      .insert(newCustomer)
+      .select("id")
+      .single();
+    if (customerError || !customer) {
+      throw new Error(customerError?.message ?? "Could not create the customer record");
+    }
+    customerId = customer.id as string;
+    customerCreated = true;
+  }
 
   let implId: string;
-  if (partnerStart) {
-    // One transaction in the database: the implementation, its first history
-    // row, and the partner journey's stages and tasks. A failure anywhere rolls
-    // all of it back, so no partial implementation is left to clean up.
-    const { data: created, error: createError } = await db().rpc("create_partner_implementation", {
-      p_customer_id: customerId,
-      p_deal_id: account.id,
-      p_name: implName,
-      p_partner_key: partnerKey,
-      p_sow: sowFields,
-      p_entered_by: await teamMemberIdForProfile(userId),
-      p_actor_profile: userId,
-      p_at: now,
+  if (partnerKey) {
+    // One transaction: the customer (when there is none), the implementation,
+    // its first history row, and the partner journey's stages and tasks. A
+    // failure anywhere writes nothing, so there is nothing to clean up here.
+    const started = await startPartnerImplementation(db(), {
+      dealId: account.id,
+      implementationName: implName,
+      partnerKey,
+      sow: sowFields,
+      customerId,
+      newCustomer: customerId ? null : newCustomer,
+      enteredBy: await teamMemberIdForProfile(userId),
+      actorProfile: userId,
+      at: now,
     });
-    if (createError || !created) {
-      if (customerCreated) {
-        // This same start made the customer moments ago, so it goes too.
-        const { error: undoError } = await db().from("customers").delete().eq("id", customerId);
-        if (undoError)
-          console.error("[partner start] could not remove the new customer", undoError);
-      }
-      throw new Error(
-        `The partner implementation was not started, so nothing was written. ${createError?.message ?? "No implementation was returned."}`,
-      );
-    }
-    implId = String(created);
+    implId = started.implementationId;
+    customerId = started.customerId;
+    customerCreated = started.customerCreated;
   } else {
+    if (!customerId) throw new Error("No customer was resolved for this start.");
     const { data: impl, error: implError } = await db()
       .from("implementations")
       .insert({

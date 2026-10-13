@@ -4,7 +4,7 @@ begin;
 
 -- Fixtures: one customer, one deal on the close.
 do $$
-declare v_c uuid; v_d uuid; v_n int; v_impl uuid; v_before int; v_raised boolean;
+declare v_c uuid; v_d uuid; v_n int; v_impl uuid; v_before int; v_raised boolean; v_res jsonb;
 begin
   insert into customers (name) values ('0083 probe customer') returning id into v_c;
   insert into portal_accounts (name, stage) values ('0083 probe deal', 'closed_won') returning id into v_d;
@@ -50,8 +50,12 @@ begin
   raise notice '0083 ok: published template content is frozen';
 
   -- 4. Starting a partner implementation generates its stages and undated work.
-  v_impl := create_partner_implementation(v_c, v_d, '0083 partner', 'field_fusion_iq',
+  v_res := create_partner_implementation(v_c, null, v_d, '0083 partner', 'field_fusion_iq',
     '{"sow_reference":"SOW-0083"}'::jsonb, null, null, now());
+  v_impl := (v_res ->> 'implementation_id')::uuid;
+  if (v_res ->> 'customer_created')::boolean then
+    raise exception '0083: an existing customer was reported as created';
+  end if;
   if (select current_stage from implementations where id = v_impl) <> 'closed_won_planning' then
     raise exception '0083: a partner implementation did not open on closed_won_planning';
   end if;
@@ -80,7 +84,7 @@ begin
    where key = 'partner-implementation' and superseded_by_id is null;
   v_raised := false;
   begin
-    perform create_partner_implementation(v_c, v_d, '0083 refused', 'field_fusion_iq', '{}'::jsonb, null, null, now());
+    perform create_partner_implementation(v_c, null, v_d, '0083 refused', 'field_fusion_iq', '{}'::jsonb, null, null, now());
   exception when others then
     v_raised := sqlerrm like '%is not published%';
   end;
@@ -101,7 +105,7 @@ begin
     for each row execute function probe_fail_work_items();
   v_raised := false;
   begin
-    perform create_partner_implementation(v_c, v_d, '0083 partial', 'field_fusion_iq', '{}'::jsonb, null, null, now());
+    perform create_partner_implementation(v_c, null, v_d, '0083 partial', 'field_fusion_iq', '{}'::jsonb, null, null, now());
   exception when others then
     v_raised := sqlerrm like '%forced apply failure%';
   end;
@@ -118,6 +122,53 @@ begin
   end if;
   raise notice '0083 ok: a template that fails to apply leaves nothing behind';
 
+  -- 8. A new customer is created in the same transaction, with its fields.
+  v_res := create_partner_implementation(null, '{"name":"0083 new customer","arr":"1500.5","industry":"Pools"}'::jsonb,
+    v_d, '0083 new customer impl', 'field_fusion_iq', '{}'::jsonb, null, null, now());
+  if not (v_res ->> 'customer_created')::boolean then
+    raise exception '0083: a new customer was not reported as created';
+  end if;
+  if not exists (select 1 from customers c where c.id = (v_res ->> 'customer_id')::uuid
+                    and c.name = '0083 new customer' and c.arr = 1500.5 and c.industry = 'Pools') then
+    raise exception '0083: the new customer did not keep its fields';
+  end if;
+  if not exists (select 1 from implementations i where i.id = (v_res ->> 'implementation_id')::uuid
+                    and i.customer_id = (v_res ->> 'customer_id')::uuid) then
+    raise exception '0083: the implementation is not linked to the new customer';
+  end if;
+  raise notice '0083 ok: a new customer is created with its fields and linked to the implementation';
+
+  -- 9. A failed apply after the customer was created rolls the customer back too.
+  v_before := (select count(*) from customers where name = '0083 orphan probe');
+  create function probe_fail_orphan() returns trigger language plpgsql as $f$
+  begin raise exception '0083: forced orphan failure'; end $f$;
+  create trigger probe_fail_orphan before insert on work_items
+    for each row execute function probe_fail_orphan();
+  v_raised := false;
+  begin
+    perform create_partner_implementation(null, '{"name":"0083 orphan probe"}'::jsonb,
+      v_d, '0083 orphan impl', 'field_fusion_iq', '{}'::jsonb, null, null, now());
+  exception when others then
+    v_raised := sqlerrm like '%forced orphan failure%';
+  end;
+  drop trigger probe_fail_orphan on work_items;
+  drop function probe_fail_orphan();
+  if not v_raised then raise exception '0083: the orphan probe did not fail for the forced reason'; end if;
+  if (select count(*) from customers where name = '0083 orphan probe') <> v_before then
+    raise exception '0083: a failed start left a customer behind';
+  end if;
+  raise notice '0083 ok: a failed start leaves no customer behind';
+
+  -- 10. A new customer without a name is refused, and nothing is written.
+  v_raised := false;
+  begin
+    perform create_partner_implementation(null, '{"arr":"10"}'::jsonb,
+      v_d, '0083 nameless', 'field_fusion_iq', '{}'::jsonb, null, null, now());
+  exception when others then
+    v_raised := sqlerrm like '%needs a name%';
+  end;
+  if not v_raised then raise exception '0083: a nameless customer was not refused for that reason'; end if;
+  raise notice '0083 ok: a nameless new customer is refused';
 end $$;
 
 rollback;
