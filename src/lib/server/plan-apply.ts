@@ -82,11 +82,6 @@ export async function applyPlanToNewImplementation(args: {
    * published template with that key exists; otherwise the rules decide.
    */
   preferKey?: string | null;
-  /**
-   * A new partner implementation: its named template must be published. When
-   * it is not, nothing is applied and the standard template is never substituted.
-   */
-  requirePreferred?: boolean;
 }): Promise<PlanApplyResult> {
   try {
     // Both flags, because a plan is stages AND tasks. With `work_items` off the
@@ -104,12 +99,6 @@ export async function applyPlanToNewImplementation(args: {
     const preferred = args.preferKey
       ? candidates.filter((c) => c.key === args.preferKey).sort((a, b) => b.version - a.version)[0]
       : undefined;
-    if (args.requirePreferred && !preferred) {
-      return {
-        applied: false,
-        reason: `The journey template ${args.preferKey ?? "(none)"} is not published, so nothing was applied. No standard journey was substituted.`,
-      };
-    }
     const selection = preferred
       ? {
           winner: {

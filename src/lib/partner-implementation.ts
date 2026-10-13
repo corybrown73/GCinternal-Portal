@@ -28,6 +28,11 @@ export type Partner = {
   legacyIntakePath: "field_fusion" | null;
 };
 
+/**
+ * The partners, as code. A new partner is one entry here and in PARTNER_KEYS:
+ * no migration. The database checks only that a key is a well-formed slug, so
+ * every registered key is accepted there (see migration 0083).
+ */
 export const PARTNERS: Readonly<Record<PartnerKey, Partner>> = {
   field_fusion_iq: {
     key: "field_fusion_iq",

@@ -1976,86 +1976,118 @@ export async function startOnboardingAs(
   // Every other start is unchanged.
   const startStage = initialStageFor(startIntake) ?? firstStage;
   const partnerKey = explicitPartnerKeyFor(startIntake);
-  const { data: impl, error: implError } = await db()
-    .from("implementations")
-    .insert({
-      customer_id: customerId,
-      // The deal this project came from (0041). Without it the customer page
-      // has no way back to the plan, the clock or the welcome link — the
-      // backfill covered the old rows; this covers every new one.
-      deal_id: account.id,
-      name: implementationNameFor(readIntakeFor(account.intake), String(account.name)),
-      current_stage: startStage,
-      ...(partnerKey ? { partner_key: partnerKey } : {}),
-      stage_entered_at: now,
-      status: "on_track",
-      source: "presale",
-      // What was sold, carried from the deal (0045). Delivery keeps its own
-      // copy: correcting the reference on the project must not rewrite what
-      // the deal says was signed.
-      sow_reference: account.sow_reference ?? null,
-      sow_signed_date: account.sow_signed_date ?? null,
-      sow_value: account.sow_value ?? null,
-      sow_document_url: account.sow_document_url ?? null,
-      sow_document_name: account.sow_document_name ?? null,
-      // The uploaded PDF travels as a path, not a re-upload: same bucket, same
-      // object, so the project and the deal point at one contract rather than
-      // two copies that can diverge.
-      sow_document_path: account.sow_document_path ?? null,
-    })
-    .select("id")
-    .single();
-  if (implError || !impl) {
-    throw new Error(implError?.message ?? "Could not create the implementation record");
-  }
-
-  // Mirror the hub's origination pattern: the first row of the append-only
-  // stage history opens with the implementation itself.
-  // entered_by is a team_members id; the login's profile carries the link.
+  const partnerStart = requiresPartnerTemplate(startIntake);
+  const implName = implementationNameFor(readIntakeFor(account.intake), String(account.name));
+  // What was sold, carried from the deal (0045). Delivery keeps its own copy:
+  // correcting the reference on the project must not rewrite what the deal says
+  // was signed. The uploaded PDF travels as a path, not a re-upload.
+  const sowFields = {
+    sow_reference: account.sow_reference ?? null,
+    sow_signed_date: account.sow_signed_date ?? null,
+    sow_value: account.sow_value ?? null,
+    sow_document_url: account.sow_document_url ?? null,
+    sow_document_name: account.sow_document_name ?? null,
+    sow_document_path: account.sow_document_path ?? null,
+  };
   const { teamMemberIdForProfile } = await import("./activity.server");
-  const { error: historyError } = await db()
-    .from("implementation_stage_history")
-    .insert({
-      implementation_id: impl.id,
-      stage: startStage,
-      entered_at: now,
-      entered_by: await teamMemberIdForProfile(userId),
-      exited_at: null,
+
+  let implId: string;
+  if (partnerStart) {
+    // One transaction in the database: the implementation, its first history
+    // row, and the partner journey's stages and tasks. A failure anywhere rolls
+    // all of it back, so no partial implementation is left to clean up.
+    const { data: created, error: createError } = await db().rpc("create_partner_implementation", {
+      p_customer_id: customerId,
+      p_deal_id: account.id,
+      p_name: implName,
+      p_partner_key: partnerKey,
+      p_sow: sowFields,
+      p_entered_by: await teamMemberIdForProfile(userId),
+      p_actor_profile: userId,
+      p_at: now,
     });
-  if (historyError) {
-    throw new Error(
-      `Implementation created, but its stage history row failed: ${historyError.message}`,
-    );
+    if (createError || !created) {
+      if (customerCreated) {
+        // This same start made the customer moments ago, so it goes too.
+        const { error: undoError } = await db().from("customers").delete().eq("id", customerId);
+        if (undoError)
+          console.error("[partner start] could not remove the new customer", undoError);
+      }
+      throw new Error(
+        `The partner implementation was not started, so nothing was written. ${createError?.message ?? "No implementation was returned."}`,
+      );
+    }
+    implId = String(created);
+  } else {
+    const { data: impl, error: implError } = await db()
+      .from("implementations")
+      .insert({
+        customer_id: customerId,
+        // The deal this project came from (0041). Without it the customer page
+        // has no way back to the plan, the clock or the welcome link.
+        deal_id: account.id,
+        name: implName,
+        current_stage: startStage,
+        stage_entered_at: now,
+        status: "on_track",
+        source: "presale",
+        ...sowFields,
+      })
+      .select("id")
+      .single();
+    if (implError || !impl) {
+      throw new Error(implError?.message ?? "Could not create the implementation record");
+    }
+    implId = impl.id as string;
+
+    // Mirror the hub's origination pattern: the first row of the append-only
+    // stage history opens with the implementation itself.
+    const { error: historyError } = await db()
+      .from("implementation_stage_history")
+      .insert({
+        implementation_id: implId,
+        stage: startStage,
+        entered_at: now,
+        entered_by: await teamMemberIdForProfile(userId),
+        exited_at: null,
+      });
+    if (historyError) {
+      throw new Error(
+        `Implementation created, but its stage history row failed: ${historyError.message}`,
+      );
+    }
   }
 
   // Every creator of an implementation emits the same event, so a webhook
   // consumer sees the whole world rather than only Salesforce-sourced activity.
-  // Never throws (see server/events.ts).
+  // Never throws (see server/events.ts). The event is an outbox row, written
+  // after the implementation it describes is committed.
   await recordImplementationCreated({
-    implementationId: impl.id as string,
+    implementationId: implId,
     customerId,
     source: "presale",
   });
 
-  // Give it a plan. Until this call existed, a project handed off from a deal
-  // arrived with no stages and no tasks — an empty rail the operator was left
-  // to interpret. The deal carries no opportunity type or amount, so no
-  // `default_for` rule can match it; this is precisely the case the configured
-  // fallback covers.
-  //
-  // Never throws: the deal is already linked and the pre-sale stage has already
-  // moved, and a handoff that half-succeeds is worse than a project that needs
-  // a template picked by hand.
-  const { applyPlanToNewImplementation } = await import("./server/plan-apply");
-  const plan = await applyPlanToNewImplementation({
-    implementationId: impl.id as string,
-    actorProfileId: userId,
-    // A Field Fusion account is a training journey, not a form build: the
-    // rail and the tasks come from that template when it is published.
-    preferKey: templateKeyFor(startIntake),
-    // A new partner must use its journey: a missing template refuses, never falls back.
-    requirePreferred: requiresPartnerTemplate(startIntake),
-  });
+  // A partner's plan was applied inside create_partner_implementation, in the
+  // same transaction, so it is not applied twice here.
+  let plan: { applied: boolean; via?: string; reason?: string } = {
+    applied: true,
+    via: "create_partner_implementation",
+  };
+  if (!partnerStart) {
+    // Give it a plan. Until this call existed, a project handed off from a deal
+    // arrived with no stages and no tasks.
+    //
+    // Never throws: the deal is already linked and the pre-sale stage has already
+    // moved, and a handoff that half-succeeds is worse than a project that needs
+    // a template picked by hand.
+    const { applyPlanToNewImplementation } = await import("./server/plan-apply");
+    plan = await applyPlanToNewImplementation({
+      implementationId: implId,
+      actorProfileId: userId,
+      preferKey: templateKeyFor(startIntake),
+    });
+  }
 
   // The journey opens where the deal already is: a deal forced straight to
   // Onboarding gets a project at the first Onboarding stage, not at handoff.
@@ -2077,7 +2109,7 @@ export async function startOnboardingAs(
       .limit(1)
       .maybeSingle();
     if (led?.team_member_id) {
-      await db().from("implementations").update({ owner_id: led.team_member_id }).eq("id", impl.id);
+      await db().from("implementations").update({ owner_id: led.team_member_id }).eq("id", implId);
     }
     const { readIntake } = await import("./intake-answers");
     const intake = readIntake((account as { intake?: unknown }).intake);
@@ -2086,7 +2118,7 @@ export async function startOnboardingAs(
     // for the next twelve weeks: the seller, the target launch from the plan,
     // the integration tier, the goal the brief captured, and the named
     // contact as the first customer contact. None of this is re-asked.
-    await carryDealFacts(dealId, impl.id as string, customerId, account, intake, userId);
+    await carryDealFacts(dealId, implId, customerId, account, intake, userId);
     const { count: reports } = await db()
       .from("portal_gong_reports")
       .select("id", { count: "exact", head: true })
@@ -2104,7 +2136,7 @@ export async function startOnboardingAs(
       const { data: items } = await db()
         .from("work_items")
         .select("id,task_key,status")
-        .eq("implementation_id", impl.id)
+        .eq("implementation_id", implId)
         .in("task_key", satisfied);
       const { setWorkItemStatus } = await import("./plan.server");
       for (const it of (items ?? []) as Array<{ id: string; status: string }>) {
@@ -2169,7 +2201,7 @@ export async function startOnboardingAs(
     entity_id: dealId,
     payload: {
       customer_id: customerId,
-      implementation_id: impl.id,
+      implementation_id: implId,
       // Whether this project got a plan, and why — the question somebody asks
       // when they open a project and find an empty rail.
       plan,
@@ -2180,7 +2212,7 @@ export async function startOnboardingAs(
   return {
     outcome: "started",
     customerId,
-    implementationId: impl.id as string,
+    implementationId: implId,
     alreadyLinked,
     customerCreated,
     matchedBy,

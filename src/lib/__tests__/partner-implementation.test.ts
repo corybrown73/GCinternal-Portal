@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import { intakeAnswersSchema, readIntake } from "../intake-answers";
 import {
   customerStages,
+  PARTNER_KEYS,
   initialStageFor,
   isPartnerJourney,
   liveTemplateId,
@@ -282,11 +283,18 @@ describe("the template migration matches the approved journey", () => {
     });
   });
 
-  it("no task invents a date: each is dated only from a recorded target launch, with no offset", () => {
-    const taskLines = [...sql.matchAll(/'(target_launch)',\s*(-?\d+),\s*(true|false)/g)];
+  it("no task invents a date: each carries the unscheduled basis, which dates nothing", () => {
+    const taskLines = [...sql.matchAll(/'(unscheduled)',\s*(-?\d+),\s*(true|false)/g)];
     const total = [...sql.matchAll(/\(v_tid,\s*v_s_[a-z]+,\s*\d+,\s*'[a-z_.]+'/g)].length;
     expect(taskLines.length).toBe(total);
     expect(taskLines.every((m) => m[2] === "0")).toBe(true);
+  });
+
+  it("every registered partner key is a well-formed slug the database accepts", () => {
+    for (const key of PARTNER_KEYS) {
+      expect(key).toMatch(/^[a-z][a-z0-9_]{1,62}$/);
+    }
+    expect(sql).toMatch(/partner_key ~ '\^\[a-z\]\[a-z0-9_\]\{1,62\}\$'/);
   });
 
   it("task keys are unique across the template", () => {
