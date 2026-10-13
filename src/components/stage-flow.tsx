@@ -229,39 +229,75 @@ function StageTiming({
  * actually diverged from the current target, and the change history stays
  * behind a toggle rather than sitting on the page by default.
  */
-function ImplementationTargetSection({ record }: { record: Customer360 }) {
+function ImplementationTargetSection({
+  record,
+  dealId,
+  agreed,
+}: {
+  record: Customer360;
+  dealId: string;
+  /** The agreed Graduate target in the Hub's stage targets: the date the customer's dashboard shows. */
+  agreed: { current: string | null; original: string | null };
+}) {
   const impl = record.implementation;
   const [open, setOpen] = useState(false);
   if (!impl) return null;
-  const target = impl.dates.target;
+  const plan = impl.dates.target;
   const baseline = impl.dates.baseline;
-  const changed = targetDidChange(baseline, target);
+  const changed = targetDidChange(baseline, plan);
   const health = deriveHealth(record, impl);
+  const agreedMoved = Boolean(
+    agreed.current && agreed.original && agreed.current !== agreed.original,
+  );
   return (
     <section
       className="rounded-md border border-border bg-card px-4 py-3"
       aria-label="Implementation target"
     >
       <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-        Target graduation
+        Target graduation · what the customer sees
       </p>
-      <p className="mt-0.5 flex items-center gap-1.5 text-[14px] font-semibold text-foreground">
-        {target ? shortDay(target) : "Not set"}
-        {target ? <StatusDot status={health.level} className="text-[12px] font-normal" /> : null}
+      <p className="mt-0.5 text-[14px] font-semibold text-foreground">
+        {agreed.current ? shortDay(agreed.current) : "Not agreed yet"}
       </p>
-      {changed ? (
-        <p className="mt-1 text-[11px] text-muted-foreground">
-          Originally {shortDay(baseline!)} ·{" "}
-          <button
-            type="button"
-            onClick={() => setOpen((o) => !o)}
-            aria-expanded={open}
-            className="font-medium text-primary hover:underline"
-          >
-            Target changed
-          </button>
+      {agreedMoved ? (
+        <p className="mt-0.5 text-[11px] text-muted-foreground">
+          First agreed {shortDay(agreed.original!)}
         </p>
       ) : null}
+      <p className="mt-1 text-[11px] text-muted-foreground">
+        Set in the{" "}
+        <a
+          href={`/onboarding-plan/${dealId}?workspace=1`}
+          target="_blank"
+          rel="noreferrer"
+          className="font-medium text-primary hover:underline"
+        >
+          presenter workspace
+        </a>
+        .
+      </p>
+      <p className="mt-2 border-t border-border pt-2 text-[11px] text-muted-foreground">
+        Plan end:{" "}
+        <span className="inline-flex items-center gap-1 font-medium text-foreground">
+          {plan ? shortDay(plan) : "Not set"}
+          {plan ? <StatusDot status={health.level} className="text-[12px] font-normal" /> : null}
+        </span>
+        {changed ? (
+          <>
+            {" · "}
+            <span>Originally {shortDay(baseline!)} · </span>
+            <button
+              type="button"
+              onClick={() => setOpen((o) => !o)}
+              aria-expanded={open}
+              className="font-medium text-primary hover:underline"
+            >
+              Plan end changed
+            </button>
+          </>
+        ) : null}
+      </p>
       {open && impl.target_changes.length > 0 ? (
         <ul className="mt-2 space-y-1 border-t border-border pt-2 text-[11px] text-muted-foreground">
           {impl.target_changes.map((c) => (
@@ -1035,6 +1071,23 @@ export function CurrentImplementationTab({
 
   return (
     <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-border bg-card px-4 py-2.5">
+        <div className="min-w-0">
+          <p className="text-[13px] font-medium text-foreground">The customer's dashboard</p>
+          <p className="text-[11px] text-muted-foreground">
+            A read-only preview of what the customer sees on their link, from the information saved
+            on this implementation.
+          </p>
+        </div>
+        <Link
+          to="/customer-dashboard-preview/$dealId"
+          params={{ dealId }}
+          search={{ customer: customerId, impl: implementationId }}
+          className="shrink-0 rounded-sm border border-primary/40 px-3 py-1.5 text-[12px] font-medium text-primary hover:bg-primary/5"
+        >
+          Preview customer dashboard →
+        </Link>
+      </div>
       <div className="space-y-2">
         <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
           Update the implementation
@@ -1051,7 +1104,14 @@ export function CurrentImplementationTab({
         </div>
       </div>
 
-      <ImplementationTargetSection record={record} />
+      <ImplementationTargetSection
+        record={record}
+        dealId={dealId}
+        agreed={{
+          current: intake.timeline.stage_targets.complete.current_date,
+          original: intake.timeline.stage_targets.complete.original_date,
+        }}
+      />
 
       <AdjustPlanDatesPanel
         dealId={dealId}

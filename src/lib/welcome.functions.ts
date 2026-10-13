@@ -17,6 +17,15 @@ export const getWelcome = createServerFn({ method: "GET" })
     return loadWelcome(data.dealId);
   });
 
+/** The customer's copy of the dashboard, for the TIS to preview. Read-only; no customer write is reachable from it. */
+export const getCustomerDashboardPreview = createServerFn({ method: "GET" })
+  .middleware([requireInternalAuth])
+  .inputValidator((data: unknown) => z.object({ dealId: z.string().uuid() }).parse(data))
+  .handler(async ({ data }) => {
+    const { customerPreviewView } = await import("./welcome.server");
+    return customerPreviewView(data.dealId);
+  });
+
 export const issueWelcomeLinkFn = createServerFn({ method: "POST" })
   .middleware([requireDealEditor])
   .inputValidator((data: unknown) => z.object({ dealId: z.string().uuid() }).parse(data))

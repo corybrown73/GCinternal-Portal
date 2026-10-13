@@ -59,7 +59,7 @@ vi.mock("../server/help/articles.server", () => ({ helpOpensFor: async () => ({}
 vi.mock("../server/audit", () => ({ audit: async () => {} }));
 vi.mock("../app-url", () => ({ appUrl: () => "https://hub.example" }));
 
-const { openWelcome, loadWelcome } = await import("../welcome.server");
+const { openWelcome, loadWelcome, customerPreviewView } = await import("../welcome.server");
 
 const TOKEN = "gcwl_" + "a".repeat(43);
 
@@ -182,5 +182,29 @@ describe("customer-safe data on the customer's link", () => {
       "contract wording stays internal",
     );
     expect(internal?.customerScope).toEqual(customer?.customerScope);
+  });
+});
+
+describe("the TIS preview of the customer's dashboard", () => {
+  it("shows what the customer's link shows: same projection, no sources, no internal identifier", async () => {
+    const preview = await customerPreviewView("deal-1");
+    const customer = await openWelcome(TOKEN);
+    const text = JSON.stringify(preview);
+    expect(preview?.dealId).toBe("");
+    expect(preview?.implementationFocus).toBeNull();
+    expect(preview?.customerScope).toEqual(customer?.customerScope);
+    expect(text).not.toContain("contract wording stays internal");
+    expect(text).not.toContain("private Gong quote");
+    expect(text).not.toContain("deal-1");
+  });
+
+  it("returns nothing for a deal that does not exist", async () => {
+    expect(await customerPreviewView("missing-deal")).toBeNull();
+  });
+
+  it("the customer's own copy carries no internal identifier either", async () => {
+    const customer = await openWelcome(TOKEN);
+    expect(customer?.dealId).toBe("");
+    expect(JSON.stringify(customer)).not.toContain("deal-1");
   });
 });
