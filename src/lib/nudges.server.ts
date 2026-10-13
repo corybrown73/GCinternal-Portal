@@ -6,6 +6,12 @@ import { isOnboardingStage, kickoffEntryDate, plannedBeforeKickoff } from "./pre
 import { closeDateFor, timelineFor } from "./onboarding-plan";
 import { businessDaysBetween, localIso } from "./onboarding-timeline";
 import { nudgesFor, stageFlow, type Nudge } from "./stage-flow";
+import { isPartnerJourney } from "./partner-implementation";
+import {
+  partnerNudges,
+  partnerOverdueByImplementation,
+  type PartnerOverdue,
+} from "./partner-attention";
 
 const db = () => supabaseAdmin as any;
 
@@ -147,7 +153,7 @@ async function nudgeRun(
           .in("account_id", ids),
         db()
           .from("implementations")
-          .select("deal_id,owner_id,created_at")
+          .select("id,deal_id,owner_id,created_at,journey_type,partner_key")
           .in("deal_id", ids)
           .order("created_at", { ascending: false }),
         db()
@@ -164,10 +170,15 @@ async function nudgeRun(
   const empty = { data: [], error: null };
   const notes = must<Array<{ account_id: string }>>("the call notes", reads[0] ?? empty);
   const briefs = must<Array<{ account_id: string }>>("the briefs", reads[1] ?? empty);
-  const impls = must<Array<{ deal_id: string; owner_id: string | null }>>(
-    "the owners",
-    reads[2] ?? empty,
-  );
+  const impls = must<
+    Array<{
+      id: string;
+      deal_id: string;
+      owner_id: string | null;
+      journey_type: string | null;
+      partner_key: string | null;
+    }>
+  >("the owners", reads[2] ?? empty);
   const sent = must<NudgedRow[]>("what was already sent", reads[3] ?? empty);
   const history = must<Array<{ account_id: string; to_stage: string; occurred_at: string }>>(
     "the stage history",
@@ -179,6 +190,33 @@ async function nudgeRun(
   const briefed = new Set(briefs.map((b) => b.account_id));
   const ownerByDeal = new Map<string, string | null>();
   for (const i of impls) if (!ownerByDeal.has(i.deal_id)) ownerByDeal.set(i.deal_id, i.owner_id);
+  // A deal whose newest implementation runs the partner journey: its nudges come
+  // from its own milestones and work items, never the standard checklist.
+  const partnerImplByDeal = new Map<string, string>();
+  for (const i of impls)
+    if (!partnerImplByDeal.has(i.deal_id) && isPartnerJourney(i))
+      partnerImplByDeal.set(i.deal_id, i.id);
+  const partnerIds = [...new Set(partnerImplByDeal.values())];
+  const partnerReads = partnerIds.length
+    ? await Promise.all([
+        db()
+          .from("milestones")
+          .select("id,implementation_id,name,target_date,completed_date,status")
+          .in("implementation_id", partnerIds),
+        db()
+          .from("work_items")
+          .select("id,implementation_id,title,due_at,status")
+          .in("implementation_id", partnerIds)
+          .not("due_at", "is", null),
+      ])
+    : [];
+  const partnerOverdue: Map<string, PartnerOverdue[]> = partnerIds.length
+    ? partnerOverdueByImplementation({
+        today,
+        milestones: must("the partner milestones", partnerReads[0] ?? empty) as never,
+        workItems: must("the partner work items", partnerReads[1] ?? empty) as never,
+      })
+    : new Map();
   const record = nudgeRecord(sent);
   const ownerIds = [...new Set([...ownerByDeal.values()].filter(Boolean))] as string[];
   const members = must<Array<{ id: string; name: string; email: string | null }>>(
@@ -203,52 +241,63 @@ async function nudgeRun(
   let sends = 0;
   for (const d of rows) {
     const id = String(d.id);
-    const intake = readIntake(d.intake);
     const ownerId = ownerByDeal.get(id) ?? null;
     const owner = ownerId ? (memberById.get(ownerId) ?? null) : null;
-    const hist = history.filter((h) => h.account_id === id);
-    const timeline = timelineFor(
-      intake,
-      closeDateFor({ intake, stageHistory: hist, wonStageKey: "closed_won", today }).date,
-    );
-    const flow = stageFlow({
-      stage: String(d.stage),
-      intake,
-      owner: owner?.name ?? (ownerId ? "owner" : null),
-      gongReports: noteCount.get(id) ?? 0,
-      hasSow: Boolean(d.sow_document_path),
-      hasBrief: briefed.has(id),
-      hasLink: Boolean(d.welcome_share_url),
-      timeline,
-    });
     const entered = String(d.stage_entered_at ?? new Date().toISOString());
     if (entered.slice(0, 10) < NUDGES_FROM) continue;
-    const inStage = Math.max(0, businessDaysBetween(entered.slice(0, 10), today));
-    const kickoffOn = kickoffEntryDate(String(d.stage), d.stage_entered_at, hist);
-    const overdueCalls = isOnboardingStage(String(d.stage))
-      ? timeline.milestones
-          .filter(
-            (m) =>
-              m.kind === "call" &&
-              !m.doneOn &&
-              m.date < today &&
-              !plannedBeforeKickoff(m, kickoffOn),
-          )
-          .map((m) => ({
-            key: m.key,
-            label: m.label,
-            date: m.date,
-            businessDaysLate: businessDaysBetween(m.date, today),
-          }))
-      : [];
-    const nudges = nudgesFor({
-      name: String(d.name),
-      stage: String(d.stage),
-      businessDaysInStage: inStage,
-      enteredAt: entered,
-      flow,
-      overdueCalls,
-    });
+    const partnerImplId = partnerImplByDeal.get(id) ?? null;
+    let nudges: Nudge[];
+    if (partnerImplId) {
+      nudges = partnerNudges({
+        name: String(d.name),
+        stage: String(d.stage),
+        enteredAt: entered,
+        overdue: partnerOverdue.get(partnerImplId) ?? [],
+      });
+    } else {
+      const intake = readIntake(d.intake);
+      const hist = history.filter((h) => h.account_id === id);
+      const timeline = timelineFor(
+        intake,
+        closeDateFor({ intake, stageHistory: hist, wonStageKey: "closed_won", today }).date,
+      );
+      const flow = stageFlow({
+        stage: String(d.stage),
+        intake,
+        owner: owner?.name ?? (ownerId ? "owner" : null),
+        gongReports: noteCount.get(id) ?? 0,
+        hasSow: Boolean(d.sow_document_path),
+        hasBrief: briefed.has(id),
+        hasLink: Boolean(d.welcome_share_url),
+        timeline,
+      });
+      const inStage = Math.max(0, businessDaysBetween(entered.slice(0, 10), today));
+      const kickoffOn = kickoffEntryDate(String(d.stage), d.stage_entered_at, hist);
+      const overdueCalls = isOnboardingStage(String(d.stage))
+        ? timeline.milestones
+            .filter(
+              (m) =>
+                m.kind === "call" &&
+                !m.doneOn &&
+                m.date < today &&
+                !plannedBeforeKickoff(m, kickoffOn),
+            )
+            .map((m) => ({
+              key: m.key,
+              label: m.label,
+              date: m.date,
+              businessDaysLate: businessDaysBetween(m.date, today),
+            }))
+        : [];
+      nudges = nudgesFor({
+        name: String(d.name),
+        stage: String(d.stage),
+        businessDaysInStage: inStage,
+        enteredAt: entered,
+        flow,
+        overdueCalls,
+      });
+    }
     for (const n of nudges) {
       const seen = record.get(`${id}|${n.key}`);
       if (seen?.done) {

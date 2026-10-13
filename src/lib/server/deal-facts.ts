@@ -1,6 +1,7 @@
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 
 import { readIntake } from "../intake-answers";
+import { isPartnerJourney } from "../partner-implementation";
 import type { DealFacts } from "../needs-action";
 import { closeDateFor, timelineFor } from "../onboarding-plan";
 import { businessDaysBetween, localIso } from "../onboarding-timeline";
@@ -71,7 +72,7 @@ export async function dealFactsFor(
         .order("created_at", { ascending: false }),
       db()
         .from("implementations")
-        .select("id,deal_id,owner_id,created_at")
+        .select("id,deal_id,owner_id,created_at,journey_type,partner_key")
         .in("deal_id", ids)
         .order("created_at", { ascending: false }),
       db()
@@ -95,9 +96,18 @@ export async function dealFactsFor(
   for (const b of (briefs ?? []) as Array<{ account_id: string; structured_json: unknown }>)
     if (!briefByDeal.has(b.account_id)) briefByDeal.set(b.account_id, b.structured_json ?? null);
   const ownerIdByDeal = new Map<string, string | null>();
-  const implRows = (impls ?? []) as Array<{ id: string; deal_id: string; owner_id: string | null }>;
-  for (const i of implRows)
+  const partnerByDeal = new Map<string, boolean>();
+  const implRows = (impls ?? []) as Array<{
+    id: string;
+    deal_id: string;
+    owner_id: string | null;
+    journey_type: string | null;
+    partner_key: string | null;
+  }>;
+  for (const i of implRows) {
     if (!ownerIdByDeal.has(i.deal_id)) ownerIdByDeal.set(i.deal_id, i.owner_id);
+    if (!partnerByDeal.has(i.deal_id)) partnerByDeal.set(i.deal_id, isPartnerJourney(i));
+  }
   const ownerIds = [...new Set([...ownerIdByDeal.values()].filter(Boolean))] as string[];
   const { data: members } = ownerIds.length
     ? await db().from("team_members").select("id,name").in("id", ownerIds)
@@ -160,6 +170,7 @@ export async function dealFactsFor(
       has_sow: hasSow,
       owner_name: owner,
       core_booked: booking?.done ?? false,
+      partner: partnerByDeal.get(d.id) ?? false,
       next_step: nextChecklistTask(input),
       overdue_calls: isOnboardingStage(d.stage)
         ? timeline.milestones

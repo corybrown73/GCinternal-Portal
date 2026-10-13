@@ -27,6 +27,10 @@ export async function syncDealStage(
   if (isPreClose(String(account.stage)) || account.stage === "onboarding_complete") {
     return { moved: null };
   }
+  // A partner implementation's progress is its own record (implementations.current_stage).
+  // The standard checklist must never move its deal.
+  const { dealHasPartnerJourney } = await import("./partner-implementation.server");
+  if (await dealHasPartnerJourney(dealId)) return { moved: null };
   const built = await flowForDeal(dealId);
   if (!built) return { moved: null };
   const { flow } = built;
