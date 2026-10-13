@@ -1,3 +1,4 @@
+import { PARTNER_KEYS } from "./partner-implementation";
 import { z } from "zod";
 import { stageTargetsSchema } from "./stage-targets";
 
@@ -254,6 +255,16 @@ export const intakeAnswersSchema = z.object({
    * is training-only by definition; this flag is for every other kind.
    */
   training_only: z.boolean().default(false),
+  /**
+   * The partner who leads this implementation, for a Partner Implementation.
+   * Separate from `path`, which still says what kind of account it is. Null
+   * for every existing account; Field Fusion accounts are read through `path`
+   * (see implementationTypeFor), so their records need no change.
+   */
+  partner_implementation: z
+    .object({ partner_key: z.enum(PARTNER_KEYS) })
+    .nullable()
+    .default(null),
   /**
    * The Field Fusion gate, before the handoff to implementation. Liesl
    * confirms the product is working and the account is set up, writes what
