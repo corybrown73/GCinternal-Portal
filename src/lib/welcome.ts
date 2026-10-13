@@ -204,6 +204,13 @@ export type WelcomeView = {
    * never falls back to the six-stage journey.
    */
   partnerUnavailable?: boolean;
+  /**
+   * The deal's chosen type is a generic Partner Implementation, before or after
+   * Closed Won. Its dashboard and deck never show the standard New Logo plan.
+   */
+  partnerDeal?: boolean;
+  /** The registered partner the deal chose, for the partner's own screens. */
+  partnerName?: string | null;
   parkingLot?: Array<{
     request: string;
     target: string;

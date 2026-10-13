@@ -235,6 +235,11 @@ async function viewFor(
       ? (await import("./partner-journey")).partnerDashboardView(partnerState.progress)
       : null;
   const partnerUnavailable = partnerState.kind === "partner_unavailable";
+  // A deal whose chosen type is a partner implementation never gets the standard
+  // plan, before Closed Won or after it.
+  const { isPartnerDeal, partnerNameFor } = await import("./partner-implementation");
+  const partnerDeal = isPartnerDeal(intake);
+  const partnerName = partnerDeal ? partnerNameFor(intake) : null;
   const focus = implementationFocusView(intake);
   const focusFallback = implementationFocusFallbackView(
     (await import("./implementation-focus")).proposeImplementationFocus(intake),
@@ -301,13 +306,16 @@ async function viewFor(
       .welcome_hidden_screens,
     textOverrides: (await import("./intake-answers")).readIntake(deal.intake).welcome_text,
     path: input.timeline.path,
-    helpPicks: (await import("./intake-answers")).readIntake(deal.intake).help_picks.map((p) => ({
-      article_id: p.article_id,
-      title: p.title,
-      url: p.url,
-      why: p.why,
-      when: p.when ?? null,
-    })),
+    // A partner deal is not offered the New Logo help articles.
+    helpPicks: partnerDeal
+      ? []
+      : (await import("./intake-answers")).readIntake(deal.intake).help_picks.map((p) => ({
+          article_id: p.article_id,
+          title: p.title,
+          url: p.url,
+          why: p.why,
+          when: p.when ?? null,
+        })),
     helpOpened: opts.internal
       ? await (await import("./server/help/articles.server")).helpOpensFor(String(deal.id))
       : {},
@@ -327,7 +335,7 @@ async function viewFor(
     // A partner deal runs its own journey: the six-stage one (read from the deal
     // stage) is left off, and the partner dashboard is read from its records instead.
     journey:
-      partner || partnerUnavailable
+      partner || partnerUnavailable || partnerDeal
         ? null
         : (await import("./welcome-journey")).customerJourney({
             stage: deal.stage ?? null,
@@ -341,6 +349,8 @@ async function viewFor(
           }),
     partner,
     partnerUnavailable,
+    partnerDeal,
+    partnerName,
   };
 }
 

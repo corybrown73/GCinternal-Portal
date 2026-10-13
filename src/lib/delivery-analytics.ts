@@ -47,6 +47,8 @@ export function outcomesFor(
   today: string,
 ): Outcome[] {
   const t = input.timeline;
+  // A partner deal has no New Logo plan to be on time against: it is not scored on one.
+  if (t.path === "partner_implementation") return [];
   const out: Outcome[] = [];
   const live = t.milestones[t.milestones.length - 1]!;
   const first = t.milestones[0]!;
@@ -230,7 +232,9 @@ export const byPath = (o: Outcome) => ({
         ? "Device Magic conversion"
         : o.path === "field_fusion"
           ? "Field Fusion · training"
-          : "New customer · implementation",
+          : o.path === "partner_implementation"
+            ? "Partner implementation"
+            : "New customer · implementation",
 });
 
 /** Steps across everything, ranked by average slip. The answer to "where do we lose days". */

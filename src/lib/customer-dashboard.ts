@@ -273,18 +273,22 @@ function changeAttention(parkingLot: WelcomeView["parkingLot"]): AttentionItem[]
  * the standard six-stage and kickoff items never apply.
  */
 export function isPartnerDashboard(
-  view: Pick<WelcomeView, "partner" | "partnerUnavailable">,
+  view: Pick<WelcomeView, "partner" | "partnerUnavailable" | "partnerDeal">,
 ): boolean {
-  return Boolean(view.partner || view.partnerUnavailable);
+  return Boolean(view.partner || view.partnerUnavailable || view.partnerDeal);
 }
 
 /** The header for the journey the customer is on. Unavailable shows no stages, dates or milestones. */
 export function dashboardHeaderFor(
-  view: Pick<WelcomeView, "journey" | "timeline" | "partner" | "partnerUnavailable">,
+  view: Pick<
+    WelcomeView,
+    "journey" | "timeline" | "partner" | "partnerUnavailable" | "partnerDeal"
+  >,
   today: string | null = null,
 ): DashboardHeader {
   if (view.partner) return partnerDashboardHeader(view.partner);
-  if (view.partnerUnavailable) {
+  // Before the journey starts, or while its progress is unavailable: no stages, no dates.
+  if (view.partnerUnavailable || view.partnerDeal) {
     return {
       started: false,
       currentLabel: null,

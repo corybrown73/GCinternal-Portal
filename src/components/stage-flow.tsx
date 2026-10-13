@@ -93,7 +93,9 @@ import {
   partnerBodyState,
 } from "@/components/partner-journey-panels";
 import {
+  isPartnerDeal,
   isPartnerJourney,
+  PARTNER_PLANNING_TO_BE_CONFIRMED,
   partnerSelectionPatch,
   type PartnerKey,
 } from "@/lib/partner-implementation";
@@ -2269,6 +2271,23 @@ function DoneButton({
 }
 
 function ReplyBody({
+  deal,
+  intake,
+  editable,
+}: {
+  deal: DealData;
+  intake: IntakeAnswers;
+  editable: boolean;
+}) {
+  // A partner deal has no kickoff to reply with times for: the reply and its
+  // calendar link are New Logo planning, so they are not offered for it.
+  if (isPartnerDeal(intake)) {
+    return <p className="text-[12px] text-muted-foreground">{PARTNER_PLANNING_TO_BE_CONFIRMED}.</p>;
+  }
+  return <KickoffReplyBody deal={deal} intake={intake} editable={editable} />;
+}
+
+function KickoffReplyBody({
   deal,
   intake,
   editable,

@@ -92,14 +92,21 @@ export function guideSteps(input: {
       key: "path",
       label: "Pick the flow",
       hint:
-        a.path === null
-          ? "New logo, existing account, Device Magic conversion, or Field Fusion. The plan and the deck follow it."
-          : !hasForm
-            ? a.path === "existing"
-              ? "Still missing: the Account Manager's answers — is the form final, and who builds it."
-              : "Still missing: the first form to build — pick a library card or name theirs."
-            : "The flow's own question is answered.",
-      done: a.path !== null && hasForm,
+        a.path === "partner_implementation"
+          ? a.partner_implementation
+            ? "The partner is chosen. Its journey starts at Closed Won."
+            : "Choose the partner that leads this implementation."
+          : a.path === null
+            ? "New logo, existing account, Device Magic conversion, Field Fusion, or a partner implementation. The plan and the deck follow it."
+            : !hasForm
+              ? a.path === "existing"
+                ? "Still missing: the Account Manager's answers — is the form final, and who builds it."
+                : "Still missing: the first form to build — pick a library card or name theirs."
+              : "The flow's own question is answered.",
+      done:
+        a.path === "partner_implementation"
+          ? a.partner_implementation !== null
+          : a.path !== null && hasForm,
       panel: { key: "deal:intake", id: "panel-intake" },
     },
     {

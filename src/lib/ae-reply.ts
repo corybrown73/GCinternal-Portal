@@ -2,6 +2,11 @@ import { zonedToUtc } from "./ics";
 import type { IntakeAnswers } from "./intake-answers";
 import { displayName, possessive } from "./names";
 import { addBusinessDays, onBusinessDay, shortDay } from "./onboarding-timeline";
+import {
+  isPartnerDeal,
+  PARTNER_PLANNING_TO_BE_CONFIRMED,
+  partnerNameFor,
+} from "./partner-implementation";
 
 /**
  * The reply to the AE's closed-won email, written for the owner.
@@ -14,7 +19,8 @@ export type AeReplyInput = {
   company: string;
   contactName: string | null;
   ownerName: string | null;
-  intake: Pick<IntakeAnswers, "path" | "training_only">;
+  intake: Pick<IntakeAnswers, "path" | "training_only"> &
+    Partial<Pick<IntakeAnswers, "partner_implementation">>;
   welcomeUrl: string | null;
   /** The plan's kickoff date. */
   plannedKickoff: string | null;
@@ -31,7 +37,22 @@ export function kickoffOptions(plannedKickoff: string | null, today: string): [s
   return [first, addBusinessDays(first, 1)];
 }
 
+/**
+ * A partner deal's reply: no kickoff, no meetings, no dates. Its planning is to be
+ * confirmed, and the reply says so rather than offering New Logo times.
+ */
+function partnerReplyDraft(i: AeReplyInput): { subject: string; body: string } {
+  const first = i.contactName?.trim().split(/\s+/)[0] ?? "there";
+  const partner = partnerNameFor(i.intake) ?? "your partner";
+  const signoff = i.ownerName ? `\n\n${i.ownerName}` : "";
+  return {
+    subject: `${i.company} · your GoCanvas implementation`,
+    body: `Hi ${first},\n\nThanks for choosing GoCanvas. ${partner} will lead the setup and connection of your implementation. ${PARTNER_PLANNING_TO_BE_CONFIRMED}, and we will confirm the next steps with you.${signoff}`,
+  };
+}
+
 export function aeReplyDraft(i: AeReplyInput): { subject: string; body: string } {
+  if (isPartnerDeal(i.intake)) return partnerReplyDraft(i);
   const first = i.contactName?.trim().split(/\s+/)[0] ?? "there";
   const zone = i.timezone ? ` ${zoneLabel(i.timezone)}` : "";
   const [a, b] = kickoffOptions(i.plannedKickoff, i.today);

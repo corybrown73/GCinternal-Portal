@@ -403,3 +403,33 @@ describe("a failed partner lookup", () => {
     expect(view?.partner?.stages).toHaveLength(5);
   });
 });
+
+describe("a partner deal before Closed Won", () => {
+  beforeEach(() => {
+    seed();
+    const account = h.state.tables["portal_accounts"]![0]!;
+    account["intake"] = {
+      ...(account["intake"] as object),
+      path: "partner_implementation",
+      partner_implementation: { partner_key: "field_fusion_iq" },
+    };
+    h.state.tables["implementations"] = [];
+  });
+
+  it("is a partner deal with no six-stage journey, no partner stages, and no New Logo help picks", async () => {
+    const view = await openWelcome(TOKEN);
+    expect(view?.partnerDeal).toBe(true);
+    expect(view?.partnerName).toBe("Field Fusion IQ");
+    expect(view?.journey).toBeNull();
+    expect(view?.partner).toBeNull();
+    expect(view?.partnerUnavailable).toBe(false);
+    expect(view?.helpPicks).toEqual([]);
+  });
+
+  it("a standard deal is not a partner deal, and keeps its journey", async () => {
+    h.state.tables["portal_accounts"]![0]!["intake"] = { ...intake, path: "new_logo" };
+    const view = await openWelcome(TOKEN);
+    expect(view?.partnerDeal).toBe(false);
+    expect(view?.partnerName).toBeNull();
+  });
+});

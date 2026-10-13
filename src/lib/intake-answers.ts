@@ -704,6 +704,8 @@ export function isTrainingOnly(a: Pick<IntakeAnswers, "path" | "training_only">)
 export function flowAnswered(a: IntakeAnswers): boolean {
   if (a.path === null) return false;
   if (a.path === "field_fusion") return true;
+  // A Partner Implementation's flow is answered by choosing its partner; the New Logo forms questions do not apply.
+  if (a.path === "partner_implementation") return a.partner_implementation !== null;
   if (a.path === "existing") {
     const e = a.existing;
     if (e.form_final === true) return true;

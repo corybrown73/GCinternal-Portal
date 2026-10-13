@@ -22,6 +22,7 @@ import {
   type BlockerItem,
 } from "@/lib/customer-dashboard";
 import { CUSTOMER_SOLUTION_STATUS } from "@/lib/welcome-journey";
+import { PARTNER_PLANNING_TO_BE_CONFIRMED } from "@/lib/partner-implementation";
 import type { HandoffValue } from "@/lib/sales-handoff";
 import { shortDay } from "@/lib/onboarding-timeline";
 import type { HomeworkKey, WelcomeView } from "@/lib/welcome";
@@ -220,6 +221,8 @@ function DashHeader({
             <p className="gc-dash-stage">
               Your implementation progress is temporarily unavailable. Please check back shortly.
             </p>
+          ) : view.partnerDeal ? (
+            <p className="gc-dash-stage">{PARTNER_PLANNING_TO_BE_CONFIRMED}</p>
           ) : (
             <p className="gc-dash-stage">Your implementation starts once your account is set up.</p>
           )}
@@ -544,6 +547,12 @@ function AttentionRow({
 /* ------------------------------------------------------- progress and blockers */
 
 function Blockers({ view }: { view: WelcomeView }) {
+  if (view.partnerDeal && !view.partner) {
+    // Not "no blockers": nothing is under way yet to have blockers.
+    return (
+      <p className="gc-dash-empty">Blockers will be shown once the implementation is under way.</p>
+    );
+  }
   if (view.partnerUnavailable) {
     // Not "no blockers": with progress unknown, that would be a guess.
     return (

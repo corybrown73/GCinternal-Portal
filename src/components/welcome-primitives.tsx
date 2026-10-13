@@ -375,7 +375,9 @@ const DEFAULT_FIELDS: Array<[string, FieldKind]> = [
 
 export function PhoneMock({ view, className }: { view: WelcomeView; className?: string }) {
   const fields = FIELDS[(view.industry ?? "").trim().toLowerCase()] ?? DEFAULT_FIELDS;
-  const title = view.firstForm?.name ?? "Your first form";
+  const title = view.partnerDeal
+    ? "Your GoCanvas app"
+    : (view.firstForm?.name ?? "Your first form");
   return (
     <div className={cn("wp-phone", className)}>
       <div className="wp-phone-screen">

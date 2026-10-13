@@ -94,6 +94,8 @@ export async function generateDeckFromMcp(args: {
     priorImplementations: context.priorImplementations,
     products: context.deal.products,
   });
+  // A Partner Implementation has no kickoff deck. Refused here, not built as a New Logo deck.
+  if (decision.kind === "partner") throw new Error(decision.reason);
 
   const { buildKickoffData } = await import("@/lib/kickoff-fields");
   const base = buildKickoffData({

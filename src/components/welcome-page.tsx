@@ -61,6 +61,7 @@ import { exportWelcomePptx, pptxFileName } from "@/components/welcome-export";
 import { GOCANVAS_APP } from "@/lib/app-links";
 import { firstName } from "@/lib/team-profile";
 import { cn } from "@/lib/utils";
+import { PARTNER_PLANNING_TO_BE_CONFIRMED } from "@/lib/partner-implementation";
 import { BrandMarkTile } from "@/components/brand-mark";
 import { KIND_MARKS, markForService, type BrandMark } from "@/lib/brand-marks";
 
@@ -333,6 +334,9 @@ export function WelcomePage({
 
 /** The screens in order, each with the key the presenter switches it by. */
 export function screenList(view: WelcomeView): Screen[] {
+  // A partner deal has no New Logo plan to present: its deck is the cover, the
+  // team, and what is recorded about its implementation.
+  if (view.partnerDeal) return partnerScreenList(view);
   const t = view.timeline;
   return [
     { key: "cover", label: "Cover", render: (a) => <Cover key="cover" view={view} qr={a.qr} /> },
@@ -971,13 +975,15 @@ function Team({ view, page }: { view: WelcomeView; page: number }) {
       role: withCompany(t.leadCard?.title ?? "Onboarding lead"),
       does:
         t.leadCard?.bio ??
-        (view.timeline.training
-          ? "Runs all three calls, trains the crew on real jobs, watches the first submissions."
-          : view.path === "existing"
-            ? "Runs both calls, reviews the form with you, watches the first real submissions through."
-            : view.path === "new_logo"
-              ? "Runs the three core meetings, prepares the work between them, and makes sure you are functional — not just trained."
-              : "Runs all three training calls, builds the first form with you, watches the first submissions."),
+        (view.partnerDeal
+          ? "Your point of contact for the implementation, and for the plan once it is confirmed."
+          : view.timeline.training
+            ? "Runs all three calls, trains the crew on real jobs, watches the first submissions."
+            : view.path === "existing"
+              ? "Runs both calls, reviews the form with you, watches the first real submissions through."
+              : view.path === "new_logo"
+                ? "Runs the three core meetings, prepares the work between them, and makes sure you are functional — not just trained."
+                : "Runs all three training calls, builds the first form with you, watches the first submissions."),
       icon: "Wrench",
       side: "gocanvas",
       photoUrl: t.leadCard?.photoUrl ?? null,
@@ -1040,7 +1046,11 @@ function Team({ view, page }: { view: WelcomeView; page: number }) {
       eyebrow="Your team"
       title="Two teams,"
       accent="one plan"
-      lede="Small on purpose. Everyone here has a job between now and Functional."
+      lede={
+        view.partnerDeal
+          ? "Small on purpose. Everyone here has a job in your implementation."
+          : "Small on purpose. Everyone here has a job between now and Functional."
+      }
       band="Over fifteen years of onboarding field teams says this is what works, and what gets value fast. Questions go to your onboarding lead by name."
       bandIcon="PhoneCall"
     >
@@ -1075,7 +1085,10 @@ function Team({ view, page }: { view: WelcomeView; page: number }) {
           <PhoneMock view={view} className="is-team" />
           <span className="wp-team-photo-cap">
             <Icon name="Smartphone" className="h-3.5 w-3.5" />
-            {view.firstForm?.name ?? (view.timeline.training ? "Your jobs" : "Your first form")}
+            {view.partnerDeal
+              ? "Your GoCanvas app"
+              : (view.firstForm?.name ??
+                (view.timeline.training ? "Your jobs" : "Your first form"))}
             {view.firstForm && view.firstFormSource === "ai" ? " (to confirm)" : ""}, on the
             crew&apos;s phone
           </span>
@@ -1095,6 +1108,94 @@ const CUSTOMER_LABEL: Record<string, string> = {
  * how long each is, how much of the customer's time it takes, and where
  * they are. The detail lives on each phase's own screen.
  */
+function partnerScreenList(view: WelcomeView): Screen[] {
+  return [
+    {
+      key: "cover",
+      label: "Cover",
+      render: () => <PartnerCover key="cover" view={view} />,
+    },
+    {
+      key: "team",
+      label: "Your team",
+      render: (a) => <Team key="team" view={view} page={a.page} />,
+    },
+    {
+      key: "partner",
+      label: "Your implementation",
+      render: (a) => <PartnerPlanning key="partner" view={view} page={a.page} />,
+    },
+  ];
+}
+
+/** The cover for a partner deal: the partner and the planning state, with no dates. */
+function PartnerCover({ view }: { view: WelcomeView }) {
+  return (
+    <section className="wp-screen is-cover">
+      <div className="wp-blob is-cover" />
+      <div className="wp-dots" />
+      <header className="wp-head">
+        <img src="/branding/gocanvas-wordmark-navy.png" alt="GoCanvas" className="wp-logo" />
+        {view.clientLogoUrl ? (
+          <img src={view.clientLogoUrl} alt={view.clientName} className="wp-client-logo" />
+        ) : null}
+      </header>
+      <div className="wp-cover-grid">
+        <div className="wp-cover-text">
+          <p className="wp-eyebrow">Partner implementation · {view.industry ?? "Your team"}</p>
+          <h1 className="wp-title is-hero">
+            Let&apos;s bring your <span className="wp-accent">workflow to life</span>
+          </h1>
+          <div className="wp-rule" />
+          <p className="wp-cover-name">{view.clientName}</p>
+          <p className="wp-lede">
+            {view.partnerName
+              ? `${view.partnerName} leads your setup and connection.`
+              : "Your partner leads your setup and connection."}{" "}
+            {PARTNER_PLANNING_TO_BE_CONFIRMED}.
+          </p>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/**
+ * What is recorded about a partner implementation, and nothing more: the current
+ * stage once it is under way, or the planning state. No dates are shown here
+ * unless the partner's own milestones record them, on the dashboard.
+ */
+function PartnerPlanning({ view, page }: { view: WelcomeView; page: number }) {
+  const eyebrow = `${String(page).padStart(2, "0")} · Your implementation`;
+  if (view.partnerUnavailable) {
+    // Not a planning state: the progress exists but could not be read just now.
+    return (
+      <section className="wp-screen">
+        <p className="wp-eyebrow">{eyebrow}</p>
+        <h2 className="wp-title">Your implementation progress is temporarily unavailable</h2>
+        <p className="wp-lede">Please check back shortly, or contact your TIS.</p>
+      </section>
+    );
+  }
+  const started = view.partner;
+  return (
+    <section className="wp-screen">
+      <p className="wp-eyebrow">{eyebrow}</p>
+      <h2 className="wp-title">
+        {started
+          ? `Currently: ${started.currentLabel ?? "under way"}`
+          : PARTNER_PLANNING_TO_BE_CONFIRMED}
+      </h2>
+      <p className="wp-lede">
+        {view.partnerName ? `${view.partnerName} leads the setup and connection.` : null}{" "}
+        {started
+          ? "The stages, dates and actions for your implementation are on your dashboard, as they are recorded."
+          : "Your dashboard shows the stages and dates as they are recorded."}
+      </p>
+    </section>
+  );
+}
+
 function Overview({ view, page }: { view: WelcomeView; page: number }) {
   const t = view.timeline;
   const live = t.milestones.find((m) => m.key === "live");

@@ -361,3 +361,27 @@ export function partnerSelectionError(
   }
   return null;
 }
+
+/**
+ * Whether a deal is explicitly a generic Partner Implementation, by its chosen
+ * type. Such a deal never gets the standard onboarding plan: no New Logo stages,
+ * meetings, target dates or expectations are generated or shown for it.
+ */
+export function isPartnerDeal(intake: Pick<IntakeAnswers, "path">): boolean {
+  return intake.path === "partner_implementation";
+}
+
+/**
+ * What a partner deal says about its planning until its own journey exists. A
+ * truthful neutral state: nothing is scheduled, so nothing is shown as scheduled.
+ */
+export const PARTNER_PLANNING_TO_BE_CONFIRMED = "Implementation planning to be confirmed";
+
+/** The registered name of the partner a deal chose, or null when none is chosen or it is unregistered. */
+export function partnerNameFor(
+  intake: Partial<Pick<IntakeAnswers, "partner_implementation">>,
+): string | null {
+  const key = intake.partner_implementation?.partner_key ?? null;
+  if (!key) return null;
+  return (PARTNERS as Readonly<Record<string, Partner>>)[key]?.name ?? null;
+}

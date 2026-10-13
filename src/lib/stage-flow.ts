@@ -15,6 +15,7 @@ import {
   type ServiceSpec,
 } from "./onboarding-services";
 import type { AccountStage } from "./presale-stages";
+import { isPartnerDeal } from "./partner-implementation";
 import { handoffChecks } from "./sales-handoff";
 import { TEAM_ZONE, shortDay, type Timeline } from "./onboarding-timeline";
 
@@ -516,6 +517,8 @@ export const CORE_MEETINGS = [
  * booking Kickoff.
  */
 function preKickoffTasks(a: IntakeAnswers): FlowTask[] {
+  // A partner deal has no kickoff: its planning is the partner journey, not a standard checklist.
+  if (a.path === "partner_implementation") return [];
   if (a.path === "field_fusion") return [kickoffBookingTask(a)];
   const t = a.handoff_tasks;
   const customerIntake = handoffChecks(a);
@@ -871,6 +874,8 @@ function playbookOnboarding(a: IntakeAnswers, t: Timeline): FlowTask[] {
 }
 
 function onboardingTasks(a: IntakeAnswers, t: Timeline | null | undefined): FlowTask[] {
+  // The New Logo milestones are never a partner deal's tasks.
+  if (a.path === "partner_implementation") return [];
   if (!t) return [];
   if (a.path === "new_logo") return playbookOnboarding(a, t);
   const out: FlowTask[] = [];
@@ -944,6 +949,8 @@ export function tasksByStage(a: IntakeAnswers, t: Timeline | null | undefined): 
     make_it_run: [],
     complete: [],
   };
+  // A partner deal's stages are its own journey: none of the New Logo working-stage tasks apply.
+  if (isPartnerDeal(a)) return out;
   if (!t) return out;
   const done = a.timeline.completed;
   const tick = (
@@ -1091,7 +1098,8 @@ export function stageFlow(input: StageFlowInput): StageFlow {
     locked: null,
     optional: true,
   };
-  const completeTasks = [graduationBrief, ...ob.complete];
+  // The standard graduation brief and checks are not a partner deal's: its graduation is the partner's own.
+  const completeTasks = isPartnerDeal(a) ? [] : [graduationBrief, ...ob.complete];
   // Without the plan the middle stages have no tasks to judge; they are not
   // passed through on that account.
   const hasPlan = Boolean(input.timeline);
@@ -1338,13 +1346,15 @@ export function showKickoffOutcomePrompt(flow: StageFlow): boolean {
 
 function flowSummary(a: IntakeAnswers): string {
   const head =
-    a.path === "new_logo"
-      ? "New logo"
-      : a.path === "existing"
-        ? "Existing account"
-        : a.path === "dm_conversion"
-          ? "Device Magic conversion"
-          : "Field Fusion";
+    a.path === "partner_implementation"
+      ? "Partner implementation"
+      : a.path === "new_logo"
+        ? "New logo"
+        : a.path === "existing"
+          ? "Existing account"
+          : a.path === "dm_conversion"
+            ? "Device Magic conversion"
+            : "Field Fusion";
   if (a.path === "field_fusion" || a.training_only) return `${head} · training`;
   const first = firstFormName(a);
   return first ? `${head} · ${first}` : head;
