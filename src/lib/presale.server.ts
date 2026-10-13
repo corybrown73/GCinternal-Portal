@@ -35,6 +35,7 @@ import { FIELD_FUSION_STAGE } from "./field-fusion";
 import {
   explicitPartnerKeyFor,
   initialStageFor,
+  partnerSelectionError,
   requiresPartnerTemplate,
   templateKeyFor,
 } from "./partner-implementation";
@@ -187,7 +188,8 @@ export interface PipelineDeal extends Account {
   implementation_id: string | null;
   se_owner_name: string | null;
   /** New customer or existing account, when the intake has said. */
-  path: "new_logo" | "existing" | "dm_conversion" | "field_fusion" | null;
+  path:
+    "new_logo" | "existing" | "dm_conversion" | "field_fusion" | "partner_implementation" | null;
   /** The two things Closed Won is gated on. */
   has_notes: boolean;
   has_sow: boolean;
@@ -371,7 +373,8 @@ export async function createDeal(
     salesforce_id: string | null;
     arr: number | null;
     summary: string | null;
-    path?: "new_logo" | "existing" | "dm_conversion" | "field_fusion" | null;
+    path?:
+      "new_logo" | "existing" | "dm_conversion" | "field_fusion" | "partner_implementation" | null;
     industry?: string | null;
     /** Where the deal already is. A deal entered after it closed starts closed. */
     stage?: AccountStage | null;
@@ -1865,6 +1868,10 @@ export async function startOnboardingAs(
   // written: no customer, no implementation, and never the standard journey.
   const { readIntake: readStartIntake } = await import("./intake-answers");
   const startIntake = readStartIntake(account.intake);
+  // A Partner Implementation must name a registered partner. This refuses before
+  // anything is written, so it can never fall back to the standard journey.
+  const selectionError = partnerSelectionError(startIntake);
+  if (selectionError) throw new Error(selectionError);
   if (requiresPartnerTemplate(startIntake)) {
     const { requireLivePartnerTemplate } = await import("./partner-template.server");
     await requireLivePartnerTemplate();
@@ -3299,7 +3306,8 @@ export type DealInboxRow = {
   stage: AccountStage;
   stage_label: string;
   stage_entered_at: string;
-  path: "new_logo" | "existing" | "dm_conversion" | "field_fusion" | null;
+  path:
+    "new_logo" | "existing" | "dm_conversion" | "field_fusion" | "partner_implementation" | null;
   /** The implementation owner from the claim ledger, when somebody has claimed it. */
   owner_name: string | null;
   /** The viewer is that owner. */

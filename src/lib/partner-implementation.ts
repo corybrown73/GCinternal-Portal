@@ -322,3 +322,42 @@ export function partnerMoveFrom(current: string | null): {
   const key = nextPartnerStage(PARTNER_TEMPLATE_STAGE_KEYS, current);
   return { next: key ? partnerStage(key as PartnerStageKey) : null, handoff: false };
 }
+
+/**
+ * The partners the selector offers: every registered partner, in registry order.
+ * Adding a partner to PARTNERS and PARTNER_KEYS adds it here; nothing else changes.
+ */
+export function partnerOptions(
+  registry: Readonly<Record<PartnerKey, Partner>> = PARTNERS,
+): Array<{ key: PartnerKey; name: string }> {
+  return (Object.keys(registry) as PartnerKey[]).map((k) => ({ key: k, name: registry[k].name }));
+}
+
+/**
+ * The intake patch that chooses a Partner Implementation and its partner. The
+ * same structure every partner path reads (partner_implementation), so no second
+ * intake form or record is needed.
+ */
+export function partnerSelectionPatch(key: PartnerKey): {
+  path: "partner_implementation";
+  partner_implementation: { partner_key: PartnerKey };
+} {
+  return { path: "partner_implementation", partner_implementation: { partner_key: key } };
+}
+
+/**
+ * Why a Partner Implementation cannot start yet, or null when it can. A partner
+ * implementation with no registered partner is refused, never started on the
+ * standard journey.
+ */
+export function partnerSelectionError(
+  intake: Pick<IntakeAnswers, "path" | "partner_implementation">,
+): string | null {
+  if (intake.path !== "partner_implementation") return null;
+  const key = intake.partner_implementation?.partner_key ?? null;
+  if (!key) return "Choose which partner leads this Partner Implementation before it starts.";
+  if (!(PARTNER_KEYS as readonly string[]).includes(key)) {
+    return `"${key}" is not a registered partner, so the implementation cannot start.`;
+  }
+  return null;
+}

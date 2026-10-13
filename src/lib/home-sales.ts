@@ -12,7 +12,8 @@ export type SalesDeal = {
   id: string;
   name: string;
   stage: string;
-  path?: "new_logo" | "existing" | "dm_conversion" | "field_fusion" | null;
+  path?:
+    "new_logo" | "existing" | "dm_conversion" | "field_fusion" | "partner_implementation" | null;
   customer_id?: string | null;
   implementation_id?: string | null;
   owner_name?: string | null;

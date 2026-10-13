@@ -61,6 +61,11 @@ export const DEAL_TYPES = [
     label: "Field Fusion",
     plan: "Forms already built: Liesl's setup check, then three 30-minute training sessions over two weeks.",
   },
+  {
+    path: "partner_implementation",
+    label: "Partner implementation",
+    plan: "Led by a partner through setup and connection, then handed to GoCanvas implementation. Pick the partner; its journey, gates and dates are set when the implementation starts.",
+  },
 ] as const;
 
 export type FlowStageKey =

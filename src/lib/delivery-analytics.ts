@@ -19,7 +19,7 @@ import type { ServiceSpec } from "./onboarding-services";
 export type Outcome = {
   dealId: string;
   account: string;
-  path: "new_logo" | "existing" | "dm_conversion" | "field_fusion";
+  path: "new_logo" | "existing" | "dm_conversion" | "field_fusion" | "partner_implementation";
   /** "phase1" for the form; else the service's kind. */
   kind: string;
   kindLabel: string;
@@ -105,7 +105,7 @@ export function outcomesFor(
 function outcome(a: {
   dealId: string;
   account: string;
-  path: "new_logo" | "existing" | "dm_conversion" | "field_fusion";
+  path: "new_logo" | "existing" | "dm_conversion" | "field_fusion" | "partner_implementation";
   kind: string;
   kindLabel: string;
   tool: string;

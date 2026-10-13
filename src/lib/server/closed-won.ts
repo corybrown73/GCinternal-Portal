@@ -290,7 +290,8 @@ function personOrUndefined(v: unknown): string | undefined {
   return t.includes("@") ? emailOrUndefined(t) : t.slice(0, 200);
 }
 
-export type OnboardingPath = "new_logo" | "existing" | "dm_conversion" | "field_fusion";
+export type OnboardingPath =
+  "new_logo" | "existing" | "dm_conversion" | "field_fusion" | "partner_implementation";
 
 /**
  * "New Logo", "new-logo", "Existing Customer", "DM Conversion", "Field

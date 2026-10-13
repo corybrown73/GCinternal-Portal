@@ -246,3 +246,54 @@ describe("the generic stepper, drawn with partner stages", () => {
     expect(markup).toContain("To be confirmed");
   });
 });
+
+describe.each([
+  ["the internal preview", true],
+  ["the customer's link", false],
+])("a known partner whose progress cannot load, on %s", (_name, internal) => {
+  const unavailable = partnerView({
+    partner: null,
+    partnerUnavailable: true,
+    journey: null,
+    intake: null,
+  });
+  const markup = dashboard(unavailable as WelcomeView, internal);
+
+  it("says the progress is temporarily unavailable, in plain words", () => {
+    expect(markup).toContain("temporarily unavailable");
+    expect(markup).toContain("Please check back shortly");
+  });
+
+  it("shows no stages, dates, tasks or milestones, and no standard journey", () => {
+    for (const label of [
+      "Partner Setup",
+      "Form Finalisation",
+      "Pilot",
+      "Trial Run",
+      "Roll Out",
+      "Intake &amp; Process",
+      "Get It Working",
+      "Make It Yours",
+      "Make It Run",
+    ]) {
+      expect(markup, label).not.toContain(label);
+    }
+    expect(markup).not.toContain("Connection verified");
+    // The milestone and target fields say they are to be confirmed; no date is shown.
+    expect(markup).toContain("Next milestone to be confirmed");
+    expect(markup).not.toMatch(/Target \d/);
+  });
+
+  it("does not reassure: no 'nothing is waiting' and no 'no blockers' when nothing is known", () => {
+    expect(markup).not.toContain("Nothing is waiting on you right now");
+    expect(markup).not.toContain("No blockers recorded");
+    expect(markup).toContain("We can&#x27;t show what needs your attention right now");
+    expect(markup).toContain("Blockers can&#x27;t be shown right now");
+  });
+
+  it("keeps no standard kickoff item and no standard solutions card", () => {
+    for (const text of STANDARD_ONLY) {
+      expect(markup, text).not.toContain(text);
+    }
+  });
+});

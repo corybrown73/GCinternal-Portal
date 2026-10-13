@@ -44,7 +44,7 @@ export type HelpFeature = {
 };
 
 export type HelpQuery = {
-  flow: "new_logo" | "existing" | "dm_conversion" | "field_fusion";
+  flow: "new_logo" | "existing" | "dm_conversion" | "field_fusion" | "partner_implementation";
   phase1: "build" | "review" | "customer_build" | "training";
   industry: string | null;
   fieldUsers: number | null;

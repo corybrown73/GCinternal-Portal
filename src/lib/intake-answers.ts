@@ -203,7 +203,10 @@ export const intakeAnswersSchema = z.object({
    * existing account adding services reviews the form the integration reads
    * from. null until somebody says — the plan treats null as a new logo.
    */
-  path: z.enum(["new_logo", "existing", "dm_conversion", "field_fusion"]).nullable().default(null),
+  path: z
+    .enum(["new_logo", "existing", "dm_conversion", "field_fusion", "partner_implementation"])
+    .nullable()
+    .default(null),
   /** What the notes suggest the path is. A person confirms; the plan never reads this. */
   path_suggested: z
     .enum(["new_logo", "existing", "dm_conversion", "field_fusion"])

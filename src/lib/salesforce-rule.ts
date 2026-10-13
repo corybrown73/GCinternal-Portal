@@ -26,7 +26,8 @@ export type IncludeGroup = {
   label: string;
   conditions: IncludeCondition[];
   /** The onboarding type a deal matched by this group gets, when the map did not set one. */
-  path: "new_logo" | "existing" | "dm_conversion" | "field_fusion" | null;
+  path:
+    "new_logo" | "existing" | "dm_conversion" | "field_fusion" | "partner_implementation" | null;
 };
 
 export type IncludeRule = { groups: IncludeGroup[] };

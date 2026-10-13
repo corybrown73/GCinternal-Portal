@@ -13,9 +13,10 @@ import {
   homeworkTexts,
   ideasForLater,
   nextBookedSession,
+  dashboardHeaderFor,
+  isPartnerDashboard,
   partnerAttentionItems,
   partnerBlockerItems,
-  partnerDashboardHeader,
   tisContact,
   type AttentionItem,
   type BlockerItem,
@@ -60,7 +61,7 @@ export function CustomerDashboard({
   const interactive = mode === "shared";
   // A partner implementation has its own header and its own cards; the standard
   // six-stage journey and its kickoff items never apply to it.
-  const header = view.partner ? partnerDashboardHeader(view.partner) : dashboardHeader(view, today);
+  const header = dashboardHeaderFor(view, today);
   const questionsOpen = view.intake ? view.intake.needed.length > 0 : false;
   return (
     <main className="gc-dash" aria-labelledby="gc-dash-title">
@@ -79,7 +80,7 @@ export function CustomerDashboard({
             <Attention view={view} interactive={interactive} onTick={onTick} onBall={onBall} />
           </Card>
 
-          {view.intake && !view.partner ? (
+          {view.intake && !isPartnerDashboard(view) ? (
             <Card
               id="answers"
               title="Your answers before kickoff"
@@ -102,7 +103,7 @@ export function CustomerDashboard({
 
           <Card
             id="agreements"
-            title={view.partner ? "Ideas and requests" : "Our kickoff agreements"}
+            title={isPartnerDashboard(view) ? "Ideas and requests" : "Our kickoff agreements"}
             order="agreements"
             wide
           >
@@ -113,7 +114,7 @@ export function CustomerDashboard({
         <aside className="gc-dash-side">
           <Card
             id="session"
-            title={view.partner ? "Next milestone" : "Next working session"}
+            title={isPartnerDashboard(view) ? "Next milestone" : "Next working session"}
             order="session"
           >
             <NextSession view={view} today={today} icsBase={icsBase} />
@@ -123,7 +124,7 @@ export function CustomerDashboard({
             <Contact view={view} />
           </Card>
 
-          {view.partner ? null : (
+          {isPartnerDashboard(view) ? null : (
             <Card id="gocanvas" title="What GoCanvas is working on" order="gocanvas">
               <GocanvasWork view={view} />
             </Card>
@@ -214,6 +215,10 @@ function DashHeader({
           {header.started ? (
             <p className="gc-dash-stage">
               Current stage <strong>{header.currentLabel}</strong>
+            </p>
+          ) : view.partnerUnavailable ? (
+            <p className="gc-dash-stage">
+              Your implementation progress is temporarily unavailable. Please check back shortly.
             </p>
           ) : (
             <p className="gc-dash-stage">Your implementation starts once your account is set up.</p>
@@ -427,13 +432,20 @@ function Attention({
   onTick?: ((key: HomeworkKey, done: boolean) => Promise<void> | void) | undefined;
   onBall?: ((solutionId: string) => Promise<void> | void) | undefined;
 }) {
-  const items = view.partner ? partnerAttentionItems(view) : attentionItems(view);
+  const items = isPartnerDashboard(view) ? partnerAttentionItems(view) : attentionItems(view);
   const actions = items.filter((i) => i.kind !== "homework");
   const homework = items.filter((i) => i.kind === "homework");
   const waiting = actions.length > 0 || homework.some((h) => !h.done);
   return (
     <div className="gc-dash-attention">
-      {!waiting ? <p className="gc-dash-empty">Nothing is waiting on you right now.</p> : null}
+      {view.partnerUnavailable ? (
+        // Not "nothing is waiting": with progress unknown, that would be a guess.
+        <p className="gc-dash-empty">
+          We can&apos;t show what needs your attention right now. Please check back shortly.
+        </p>
+      ) : !waiting ? (
+        <p className="gc-dash-empty">Nothing is waiting on you right now.</p>
+      ) : null}
       {actions.length ? (
         <ul className="gc-dash-list">
           {actions.map((item) => (
@@ -532,6 +544,14 @@ function AttentionRow({
 /* ------------------------------------------------------- progress and blockers */
 
 function Blockers({ view }: { view: WelcomeView }) {
+  if (view.partnerUnavailable) {
+    // Not "no blockers": with progress unknown, that would be a guess.
+    return (
+      <p className="gc-dash-empty">
+        Blockers can&apos;t be shown right now. Please check back shortly.
+      </p>
+    );
+  }
   const blockers: BlockerItem[] = view.partner
     ? partnerBlockerItems(view.partner)
     : blockerItems(view);
@@ -684,7 +704,7 @@ function Agreements({ view }: { view: WelcomeView }) {
   const ideas = ideasForLater(view.parkingLot);
   return (
     <div className="gc-dash-agreements">
-      {view.partner ? null : (
+      {isPartnerDashboard(view) ? null : (
         <div className="gc-dash-block">
           <h3 className="gc-dash-h4">Agreed deliverables</h3>
           {scope.state === "empty" ? (
@@ -711,7 +731,7 @@ function Agreements({ view }: { view: WelcomeView }) {
         </div>
       )}
 
-      {view.partner ? null : (
+      {isPartnerDashboard(view) ? null : (
         <Disclosure label="How we'll work together">
           <div className="gc-dash-expect">
             {KICKOFF_EXPECTATIONS.columns.map((column) => (
@@ -769,9 +789,9 @@ function NextSession({
   today: string | null;
   icsBase: string | null;
 }) {
-  if (view.partner) {
+  if (isPartnerDashboard(view)) {
     // A partner plan has no kickoff calls: the next thing on it is its next recorded milestone.
-    const next = view.partner.nextMilestone;
+    const next = view.partner?.nextMilestone ?? null;
     // A recorded milestone and its target date: not a meeting, so no time, no calendar link.
     return next ? (
       <article className="gc-dash-session">

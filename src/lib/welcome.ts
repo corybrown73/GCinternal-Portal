@@ -165,7 +165,7 @@ export type WelcomeView = {
   /** Text rewritten in place on the page, by text key. Both modes read it. */
   textOverrides: Record<string, string>;
   /** New logo or existing account — the words on every screen follow it. */
-  path: "new_logo" | "existing" | "dm_conversion" | "field_fusion";
+  path: "new_logo" | "existing" | "dm_conversion" | "field_fusion" | "partner_implementation";
   /** "Get started on your own": the help articles picked for this customer. */
   helpPicks: Array<{
     article_id: string;
@@ -198,6 +198,12 @@ export type WelcomeView = {
    * null), so the partner stages are never forced through it.
    */
   partner?: import("./partner-journey").PartnerDashboardView | null;
+  /**
+   * True when the deal IS a Partner Implementation but its progress could not
+   * be read. The dashboard then says so, with no stages, dates or tasks, and
+   * never falls back to the six-stage journey.
+   */
+  partnerUnavailable?: boolean;
   parkingLot?: Array<{
     request: string;
     target: string;

@@ -464,7 +464,15 @@ export const getPartnerProgress = createServerFn({ method: "GET" })
   .inputValidator((data: unknown) => z.object({ implementationId: z.string().uuid() }).parse(data))
   .handler(async ({ data }) => {
     const { loadPartnerProgress } = await import("./partner-journey.server");
-    return loadPartnerProgress(data.implementationId);
+    try {
+      return await loadPartnerProgress(data.implementationId);
+    } catch (error) {
+      console.error("[partner] could not load partner progress", {
+        implementationId: data.implementationId,
+        error,
+      });
+      throw new Error("Partner progress could not be loaded.");
+    }
   });
 
 /**

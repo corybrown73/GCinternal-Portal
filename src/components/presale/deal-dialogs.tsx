@@ -27,9 +27,12 @@ import {
   addReport,
   getNewDealOwnerOptions,
   importDeals,
+  saveIntake as savePartner,
   settleNewDealFn,
   uploadSow,
 } from "@/lib/presale.functions";
+import { PartnerChoice } from "@/components/partner-choice";
+import { partnerSelectionPatch, type PartnerKey } from "@/lib/partner-implementation";
 import { WON_GATE_LABEL, type WonGateMissing } from "@/lib/won-gate";
 import {
   ALREADY_STAGED,
@@ -63,7 +66,9 @@ type DealDraft = {
   salesforceId: string;
   arr: string;
   summary: string;
-  path: "" | "new_logo" | "existing" | "dm_conversion" | "field_fusion";
+  path: "" | "new_logo" | "existing" | "dm_conversion" | "field_fusion" | "partner_implementation";
+  /** Which registered partner leads a Partner Implementation. Required for that type. */
+  partnerKey: PartnerKey | "";
   industry: string;
   stage: NewDealStage;
   /** An existing account: the customer record the services are added to. */
@@ -81,6 +86,7 @@ const emptyDeal: DealDraft = {
   arr: "",
   summary: "",
   path: "",
+  partnerKey: "",
   industry: "",
   stage: "prospect",
   customerId: "",
@@ -199,6 +205,10 @@ export function NewDealDialog() {
       // Create again made a second account.
       const sowType = sow ? documentUploadType(sow) : null;
       if (sow && !sowType) throw new Error(DOCUMENT_UPLOAD_HINT);
+      // A Partner Implementation must name its partner before anything is created.
+      if (draft.path === "partner_implementation" && !draft.partnerKey) {
+        throw new Error("Choose which partner leads this Partner Implementation.");
+      }
       const done = progress.current;
       if (existing && draft.customerId) {
         // Services for a customer we already have: the add-on deal starts
@@ -223,6 +233,12 @@ export function NewDealDialog() {
           },
         });
         done.dealId = result.account.id;
+        if (draft.path === "partner_implementation" && draft.partnerKey) {
+          // The partner is the intake's partner_implementation, saved on the new deal.
+          await savePartner({
+            data: { dealId: done.dealId, patch: partnerSelectionPatch(draft.partnerKey) },
+          });
+        }
       }
       const dealId = done.dealId!;
       if (notes.trim() && !done.notes) {
@@ -508,6 +524,15 @@ export function NewDealDialog() {
                       </option>
                     ))}
                   </select>
+                  {draft.path === "partner_implementation" ? (
+                    <div className="mt-2">
+                      <PartnerChoice
+                        id="new-deal-partner"
+                        value={draft.partnerKey || null}
+                        onChange={(key) => set({ partnerKey: key })}
+                      />
+                    </div>
+                  ) : null}
                   {/* The suggestion names the option it would pick, and its
                     line is reserved so the form does not jump when it appears. */}
                   <p className="mt-0.5 min-h-[16px] text-[11px] text-amber-700 dark:text-amber-400">

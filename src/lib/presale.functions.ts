@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
 import { DOCUMENT_UPLOAD_TYPES } from "./document-upload";
+import { PARTNER_KEYS } from "./partner-implementation";
 import { formEditorUrlSchema } from "./intake-answers";
 import {
   implementationFocusPatchSchema,
@@ -71,7 +72,7 @@ export const addDeal = createServerFn({ method: "POST" })
         arr: z.number().nonnegative().nullable(),
         summary: z.string().max(10000).nullable(),
         path: z
-          .enum(["new_logo", "existing", "dm_conversion", "field_fusion"])
+          .enum(["new_logo", "existing", "dm_conversion", "field_fusion", "partner_implementation"])
           .nullable()
           .optional(),
         industry: z.string().trim().max(80).nullable().optional(),
@@ -564,7 +565,18 @@ export const saveIntake = createServerFn({ method: "POST" })
             current_process: z.string().trim().max(4000).nullable().optional(),
             current_process_source: z.enum(["ai", "person"]).nullable().optional(),
             path: z
-              .enum(["new_logo", "existing", "dm_conversion", "field_fusion"])
+              .enum([
+                "new_logo",
+                "existing",
+                "dm_conversion",
+                "field_fusion",
+                "partner_implementation",
+              ])
+              .nullable()
+              .optional(),
+            // Which partner leads a Partner Implementation. Chosen with the path; cleared when another path is chosen.
+            partner_implementation: z
+              .object({ partner_key: z.enum(PARTNER_KEYS) })
               .nullable()
               .optional(),
             training_only: z.boolean().optional(),
