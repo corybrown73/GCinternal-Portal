@@ -11,6 +11,7 @@ import { nextLifecycleStage } from "@/lib/stage-advance-input";
 import { stageLabel } from "@/lib/hub-format";
 import type { LifecycleStageId } from "@/lib/lifecycle";
 import {
+  partnerMoveBlocked,
   advanceLabel,
   gateOutcome,
   overridePrompt,
@@ -24,7 +25,7 @@ import {
 import { userMessage } from "@/lib/errors";
 import { cn } from "@/lib/utils";
 import { ask } from "@/components/ui/ask";
-import type { PartnerMoveView } from "@/components/stage-advance-write";
+import type { PartnerMoveView } from "@/lib/partner-implementation";
 
 /**
  * The three things that have to be true before this project moves on.
@@ -102,6 +103,11 @@ export function StageGatesPanel({
     },
   });
 
+  // A partner stage's blocking gates are mandatory: the move is refused while any
+  // is open and cannot be overridden, so no override control is offered for it.
+  const partnerBlocked =
+    Boolean(partner) && partnerMoveBlocked(status, stageGateMode, next !== null);
+
   const move = useMutation({
     mutationFn: (v: { reason: string | null }) =>
       advance({
@@ -111,9 +117,13 @@ export function StageGatesPanel({
           // Null: the server resolves the actor from the authenticated caller
           // rather than asking the client who it is.
           enteredBy: null,
+          // A partner advance has no override field: a reason given on an advisory
+          // partner gap is recorded as the move's note, so it is not lost.
           notes: status.ready
             ? "All core criteria complete"
-            : `Advanced with ${status.remaining.length} core criteria outstanding`,
+            : partner && v.reason
+              ? v.reason
+              : `Advanced with ${status.remaining.length} core criteria outstanding`,
           override: status.ready ? null : { reason: v.reason },
         },
       }),
@@ -189,7 +199,11 @@ export function StageGatesPanel({
           {gateSummary(status)}
         </p>
 
-        {next ? (
+        {next && partnerBlocked ? (
+          <p className="text-[12px] font-medium text-status-risk-foreground">
+            Mandatory for this stage: {gateSummary(status)}. This move cannot be overridden.
+          </p>
+        ) : next ? (
           <Button
             size="sm"
             // Demoted whenever anything is outstanding. A primary button is a

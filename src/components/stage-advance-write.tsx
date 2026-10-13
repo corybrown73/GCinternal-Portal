@@ -8,14 +8,6 @@ import { nextLifecycleStage } from "@/lib/stage-advance-input";
 import { LIFECYCLE_STAGE_MAP, type LifecycleStageId } from "@/lib/lifecycle";
 import { stageLabel } from "@/lib/hub-format";
 import { LAUNCH_GATE_TITLE, type LaunchGate } from "@/lib/launch-gate";
-import type { PartnerStage } from "@/lib/partner-implementation";
-
-/** A Partner Implementation's move: where it is now, and the next partner stage (null at the end or at the handoff). */
-export type PartnerMoveView = {
-  currentLabel: string;
-  next: PartnerStage | null;
-  handoff: boolean;
-};
 
 const inputClass =
   "h-6 w-full rounded-sm border border-border bg-background px-1.5 text-[12px] text-foreground outline-none focus:ring-1 focus:ring-ring";
@@ -41,7 +33,6 @@ export function AdvanceStage({
   currentStage,
   team,
   gate,
-  partner,
 }: {
   customerId: string;
   implementationId: string;
@@ -49,11 +40,6 @@ export function AdvanceStage({
   team: TeamOption[];
   /** Solution acceptance gate for the next stage, when that stage is Launch. */
   gate?: LaunchGate | null;
-  /**
-   * A Partner Implementation's own move, from the partner order. Given, it
-   * replaces the lifecycle step: the house lifecycle has none of its stages.
-   */
-  partner?: PartnerMoveView | null;
 }) {
   const [open, setOpen] = useState(false);
   const [confirming, setConfirming] = useState(false);
@@ -62,26 +48,14 @@ export function AdvanceStage({
   const queryClient = useQueryClient();
   const advance = useServerFn(advanceImplementationStage);
 
-  const lifecycleNext = partner ? null : nextLifecycleStage(currentStage);
-  const step: { key: string; label: string; intent: string } | null = partner
-    ? partner.next
-      ? { key: partner.next.key, label: partner.next.label, intent: partner.next.description }
-      : null
-    : lifecycleNext
-      ? {
-          key: lifecycleNext,
-          label: LIFECYCLE_STAGE_MAP[lifecycleNext].label,
-          intent: LIFECYCLE_STAGE_MAP[lifecycleNext].intent,
-        }
-      : null;
-  const currentLabel = partner ? partner.currentLabel : stageLabel(currentStage ?? "");
+  const next = nextLifecycleStage(currentStage);
 
   const mutation = useMutation({
     mutationFn: () =>
       advance({
         data: {
           implementationId,
-          toStage: step!.key,
+          toStage: next!,
           enteredBy: nullable(enteredBy),
           notes: nullable(notes),
           // This form is the plain "record a move" path with no gate panel in
@@ -93,7 +67,6 @@ export function AdvanceStage({
       }),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["customer360", customerId] });
-      await queryClient.invalidateQueries({ queryKey: ["partner-progress", implementationId] });
       await queryClient.invalidateQueries({ queryKey: ["home"] });
       setOpen(false);
       setConfirming(false);
@@ -102,30 +75,15 @@ export function AdvanceStage({
     },
   });
 
-  // The Implementation Ready handoff is never a plain stage move: it carries its
-  // own checks and the team member taking it. That surface is not reachable for
-  // a generic partner yet (see PartnerHandoffPanel), so this says so rather than
-  // offering a move that would skip the handoff.
-  if (partner?.handoff) {
+  if (!next) {
     return (
       <p className="text-[11px] text-muted-foreground">
-        Partner Setup ends with the handoff to the GoCanvas implementation team. That handoff is not
-        available from this screen yet, so the stage does not move here.
+        End of the lifecycle — no further stage to advance to.
       </p>
     );
   }
 
-  if (!step) {
-    return (
-      <p className="text-[11px] text-muted-foreground">
-        {partner
-          ? "End of the partner journey — no further stage to move to here."
-          : "End of the lifecycle — no further stage to advance to."}
-      </p>
-    );
-  }
-
-  const nextStage = { label: step.label, intent: step.intent };
+  const nextStage = LIFECYCLE_STAGE_MAP[next];
   const blocked = gate?.blocked === true;
 
   // Blocked before the user tries: the move is not offered at all, and the
@@ -185,7 +143,7 @@ export function AdvanceStage({
     <div className="space-y-2 rounded-sm border border-border bg-background p-2">
       <div className="flex flex-wrap items-baseline gap-2 text-[12px]">
         <span className={labelClass}>Move to next stage</span>
-        <span className="font-medium">{currentLabel}</span>
+        <span className="font-medium">{stageLabel(currentStage ?? "")}</span>
         <ArrowRight className="h-3 w-3 text-muted-foreground" />
         <span className="font-medium">{nextStage.label}</span>
       </div>
@@ -226,8 +184,8 @@ export function AdvanceStage({
 
       {confirming ? (
         <div className="rounded-sm border border-dashed border-border bg-muted/40 px-2 py-1.5 text-[11px]">
-          Confirm: close {currentLabel} now, open {nextStage.label} and set it as the current stage.
-          This is recorded in stage history and cannot be undone here.
+          Confirm: close {stageLabel(currentStage ?? "")} now, open {nextStage.label} and set it as
+          the current stage. This is recorded in stage history and cannot be undone here.
         </div>
       ) : null}
 

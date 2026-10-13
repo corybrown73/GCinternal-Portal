@@ -111,7 +111,11 @@ export function CustomerDashboard({
         </div>
 
         <aside className="gc-dash-side">
-          <Card id="session" title="Next working session" order="session">
+          <Card
+            id="session"
+            title={view.partner ? "Next milestone" : "Next working session"}
+            order="session"
+          >
             <NextSession view={view} today={today} icsBase={icsBase} />
           </Card>
 
@@ -768,10 +772,11 @@ function NextSession({
   if (view.partner) {
     // A partner plan has no kickoff calls: the next thing on it is its next recorded milestone.
     const next = view.partner.nextMilestone;
+    // A recorded milestone and its target date: not a meeting, so no time, no calendar link.
     return next ? (
       <article className="gc-dash-session">
         <p className="gc-dash-session-label">{next.name}</p>
-        <p className="gc-dash-session-when">{shortDay(next.date)}</p>
+        <p className="gc-dash-session-when">Target {shortDay(next.date)}</p>
       </article>
     ) : (
       <p className="gc-dash-empty">Next milestone to be confirmed.</p>

@@ -292,6 +292,13 @@ export function liveTemplateId(
   return live?.id ?? null;
 }
 
+/** A Partner Implementation's move: where it is now, and the next partner stage (null at the end or at the handoff). */
+export type PartnerMoveView = {
+  currentLabel: string;
+  next: PartnerStage | null;
+  handoff: boolean;
+};
+
 /**
  * The move a Partner Implementation can make from its current stage, in the
  * partner order. The Implementation Ready boundary is `handoff`: that move is

@@ -26,7 +26,15 @@ const partnerRecords = {
     { stage_key: "roll_out", status: "pending", gate_mode: "blocking" },
   ],
   stageHistory: [],
-  milestones: [],
+  milestones: [
+    {
+      name: "Implementation Ready",
+      stage: "partner_setup",
+      status: "not_started",
+      target_date: "2026-11-02",
+      completed_date: null,
+    },
+  ],
   workItems: [
     {
       id: "w-connection",
@@ -176,6 +184,20 @@ describe.each([
     for (const text of STANDARD_ONLY) {
       expect(markup, text).not.toContain(text);
     }
+  });
+
+  it("shows the recorded milestone as Next milestone with its target, never as a session", () => {
+    expect(markup).toContain("Next milestone");
+    expect(markup).toContain("Implementation Ready");
+    expect(markup).toContain("Target ");
+    expect(markup).not.toContain("Next working session");
+    // A milestone is not a meeting: it carries no time and no calendar link.
+    // The session card sits between the progress card and the contact card.
+    const from = markup.indexOf("Next milestone", markup.indexOf("Progress and blockers"));
+    const session = markup.slice(from, markup.indexOf("Contact your TIS"));
+    expect(from).toBeGreaterThan(-1);
+    expect(session).not.toMatch(/\d{1,2}:\d{2}/);
+    expect(markup).not.toContain("Add all dates to your calendar");
   });
 
   it("says To be confirmed for the dates nothing records", () => {

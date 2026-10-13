@@ -5,12 +5,11 @@ import { Send } from "lucide-react";
 
 import { StageStepper } from "@/components/stage-stepper";
 import { StageGatesPanel } from "@/components/stage-gates-panel";
-import type { PartnerMoveView } from "@/components/stage-advance-write";
 import { MemberOptions } from "@/components/member-options";
 import { ask } from "@/components/ui/ask";
 import { getDealAssignment } from "@/lib/assignment.functions";
 import { handOffPartnerImplementation } from "@/lib/hub.functions";
-import { partnerMoveFrom } from "@/lib/partner-implementation";
+import { partnerMoveFrom, type PartnerMoveView } from "@/lib/partner-implementation";
 import {
   partnerStepperStages,
   type PartnerProgress,

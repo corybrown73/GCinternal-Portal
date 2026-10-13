@@ -139,3 +139,17 @@ export function overridePrompt(s: StageGateStatus, nextStageName: string): strin
     items.length === 1 ? "on" : "a"
   } outstanding:\n\n${list}\n\nThis is recorded against your name in the change history.`;
 }
+
+/**
+ * Whether a partner move is blocked by open criteria on a blocking stage. The
+ * database refuses such a move (advance_partner_stage: closed_gate), and a partner
+ * stage has no override, so the panel must say so rather than offer one. Only a
+ * move that exists can be blocked (hasNext). Standard stages never use this rule.
+ */
+export function partnerMoveBlocked(
+  s: StageGateStatus,
+  gateMode: string | null | undefined,
+  hasNext: boolean,
+): boolean {
+  return hasNext && gateMode === "blocking" && !s.ready && !s.ungated;
+}
