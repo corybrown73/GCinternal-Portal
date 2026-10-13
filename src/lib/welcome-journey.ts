@@ -70,6 +70,8 @@ export type SolutionBallView = {
   kind: string;
   /** In the customer's words. */
   status: string;
+  /** The recorded stage itself, for work-state reading (never shown as-is). */
+  statusKey: ReturnType<typeof solutionStatus>;
   /** Who holds it: us, you, or nobody because it is finished. */
   who: "us" | "you" | "done";
   /** The date it is wanted by, when one is set — ball.date, else the solution's own due date. */
@@ -167,6 +169,35 @@ export type YourItem = {
   ownerName: string | null;
 };
 
+/**
+ * The template stage keys (stage_instances.stage_key) behind each customer
+ * stage — the same groups COMPLETION_BOUNDARIES reads. Kickoff has none of
+ * its own, so it is never hidden.
+ */
+const TEMPLATE_STAGES_BY_JOURNEY: Partial<Record<JourneyStageKey, readonly string[]>> = {
+  pre_kickoff: ["handoff", "plan-internal", "align-external"],
+  get_it_working: ["build", "get-it-working"],
+  make_it_yours: ["validate-iterate", "make-it-yours"],
+  make_it_run: ["adopt", "make-it-run"],
+  complete: ["graduate-to-cs", "complete", "onboarding-complete"],
+};
+
+/**
+ * The customer stages whose plan rows are ALL explicitly marked 'skipped' in
+ * stage_instances. Only that status hides a stage: a missing row, a pending
+ * or done row, or a mixed group never hides anything, and missing dates or
+ * completion records are never read as a skip.
+ */
+export function skippedJourneyStages(
+  rows: ReadonlyArray<{ stage_key: string; status: string }>,
+): JourneyStageKey[] {
+  return (Object.keys(TEMPLATE_STAGES_BY_JOURNEY) as JourneyStageKey[]).filter((key) => {
+    const members = TEMPLATE_STAGES_BY_JOURNEY[key] ?? [];
+    const found = rows.filter((r) => members.includes(r.stage_key));
+    return found.length > 0 && found.every((r) => r.status === "skipped");
+  });
+}
+
 export type CustomerJourney = {
   stages: JourneyStage[];
   current: JourneyStage;
@@ -245,6 +276,8 @@ export function customerJourney(input: {
   parkingLot: ReadonlyArray<{ request: string; target: string; status: string; owner?: string }>;
   leadName: string | null;
   stageHistory?: readonly ImplementationStageHistoryEntry[];
+  /** Explicitly skipped customer stages (skippedJourneyStages). Never the current one. */
+  skippedStages?: readonly JourneyStageKey[];
 }): CustomerJourney | null {
   const stage = input.stage ? normalizeStage(String(input.stage)) : null;
   if (!stage || isPreClose(stage)) return null;
@@ -275,6 +308,11 @@ export function customerJourney(input: {
     };
   });
   const current = stages[at]!;
+  // A skipped stage is left out of the customer's journey entirely: it is
+  // not a stage they are "done" with, and it is not shown as one. The stage
+  // they are in is never hidden, whatever the plan says.
+  const skipped = new Set(input.skippedStages ?? []);
+  const visible = stages.filter((s, i) => i === at || !skipped.has(s.key));
 
   const completed = input.intake.timeline.completed;
   const services = normalizeServices(
@@ -295,6 +333,7 @@ export function customerJourney(input: {
       name: s.name,
       kind: SOLUTION_LABEL[s.kind] ?? s.kind,
       status: CUSTOMER_SOLUTION_STATUS[status],
+      statusKey: status,
       who,
       when: ball?.date ?? s.due ?? null,
       canConfirm: who === "you" && status === "accept" && !completed[`${s.id}:review`],
@@ -386,7 +425,7 @@ export function customerJourney(input: {
         ? `You are in ${current.label}. ${yourCount === 1 ? "One thing is" : `${yourCount} things are`} yours to do — listed below with the date each is wanted by.`
         : `You are in ${current.label}. Nothing is waiting on you right now${input.leadName ? ` — ${input.leadName} has the ball` : ""}.`;
 
-  return { stages, current, headline, solutions, yours };
+  return { stages: visible, current, headline, solutions, yours };
 }
 
 /** "by Oct 7" / "by Week 4" / "" for the customer's list. */

@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useState, type CSSProperties, type ReactNode } from "react";
 import { Check, CalendarPlus, Circle, CircleDot, ExternalLink, Mail } from "lucide-react";
 
 import { T, tkey, type WelcomeMode } from "@/components/welcome-primitives";
@@ -8,6 +8,7 @@ import {
   blockerItems,
   dashboardHeader,
   dashboardResources,
+  GOCANVAS_WORK_STATE_LABEL,
   gocanvasWork,
   homeworkTexts,
   ideasForLater,
@@ -211,7 +212,11 @@ function DashHeader({
       </div>
 
       {header.started ? (
-        <ol className="gc-dash-bar" aria-label="Implementation progress">
+        <ol
+          className="gc-dash-bar"
+          aria-label="Implementation progress"
+          style={{ "--gc-dash-cols": header.stages.length } as CSSProperties}
+        >
           {header.stages.map((s) => (
             <li
               key={s.key}
@@ -264,7 +269,7 @@ function DashHeader({
                 </span>
               </>
             ) : (
-              <span className="gc-dash-muted">None recorded yet</span>
+              <span className="gc-dash-muted">Next milestone to be confirmed.</span>
             )}
           </span>
         </div>
@@ -402,7 +407,9 @@ function Attention({
                       <T k={tkey("together", "homework", key)}>{homeworkTexts(view)[key]}</T>
                     </span>
                   </label>
-                  {h.due ? (
+                  {h.coveredBy === "testing" ? (
+                    <span className="gc-dash-muted">Covered by the testing action above</span>
+                  ) : h.due ? (
                     <span className="gc-dash-muted">Plan date {shortDay(h.due)}</span>
                   ) : null}
                 </li>
@@ -735,7 +742,7 @@ function NextSession({
 function GocanvasWork({ view }: { view: WelcomeView }) {
   const items = gocanvasWork(view);
   if (!items.length) {
-    return <p className="gc-dash-empty">Nothing is recorded for GoCanvas right now.</p>;
+    return <p className="gc-dash-empty">No GoCanvas work status is recorded yet.</p>;
   }
   return (
     <ul className="gc-dash-list is-compact">
@@ -746,8 +753,8 @@ function GocanvasWork({ view }: { view: WelcomeView }) {
               {item.what}
               {item.shared ? <span className="gc-dash-tag">Shared</span> : null}
             </span>
-            <span className="gc-dash-muted">
-              {item.status}
+            <span className="gc-dash-muted" data-state={item.state}>
+              {GOCANVAS_WORK_STATE_LABEL[item.state]}
               {item.owner ? ` · ${item.owner}` : ""}
               {item.due
                 ? ` · wanted by ${shortDay(item.due)}`

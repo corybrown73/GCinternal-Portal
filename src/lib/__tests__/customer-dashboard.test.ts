@@ -12,6 +12,7 @@ import {
   tisContact,
 } from "../customer-dashboard";
 import { customerWelcomeView, type WelcomeView } from "../welcome";
+import { TESTING_HOMEWORK_COPY } from "../onboarding-timeline";
 
 /** A WelcomeView with nothing recorded, overridden per test. */
 function viewWith(overrides: Record<string, unknown> = {}): WelcomeView {
@@ -407,6 +408,7 @@ describe("gocanvasWork — GoCanvas's work, in customer words, with no internal 
               name: "Integration",
               who: "us",
               status: "Being built",
+              statusKey: "build",
               when: "2026-10-20",
               responsiblePerson: "Lee Build",
               note: "internal note",
@@ -420,7 +422,7 @@ describe("gocanvasWork — GoCanvas's work, in customer words, with no internal 
       {
         id: "solution:s2",
         what: "Integration",
-        status: "Being built",
+        state: "in_progress",
         owner: "Lee Build",
         due: "2026-10-20",
         dueText: null,
@@ -458,9 +460,9 @@ describe("gocanvasWork — GoCanvas's work, in customer words, with no internal 
         ],
       }),
     );
-    expect(work.map((w) => [w.what, w.status, w.shared])).toEqual([
-      ["Map the export", "Scheduled", false],
-      ["Pick users", "Open", true],
+    expect(work.map((w) => [w.what, w.state, w.shared])).toEqual([
+      ["Map the export", "not_started", false],
+      ["Pick users", "not_started", true],
     ]);
   });
 });
@@ -676,7 +678,8 @@ describe("dashboardHeader — the next milestone is the next one still ahead of 
       date: "2026-10-26",
       status: "planned",
     });
-    expect(dashboardHeader(view, null).nextMilestone?.label).toBe("Deal closes");
+    // With today unknown, the close is still history: the next step is Functional.
+    expect(dashboardHeader(view, null).nextMilestone?.label).toBe("Functional");
   });
 });
 
@@ -806,13 +809,264 @@ describe("the recorded tester responsibility is not merged with plan copy", () =
     const items = attentionItems(view);
     const testing = items.find((i) => i.kind === "testing")!;
     expect(testing).toMatchObject({ owner: "Dana Ortiz", due: "2026-10-30" });
-    // The plan's copy stays a separate preparation item with the plan's date, not the tester's.
+    // The plan's copy stays a preparation row, but it carries no second deadline:
+    // the recorded tester's action is the one commitment for this work.
     const plan = items.find(
       (i) => i.kind === "homework" && i.what === "Test the form on real jobs",
     )!;
-    expect(plan.due).toBe("2026-10-08");
+    expect(plan.due).toBeNull();
+    expect(plan.coveredBy).toBe("testing");
     expect(
       items.filter((i) => i.what === "Test the form on real jobs" && i.kind === "testing"),
+    ).toEqual([]);
+  });
+});
+
+describe("dashboardHeader — sales milestones are never the next milestone", () => {
+  const sales = {
+    key: "close",
+    kind: "milestone",
+    label: "Deal closes",
+    date: "2026-07-01",
+    doneOn: null,
+  };
+  const stage = (currentDate: string | null, current = "make_it_run") =>
+    ({
+      stages: [
+        {
+          key: current,
+          state: "now",
+          label: "Make it run",
+          target: { originalDate: currentDate, currentDate, actualDate: null },
+        },
+      ],
+      current: {
+        key: current,
+        label: "Make it run",
+        state: "now",
+        target: { originalDate: currentDate, currentDate, actualDate: null },
+      },
+    }) as never;
+
+  it("an unticked close from months ago is never shown as the next milestone", () => {
+    const view = viewWith({
+      journey: stage(null),
+      timeline: { ...viewWith().timeline, milestones: [sales] } as never,
+    });
+    expect(dashboardHeader(view, "2026-10-13").nextMilestone).toBeNull();
+  });
+
+  it("with no unfinished implementation step, the current stage's recorded target is shown", () => {
+    const view = viewWith({
+      journey: stage("2026-11-02"),
+      timeline: { ...viewWith().timeline, milestones: [sales] } as never,
+    });
+    expect(dashboardHeader(view, "2026-10-13").nextMilestone).toEqual({
+      label: "Make it run target",
+      date: "2026-11-02",
+      status: "planned",
+    });
+  });
+
+  it("an unfinished implementation step ahead of today wins over the stage target", () => {
+    const view = viewWith({
+      journey: stage("2026-11-02"),
+      timeline: {
+        ...viewWith().timeline,
+        milestones: [
+          sales,
+          { key: "live", kind: "milestone", label: "Functional", date: "2026-10-26", doneOn: null },
+        ],
+      } as never,
+    });
+    expect(dashboardHeader(view, "2026-10-13").nextMilestone).toEqual({
+      label: "Functional",
+      date: "2026-10-26",
+      status: "planned",
+    });
+  });
+
+  it("nothing recorded at all is an honest empty state, never an invented date", () => {
+    const view = viewWith({
+      journey: null,
+      timeline: { ...viewWith().timeline, milestones: [sales] } as never,
+    });
+    expect(dashboardHeader(view, "2026-10-13").nextMilestone).toBeNull();
+  });
+});
+
+describe("the testing preparation and the recorded tester are one commitment, not two", () => {
+  const kickoffWith = (homework: string[]) =>
+    viewWith({
+      homeworkDone: { app: true },
+      timeline: {
+        ...viewWith().timeline,
+        milestones: [
+          {
+            key: "kickoff",
+            kind: "call",
+            label: "Kickoff",
+            date: "2026-10-05",
+            time: "09:00",
+            doneOn: "2026-10-05",
+            homework,
+          },
+          {
+            key: "homework",
+            kind: "homework",
+            label: "Homework",
+            date: "2026-10-08",
+            time: null,
+            doneOn: null,
+          },
+        ],
+      } as never,
+    });
+
+  it("with a recorded tester, the testing preparation shows no plan date and is marked covered", () => {
+    const view = kickoffWith([TESTING_HOMEWORK_COPY, "Send us any missing data"]);
+    const items = attentionItems({
+      ...view,
+      fieldTester: "Dana Ortiz",
+      fieldTesterDue: "2026-10-30",
+    } as never);
+    const prep = items.find((i) => i.id === "homework:app")!;
+    expect(prep).toMatchObject({
+      what: TESTING_HOMEWORK_COPY,
+      due: null,
+      coveredBy: "testing",
+      done: true,
+    });
+    expect(items.find((i) => i.kind === "testing")).toMatchObject({
+      owner: "Dana Ortiz",
+      due: "2026-10-30",
+    });
+  });
+
+  it("with no recorded tester, the preparation keeps its plan date, as before", () => {
+    const view = kickoffWith([TESTING_HOMEWORK_COPY]);
+    const items = attentionItems({ ...view, fieldTester: null, fieldTesterDue: null } as never);
+    expect(items.find((i) => i.id === "homework:app")).toMatchObject({
+      due: "2026-10-08",
+      coveredBy: null,
+    });
+    expect(items.some((i) => i.kind === "testing")).toBe(false);
+  });
+
+  it("a distinct preparation step is never covered by the tester, even if it mentions testing", () => {
+    const view = kickoffWith(["Send us any missing data", "Tell us who your first users are"]);
+    const items = attentionItems({
+      ...view,
+      fieldTester: "Dana Ortiz",
+      fieldTesterDue: "2026-10-30",
+    } as never);
+    expect(
+      items
+        .filter((i) => i.kind === "homework")
+        .every((i) => i.coveredBy === null && i.due === "2026-10-08"),
+    ).toBe(true);
+  });
+});
+
+describe("gocanvasWork — four recorded states, and an honest empty state", () => {
+  const sol = (id: string, statusKey: string | undefined, who = "us") => ({
+    id,
+    name: `Solution ${id}`,
+    status: "customer words",
+    statusKey,
+    who,
+    responsiblePerson: null,
+    when: null,
+    blocked: null,
+  });
+  const milestone = (key: string, label: string, owner: string, doneOn: string | null) => ({
+    key,
+    label,
+    owner,
+    kind: "milestone",
+    date: "2026-10-20",
+    doneOn,
+  });
+
+  it("maps feasibility and define to not started, build to in progress, accepted to completed", () => {
+    const work = gocanvasWork(
+      viewWith({
+        journey: {
+          solutions: [
+            sol("a", "feasibility"),
+            sol("b", "define"),
+            sol("c", "build"),
+            sol("d", "accepted", "done"),
+          ],
+        } as never,
+      }),
+    );
+    expect(work.map((w) => [w.id, w.state])).toEqual([
+      ["solution:a", "not_started"],
+      ["solution:b", "not_started"],
+      ["solution:c", "in_progress"],
+      ["solution:d", "completed"],
+    ]);
+  });
+
+  it("a GoCanvas solution with no recorded stage says no status is recorded, never a guess", () => {
+    const work = gocanvasWork(viewWith({ journey: { solutions: [sol("x", undefined)] } as never }));
+    expect(work).toEqual([expect.objectContaining({ id: "solution:x", state: "no_status" })]);
+  });
+
+  it("the customer's own turn and finished-without-going-ahead solutions are not GoCanvas work", () => {
+    const work = gocanvasWork(
+      viewWith({
+        journey: {
+          solutions: [
+            sol("y", "accept", "you"),
+            sol("z", "descoped", "done"),
+            sol("w", "transferred", "done"),
+          ],
+        } as never,
+      }),
+    );
+    expect(work).toEqual([]);
+  });
+
+  it("GoCanvas-owned milestones are completed when done, else no status is recorded; the sales close is never work", () => {
+    const work = gocanvasWork(
+      viewWith({
+        timeline: {
+          ...viewWith().timeline,
+          milestones: [
+            milestone("close", "Deal closes", "gocanvas", "2026-07-01"),
+            milestone("live", "Functional", "gocanvas", null),
+            milestone("fieldtest", "Field test", "gocanvas", "2026-10-02"),
+            milestone("kickoff", "Kickoff", "both", null),
+          ],
+        } as never,
+      }),
+    );
+    expect(work.map((w) => [w.what, w.state])).toEqual([
+      ["Functional", "no_status"],
+      ["Field test", "completed"],
+    ]);
+  });
+
+  it("a done change is completed; nothing recorded gives an empty list", () => {
+    const work = gocanvasWork(
+      viewWith({
+        parkingLot: [
+          {
+            request: "Export fix",
+            target: "",
+            status: "done",
+            neededForLaunch: false,
+            owner: "gocanvas",
+          },
+        ],
+        timeline: { ...viewWith().timeline, milestones: [] } as never,
+      }),
+    );
+    expect(work.map((w) => [w.what, w.state])).toEqual([["Export fix", "completed"]]);
+    expect(
+      gocanvasWork(viewWith({ timeline: { ...viewWith().timeline, milestones: [] } as never })),
     ).toEqual([]);
   });
 });

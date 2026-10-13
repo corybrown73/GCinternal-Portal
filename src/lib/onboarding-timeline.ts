@@ -110,6 +110,13 @@ export function isTrainingPlan(
  * catch-up and whatever the account needs more time on; it is the window,
  * not the plan. Same keys as every other plan, so every screen follows.
  */
+/**
+ * The kickoff step's preparation copy for testing the form on real work. The
+ * recorded field tester owns that work (with their own name and deadline), so
+ * the dashboard reads this exact copy to know the preparation row is covered.
+ */
+export const TESTING_HOMEWORK_COPY = "Test the form on real jobs";
+
 export const NEW_LOGO_PLAN: readonly MilestoneSpec[] = [
   {
     key: "close",
@@ -131,7 +138,7 @@ export const NEW_LOGO_PLAN: readonly MilestoneSpec[] = [
     detail:
       "We start from what sales already learned: your process mapped and a starting form built. Together we confirm the workflow, refine the form, publish it, submit from a phone and follow the result end to end.",
     homework: [
-      "Test the form on real jobs",
+      TESTING_HOMEWORK_COPY,
       "Send us any missing data — your lists, as spreadsheets",
       "Tell us who your first users are",
       "Note anything that slows you down",

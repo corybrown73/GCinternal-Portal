@@ -1,5 +1,5 @@
 import { kickoffGraduationTarget } from "./kickoff-view";
-import type { Milestone } from "./onboarding-timeline";
+import { TESTING_HOMEWORK_COPY, type Milestone } from "./onboarding-timeline";
 import { HOMEWORK_TEXT } from "./welcome-journey";
 import { HOMEWORK_KEYS, type HomeworkKey, type WelcomeView } from "./welcome";
 
@@ -32,6 +32,9 @@ export type DashboardStage = {
   state: "done" | "now" | "later";
 };
 
+/** The plan's sales step. It describes the close, so it is never the next milestone. */
+const SALES_MILESTONE_KEYS: ReadonlySet<string> = new Set(["close"]);
+
 export type DashboardHeader = {
   /** False before the account is set up: there is no stage to show yet. */
   started: boolean;
@@ -47,37 +50,51 @@ export type DashboardHeader = {
 };
 
 /**
- * Progress for the six-segment bar, from the stage journey. The next milestone
- * is the earliest step not done that is still ahead today; when none is ahead
- * (or today is not known yet), it is the earliest step not done.
+ * Progress for the segment bar, from the stage journey. The next milestone is
+ * the earliest unfinished implementation step still ahead today; failing that,
+ * the current stage's recorded target; failing that, the earliest unfinished
+ * implementation step. Null when none of those is recorded.
  */
 export function dashboardHeader(
   view: Pick<WelcomeView, "journey" | "timeline">,
   today: string | null = null,
 ): DashboardHeader {
   const journey = view.journey ?? null;
-  const stageState = (key: string): DashboardStage["state"] =>
-    journey?.stages.find((s) => s.key === key)?.state ?? "later";
-  const stages: DashboardStage[] = DASHBOARD_STAGES.map((s) => ({
-    key: s.key,
-    label: s.label,
-    state: stageState(s.key),
-  }));
+  // The bar shows the stages the customer's journey actually has: a stage the
+  // plan explicitly skipped is not in it, so the bar is not padded with it.
+  // Before the account is set up there is no journey yet, so all six show.
+  const stages: DashboardStage[] = journey
+    ? journey.stages.map((s) => ({
+        key: s.key,
+        label: DASHBOARD_STAGES.find((d) => d.key === s.key)?.label ?? s.label,
+        state: s.state,
+      }))
+    : DASHBOARD_STAGES.map((s) => ({ key: s.key, label: s.label, state: "later" as const }));
 
+  // The next milestone is an implementation step. The sales step that closed
+  // the deal is history, never "next", whether or not it was ticked.
   const open = view.timeline.milestones
-    .filter((m) => !m.doneOn)
+    .filter((m) => !m.doneOn && !SALES_MILESTONE_KEYS.has(m.key))
     .sort((a, b) => a.date.localeCompare(b.date));
   const ahead = today ? open.filter((m) => m.date >= today) : [];
-  const next = ahead[0] ?? open[0];
-  const nextMilestone = next
-    ? next.kind === "call" && !next.time
-      ? { label: next.label, date: null, status: "to_schedule" as const }
+  const next = ahead[0];
+  const currentStage = journey?.current ?? null;
+  const stageTarget = currentStage?.target?.currentDate ?? null;
+  const milestoneFact = (m: Milestone): DashboardHeader["nextMilestone"] =>
+    m.kind === "call" && !m.time
+      ? { label: m.label, date: null, status: "to_schedule" }
       : {
-          label: next.label,
-          date: next.date,
-          status: next.kind === "call" ? ("booked" as const) : ("planned" as const),
-        }
-    : null;
+          label: m.label,
+          date: m.date,
+          status: m.kind === "call" ? "booked" : "planned",
+        };
+  const nextMilestone: DashboardHeader["nextMilestone"] = next
+    ? milestoneFact(next)
+    : currentStage && isIsoDate(stageTarget)
+      ? { label: `${currentStage.label} target`, date: stageTarget, status: "planned" }
+      : open[0]
+        ? milestoneFact(open[0])
+        : null;
 
   const complete = journey?.stages.find((s) => s.key === "complete")?.target ?? null;
   const current = kickoffGraduationTarget(journey);
@@ -125,6 +142,11 @@ export type AttentionItem = {
   canConfirm: boolean;
   /** An AI-proposed name, shown as to confirm. */
   toConfirm: boolean;
+  /**
+   * Homework only: the recorded action that now carries this work, so the
+   * preparation row shows no plan date of its own. The row stays ticked as before.
+   */
+  coveredBy: "testing" | null;
 };
 
 /**
@@ -157,17 +179,23 @@ export function attentionItems(
     solutionId: null,
     canConfirm: false,
     toConfirm: false,
+    coveredBy: null,
   };
 
   for (const key of HOMEWORK_KEYS) {
+    // The plan's testing preparation is covered by the recorded tester's own
+    // action (below), which carries their name and deadline. Its plan date is
+    // not a second deadline for the same work, so it is not shown.
+    const covered = Boolean(view.fieldTester) && texts[key] === TESTING_HOMEWORK_COPY;
     items.push({
       ...blank,
       id: `homework:${key}`,
       kind: "homework",
       what: texts[key],
-      due: isIsoDate(homeworkDate) ? homeworkDate : null,
+      due: !covered && isIsoDate(homeworkDate) ? homeworkDate : null,
       done: Boolean(view.homeworkDone[key]),
       homeworkKey: key,
+      coveredBy: covered ? "testing" : null,
     });
   }
 
@@ -249,11 +277,24 @@ export function blockerItems(view: Pick<WelcomeView, "journey">): BlockerItem[] 
     }));
 }
 
+/**
+ * Where a piece of GoCanvas's work stands, from what is recorded. Only these
+ * four states exist. Proposed scope is "not started", never underway, and a
+ * step with no recorded status says so rather than guessing.
+ */
+export type GocanvasWorkState = "not_started" | "in_progress" | "completed" | "no_status";
+
+export const GOCANVAS_WORK_STATE_LABEL: Record<GocanvasWorkState, string> = {
+  not_started: "Not started yet",
+  in_progress: "Work in progress",
+  completed: "Completed",
+  no_status: "No work status recorded",
+};
+
 export type GocanvasWorkItem = {
   id: string;
   what: string;
-  /** The customer-words status for a solution, or the change's state for a change. */
-  status: string;
+  state: GocanvasWorkState;
   owner: string | null;
   due: string | null;
   dueText: string | null;
@@ -261,38 +302,68 @@ export type GocanvasWorkItem = {
   shared: boolean;
 };
 
+/** A solution's recorded stage, read as GoCanvas work. Accept is the customer's turn, so it is not GoCanvas work. */
+const SOLUTION_WORK_STATE: Partial<Record<string, GocanvasWorkState>> = {
+  feasibility: "not_started",
+  define: "not_started",
+  build: "in_progress",
+  accepted: "completed",
+};
+
 /**
- * GoCanvas-owned work from the solutions and the change list. Internal notes
- * and blockers never appear here: the customer's view has already removed them,
- * and this reads only the name, the customer's status and the recorded date.
+ * GoCanvas's work, from the recorded solutions, the change list and the plan's
+ * GoCanvas-owned milestones. Internal notes, issues, risks and blockers never
+ * appear here: this reads only the name, the recorded stage or done stamp, the
+ * named person and the recorded date.
  */
 export function gocanvasWork(
-  view: Pick<WelcomeView, "journey" | "parkingLot">,
+  view: Pick<WelcomeView, "journey" | "parkingLot" | "timeline">,
 ): GocanvasWorkItem[] {
   const items: GocanvasWorkItem[] = [];
   for (const s of view.journey?.solutions ?? []) {
-    if (s.who !== "us") continue;
+    const stage = s.statusKey;
+    const state = stage ? SOLUTION_WORK_STATE[stage] : s.who === "us" ? "no_status" : undefined;
+    if (!state) continue;
     items.push({
       id: `solution:${s.id}`,
       what: s.name,
-      status: s.status,
+      state,
       owner: s.responsiblePerson,
-      due: isIsoDate(s.when) ? s.when : null,
+      due: state === "completed" ? null : isIsoDate(s.when) ? s.when : null,
       dueText: null,
       shared: false,
     });
   }
   for (const [index, p] of (view.parkingLot ?? []).entries()) {
     if (p.owner !== "gocanvas" && p.owner !== "both") continue;
-    if (p.status !== "open" && p.status !== "scheduled") continue;
+    const state: GocanvasWorkState | null =
+      p.status === "done"
+        ? "completed"
+        : p.status === "open" || p.status === "scheduled"
+          ? "not_started"
+          : null;
+    if (!state) continue;
     items.push({
       id: `change:${index}`,
       what: p.request,
-      status: p.status === "scheduled" ? "Scheduled" : "Open",
+      state,
       owner: null,
-      due: isIsoDate(p.target) ? p.target : null,
-      dueText: p.target && !isIsoDate(p.target) ? p.target : null,
+      due: state !== "completed" && isIsoDate(p.target) ? p.target : null,
+      dueText: state !== "completed" && p.target && !isIsoDate(p.target) ? p.target : null,
       shared: p.owner === "both",
+    });
+  }
+  // The plan's own GoCanvas steps. The sales close is history, never work.
+  for (const m of view.timeline?.milestones ?? []) {
+    if (m.owner !== "gocanvas" || SALES_MILESTONE_KEYS.has(m.key)) continue;
+    items.push({
+      id: `milestone:${m.key}`,
+      what: m.label,
+      state: m.doneOn ? "completed" : "no_status",
+      owner: null,
+      due: null,
+      dueText: null,
+      shared: false,
     });
   }
   return items.sort((a, b) =>
