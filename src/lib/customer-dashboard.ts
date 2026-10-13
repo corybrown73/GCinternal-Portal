@@ -56,13 +56,16 @@ export function dashboardHeader(
   today: string | null = null,
 ): DashboardHeader {
   const journey = view.journey ?? null;
-  const stageState = (key: string): DashboardStage["state"] =>
-    journey?.stages.find((s) => s.key === key)?.state ?? "later";
-  const stages: DashboardStage[] = DASHBOARD_STAGES.map((s) => ({
-    key: s.key,
-    label: s.label,
-    state: stageState(s.key),
-  }));
+  // The bar shows the stages the customer's journey actually has: a stage the
+  // plan explicitly skipped is not in it, so the bar is not padded with it.
+  // Before the account is set up there is no journey yet, so all six show.
+  const stages: DashboardStage[] = journey
+    ? journey.stages.map((s) => ({
+        key: s.key,
+        label: DASHBOARD_STAGES.find((d) => d.key === s.key)?.label ?? s.label,
+        state: s.state,
+      }))
+    : DASHBOARD_STAGES.map((s) => ({ key: s.key, label: s.label, state: "later" as const }));
 
   const open = view.timeline.milestones
     .filter((m) => !m.doneOn)

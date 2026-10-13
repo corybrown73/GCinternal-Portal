@@ -224,6 +224,10 @@ async function viewFor(
     String(deal.id),
     deal.customer_id ? String(deal.customer_id) : null,
   );
+  const skippedStages = await skippedStagesForDeal(
+    String(deal.id),
+    deal.customer_id ? String(deal.customer_id) : null,
+  );
   const focus = implementationFocusView(intake);
   const focusFallback = implementationFocusFallbackView(
     (await import("./implementation-focus")).proposeImplementationFocus(intake),
@@ -321,8 +325,35 @@ async function viewFor(
       parkingLot: lot,
       leadName,
       stageHistory,
+      skippedStages,
     }),
   };
+}
+
+/**
+ * The customer stages the plan explicitly marks skipped (stage_instances rows
+ * with status 'skipped'). Never throws: a read that fails hides nothing, so
+ * the customer sees all six stages rather than a guessed-at journey.
+ */
+async function skippedStagesForDeal(
+  dealId: string,
+  customerId: string | null,
+): Promise<import("./welcome-journey").JourneyStageKey[]> {
+  try {
+    const { implementationForDeal } = await import("./assignment.server");
+    const implementationId = await implementationForDeal(dealId, customerId);
+    if (!implementationId) return [];
+    const { data, error } = await db()
+      .from("stage_instances")
+      .select("stage_key,status")
+      .eq("implementation_id", implementationId);
+    if (error) throw error;
+    const { skippedJourneyStages } = await import("./welcome-journey");
+    return skippedJourneyStages((data ?? []) as { stage_key: string; status: string }[]);
+  } catch (error) {
+    console.error("[welcome] could not read skipped stages", error);
+    return [];
+  }
 }
 
 async function implementationStageHistoryForDeal(

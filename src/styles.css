@@ -5041,7 +5041,7 @@ body.gc-presenting {
   padding: 0;
   list-style: none;
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-template-columns: repeat(var(--gc-dash-cols, 6), minmax(0, 1fr));
   gap: 8px;
 }
 .gc-welcome .gc-dash-seg {

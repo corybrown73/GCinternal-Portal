@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useState, type CSSProperties, type ReactNode } from "react";
 import { Check, CalendarPlus, Circle, CircleDot, ExternalLink, Mail } from "lucide-react";
 
 import { T, tkey, type WelcomeMode } from "@/components/welcome-primitives";
@@ -211,7 +211,11 @@ function DashHeader({
       </div>
 
       {header.started ? (
-        <ol className="gc-dash-bar" aria-label="Implementation progress">
+        <ol
+          className="gc-dash-bar"
+          aria-label="Implementation progress"
+          style={{ "--gc-dash-cols": header.stages.length } as CSSProperties}
+        >
           {header.stages.map((s) => (
             <li
               key={s.key}
