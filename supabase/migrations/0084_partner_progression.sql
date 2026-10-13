@@ -24,6 +24,10 @@ create table notification_outbox (
   next_attempt_at timestamptz not null default now(),
   last_error text,
   sent_at timestamptz,
+  -- Lease: a worker holds a notice from claim until it finishes or the lease
+  -- lapses. claim_token is the holder's identity; only it may finish the notice.
+  claimed_until timestamptz,
+  claim_token uuid,
   created_at timestamptz not null default now()
 );
 create index notification_outbox_due_idx on notification_outbox (status, next_attempt_at);
@@ -45,7 +49,9 @@ returns text language sql stable security definer set search_path = public as $$
    limit 1
 $$;
 
--- How many gate criteria are still open on a stage: gate work items not done or skipped.
+-- How many gate criteria are still open on a stage. A criterion is satisfied
+-- only when it is done and carries its completion stamp, the one the existing
+-- status writer sets. Skipping a criterion is not completing it.
 create or replace function partner_gate_outstanding(p_implementation_id uuid, p_stage text)
 returns int language sql stable security definer set search_path = public as $$
   select count(*)::int
@@ -54,8 +60,29 @@ returns int language sql stable security definer set search_path = public as $$
    where w.implementation_id = p_implementation_id
      and si.stage_key = p_stage
      and w.is_gate
-     and w.status not in ('done', 'skipped')
+     and not (w.status = 'done' and w.completed_at is not null)
 $$;
+
+-- A partner's gate criterion cannot be skipped at all. The guard lives in the
+-- database, so no caller, status writer or direct update can bypass it.
+create or replace function partner_gate_skip_guard()
+returns trigger language plpgsql security definer set search_path = public as $$
+declare v_partner boolean;
+begin
+  if new.is_gate and new.status = 'skipped' then
+    select (coalesce(i.journey_type = 'partner_implementation', false) or i.partner_key is not null)
+      into v_partner
+      from implementations i where i.id = new.implementation_id;
+    if coalesce(v_partner, false) then
+      raise exception 'Partner gate criteria cannot be skipped: complete "%" instead.', new.title;
+    end if;
+  end if;
+  return new;
+end $$;
+
+create trigger work_items_partner_gate_skip_guard
+  before insert or update of status on work_items
+  for each row execute function partner_gate_skip_guard();
 
 -- Move the implementation to a stage: close the open history row, open the new
 -- one, set the stage, and resync the rail's stage rows from it.
@@ -294,13 +321,127 @@ begin
   return jsonb_build_object('graduated', true);
 end $$;
 
--- 6. Only the server (service role) runs these. Nothing else may call them.
+-- 6. Resync, partner-aware. The standard rule is unchanged. For a partner, the
+--    current stage is 'done' when it was completed and closed (graduation stamps
+--    both), so a resync after graduation does not reopen Roll Out.
+create or replace function resync_stage_instances(p_implementation_id uuid)
+returns jsonb
+language plpgsql
+security definer set search_path = public
+as $$
+declare
+  cur_key text;
+  cur_pos int;
+  v_partner boolean;
+  changed int := 0;
+begin
+  if not (auth.role() = 'service_role' or portal_is_internal()) then
+    raise exception 'forbidden';
+  end if;
+
+  select current_stage into cur_key from implementations where id = p_implementation_id;
+  select position into cur_pos from stage_instances
+   where implementation_id = p_implementation_id and stage_key = cur_key;
+  if cur_pos is null then
+    return jsonb_build_object('ok', false, 'reason', 'current_stage has no stage_instance');
+  end if;
+
+  select (coalesce(i.journey_type = 'partner_implementation', false) or i.partner_key is not null)
+    into v_partner from implementations i where i.id = p_implementation_id;
+
+  with target as (
+    select s.id,
+      case
+        when s.position < cur_pos then 'done'
+        when s.position = cur_pos and coalesce(v_partner, false)
+             and s.status = 'done' and s.exited_at is not null then 'done'
+        when s.position = cur_pos then 'active'
+        else 'pending'
+      end as want
+      from stage_instances s
+     where s.implementation_id = p_implementation_id
+  )
+  update stage_instances s set status = t.want
+    from target t
+   where s.id = t.id and s.status <> t.want;
+  get diagnostics changed = row_count;
+
+  if changed > 0 then
+    insert into journey_events (implementation_id, kind, detail)
+    values (p_implementation_id, 'stage_resynced',
+            jsonb_build_object('current_stage', cur_key, 'rows_changed', changed));
+  end if;
+
+  return jsonb_build_object('ok', true, 'rows_changed', changed);
+end;
+$$;
+
+-- 7. Notification claims. A worker claims due notices atomically: the rows are
+--    locked with SKIP LOCKED and marked with a lease in the same statement, so
+--    two overlapping workers can never claim the same notice. Each claim counts
+--    as an attempt, so a worker that dies mid-send still uses one up.
+create or replace function claim_notices(p_limit int, p_lease_seconds int)
+returns table (id uuid, recipient text, subject text, html text, attempts int, claim_token uuid)
+language plpgsql security definer set search_path = public as $$
+begin
+  return query
+  with due as (
+    select n.id
+      from notification_outbox n
+     where n.status = 'queued'
+       and n.next_attempt_at <= now()
+       and (n.claimed_until is null or n.claimed_until < now())
+     order by n.created_at
+     limit p_limit
+     for update skip locked
+  ),
+  claimed as (
+    update notification_outbox n
+       set claimed_until = now() + make_interval(secs => p_lease_seconds),
+           claim_token = gen_random_uuid(),
+           attempts = n.attempts + 1
+      from due
+     where n.id = due.id
+    returning n.id, n.recipient, n.subject, n.html, n.attempts, n.claim_token
+  )
+  select c.id, c.recipient, c.subject, c.html, c.attempts, c.claim_token from claimed c;
+end $$;
+
+-- Finish a claimed notice. Only the holder of the claim can: if the lease
+-- lapsed and another worker took the notice, this returns false and changes
+-- nothing. Returns whether the outcome was recorded.
+create or replace function finish_notice(
+  p_id uuid,
+  p_token uuid,
+  p_status text,
+  p_error text,
+  p_next timestamptz
+) returns boolean language plpgsql security definer set search_path = public as $$
+begin
+  update notification_outbox
+     set status = case when p_status = 'sent' then 'sent'
+                       when p_status = 'exhausted' then 'exhausted'
+                       else 'queued' end,
+         sent_at = case when p_status = 'sent' then now() else sent_at end,
+         next_attempt_at = coalesce(p_next, next_attempt_at),
+         last_error = p_error,
+         claimed_until = null,
+         claim_token = null
+   where id = p_id and claim_token = p_token;
+  return found;
+end $$;
+
+-- 8. Only the server (service role) runs these. Nothing else may call them.
 revoke execute on function partner_next_stage(uuid, text) from public, anon, authenticated;
 revoke execute on function partner_gate_outstanding(uuid, text) from public, anon, authenticated;
 revoke execute on function partner_move_stage(uuid, text, uuid, text, boolean, timestamptz) from public, anon, authenticated;
 revoke execute on function partner_lock(uuid) from public, anon, authenticated;
 revoke execute on function partner_record(uuid, uuid, text, jsonb, uuid, timestamptz) from public, anon, authenticated;
 revoke execute on function partner_complete_milestone(uuid, text, text, timestamptz) from public, anon, authenticated;
+revoke execute on function claim_notices(int, int) from public, anon, authenticated;
+revoke execute on function finish_notice(uuid, uuid, text, text, timestamptz) from public, anon, authenticated;
+grant execute on function claim_notices(int, int) to service_role;
+grant execute on function finish_notice(uuid, uuid, text, text, timestamptz) to service_role;
 revoke execute on function advance_partner_stage(uuid, text, uuid, uuid, text, timestamptz) from public, anon, authenticated;
 revoke execute on function partner_implementation_handoff(uuid, uuid, uuid, uuid, jsonb, jsonb, timestamptz) from public, anon, authenticated;
 revoke execute on function partner_implementation_graduate(uuid, uuid, uuid, timestamptz) from public, anon, authenticated;

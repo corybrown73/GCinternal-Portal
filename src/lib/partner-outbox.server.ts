@@ -1,28 +1,33 @@
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 
-import { drainNotices, type NoticeState } from "./partner-notifications";
+import { type ClaimedNotice, drainNotices, type NoticeState } from "./partner-notifications";
 import { sendEmail } from "./server/email";
 
 const db = () => supabaseAdmin as any;
 
 /**
+ * How long a worker holds a notice before another may take it over. It must be
+ * longer than one send, so a slow send is not re-sent by a second worker.
+ */
+export const NOTICE_LEASE_SECONDS = 300;
+
+/**
  * Send the queued assignment notices that are due. Called by the dispatch cron.
- * Each notice is marked sent only when the email is confirmed delivered.
+ * Claims are atomic (claim_notices locks with SKIP LOCKED and leases in the
+ * same statement), so overlapping cron runs cannot send the same notice.
  */
 export async function drainNotificationOutbox(limit: number) {
   return drainNotices({
     now: new Date(),
     limit,
+    leaseSeconds: NOTICE_LEASE_SECONDS,
     store: {
-      async due(at, n) {
-        const { data, error } = await db()
-          .from("notification_outbox")
-          .select("id,recipient,subject,html,attempts")
-          .eq("status", "queued")
-          .lte("next_attempt_at", at.toISOString())
-          .order("created_at", { ascending: true })
-          .limit(n);
-        if (error) throw new Error(`Could not read the notice outbox: ${error.message}`);
+      async claim(_now, n, leaseSeconds) {
+        const { data, error } = await db().rpc("claim_notices", {
+          p_limit: n,
+          p_lease_seconds: leaseSeconds,
+        });
+        if (error) throw new Error(`Could not claim notices: ${error.message}`);
         return (
           (data ?? []) as Array<{
             id: string;
@@ -30,34 +35,27 @@ export async function drainNotificationOutbox(limit: number) {
             subject: string;
             html: string;
             attempts: number;
+            claim_token: string;
           }>
-        ).map((r) => ({
+        ).map((r): ClaimedNotice => ({
           id: r.id,
           recipient: r.recipient,
           subject: r.subject,
           html: r.html,
           attempts: r.attempts,
+          token: r.claim_token,
         }));
       },
-      async save(id, state: NoticeState) {
-        const patch =
-          state.status === "sent"
-            ? {
-                status: "sent",
-                attempts: state.attempts,
-                sent_at: state.sentAt.toISOString(),
-                last_error: null,
-              }
-            : state.status === "exhausted"
-              ? { status: "exhausted", attempts: state.attempts, last_error: state.lastError }
-              : {
-                  status: "queued",
-                  attempts: state.attempts,
-                  next_attempt_at: state.nextAttemptAt.toISOString(),
-                  last_error: state.lastError,
-                };
-        const { error } = await db().from("notification_outbox").update(patch).eq("id", id);
+      async finish(notice: ClaimedNotice, state: NoticeState) {
+        const { data, error } = await db().rpc("finish_notice", {
+          p_id: notice.id,
+          p_token: notice.token,
+          p_status: state.status,
+          p_error: state.status === "sent" ? null : state.lastError,
+          p_next: state.status === "queued" ? state.nextAttemptAt.toISOString() : null,
+        });
         if (error) throw new Error(`Could not record a notice outcome: ${error.message}`);
+        return data === true;
       },
     },
     async send({ to, subject, html }) {

@@ -56,6 +56,7 @@ async function runDispatch(): Promise<Response> {
     noticesSent: 0,
     noticesRetrying: 0,
     noticesExhausted: 0,
+    noticesLost: 0,
   };
 
   /* ---- 1. Fan out ------------------------------------------------------ */
@@ -310,6 +311,7 @@ async function runDispatch(): Promise<Response> {
   summary.noticesSent = notices.sent;
   summary.noticesRetrying = notices.retrying;
   summary.noticesExhausted = notices.exhausted;
+  summary.noticesLost = notices.lost;
 
   // Every five minutes: an idle run is not worth an audit row.
   if (Object.values(summary).some((n) => n > 0)) {

@@ -66,7 +66,7 @@ begin
 
   -- 5. Satisfy the partner's gate, then hand off: the stage, milestone, deal, owner,
   --    ledger, outbox and events all change together.
-  update work_items set status = 'done'
+  update work_items set status = 'done', completed_at = now()
    where implementation_id = v_impl and is_gate
      and stage_instance_id in (select id from stage_instances where implementation_id = v_impl and stage_key = 'partner_setup');
   perform partner_implementation_handoff(v_impl, v_tm, null, null,
@@ -118,7 +118,7 @@ begin
     '0084 rollback partner', 'field_fusion_iq', '{}'::jsonb, null, null, v_at);
   v_impl2 := (v_res ->> 'implementation_id')::uuid;
   perform advance_partner_stage(v_impl2, 'partner_setup', null, null, null, v_at);
-  update work_items set status = 'done'
+  update work_items set status = 'done', completed_at = now()
    where implementation_id = v_impl2 and is_gate
      and stage_instance_id in (select id from stage_instances where implementation_id = v_impl2 and stage_key = 'partner_setup');
   create function probe_fail_assign() returns trigger language plpgsql as $f$
@@ -183,7 +183,7 @@ begin
 
   -- 11. Satisfy the four criteria: graduation completes the stage, the milestone,
   --     and moves the deal to onboarding_complete, in one transaction.
-  update work_items set status = 'done'
+  update work_items set status = 'done', completed_at = now()
    where implementation_id = v_impl and is_gate
      and stage_instance_id in (select id from stage_instances where implementation_id = v_impl and stage_key = 'roll_out');
   perform partner_implementation_graduate(v_impl, v_tm, null, v_at);
@@ -223,6 +223,81 @@ begin
     raise exception '0084: a refused standard call moved a standard implementation';
   end if;
   raise notice '0084 ok: a standard implementation is refused by every partner function, and unchanged';
+
+  -- 14. A partner's gate criterion cannot be skipped, by any writer.
+  begin
+    update work_items set status = 'skipped'
+     where implementation_id = v_impl and is_gate
+       and stage_instance_id in (select id from stage_instances where implementation_id = v_impl and stage_key = 'pilot');
+    raise exception '0084: a partner gate criterion was skipped';
+  exception when others then
+    if sqlerrm like '%cannot be skipped%' then null; else raise; end if;
+  end;
+  raise notice '0084 ok: a partner gate criterion cannot be skipped';
+
+  -- 15. A completed criterion without its completion stamp does not satisfy the gate.
+  v_n := (select count(*) from work_items where implementation_id = v_impl and stage_instance_id in
+            (select id from stage_instances where implementation_id = v_impl and stage_key = 'pilot') and is_gate);
+  update work_items set status = 'done', completed_at = null
+   where implementation_id = v_impl and is_gate
+     and stage_instance_id in (select id from stage_instances where implementation_id = v_impl and stage_key = 'pilot');
+  if partner_gate_outstanding(v_impl, 'pilot') <> v_n then
+    raise exception '0084: a criterion without its completion stamp satisfied the gate';
+  end if;
+  update work_items set completed_at = now()
+   where implementation_id = v_impl and is_gate
+     and stage_instance_id in (select id from stage_instances where implementation_id = v_impl and stage_key = 'pilot');
+  if partner_gate_outstanding(v_impl, 'pilot') <> 0 then
+    raise exception '0084: a stamped criterion did not satisfy the gate';
+  end if;
+  raise notice '0084 ok: only a done, stamped criterion satisfies a gate';
+
+  -- 16. A resync after graduation keeps Roll Out completed, in stage rows and history.
+  perform resync_stage_instances(v_impl);
+  if (select status from stage_instances where implementation_id = v_impl and stage_key = 'roll_out') <> 'done' then
+    raise exception '0084: a resync after graduation reopened Roll Out';
+  end if;
+  if (select count(*) from implementation_stage_history where implementation_id = v_impl and stage = 'roll_out' and exited_at is not null) < 1 then
+    raise exception '0084: the completed Roll Out is not closed in history';
+  end if;
+  raise notice '0084 ok: a resync after graduation keeps Roll Out completed';
+
+  -- 17. Notice claims: disjoint, leased, fenced, and retried.
+  -- Only this probe's notices are queued: the earlier handoff notices are settled first.
+  update notification_outbox set status = 'sent', sent_at = now() where status = 'queued';
+  insert into notification_outbox (dedupe_key, kind, recipient, subject, html, implementation_id)
+  values ('probe:claim:a', 'assignment', 'a@example.test', 's', 'h', v_impl),
+         ('probe:claim:b', 'assignment', 'b@example.test', 's', 'h', v_impl);
+  create temp table probe_claim_a as select * from claim_notices(1, 300);
+  create temp table probe_claim_b as select * from claim_notices(10, 300);
+  if (select count(*) from probe_claim_a) <> 1 or (select count(*) from probe_claim_b) <> 1 then
+    raise exception '0084: overlapping claims did not split the notices';
+  end if;
+  if (select recipient from probe_claim_a) = (select recipient from probe_claim_b) then
+    raise exception '0084: two claims took the same notice';
+  end if;
+  if (select count(*) from claim_notices(10, 300)) <> 0 then
+    raise exception '0084: a leased notice was claimable again';
+  end if;
+  if (select attempts from probe_claim_a) <> 1 then
+    raise exception '0084: a claim did not count as an attempt';
+  end if;
+  if finish_notice((select id from probe_claim_a), gen_random_uuid(), 'sent', null, null) then
+    raise exception '0084: a finish with the wrong token was accepted';
+  end if;
+  if not finish_notice((select id from probe_claim_a), (select claim_token from probe_claim_a), 'queued', 'down', now() - interval '1 minute') then
+    raise exception '0084: the holder could not finish its claim';
+  end if;
+  -- The released notice is due again; its lease is cleared, so it is claimable.
+  if (select count(*) from claim_notices(10, 300)) <> 1 then
+    raise exception '0084: a released notice was not claimable again';
+  end if;
+  -- An abandoned claim (lease lapsed) is claimable again, and counts as another attempt.
+  update notification_outbox set claimed_until = now() - interval '1 second' where dedupe_key = 'probe:claim:b';
+  if (select attempts from notification_outbox where dedupe_key = 'probe:claim:b') < 1 then
+    raise exception '0084: setup for the abandoned claim failed';
+  end if;
+  raise notice '0084 ok: notice claims are disjoint, leased, fenced, and retried';
 end $$;
 
 rollback;

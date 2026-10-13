@@ -10,81 +10,97 @@
 
 export const MAX_NOTICE_ATTEMPTS = 6;
 
-export type NoticeRow = {
+/** A notice a worker holds under a lease. `attempts` already counts this claim. */
+export type ClaimedNotice = {
   id: string;
   recipient: string;
   subject: string;
   html: string;
   attempts: number;
+  token: string;
 };
 
 export type NoticeState =
-  | { status: "queued"; attempts: number; nextAttemptAt: Date; lastError: string | null }
-  | { status: "sent"; attempts: number; sentAt: Date; lastError: null }
+  | { status: "queued"; attempts: number; nextAttemptAt: Date; lastError: string }
+  | { status: "sent"; attempts: number; sentAt: Date }
   | { status: "exhausted"; attempts: number; lastError: string };
 
 export type SendResult = { delivered: boolean; reason: string | null };
 
 /**
- * The next state after one attempt. A delivery ends the notice. A failure is
- * retried with exponential backoff (1, 2, 4, 8, 16 minutes), and after
- * MAX_NOTICE_ATTEMPTS it is exhausted and visible as such.
+ * The state after one claimed attempt. Only a confirmed delivery ends a notice
+ * as sent. A failure is retried with exponential backoff (1, 2, 4, 8, 16
+ * minutes); after MAX_NOTICE_ATTEMPTS it is exhausted and stays visible.
  */
 export function nextNoticeState(
   attempts: number,
   outcome: { delivered: true } | { delivered: false; error: string },
   now: Date,
 ): NoticeState {
-  const next = attempts + 1;
   if (outcome.delivered) {
-    return { status: "sent", attempts: next, sentAt: now, lastError: null };
+    return { status: "sent", attempts, sentAt: now };
   }
-  if (next >= MAX_NOTICE_ATTEMPTS) {
-    return { status: "exhausted", attempts: next, lastError: outcome.error };
+  if (attempts >= MAX_NOTICE_ATTEMPTS) {
+    return { status: "exhausted", attempts, lastError: outcome.error };
   }
-  const waitMinutes = 2 ** (next - 1);
+  const waitMinutes = 2 ** (attempts - 1);
   return {
     status: "queued",
-    attempts: next,
+    attempts,
     nextAttemptAt: new Date(now.getTime() + waitMinutes * 60_000),
     lastError: outcome.error,
   };
 }
 
-/** Where the drain reads due notices and writes their outcome. */
+/**
+ * Where the drain claims notices and records their outcome. The store is
+ * responsible for the claim being atomic and for `finish` being fenced: it
+ * succeeds only for the worker that still holds the lease.
+ */
 export type NoticeStore = {
-  due(now: Date, limit: number): Promise<NoticeRow[]>;
-  save(id: string, state: NoticeState): Promise<void>;
+  claim(now: Date, limit: number, leaseSeconds: number): Promise<ClaimedNotice[]>;
+  finish(notice: ClaimedNotice, state: NoticeState): Promise<boolean>;
 };
 
 /**
- * Send each due notice once and record the outcome. Never throws for one
- * notice's failure: that notice is retried later, and the rest still go out.
+ * Claim due notices, send each, and record the outcome against the claim.
+ * A notice is counted as sent only when the sender confirms delivery AND the
+ * outcome is recorded against this worker's own claim. If the lease lapsed and
+ * another worker took the notice, the finish is refused, counted as `lost`, and
+ * the other worker's outcome stands. One notice's failure never stops the rest.
  */
 export async function drainNotices(args: {
   store: NoticeStore;
   send: (notice: { to: string; subject: string; html: string }) => Promise<SendResult>;
   now: Date;
   limit: number;
-}): Promise<{ sent: number; retrying: number; exhausted: number }> {
-  const counts = { sent: 0, retrying: 0, exhausted: 0 };
-  for (const row of await args.store.due(args.now, args.limit)) {
+  leaseSeconds: number;
+}): Promise<{ sent: number; retrying: number; exhausted: number; lost: number }> {
+  const counts = { sent: 0, retrying: 0, exhausted: 0, lost: 0 };
+  for (const notice of await args.store.claim(args.now, args.limit, args.leaseSeconds)) {
     let outcome: { delivered: true } | { delivered: false; error: string };
     try {
-      const result = await args.send({ to: row.recipient, subject: row.subject, html: row.html });
+      const result = await args.send({
+        to: notice.recipient,
+        subject: notice.subject,
+        html: notice.html,
+      });
       outcome = result.delivered
         ? { delivered: true }
         : { delivered: false, error: result.reason ?? "The email was not delivered." };
     } catch (e) {
       outcome = { delivered: false, error: e instanceof Error ? e.message : String(e) };
     }
-    const state = nextNoticeState(row.attempts, outcome, args.now);
-    await args.store.save(row.id, state);
+    const state = nextNoticeState(notice.attempts, outcome, args.now);
+    if (!(await args.store.finish(notice, state))) {
+      counts.lost += 1;
+      continue;
+    }
     if (state.status === "sent") counts.sent += 1;
     else if (state.status === "queued") counts.retrying += 1;
     else counts.exhausted += 1;
   }
-  return { sent: counts.sent, retrying: counts.retrying, exhausted: counts.exhausted };
+  return counts;
 }
 
 const escape = (s: string) =>
