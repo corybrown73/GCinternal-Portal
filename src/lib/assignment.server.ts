@@ -224,6 +224,67 @@ export async function implementationForDeal(dealId: string, customerId: string |
  * pool. Writes the project's owner, the ledger row, the audit entry, and
  * sends the assignee a short email: the account, the first move, the link.
  */
+/** The assignee the rules pick, without writing anything or notifying anyone. */
+export type AssigneeChoice =
+  | {
+      kind: "chosen";
+      chosen: PoolRow;
+      source: "auto" | "manual";
+      weight: number;
+      breakdown: WeightBreakdown;
+      rules: Awaited<ReturnType<typeof loadRules>>;
+      deal: Awaited<ReturnType<typeof dealFacts>>["deal"];
+      forWeight: Awaited<ReturnType<typeof dealFacts>>["forWeight"];
+      training: Awaited<ReturnType<typeof dealFacts>>["training"];
+    }
+  | {
+      kind: "claim";
+      pool: PoolRow[];
+      dealName: string;
+      weight: number;
+      breakdown: WeightBreakdown;
+    }
+  | { kind: "none" };
+
+/**
+ * Who the rules pick for a deal. Reads only: the caller writes the assignment
+ * and sends any notice. Shared by assignDeal and the partner handoff, so the
+ * two can never pick differently.
+ */
+export async function chooseAssignee(args: {
+  dealId: string;
+  teamMemberId?: string | null;
+  ownerEmail?: string | undefined;
+}): Promise<AssigneeChoice> {
+  const rules = await loadRules();
+  const { deal, forWeight, training } = await dealFacts(args.dealId);
+  const { weight, breakdown } = dealWeight(forWeight, rules);
+  const pool = await loadPool(rules);
+
+  let chosen: PoolRow | undefined;
+  let source: "auto" | "manual" = "auto";
+  if (args.teamMemberId) {
+    chosen = pool.find((p) => p.teamMemberId === args.teamMemberId);
+    source = "manual";
+  } else if (args.ownerEmail) {
+    const email = args.ownerEmail.toLowerCase();
+    chosen = pool.find((p) => (p.email ?? "").toLowerCase() === email);
+    source = "manual";
+  }
+  if (!chosen && rules.mode === "claim") {
+    return { kind: "claim", pool, dealName: String(deal.name), weight, breakdown };
+  }
+  if (!chosen) {
+    const ranked = pool
+      .filter((p) => p.inPool && p.active)
+      .sort((a, b) => (a.rank ?? 99) - (b.rank ?? 99));
+    chosen = ranked[0];
+    source = "auto";
+  }
+  if (!chosen) return { kind: "none" };
+  return { kind: "chosen", chosen, source, weight, breakdown, rules, deal, forWeight, training };
+}
+
 export async function assignDeal(args: {
   dealId: string;
   implementationId?: string | null;
@@ -247,41 +308,25 @@ export async function assignDeal(args: {
   source: "auto" | "manual";
   notified: boolean;
 } | null> {
-  const rules = await loadRules();
-  const { deal, forWeight, training } = await dealFacts(args.dealId);
-  const { weight, breakdown } = dealWeight(forWeight, rules);
-  const pool = await loadPool(rules);
-
-  let chosen: PoolRow | undefined;
-  let source: "auto" | "manual" = "auto";
-  if (args.teamMemberId) {
-    chosen = pool.find((p) => p.teamMemberId === args.teamMemberId);
-    source = "manual";
-  } else if (args.ownerEmail) {
-    const email = args.ownerEmail.toLowerCase();
-    chosen = pool.find((p) => (p.email ?? "").toLowerCase() === email);
-    source = "manual";
-  }
-  if (!chosen && rules.mode === "claim") {
+  const picked = await chooseAssignee({
+    dealId: args.dealId,
+    teamMemberId: args.teamMemberId ?? null,
+    ownerEmail: args.ownerEmail,
+  });
+  if (picked.kind === "claim") {
     // Nobody is picked for them. The pool is told there is an account to
     // claim, and the deal page offers the claim to whoever opens it.
-    await notifyPoolToClaim(pool, {
+    await notifyPoolToClaim(picked.pool, {
       dealId: args.dealId,
-      dealName: String(deal.name),
-      weight,
-      breakdown,
+      dealName: picked.dealName,
+      weight: picked.weight,
+      breakdown: picked.breakdown,
       handoff: args.handoff ?? null,
     });
     return null;
   }
-  if (!chosen) {
-    const ranked = pool
-      .filter((p) => p.inPool && p.active)
-      .sort((a, b) => (a.rank ?? 99) - (b.rank ?? 99));
-    chosen = ranked[0];
-    source = "auto";
-  }
-  if (!chosen) return null;
+  if (picked.kind === "none") return null;
+  const { chosen, source, weight, breakdown, rules, deal, forWeight, training } = picked;
 
   const implementationId =
     args.implementationId ?? (await implementationForDeal(args.dealId, deal.customer_id ?? null));

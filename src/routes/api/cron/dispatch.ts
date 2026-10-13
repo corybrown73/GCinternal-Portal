@@ -53,6 +53,10 @@ async function runDispatch(): Promise<Response> {
     exhausted: 0,
     healed: 0,
     pruned: 0,
+    noticesSent: 0,
+    noticesRetrying: 0,
+    noticesExhausted: 0,
+    noticesLost: 0,
   };
 
   /* ---- 1. Fan out ------------------------------------------------------ */
@@ -297,6 +301,17 @@ async function runDispatch(): Promise<Response> {
       .in("status", ["succeeded", "skipped", "exhausted"]);
     summary.pruned = (prunedLogs ?? 0) + (prunedDeliveries ?? 0);
   }
+
+  /* ---- 5. Assignment notices ------------------------------------------ */
+  // Partner handoffs queue their notices in the same transaction as the
+  // handoff. A notice is sent once the sender confirms delivery; a failure is
+  // retried with backoff and ends as exhausted, never as sent.
+  const { drainNotificationOutbox } = await import("@/lib/partner-outbox.server");
+  const notices = await drainNotificationOutbox(25);
+  summary.noticesSent = notices.sent;
+  summary.noticesRetrying = notices.retrying;
+  summary.noticesExhausted = notices.exhausted;
+  summary.noticesLost = notices.lost;
 
   // Every five minutes: an idle run is not worth an audit row.
   if (Object.values(summary).some((n) => n > 0)) {
