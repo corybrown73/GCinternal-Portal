@@ -61,14 +61,19 @@ export type PartnerStage = {
   /** Internal stages are the two commercial ones; the customer sees the rest. */
   visibility: StageVisibility;
   /**
-   * The deal stages that hold this partner stage today. Empty where storage has
-   * no equivalent yet (see the dependencies in the PR): the stage exists in the
-   * configuration, and nothing maps a deal to it.
+   * LEGACY COMPATIBILITY ONLY. The deal stages that existing Field Fusion
+   * records already sit in, read for display of those records. This is not
+   * how partner progress is stored: Phase 2 persists each partner stage's own
+   * record and completion. Empty where no legacy equivalent exists.
    */
-  dealStages: readonly AccountStage[];
+  legacyDealStages: readonly AccountStage[];
 };
 
-/** The canonical seven-stage partner journey, in order. */
+/**
+ * The canonical seven-stage partner journey, in order. `legacyDealStages` below
+ * is a read-only bridge for existing Field Fusion records; it never marks a
+ * partner stage complete.
+ */
 export const PARTNER_JOURNEY: readonly PartnerStage[] = [
   {
     key: "pre_sale_poc",
@@ -76,7 +81,7 @@ export const PARTNER_JOURNEY: readonly PartnerStage[] = [
     label: "Pre-Sale & POC",
     description: "Partner-led solution validation and proof of value.",
     visibility: "internal",
-    dealStages: ["prospect", "negotiate"],
+    legacyDealStages: ["prospect", "negotiate"],
   },
   {
     key: "closed_won_planning",
@@ -84,7 +89,7 @@ export const PARTNER_JOURNEY: readonly PartnerStage[] = [
     label: "Closed Won & Planning",
     description: "Confirm requirements, stakeholders and implementation planning.",
     visibility: "internal",
-    dealStages: ["closed_won"],
+    legacyDealStages: ["closed_won"],
   },
   {
     key: "partner_setup",
@@ -92,7 +97,7 @@ export const PARTNER_JOURNEY: readonly PartnerStage[] = [
     label: "Partner Setup & Connection",
     description: "Partner configures the solution and establishes the technical connection.",
     visibility: "customer",
-    dealStages: ["field_fusion_setup"],
+    legacyDealStages: ["field_fusion_setup"],
   },
   {
     key: "form_finalisation",
@@ -100,7 +105,7 @@ export const PARTNER_JOURNEY: readonly PartnerStage[] = [
     label: "Form Finalisation & Data Readiness",
     description: "TIS leads GoCanvas form and dataset preparation.",
     visibility: "customer",
-    dealStages: ["onboarding_kickoff"],
+    legacyDealStages: ["onboarding_kickoff"],
   },
   {
     key: "pilot",
@@ -108,7 +113,7 @@ export const PARTNER_JOURNEY: readonly PartnerStage[] = [
     label: "Pilot",
     description: "Customer tests; TIS supports and refines.",
     visibility: "customer",
-    dealStages: [],
+    legacyDealStages: [],
   },
   {
     key: "trial_run",
@@ -116,7 +121,7 @@ export const PARTNER_JOURNEY: readonly PartnerStage[] = [
     label: "Trial Run",
     description: "End users test; TIS supports and refines.",
     visibility: "customer",
-    dealStages: [],
+    legacyDealStages: [],
   },
   {
     key: "roll_out",
@@ -124,7 +129,7 @@ export const PARTNER_JOURNEY: readonly PartnerStage[] = [
     label: "Roll Out & Graduation",
     description: "Go live, training, acceptance and transition to support.",
     visibility: "customer",
-    dealStages: [],
+    legacyDealStages: [],
   },
 ];
 
@@ -166,10 +171,17 @@ export function stageOwner(key: PartnerStageKey): StageOwner {
   return partnerStage(key).position <= readyAt ? "partner" : "gocanvas_tis";
 }
 
-/** The partner stage a deal stage corresponds to today, or null where none does. */
-export function partnerStageForDealStage(stage: AccountStage | string | null | undefined) {
+/**
+ * LEGACY COMPATIBILITY ONLY: the partner stage an existing deal stage is shown
+ * under, or null where there is no legacy equivalent. This is an entry read,
+ * not progress. `onboarding_kickoff` marks the move into GoCanvas implementation
+ * (the handoff), so it does not mean Form Finalisation & Data Readiness is done.
+ */
+export function legacyPartnerStageForDealStage(stage: AccountStage | string | null | undefined) {
   if (!stage || !isStage(stage)) return null;
-  return PARTNER_JOURNEY.find((s) => (s.dealStages as readonly string[]).includes(stage)) ?? null;
+  return (
+    PARTNER_JOURNEY.find((s) => (s.legacyDealStages as readonly string[]).includes(stage)) ?? null
+  );
 }
 
 export type ImplementationTypeInfo =

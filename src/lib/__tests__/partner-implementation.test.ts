@@ -8,7 +8,7 @@ import {
   implementationTypeFor,
   PARTNER_JOURNEY,
   partnerStage,
-  partnerStageForDealStage,
+  legacyPartnerStageForDealStage,
   stageOwner,
 } from "../partner-implementation";
 import { CANONICAL_JOURNEY_KEYS } from "../stage-flow";
@@ -73,17 +73,30 @@ describe("existing Field Fusion records are read through a compatibility mapping
     expect(implementationTypeFor(intake)).toMatchObject({ legacy: false });
   });
 
-  it("the existing Field Fusion deal stages map onto the partner stages they correspond to", () => {
-    expect(partnerStageForDealStage("closed_won")?.key).toBe("closed_won_planning");
-    expect(partnerStageForDealStage("field_fusion_setup")?.key).toBe("partner_setup");
-    expect(partnerStageForDealStage("onboarding_kickoff")?.key).toBe("form_finalisation");
+  it("the legacy mapping is an entry read only: onboarding_kickoff marks the handoff, not Form Finalisation being done", () => {
+    // The mapping says where an existing record is shown. It carries no
+    // completion, so nothing can read it as stage 4 finished.
+    const mapped = legacyPartnerStageForDealStage("onboarding_kickoff");
+    expect(mapped?.key).toBe("form_finalisation");
+    expect(Object.keys(mapped ?? {})).not.toContain("completedAt");
+    expect(Object.keys(mapped ?? {})).not.toContain("done");
+    // Stages with no legacy equivalent stay unmapped rather than guessed.
+    expect(
+      PARTNER_JOURNEY.filter((s) => s.legacyDealStages.length === 0).map((s) => s.key),
+    ).toEqual(["pilot", "trial_run", "roll_out"]);
+  });
+
+  it("the existing Field Fusion deal stages map onto the legacy partner stages they correspond to", () => {
+    expect(legacyPartnerStageForDealStage("closed_won")?.key).toBe("closed_won_planning");
+    expect(legacyPartnerStageForDealStage("field_fusion_setup")?.key).toBe("partner_setup");
+    expect(legacyPartnerStageForDealStage("onboarding_kickoff")?.key).toBe("form_finalisation");
   });
 
   it("a deal stage with no partner equivalent yet maps to nothing rather than a guess", () => {
-    expect(partnerStageForDealStage("get_it_working")).toBeNull();
-    expect(partnerStageForDealStage("onboarding_complete")).toBeNull();
-    expect(partnerStageForDealStage(null)).toBeNull();
-    expect(partnerStageForDealStage("not_a_stage")).toBeNull();
+    expect(legacyPartnerStageForDealStage("get_it_working")).toBeNull();
+    expect(legacyPartnerStageForDealStage("onboarding_complete")).toBeNull();
+    expect(legacyPartnerStageForDealStage(null)).toBeNull();
+    expect(legacyPartnerStageForDealStage("not_a_stage")).toBeNull();
   });
 });
 
