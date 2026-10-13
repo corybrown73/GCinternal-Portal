@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   attentionItems,
+  blockerItems,
   dashboardHeader,
   dashboardResources,
   gocanvasWork,
@@ -475,7 +476,7 @@ describe("nextBookedSession — only a booked, unfinished session counts", () =>
   ] as never;
 
   it("returns the earliest booked session that is not yet held, with its purpose and what to prepare", () => {
-    expect(nextBookedSession(milestones)).toEqual({
+    expect(nextBookedSession(milestones, "2026-10-12")).toEqual({
       key: "adjust",
       label: "Session adjust",
       date: "2026-10-20",
@@ -486,11 +487,13 @@ describe("nextBookedSession — only a booked, unfinished session counts", () =>
   });
 
   it("an unbooked planned date is never returned as a meeting", () => {
-    expect(nextBookedSession([call("unbooked", "2026-10-15", null)] as never)).toBeNull();
+    expect(
+      nextBookedSession([call("unbooked", "2026-10-15", null)] as never, "2026-10-12"),
+    ).toBeNull();
   });
 
   it("returns null when nothing is booked, so the page says it is to be scheduled", () => {
-    expect(nextBookedSession([] as never)).toBeNull();
+    expect(nextBookedSession([] as never, "2026-10-12")).toBeNull();
   });
 });
 
@@ -674,5 +677,142 @@ describe("dashboardHeader — the next milestone is the next one still ahead of 
       status: "planned",
     });
     expect(dashboardHeader(view, null).nextMilestone?.label).toBe("Deal closes");
+  });
+});
+
+describe("nextBookedSession — a past meeting is never presented as upcoming", () => {
+  const meeting = (key: string, date: string, extra: Record<string, unknown> = {}) =>
+    ({
+      key,
+      kind: "call",
+      label: `Session ${key}`,
+      date,
+      time: "10:00",
+      doneOn: null,
+      detail: "",
+      homework: [],
+      ...extra,
+    }) as never;
+
+  it("skips a booked meeting whose date has passed, even with no completion recorded", () => {
+    expect(nextBookedSession([meeting("working", "2026-10-07")], "2026-10-13")).toBeNull();
+  });
+
+  it("takes a meeting dated today, and the earliest upcoming one after it", () => {
+    const next = nextBookedSession(
+      [
+        meeting("late", "2026-10-30"),
+        meeting("today", "2026-10-13"),
+        meeting("past", "2026-10-07"),
+      ],
+      "2026-10-13",
+    );
+    expect(next?.key).toBe("today");
+  });
+
+  it("ignores an unbooked upcoming date, a completed meeting, and a service call", () => {
+    expect(
+      nextBookedSession([meeting("unbooked", "2026-10-20", { time: null })], "2026-10-13"),
+    ).toBeNull();
+    expect(
+      nextBookedSession([meeting("done", "2026-10-20", { doneOn: "2026-10-19" })], "2026-10-13"),
+    ).toBeNull();
+    expect(
+      nextBookedSession([meeting("svc", "2026-10-20", { serviceId: "svc-1" })], "2026-10-13"),
+    ).toBeNull();
+  });
+
+  it("returns nothing while today is not yet known, rather than guessing", () => {
+    expect(nextBookedSession([meeting("any", "2026-10-20")], null)).toBeNull();
+  });
+
+  it("leaves the historical meeting in the plan, unchanged", () => {
+    const milestones = [meeting("working", "2026-10-07")];
+    nextBookedSession(milestones, "2026-10-13");
+    expect(milestones[0]).toMatchObject({ date: "2026-10-07", time: "10:00", doneOn: null });
+  });
+});
+
+describe("progress and blockers — each recorded blocker is shown once", () => {
+  const solution = (id: string, who: string, blocked: string | null, name = `Service ${id}`) => ({
+    id,
+    name,
+    who,
+    status: "Your turn to test it",
+    when: "2026-10-20",
+    responsiblePerson: null,
+    canConfirm: true,
+    note: null,
+    blocked,
+  });
+
+  it("lists a service blocked on the customer under blockers, and not again under attention", () => {
+    const view = viewWith({
+      journey: { solutions: [solution("s1", "you", "customer")], yours: [] } as never,
+    });
+    expect(blockerItems(view).map((b) => b.what)).toEqual(["Service s1"]);
+    expect(attentionItems(view).filter((i) => i.kind === "solution")).toEqual([]);
+  });
+
+  it("keeps an unblocked customer service under attention", () => {
+    const view = viewWith({
+      journey: { solutions: [solution("s2", "you", null)], yours: [] } as never,
+    });
+    expect(blockerItems(view)).toEqual([]);
+    expect(
+      attentionItems(view)
+        .filter((i) => i.kind === "solution")
+        .map((i) => i.solutionId),
+    ).toEqual(["s2"]);
+  });
+
+  it("a blocker recorded on the GoCanvas side never appears, even if it reaches this view", () => {
+    const view = viewWith({
+      journey: { solutions: [solution("s3", "us", "internal")], yours: [] } as never,
+    });
+    expect(blockerItems(view)).toEqual([]);
+  });
+});
+
+describe("the recorded tester responsibility is not merged with plan copy", () => {
+  it("keeps the recorded tester's name and deadline on their own item, and never borrows the plan's date", () => {
+    const view = viewWith({
+      fieldTester: "Dana Ortiz",
+      fieldTesterDue: "2026-10-30",
+      fieldTesterSource: "person",
+      timeline: {
+        ...viewWith().timeline,
+        milestones: [
+          {
+            key: "kickoff",
+            kind: "call",
+            label: "Kickoff",
+            date: "2026-10-05",
+            time: "09:00",
+            doneOn: "2026-10-05",
+            homework: ["Test the form on real jobs"],
+          },
+          {
+            key: "homework",
+            kind: "homework",
+            label: "Homework",
+            date: "2026-10-08",
+            time: null,
+            doneOn: null,
+          },
+        ],
+      } as never,
+    });
+    const items = attentionItems(view);
+    const testing = items.find((i) => i.kind === "testing")!;
+    expect(testing).toMatchObject({ owner: "Dana Ortiz", due: "2026-10-30" });
+    // The plan's copy stays a separate preparation item with the plan's date, not the tester's.
+    const plan = items.find(
+      (i) => i.kind === "homework" && i.what === "Test the form on real jobs",
+    )!;
+    expect(plan.due).toBe("2026-10-08");
+    expect(
+      items.filter((i) => i.what === "Test the form on real jobs" && i.kind === "testing"),
+    ).toEqual([]);
   });
 });

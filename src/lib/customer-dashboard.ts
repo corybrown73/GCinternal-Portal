@@ -184,7 +184,8 @@ export function attentionItems(
   }
 
   for (const s of view.journey?.solutions ?? []) {
-    if (s.who !== "you") continue;
+    // A solution the customer is blocking is shown once, under progress and blockers.
+    if (s.who !== "you" || s.blocked === "customer") continue;
     items.push({
       ...blank,
       id: `solution:${s.id}`,
@@ -217,6 +218,36 @@ export function attentionItems(
 }
 
 /* ------------------------------------------------ What GoCanvas is working on */
+
+export type BlockerItem = {
+  id: string;
+  what: string;
+  /** The customer's status for the service, in their words. */
+  status: string;
+  owner: string | null;
+  due: string | null;
+  dueText: string | null;
+};
+
+/**
+ * Recorded blockers that are waiting on the customer, from the solutions the
+ * journey already holds. A blocker recorded on the GoCanvas side is internal and
+ * never reaches the customer's copy (see customerWelcomeView), so it cannot appear
+ * here. Nothing is predicted: a service is listed only when someone recorded it as
+ * blocked on the customer.
+ */
+export function blockerItems(view: Pick<WelcomeView, "journey">): BlockerItem[] {
+  return (view.journey?.solutions ?? [])
+    .filter((s) => s.blocked === "customer" && s.who !== "done")
+    .map((s) => ({
+      id: `solution:${s.id}`,
+      what: s.name,
+      status: s.status,
+      owner: s.responsiblePerson,
+      due: isIsoDate(s.when) ? s.when : null,
+      dueText: null,
+    }));
+}
 
 export type GocanvasWorkItem = {
   id: string;
@@ -283,14 +314,28 @@ export type NextSession = {
 };
 
 /**
- * The next working session that is genuinely booked and not yet held: a call
- * with a time set and no completion. A planned date with no time is not a
- * meeting, and is never returned here. Service-specific calls are excluded,
- * as they are on the journey.
+ * The next working session: a call with a time set, not marked done, and dated
+ * today or later. A session whose date has passed is history, even when nobody
+ * has marked it done, so it is never presented as upcoming. A planned date with
+ * no time is not a meeting. Service-specific calls are excluded, as they are on
+ * the journey. Null when today is not known yet, or nothing upcoming is booked.
+ * Historical meetings stay in the plan untouched.
  */
-export function nextBookedSession(milestones: ReadonlyArray<Milestone>): NextSession | null {
+export function nextBookedSession(
+  milestones: ReadonlyArray<Milestone>,
+  today: string | null,
+): NextSession | null {
+  if (!isIsoDate(today)) return null;
   const next = milestones
-    .filter((m) => m.kind === "call" && !m.serviceId && !m.doneOn && Boolean(m.time))
+    .filter(
+      (m) =>
+        m.kind === "call" &&
+        !m.serviceId &&
+        !m.doneOn &&
+        Boolean(m.time) &&
+        isIsoDate(m.date) &&
+        m.date >= today,
+    )
     .sort((a, b) => a.date.localeCompare(b.date))[0];
   if (!next || !next.time) return null;
   return {

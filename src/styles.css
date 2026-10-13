@@ -4960,18 +4960,19 @@ body.gc-presenting {
   border-bottom: 4px solid transparent;
 }
 
-/* Customer implementation dashboard (Phase 1). One column on a phone, a calm
-   wider column on a desktop. Colours and type come from the welcome tokens. */
+/* Customer implementation dashboard. Full width of the content it sits in: a
+   compact header, then a 60/40 body on a wide screen, one column below it. */
 .gc-welcome .gc-dash {
-  max-width: 980px;
-  margin: 0 auto;
-  padding: 24px 20px 40px;
+  max-width: none;
+  margin: 0;
+  padding: 20px 28px 32px;
   color: var(--wp-ink);
   background: #fff;
   text-align: left;
+  min-width: 0;
 }
 .gc-welcome .gc-dash-preview {
-  margin: 0 0 16px;
+  margin: 0 0 14px;
   padding: 8px 12px;
   border: 1px solid #f5c08a;
   border-radius: 10px;
@@ -4979,28 +4980,24 @@ body.gc-presenting {
   font-size: 13px;
   color: #8a4a12;
 }
+
+/* Header */
 .gc-welcome .gc-dash-head {
-  padding-bottom: 20px;
+  padding-bottom: 16px;
   border-bottom: 1px solid var(--wp-line);
 }
-.gc-welcome .gc-dash-brand {
+.gc-welcome .gc-dash-head-top {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
+  justify-content: space-between;
   gap: 16px;
   flex-wrap: wrap;
 }
-.gc-welcome .gc-dash-logo {
-  height: 26px;
-  width: auto;
-}
-.gc-welcome .gc-dash-client-logo {
-  height: 30px;
-  width: auto;
-  max-width: 160px;
-  object-fit: contain;
+.gc-welcome .gc-dash-title-block {
+  min-width: 0;
 }
 .gc-welcome .gc-dash-eyebrow {
-  margin: 18px 0 4px;
+  margin: 0 0 2px;
   font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.14em;
@@ -5009,19 +5006,35 @@ body.gc-presenting {
 }
 .gc-welcome .gc-dash-title {
   margin: 0;
-  font-size: 32px;
+  font-size: 28px;
   font-weight: 800;
   letter-spacing: -0.02em;
   line-height: 1.15;
   color: var(--wp-navy);
 }
 .gc-welcome .gc-dash-stage {
-  margin: 10px 0 0;
-  font-size: 15px;
+  margin: 4px 0 0;
+  font-size: 14px;
   color: var(--wp-body);
 }
 .gc-welcome .gc-dash-stage strong {
   color: var(--wp-navy);
+}
+.gc-welcome .gc-dash-brand {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+.gc-welcome .gc-dash-logo {
+  height: 24px;
+  width: auto;
+}
+.gc-welcome .gc-dash-client-logo {
+  height: 28px;
+  width: auto;
+  max-width: 160px;
+  object-fit: contain;
 }
 .gc-welcome .gc-dash-bar {
   margin: 14px 0 0;
@@ -5035,11 +5048,11 @@ body.gc-presenting {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 4px;
 }
 .gc-welcome .gc-dash-seg-fill {
   display: block;
-  height: 8px;
+  height: 7px;
   border-radius: 999px;
   background: var(--wp-line);
 }
@@ -5079,20 +5092,20 @@ body.gc-presenting {
   height: 14px;
 }
 .gc-welcome .gc-dash-facts {
-  margin-top: 18px;
+  margin-top: 12px;
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
 }
 .gc-welcome .gc-dash-fact {
   min-width: 0;
-  padding: 12px 16px;
+  padding: 10px 14px;
   border: 1px solid var(--wp-blue-line);
   border-radius: 12px;
   background: var(--wp-blue-soft);
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
 }
 .gc-welcome .gc-dash-fact-label {
   font-size: 11px;
@@ -5102,7 +5115,7 @@ body.gc-presenting {
   color: var(--wp-blue-deep);
 }
 .gc-welcome .gc-dash-fact-value {
-  font-size: 17px;
+  font-size: 16px;
   font-weight: 700;
   color: var(--wp-navy);
 }
@@ -5112,21 +5125,28 @@ body.gc-presenting {
   color: var(--wp-muted);
 }
 .gc-welcome .gc-dash-journey {
-  margin-top: 14px;
+  margin-top: 10px;
 }
+
+/* Disclosures: collapsed by default, labelled by what they hold. */
+.gc-welcome .gc-dash-disclosure > summary,
 .gc-welcome .gc-dash-journey > summary {
   cursor: pointer;
   font-size: 14px;
   font-weight: 700;
   color: var(--wp-blue-deep);
-  padding: 6px 0;
+  padding: 4px 0;
+  list-style-position: inside;
+}
+.gc-welcome .gc-dash-disclosure-body {
+  margin-top: 10px;
 }
 .gc-welcome .gc-dash-stages {
   margin: 10px 0 0;
   padding: 0;
   list-style: none;
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
 }
 .gc-welcome .gc-dash-stage-row {
@@ -5134,6 +5154,7 @@ body.gc-presenting {
   border-left: 3px solid var(--wp-line);
   border-radius: 8px;
   background: #fff;
+  min-width: 0;
 }
 .gc-welcome .gc-dash-stage-row.is-done {
   border-left-color: var(--wp-blue-deep);
@@ -5183,29 +5204,51 @@ body.gc-presenting {
   padding-left: 18px;
   font-size: 14px;
 }
-.gc-welcome .gc-dash-section {
-  margin-top: 28px;
+
+/* Body: the 60/40 grid. Narrower than 1024px, the two columns flow as one. */
+.gc-welcome .gc-dash-body {
+  margin-top: 18px;
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  gap: 18px;
+  align-items: start;
+}
+.gc-welcome .gc-dash-main,
+.gc-welcome .gc-dash-side {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.gc-welcome .gc-dash-card {
+  min-width: 0;
+  padding: 14px 16px;
+  border: 1px solid var(--wp-line);
+  border-radius: 14px;
+  background: #fff;
+}
+.gc-welcome .gc-dash-card.is-action {
+  border-left: 4px solid var(--wp-orange);
 }
 .gc-welcome .gc-dash-h2 {
-  margin: 0 0 12px;
-  font-size: 20px;
+  margin: 0 0 10px;
+  font-size: 15px;
   font-weight: 800;
   letter-spacing: -0.01em;
   color: var(--wp-navy);
 }
-.gc-welcome .gc-dash-h3 {
-  margin: 0 0 8px;
-  font-size: 15px;
-  font-weight: 800;
-  color: var(--wp-navy);
-}
 .gc-welcome .gc-dash-h4 {
-  margin: 10px 0 4px;
+  margin: 8px 0 4px;
   font-size: 12px;
   font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--wp-blue-deep);
+}
+.gc-welcome .gc-dash-empty {
+  margin: 2px 0;
+  font-size: 14px;
+  color: var(--wp-muted);
 }
 .gc-welcome .gc-dash-list {
   margin: 0;
@@ -5215,16 +5258,23 @@ body.gc-presenting {
   flex-direction: column;
   gap: 8px;
 }
+.gc-welcome .gc-dash-list.is-compact {
+  gap: 6px;
+}
 .gc-welcome .gc-dash-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 10px;
   flex-wrap: wrap;
-  padding: 12px 14px;
+  padding: 10px 12px;
   border: 1px solid var(--wp-line);
-  border-radius: 12px;
+  border-radius: 10px;
   background: #fff;
+  min-width: 0;
+}
+.gc-welcome .gc-dash-row.is-compact {
+  padding: 8px 10px;
 }
 .gc-welcome .gc-dash-row.is-stacked {
   flex-direction: column;
@@ -5232,7 +5282,7 @@ body.gc-presenting {
 }
 .gc-welcome .gc-dash-row-main {
   min-width: 0;
-  flex: 1 1 240px;
+  flex: 1 1 220px;
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -5242,6 +5292,7 @@ body.gc-presenting {
   font-weight: 700;
   line-height: 1.35;
   color: var(--wp-ink);
+  overflow-wrap: anywhere;
 }
 .gc-welcome .gc-dash-tag {
   display: inline-block;
@@ -5265,8 +5316,8 @@ body.gc-presenting {
   color: #b24f10;
 }
 .gc-welcome .gc-dash-button {
-  min-height: 40px;
-  padding: 8px 14px;
+  min-height: 38px;
+  padding: 6px 12px;
   border: 1px solid var(--wp-blue-line);
   border-radius: 10px;
   background: #fff;
@@ -5291,20 +5342,29 @@ body.gc-presenting {
   display: flex;
   align-items: center;
   gap: 10px;
-  font-size: 15px;
+  font-size: 14px;
   color: var(--wp-ink);
   cursor: pointer;
+  min-width: 0;
 }
 .gc-welcome .gc-dash-check input {
-  width: 20px;
-  height: 20px;
+  width: 18px;
+  height: 18px;
+  flex: none;
   accent-color: var(--wp-blue);
 }
 .gc-welcome .gc-dash-check input:disabled {
   cursor: default;
 }
-.gc-welcome .gc-dash-homework {
-  margin-top: 18px;
+.gc-welcome .gc-dash-prep {
+  margin-top: 14px;
+  padding-top: 10px;
+  border-top: 1px solid var(--wp-line);
+}
+.gc-welcome .gc-dash-answers {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 .gc-welcome .gc-dash-answer-row {
   display: flex;
@@ -5313,45 +5373,98 @@ body.gc-presenting {
 }
 .gc-welcome .gc-dash-answer-row input,
 .gc-welcome .gc-dash-answer-row textarea {
-  flex: 1 1 220px;
+  flex: 1 1 200px;
   min-width: 0;
-  padding: 8px 10px;
+  padding: 7px 10px;
   border: 1px solid var(--wp-line);
   border-radius: 8px;
   font-size: 14px;
   color: var(--wp-ink);
   background: #fff;
 }
-.gc-welcome .gc-dash-empty {
-  margin: 4px 0;
-  font-size: 14px;
-  color: var(--wp-muted);
+.gc-welcome .gc-dash-agreements {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
-.gc-welcome .gc-dash-session {
-  padding: 18px 20px;
-  border: 1px solid var(--wp-blue-line);
-  border-radius: 14px;
-  background: var(--wp-blue-soft);
-}
-.gc-welcome .gc-dash-session h3 {
-  margin: 0;
-  font-size: 18px;
-}
-.gc-welcome .gc-dash-session-when {
-  margin: 4px 0 0;
-  font-size: 16px;
-  font-weight: 800;
-  color: var(--wp-navy);
-}
-.gc-welcome .gc-dash-session-purpose {
-  margin: 8px 0 0;
-  font-size: 14px;
-  line-height: 1.5;
-  color: var(--wp-ink);
+.gc-welcome .gc-dash-block {
+  min-width: 0;
 }
 .gc-welcome .gc-dash-bullets {
   margin: 4px 0 0;
   padding-left: 18px;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--wp-ink);
+}
+.gc-welcome .gc-dash-expect {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+}
+.gc-welcome .gc-dash-expect-col {
+  min-width: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--wp-blue-line);
+  border-radius: 12px;
+  background: #fff;
+}
+.gc-welcome .gc-dash-expect-col h4 {
+  margin: 0 0 6px;
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--wp-navy);
+}
+.gc-welcome .gc-dash-expect-col ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 14px;
+  line-height: 1.4;
+  color: var(--wp-ink);
+}
+.gc-welcome .gc-dash-expect-col li {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+.gc-welcome .gc-dash-expect-col li .gc-dash-icon {
+  margin-top: 3px;
+  color: var(--wp-blue);
+}
+.gc-welcome .gc-dash-card.o-agreements {
+  container-type: inline-size;
+}
+@container (min-width: 620px) {
+  .gc-welcome .gc-dash-expect {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+/* Next working session, GoCanvas work, contact, resources */
+.gc-welcome .gc-dash-session {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.gc-welcome .gc-dash-session-label {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--wp-navy);
+}
+.gc-welcome .gc-dash-session-when {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--wp-blue-deep);
+}
+.gc-welcome .gc-dash-session-purpose {
+  margin: 0;
+  max-width: 62ch;
   font-size: 14px;
   line-height: 1.5;
   color: var(--wp-ink);
@@ -5366,63 +5479,11 @@ body.gc-presenting {
   text-decoration: underline;
   text-underline-offset: 3px;
 }
-.gc-welcome .gc-dash-agreements {
-  display: flex;
-  flex-direction: column;
-  gap: 22px;
-}
-.gc-welcome .gc-dash-expect {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 14px;
-}
-.gc-welcome .gc-dash-expect-col {
-  min-width: 0;
-  padding: 14px 16px;
-  border: 1px solid var(--wp-blue-line);
-  border-radius: 14px;
-  background: #fff;
-}
-.gc-welcome .gc-dash-expect-col h4 {
-  margin: 0 0 8px;
-  font-size: 15px;
-  font-weight: 800;
-  color: var(--wp-navy);
-}
-.gc-welcome .gc-dash-expect-col ul {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  font-size: 14px;
-  line-height: 1.4;
-  color: var(--wp-ink);
-}
-.gc-welcome .gc-dash-expect-col li {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-}
-.gc-welcome .gc-dash-expect-col li .gc-dash-icon {
-  margin-top: 3px;
-  color: var(--wp-blue);
-}
-.gc-welcome .gc-dash-resources {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 300px;
-  gap: 24px;
-  align-items: start;
-}
 .gc-welcome .gc-dash-contact {
-  padding: 16px 18px;
-  border: 1px solid var(--wp-blue-line);
-  border-radius: 14px;
-  background: var(--wp-blue-soft);
   display: flex;
-  flex-direction: column;
-  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
 }
 .gc-welcome .gc-dash-contact-name {
   margin: 0;
@@ -5430,9 +5491,44 @@ body.gc-presenting {
   font-weight: 700;
   color: var(--wp-navy);
 }
+.gc-welcome .gc-dash-contact .gc-dash-empty {
+  flex: 1 1 100%;
+}
+.gc-welcome .gc-dash-resource {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--wp-line);
+  min-width: 0;
+}
+.gc-welcome .gc-dash-resource:last-child {
+  border-bottom: 0;
+}
+.gc-welcome .gc-dash-resource .gc-dash-disclosure > summary {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--wp-muted);
+}
+.gc-welcome .gc-dash-resource .gc-dash-disclosure-body p {
+  margin: 0 0 4px;
+  font-size: 13px;
+}
+
+/* Order: what matters most first. Within a wide column the order runs down the
+   column; on a narrow screen both columns flow together in this order. */
+.gc-welcome .o-attention { order: 1; }
+.gc-welcome .o-session { order: 2; }
+.gc-welcome .o-answers { order: 3; }
+.gc-welcome .o-progress { order: 4; }
+.gc-welcome .o-contact { order: 5; }
+.gc-welcome .o-gocanvas { order: 6; }
+.gc-welcome .o-agreements { order: 7; }
+.gc-welcome .o-resources { order: 8; }
+
 .gc-welcome .gc-dash-foot {
-  margin-top: 40px;
-  padding-top: 12px;
+  margin-top: 28px;
+  padding-top: 10px;
   border-top: 1px solid var(--wp-line);
   font-size: 12px;
   color: var(--wp-muted);
@@ -5445,23 +5541,35 @@ body.gc-presenting {
   outline: 3px solid var(--wp-blue);
   outline-offset: 2px;
 }
+
+/* Tablet and phone: one column. The two columns dissolve so their cards sit in
+   the order above; nothing is a fixed width, so nothing overflows. */
+@media (max-width: 1023px) {
+  .gc-welcome .gc-dash-body {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 14px;
+  }
+  .gc-welcome .gc-dash-main,
+  .gc-welcome .gc-dash-side {
+    display: contents;
+  }
+}
 @media (max-width: 720px) {
   .gc-welcome .gc-dash {
-    padding: 16px 16px 32px;
+    padding: 16px 14px 28px;
   }
   .gc-welcome .gc-dash-title {
-    font-size: 26px;
+    font-size: 24px;
   }
   .gc-welcome .gc-dash-bar {
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    row-gap: 14px;
+    row-gap: 12px;
   }
-  .gc-welcome .gc-dash-facts {
-    grid-template-columns: 1fr;
-  }
-  .gc-welcome .gc-dash-expect,
-  .gc-welcome .gc-dash-resources {
-    grid-template-columns: 1fr;
+  .gc-welcome .gc-dash-facts,
+  .gc-welcome .gc-dash-stages {
+    grid-template-columns: minmax(0, 1fr);
   }
   .gc-welcome .gc-dash-row {
     align-items: flex-start;
