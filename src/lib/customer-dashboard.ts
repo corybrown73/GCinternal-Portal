@@ -268,6 +268,39 @@ function changeAttention(parkingLot: WelcomeView["parkingLot"]): AttentionItem[]
 /* --------------------------------------------- Partner implementations */
 
 /**
+ * Whether the customer's dashboard is the partner one: a partner's progress is
+ * shown, or it is a partner deal whose progress could not be loaded. Either way
+ * the standard six-stage and kickoff items never apply.
+ */
+export function isPartnerDashboard(
+  view: Pick<WelcomeView, "partner" | "partnerUnavailable" | "partnerDeal">,
+): boolean {
+  return Boolean(view.partner || view.partnerUnavailable || view.partnerDeal);
+}
+
+/** The header for the journey the customer is on. Unavailable shows no stages, dates or milestones. */
+export function dashboardHeaderFor(
+  view: Pick<
+    WelcomeView,
+    "journey" | "timeline" | "partner" | "partnerUnavailable" | "partnerDeal"
+  >,
+  today: string | null = null,
+): DashboardHeader {
+  if (view.partner) return partnerDashboardHeader(view.partner);
+  // Before the journey starts, or while its progress is unavailable: no stages, no dates.
+  if (view.partnerUnavailable || view.partnerDeal) {
+    return {
+      started: false,
+      currentLabel: null,
+      stages: [],
+      nextMilestone: null,
+      graduation: { current: null, original: null, moved: false },
+    };
+  }
+  return dashboardHeader(view, today);
+}
+
+/**
  * The header for a partner implementation, in the same shape the standard
  * header takes, so the existing bar, facts and full-journey card read it
  * unchanged. Dates are recorded targets only; the rest says To be confirmed.

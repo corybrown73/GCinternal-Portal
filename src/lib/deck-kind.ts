@@ -30,7 +30,7 @@
  * Pure, so the rule is testable and stated once.
  */
 
-export type DeckKind = "new-logo" | "expansion";
+export type DeckKind = "new-logo" | "expansion" | "partner";
 
 export type DeckKindSignal = {
   /** The journey template key on the project, once one exists. */
@@ -57,6 +57,15 @@ export function deckKindFor(signal: DeckKindSignal): DeckKindDecision {
 
   // The project's own template is the strongest signal, because somebody chose
   // it. It beats a count of prior work either way.
+  // A Partner Implementation has no kickoff deck: its planning is the partner journey.
+  if (key === "partner-implementation") {
+    return {
+      kind: "partner",
+      reason:
+        "A partner-led implementation: its planning is the partner journey, not a kickoff deck.",
+    };
+  }
+
   if (key && EXPANSION_KEYS.has(key)) {
     return {
       kind: "expansion",

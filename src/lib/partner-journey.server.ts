@@ -87,25 +87,51 @@ export async function loadPartnerProgress(
 }
 
 /**
- * The partner progress for a deal's partner implementation, or null when the
- * deal has none. The newest non-superseded implementation decides, as it does
- * for every other deal-level read.
+ * What a deal's partner journey is, for the customer's views. It never throws:
+ *   - standard: the deal has no partner implementation (or only a standard one);
+ *   - partner: the deal is a Partner Implementation and its progress loaded;
+ *   - partner_unavailable: the deal IS a Partner Implementation but its progress
+ *     could not be read. The views must say so, never show another journey;
+ *   - unknown: the lookup that identifies the deal failed. The optional partner
+ *     lookup is not allowed to disturb the standard experience, so the caller
+ *     keeps the standard path, as it always has.
+ * Every failure is logged with its deal and implementation, for investigation.
  */
-export async function loadPartnerProgressForDeal(dealId: string): Promise<PartnerProgress | null> {
-  const { data, error } = await db()
-    .from("implementations")
-    .select("id,journey_type,partner_key")
-    .eq("deal_id", dealId)
-    .is("superseded_by_implementation_id", null)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  if (error) throw new Error(`Could not read the implementation for the deal: ${error.message}`);
-  if (
-    !data ||
-    !isPartnerJourney(data as { journey_type: string | null; partner_key: string | null })
-  ) {
-    return null;
+export type PartnerDealState =
+  | { kind: "standard" }
+  | { kind: "partner"; progress: PartnerProgress }
+  | { kind: "partner_unavailable"; implementationId: string }
+  | { kind: "unknown" };
+
+export async function partnerStateForDeal(dealId: string): Promise<PartnerDealState> {
+  let identified: { id: string; journey_type: string | null; partner_key: string | null } | null;
+  try {
+    const { data, error } = await db()
+      .from("implementations")
+      .select("id,journey_type,partner_key")
+      .eq("deal_id", dealId)
+      .is("superseded_by_implementation_id", null)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    identified = data as typeof identified;
+  } catch (error) {
+    console.error("[partner] could not identify the implementation for a deal", { dealId, error });
+    return { kind: "unknown" };
   }
-  return loadPartnerProgress((data as { id: string }).id);
+  if (!identified || !isPartnerJourney(identified)) return { kind: "standard" };
+
+  try {
+    const progress = await loadPartnerProgress(identified.id);
+    if (!progress) throw new Error("the partner journey returned no progress");
+    return { kind: "partner", progress };
+  } catch (error) {
+    console.error("[partner] could not load partner progress", {
+      dealId,
+      implementationId: identified.id,
+      error,
+    });
+    return { kind: "partner_unavailable", implementationId: identified.id };
+  }
 }

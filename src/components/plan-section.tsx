@@ -1,3 +1,8 @@
+import {
+  isPartnerDeal,
+  partnerNameFor,
+  PARTNER_PLANNING_TO_BE_CONFIRMED,
+} from "@/lib/partner-implementation";
 import { useQuery } from "@tanstack/react-query";
 
 import { SolutionsCard } from "@/components/solutions-card";
@@ -26,6 +31,27 @@ export function PlanSection({
   highlight?: boolean;
 }) {
   const intake = readIntake(deal.account.intake);
+  // A partner deal has no New Logo plan: no plan is built, so no plan-based
+  // watch-out or timeline is shown for it. Its own planning is to be confirmed.
+  if (isPartnerDeal(intake)) {
+    return (
+      <section
+        className="rounded-md border border-border bg-card px-4 py-3"
+        aria-label="Implementation plan"
+      >
+        <h2 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+          Implementation plan
+        </h2>
+        <p className="mt-1.5 text-[13px] text-foreground">{PARTNER_PLANNING_TO_BE_CONFIRMED}.</p>
+        <p className="mt-1 text-[12px] text-muted-foreground">
+          {partnerNameFor(intake)
+            ? `${partnerNameFor(intake)} leads the setup and connection. `
+            : ""}
+          Once the implementation starts, its stages, dates and milestones are recorded on it.
+        </p>
+      </section>
+    );
+  }
   const timeline = timelineFor(
     intake,
     closeDateFor({

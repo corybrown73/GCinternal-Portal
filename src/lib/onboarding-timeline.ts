@@ -70,7 +70,7 @@ export type MilestoneSpec = {
  * same rule for everything after, so every screen and every date follows.
  */
 export type OnboardingPath =
-  "new_logo" | "existing" | "dm_conversion" | "field_fusion" | "field_fusion";
+  "new_logo" | "existing" | "dm_conversion" | "field_fusion" | "partner_implementation";
 
 /** The four kinds of account, in the words the pickers use. */
 export const PATH_LABEL: Record<OnboardingPath, string> = {
@@ -78,6 +78,7 @@ export const PATH_LABEL: Record<OnboardingPath, string> = {
   existing: "Existing account — adding services",
   dm_conversion: "Device Magic → GoCanvas conversion",
   field_fusion: "Field Fusion — GoCanvas training, forms already built",
+  partner_implementation: "Partner implementation — led by a partner",
 };
 /** Short, for a chip on a board. */
 export const PATH_CHIP: Record<OnboardingPath, string> = {
@@ -85,6 +86,7 @@ export const PATH_CHIP: Record<OnboardingPath, string> = {
   existing: "Existing",
   dm_conversion: "DM → GC",
   field_fusion: "Field Fusion",
+  partner_implementation: "Partner",
 };
 
 /**

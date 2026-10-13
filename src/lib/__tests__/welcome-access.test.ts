@@ -17,6 +17,8 @@ const h = vi.hoisted(() => {
     updates: [] as Array<{ table: string; patch: Record<string, unknown> }>,
     reads: 0,
     deckInput: null as unknown,
+    // Tables whose reads fail, to prove the optional partner lookup cannot take a dashboard down.
+    failing: new Set<string>(),
   };
   type Query = {
     select: () => Query;
@@ -26,14 +28,18 @@ const h = vi.hoisted(() => {
     order: () => Query;
     limit: () => Query;
     update: (patch: Record<string, unknown>) => Query;
-    maybeSingle: () => Promise<{ data: Record<string, unknown> | null; error: null }>;
+    maybeSingle: () => Promise<{
+      data: Record<string, unknown> | null;
+      error: { message: string } | null;
+    }>;
     then: (
-      resolve: (v: { data: unknown[]; error: null }) => unknown,
+      resolve: (v: { data: unknown; error: { message: string } | null }) => unknown,
       reject?: (e: unknown) => unknown,
     ) => Promise<unknown>;
   };
   const builder = (table: string): Query => {
     let rows = state.tables[table] ?? [];
+    const failed = { data: null, error: { message: `${table} is unavailable` } };
     const api: Query = {
       select: () => api,
       in: () => api,
@@ -52,9 +58,14 @@ const h = vi.hoisted(() => {
         state.updates.push({ table, patch });
         return api;
       },
-      maybeSingle: async () => ({ data: rows[0] ?? null, error: null }),
+      maybeSingle: async () =>
+        state.failing.has(table) ? failed : { data: rows[0] ?? null, error: null },
       // A filtered list read is awaited directly, as the partner progress loader does.
-      then: (resolve, reject) => Promise.resolve({ data: rows, error: null }).then(resolve, reject),
+      then: (resolve, reject) =>
+        Promise.resolve(state.failing.has(table) ? failed : { data: rows, error: null }).then(
+          resolve,
+          reject,
+        ),
     };
     return api;
   };
@@ -148,6 +159,7 @@ function seed(overrides: { welcome_token_hash?: string | null } = {}) {
   };
   h.state.updates = [];
   h.state.reads = 0;
+  h.state.failing.clear();
 }
 
 beforeEach(() => seed());
@@ -330,5 +342,94 @@ describe("a partner deal's customer link", () => {
     const view = await openWelcome(TOKEN);
     expect(view?.partner).toBeNull();
     expect(view?.journey).not.toBeNull();
+  });
+});
+
+describe("a failed partner lookup", () => {
+  beforeEach(() => {
+    seed();
+    h.state.tables["implementations"] = [
+      {
+        id: "impl-p",
+        deal_id: "deal-1",
+        customer_id: "cust-1",
+        name: "Partner implementation",
+        journey_type: "partner_implementation",
+        partner_key: "field_fusion_iq",
+        current_stage: "partner_setup",
+        superseded_by_implementation_id: null,
+        created_at: "2026-03-01T00:00:00Z",
+      },
+    ];
+    h.state.tables["stage_instances"] = [
+      {
+        id: "si-1",
+        implementation_id: "impl-p",
+        stage_key: "partner_setup",
+        status: "active",
+        gate_mode: "blocking",
+      },
+    ];
+    h.state.tables["work_items"] = [];
+    h.state.tables["milestones"] = [];
+    h.state.tables["portal_stage_transitions"] = [];
+  });
+
+  it("a known partner whose progress cannot load shows no standard journey and no partner stages", async () => {
+    h.state.failing.add("stage_instances");
+    const view = await openWelcome(TOKEN);
+    expect(view).not.toBeNull();
+    expect(view?.partnerUnavailable).toBe(true);
+    expect(view?.partner).toBeNull();
+    expect(view?.journey).toBeNull();
+  });
+
+  it("a standard customer's dashboard survives a failed partner lookup, with its six-stage journey", async () => {
+    h.state.tables["implementations"] = [];
+    h.state.failing.add("implementations");
+    const view = await openWelcome(TOKEN);
+    expect(view).not.toBeNull();
+    expect(view?.partnerUnavailable).toBe(false);
+    expect(view?.partner).toBeNull();
+    expect(view?.journey).not.toBeNull();
+  });
+
+  it("a partner's dashboard is complete again once its progress can be read", async () => {
+    h.state.failing.add("stage_instances");
+    expect((await openWelcome(TOKEN))?.partnerUnavailable).toBe(true);
+    h.state.failing.clear();
+    const view = await openWelcome(TOKEN);
+    expect(view?.partnerUnavailable).toBe(false);
+    expect(view?.partner?.stages).toHaveLength(5);
+  });
+});
+
+describe("a partner deal before Closed Won", () => {
+  beforeEach(() => {
+    seed();
+    const account = h.state.tables["portal_accounts"]![0]!;
+    account["intake"] = {
+      ...(account["intake"] as object),
+      path: "partner_implementation",
+      partner_implementation: { partner_key: "field_fusion_iq" },
+    };
+    h.state.tables["implementations"] = [];
+  });
+
+  it("is a partner deal with no six-stage journey, no partner stages, and no New Logo help picks", async () => {
+    const view = await openWelcome(TOKEN);
+    expect(view?.partnerDeal).toBe(true);
+    expect(view?.partnerName).toBe("Field Fusion IQ");
+    expect(view?.journey).toBeNull();
+    expect(view?.partner).toBeNull();
+    expect(view?.partnerUnavailable).toBe(false);
+    expect(view?.helpPicks).toEqual([]);
+  });
+
+  it("a standard deal is not a partner deal, and keeps its journey", async () => {
+    h.state.tables["portal_accounts"]![0]!["intake"] = { ...intake, path: "new_logo" };
+    const view = await openWelcome(TOKEN);
+    expect(view?.partnerDeal).toBe(false);
+    expect(view?.partnerName).toBeNull();
   });
 });

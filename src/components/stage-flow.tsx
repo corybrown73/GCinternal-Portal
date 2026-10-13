@@ -87,8 +87,19 @@ import {
 } from "@/lib/stage-flow";
 import { syncDealStageFn } from "@/lib/stage-flow.functions";
 import { StageStepper } from "@/components/stage-stepper";
-import { PartnerJourney } from "@/components/partner-journey-panels";
-import { isPartnerJourney } from "@/lib/partner-implementation";
+import {
+  PartnerJourney,
+  PartnerProgressStatus,
+  partnerBodyState,
+} from "@/components/partner-journey-panels";
+import {
+  isPartnerDeal,
+  isPartnerJourney,
+  PARTNER_PLANNING_TO_BE_CONFIRMED,
+  partnerSelectionPatch,
+  type PartnerKey,
+} from "@/lib/partner-implementation";
+import { PartnerChoice } from "@/components/partner-choice";
 import { partnerWorkspace } from "@/lib/partner-journey";
 import { getPartnerProgress } from "@/lib/hub.functions";
 import { stageGuidanceFor } from "@/lib/stage-guidance";
@@ -1036,7 +1047,13 @@ export function CurrentImplementationTab({
     timeline,
     hasGraduationBrief,
   });
-  const strip = partner && partnerQ.data ? partnerWorkspace(partnerQ.data) : null;
+  // A partner's strip reads only its own progress. While that is not available it
+  // says so, never the standard workspace's values.
+  const strip = partner
+    ? partnerQ.data
+      ? partnerWorkspace(partnerQ.data)
+      : partnerStripPlaceholder(partnerQ.isError)
+    : null;
   const ws = workspaceFor({
     flow,
     intake,
@@ -1248,7 +1265,14 @@ export function CurrentImplementationTab({
             dealId={dealId}
             editable={editable}
           />
-        ) : null
+        ) : (
+          // Not the standard stage controls: a clear state, and a way to try again.
+          <PartnerProgressStatus
+            state={partnerBodyState(partnerQ)}
+            retrying={partnerQ.isFetching}
+            onRetry={() => void partnerQ.refetch()}
+          />
+        )
       ) : flow.current === "field_fusion" ? (
         // With a Partner Implementation Lead, before the handoff: its own
         // surface, never the Closed Won fallback below.
@@ -1391,6 +1415,12 @@ export function CurrentImplementationTab({
       />
     </div>
   );
+}
+
+/** The status strip while a partner's progress is loading or not available. */
+function partnerStripPlaceholder(isError: boolean) {
+  const text = isError ? "Unavailable right now" : "Loading…";
+  return { stageLabel: text, nextAction: text, waitingOn: text };
 }
 
 /**
@@ -2099,8 +2129,21 @@ function DealTypeBody({
   const save = useServerFn(saveIntake);
   const [error, setError] = useState<string | null>(null);
   const m = useMutation({
-    mutationFn: (path: (typeof DEAL_TYPES)[number]["path"]) =>
-      save({ data: { dealId: deal.account.id, patch: { path } } as never }),
+    mutationFn: (patch: {
+      path: (typeof DEAL_TYPES)[number]["path"];
+      partner_implementation?: null;
+    }) => save({ data: { dealId: deal.account.id, patch } as never }),
+    onMutate: () => setError(null),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["deal", deal.account.id] });
+      void qc.invalidateQueries({ queryKey: ["welcome", deal.account.id] });
+    },
+    onError: (e) => setError((e as Error).message),
+  });
+  // Which partner leads a Partner Implementation. Saved as the intake's partner_implementation.
+  const choosePartner = useMutation({
+    mutationFn: (key: PartnerKey) =>
+      save({ data: { dealId: deal.account.id, patch: partnerSelectionPatch(key) } as never }),
     onMutate: () => setError(null),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["deal", deal.account.id] });
@@ -2120,7 +2163,12 @@ function DealTypeBody({
       }))
     )
       return;
-    m.mutate(path);
+    // Leaving the partner type clears the partner choice, so a standard deal never carries one.
+    m.mutate(
+      intake.partner_implementation && path !== "partner_implementation"
+        ? { path, partner_implementation: null }
+        : { path },
+    );
   };
   return (
     <div className="space-y-2">
@@ -2156,6 +2204,21 @@ function DealTypeBody({
           );
         })}
       </div>
+      {intake.path === "partner_implementation" ? (
+        <div className="max-w-xs">
+          <PartnerChoice
+            id="deal-type-partner"
+            value={intake.partner_implementation?.partner_key ?? null}
+            disabled={!editable || choosePartner.isPending}
+            onChange={(key) => choosePartner.mutate(key)}
+          />
+          {!intake.partner_implementation ? (
+            <p className="mt-1 text-[11px] text-muted-foreground">
+              Choose the partner before this implementation starts.
+            </p>
+          ) : null}
+        </div>
+      ) : null}
       <AiSource answers={intake} field="path" />
       {/* Only the close reads the pick, so it is asked only before the close. */}
       {intake.path === "existing" && !deal.account.customer_id && isPreClose(deal.account.stage) ? (
@@ -2208,6 +2271,23 @@ function DoneButton({
 }
 
 function ReplyBody({
+  deal,
+  intake,
+  editable,
+}: {
+  deal: DealData;
+  intake: IntakeAnswers;
+  editable: boolean;
+}) {
+  // A partner deal has no kickoff to reply with times for: the reply and its
+  // calendar link are New Logo planning, so they are not offered for it.
+  if (isPartnerDeal(intake)) {
+    return <p className="text-[12px] text-muted-foreground">{PARTNER_PLANNING_TO_BE_CONFIRMED}.</p>;
+  }
+  return <KickoffReplyBody deal={deal} intake={intake} editable={editable} />;
+}
+
+function KickoffReplyBody({
   deal,
   intake,
   editable,

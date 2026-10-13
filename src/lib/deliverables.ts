@@ -1,5 +1,6 @@
 import { markForService, KIND_MARKS, type BrandMark } from "./brand-marks";
 import { firstFormName, type IntakeAnswers } from "./intake-answers";
+import { isPartnerDeal } from "./partner-implementation";
 import type { ServiceKind } from "./onboarding-services";
 import type { Timeline } from "./onboarding-timeline";
 import type { ServiceSpec } from "./onboarding-services";
@@ -36,6 +37,8 @@ function shortDay(iso: string): string {
 }
 
 export function deliverablesFor(intake: IntakeAnswers, t: Timeline): Deliverable[] {
+  // A partner deal's deliverables are its own (not yet planned): none are the New Logo first form.
+  if (isPartnerDeal(intake)) return [];
   const out: Deliverable[] = [];
   const existing = intake.path === "existing";
 

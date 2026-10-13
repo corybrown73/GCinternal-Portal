@@ -5,6 +5,7 @@ import { Send } from "lucide-react";
 
 import { StageStepper } from "@/components/stage-stepper";
 import { StageGatesPanel } from "@/components/stage-gates-panel";
+import { Button } from "@/components/ui/button";
 import { MemberOptions } from "@/components/member-options";
 import { ask } from "@/components/ui/ask";
 import { getDealAssignment } from "@/lib/assignment.functions";
@@ -77,6 +78,61 @@ export function PartnerJourney({
         />
       ) : null}
     </>
+  );
+}
+
+/** What the partner body shows, from its progress query. Nothing else is ever drawn in its place. */
+export function partnerBodyState(query: {
+  data: unknown;
+  isError: boolean;
+}): "ready" | "error" | "loading" {
+  if (query.data) return "ready";
+  return query.isError ? "error" : "loading";
+}
+
+/**
+ * The partner body while its progress is loading, or when it could not be
+ * loaded. A clear message and a retry, never the standard stage controls.
+ */
+export function PartnerProgressStatus({
+  state,
+  retrying,
+  onRetry,
+}: {
+  state: "ready" | "error" | "loading";
+  retrying: boolean;
+  onRetry: () => void;
+}) {
+  // Ready is drawn by PartnerJourney; this shows nothing in its place.
+  if (state === "ready") return null;
+  if (state === "loading") {
+    return (
+      <section
+        className="rounded-md border border-border bg-card px-4 py-3"
+        aria-label="Partner progress loading"
+      >
+        <p className="text-[13px] text-muted-foreground">Loading the partner journey…</p>
+      </section>
+    );
+  }
+  return (
+    <section
+      className="rounded-md border border-status-risk bg-status-risk/10 px-4 py-3"
+      aria-label="Partner progress unavailable"
+      role="alert"
+    >
+      <p className="text-[13px] font-semibold text-foreground">
+        The partner journey can&apos;t be loaded right now.
+      </p>
+      <p className="mt-0.5 text-[12px] text-muted-foreground">
+        Nothing has been changed. Its stages, gates and handoff will appear here once they load.
+      </p>
+      <div className="mt-2">
+        <Button size="sm" variant="outline" disabled={retrying} onClick={onRetry}>
+          {retrying ? "Trying again…" : "Try again"}
+        </Button>
+      </div>
+    </section>
   );
 }
 

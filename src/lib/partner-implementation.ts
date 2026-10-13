@@ -322,3 +322,66 @@ export function partnerMoveFrom(current: string | null): {
   const key = nextPartnerStage(PARTNER_TEMPLATE_STAGE_KEYS, current);
   return { next: key ? partnerStage(key as PartnerStageKey) : null, handoff: false };
 }
+
+/**
+ * The partners the selector offers: every registered partner, in registry order.
+ * Adding a partner to PARTNERS and PARTNER_KEYS adds it here; nothing else changes.
+ */
+export function partnerOptions(
+  registry: Readonly<Record<PartnerKey, Partner>> = PARTNERS,
+): Array<{ key: PartnerKey; name: string }> {
+  return (Object.keys(registry) as PartnerKey[]).map((k) => ({ key: k, name: registry[k].name }));
+}
+
+/**
+ * The intake patch that chooses a Partner Implementation and its partner. The
+ * same structure every partner path reads (partner_implementation), so no second
+ * intake form or record is needed.
+ */
+export function partnerSelectionPatch(key: PartnerKey): {
+  path: "partner_implementation";
+  partner_implementation: { partner_key: PartnerKey };
+} {
+  return { path: "partner_implementation", partner_implementation: { partner_key: key } };
+}
+
+/**
+ * Why a Partner Implementation cannot start yet, or null when it can. A partner
+ * implementation with no registered partner is refused, never started on the
+ * standard journey.
+ */
+export function partnerSelectionError(
+  intake: Pick<IntakeAnswers, "path" | "partner_implementation">,
+): string | null {
+  if (intake.path !== "partner_implementation") return null;
+  const key = intake.partner_implementation?.partner_key ?? null;
+  if (!key) return "Choose which partner leads this Partner Implementation before it starts.";
+  if (!(PARTNER_KEYS as readonly string[]).includes(key)) {
+    return `"${key}" is not a registered partner, so the implementation cannot start.`;
+  }
+  return null;
+}
+
+/**
+ * Whether a deal is explicitly a generic Partner Implementation, by its chosen
+ * type. Such a deal never gets the standard onboarding plan: no New Logo stages,
+ * meetings, target dates or expectations are generated or shown for it.
+ */
+export function isPartnerDeal(intake: Pick<IntakeAnswers, "path">): boolean {
+  return intake.path === "partner_implementation";
+}
+
+/**
+ * What a partner deal says about its planning until its own journey exists. A
+ * truthful neutral state: nothing is scheduled, so nothing is shown as scheduled.
+ */
+export const PARTNER_PLANNING_TO_BE_CONFIRMED = "Implementation planning to be confirmed";
+
+/** The registered name of the partner a deal chose, or null when none is chosen or it is unregistered. */
+export function partnerNameFor(
+  intake: Partial<Pick<IntakeAnswers, "partner_implementation">>,
+): string | null {
+  const key = intake.partner_implementation?.partner_key ?? null;
+  if (!key) return null;
+  return (PARTNERS as Readonly<Record<string, Partner>>)[key]?.name ?? null;
+}

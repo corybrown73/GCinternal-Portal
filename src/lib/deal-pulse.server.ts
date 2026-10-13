@@ -18,7 +18,7 @@ const db = () => supabaseAdmin as any;
  */
 export type DealPulse = {
   dealId: string;
-  path: "new_logo" | "existing" | "dm_conversion" | "field_fusion";
+  path: "new_logo" | "existing" | "dm_conversion" | "field_fusion" | "partner_implementation";
   counter: DayCounter;
   next: GuideStep | null;
   done: number;

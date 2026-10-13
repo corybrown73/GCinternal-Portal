@@ -203,7 +203,10 @@ export const intakeAnswersSchema = z.object({
    * existing account adding services reviews the form the integration reads
    * from. null until somebody says — the plan treats null as a new logo.
    */
-  path: z.enum(["new_logo", "existing", "dm_conversion", "field_fusion"]).nullable().default(null),
+  path: z
+    .enum(["new_logo", "existing", "dm_conversion", "field_fusion", "partner_implementation"])
+    .nullable()
+    .default(null),
   /** What the notes suggest the path is. A person confirms; the plan never reads this. */
   path_suggested: z
     .enum(["new_logo", "existing", "dm_conversion", "field_fusion"])
@@ -701,6 +704,8 @@ export function isTrainingOnly(a: Pick<IntakeAnswers, "path" | "training_only">)
 export function flowAnswered(a: IntakeAnswers): boolean {
   if (a.path === null) return false;
   if (a.path === "field_fusion") return true;
+  // A Partner Implementation's flow is answered by choosing its partner; the New Logo forms questions do not apply.
+  if (a.path === "partner_implementation") return a.partner_implementation !== null;
   if (a.path === "existing") {
     const e = a.existing;
     if (e.form_final === true) return true;
