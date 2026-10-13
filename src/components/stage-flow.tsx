@@ -2,7 +2,7 @@ import { Fragment, useEffect, useRef, useState } from "react";
 import { Link, useSearch } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { ArrowRight, Check, Copy, Lock, Send, UserRoundCheck } from "lucide-react";
+import { ArrowRight, Check, ChevronRight, Copy, Lock, Send, UserRoundCheck } from "lucide-react";
 
 import { AdjustPlanDatesPanel } from "@/components/adjust-plan-dates";
 import { attachmentsQuery } from "@/components/attachments-panel";
@@ -105,11 +105,13 @@ import { PartnerChoice } from "@/components/partner-choice";
 import { partnerDashboardView, partnerWorkspace } from "@/lib/partner-journey";
 import { currentImplementationLayout } from "@/lib/current-implementation-layout";
 import {
+  CARD,
   JourneyBar,
   KeyDatesCard,
   NeedsAttentionCard,
   OwnershipCard,
   ProgressLine,
+  TONE,
   ToolsCard,
 } from "@/components/current-implementation-context";
 import { journeyPosition, taskFocusFor } from "@/lib/current-implementation-focus";
@@ -231,7 +233,7 @@ function StageTiming({
   const latest = latestStageTransition(history, accountStage);
   if (!latest && !targetDate) return null;
   return (
-    <div className="space-y-0.5 border-b border-border bg-muted/20 px-4 py-2 text-[11px]">
+    <div className="space-y-0.5 px-4 pb-3 text-[12px]">
       <p className="font-semibold text-foreground">{flowLabel(shown)}</p>
       <p className="text-muted-foreground">
         {latest ? (
@@ -286,11 +288,14 @@ function ImplementationTargetSection({
     agreed.current && agreed.original && agreed.current !== agreed.original,
   );
   return (
-    <section className="border-t border-border pt-3" aria-label="Implementation target">
-      <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-        {partner ? "Graduation target · partner" : "Target graduation · what the customer sees"}
+    <section className={cn(CARD, "px-4 py-3.5")} aria-label="Implementation target">
+      <h2 className="text-[16px] font-semibold">
+        {partner ? "Graduation target" : "Target graduation"}
+      </h2>
+      <p className="text-[12px] text-muted-foreground">
+        {partner ? "The partner's Roll Out target" : "What the customer sees"}
       </p>
-      <p className="mt-0.5 text-[14px] font-semibold text-foreground">
+      <p className="mt-2 text-[18px] font-semibold text-foreground">
         {partner
           ? partner.graduationTarget
             ? shortDay(partner.graduationTarget)
@@ -300,12 +305,12 @@ function ImplementationTargetSection({
             : "Not agreed yet"}
       </p>
       {!partner && agreedMoved ? (
-        <p className="mt-0.5 text-[11px] text-muted-foreground">
+        <p className="mt-0.5 text-[12px] text-muted-foreground">
           First agreed {shortDay(agreed.original!)}
         </p>
       ) : null}
       {!partner ? (
-        <p className="mt-1 text-[11px] text-muted-foreground">
+        <p className="mt-1 text-[12px] text-muted-foreground">
           Set in the{" "}
           <a
             href={`/onboarding-plan/${dealId}?workspace=1`}
@@ -318,7 +323,7 @@ function ImplementationTargetSection({
           .
         </p>
       ) : null}
-      <p className="mt-2 border-t border-border pt-2 text-[11px] text-muted-foreground">
+      <p className="mt-3 text-[12px] text-muted-foreground">
         {partner ? "Recorded go-live target: " : "Plan end: "}
         <span className="inline-flex items-center gap-1 font-medium text-foreground">
           {plan ? shortDay(plan) : "Not set"}
@@ -340,7 +345,7 @@ function ImplementationTargetSection({
         ) : null}
       </p>
       {open && impl.target_changes.length > 0 ? (
-        <ul className="mt-2 space-y-1 border-t border-border pt-2 text-[11px] text-muted-foreground">
+        <ul className="mt-2 space-y-1 text-[12px] text-muted-foreground">
           {impl.target_changes.map((c) => (
             <li key={c.id}>
               {c.from_date ? `${shortDay(c.from_date)} → ` : ""}
@@ -381,17 +386,14 @@ function StageGuidancePanel({
   if (!guidance) return null;
   const active = guidance.stuck.find((s) => s.key === openIssue) ?? null;
   return (
-    <div
-      className="border-t border-border bg-card px-4 py-3.5 text-[12.5px]"
-      aria-label="Stage guidance"
-    >
+    <div className="px-4 pb-4 pt-1 text-[13px] leading-relaxed" aria-label="Stage guidance">
       {showObjective ? <p className="font-semibold text-foreground">{guidance.objective}</p> : null}
       <p className={cn("text-muted-foreground", showObjective && "mt-0.5")}>
         {guidance.objectiveDetail}
       </p>
 
       <div className="mt-3.5">
-        <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+        <div className="text-[13px] font-semibold text-foreground">
           Check before you move on
           <span className="ml-1.5 normal-case tracking-normal font-normal">
             · guidance, not tracked here
@@ -411,9 +413,7 @@ function StageGuidancePanel({
       </div>
 
       <div className="mt-3.5">
-        <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-          If you're stuck
-        </div>
+        <div className="text-[13px] font-semibold text-foreground">If you're stuck</div>
         <div className="mt-1.5 grid gap-1.5 sm:grid-cols-2">
           {guidance.stuck.map((s) => {
             const isOpen = s.key === openIssue;
@@ -482,9 +482,7 @@ function StageGuidancePanel({
       </div>
 
       <div className="mt-3.5 border-t border-border pt-2.5">
-        <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-          {guidance.readyLabel}
-        </div>
+        <div className="text-[13px] font-semibold text-foreground">{guidance.readyLabel}</div>
         <ul className="mt-1.5 space-y-1 text-foreground">
           {guidance.readyWhen.map((r) => (
             <li key={r} className="flex items-start gap-2">
@@ -1125,7 +1123,6 @@ export function CurrentImplementationTab({
   const viewFocus = taskFocusFor(stage.tasks);
   const next = viewFocus.state === "next" ? viewFocus.next : null;
   const stageKeys = canonicalStages.map((s) => s.key);
-  const journeyPos = journeyPosition(stageKeys, shown);
   const currentPos = currentInCanon ? journeyPosition(stageKeys, currentInCanon) : null;
   const guidance = stageGuidanceFor(shown);
   const manualTask = manual ? stage.tasks.find((t) => t.key === manual.key) : undefined;
@@ -1180,7 +1177,7 @@ export function CurrentImplementationTab({
       <span className="flex items-center gap-2">
         <button
           type="button"
-          className="text-[11px] text-muted-foreground underline decoration-dotted hover:text-foreground disabled:opacity-50"
+          className="text-[13px] text-muted-foreground underline decoration-dotted hover:text-foreground disabled:opacity-50"
           disabled={skip.isPending}
           onClick={async () => {
             const why = await ask({
@@ -1221,7 +1218,7 @@ export function CurrentImplementationTab({
           {journeyOpen ? (
             <section
               id="current-implementation-journey"
-              className="overflow-hidden rounded-md border border-border bg-card"
+              className={cn(CARD, "overflow-hidden")}
               aria-label="Implementation journey"
             >
               <Stepper
@@ -1273,18 +1270,18 @@ export function CurrentImplementationTab({
             // moment the deal moves on.
             <StageFlow deal={deal} />
           ) : (
-            <section
-              className="overflow-hidden rounded-md border border-border bg-card"
-              aria-label={`${stage.label} stage`}
-            >
-              <div className="px-4 pb-3 pt-4">
+            <section className={cn(CARD, "overflow-hidden")} aria-label={`${stage.label} stage`}>
+              <div className="px-4 pb-1 pt-4">
                 {viewingOther ? (
-                  <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-sm bg-amber-500/10 px-3 py-1.5 text-[12px]">
+                  <div
+                    className={cn(
+                      "mb-3 flex flex-wrap items-center justify-between gap-2 rounded-md px-3 py-2 text-[13px]",
+                      TONE.warning.chip,
+                    )}
+                  >
                     <span>
-                      <span className="font-medium text-foreground">Viewing: {stage.label}</span>
-                      {viewingPosition ? (
-                        <span className="text-muted-foreground"> · {viewingPosition}</span>
-                      ) : null}
+                      <span className="font-semibold">Viewing: {stage.label}</span>
+                      {viewingPosition ? <span> · {viewingPosition}</span> : null}
                     </span>
                     <button
                       type="button"
@@ -1292,21 +1289,21 @@ export function CurrentImplementationTab({
                         setViewing(null);
                         setManual(null);
                       }}
-                      className="font-medium text-primary underline-offset-2 hover:underline"
+                      className="font-semibold underline-offset-2 hover:underline"
                     >
                       Back to current stage
                     </button>
                   </div>
                 ) : null}
-                <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                  {journeyPos ? `Stage ${journeyPos.index} of ${journeyPos.total}` : "Stage"}
-                  {viewingOther ? " · viewing" : " · current"}
-                </p>
-                <h2 className="mt-0.5 text-[20px] font-semibold tracking-tight text-foreground">
-                  {stage.label}
-                </h2>
+                <div className="flex flex-wrap items-center gap-2.5">
+                  <h2 className="text-[20px] font-semibold tracking-tight text-foreground">
+                    {stage.label}
+                  </h2>
+                </div>
                 {guidance ? (
-                  <p className="mt-1 text-[13px] text-foreground/80">{guidance.objective}</p>
+                  <p className="mt-1.5 text-[14px] leading-relaxed text-foreground/85">
+                    {guidance.objective}
+                  </p>
                 ) : null}
                 {viewFocus.progress.total > 0 ? (
                   <div className="mt-3">
@@ -1360,10 +1357,7 @@ export function CurrentImplementationTab({
                 )
               ) : viewFocus.state === "next" ? (
                 // Focus Mode: the one task the stage logic says is next, with its own control.
-                <div>
-                  <p className="px-4 pt-3 text-[10px] font-semibold uppercase tracking-[0.12em] text-primary">
-                    Next task
-                  </p>
+                <div className="pb-1">
                   {isWorkingStageKey(shown) ? (
                     <OnboardingList
                       deal={deal}
@@ -1381,6 +1375,7 @@ export function CurrentImplementationTab({
                         n={stage.tasks.indexOf(viewFocus.next) + 1}
                         task={viewFocus.next}
                         open
+                        featured
                         onOpen={() => undefined}
                       >
                         <TaskBody
@@ -1414,7 +1409,7 @@ export function CurrentImplementationTab({
                 </p>
               )}
               {stage.tasks.length > 0 ? (
-                <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border px-4 py-2.5 text-[12px]">
+                <div className="flex flex-wrap items-center justify-between gap-2 px-4 pb-4 pt-3 text-[13px]">
                   <span className="text-muted-foreground">
                     {!allTasksOpen && viewFocus.state === "next" && viewFocus.others > 0
                       ? `${viewFocus.others} more open in this stage`
@@ -1424,19 +1419,23 @@ export function CurrentImplementationTab({
                     type="button"
                     aria-expanded={allTasksOpen}
                     onClick={() => setAllTasksOpen((o) => !o)}
-                    className="font-medium text-primary underline-offset-2 hover:underline"
+                    className="inline-flex items-center gap-1.5 font-medium text-primary hover:underline"
                   >
+                    <ChevronRight
+                      className={cn("h-4 w-4 transition-transform", allTasksOpen && "rotate-90")}
+                      aria-hidden
+                    />
                     {allTasksOpen ? "Show only the next task" : "View all stage tasks"}
                   </button>
                 </div>
               ) : null}
               {parkingAccess && parkingOpen ? (
-                <div className="border-t border-border">
+                <div className="px-4 pb-4">
                   <ParkingLot dealId={dealId} editable={editable} />
                 </div>
               ) : null}
               {guidance ? (
-                <SupportingSection title="Stage guidance" persistKey="guidance">
+                <SupportingSection title="Stage guidance" persistKey="guidance" inset>
                   <StageGuidancePanel shown={shown} showObjective={false} />
                 </SupportingSection>
               ) : null}
@@ -1444,7 +1443,7 @@ export function CurrentImplementationTab({
           )}
         </div>
 
-        <div className="min-w-0 space-y-3">
+        <div className="min-w-0 space-y-4">
           <NeedsAttentionCard record={record} dealId={dealId} />
           <OwnershipCard
             owner={ownerName}
@@ -1527,7 +1526,7 @@ export function CurrentImplementationTab({
         </div>
       </div>
 
-      <div className="space-y-2">
+      <div className="space-y-3">
         <SupportingSection title="Solutions" persistKey="solutions">
           <SolutionsCard deal={deal} editable={editable} />
         </SupportingSection>
@@ -1557,18 +1556,22 @@ export function CurrentImplementationTab({
 const OPEN_PREF = "ci-open:";
 
 /**
- * A disclosure for a supporting section: closed by default, so the working stage
- * stays first. A `persistKey` remembers this viewer's last choice for it, on this
- * device only; storage that is unavailable falls back to closed.
+ * A disclosure, closed by default, in Home's expandable-section pattern: a
+ * chevron that turns, the title, and nothing that competes with the work. The
+ * standalone form is a card; the `inset` form sits inside the stage card. A
+ * `persistKey` remembers this viewer's last choice for it, on this device only;
+ * storage that is unavailable falls back to closed.
  */
 function SupportingSection({
   title,
   children,
   persistKey,
+  inset = false,
 }: {
   title: string;
   children: React.ReactNode;
   persistKey?: string;
+  inset?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   useEffect(() => {
@@ -1581,7 +1584,7 @@ function SupportingSection({
   }, [persistKey]);
   return (
     <details
-      className="group rounded-md border border-border bg-card"
+      className={cn("group", inset ? "border-t border-border" : CARD)}
       open={open}
       onToggle={(e) => {
         const next = e.currentTarget.open;
@@ -1594,14 +1597,17 @@ function SupportingSection({
         }
       }}
     >
-      <summary className="flex cursor-pointer list-none items-center justify-between px-4 py-2.5 text-[13px] font-medium text-foreground hover:bg-muted/50">
+      <summary
+        className={cn(
+          "flex cursor-pointer list-none items-center gap-2 text-foreground hover:text-primary",
+          inset ? "px-4 py-3 text-[14px] font-semibold" : "px-4 py-3.5 text-[16px] font-semibold",
+        )}
+      >
+        <ChevronRight
+          className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-90"
+          aria-hidden
+        />
         {title}
-        <span className="text-[11px] font-normal text-muted-foreground group-open:hidden">
-          Show
-        </span>
-        <span className="hidden text-[11px] font-normal text-muted-foreground group-open:inline">
-          Hide
-        </span>
       </summary>
       <div className="border-t border-border">{children}</div>
     </details>
@@ -1816,15 +1822,24 @@ function TaskRow({
   open,
   onOpen,
   children,
+  featured = false,
 }: {
   n: number;
   task: FlowTask;
   open: boolean;
   onOpen: () => void;
   children: React.ReactNode;
+  /** Focus Mode's one next task: the strongest card on the page. */
+  featured?: boolean;
 }) {
   return (
-    <li className={cn("px-4 py-2.5", open && "bg-primary/5")}>
+    <li
+      className={cn(
+        featured ? "rounded-md border border-border bg-card px-4 py-4" : "px-4 py-2.5",
+        open && !featured && "bg-primary/5",
+      )}
+      style={featured ? { boxShadow: `inset 3px 0 0 0 ${TONE.info.bar}` } : undefined}
+    >
       <div className="flex items-start gap-2.5">
         <span
           className={cn(
@@ -1845,13 +1860,25 @@ function TaskRow({
             disabled={open}
             className="flex w-full flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 text-left disabled:cursor-default"
           >
-            <span
-              className={cn(
-                "text-[13px] font-medium",
-                !task.done && task.locked && "text-muted-foreground",
-              )}
-            >
-              {task.label}
+            <span className="flex flex-wrap items-center gap-2">
+              {featured ? (
+                <span
+                  className={cn(
+                    "whitespace-nowrap rounded-full px-2 py-px text-[12px] font-semibold",
+                    TONE.info.chip,
+                  )}
+                >
+                  Up next
+                </span>
+              ) : null}
+              <span
+                className={cn(
+                  featured ? "text-[16px] font-semibold" : "text-[13px] font-medium",
+                  !task.done && task.locked && "text-muted-foreground",
+                )}
+              >
+                {task.label}
+              </span>
             </span>
             <span className="text-[12px] text-muted-foreground">
               {task.done ? (
@@ -1868,7 +1895,7 @@ function TaskRow({
           </button>
           {open ? (
             <div className="mt-2 space-y-2">
-              <p className="text-[12px] text-muted-foreground">{task.hint}</p>
+              <p className="text-[13px] leading-relaxed text-muted-foreground">{task.hint}</p>
               {task.locked && !task.done ? (
                 <p className="text-[12px] text-amber-800 dark:text-amber-300">{task.locked}.</p>
               ) : null}
@@ -3397,14 +3424,14 @@ function OnboardingList({
   const today = localIso();
   return (
     <div>
-      <ul className="divide-y divide-border">
+      <ul className={only ? "px-4 pb-4" : "divide-y divide-border"}>
         {rows.map((t, i) => {
           const late = !t.done && !t.optional && t.date && t.date < today;
           const heading = !only && t.group && t.group !== tasks[i - 1]?.group ? t.group : null;
           return (
             <Fragment key={t.key}>
               {heading ? (
-                <li className="bg-muted/40 px-4 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                <li className="bg-muted/40 px-4 py-1.5 text-[12px] font-semibold text-muted-foreground">
                   {heading}
                   {heading.startsWith("Functional") ? (
                     <span className="ml-2 font-normal normal-case tracking-normal">
@@ -3417,13 +3444,16 @@ function OnboardingList({
               ) : null}
               <li
                 className={cn(
-                  "flex items-start gap-2.5 px-4 py-2",
-                  t.key === focusKey && "bg-primary/5",
+                  only
+                    ? "flex items-start gap-3 rounded-md border border-border bg-card px-4 py-4"
+                    : "flex items-start gap-2.5 px-4 py-2",
+                  t.key === focusKey && !only && "bg-primary/5",
                 )}
+                style={only ? { boxShadow: `inset 3px 0 0 0 ${TONE.info.bar}` } : undefined}
               >
                 <input
                   type="checkbox"
-                  className="mt-0.5 h-4 w-4 shrink-0"
+                  className={cn("mt-0.5 h-4 w-4 shrink-0", only && "mt-1 h-5 w-5")}
                   checked={
                     t.action === "graduate"
                       ? grad.isOn(t.key, t.done)
@@ -3447,10 +3477,20 @@ function OnboardingList({
                   <div className="flex flex-wrap items-baseline justify-between gap-x-3">
                     <span
                       className={cn(
-                        only ? "text-[15px] font-semibold" : "text-[13px]",
+                        only ? "text-[16px] font-semibold" : "text-[13px]",
                         isDone(t) && "text-muted-foreground line-through",
                       )}
                     >
+                      {only ? (
+                        <span
+                          className={cn(
+                            "mr-2 whitespace-nowrap rounded-full px-2 py-px text-[12px] font-semibold",
+                            TONE.info.chip,
+                          )}
+                        >
+                          Up next
+                        </span>
+                      ) : null}
                       {t.label}
                       {t.optional ? (
                         <span className="ml-1.5 rounded-full border border-border px-1.5 py-px text-[10px] text-muted-foreground">
@@ -3460,7 +3500,7 @@ function OnboardingList({
                     </span>
                     <span
                       className={cn(
-                        "font-mono text-[11px]",
+                        "font-mono text-[12px]",
                         late ? "text-amber-700 dark:text-amber-400" : "text-muted-foreground",
                       )}
                     >
@@ -3472,7 +3512,9 @@ function OnboardingList({
                     </span>
                   </div>
                   {t.key === focusKey || (t.optional && !t.done) ? (
-                    <p className="mt-0.5 text-[12px] text-muted-foreground">{t.hint}</p>
+                    <p className="mt-0.5 text-[13px] leading-relaxed text-muted-foreground">
+                      {t.hint}
+                    </p>
                   ) : null}
                   {editable && isReadinessKey(t.key) && !t.done ? (
                     <ReadinessOff deal={deal} intake={intake} itemKey={t.key} />

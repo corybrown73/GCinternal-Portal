@@ -2,7 +2,7 @@ import { useState, type ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { ArrowRight, Check, TriangleAlert } from "lucide-react";
+import { ArrowRight, ChevronRight, TriangleAlert } from "lucide-react";
 
 import { getDealPulseFn } from "@/lib/deal-pulse.functions";
 import { triageRowForCustomer360 } from "@/lib/home-triage";
@@ -18,15 +18,31 @@ import { cn } from "@/lib/utils";
  * existing panels. Every value is read from a record the tab already holds;
  * nothing here is a second source of truth, and nothing here writes except
  * the target-move explanation, which is the existing `explainTargetChange`.
+ *
+ * Presentation follows Home: soft white cards with a light border, 16px section
+ * headings, semantic pastel chips, and Home's inset colour bar on a row that
+ * needs attention. The tones below are Home's own values (its tone maps are not
+ * exported, and Home is not changed for this).
  */
 
 type Impl = NonNullable<Customer360["implementation"]>;
 
+/** Home's semantic tones: the chip ink and tint, and the inset bar that marks a row. */
+export const TONE = {
+  critical: { chip: "bg-[#fde8e6] text-[#b42318]", bar: "#d03b3b", fill: "#d03b3b" },
+  warning: { chip: "bg-[#fff1d6] text-[#93500a]", bar: "#fab219", fill: "#fab219" },
+  info: { chip: "bg-[#e3eefc] text-[#1c5cab]", bar: "#2a78d6", fill: "#2a78d6" },
+  good: { chip: "bg-[#e3f5e3] text-[#006300]", bar: "#0ca30c", fill: "#0ca30c" },
+  muted: { chip: "bg-muted text-muted-foreground", bar: "", fill: "" },
+} as const;
+
+/** The card every block sits in, as Home's sections do. */
+export const CARD = "rounded-lg border border-border bg-card";
+
 /**
  * The exceptional thing, when there is one: the same triage row Home runs for
- * this implementation. Deal-linked projects get no header band, so this is the
- * only place their attention signal appears on the tab. Renders nothing when
- * the implementation is moving normally.
+ * this implementation. Shown as a concise row, with the full detail behind a
+ * disclosure. Renders nothing when the implementation is moving normally.
  */
 export function NeedsAttentionCard({ record, dealId }: { record: Customer360; dealId: string }) {
   const row = triageRowForCustomer360(record);
@@ -36,27 +52,43 @@ export function NeedsAttentionCard({ record, dealId }: { record: Customer360; de
   });
   if (!row || row.bucket === "moving") return null;
   const guide = pulse.data?.next ?? null;
+  const tone = row.bucket === "act_now" ? TONE.critical : TONE.warning;
   return (
     <section
-      className="rounded-md border border-status-risk/40 bg-status-risk/5 px-4 py-3"
+      className={cn(CARD, "px-4 py-3.5")}
       aria-label="Needs attention"
+      style={{ boxShadow: `inset 3px 0 0 0 ${tone.bar}` }}
     >
-      <p className="text-[13px] font-semibold tracking-tight text-foreground">{row.reason}</p>
-      {row.impact ? <p className="mt-0.5 text-[12px] text-muted-foreground">{row.impact}</p> : null}
-      {row.dependency.party !== "none" ? (
-        <p className="mt-1 text-[12px] text-muted-foreground">{row.dependency.reason}</p>
-      ) : null}
-      {guide ? (
-        <p className="mt-2 text-[12px] italic text-muted-foreground">
-          {guide.label}: {guide.hint}
-        </p>
-      ) : null}
-      <Link
-        to="/how-it-works"
-        className="mt-1.5 inline-flex items-center gap-1 text-[12px] font-medium text-primary hover:underline"
-      >
-        How this works <ArrowRight className="h-3 w-3" />
-      </Link>
+      <div className="flex flex-wrap items-center gap-2">
+        <span className={cn("rounded-sm px-1.5 py-px text-[12px] font-medium", tone.chip)}>
+          {row.bucket === "act_now" ? "Act now" : "Needs attention"}
+        </span>
+      </div>
+      <p className="mt-2 text-[15px] font-semibold leading-snug text-foreground">{row.reason}</p>
+      <details className="group mt-2.5">
+        <summary className="inline-flex cursor-pointer list-none items-center gap-1.5 text-[13px] font-medium text-primary hover:underline">
+          <ChevronRight
+            className="h-3.5 w-3.5 shrink-0 transition-transform group-open:rotate-90"
+            aria-hidden
+          />
+          Full risk details
+        </summary>
+        <div className="mt-2.5 space-y-2 text-[13px] leading-relaxed text-muted-foreground">
+          {row.impact ? <p>{row.impact}</p> : null}
+          {row.dependency.party !== "none" ? <p>{row.dependency.reason}</p> : null}
+          {guide ? (
+            <p className="italic">
+              {guide.label}: {guide.hint}
+            </p>
+          ) : null}
+          <Link
+            to="/how-it-works"
+            className="inline-flex items-center gap-1 font-medium text-primary hover:underline"
+          >
+            How this works <ArrowRight className="h-3.5 w-3.5" />
+          </Link>
+        </div>
+      </details>
     </section>
   );
 }
@@ -81,50 +113,58 @@ export function OwnershipCard({
   healthWhy: string | null;
 }) {
   return (
-    <section className="border-t border-border pt-3" aria-label="Ownership">
-      <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-        Owner
-      </p>
-      <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-foreground">
-        <span className="font-medium">{owner ?? "Nobody yet"}</span>
+    <section className={cn(CARD, "px-4 py-3.5")} aria-label="Ownership">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="text-[12px] text-muted-foreground">Owner</p>
+          <p className="text-[15px] font-semibold text-foreground">{owner ?? "Nobody yet"}</p>
+        </div>
         {ball ? (
           <span
             className={cn(
-              "rounded-full px-2 py-0.5 text-[11px] font-medium",
-              ball.who === "customer"
-                ? "bg-amber-500/15 text-amber-800 dark:text-amber-300"
-                : "bg-primary/10 text-primary",
+              "rounded-full px-2.5 py-1 text-[12px] font-medium",
+              ball.who === "customer" ? TONE.warning.chip : TONE.info.chip,
             )}
             title={ball.detail}
           >
             {ball.who === "customer" ? "With the customer" : "With us"}
           </span>
         ) : null}
-      </p>
+      </div>
 
-      <p className="mt-3 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-        Waiting on
-      </p>
-      {waitingText !== null ? (
-        <p className="mt-1 text-[12px] text-foreground">{waitingText}</p>
-      ) : waiting.length === 0 ? (
-        <p className="mt-1 text-[12px] text-muted-foreground">Nothing on anyone&apos;s desk</p>
-      ) : (
-        <ul className="mt-1 space-y-0.5 text-[12px]">
-          {waiting.map((w, i) => (
-            <li key={i}>
-              <span className="font-medium text-foreground">
-                {w.who === "customer" ? "Customer" : "GoCanvas"}:
-              </span>{" "}
-              {w.what}
-            </li>
-          ))}
-        </ul>
-      )}
+      <div className="mt-3.5">
+        <p className="text-[13px] font-semibold text-foreground">Waiting on</p>
+        {waitingText !== null ? (
+          <p className="mt-1.5 text-[13px] leading-relaxed text-foreground">{waitingText}</p>
+        ) : waiting.length === 0 ? (
+          <p className="mt-1.5 text-[13px] text-muted-foreground">Nothing on anyone&apos;s desk</p>
+        ) : (
+          <ul className="mt-2 space-y-2">
+            {waiting.map((w, i) => (
+              <li key={i} className="flex items-start gap-2 text-[13px] leading-snug">
+                <span
+                  className={cn(
+                    "mt-px shrink-0 rounded-sm px-1.5 py-px text-[12px] font-medium",
+                    w.who === "customer" ? TONE.warning.chip : TONE.info.chip,
+                  )}
+                >
+                  {w.who === "customer" ? "Customer" : "GoCanvas"}
+                </span>
+                <span className="text-foreground">{w.what}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
 
       {healthWhy ? (
-        <p className="mt-3 text-[12px] text-muted-foreground">
-          <span className="font-medium text-foreground">Why it is flagged:</span> {healthWhy}
+        <p
+          className={cn(
+            "mt-3.5 rounded-md px-3 py-2 text-[13px] leading-relaxed",
+            TONE.warning.chip,
+          )}
+        >
+          <span className="font-semibold">Why it is flagged:</span> {healthWhy}
         </p>
       ) : null}
     </section>
@@ -164,29 +204,27 @@ export function KeyDatesCard({
     });
   }
   return (
-    <section className="border-t border-border pt-3" aria-label="Key dates">
-      <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-        Key dates
-      </p>
-      <dl className="mt-1.5 space-y-1 text-[12px]">
+    <section className={cn(CARD, "px-4 py-3.5")} aria-label="Key dates">
+      <h2 className="text-[16px] font-semibold">Key dates</h2>
+      <dl className="mt-2.5 space-y-2.5 text-[13px]">
         {rows.map((r) => (
           <div key={r.label} className="flex justify-between gap-3" title={r.hint}>
             <dt className="text-muted-foreground">{r.label}</dt>
-            <dd className="font-medium tabular-nums text-foreground">{r.value}</dd>
+            <dd className="font-semibold tabular-nums text-foreground">{r.value}</dd>
           </div>
         ))}
         {impl.complete_outcome ? (
           <div className="flex justify-between gap-3">
             <dt className="text-muted-foreground">Outcome</dt>
-            <dd className="font-medium text-foreground">
+            <dd className="font-semibold text-foreground">
               {impl.complete_outcome === "proven" ? "Proven" : "Not Proven"}
             </dd>
           </div>
         ) : null}
         {next ? (
-          <div className="flex justify-between gap-3 border-t border-border pt-1.5">
+          <div className="flex justify-between gap-3 rounded-md bg-muted/50 px-2.5 py-2">
             <dt className="text-muted-foreground">{next.label}</dt>
-            <dd className="text-right font-medium text-foreground">{next.detail}</dd>
+            <dd className="text-right font-semibold text-foreground">{next.detail}</dd>
           </div>
         ) : null}
       </dl>
@@ -222,16 +260,16 @@ export function TargetMoveNotice({ impl, customerId }: { impl: Impl; customerId:
   if (!pending.length && !explained.length) return null;
   const c = pending[0];
   return (
-    <div className="mt-2 border-t border-border pt-2 text-[12px]">
+    <div className="mt-3.5 text-[13px]">
       {c ? (
-        <div className="flex flex-col gap-2">
-          <span className="inline-flex items-center gap-1.5">
-            <TriangleAlert className="h-3.5 w-3.5 text-amber-700 dark:text-amber-300" aria-hidden />
+        <div className={cn("flex flex-col gap-2.5 rounded-md p-3", TONE.warning.chip)}>
+          <span className="inline-flex items-start gap-1.5 leading-snug">
+            <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
             The target moved {c.from_date ? `from ${shortDay(c.from_date)} ` : ""}to{" "}
-            <span className="font-medium">{shortDay(c.to_date)}</span> after the baseline. Why?
+            <span className="font-semibold">{shortDay(c.to_date)}</span> after the baseline. Why?
           </span>
           <select
-            className="h-8 rounded-sm border border-border bg-background px-1.5 text-[12px]"
+            className="h-9 rounded-md border border-border bg-card px-2 text-[13px] text-foreground"
             aria-label="Reason the target moved"
             value={code}
             disabled={m.isPending}
@@ -245,7 +283,7 @@ export function TargetMoveNotice({ impl, customerId }: { impl: Impl; customerId:
             ))}
           </select>
           <input
-            className="h-8 rounded-sm border border-border bg-background px-2 text-[12px]"
+            className="h-9 rounded-md border border-border bg-card px-2 text-[13px] text-foreground"
             placeholder="One line of why (optional)"
             aria-label="Why the target moved"
             value={note}
@@ -254,7 +292,7 @@ export function TargetMoveNotice({ impl, customerId }: { impl: Impl; customerId:
           />
           <button
             type="button"
-            className="self-start rounded-sm bg-primary px-2.5 py-1 text-[12px] font-medium text-primary-foreground disabled:opacity-50"
+            className="self-start rounded-md bg-primary px-3 py-1.5 text-[13px] font-medium text-primary-foreground disabled:opacity-50"
             disabled={!code || m.isPending}
             onClick={() => m.mutate(c.id)}
           >
@@ -277,7 +315,10 @@ export function TargetMoveNotice({ impl, customerId }: { impl: Impl; customerId:
   );
 }
 
-/** One line of progress: "2 of 5 tasks done", with a bar that only shows actual completion. */
+/**
+ * Progress from actual completion: "2 of 5 tasks done", with a bar that fills
+ * only by what is done. Home's stage bars use the same track and tone.
+ */
 export function ProgressLine({
   done,
   total,
@@ -288,22 +329,27 @@ export function ProgressLine({
   label: string;
 }) {
   const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+  const complete = total > 0 && done === total;
   return (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] text-muted-foreground">
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[13px] text-muted-foreground">
       <span className="tabular-nums">
         {done} of {total} {label}
       </span>
-      <span aria-hidden className="block h-1 w-28 overflow-hidden rounded-full bg-muted">
-        <span className="block h-full rounded-full bg-primary" style={{ width: `${pct}%` }} />
+      <span aria-hidden className="block h-1.5 w-32 overflow-hidden rounded-full bg-muted">
+        <span
+          className="block h-full rounded-full"
+          style={{ width: `${pct}%`, background: complete ? TONE.good.fill : TONE.info.fill }}
+        />
       </span>
     </div>
   );
 }
 
 /**
- * The journey in Focus Mode: where the implementation is, how far its current
- * stage has got, and the full journey one click away. The skip control stays
- * here so it is never hidden behind the expanded journey.
+ * The journey in Focus Mode: where the implementation is, with the full journey
+ * one click away. It is an expandable header in Home's pattern: a chevron that
+ * turns when open. The skip control stays on the bar, never behind the expanded
+ * journey.
  */
 export function JourneyBar({
   position,
@@ -321,37 +367,42 @@ export function JourneyBar({
 }) {
   return (
     <section
-      className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2 rounded-md border border-border bg-card px-4 py-3"
+      className={cn(CARD, "flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4 py-3")}
       aria-label="Implementation journey summary"
     >
-      <div className="min-w-0">
-        <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-          Implementation journey
-        </p>
-        <p className="mt-0.5 text-[14px] font-semibold text-foreground">
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={expanded}
+        aria-controls="current-implementation-journey"
+        className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2.5 gap-y-1 text-left"
+      >
+        <ChevronRight
+          className={cn(
+            "h-4 w-4 shrink-0 text-muted-foreground transition-transform",
+            expanded && "rotate-90",
+          )}
+          aria-hidden
+        />
+        <span className="text-[16px] font-semibold text-foreground">Implementation journey</span>
+        <span className={cn("rounded-full px-2 py-px text-[12px] font-semibold", TONE.info.chip)}>
           {position ? `Stage ${position.index} of ${position.total}` : fallbackLabel}
-        </p>
-      </div>
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-        {skip}
-        <button
-          type="button"
-          onClick={onToggle}
-          aria-expanded={expanded}
-          aria-controls="current-implementation-journey"
-          className="rounded-sm border border-primary/40 px-2.5 py-1 text-[12px] font-medium text-primary hover:bg-primary/5"
-        >
+        </span>
+        <span className="ml-auto text-[13px] font-medium text-primary">
           {expanded ? "Hide full journey" : "View full journey"}
-        </button>
-      </div>
+        </span>
+      </button>
+      {skip ? <div className="flex items-center">{skip}</div> : null}
     </section>
   );
 }
 
 /**
- * The tools that sit beside the work, compact: updates, plan dates, the Parking
- * Lot and the customer dashboard preview. Each opens its existing panel in place.
- * The panels stay mounted, so a half-written update survives closing the panel.
+ * The tools that sit beside the work, as quiet secondary actions: updates, plan
+ * dates, the Parking Lot and the customer dashboard preview. Each opens its
+ * existing panel in place. The panels stay mounted, so a half-written update
+ * survives closing the panel. They are text rows, not buttons that compete with
+ * the task.
  */
 export function ToolsCard({
   open,
@@ -373,22 +424,21 @@ export function ToolsCard({
       onClick={() => onOpen(which)}
       aria-expanded={open === which}
       className={cn(
-        "flex w-full items-center justify-between gap-2 py-1.5 text-left text-[12px] font-medium transition-colors",
-        open === which ? "text-foreground" : "text-muted-foreground hover:text-foreground",
+        "flex w-full items-center justify-between gap-2 rounded-md px-2.5 py-2 text-left text-[13px] transition-colors hover:bg-muted",
+        open === which ? "bg-muted font-medium text-foreground" : "text-foreground",
       )}
     >
-      {label}
-      <span aria-hidden className="text-[11px]">
-        {open === which ? "Close" : "Open"}
-      </span>
+      <span>{label}</span>
+      <ChevronRight
+        className={cn("h-3.5 w-3.5 shrink-0 text-muted-foreground", open === which && "rotate-90")}
+        aria-hidden
+      />
     </button>
   );
   return (
-    <section className="border-t border-border pt-3" aria-label="Updates and tools">
-      <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-        Updates and tools
-      </p>
-      <div className="mt-1 divide-y divide-border">
+    <section className={cn(CARD, "px-4 py-3.5")} aria-label="Updates and tools">
+      <h2 className="text-[16px] font-semibold">Updates and tools</h2>
+      <div className="mt-2.5 grid gap-0.5">
         {row("meeting", "Update from a customer meeting")}
         {row("update", "Add an implementation update")}
         {showPlanDates ? row("dates", "Adjust plan dates") : null}
@@ -398,22 +448,31 @@ export function ToolsCard({
             onClick={parking.onToggle}
             aria-expanded={parking.expanded}
             className={cn(
-              "flex w-full items-center justify-between gap-2 py-1.5 text-left text-[12px] font-medium transition-colors",
-              parking.expanded ? "text-foreground" : "text-muted-foreground hover:text-foreground",
+              "flex w-full items-center justify-between gap-2 rounded-md px-2.5 py-2 text-left text-[13px] transition-colors hover:bg-muted",
+              parking.expanded ? "bg-muted font-medium text-foreground" : "text-foreground",
             )}
           >
-            <span>
-              Parking Lot
-              <span className="ml-2 font-normal text-muted-foreground">
-                · {parking.openCount === 0 ? "none open" : `${parking.openCount} open on our side`}
+            <span>Parking Lot</span>
+            <span className="flex items-center gap-2">
+              <span
+                className={cn(
+                  "rounded-full px-2 py-px text-[12px] font-medium",
+                  parking.openCount > 0 ? TONE.warning.chip : TONE.muted.chip,
+                )}
+              >
+                {parking.openCount === 0 ? "none open" : `${parking.openCount} open on our side`}
               </span>
-            </span>
-            <span aria-hidden className="text-[11px]">
-              {parking.expanded ? "Close" : "Open"}
+              <ChevronRight
+                className={cn(
+                  "h-3.5 w-3.5 shrink-0 text-muted-foreground",
+                  parking.expanded && "rotate-90",
+                )}
+                aria-hidden
+              />
             </span>
           </button>
         ) : null}
-        <div className="py-1.5">{dashboardLink}</div>
+        <div className="px-2.5 py-2 text-[13px]">{dashboardLink}</div>
       </div>
     </section>
   );

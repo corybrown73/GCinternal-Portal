@@ -61,7 +61,7 @@ describe("OwnershipCard", () => {
         waitingText: null,
       }),
     );
-    expect(markup).toContain("GoCanvas:");
+    expect(markup).toContain("GoCanvas");
     expect(markup).toContain("Send the form library");
   });
 
@@ -236,7 +236,8 @@ describe("ToolsCard", () => {
         dashboardLink: dashboard,
       }),
     );
-    expect(markup).toMatch(/aria-expanded="true"[^>]*>Add an implementation update/);
+    expect(markup).toContain('aria-expanded="true"');
+    expect(markup).toContain("Add an implementation update");
   });
 });
 

@@ -4,7 +4,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { Send } from "lucide-react";
 
 import { StageStepper } from "@/components/stage-stepper";
-import { JourneyBar } from "@/components/current-implementation-context";
+import { CARD, JourneyBar, TONE } from "@/components/current-implementation-context";
 import { StageGatesPanel } from "@/components/stage-gates-panel";
 import { Button } from "@/components/ui/button";
 import { MemberOptions } from "@/components/member-options";
@@ -86,7 +86,7 @@ export function PartnerJourney({
       {journeyOpen ? (
         <section
           id="current-implementation-journey"
-          className="overflow-hidden rounded-md border border-border bg-card"
+          className={cn(CARD, "overflow-hidden")}
           aria-label="Implementation journey"
         >
           <StageStepper
@@ -113,17 +113,6 @@ export function PartnerJourney({
         />
       ) : current ? (
         <>
-          <div className="px-1">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-              {position ? `Stage ${position.index} of ${position.total}` : "Stage"} · current
-            </p>
-            <h2 className="mt-0.5 text-[20px] font-semibold tracking-tight text-foreground">
-              {current.label}
-            </h2>
-            {definition(current.key) ? (
-              <p className="mt-1 text-[13px] text-foreground/80">{definition(current.key)}</p>
-            ) : null}
-          </div>
           <StageGatesPanel
             customerId={customerId}
             implementationId={implementationId}
@@ -132,6 +121,7 @@ export function PartnerJourney({
             items={gateItemsFor(current.items)}
             partner={moveView}
             focus
+            focusHeading={{ title: current.label, goal: definition(current.key) }}
           />
         </>
       ) : null}
@@ -158,11 +148,13 @@ function PartnerStageReadOnly({
 }) {
   const criteria = items.filter((i) => i.isGate);
   return (
-    <section
-      className="overflow-hidden rounded-md border border-border bg-card"
-      aria-label={`${label} stage, read only`}
-    >
-      <div className="flex flex-wrap items-center justify-between gap-2 bg-amber-500/10 px-4 py-2 text-[12px]">
+    <section className={cn(CARD, "overflow-hidden")} aria-label={`${label} stage, read only`}>
+      <div
+        className={cn(
+          "flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 text-[13px]",
+          TONE.info.chip,
+        )}
+      >
         <span>
           <span className="font-medium text-foreground">Viewing: {label}</span>
           {position ? <span className="text-muted-foreground"> · {position}</span> : null}
@@ -192,7 +184,7 @@ function PartnerStageReadOnly({
                 >
                   {c.title}
                 </span>
-                <span className="text-[11px] text-muted-foreground">
+                <span className="text-[12px] text-muted-foreground">
                   {c.status === "done"
                     ? c.verified
                       ? "Verified"
@@ -357,13 +349,10 @@ function PartnerHandoffSection({
   const members = assignment.data?.members ?? [];
 
   return (
-    <section
-      className="overflow-hidden rounded-md border border-border bg-card"
-      aria-label="Partner implementation handoff"
-    >
-      <div className="border-b border-border bg-amber-500/10 px-4 py-2.5">
-        <p className="text-[13px] font-semibold text-foreground">Being prepared for handoff</p>
-        <p className="mt-0.5 text-[12px] text-muted-foreground">
+    <section className={cn(CARD, "overflow-hidden")} aria-label="Partner implementation handoff">
+      <div className={cn("px-4 py-3", TONE.warning.chip)}>
+        <p className="text-[15px] font-semibold">Being prepared for handoff</p>
+        <p className="mt-0.5 text-[13px]">
           {assignment.isPending
             ? "Checking who owns this…"
             : ownerName
@@ -388,24 +377,40 @@ function PartnerHandoffSection({
             </button>
           ) : null}
         </div>
-        <ul className="space-y-1.5">
+        <ul className="space-y-2.5">
           {visibleGates.map((g) => {
             const checked = isChecked(g);
+            const featured = !showAll && !checked;
             return (
-              <li key={g.id}>
+              <li
+                key={g.id}
+                className={cn(featured && "rounded-md border border-border bg-card px-4 py-3.5")}
+                style={featured ? { boxShadow: `inset 3px 0 0 0 ${TONE.info.bar}` } : undefined}
+              >
                 <label
                   className={cn(
-                    "flex items-center gap-2 text-[13px]",
+                    "flex items-center gap-2.5 text-[13px]",
+                    featured && "text-[16px] font-semibold",
                     editable ? "cursor-pointer" : "cursor-default",
                   )}
                 >
                   <input
                     type="checkbox"
-                    className="h-4 w-4"
+                    className={cn("h-4 w-4", featured && "h-5 w-5")}
                     checked={checked}
                     disabled={!editable || busy}
                     onChange={() => toggle.mutate({ id: g.id, done: !checked })}
                   />
+                  {featured ? (
+                    <span
+                      className={cn(
+                        "rounded-full px-2 py-px text-[12px] font-semibold",
+                        TONE.info.chip,
+                      )}
+                    >
+                      Up next
+                    </span>
+                  ) : null}
                   <span className={cn(checked && "text-muted-foreground line-through")}>
                     {g.title}
                   </span>
