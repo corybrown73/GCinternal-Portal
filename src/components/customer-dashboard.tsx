@@ -406,7 +406,9 @@ function Attention({
                       <T k={tkey("together", "homework", key)}>{homeworkTexts(view)[key]}</T>
                     </span>
                   </label>
-                  {h.due ? (
+                  {h.coveredBy === "testing" ? (
+                    <span className="gc-dash-muted">Covered by the testing action above</span>
+                  ) : h.due ? (
                     <span className="gc-dash-muted">Plan date {shortDay(h.due)}</span>
                   ) : null}
                 </li>

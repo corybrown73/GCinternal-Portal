@@ -1,5 +1,5 @@
 import { kickoffGraduationTarget } from "./kickoff-view";
-import type { Milestone } from "./onboarding-timeline";
+import { TESTING_HOMEWORK_COPY, type Milestone } from "./onboarding-timeline";
 import { HOMEWORK_TEXT } from "./welcome-journey";
 import { HOMEWORK_KEYS, type HomeworkKey, type WelcomeView } from "./welcome";
 
@@ -142,6 +142,11 @@ export type AttentionItem = {
   canConfirm: boolean;
   /** An AI-proposed name, shown as to confirm. */
   toConfirm: boolean;
+  /**
+   * Homework only: the recorded action that now carries this work, so the
+   * preparation row shows no plan date of its own. The row stays ticked as before.
+   */
+  coveredBy: "testing" | null;
 };
 
 /**
@@ -174,17 +179,23 @@ export function attentionItems(
     solutionId: null,
     canConfirm: false,
     toConfirm: false,
+    coveredBy: null,
   };
 
   for (const key of HOMEWORK_KEYS) {
+    // The plan's testing preparation is covered by the recorded tester's own
+    // action (below), which carries their name and deadline. Its plan date is
+    // not a second deadline for the same work, so it is not shown.
+    const covered = Boolean(view.fieldTester) && texts[key] === TESTING_HOMEWORK_COPY;
     items.push({
       ...blank,
       id: `homework:${key}`,
       kind: "homework",
       what: texts[key],
-      due: isIsoDate(homeworkDate) ? homeworkDate : null,
+      due: !covered && isIsoDate(homeworkDate) ? homeworkDate : null,
       done: Boolean(view.homeworkDone[key]),
       homeworkKey: key,
+      coveredBy: covered ? "testing" : null,
     });
   }
 

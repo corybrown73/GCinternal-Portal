@@ -12,6 +12,7 @@ import {
   tisContact,
 } from "../customer-dashboard";
 import { customerWelcomeView, type WelcomeView } from "../welcome";
+import { TESTING_HOMEWORK_COPY } from "../onboarding-timeline";
 
 /** A WelcomeView with nothing recorded, overridden per test. */
 function viewWith(overrides: Record<string, unknown> = {}): WelcomeView {
@@ -807,11 +808,13 @@ describe("the recorded tester responsibility is not merged with plan copy", () =
     const items = attentionItems(view);
     const testing = items.find((i) => i.kind === "testing")!;
     expect(testing).toMatchObject({ owner: "Dana Ortiz", due: "2026-10-30" });
-    // The plan's copy stays a separate preparation item with the plan's date, not the tester's.
+    // The plan's copy stays a preparation row, but it carries no second deadline:
+    // the recorded tester's action is the one commitment for this work.
     const plan = items.find(
       (i) => i.kind === "homework" && i.what === "Test the form on real jobs",
     )!;
-    expect(plan.due).toBe("2026-10-08");
+    expect(plan.due).toBeNull();
+    expect(plan.coveredBy).toBe("testing");
     expect(
       items.filter((i) => i.what === "Test the form on real jobs" && i.kind === "testing"),
     ).toEqual([]);
@@ -888,5 +891,78 @@ describe("dashboardHeader — sales milestones are never the next milestone", ()
       timeline: { ...viewWith().timeline, milestones: [sales] } as never,
     });
     expect(dashboardHeader(view, "2026-10-13").nextMilestone).toBeNull();
+  });
+});
+
+describe("the testing preparation and the recorded tester are one commitment, not two", () => {
+  const kickoffWith = (homework: string[]) =>
+    viewWith({
+      homeworkDone: { app: true },
+      timeline: {
+        ...viewWith().timeline,
+        milestones: [
+          {
+            key: "kickoff",
+            kind: "call",
+            label: "Kickoff",
+            date: "2026-10-05",
+            time: "09:00",
+            doneOn: "2026-10-05",
+            homework,
+          },
+          {
+            key: "homework",
+            kind: "homework",
+            label: "Homework",
+            date: "2026-10-08",
+            time: null,
+            doneOn: null,
+          },
+        ],
+      } as never,
+    });
+
+  it("with a recorded tester, the testing preparation shows no plan date and is marked covered", () => {
+    const view = kickoffWith([TESTING_HOMEWORK_COPY, "Send us any missing data"]);
+    const items = attentionItems({
+      ...view,
+      fieldTester: "Dana Ortiz",
+      fieldTesterDue: "2026-10-30",
+    } as never);
+    const prep = items.find((i) => i.id === "homework:app")!;
+    expect(prep).toMatchObject({
+      what: TESTING_HOMEWORK_COPY,
+      due: null,
+      coveredBy: "testing",
+      done: true,
+    });
+    expect(items.find((i) => i.kind === "testing")).toMatchObject({
+      owner: "Dana Ortiz",
+      due: "2026-10-30",
+    });
+  });
+
+  it("with no recorded tester, the preparation keeps its plan date, as before", () => {
+    const view = kickoffWith([TESTING_HOMEWORK_COPY]);
+    const items = attentionItems({ ...view, fieldTester: null, fieldTesterDue: null } as never);
+    expect(items.find((i) => i.id === "homework:app")).toMatchObject({
+      due: "2026-10-08",
+      coveredBy: null,
+    });
+    expect(items.some((i) => i.kind === "testing")).toBe(false);
+  });
+
+  it("a distinct preparation step is never covered by the tester, even if it mentions testing", () => {
+    const view = kickoffWith(["Send us any missing data", "Tell us who your first users are"]);
+    const items = attentionItems({
+      ...view,
+      fieldTester: "Dana Ortiz",
+      fieldTesterDue: "2026-10-30",
+    } as never);
+    expect(
+      items
+        .filter((i) => i.kind === "homework")
+        .every((i) => i.coveredBy === null && i.due === "2026-10-08"),
+    ).toBe(true);
   });
 });
