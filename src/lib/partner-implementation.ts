@@ -291,3 +291,20 @@ export function liveTemplateId(
   );
   return live?.id ?? null;
 }
+
+/**
+ * The move a Partner Implementation can make from its current stage, in the
+ * partner order. The Implementation Ready boundary is `handoff`: that move is
+ * recorded by the handoff itself (its checks and the team member taking it),
+ * never by a plain stage advance, so no advance control offers it.
+ */
+export function partnerMoveFrom(current: string | null): {
+  next: PartnerStage | null;
+  handoff: boolean;
+} {
+  if (!current || !PARTNER_JOURNEY.some((s) => s.key === current))
+    return { next: null, handoff: false };
+  if (current === IMPLEMENTATION_READY.afterStage) return { next: null, handoff: true };
+  const key = nextPartnerStage(PARTNER_TEMPLATE_STAGE_KEYS, current);
+  return { next: key ? partnerStage(key as PartnerStageKey) : null, handoff: false };
+}

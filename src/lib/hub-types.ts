@@ -244,6 +244,9 @@ export type Customer360 = {
     current_stage: string;
     /** The deal's stage — the one the header and "At a glance" show. */
     deal_stage: AccountStage;
+    /** A Partner Implementation runs its own journey; null/absent for standard and legacy. */
+    journey_type?: string | null;
+    partner_key?: string | null;
     stage_entered_at: string;
     status: string;
     /** Recorded by a person through the editor; null = never recorded (0010). */

@@ -24,7 +24,7 @@ import { FromSalesPanel } from "@/components/from-sales-panel";
 import { ConversationPanel } from "@/components/conversation-panel";
 import { ProjectRail, ProjectTimelines } from "@/components/project-timeline-rail";
 import { buildProjectTimeline, type TimelineInput } from "@/lib/project-timeline";
-import { AdvanceStage } from "@/components/stage-advance-write";
+import { AdvanceStage, type PartnerMoveView } from "@/components/stage-advance-write";
 import { launchAcceptanceGate } from "@/lib/launch-gate";
 import { nextLifecycleStage } from "@/lib/stage-advance-input";
 import { AddSuccessCriterion, EditSuccessCriterion } from "@/components/success-criterion-write";
@@ -94,6 +94,7 @@ import { triageRowForCustomer360 } from "@/lib/home-triage";
 import type { Customer360, TraceStep } from "@/lib/hub-types";
 import { dealStageLabel, dealStageProgress } from "@/lib/deal-stage";
 import { LIFECYCLE_STAGES } from "@/lib/lifecycle";
+import { PARTNER_JOURNEY, isPartnerJourney, partnerMoveFrom } from "@/lib/partner-implementation";
 import { FLOW_STAGES } from "@/lib/stage-flow";
 import { readIntake } from "@/lib/intake-answers";
 import { normalizeServices, SOLUTION_LABEL, type ServiceSpec } from "@/lib/onboarding-services";
@@ -2136,6 +2137,15 @@ function JourneyTab({ record, customerId }: { record: Customer360; customerId: s
   const impl = record.implementation!;
   const activeStage = normalizeStage(impl.current_stage);
   const activeIndex = LIFECYCLE_STAGES.findIndex((s) => s.id === activeStage);
+  // A Partner Implementation moves along its own partner order, read from the
+  // stored journey (not the deal stage, which the partner journey does not use).
+  const partnerMove: PartnerMoveView | null = isPartnerJourney(impl)
+    ? {
+        currentLabel:
+          PARTNER_JOURNEY.find((s) => s.key === impl.current_stage)?.label ?? impl.current_stage,
+        ...partnerMoveFrom(impl.current_stage),
+      }
+    : null;
   const launchGate = launchAcceptanceGate({
     toStage: nextLifecycleStage(activeStage),
     solutions: record.technical_solutions as any[],
@@ -2180,6 +2190,7 @@ function JourneyTab({ record, customerId }: { record: Customer360; customerId: s
             currentStage={activeStage}
             team={record.team}
             gate={launchGate}
+            partner={partnerMove}
           />
         </div>
       </div>

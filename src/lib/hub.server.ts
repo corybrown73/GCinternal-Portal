@@ -984,6 +984,8 @@ export async function loadCustomer360(
       name: impl.name,
       current_stage: impl.current_stage,
       deal_stage: dealStageOf(impl),
+      journey_type: impl.journey_type ?? null,
+      partner_key: impl.partner_key ?? null,
       stage_entered_at: impl.stage_entered_at,
       status: impl.status,
       health_recorded: impl.health_recorded ?? null,

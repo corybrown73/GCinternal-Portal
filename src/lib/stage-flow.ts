@@ -1220,11 +1220,12 @@ export function stageFlow(input: StageFlowInput): StageFlow {
 export type RailStatus = "completed" | "current" | "upcoming" | "skipped";
 
 export function railStatuses<
-  T extends { key: FlowStageKey; done: boolean; tasks: readonly unknown[] },
+  K extends string,
+  T extends { key: K; done: boolean; tasks: readonly unknown[] },
 >(
   stages: ReadonlyArray<T>,
-  current: FlowStageKey | null,
-): Array<{ key: FlowStageKey; status: RailStatus; hasRecords: boolean }> {
+  current: K | null,
+): Array<{ key: K; status: RailStatus; hasRecords: boolean }> {
   const at = stages.findIndex((s) => s.key === current);
   return stages.map((s, i) => {
     const past = at >= 0 && i < at;
