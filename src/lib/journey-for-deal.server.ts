@@ -1,6 +1,7 @@
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 
 import { journeyTargetForDeal } from "./journey-for-deal";
+import { isPartnerJourney } from "./partner-implementation";
 import type { AccountStage } from "./presale-stages";
 import { STAGE_LABELS } from "./presale-stages";
 
@@ -25,13 +26,15 @@ export async function mirrorJourneyToDeal(
   try {
     const { data: impl } = await db()
       .from("implementations")
-      .select("id,current_stage")
+      .select("id,current_stage,journey_type,partner_key")
       .eq("deal_id", dealId)
       .is("superseded_by_implementation_id", null)
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle();
     if (!impl) return null;
+    // A partner's progress is its own record: the deal's band never pulls it.
+    if (isPartnerJourney(impl)) return null;
 
     const { loadLifecycleStages } = await import("./lifecycle-stages.server");
     const { applyStageOverrides, LIFECYCLE_STAGES } = await import("./lifecycle");

@@ -31,7 +31,13 @@ import { createTamRequest } from "./server/tam";
 import { generateApiKey } from "./server/api-auth";
 import { recordImplementationCreated } from "./server/events";
 import { sfId18 } from "./server/sf-id";
-import { FIELD_FUSION_STAGE, FIELD_FUSION_TEMPLATE_KEY } from "./field-fusion";
+import { FIELD_FUSION_STAGE } from "./field-fusion";
+import {
+  explicitPartnerKeyFor,
+  initialStageFor,
+  requiresPartnerTemplate,
+  templateKeyFor,
+} from "./partner-implementation";
 import { LIFECYCLE_STAGES } from "./lifecycle";
 import type {
   Account,
@@ -1854,6 +1860,15 @@ export async function startOnboardingAs(
     .maybeSingle();
   if (!account) throw new Error("Deal not found");
 
+  // A new partner implementation needs its published journey before anything is
+  // written: no customer, no implementation, and never the standard journey.
+  const { readIntake: readStartIntake } = await import("./intake-answers");
+  const startIntake = readStartIntake(account.intake);
+  if (requiresPartnerTemplate(startIntake)) {
+    const { requireLivePartnerTemplate } = await import("./partner-template.server");
+    await requireLivePartnerTemplate();
+  }
+
   const flagOn = await isFlagOn("account_model");
 
   // Identity match, never by name. Only looked up while the flag is on, so the
@@ -1957,6 +1972,10 @@ export async function startOnboardingAs(
   const firstStage = LIFECYCLE_STAGES[0]!.id;
   const now = new Date().toISOString();
   const { readIntake: readIntakeFor } = await import("./intake-answers");
+  // A partner implementation opens on its own first stage and names its partner.
+  // Every other start is unchanged.
+  const startStage = initialStageFor(startIntake) ?? firstStage;
+  const partnerKey = explicitPartnerKeyFor(startIntake);
   const { data: impl, error: implError } = await db()
     .from("implementations")
     .insert({
@@ -1966,7 +1985,8 @@ export async function startOnboardingAs(
       // backfill covered the old rows; this covers every new one.
       deal_id: account.id,
       name: implementationNameFor(readIntakeFor(account.intake), String(account.name)),
-      current_stage: firstStage,
+      current_stage: startStage,
+      ...(partnerKey ? { partner_key: partnerKey } : {}),
       stage_entered_at: now,
       status: "on_track",
       source: "presale",
@@ -1997,7 +2017,7 @@ export async function startOnboardingAs(
     .from("implementation_stage_history")
     .insert({
       implementation_id: impl.id,
-      stage: firstStage,
+      stage: startStage,
       entered_at: now,
       entered_by: await teamMemberIdForProfile(userId),
       exited_at: null,
@@ -2032,11 +2052,9 @@ export async function startOnboardingAs(
     actorProfileId: userId,
     // A Field Fusion account is a training journey, not a form build: the
     // rail and the tasks come from that template when it is published.
-    preferKey:
-      (await import("./intake-answers")).readIntake((account as { intake?: unknown }).intake)
-        .path === "field_fusion"
-        ? FIELD_FUSION_TEMPLATE_KEY
-        : null,
+    preferKey: templateKeyFor(startIntake),
+    // A new partner must use its journey: a missing template refuses, never falls back.
+    requirePreferred: requiresPartnerTemplate(startIntake),
   });
 
   // The journey opens where the deal already is: a deal forced straight to

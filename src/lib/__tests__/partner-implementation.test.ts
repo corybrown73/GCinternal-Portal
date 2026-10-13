@@ -1,8 +1,17 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { intakeAnswersSchema, readIntake } from "../intake-answers";
 import {
   customerStages,
+  initialStageFor,
+  isPartnerJourney,
+  liveTemplateId,
+  nextPartnerStage,
+  PARTNER_TEMPLATE_STAGE_KEYS,
+  requiresPartnerTemplate,
+  templateKeyFor,
   HANDOFF_ROLES,
   IMPLEMENTATION_READY,
   implementationTypeFor,
@@ -188,5 +197,123 @@ describe("the standard six-stage journey is unchanged", () => {
     for (const path of ["new_logo", "existing", "dm_conversion", null] as const) {
       expect(implementationTypeFor(intakeWith({ path }))).toMatchObject({ type: "standard" });
     }
+  });
+});
+
+describe("template selection, start stage and progression", () => {
+  it("a new partner uses the partner template; legacy Field Fusion keeps its own; standard uses none", () => {
+    expect(
+      templateKeyFor(intakeWith({ partner_implementation: { partner_key: "field_fusion_iq" } })),
+    ).toBe("partner-implementation");
+    expect(templateKeyFor(intakeWith({ path: "field_fusion" }))).toBe("field-fusion");
+    expect(templateKeyFor(intakeWith({ path: "new_logo" }))).toBeNull();
+  });
+
+  it("a new partner must use the partner template, so a missing one refuses the start; legacy and standard may not", () => {
+    expect(
+      requiresPartnerTemplate(
+        intakeWith({ partner_implementation: { partner_key: "field_fusion_iq" } }),
+      ),
+    ).toBe(true);
+    expect(requiresPartnerTemplate(intakeWith({ path: "field_fusion" }))).toBe(false);
+    expect(requiresPartnerTemplate(intakeWith({ path: "new_logo" }))).toBe(false);
+  });
+
+  it("a new partner opens on Closed Won & Planning; legacy and standard keep the standard start", () => {
+    expect(
+      initialStageFor(intakeWith({ partner_implementation: { partner_key: "field_fusion_iq" } })),
+    ).toBe("closed_won_planning");
+    expect(initialStageFor(intakeWith({ path: "field_fusion" }))).toBeNull();
+    expect(initialStageFor(intakeWith({ path: "new_logo" }))).toBeNull();
+  });
+
+  it("an implementation runs the partner journey by its journey type or its partner, never by the deal stage", () => {
+    expect(isPartnerJourney({ journey_type: "partner_implementation", partner_key: null })).toBe(
+      true,
+    );
+    expect(isPartnerJourney({ journey_type: "new_logo", partner_key: "field_fusion_iq" })).toBe(
+      true,
+    );
+    expect(isPartnerJourney({ journey_type: "new_logo", partner_key: null })).toBe(false);
+    expect(isPartnerJourney({})).toBe(false);
+  });
+
+  it("progression steps one stage forward through the template's own order, and stops at the end", () => {
+    const order = PARTNER_TEMPLATE_STAGE_KEYS;
+    expect(order).toEqual([
+      "closed_won_planning",
+      "partner_setup",
+      "form_finalisation",
+      "pilot",
+      "trial_run",
+      "roll_out",
+    ]);
+    expect(nextPartnerStage(order, "closed_won_planning")).toBe("partner_setup");
+    expect(nextPartnerStage(order, "partner_setup")).toBe("form_finalisation");
+    expect(nextPartnerStage(order, "roll_out")).toBeNull();
+    expect(nextPartnerStage(order, "handoff")).toBeNull();
+    expect(nextPartnerStage(order, null)).toBeNull();
+  });
+});
+
+describe("the template migration matches the approved journey", () => {
+  const sql = readFileSync(
+    join(__dirname, "../../../supabase/migrations/0083_partner_implementation.sql"),
+    "utf8",
+  );
+  const stageRows = [
+    ...sql.matchAll(/\(v_tid, (\d+),\s*'([a-z_]+)',\s*'[^']*',\s*'[^']*',\s*'([a-z]+)'/g),
+  ].map((m) => ({ position: Number(m[1]), key: m[2], gate: m[3] }));
+
+  it("its stages are the partner journey from Closed Won & Planning on, in order", () => {
+    expect(stageRows.map((r) => r.key)).toEqual([...PARTNER_TEMPLATE_STAGE_KEYS]);
+    expect(stageRows.map((r) => r.position)).toEqual([1, 2, 3, 4, 5, 6]);
+  });
+
+  it("Partner Setup and Roll Out & Graduation are blocking; the others are advisory", () => {
+    const gate = Object.fromEntries(stageRows.map((r) => [r.key, r.gate]));
+    expect(gate).toEqual({
+      closed_won_planning: "advisory",
+      partner_setup: "blocking",
+      form_finalisation: "advisory",
+      pilot: "advisory",
+      trial_run: "advisory",
+      roll_out: "blocking",
+    });
+  });
+
+  it("no task invents a date: each is dated only from a recorded target launch, with no offset", () => {
+    const taskLines = [...sql.matchAll(/'(target_launch)',\s*(-?\d+),\s*(true|false)/g)];
+    const total = [...sql.matchAll(/\(v_tid,\s*v_s_[a-z]+,\s*\d+,\s*'[a-z_.]+'/g)].length;
+    expect(taskLines.length).toBe(total);
+    expect(taskLines.every((m) => m[2] === "0")).toBe(true);
+  });
+
+  it("task keys are unique across the template", () => {
+    const keys = [...sql.matchAll(/\(v_tid,\s*v_s_[a-z]+,\s*\d+,\s*'([a-z_.]+)'/g)].map(
+      (m) => m[1],
+    );
+    expect(new Set(keys).size).toBe(keys.length);
+  });
+});
+
+describe("a partner's start refuses rather than falling back", () => {
+  const row = (over: Record<string, unknown>) => ({
+    id: "t1",
+    key: "partner-implementation",
+    status: "published",
+    superseded_by_id: null,
+    ...over,
+  });
+
+  it("finds the live published template", () => {
+    expect(liveTemplateId([row({})])).toBe("t1");
+  });
+
+  it("refuses when the template is only a draft, superseded, or missing", () => {
+    expect(liveTemplateId([row({ status: "draft" })])).toBeNull();
+    expect(liveTemplateId([row({ superseded_by_id: "t2" })])).toBeNull();
+    expect(liveTemplateId([row({ key: "field-fusion" })])).toBeNull();
+    expect(liveTemplateId([])).toBeNull();
   });
 });

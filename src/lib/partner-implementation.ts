@@ -1,3 +1,4 @@
+import { FIELD_FUSION_TEMPLATE_KEY } from "./field-fusion";
 import type { IntakeAnswers } from "./intake-answers";
 import { isStage, type AccountStage } from "./presale-stages";
 
@@ -204,4 +205,84 @@ export function implementationTypeFor(
   const legacy = PARTNER_KEYS.find((k) => PARTNERS[k].legacyIntakePath === intake.path);
   if (legacy) return { type: "partner_implementation", partner: legacy, legacy: true };
   return { type: "standard", partner: null, legacy: false };
+}
+
+/** The journey template a Partner Implementation is built from (migration 0083). Any partner uses it. */
+export const PARTNER_TEMPLATE_KEY = "partner-implementation";
+
+/** The stage a Partner Implementation opens on: Closed Won & Planning, the template's first stage. */
+export const PARTNER_INITIAL_STAGE: PartnerStageKey = "closed_won_planning";
+
+/** The template's stages, in order: the partner journey from Closed Won & Planning onward. */
+export const PARTNER_TEMPLATE_STAGE_KEYS: readonly PartnerStageKey[] = PARTNER_JOURNEY.filter(
+  (s) => s.position >= 2,
+).map((s) => s.key);
+
+/** The partner an explicitly partner-led implementation names; null for legacy and standard. */
+export function explicitPartnerKeyFor(
+  intake: Pick<IntakeAnswers, "path" | "partner_implementation">,
+): PartnerKey | null {
+  const t = implementationTypeFor(intake);
+  return t.type === "partner_implementation" && !t.legacy ? t.partner : null;
+}
+
+/**
+ * The journey template a new implementation is built from. Legacy Field Fusion
+ * keeps its own template; a new partner uses the partner template; standard
+ * accounts keep the existing rules (no preferred template).
+ */
+export function templateKeyFor(
+  intake: Pick<IntakeAnswers, "path" | "partner_implementation">,
+): string | null {
+  const t = implementationTypeFor(intake);
+  if (t.type === "standard") return null;
+  return t.legacy ? FIELD_FUSION_TEMPLATE_KEY : PARTNER_TEMPLATE_KEY;
+}
+
+/**
+ * A new explicitly-partnered implementation must use the partner template. If
+ * it is not published, the start is refused: never a silent standard fallback.
+ */
+export function requiresPartnerTemplate(
+  intake: Pick<IntakeAnswers, "path" | "partner_implementation">,
+): boolean {
+  const t = implementationTypeFor(intake);
+  return t.type === "partner_implementation" && !t.legacy;
+}
+
+/** The stage a new implementation opens on, when its journey is the partner one; null keeps the standard start. */
+export function initialStageFor(
+  intake: Pick<IntakeAnswers, "path" | "partner_implementation">,
+): PartnerStageKey | null {
+  return requiresPartnerTemplate(intake) ? PARTNER_INITIAL_STAGE : null;
+}
+
+/**
+ * Whether an implementation runs the partner journey. Read from its stored
+ * journey type or partner, so partner progress is never judged by the deal stage.
+ */
+export function isPartnerJourney(impl: {
+  journey_type?: string | null;
+  partner_key?: string | null;
+}): boolean {
+  return impl.journey_type === "partner_implementation" || Boolean(impl.partner_key);
+}
+
+/** The next stage in the template's own order, or null at the end. A step forward only. */
+export function nextPartnerStage(order: readonly string[], current: string | null): string | null {
+  if (!current) return null;
+  const i = order.indexOf(current);
+  if (i < 0 || i === order.length - 1) return null;
+  return order[i + 1]!;
+}
+
+/** The live partner template id from rows read for it: published and not superseded. Null if none. */
+export function liveTemplateId(
+  rows: ReadonlyArray<{ id: string; key: string; status: string; superseded_by_id: string | null }>,
+): string | null {
+  const live = rows.find(
+    (r) =>
+      r.key === PARTNER_TEMPLATE_KEY && r.status === "published" && r.superseded_by_id === null,
+  );
+  return live?.id ?? null;
 }
