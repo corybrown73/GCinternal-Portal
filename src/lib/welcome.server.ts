@@ -224,10 +224,7 @@ async function viewFor(
     String(deal.id),
     deal.customer_id ? String(deal.customer_id) : null,
   );
-  const skippedStages = await skippedStagesForDeal(
-    String(deal.id),
-    deal.customer_id ? String(deal.customer_id) : null,
-  );
+  const railStatuses = await railStatusesForDeal(String(deal.id));
   const focus = implementationFocusView(intake);
   const focusFallback = implementationFocusFallbackView(
     (await import("./implementation-focus")).proposeImplementationFocus(intake),
@@ -325,33 +322,34 @@ async function viewFor(
       parkingLot: lot,
       leadName,
       stageHistory,
-      skippedStages,
+      railStatuses,
     }),
   };
 }
 
 /**
- * The customer stages the plan explicitly marks skipped (stage_instances rows
- * with status 'skipped'). Never throws: a read that fails hides nothing, so
- * the customer sees all six stages rather than a guessed-at journey.
+ * Each customer stage's status on the Current Implementation rail, read from
+ * the same flow the rail reads (flowForDeal → railStatuses). Never throws: a
+ * read that fails returns nothing, so no stage is hidden on a guess.
  */
-async function skippedStagesForDeal(
+async function railStatusesForDeal(
   dealId: string,
-  customerId: string | null,
-): Promise<import("./welcome-journey").JourneyStageKey[]> {
+): Promise<import("./welcome-journey").RailStageStatus[]> {
   try {
-    const { implementationForDeal } = await import("./assignment.server");
-    const implementationId = await implementationForDeal(dealId, customerId);
-    if (!implementationId) return [];
-    const { data, error } = await db()
-      .from("stage_instances")
-      .select("stage_key,status")
-      .eq("implementation_id", implementationId);
-    if (error) throw error;
-    const { skippedJourneyStages } = await import("./welcome-journey");
-    return skippedJourneyStages((data ?? []) as { stage_key: string; status: string }[]);
+    const { flowForDeal } = await import("./stage-flow.server");
+    const built = await flowForDeal(dealId);
+    if (!built) return [];
+    const { railStatuses, CANONICAL_JOURNEY_KEYS } = await import("./stage-flow");
+    // The rail shows only the canonical journey, so the customer's journey
+    // is read over exactly the same stages and current stage.
+    const canonical = built.flow.stages.filter((s) => CANONICAL_JOURNEY_KEYS.includes(s.key));
+    const current =
+      built.flow.current && CANONICAL_JOURNEY_KEYS.includes(built.flow.current)
+        ? built.flow.current
+        : null;
+    return railStatuses(canonical, current);
   } catch (error) {
-    console.error("[welcome] could not read skipped stages", error);
+    console.error("[welcome] could not read the implementation rail", error);
     return [];
   }
 }
