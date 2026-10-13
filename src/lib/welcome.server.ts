@@ -377,6 +377,22 @@ export async function loadWelcome(dealId: string): Promise<WelcomeView | null> {
   return viewFor(deal, { internal: true });
 }
 
+/**
+ * What the customer would see on their link, read for the TIS to preview from
+ * Current Implementation. The same customer projection the link itself uses,
+ * read without a token: resource links are the direct article addresses, since
+ * there is no customer link to track them through. Read-only.
+ */
+export async function customerPreviewView(dealId: string): Promise<WelcomeView | null> {
+  const { data: deal } = await db()
+    .from("portal_accounts")
+    .select(DEAL_COLUMNS)
+    .eq("id", dealId)
+    .maybeSingle();
+  if (!deal) return null;
+  return customerWelcomeView(await viewFor(deal, { internal: false, token: null }));
+}
+
 /** Mint (or rotate) the customer's link. Returns the raw URL, once. */
 export async function issueWelcomeLink(
   userId: string,

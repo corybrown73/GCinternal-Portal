@@ -426,9 +426,9 @@ function Customer360Page() {
                   to="/onboarding-plan/$dealId"
                   params={{ dealId: impl.deal_id }}
                   className="lift inline-flex items-center gap-1 rounded-full border border-primary/40 bg-card px-2 py-0.5 text-[11px] text-primary hover:text-foreground"
-                  title="The customer-facing brief: team, timeline, what's expected"
+                  title="The kickoff deck and the presenter workspace for this implementation"
                 >
-                  Welcome page
+                  Kickoff deck
                 </Link>
               ) : null}
             </p>
@@ -907,13 +907,13 @@ function ResourcesTab({ record }: { record: Customer360 }) {
 
       {impl.deal_id ? (
         <div className="space-y-2">
-          <ResourceGroupLabel>Customer Welcome page</ResourceGroupLabel>
+          <ResourceGroupLabel>Kickoff deck</ResourceGroupLabel>
           <Link
             to="/onboarding-plan/$dealId"
             params={{ dealId: impl.deal_id }}
             className="block rounded-md border border-border bg-card px-3 py-2 text-[12px] hover:bg-muted/60"
           >
-            <span className="font-medium">Welcome page</span>
+            <span className="font-medium">Kickoff deck</span>
             <span className="ml-1.5 rounded-sm bg-muted px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
               Customer-facing
             </span>

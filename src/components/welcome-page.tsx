@@ -124,11 +124,11 @@ export function WelcomePage({
   const [at, setAt] = useState(0);
   const today = useToday();
   // WHAT experience is showing, distinct from `mode` (WHO is viewing).
-  // Internal only in this PR: the toggle that sets this lives in the
-  // Toolbar, which only renders for mode === "internal". The customer's
-  // link always renders the Plan experience, because nothing on that path
-  // can ever set this to "kickoff".
-  const [experience, setExperience] = useState<"plan" | "kickoff">("plan");
+  // The internal Welcome page is the kickoff room: the six-slide deck and the
+  // presenter workspace link. The customer's live dashboard is never shown here;
+  // the TIS previews it from Current Implementation (see the customer preview
+  // route). The customer's link always renders the dashboard.
+  const experience: "plan" | "kickoff" = mode === "internal" ? "kickoff" : "plan";
   // The customer's link as a QR for the room: from the record when one has
   // been issued, so it is there on every load, not only in the session that
   // minted it. Minting again replaces it.
@@ -209,10 +209,6 @@ export function WelcomePage({
           <Toolbar
             view={view}
             experience={experience}
-            onToggleExperience={() => {
-              setExperience((e) => (e === "plan" ? "kickoff" : "plan"));
-              setAt(0);
-            }}
             onPresent={
               experience === "kickoff"
                 ? () => {
@@ -222,8 +218,8 @@ export function WelcomePage({
                 : undefined
             }
             workspaceHref={workspaceHref}
-            onCopyLink={experience === "plan" ? mintForQr : undefined}
-            onMarkSent={experience === "plan" ? onMarkSent : undefined}
+            onCopyLink={mintForQr}
+            onMarkSent={onMarkSent}
             onExportPptx={
               experience === "kickoff"
                 ? async (report) => {
@@ -264,7 +260,7 @@ export function WelcomePage({
                   }
                 : undefined
             }
-            qrReady={experience === "plan" && Boolean(qr)}
+            qrReady={Boolean(qr)}
             showQr={showQr}
             onToggleQr={() => setShowQr((v) => !v)}
             backHref={backHref ?? null}
@@ -594,7 +590,6 @@ function DayChip({ view }: { view: WelcomeView }) {
 function Toolbar({
   view,
   experience,
-  onToggleExperience,
   onPresent,
   onCopyLink,
   onMarkSent,
@@ -611,7 +606,6 @@ function Toolbar({
   experience: "plan" | "kickoff";
   /** Internal: the presenter's own window, opened beside the presentation. */
   workspaceHref?: string | null | undefined;
-  onToggleExperience: () => void;
   onPresent?: (() => void) | undefined;
   onCopyLink?: (() => Promise<string>) | undefined;
   onMarkSent?: (() => Promise<void> | void) | undefined;
@@ -658,14 +652,7 @@ function Toolbar({
           </a>
         ) : null}
         <span className="wp-toolbar-title">{view.clientName}</span>
-        <button
-          type="button"
-          className="wp-tool"
-          onClick={onToggleExperience}
-          title="Switch between the living Implementation Plan and the Kickoff presentation"
-        >
-          {experience === "plan" ? "Kickoff View" : "Implementation Plan"}
-        </button>
+        <span className="wp-toolbar-meta">Kickoff deck</span>
 
         {experience === "kickoff" && workspaceHref ? (
           <a

@@ -57,7 +57,23 @@ function OnboardingPlanPage() {
     [dealId, qc],
   );
 
-  if (workspace) return <PresenterWorkspace dealId={dealId} />;
+  if (workspace) {
+    return (
+      <div>
+        <nav className="flex items-center gap-3 border-b border-border px-6 py-2 text-[12px]">
+          <Link
+            to="/onboarding-plan/$dealId"
+            params={{ dealId }}
+            className="font-medium text-primary hover:underline"
+          >
+            ← Kickoff deck
+          </Link>
+          <span className="text-muted-foreground">Presenter workspace</span>
+        </nav>
+        <PresenterWorkspace dealId={dealId} />
+      </div>
+    );
+  }
 
   if (query.isPending) {
     return <p className="p-6 text-[13px] text-muted-foreground">Loading the plan…</p>;

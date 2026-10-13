@@ -49,6 +49,7 @@ import { Route as AdminUsersRouteImport } from "./routes/admin.users";
 import { Route as ApiSplatRouteImport } from "./routes/api.$";
 import { Route as ApiMcpRouteImport } from "./routes/api/mcp";
 import { Route as AuthCallbackRouteImport } from "./routes/auth.callback";
+import { Route as CustomerDashboardPreviewDealIdRouteImport } from "./routes/customer-dashboard-preview.$dealId";
 import { Route as CustomersIndexRouteImport } from "./routes/customers.index";
 import { Route as CustomersCustomerIdRouteImport } from "./routes/customers.$customerId";
 import { Route as DealsDealIdRouteImport } from "./routes/deals.$dealId";
@@ -294,6 +295,11 @@ const ApiMcpRoute = ApiMcpRouteImport.update({
 const AuthCallbackRoute = AuthCallbackRouteImport.update({
   id: "/auth/callback",
   path: "/auth/callback",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const CustomerDashboardPreviewDealIdRoute = CustomerDashboardPreviewDealIdRouteImport.update({
+  id: "/customer-dashboard-preview/$dealId",
+  path: "/customer-dashboard-preview/$dealId",
   getParentRoute: () => rootRouteImport,
 } as any);
 const CustomersIndexRoute = CustomersIndexRouteImport.update({
@@ -567,6 +573,7 @@ export interface FileRoutesByFullPath {
   "/api/$": typeof ApiSplatRoute;
   "/api/mcp": typeof ApiMcpRoute;
   "/auth/callback": typeof AuthCallbackRoute;
+  "/customer-dashboard-preview/$dealId": typeof CustomerDashboardPreviewDealIdRoute;
   "/customers/$customerId": typeof CustomersCustomerIdRoute;
   "/deals/$dealId": typeof DealsDealIdRoute;
   "/journeys/$journeyId": typeof JourneysJourneyIdRoute;
@@ -649,6 +656,7 @@ export interface FileRoutesByTo {
   "/api/$": typeof ApiSplatRoute;
   "/api/mcp": typeof ApiMcpRoute;
   "/auth/callback": typeof AuthCallbackRoute;
+  "/customer-dashboard-preview/$dealId": typeof CustomerDashboardPreviewDealIdRoute;
   "/customers/$customerId": typeof CustomersCustomerIdRoute;
   "/deals/$dealId": typeof DealsDealIdRoute;
   "/journeys/$journeyId": typeof JourneysJourneyIdRoute;
@@ -738,6 +746,7 @@ export interface FileRoutesById {
   "/api/$": typeof ApiSplatRoute;
   "/api/mcp": typeof ApiMcpRoute;
   "/auth/callback": typeof AuthCallbackRoute;
+  "/customer-dashboard-preview/$dealId": typeof CustomerDashboardPreviewDealIdRoute;
   "/customers/$customerId": typeof CustomersCustomerIdRoute;
   "/deals/$dealId": typeof DealsDealIdRoute;
   "/journeys/$journeyId": typeof JourneysJourneyIdRoute;
@@ -828,6 +837,7 @@ export interface FileRouteTypes {
     | "/api/$"
     | "/api/mcp"
     | "/auth/callback"
+    | "/customer-dashboard-preview/$dealId"
     | "/customers/$customerId"
     | "/deals/$dealId"
     | "/journeys/$journeyId"
@@ -910,6 +920,7 @@ export interface FileRouteTypes {
     | "/api/$"
     | "/api/mcp"
     | "/auth/callback"
+    | "/customer-dashboard-preview/$dealId"
     | "/customers/$customerId"
     | "/deals/$dealId"
     | "/journeys/$journeyId"
@@ -998,6 +1009,7 @@ export interface FileRouteTypes {
     | "/api/$"
     | "/api/mcp"
     | "/auth/callback"
+    | "/customer-dashboard-preview/$dealId"
     | "/customers/$customerId"
     | "/deals/$dealId"
     | "/journeys/$journeyId"
@@ -1075,6 +1087,7 @@ export interface RootRouteChildren {
   ApiSplatRoute: typeof ApiSplatRoute;
   ApiMcpRoute: typeof ApiMcpRoute;
   AuthCallbackRoute: typeof AuthCallbackRoute;
+  CustomerDashboardPreviewDealIdRoute: typeof CustomerDashboardPreviewDealIdRoute;
   DealsDealIdRoute: typeof DealsDealIdRoute;
   OnboardingNotesDealIdRoute: typeof OnboardingNotesDealIdRoute;
   OnboardingPlanDealIdRoute: typeof OnboardingPlanDealIdRoute;
@@ -1388,6 +1401,13 @@ declare module "@tanstack/react-router" {
       path: "/auth/callback";
       fullPath: "/auth/callback";
       preLoaderRoute: typeof AuthCallbackRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/customer-dashboard-preview/$dealId": {
+      id: "/customer-dashboard-preview/$dealId";
+      path: "/customer-dashboard-preview/$dealId";
+      fullPath: "/customer-dashboard-preview/$dealId";
+      preLoaderRoute: typeof CustomerDashboardPreviewDealIdRouteImport;
       parentRoute: typeof rootRouteImport;
     };
     "/customers/": {
@@ -1877,6 +1897,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiSplatRoute: ApiSplatRoute,
   ApiMcpRoute: ApiMcpRoute,
   AuthCallbackRoute: AuthCallbackRoute,
+  CustomerDashboardPreviewDealIdRoute: CustomerDashboardPreviewDealIdRoute,
   DealsDealIdRoute: DealsDealIdRoute,
   OnboardingNotesDealIdRoute: OnboardingNotesDealIdRoute,
   OnboardingPlanDealIdRoute: OnboardingPlanDealIdRoute,

@@ -230,6 +230,8 @@ export type WelcomeView = {
 export function customerWelcomeView(view: WelcomeView): WelcomeView {
   return {
     ...view,
+    // The Hub's own identifier for the deal never leaves the server on a customer's copy.
+    dealId: "",
     implementationFocus: null,
     implementationFocusFallback: [],
     workflowStory: view.workflowStory ? { ...view.workflowStory, validatedBy: null } : null,
