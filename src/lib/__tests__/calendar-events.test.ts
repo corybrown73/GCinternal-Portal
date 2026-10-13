@@ -4,6 +4,7 @@ import {
   buildCalendarEvents,
   customerLinkFor,
   dayInZone,
+  dayLabel,
   defaultSelectedDay,
   detailRows,
   eventsByDay,
@@ -402,7 +403,58 @@ describe("go-live dates", () => {
     expect(target.date).toBe("2026-10-01");
     expect(actual.date).toBe("2026-10-03");
     expect(actual.status).toBe("went_live");
-    expect(actual.title).toBe("Went live");
+    expect(actual.title).toBe("Actual go-live");
+  });
+
+  describe("target and actual go-live when the dates differ (regression)", () => {
+    const events = buildCalendarEvents(
+      source({
+        implementations: [impl({ targetDate: "2026-10-01", goLiveAt: "2026-10-03" })],
+      }),
+    );
+
+    it("keeps the target event as the planned, historical date, not a go-live", () => {
+      const target = find(events, "go-live-target:impl-1");
+      expect(target.status).toBe("target_date");
+      expect(target.status).not.toBe("went_live");
+      expect(target.title).toBe("Target go-live");
+      expect(target.date).toBe("2026-10-01");
+      expect(STATUS_LABEL[target.status]).toBe("Planned target date");
+      expect(target.statusDetail).toBe(`Actual go-live recorded ${dayLabel("2026-10-03")}`);
+    });
+
+    it("gives the real go-live its own event on the day it happened, referring to the plan", () => {
+      const actual = find(events, "go-live-actual:impl-1");
+      expect(actual.status).toBe("went_live");
+      expect(actual.title).toBe("Actual go-live");
+      expect(actual.date).toBe("2026-10-03");
+      expect(actual.statusDetail).toBe(`Planned target was ${dayLabel("2026-10-01")}`);
+    });
+
+    it("keeps both events, never merged into one", () => {
+      const goLive = events.filter((e) => e.kind === "go_live");
+      expect(goLive.map((e) => e.key).sort()).toEqual([
+        "go-live-actual:impl-1",
+        "go-live-target:impl-1",
+      ]);
+    });
+  });
+
+  it("says so plainly when the real go-live landed on the planned day", () => {
+    const events = buildCalendarEvents(
+      source({
+        implementations: [impl({ targetDate: "2026-10-01", goLiveAt: "2026-10-01" })],
+      }),
+    );
+    expect(find(events, "go-live-target:impl-1").statusDetail).toBe("Went live on this date");
+    expect(find(events, "go-live-actual:impl-1").statusDetail).toBe("On the planned target date");
+  });
+
+  it("does not use the target status for a target that is still ahead", () => {
+    const events = buildCalendarEvents(
+      source({ implementations: [impl({ targetDate: "2026-11-02" })] }),
+    );
+    expect(find(events, "go-live-target:impl-1").status).toBe("planned");
   });
 
   it("notes an agreed baseline only when it differs from the current target", () => {

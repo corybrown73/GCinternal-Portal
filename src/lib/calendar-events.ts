@@ -110,6 +110,7 @@ export type CalendarStatus =
   | "completion_not_recorded"
   | "cancelled"
   | "target_passed"
+  | "target_date"
   | "went_live";
 
 export const STATUS_LABEL: Record<CalendarStatus, string> = {
@@ -120,6 +121,7 @@ export const STATUS_LABEL: Record<CalendarStatus, string> = {
   completion_not_recorded: "Completion not recorded",
   cancelled: "Cancelled",
   target_passed: "Target passed, go-live not recorded",
+  target_date: "Planned target date",
   went_live: "Went live",
 };
 
@@ -437,9 +439,14 @@ export function buildCalendarEvents(source: CalendarSource): CalendarEvent[] {
     if (target && ISO_DAY.test(target)) {
       let status: CalendarStatus;
       let statusDetail: string | null;
+      // A target stays the planned date even once the real go-live is recorded:
+      // it is history, not the customer's go-live. The real day is its own event.
       if (actual) {
-        status = "went_live";
-        statusDetail = `Go-live recorded ${dayLabel(actual)}`;
+        status = "target_date";
+        statusDetail =
+          actual === target
+            ? "Went live on this date"
+            : `Actual go-live recorded ${dayLabel(actual)}`;
       } else if (target >= source.today) {
         status = "planned";
         statusDetail = "Go-live not yet recorded";
@@ -472,9 +479,13 @@ export function buildCalendarEvents(source: CalendarSource): CalendarEvent[] {
         time: null,
         timeZone: null,
         kind: "go_live",
-        title: "Went live",
+        title: "Actual go-live",
         status: "went_live",
-        statusDetail: null,
+        statusDetail: !target
+          ? null
+          : actual === target
+            ? "On the planned target date"
+            : `Planned target was ${dayLabel(target)}`,
         owner: null,
         stageLabel: null,
         source: "record",
@@ -555,7 +566,6 @@ export function detailRows(e: CalendarEvent): Array<{ label: string; value: stri
       label: "Time",
       value: e.time && e.timeZone ? timeLabel(e.time, e.timeZone) : "Not recorded",
     },
-    { label: "Status", value: STATUS_LABEL[e.status] },
     {
       label: "Date basis",
       value:

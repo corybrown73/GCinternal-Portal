@@ -75,6 +75,23 @@ export const Route = createFileRoute("/calendar")({
   component: CalendarPage,
 });
 
+/** Each kind has its own shape as well as its colour, so it never rests on colour alone. */
+const KIND_SHAPE: Record<CalendarKind, string> = {
+  meeting: "rounded-full",
+  commitment: "rounded-[2px]",
+  milestone: "rotate-45 rounded-[1px]",
+  go_live: "[clip-path:polygon(50%_0,100%_100%,0_100%)]",
+};
+
+function KindMark({ kind, className }: { kind: CalendarKind; className?: string }) {
+  return (
+    <span
+      aria-hidden="true"
+      className={cn("inline-block shrink-0", KIND_SHAPE[kind], KIND_DOT[kind], className)}
+    />
+  );
+}
+
 const KIND_DOT: Record<CalendarKind, string> = {
   meeting: "bg-[#2a78d6]",
   commitment: "bg-[#eda100]",
@@ -90,6 +107,7 @@ const STATUS_ICON: Record<CalendarStatus, LucideIcon> = {
   completion_not_recorded: CircleDashed,
   cancelled: XCircle,
   target_passed: Flag,
+  target_date: Flag,
   went_live: Rocket,
 };
 
@@ -100,6 +118,7 @@ const STATUS_TONE: Record<CalendarStatus, string> = {
   due: "text-foreground",
   overdue: "text-status-risk-foreground",
   target_passed: "text-status-risk-foreground",
+  target_date: "text-foreground",
   completion_not_recorded: "text-muted-foreground",
   cancelled: "text-muted-foreground line-through",
 };
@@ -180,7 +199,9 @@ function CalendarPage() {
     const delta = step[e.key];
     if (delta === undefined) return;
     e.preventDefault();
-    const next = addDaysIso(selectedDay, delta);
+    // Move from the day that has focus, so the key follows the cell the user is on.
+    const origin = (e.target as HTMLElement).closest<HTMLElement>("[data-day]")?.dataset["day"];
+    const next = addDaysIso(origin ?? selectedDay, delta);
     if (next.slice(0, 7) !== viewedMonth.slice(0, 7)) setViewedMonth(monthStartIso(next));
     setSelectedDay(next);
     setFocusDay(next);
@@ -206,7 +227,7 @@ function CalendarPage() {
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-[12px] text-muted-foreground">
           {(Object.keys(KIND_LABEL) as CalendarKind[]).map((k) => (
             <span key={k} className="inline-flex items-center gap-1.5">
-              <span className={cn("h-2 w-2 rounded-full", KIND_DOT[k])} aria-hidden="true" />
+              <KindMark kind={k} className="h-2 w-2" />
               {KIND_LABEL[k]}
             </span>
           ))}
@@ -218,7 +239,7 @@ function CalendarPage() {
           </span>
         </div>
 
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-[16px] font-semibold">{monthLabel(viewedMonth)}</h2>
           <div className="flex items-center gap-1.5">
             <button
@@ -264,14 +285,15 @@ function CalendarPage() {
         ) : null}
 
         <div className="overflow-x-auto rounded-lg border border-border">
-          <div className="min-w-[640px]">
+          <div className="sm:min-w-[640px]">
             <div className="grid grid-cols-7 border-b border-border bg-muted/40">
               {WEEKDAY_LABELS.map((label) => (
                 <div
                   key={label}
-                  className="px-2 py-1.5 text-center text-[12px] font-semibold uppercase tracking-wide text-muted-foreground"
+                  className="px-1 py-1.5 text-center text-[12px] font-semibold uppercase tracking-wide text-muted-foreground sm:px-2"
                 >
-                  {label}
+                  <span className="sm:hidden">{label.slice(0, 1)}</span>
+                  <span className="hidden sm:inline">{label}</span>
                 </div>
               ))}
             </div>
@@ -302,7 +324,7 @@ function CalendarPage() {
                         setOpenKey(null);
                       }}
                       className={cn(
-                        "flex min-h-[104px] flex-col items-stretch border-b border-r border-border p-1.5 text-left last:border-r-0 hover:bg-muted/50 focus-visible:relative focus-visible:z-10 focus-visible:outline-2 focus-visible:outline-primary",
+                        "flex min-h-[56px] flex-col items-stretch border-b border-r border-border p-1 text-left last:border-r-0 hover:bg-muted/50 focus-visible:relative focus-visible:z-10 focus-visible:outline-2 focus-visible:outline-primary sm:min-h-[104px] sm:p-1.5",
                         !inMonth && "bg-muted/20",
                         isSelected && "bg-primary/5 ring-2 ring-inset ring-primary",
                       )}
@@ -319,7 +341,17 @@ function CalendarPage() {
                       >
                         {Number(d.slice(8, 10))}
                       </span>
-                      <span className="space-y-0.5">
+                      <span className="flex flex-wrap gap-1 sm:hidden" aria-hidden="true">
+                        {items.slice(0, MAX_CHIPS).map((e) => (
+                          <KindMark key={e.key} kind={e.kind} className="h-1.5 w-1.5" />
+                        ))}
+                        {items.length > MAX_CHIPS ? (
+                          <span className="text-[10px] leading-none text-primary">
+                            +{items.length - MAX_CHIPS}
+                          </span>
+                        ) : null}
+                      </span>
+                      <span className="hidden space-y-0.5 sm:block">
                         {items.slice(0, MAX_CHIPS).map((e) => (
                           <span
                             key={e.key}
@@ -327,12 +359,10 @@ function CalendarPage() {
                               "flex items-center gap-1 truncate text-[12px] leading-5",
                               e.status === "cancelled" && "line-through text-muted-foreground",
                             )}
-                            title={`${e.customerName} · ${e.title}`}
+                            title={`${KIND_LABEL[e.kind]}: ${e.customerName} · ${e.title}`}
                           >
-                            <span
-                              className={cn("h-1.5 w-1.5 shrink-0 rounded-full", KIND_DOT[e.kind])}
-                              aria-hidden="true"
-                            />
+                            <KindMark kind={e.kind} className="h-1.5 w-1.5" />
+                            <span className="sr-only">{KIND_LABEL[e.kind]}: </span>
                             <span className="truncate">
                               {e.customerName} · {e.title}
                             </span>
@@ -352,7 +382,10 @@ function CalendarPage() {
           </div>
         </div>
 
-        <section aria-labelledby="calendar-agenda-heading" className="space-y-2">
+        <section
+          aria-labelledby="calendar-agenda-heading"
+          className="scroll-mt-72 space-y-2 sm:scroll-mt-40"
+        >
           <h3 id="calendar-agenda-heading" className="text-[15px] font-semibold">
             {dayLabel(selectedDay)}
             {selectedDay === today ? (
@@ -372,7 +405,7 @@ function CalendarPage() {
                     aria-pressed={openKey === e.key}
                     onClick={() => setOpenKey(e.key)}
                     className={cn(
-                      "grid w-full grid-cols-[120px_1fr_auto] items-start gap-3 px-3 py-2.5 text-left hover:bg-muted/50",
+                      "flex w-full flex-col gap-1 px-3 py-2.5 text-left hover:bg-muted/50 sm:grid sm:grid-cols-[120px_1fr_auto] sm:items-start sm:gap-3",
                       openKey === e.key && "bg-primary/5",
                     )}
                   >
@@ -381,14 +414,11 @@ function CalendarPage() {
                     </span>
                     <span className="min-w-0">
                       <span className="flex items-center gap-1.5 text-[12px] text-muted-foreground">
-                        <span
-                          className={cn("h-1.5 w-1.5 rounded-full", KIND_DOT[e.kind])}
-                          aria-hidden="true"
-                        />
+                        <KindMark kind={e.kind} className="h-1.5 w-1.5" />
                         {KIND_LABEL[e.kind]}
                       </span>
-                      <span className="block truncate text-[14px] font-medium">{e.title}</span>
-                      <span className="block truncate text-[13px] text-muted-foreground">
+                      <span className="block break-words text-[14px] font-medium">{e.title}</span>
+                      <span className="block break-words text-[13px] text-muted-foreground">
                         {e.customerName} · {e.implementationName}
                       </span>
                     </span>
@@ -423,7 +453,7 @@ function EventDetails({
       ref={detailsRef}
       tabIndex={-1}
       aria-labelledby="calendar-event-title"
-      className="space-y-4 rounded-lg border border-border bg-card p-4 outline-none"
+      className="scroll-mt-72 space-y-4 rounded-lg border border-border bg-card p-4 outline-none sm:scroll-mt-40"
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
@@ -445,7 +475,7 @@ function EventDetails({
 
       <StatusTag status={event.status} detail={event.statusDetail} />
 
-      <dl className="grid grid-cols-[140px_1fr] gap-x-4 gap-y-2 text-[13px]">
+      <dl className="grid grid-cols-1 gap-x-4 gap-y-1 text-[13px] sm:grid-cols-[140px_1fr] sm:gap-y-2">
         {detailRows(event).map((row) => (
           <div key={row.label} className="contents">
             <dt className="text-muted-foreground">{row.label}</dt>
