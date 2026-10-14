@@ -47,6 +47,16 @@ export function aiConfigured(): boolean {
   return Boolean(process.env["ANTHROPIC_API_KEY"]);
 }
 
+/**
+ * The workspace every call bills to, for an API key that is not scoped to
+ * one: the API refuses such a key's requests unless they name a workspace
+ * in the `anthropic-workspace-id` header. Unset for a key created inside a
+ * workspace, which is the usual kind.
+ */
+export function aiWorkspaceId(): string | null {
+  return process.env["ANTHROPIC_WORKSPACE_ID"]?.trim() || null;
+}
+
 export function isAiEffort(v: unknown): v is AiEffort {
   return typeof v === "string" && (AI_EFFORTS as readonly string[]).includes(v);
 }

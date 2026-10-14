@@ -387,6 +387,23 @@ describe("runStructured", () => {
     const client = (await getAnthropic()) as unknown as { options: Record<string, unknown> };
     expect(client.options).toEqual({ timeout: 240_000, maxRetries: 1 });
   });
+
+  it("names the workspace on every call when ANTHROPIC_WORKSPACE_ID is set", async () => {
+    vi.stubEnv("ANTHROPIC_WORKSPACE_ID", " wrkspc_test ");
+    try {
+      resetAnthropicClient();
+      const { getAnthropic } = await import("../server/ai/client");
+      const client = (await getAnthropic()) as unknown as { options: Record<string, unknown> };
+      expect(client.options).toEqual({
+        timeout: 240_000,
+        maxRetries: 1,
+        defaultHeaders: { "anthropic-workspace-id": "wrkspc_test" },
+      });
+    } finally {
+      vi.unstubAllEnvs();
+      resetAnthropicClient();
+    }
+  });
 });
 
 describe("describeAiError", () => {
@@ -399,6 +416,17 @@ describe("describeAiError", () => {
       "Reading the SOW failed: the request was rejected (bad thing).",
     );
     expect(describeAiError(new h.FakeApiError(529, "overloaded"))).toMatch(/529/);
+    expect(
+      describeAiError(
+        new h.FakeApiError(
+          400,
+          "This API key is not scoped to a workspace, so this request must include the anthropic-workspace-id header",
+        ),
+        "Reading the SOW",
+      ),
+    ).toMatch(
+      /^Reading the SOW failed: the API key is not tied to a workspace\. Set ANTHROPIC_WORKSPACE_ID/,
+    );
     expect(describeAiError(new AiRefusedError("brief"))).toMatch(/declined/);
     // The stream timer firing surfaces as the SDK's abort error, status-less.
     const aborted = new Error("Request was aborted.");

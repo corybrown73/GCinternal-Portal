@@ -35,7 +35,7 @@ Then optionally run `supabase/seed_demo.sql` for walkthrough data.
 Authentication → Providers → Email: **Confirm email ON**, min password length 12, leaked-password protection ON. URL Configuration: Site URL = your deployed URL; add `https://<app>/auth/callback` to redirect URLs.
 
 ### 3. Deploy (Vercel)
-Import the repo (framework: Other; build `npm run build`; the nitro `vercel` preset emits `.vercel/output`). Set env vars from `.env.example` — minimum: the four Supabase vars, `SUPABASE_SERVICE_ROLE_KEY`, `TAM_TOKEN_SECRET`, `CRON_SECRET`, `APP_URL`. Optional: `SALESFORCE_CLIENT_ID` + `SALESFORCE_CLIENT_SECRET` + `SALESFORCE_LOGIN_URL` (the Salesforce pull), `ANTHROPIC_API_KEY` (the AI reading; `ANTHROPIC_MODEL` optionally picks the model, default `claude-opus-5-5`), `RESEND_API_KEY` + `EMAIL_FROM` (real email; otherwise emails print to the function log — do not also set `EMAIL_MODE=log`, it overrides the key). `vercel.json` schedules the SLA cron (hourly) and sequence cron (every 30 min).
+Import the repo (framework: Other; build `npm run build`; the nitro `vercel` preset emits `.vercel/output`). Set env vars from `.env.example` — minimum: the four Supabase vars, `SUPABASE_SERVICE_ROLE_KEY`, `TAM_TOKEN_SECRET`, `CRON_SECRET`, `APP_URL`. Optional: `SALESFORCE_CLIENT_ID` + `SALESFORCE_CLIENT_SECRET` + `SALESFORCE_LOGIN_URL` (the Salesforce pull), `ANTHROPIC_API_KEY` (the AI reading; `ANTHROPIC_MODEL` optionally picks the model, default `claude-opus-5-5`; `ANTHROPIC_WORKSPACE_ID` only for a key not scoped to a workspace), `RESEND_API_KEY` + `EMAIL_FROM` (real email; otherwise emails print to the function log — do not also set `EMAIL_MODE=log`, it overrides the key). `vercel.json` schedules the SLA cron (hourly) and sequence cron (every 30 min).
 
 ### 4. First run
 Sign up with your `@gocanvas.com` email → verify → you are super admin #1. Designate #2 in **Admin → Users**.
@@ -69,7 +69,7 @@ Every deal is read once, in the background, by a job that walks `sources → sow
 - **Effort.** `ai.effort` in `portal_app_config` (`low | medium | high | xhigh | max`, default `high`) says how hard the model thinks on every reading; the same tab has a select for it. Higher is slower and dearer; `xhigh` when a reading keeps missing things.
 - **Documents.** PDF and Word (`.docx`) are read; images are read as images; a legacy `.doc`, `.pptx` or `.xlsx` is refused with a one-line reason instead of a bare 400. Files over 20 MB are reported, not silently dropped.
 - **Where to watch it.** Admin → Integrations → AI: whether the key is set, the model and effort, the flag, the last 50 jobs with their step, duration, tokens and error (with a "Run again" per deal), and 30-day totals — jobs, calls, tokens in / out / cached, and the cost estimated at list price ($4 in, $20 out, $0.20 cache read, $5 cache write per million tokens). Every model call also leaves an `ai.call` row in the audit log.
-- **Env.** `ANTHROPIC_API_KEY` is required for any reading; `ANTHROPIC_MODEL` is optional and defaults to `claude-opus-5-5`.
+- **Env.** `ANTHROPIC_API_KEY` is required for any reading; `ANTHROPIC_MODEL` is optional and defaults to `claude-opus-5-5`. A key that is not scoped to a workspace also needs `ANTHROPIC_WORKSPACE_ID` (the API refuses its requests otherwise); a key created inside a workspace does not.
 
 ## Open API (`/api/v1`, `Authorization: Bearer gcp_live_…`)
 

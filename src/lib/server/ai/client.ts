@@ -15,6 +15,7 @@ import {
   AI_STEP_BUDGET_MS,
   aiEffort,
   aiModel,
+  aiWorkspaceId,
   type AiCallKind,
   type AiEffort,
 } from "./config";
@@ -159,7 +160,12 @@ let client: Anthropic | null = null;
 export async function getAnthropic(): Promise<Anthropic> {
   if (client) return client;
   const { default: AnthropicSDK } = await import("@anthropic-ai/sdk");
-  client = new AnthropicSDK({ timeout: AI_CALL_TIMEOUT_MS, maxRetries: 1 });
+  const workspace = aiWorkspaceId();
+  client = new AnthropicSDK({
+    timeout: AI_CALL_TIMEOUT_MS,
+    maxRetries: 1,
+    ...(workspace ? { defaultHeaders: { "anthropic-workspace-id": workspace } } : {}),
+  });
   return client;
 }
 
@@ -433,6 +439,8 @@ export function describeAiError(e: unknown, what = "AI synthesis"): string {
     if (e.status === 401)
       return `${what} failed: the API key was rejected. Check ANTHROPIC_API_KEY on the deployment.`;
     if (e.status === 429) return `${what} failed: rate limited. Try again in a minute.`;
+    if (/not scoped to a workspace/i.test(apiMessage(e)))
+      return `${what} failed: the API key is not tied to a workspace. Set ANTHROPIC_WORKSPACE_ID on the deployment to the workspace's ID (Claude Console → Settings → Workspaces), or replace ANTHROPIC_API_KEY with a key created inside a workspace.`;
     if (e.status === 400) return `${what} failed: the request was rejected (${apiMessage(e)}).`;
     return `${what} failed (${e.status ?? "network"}): ${apiMessage(e)}`;
   }
