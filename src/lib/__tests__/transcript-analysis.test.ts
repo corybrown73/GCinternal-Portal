@@ -5,7 +5,9 @@ import {
   attachmentReferenceFor,
   buildTranscriptContextText,
   proposalApplyPlan,
+  PARTNER_PLAN_DATE_REFUSAL,
   proposalDefaultSelected,
+  proposalOfferable,
   transcriptAnalysisSchema,
   type EvidenceProposalRow,
   type TranscriptContext,
@@ -39,6 +41,7 @@ const ctx: TranscriptContext = {
   attachment: { title: "kickoff.vtt", uploadedAt: "2026-10-08" },
   hasHandoff: true,
   handoffAnswered: ["bought", "business_outcome"],
+  partner: false,
 };
 
 const row = (over: Partial<EvidenceProposalRow> = {}): EvidenceProposalRow => ({
@@ -377,5 +380,39 @@ describe("the apply mapping", () => {
     expect(proposalDefaultSelected(row({ type: "intake_suggestion", intake_key: null }), "")).toBe(
       false,
     );
+  });
+});
+
+describe("partner implementations: standard plan dates are never offered", () => {
+  it("offers a standard plan-date change only for a standard implementation", () => {
+    expect(proposalOfferable({ type: "target_date" }, false)).toBe(true);
+    expect(proposalOfferable({ type: "target_date" }, true)).toBe(false);
+  });
+
+  it("keeps every other kind of proposal for a partner", () => {
+    for (const type of ["risk", "issue", "decision", "note", "owner", "intake_suggestion"]) {
+      expect(proposalOfferable({ type }, true)).toBe(true);
+    }
+  });
+
+  it("does not pre-select a plan-date proposal for a partner, though it is pre-selected for a standard one", () => {
+    const dated = row({ type: "target_date", proposed_date: "2026-10-20" });
+    expect(proposalDefaultSelected(dated, "", false)).toBe(true);
+    expect(proposalDefaultSelected(dated, "", true)).toBe(false);
+    expect(proposalDefaultSelected(row({ type: "risk" }), "", true)).toBe(true);
+  });
+
+  it("tells the model a partner's dates are not proposed, and says nothing of it for a standard one", () => {
+    expect(buildTranscriptContextText({ ...ctx, partner: true })).toContain(
+      "Partner implementation: yes",
+    );
+    expect(buildTranscriptContextText({ ...ctx, partner: false })).not.toContain(
+      "Partner implementation",
+    );
+  });
+
+  it("gives the reviewer a refusal that says why and that nothing changed", () => {
+    expect(PARTNER_PLAN_DATE_REFUSAL).toMatch(/partner implementation/);
+    expect(PARTNER_PLAN_DATE_REFUSAL).toMatch(/Nothing was changed/);
   });
 });

@@ -221,6 +221,9 @@ export function TranscriptUpdatePanel({
   const pending = useMemo(() => proposals.filter((p) => p.status === "pending"), [proposals]);
   const decided = useMemo(() => proposals.filter((p) => p.status !== "pending"), [proposals]);
   const jobs = work.data?.jobs ?? [];
+  // A partner's standard plan-date proposal is listed for review but never
+  // pre-selected: applying it is refused on the server.
+  const partner = work.data?.partner ?? false;
   const running = jobs.filter((j) => j.status === "queued" || j.status === "running");
   const finished = jobs.filter((j) => j.status === "done" || j.status === "failed");
   const roster = useMemo(() => team.data ?? [], [team.data]);
@@ -252,10 +255,11 @@ export function TranscriptUpdatePanel({
       const add = fresh(prev);
       if (!add.length) return prev;
       const next = { ...prev };
-      for (const p of add) next[p.id] = proposalDefaultSelected(p, initialOwner(roster, p));
+      for (const p of add)
+        next[p.id] = proposalDefaultSelected(p, initialOwner(roster, p), partner);
       return next;
     });
-  }, [pending, roster, rosterKnown]);
+  }, [pending, roster, rosterKnown, partner]);
 
   type RunInput = { kind: "paste"; text: string } | { kind: "file"; file: File };
 
