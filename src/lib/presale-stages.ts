@@ -90,14 +90,16 @@ export function isBeforeKickoff(stage: string | null | undefined): boolean {
  * kickoff is not booked either. Its date is the playbook's guess from the
  * close, not a meeting: Home and the Calendar leave it out. Once the
  * kickoff is booked the dates follow it and show again (with Home's "not
- * booked yet" tag). The deal page always shows the plan.
+ * booked yet" tag). The deal page always shows the plan. A call with a
+ * completion recorded is history, not a guess, and is never left out here
+ * (Home's upcoming list drops completed calls on its own).
  */
 export function isUnbookedBeforeKickoff(
   stage: string | null | undefined,
-  m: { kind: string; time?: string | null | undefined },
+  m: { kind: string; time?: string | null | undefined; doneOn?: string | null | undefined },
   kickoffBooked = false,
 ): boolean {
-  return m.kind === "call" && isGuessBeforeKickoff(stage, m, kickoffBooked);
+  return m.kind === "call" && !m.doneOn && isGuessBeforeKickoff(stage, m, kickoffBooked);
 }
 
 /**

@@ -2,7 +2,10 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildCalendarEvents,
+  chipLabel,
+  chipTitle,
   customerLinkFor,
+  customersWithSeveralImplementations,
   dayInZone,
   dayLabel,
   defaultSelectedDay,
@@ -14,6 +17,7 @@ import {
   sortEvents,
   STATUS_LABEL,
   teamToday,
+  addDaysIso,
   addMonthsIso,
   type CalendarCommitment,
   type CalendarEvent,
@@ -147,18 +151,52 @@ describe("calendar days and time zones", () => {
 /* ------------------------------------------------------- meetings & status */
 
 describe("planned and completed meetings", () => {
-  it("keeps a future meeting planned, even with a time, and never calls it confirmed", () => {
+  it("reads a future meeting with a recorded time as booked, and never calls it confirmed", () => {
     const events = buildCalendarEvents(
       source({
         planMeetings: [{ implementationId: "impl-1", meetings: [meeting({ time: "10:00" })] }],
       }),
     );
     const e = find(events, "plan:deal-1:call.stage1");
-    expect(e.status).toBe("planned");
-    expect(e.statusDetail).toBe("Confirmation not recorded");
+    expect(e.status).toBe("booked");
+    expect(STATUS_LABEL[e.status]).toBe("Booked");
+    expect(e.statusDetail).toBe("10:00 America/New_York · Confirmation not recorded");
     expect(e.time).toBe("10:00");
     expect(e.timeZone).toBe("America/New_York");
     expect(Object.values(STATUS_LABEL)).not.toContain("Confirmed");
+  });
+
+  it("reads a future meeting with no recorded time as not booked yet", () => {
+    const events = buildCalendarEvents(
+      source({
+        planMeetings: [{ implementationId: "impl-1", meetings: [meeting({ time: null })] }],
+      }),
+    );
+    const e = find(events, "plan:deal-1:call.stage1");
+    expect(e.status).toBe("not_booked");
+    expect(STATUS_LABEL[e.status]).toBe("Not booked yet");
+    expect(e.statusDetail).toBe("No time recorded on the plan");
+    expect(chipTitle(e)).toContain("Status: Not booked yet");
+  });
+
+  it("keeps past calls as completed or completion not recorded, booked or not", () => {
+    const events = buildCalendarEvents(
+      source({
+        planMeetings: [
+          {
+            implementationId: "impl-1",
+            meetings: [
+              meeting({ key: "a", date: "2026-10-01", time: "10:00" }),
+              meeting({ key: "b", date: "2026-10-02", time: null }),
+              meeting({ key: "c", date: "2026-10-03", time: "10:00", doneOn: "2026-10-03" }),
+            ],
+          },
+        ],
+      }),
+    );
+    expect(find(events, "plan:deal-1:a").status).toBe("completion_not_recorded");
+    expect(find(events, "plan:deal-1:b").status).toBe("completion_not_recorded");
+    expect(find(events, "plan:deal-1:c").status).toBe("completed");
   });
 
   it("keeps a past call that was never ticked as 'completion not recorded', not overdue or completed", () => {
@@ -227,6 +265,84 @@ describe("planned and completed meetings", () => {
     expect(before.every((m) => m.time !== null || m.doneOn !== null)).toBe(true);
     // Once the deal has moved on, the same untimed calls are the plan, and are kept.
     expect(after.some((m) => m.time === null)).toBe(true);
+  });
+
+  it("keeps a completed call before Kickoff, even when the kickoff was never booked", () => {
+    const intake = {
+      ...EMPTY_INTAKE,
+      path: "new_logo" as const,
+      timeline: { ...EMPTY_INTAKE.timeline, completed: { kickoff: "2026-10-07" } },
+    };
+    const meetings = planMeetingsFor({
+      intake,
+      closeDate: "2026-10-05",
+      dealStage: "onboarding_kickoff",
+      partner: false,
+    });
+    const kickoff = meetings.find((m) => m.key === "kickoff");
+    expect(kickoff?.doneOn).toBe("2026-10-07");
+    expect(kickoff?.time).toBeNull();
+    // The other, unbooked sessions are still only guesses and stay out.
+    expect(meetings.every((m) => m.time !== null || m.doneOn !== null)).toBe(true);
+  });
+
+  it("drops an unbooked call the plan dated before the deal entered Kickoff, once it is there", () => {
+    const intake = { ...EMPTY_INTAKE, path: "new_logo" as const };
+    const all = planMeetingsFor({
+      intake,
+      closeDate: "2026-09-01",
+      dealStage: "kickoff",
+      partner: false,
+    });
+    const kickoffOn = "2026-10-12";
+    const guessed = all.filter((m) => m.date < kickoffOn);
+    expect(guessed.length).toBeGreaterThan(0);
+
+    const kept = planMeetingsFor({
+      intake,
+      closeDate: "2026-09-01",
+      dealStage: "kickoff",
+      partner: false,
+      kickoffOn,
+    });
+    expect(kept.some((m) => m.date < kickoffOn)).toBe(false);
+    expect(kept.length).toBe(all.length - guessed.length);
+    // So nothing the close guessed comes back as a call whose completion is missing.
+    const events = buildCalendarEvents(
+      source({ planMeetings: [{ implementationId: "impl-1", meetings: kept }] }),
+    );
+    expect(events.some((e) => e.status === "completion_not_recorded")).toBe(false);
+  });
+
+  it("keeps a booked or completed call dated before the deal entered Kickoff", () => {
+    const first = planMeetingsFor({
+      intake: { ...EMPTY_INTAKE, path: "new_logo" as const },
+      closeDate: "2026-09-01",
+      dealStage: "kickoff",
+      partner: false,
+    })[0]!;
+    const kickoffOn = addDaysIso(first.date, 7);
+    const withTimeline = (timeline: Partial<typeof EMPTY_INTAKE.timeline>) => ({
+      ...EMPTY_INTAKE,
+      path: "new_logo" as const,
+      timeline: { ...EMPTY_INTAKE.timeline, ...timeline },
+    });
+    const booked = planMeetingsFor({
+      intake: withTimeline({ times: { [first.key]: "10:00" } }),
+      closeDate: "2026-09-01",
+      dealStage: "kickoff",
+      partner: false,
+      kickoffOn,
+    });
+    expect(booked.find((m) => m.key === first.key)?.time).toBe("10:00");
+    const completed = planMeetingsFor({
+      intake: withTimeline({ completed: { [first.key]: first.date } }),
+      closeDate: "2026-09-01",
+      dealStage: "kickoff",
+      partner: false,
+      kickoffOn,
+    });
+    expect(completed.find((m) => m.key === first.key)?.doneOn).toBe(first.date);
   });
 });
 
@@ -587,5 +703,75 @@ describe("selected day, agenda, details and navigation", () => {
       source({ milestones: [milestone({ stage: null, targetDate: "2026-10-30" })] }),
     );
     expect(detailRows(find(events, "milestone:m-1")).some((r) => r.label === "Stage")).toBe(false);
+  });
+});
+
+describe("month grid chips", () => {
+  const twoDeals = () =>
+    buildCalendarEvents(
+      source({
+        implementations: [
+          impl({ id: "impl-1", name: "Field Forms", dealId: "deal-1", targetDate: "2026-10-20" }),
+          impl({ id: "impl-2", name: "Safety Audits", dealId: "deal-2", targetDate: "2026-10-20" }),
+        ],
+      }),
+    );
+
+  it("names the customer, then the implementation, when a customer has two in view", () => {
+    const events = twoDeals();
+    const several = customersWithSeveralImplementations(events);
+    const a = find(events, "go-live-target:impl-1");
+    const b = find(events, "go-live-target:impl-2");
+    expect(chipLabel(a, several)).toBe("Aquatic Facility Services · Field Forms · Target go-live");
+    expect(chipLabel(b, several)).toBe(
+      "Aquatic Facility Services · Safety Audits · Target go-live",
+    );
+    expect(chipTitle(a)).toBe(
+      "Go-live: Aquatic Facility Services · Field Forms · Target go-live. Status: Planned",
+    );
+    expect(chipTitle(a)).not.toBe(chipTitle(b));
+  });
+
+  it("keeps the customer's name in the chip when it has one implementation in view", () => {
+    const events = buildCalendarEvents(
+      source({ implementations: [impl({ targetDate: "2026-10-20" })] }),
+    );
+    const e = find(events, "go-live-target:impl-1");
+    expect(chipLabel(e, customersWithSeveralImplementations(events))).toBe(
+      "Aquatic Facility Services · Target go-live",
+    );
+  });
+
+  it("counts only the events in view: a second implementation elsewhere does not change the chip", () => {
+    const events = twoDeals();
+    const inView = events.filter((e) => e.implementationId === "impl-1");
+    expect(customersWithSeveralImplementations(inView).size).toBe(0);
+  });
+
+  it("tells two customers with the same implementation name apart by customer", () => {
+    const events = buildCalendarEvents(
+      source({
+        implementations: [
+          impl({ id: "impl-1", targetDate: "2026-10-20" }),
+          impl({
+            id: "impl-2",
+            customerId: "cust-2",
+            customerName: "Ridgeline HVAC",
+            dealId: "deal-2",
+            targetDate: "2026-10-20",
+          }),
+        ],
+      }),
+    );
+    expect(customersWithSeveralImplementations(events).size).toBe(0);
+  });
+
+  it("puts a missed target's status in words in the chip's title", () => {
+    const events = buildCalendarEvents(
+      source({ implementations: [impl({ targetDate: "2026-10-01" })] }),
+    );
+    const e = find(events, "go-live-target:impl-1");
+    expect(e.status).toBe("target_passed");
+    expect(chipTitle(e)).toContain("Status: Target passed, go-live not recorded");
   });
 });

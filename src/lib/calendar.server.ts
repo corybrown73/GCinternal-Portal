@@ -3,6 +3,7 @@ import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { readIntake } from "./intake-answers";
 import { closeDateFor } from "./onboarding-plan";
 import { isPartnerJourney } from "./partner-implementation";
+import { kickoffEntryDate } from "./presale-stages";
 import { loadImplementations, type BookOptions } from "./hub.server";
 import type { ResolvedScope } from "./ownership.server";
 import {
@@ -49,7 +50,7 @@ export async function loadCalendar(
         "id,created_at,journey_type,partner_key,target_date,target_launch_date,baseline_date,go_live_at,actual_launch_date",
       ),
     dealIds.length
-      ? db().from("portal_accounts").select("id,intake,stage").in("id", dealIds)
+      ? db().from("portal_accounts").select("id,intake,stage,stage_entered_at").in("id", dealIds)
       : Promise.resolve({ data: [], error: null }),
     dealIds.length
       ? db()
@@ -100,9 +101,10 @@ export async function loadCalendar(
   const primary = primaryImplementationByDeal(
     implementations.map((i) => ({ id: i.id, dealId: i.dealId, createdAt: i.createdAt })),
   );
-  const deals = new Map<string, { intake: unknown; stage: string | null }>(
-    ((dealRes.data ?? []) as any[]).map((d) => [d.id, d]),
-  );
+  const deals = new Map<
+    string,
+    { intake: unknown; stage: string | null; stage_entered_at: string | null }
+  >(((dealRes.data ?? []) as any[]).map((d) => [d.id, d]));
   const history = (histRes.data ?? []) as Array<{
     account_id: string;
     to_stage: string;
@@ -132,6 +134,7 @@ export async function loadCalendar(
         closeDate,
         dealStage: deal.stage,
         partner: impl.partner,
+        kickoffOn: kickoffEntryDate(deal.stage, deal.stage_entered_at, stageHistory),
       }),
     });
   }

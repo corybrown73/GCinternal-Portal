@@ -3,6 +3,8 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { queryOptions, useSuspenseQuery } from "@tanstack/react-query";
 import {
   AlertTriangle,
+  CalendarCheck,
+  CalendarDays,
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
@@ -20,7 +22,10 @@ import { getCalendar } from "@/lib/hub.functions";
 import {
   addDaysIso,
   addMonthsIso,
+  chipLabel,
+  chipTitle,
   customerLinkFor,
+  customersWithSeveralImplementations,
   dayLabel,
   defaultSelectedDay,
   detailRows,
@@ -83,25 +88,46 @@ const KIND_SHAPE: Record<CalendarKind, string> = {
   go_live: "[clip-path:polygon(50%_0,100%_100%,0_100%)]",
 };
 
-function KindMark({ kind, className }: { kind: CalendarKind; className?: string }) {
+/**
+ * A meeting nobody has booked yet is a hollow ring, a booked or past one a
+ * filled dot; the status is also in words wherever the mark appears.
+ */
+function KindMark({
+  kind,
+  status,
+  className,
+}: {
+  kind: CalendarKind;
+  status?: CalendarStatus;
+  className?: string;
+}) {
+  const hollow = kind === "meeting" && status === "not_booked";
   return (
     <span
       aria-hidden="true"
-      className={cn("inline-block shrink-0", KIND_SHAPE[kind], KIND_DOT[kind], className)}
+      className={cn(
+        "inline-block shrink-0",
+        KIND_SHAPE[kind],
+        hollow ? "border-[1.5px] border-event-meeting bg-transparent" : KIND_DOT[kind],
+        className,
+      )}
     />
   );
 }
 
+/** Meeting and go-live come from the theme, so they follow light and dark mode. */
 const KIND_DOT: Record<CalendarKind, string> = {
-  meeting: "bg-[#2a78d6]",
+  meeting: "bg-event-meeting",
   commitment: "bg-[#eda100]",
   milestone: "bg-[#0f8a7a]",
-  go_live: "bg-[#4a3aa7]",
+  go_live: "bg-event-go-live",
 };
 
 const STATUS_ICON: Record<CalendarStatus, LucideIcon> = {
   completed: CheckCircle2,
   planned: Clock,
+  booked: CalendarCheck,
+  not_booked: CalendarDays,
   due: Clock,
   overdue: AlertTriangle,
   completion_not_recorded: CircleDashed,
@@ -115,6 +141,8 @@ const STATUS_TONE: Record<CalendarStatus, string> = {
   completed: "text-status-ontrack-foreground",
   went_live: "text-status-ontrack-foreground",
   planned: "text-foreground",
+  booked: "text-foreground",
+  not_booked: "text-muted-foreground",
   due: "text-foreground",
   overdue: "text-status-risk-foreground",
   target_passed: "text-status-risk-foreground",
@@ -179,6 +207,14 @@ function CalendarPage() {
   const detailsRef = useRef<HTMLElement>(null);
 
   const weeks = useMemo(() => monthWeeks(viewedMonth), [viewedMonth]);
+  // Customers with more than one implementation in the weeks shown.
+  const several = useMemo(() => {
+    const first = weeks[0]?.[0] ?? "";
+    const last = weeks.at(-1)?.at(-1) ?? "";
+    return customersWithSeveralImplementations(
+      events.filter((e) => e.date >= first && e.date <= last),
+    );
+  }, [events, weeks]);
   const dayEvents = byDay.get(selectedDay) ?? [];
   const selected = openKey ? (events.find((e) => e.key === openKey) ?? null) : null;
 
@@ -231,6 +267,10 @@ function CalendarPage() {
               {KIND_LABEL[k]}
             </span>
           ))}
+          <span className="inline-flex items-center gap-1.5">
+            <KindMark kind="meeting" status="not_booked" className="h-2 w-2" />
+            Meeting, {STATUS_LABEL.not_booked.toLowerCase()}
+          </span>
           <span className="ml-auto">
             <ShowTestsToggle
               checked={tests}
@@ -343,7 +383,12 @@ function CalendarPage() {
                       </span>
                       <span className="flex flex-wrap gap-1 sm:hidden" aria-hidden="true">
                         {items.slice(0, MAX_CHIPS).map((e) => (
-                          <KindMark key={e.key} kind={e.kind} className="h-1.5 w-1.5" />
+                          <KindMark
+                            key={e.key}
+                            kind={e.kind}
+                            status={e.status}
+                            className="h-2 w-2"
+                          />
                         ))}
                         {items.length > MAX_CHIPS ? (
                           <span className="text-[10px] leading-none text-primary">
@@ -358,14 +403,16 @@ function CalendarPage() {
                             className={cn(
                               "flex items-center gap-1 truncate text-[12px] leading-5",
                               e.status === "cancelled" && "line-through text-muted-foreground",
+                              e.status === "target_passed" && "text-status-risk-foreground",
                             )}
-                            title={`${KIND_LABEL[e.kind]}: ${e.customerName} · ${e.title}`}
+                            title={chipTitle(e)}
                           >
-                            <KindMark kind={e.kind} className="h-1.5 w-1.5" />
+                            <KindMark kind={e.kind} status={e.status} className="h-2 w-2" />
+                            {e.status === "target_passed" ? (
+                              <Flag className="h-3 w-3 shrink-0" aria-hidden="true" />
+                            ) : null}
                             <span className="sr-only">{KIND_LABEL[e.kind]}: </span>
-                            <span className="truncate">
-                              {e.customerName} · {e.title}
-                            </span>
+                            <span className="truncate">{chipLabel(e, several)}</span>
                           </span>
                         ))}
                         {items.length > MAX_CHIPS ? (
@@ -414,7 +461,7 @@ function CalendarPage() {
                     </span>
                     <span className="min-w-0">
                       <span className="flex items-center gap-1.5 text-[12px] text-muted-foreground">
-                        <KindMark kind={e.kind} className="h-1.5 w-1.5" />
+                        <KindMark kind={e.kind} status={e.status} className="h-2 w-2" />
                         {KIND_LABEL[e.kind]}
                       </span>
                       <span className="block break-words text-[14px] font-medium">{e.title}</span>

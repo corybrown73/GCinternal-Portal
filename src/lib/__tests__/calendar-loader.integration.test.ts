@@ -263,12 +263,12 @@ suite("Calendar loader — integration against the QA database", () => {
     expect(e!.statusDetail).toMatch(/^Completed /);
   });
 
-  it("keeps a moved, untimed call planned, with confirmation not recorded and no time invented", async () => {
+  it("keeps a moved, untimed call as not booked yet, with no time invented", async () => {
     const e = (await calendar()).find((x) => x.key === `plan:${standardB.deal}:kickoff`);
     expect(e).toBeDefined();
-    expect(e!.status).toBe("planned");
+    expect(e!.status).toBe("not_booked");
     expect(e!.time).toBeNull();
-    expect(e!.statusDetail).toBe("Confirmation not recorded");
+    expect(e!.statusDetail).toBe("No time recorded on the plan");
     expect(e!.missing).toContain("Time not recorded");
   });
 

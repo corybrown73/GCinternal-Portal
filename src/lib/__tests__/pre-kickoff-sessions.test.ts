@@ -108,6 +108,19 @@ describe("isUnbookedBeforeKickoff", () => {
     );
   });
 
+  it("never leaves out a call with a completion recorded: that is history, not a guess", () => {
+    expect(
+      isUnbookedBeforeKickoff("onboarding_kickoff", {
+        kind: "call",
+        time: null,
+        doneOn: "2026-10-07",
+      }),
+    ).toBe(false);
+    expect(isUnbookedBeforeKickoff("closed_won", { kind: "call", time: null, doneOn: null })).toBe(
+      true,
+    );
+  });
+
   it("isGuessBeforeKickoff covers homework and build days too", () => {
     expect(isGuessBeforeKickoff("closed_won", { time: null })).toBe(true);
     expect(isGuessBeforeKickoff("closed_won", { time: null }, true)).toBe(false);
@@ -176,6 +189,18 @@ describe("dealFactsFor — upcoming calls", () => {
     const facts = (await dealFactsFor(["ip"], today)).get("ip")!;
     expect(facts.upcoming_calls?.map((c) => c.key)).toEqual(["kickoff"]);
     expect(facts.upcoming_calls?.[0]?.time).toBe("10:00");
+    expect(facts.overdue_calls).toEqual([]);
+  });
+
+  it("a completed call before Kickoff, with the kickoff unbooked, is never added to Home", async () => {
+    const d = {
+      ...deal("ip", "onboarding_kickoff"),
+      intake: { timeline: { times: {}, overrides: {}, completed: { kickoff: today } } },
+    };
+    fake.store["portal_accounts"]!.push(d);
+    closedToday("ip");
+    const facts = (await dealFactsFor(["ip"], today)).get("ip")!;
+    expect(facts.upcoming_calls).toEqual([]);
     expect(facts.overdue_calls).toEqual([]);
   });
 

@@ -2,7 +2,7 @@ import { isKickoffBooked } from "./stage-flow";
 import { isPartnerDeal, PARTNER_JOURNEY } from "./partner-implementation";
 import { timelineFor } from "./onboarding-plan";
 import { TEAM_ZONE } from "./onboarding-timeline";
-import { isUnbookedBeforeKickoff } from "./presale-stages";
+import { isUnbookedBeforeKickoff, plannedBeforeKickoff } from "./presale-stages";
 import type { IntakeAnswers } from "./intake-answers";
 
 /**
@@ -99,12 +99,15 @@ export function timeLabel(time: string, zone: string): string {
 export type CalendarKind = "meeting" | "commitment" | "milestone" | "go_live";
 
 /**
- * What the record says about the event. A planned meeting is "planned" even
- * when it has a time: the Hub keeps no confirmation, so none is claimed.
+ * What the record says about the event. A coming plan call is "booked" when
+ * the plan records its time and "not booked yet" when it does not; a booked
+ * call is never called confirmed, because the Hub keeps no confirmation.
  */
 export type CalendarStatus =
   | "completed"
   | "planned"
+  | "booked"
+  | "not_booked"
   | "due"
   | "overdue"
   | "completion_not_recorded"
@@ -116,6 +119,8 @@ export type CalendarStatus =
 export const STATUS_LABEL: Record<CalendarStatus, string> = {
   completed: "Completed",
   planned: "Planned",
+  booked: "Booked",
+  not_booked: "Not booked yet",
   due: "Due",
   overdue: "Overdue",
   completion_not_recorded: "Completion not recorded",
@@ -255,23 +260,31 @@ export function primaryImplementationByDeal(
  * shows. Empty for a partner implementation: partner dates come only from
  * partner records, never from the standard plan. A call that is only a guess
  * before kickoff (no kickoff booked, no time of its own) is not an event.
+ * Nor is one the plan dated before the day the deal entered Kickoff with no
+ * time booked: that guess is not history, so it never comes back as a call
+ * whose completion is missing (the same rule as Home's overdue calls). A
+ * booked or completed call is always kept.
  */
 export function planMeetingsFor(input: {
   intake: IntakeAnswers;
   closeDate: string;
   dealStage: string | null;
   partner: boolean;
+  /** The day the deal entered Kickoff (kickoffEntryDate), else null. */
+  kickoffOn?: string | null;
 }): PlanMeeting[] {
   if (input.partner || isPartnerDeal(input.intake)) return [];
   const timeline = timelineFor(input.intake, input.closeDate);
   const kickoffBooked = isKickoffBooked(input.intake);
+  const kickoffOn = input.kickoffOn ?? null;
   const timeZone = input.intake.timeline.timezone || TEAM_ZONE;
   return timeline.milestones
     .filter(
       (m) =>
         m.kind === "call" &&
         !m.serviceId &&
-        !isUnbookedBeforeKickoff(input.dealStage, m, kickoffBooked),
+        !isUnbookedBeforeKickoff(input.dealStage, m, kickoffBooked) &&
+        (m.doneOn !== null || !plannedBeforeKickoff(m, kickoffOn)),
     )
     .map((m) => ({
       key: m.key,
@@ -329,9 +342,12 @@ export function buildCalendarEvents(source: CalendarSource): CalendarEvent[] {
       if (m.doneOn) {
         status = "completed";
         statusDetail = `Completed ${dayLabel(m.doneOn)}`;
+      } else if (m.date >= source.today && m.time) {
+        status = "booked";
+        statusDetail = `${timeLabel(m.time, m.timeZone)} · Confirmation not recorded`;
       } else if (m.date >= source.today) {
-        status = "planned";
-        statusDetail = "Confirmation not recorded";
+        status = "not_booked";
+        statusDetail = "No time recorded on the plan";
       } else {
         status = "completion_not_recorded";
         statusDetail = "No completion recorded for this call";
@@ -526,6 +542,43 @@ export function eventsByDay(events: ReadonlyArray<CalendarEvent>): Map<string, C
   const map = new Map<string, CalendarEvent[]>();
   for (const e of events) map.set(e.date, [...(map.get(e.date) ?? []), e]);
   return map;
+}
+
+function customerKey(e: Pick<CalendarEvent, "customerId" | "customerName">): string {
+  return e.customerId ?? `name:${e.customerName}`;
+}
+
+/**
+ * The customers with events from more than one implementation among these
+ * events (the ones in view), so their chips can name the implementation.
+ */
+export function customersWithSeveralImplementations(
+  events: ReadonlyArray<CalendarEvent>,
+): Set<string> {
+  const impls = new Map<string, Set<string>>();
+  for (const e of events) {
+    const key = customerKey(e);
+    impls.set(key, (impls.get(key) ?? new Set()).add(e.implementationId));
+  }
+  return new Set([...impls].filter(([, ids]) => ids.size > 1).map(([key]) => key));
+}
+
+/**
+ * The month-grid chip's text. The customer always leads, so a chip never
+ * loses whose event it is; when the customer has more than one
+ * implementation in view, the implementation's name follows, so two deals
+ * under one customer read differently. A narrow cell truncates the end; the
+ * chip's title and the agenda carry the whole text.
+ */
+export function chipLabel(e: CalendarEvent, several: ReadonlySet<string>): string {
+  return several.has(customerKey(e))
+    ? `${e.customerName} · ${e.implementationName} · ${e.title}`
+    : `${e.customerName} · ${e.title}`;
+}
+
+/** The chip's title (tooltip): kind, customer, implementation, title and status, in words. */
+export function chipTitle(e: CalendarEvent): string {
+  return `${KIND_LABEL[e.kind]}: ${e.customerName} · ${e.implementationName} · ${e.title}. Status: ${STATUS_LABEL[e.status]}`;
 }
 
 /** The weeks of a month's grid, Monday first, including the days either side. */
