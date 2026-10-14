@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { ArrowRight, Check, CircleDashed } from "lucide-react";
@@ -23,6 +23,7 @@ import {
   type GateItem,
 } from "@/lib/stage-gates";
 import { userMessage } from "@/lib/errors";
+import { CARD, TONE } from "@/components/current-implementation-context";
 import { cn } from "@/lib/utils";
 import { ask } from "@/components/ui/ask";
 import type { PartnerMoveView } from "@/lib/partner-implementation";
@@ -41,6 +42,40 @@ import type { PartnerMoveView } from "@/lib/partner-implementation";
  * checkbox that silently rewrites the project's timeline is the kind of
  * helpfulness people learn to distrust.
  */
+/**
+ * The focus view's shell: a Home card with a 16px heading and the count as a
+ * chip. The default view keeps the Panel it always drew.
+ */
+function FocusShell({
+  title,
+  meta,
+  children,
+}: {
+  title: ReactNode;
+  meta?: ReactNode;
+  level?: string;
+  children: ReactNode;
+}) {
+  return (
+    <section
+      className={cn(CARD, "overflow-hidden")}
+      aria-label={typeof title === "string" ? title : undefined}
+    >
+      <div className="flex items-center justify-between gap-2 px-4 pt-3.5">
+        <h2 className="text-[18px] font-semibold tracking-tight text-foreground">{title}</h2>
+        {meta ? (
+          <span
+            className={cn("rounded-full px-2 py-px text-[12px] font-semibold", TONE.muted.chip)}
+          >
+            {meta}
+          </span>
+        ) : null}
+      </div>
+      {children}
+    </section>
+  );
+}
+
 export function StageGatesPanel({
   customerId,
   implementationId,
@@ -48,6 +83,8 @@ export function StageGatesPanel({
   stageGateMode,
   items,
   partner,
+  focus = false,
+  focusHeading = null,
 }: {
   customerId: string;
   implementationId: string;
@@ -57,7 +94,19 @@ export function StageGatesPanel({
   items: GateItem[];
   /** A Partner Implementation's move, from the partner order. Replaces the lifecycle step. */
   partner?: PartnerMoveView | null;
+  /**
+   * Focus Mode: show only the next open criterion, in the order the stage gives
+   * them, with the rest one click away. The move and graduate controls are the
+   * same either way.
+   */
+  focus?: boolean;
+  /**
+   * Focus Mode's card heading for a partner stage: the stage's own name and goal,
+   * so the stage reads as one card, as the standard stage does.
+   */
+  focusHeading?: { title: string; goal: string | null } | null;
 }) {
+  const [showAll, setShowAll] = useState(false);
   const status = stageGateStatus(items);
   // A partner implementation moves along its own order; the house lifecycle has none of its stages.
   const next: string | null = partner
@@ -153,10 +202,11 @@ export function StageGatesPanel({
   const outcome = gateOutcome(status, stageGateMode);
   const override = needsOverride(status, stageGateMode);
   const mustExplain = requiresReason(status, stageGateMode);
+  const Shell = focus ? FocusShell : Panel;
 
   return (
-    <Panel
-      title="To leave this stage"
+    <Shell
+      title={focusHeading ? focusHeading.title : "To leave this stage"}
       level="primary"
       meta={
         status.total > 0 ? (
@@ -166,21 +216,45 @@ export function StageGatesPanel({
         ) : null
       }
     >
-      <ul className="divide-y divide-border">
-        {status.gates.map((g) => {
+      {focusHeading ? (
+        <div className="px-4 pt-1.5">
+          {focusHeading.goal ? (
+            <p className="text-[14px] leading-relaxed text-foreground/85">{focusHeading.goal}</p>
+          ) : null}
+          <p className="mt-3 text-[12px] font-semibold text-muted-foreground">
+            To leave this stage
+          </p>
+        </div>
+      ) : null}
+      <ul className={focus && !showAll ? "" : "divide-y divide-border"}>
+        {(focus && !showAll ? status.remaining.slice(0, 1) : status.gates).map((g) => {
           const done = optimistic[g.id] ?? isSettled(g.status);
+          const featured = focus && !showAll && !done;
           return (
-            <li key={g.id} className="flex items-center gap-3 px-3 py-2">
+            <li
+              key={g.id}
+              className={cn(
+                "flex items-center gap-3",
+                featured
+                  ? "mx-4 my-4 rounded-md border border-border bg-card px-4 py-4"
+                  : "px-3 py-2",
+              )}
+              style={featured ? { boxShadow: `inset 3px 0 0 0 ${TONE.info.bar}` } : undefined}
+            >
               {/* The whole row is the target, not a 14px box. A checklist you
                   have to aim at is a checklist people stop ticking. */}
               <button
                 type="button"
                 onClick={() => toggle.mutate({ id: g.id, done: !done })}
-                className="flex min-w-0 flex-1 items-center gap-2.5 text-left"
+                className={cn(
+                  "flex min-w-0 flex-1 items-center text-left",
+                  featured ? "gap-3" : "gap-2.5",
+                )}
               >
                 <span
                   className={cn(
-                    "flex h-4 w-4 shrink-0 items-center justify-center rounded-sm border transition-colors",
+                    "flex shrink-0 items-center justify-center rounded-sm border transition-colors",
+                    featured ? "h-5 w-5" : "h-4 w-4",
                     done
                       ? "border-status-ontrack-foreground bg-status-ontrack-foreground text-white"
                       : "border-input",
@@ -190,12 +264,23 @@ export function StageGatesPanel({
                 </span>
                 <span
                   className={cn(
-                    "min-w-0 truncate text-[13px]",
+                    featured ? "min-w-0 text-[16px] font-semibold" : "min-w-0 truncate text-[13px]",
                     done ? "text-muted-foreground line-through" : "font-medium",
                   )}
                 >
                   {g.title}
                 </span>
+                {done && g.verified !== undefined ? (
+                  g.verified ? (
+                    <span className="shrink-0 rounded-full border border-status-ontrack-foreground/40 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-status-ontrack-foreground">
+                      Verified
+                    </span>
+                  ) : (
+                    <span className="shrink-0 rounded-full border border-border px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                      Done, not verified
+                    </span>
+                  )
+                ) : null}
                 {g.party === "customer" ? (
                   <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-muted-foreground">
                     Customer
@@ -207,15 +292,34 @@ export function StageGatesPanel({
         })}
       </ul>
 
-      <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border bg-surface px-3 py-2">
-        <p className="flex items-center gap-1.5 text-[12px] text-muted-foreground">
-          {status.ready ? (
-            <Check className="h-3.5 w-3.5 text-status-ontrack-foreground" />
-          ) : (
-            <CircleDashed className="h-3.5 w-3.5" />
-          )}
-          {gateSummary(status)}
-        </p>
+      <div
+        className={cn(
+          "flex flex-wrap items-center justify-between gap-2 border-t border-border",
+          focus ? "px-4 py-3" : "bg-surface px-3 py-2",
+        )}
+      >
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+          <p className="flex items-center gap-1.5 text-[12px] text-muted-foreground">
+            {status.ready ? (
+              <Check className="h-3.5 w-3.5 text-status-ontrack-foreground" />
+            ) : (
+              <CircleDashed className="h-3.5 w-3.5" />
+            )}
+            {gateSummary(status)}
+          </p>
+          {focus && status.gates.length > 1 ? (
+            <button
+              type="button"
+              aria-expanded={showAll}
+              onClick={() => setShowAll((o) => !o)}
+              className="text-[12px] font-medium text-primary underline-offset-2 hover:underline"
+            >
+              {showAll
+                ? "Show only the next criterion"
+                : `View all ${status.gates.length} criteria`}
+            </button>
+          ) : null}
+        </div>
 
         {next && partnerBlocked ? (
           <p className="text-[12px] font-medium text-status-risk-foreground">
@@ -327,6 +431,6 @@ export function StageGatesPanel({
           {userMessage("save that task", toggle.error)}
         </p>
       ) : null}
-    </Panel>
+    </Shell>
   );
 }
