@@ -21,6 +21,7 @@ import {
   deriveHealth,
   launchOverdue,
   launchStateConflict,
+  launchedOn,
   openItems,
   proveValueGaps,
   proveValueState,
@@ -198,7 +199,7 @@ export function leadershipAction(
     };
   }
 
-  if (launchOverdue(impl) || launchStateConflict(impl)) {
+  if (launchOverdue(impl) || unrecordedLaunch(impl)) {
     return {
       action: "rebaseline_launch",
       action_reason: launchOverdue(impl)
@@ -234,6 +235,16 @@ export function leadershipAction(
   };
 }
 
+/**
+ * A lead's "rebaseline launch": stage past Launch and nothing records a launch
+ * (launchedOn: the typed date, the Go-Live tick or the plan's live tick).
+ * launchStateConflict stays the pure actual_launch_date check for Portfolio's
+ * Conflict column and the Customer 360 hint.
+ */
+function unrecordedLaunch(impl: ImplementationRow): boolean {
+  return launchStateConflict(impl) && !launchedOn(impl);
+}
+
 /** Accounts a lead must step into: act-now, plus attention rows with lead-level causes. */
 export function interventions(data: LeadershipData): InterventionRow[] {
   const queue = buildQueue(data.implementations, data.triage);
@@ -254,7 +265,7 @@ export function interventions(data: LeadershipData): InterventionRow[] {
         open.escalations.length > 0 ||
         open.risks.some((x: any) => severityRank(x.severity) <= 1) ||
         launchOverdue(r.impl) ||
-        launchStateConflict(r.impl)
+        unrecordedLaunch(r.impl)
       );
     }),
   ];
@@ -324,7 +335,7 @@ export function ownerLoad(data: LeadershipData): OwnerLoadRow[] {
       arr: arrValues.length ? arrValues.reduce((a, b) => a + b, 0) : null,
       launches_30d: impls.filter((i) => {
         const d = daysUntil(i.target_launch_date);
-        return !i.actual_launch_date && d != null && d >= 0 && d <= 30;
+        return !launchedOn(i) && d != null && d >= 0 && d <= 30;
       }).length,
       flags: [],
     };
@@ -481,7 +492,7 @@ export function launchBoard(data: LeadershipData): LaunchBoard {
     const d = daysUntil(impl.target_launch_date);
     if (launchOverdue(impl)) {
       slipped.push({ impl, detail: `${Math.abs(d ?? 0)}d past target, no actual launch recorded` });
-    } else if (!impl.actual_launch_date && d != null && d >= 0 && d <= 30) {
+    } else if (!launchedOn(impl) && d != null && d >= 0 && d <= 30) {
       landing.push({ impl, detail: `${d}d to target launch` });
     }
     if (launchStateConflict(impl)) {

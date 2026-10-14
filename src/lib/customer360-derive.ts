@@ -2,6 +2,7 @@ import { GRADUATED_STAGE } from "./claimed-owner";
 import type { Customer360 } from "./hub-types";
 import { dealStageLabel } from "./deal-stage";
 import { LIFECYCLE_STAGES, LIFECYCLE_STAGE_MAP } from "./lifecycle";
+import { launchOverdue, launchedOn, type LaunchRecord } from "./launch-state";
 import type { DealFacts } from "./needs-action";
 import { STAGE_LIMITS, stuckLevel } from "./stage-flow";
 import {
@@ -80,7 +81,7 @@ export function whatMattersNow(record: Customer360): string {
 /** "Next action": nearest overdue/upcoming commitment, else an undecided decision. */
 export function nextAction(
   record: Customer360,
-  impl?: { target_launch_date?: string | null; actual_launch_date?: string | null },
+  impl?: LaunchRecord & { target_launch_date?: string | null },
 ): string {
   const open = openItems(record);
   const dated = open.commitments
@@ -102,21 +103,17 @@ export function nextAction(
   if (pending) return `Resolve the open decision — ${(pending as any).title}`;
   const undated = open.commitments[0] as any;
   if (undated) return `Schedule the commitment — ${undated.description} (no due date set)`;
-  if (impl && launchOverdue(impl)) {
+  if (impl && launchOverdue(impl, record.deal_facts)) {
     return `Launch date has passed (${fmtDate(impl.target_launch_date)}) — needs a launch review and replan`;
   }
   return NEXT_ACTION_UNKNOWN;
 }
 
-/** Target launch date has passed with no actual launch recorded. */
-export function launchOverdue(impl: {
-  target_launch_date?: string | null;
-  actual_launch_date?: string | null;
-}) {
-  return Boolean(
-    !impl.actual_launch_date && impl.target_launch_date && isOverdue(impl.target_launch_date),
-  );
-}
+/**
+ * Target launch date has passed and nothing records a launch: the typed
+ * actual launch, the Go-Live tick or the plan's live tick (launch-state.ts).
+ */
+export { launchOverdue, launchedOn };
 
 /**
  * True when the only reason to surface an implementation would be plain steady-state
@@ -154,10 +151,14 @@ type HealthImpl = {
   stage_entered_at?: string | null;
   target_launch_date?: string | null;
   actual_launch_date?: string | null;
+  go_live_at?: string | null;
+  /** The plan's live tick, when the loader laid it on the row. */
+  live_done_on?: string | null;
 };
 
-/** The deal's stage clock, as the deal facts carry it. */
-export type DealClock = Pick<DealFacts, "stage" | "business_days_in_stage" | "partner">;
+/** The deal's stage clock, as the deal facts carry it, and the plan's live tick. */
+export type DealClock = Pick<DealFacts, "stage" | "business_days_in_stage" | "partner"> &
+  Pick<DealFacts, "live_done_on">;
 
 export type Stall = {
   stalled: boolean;
@@ -348,7 +349,7 @@ export function deriveHealth(record: Customer360, impl: HealthImpl): HealthResul
       "overdue_commitments",
     );
   }
-  if (launchOverdue(impl)) {
+  if (launchOverdue(impl, dealClock)) {
     return decide(
       "at_risk",
       `Target launch ${fmtDate(impl.target_launch_date)} passed with no actual launch recorded`,

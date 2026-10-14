@@ -49,6 +49,8 @@ export type DealFacts = {
   /** The plan's close and finish line, for time-to-value and "launching". */
   close_date?: string | null;
   live_date?: string | null;
+  /** The day the plan's live milestone was ticked, or null: a launch (launch-state.ts). */
+  live_done_on?: string | null;
   /** Transcript proposals on THIS implementation that nobody has applied or dismissed (laid on per implementation by `withPendingProposals`). */
   pending_proposals?: number;
 };

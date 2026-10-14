@@ -1,6 +1,8 @@
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { deriveHealth, type HealthResult } from "./customer360-derive";
 import type { Customer360 } from "./hub-types";
+import { readIntake } from "./intake-answers";
+import { liveTickOf } from "./launch-state";
 import { businessDaysBetween, localIso } from "./onboarding-timeline";
 import { isPartnerJourney } from "./partner-implementation";
 import { isStage } from "./presale-stages";
@@ -32,7 +34,7 @@ async function loadHealthInputs(implementationId: string) {
     db()
       .from("implementations")
       .select(
-        "id, deal_id, current_stage, stage_entered_at, target_launch_date, actual_launch_date, journey_type, partner_key",
+        "id, deal_id, current_stage, stage_entered_at, target_launch_date, actual_launch_date, go_live_at, journey_type, partner_key",
       )
       .eq("id", implementationId)
       .maybeSingle(),
@@ -48,7 +50,7 @@ async function loadHealthInputs(implementationId: string) {
   const { data: deal } = impl.deal_id
     ? await db()
         .from("portal_accounts")
-        .select("stage, stage_entered_at")
+        .select("stage, stage_entered_at, intake")
         .eq("id", impl.deal_id)
         .maybeSingle()
     : { data: null };
@@ -77,7 +79,9 @@ async function loadHealthInputs(implementationId: string) {
         : null,
   } as unknown as Customer360;
 
-  return { impl: { ...impl, deal_stage: stage }, record };
+  // The plan's live tick is a launch, like the Go-Live tick (launch-state.ts).
+  const live_done_on = deal?.intake ? liveTickOf(readIntake(deal.intake)) : null;
+  return { impl: { ...impl, deal_stage: stage, live_done_on }, record };
 }
 
 /** Recompute and cache health for one implementation. Returns null if it is gone. */

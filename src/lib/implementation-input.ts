@@ -72,6 +72,20 @@ export const createImplementationInput = z
 export type CreateImplementationInput = z.infer<typeof createImplementationInput>;
 export type NewCustomerInput = z.infer<typeof newCustomerInput>;
 
+/**
+ * The stored target lives in two columns: target_launch_date (the Customers
+ * list, the portal, Salesforce) and target_date (Plan end, Reports TTV, the
+ * Calendar, read as target_date ?? target_launch_date). Every writer sets
+ * both to the same value, or a hand edit makes the list and the plan
+ * disagree. A patch that sets target_launch_date gets target_date with it.
+ */
+export function withTargetPair<T extends Record<string, unknown>>(
+  patch: T,
+): T & { target_date?: unknown } {
+  if (!Object.prototype.hasOwnProperty.call(patch, "target_launch_date")) return patch;
+  return { ...patch, target_date: patch["target_launch_date"] ?? null };
+}
+
 export function toImplementationPatch(data: CreateImplementationInput) {
   return {
     name: data.name,
@@ -85,6 +99,8 @@ export function toImplementationPatch(data: CreateImplementationInput) {
     sow_signed_date: data.sowSignedDate,
     contract_start_date: data.contractStartDate,
     target_launch_date: data.targetLaunchDate,
+    // The same value in both target columns (withTargetPair).
+    target_date: data.targetLaunchDate,
     customer_goals: data.customerGoals,
     external_ref: data.externalRef,
     deal_id: data.dealId,
@@ -189,6 +205,9 @@ export function toImplementationUpdatePatch(data: UpdateImplementationInput) {
     sow_signed_date: data.sowSignedDate,
     contract_start_date: data.contractStartDate,
     target_launch_date: data.targetLaunchDate,
+    // The same value in both target columns (withTargetPair). On a project a
+    // deal's plan keeps, updateImplementation drops target_date again.
+    target_date: data.targetLaunchDate,
     actual_launch_date: data.actualLaunchDate,
     customer_goals: data.customerGoals,
   };

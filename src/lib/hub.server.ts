@@ -5,6 +5,7 @@ import { normalizeStage } from "./hub-format";
 import { dealStageFor } from "./deal-stage";
 import { dealValue } from "./deal-value";
 import { dealStagesFor } from "./server/deal-stage";
+import { withTargetPair } from "./implementation-input";
 import { dealFactsFor, withPendingProposals } from "./server/deal-facts";
 import { nextLifecycleStage } from "./stage-advance-input";
 import { LAUNCH_STAGE, launchAcceptanceGate, launchGateMessage } from "./launch-gate";
@@ -31,7 +32,15 @@ import { SOLUTION_COMPLETE_STATUS } from "./solution-enums";
 const db = () => supabaseAdmin as any;
 
 /** What a book loader leaves out: test accounts, unless asked for (0085). */
-export type BookOptions = { includeTests?: boolean };
+export type BookOptions = {
+  includeTests?: boolean;
+  /**
+   * Keep projects a newer one replaced, marked `superseded`. Only the
+   * Calendar asks: a superseded project's own commitments, milestones and
+   * go-live stay on it as history. Every count and list leaves it out.
+   */
+  includeSuperseded?: boolean;
+};
 
 /**
  * Phase 7 demo mode. The flag lookup lives here rather than in demo-mode.ts so
@@ -158,7 +167,7 @@ export async function loadImplementations(
       // A superseded project was replaced by a newer one for the same deal: it
       // is out of the book (claimed-owner's active book), so no count, queue or
       // list says the deal twice. Customer 360 still opens it by id.
-      .filter((i: any) => !i.superseded_by_implementation_id)
+      .filter((i: any) => opts.includeSuperseded === true || !i.superseded_by_implementation_id)
       .filter(inScope)
       .map((i: any) => {
         const c: any = customerMap.get(i.customer_id) ?? {};
@@ -190,6 +199,8 @@ export async function loadImplementations(
           tier: i.tier,
           target_launch_date: i.target_launch_date,
           actual_launch_date: i.actual_launch_date,
+          go_live_at: i.go_live_at ?? null,
+          live_done_on: dealStages.get(i.id)?.live_done_on ?? null,
           overdue_commitments: (commitments ?? []).filter(
             (m: any) =>
               m.implementation_id === i.id && m.status === "open" && isOverdue(m.due_date),
@@ -1070,6 +1081,7 @@ export async function loadCustomer360(
       contract_start_date: impl.contract_start_date,
       target_launch_date: impl.target_launch_date,
       actual_launch_date: impl.actual_launch_date,
+      go_live_at: impl.go_live_at ?? null,
       // null when the template set no target for this stage — which the UI
       // reports as "no target", never as "on pace".
       stage_target_days:
@@ -2298,6 +2310,16 @@ export async function updateImplementation(
   patch: Record<string, unknown>,
   opts: { actorProfileId?: string | null } = {},
 ) {
+  // A hand edit of the target on a project a deal's plan keeps writes
+  // target_launch_date only. syncTargetLaunch reads target_date as the date
+  // it last wrote and leaves the hand edit alone while the plan's own target
+  // is unchanged; a target_date written here too would make the next tick put
+  // the plan date back, silently. Without a plan, both columns (withTargetPair).
+  if ("target_date" in patch && "target_launch_date" in patch && (await planKeepsTarget(id))) {
+    patch = { ...patch };
+    delete patch["target_date"];
+  }
+
   // Phase 7: snapshot before the write so the account activity feed can record
   // old → new. Returns null (and costs nothing) while audit_activity_feed is
   // off. See docs/design/hygiene.md §1.
@@ -2314,6 +2336,29 @@ export async function updateImplementation(
   // lie about history.
   await recordImplementationChange(id, before, patch, opts.actorProfileId ?? null);
   return { ok: true };
+}
+
+/**
+ * Whether syncTargetLaunch can reach this project: it is linked to a deal, or
+ * a deal of its customer falls back to it (implementationForDeal). True when
+ * the read fails, which keeps the hand edit to target_launch_date alone.
+ */
+async function planKeepsTarget(implementationId: string): Promise<boolean> {
+  const { data: impl, error } = await db()
+    .from("implementations")
+    .select("deal_id,customer_id")
+    .eq("id", implementationId)
+    .maybeSingle();
+  if (error) return true;
+  if (!impl) return false;
+  if (impl.deal_id) return true;
+  if (!impl.customer_id) return false;
+  const { data: deals, error: dealError } = await db()
+    .from("portal_accounts")
+    .select("id")
+    .eq("customer_id", impl.customer_id)
+    .limit(1);
+  return Boolean(dealError) || (deals ?? []).length > 0;
 }
 
 /* ---------- Mutations (Stage advancement) ---------- */
@@ -3118,11 +3163,12 @@ export async function updateRecordField(args: {
   if (spec.table === "implementations") {
     // Through updateImplementation, so the activity feed snapshot and the
     // old→new diff happen exactly as they do for a full save.
-    await updateImplementation(
-      args.implementationId,
-      { [args.field]: next },
-      { actorProfileId: args.actorProfileId },
-    );
+    // A target launch edit writes target_date with it (withTargetPair), so
+    // the Customers list and Plan end / Reports read one date, unless a
+    // deal's plan keeps the target (see updateImplementation).
+    await updateImplementation(args.implementationId, withTargetPair({ [args.field]: next }), {
+      actorProfileId: args.actorProfileId,
+    });
     return { ok: true, field: args.field, value: next };
   }
 

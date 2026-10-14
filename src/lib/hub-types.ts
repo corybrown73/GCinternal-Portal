@@ -30,6 +30,10 @@ export type ImplementationRow = {
   tier: string | null;
   target_launch_date: string | null;
   actual_launch_date: string | null;
+  /** The plan's Go-Live tick (0073). A launch, like actual_launch_date (launch-state.ts). */
+  go_live_at?: string | null;
+  /** The deal's plan ticked its live milestone on this day. Also a launch. */
+  live_done_on?: string | null;
   overdue_commitments: number;
   open_escalations: number;
 };
@@ -283,6 +287,8 @@ export type Customer360 = {
     contract_start_date: string | null;
     target_launch_date: string | null;
     actual_launch_date: string | null;
+    /** The Go-Live tick (= dates.go_live), for the launch readers (launch-state.ts). */
+    go_live_at?: string | null;
     /** This stage's target duration from the template, or null if none was set. */
     stage_target_days: number | null;
     customer_goals: string | null;

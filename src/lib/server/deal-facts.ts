@@ -229,6 +229,7 @@ export async function dealFactsFor(
           : [],
       close_date: timeline.closeDate,
       live_date: timeline.liveDate,
+      live_done_on: timeline.liveDoneOn,
       // Transcript proposals are an implementation's, not the deal's: the
       // caller that knows which implementation it is rendering overlays the
       // count (`withPendingProposals`), so a deal with two implementations

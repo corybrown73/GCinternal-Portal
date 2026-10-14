@@ -5,6 +5,7 @@ import { isFlagOn } from "./app-config.server";
 import { audit } from "./server/audit";
 import { emitEvent, recordImplementationCreated, safeCreateAlert } from "./server/events";
 import { sfId18 } from "./server/sf-id";
+import { withTargetPair } from "./implementation-input";
 import type { FieldMap } from "./server/sf-field-maps";
 import { outboundFields } from "./server/sf-field-maps";
 import type { TemplateCandidate } from "./server/template-select";
@@ -218,6 +219,19 @@ export function createIngestPort(ctx: { apiKeyId: string | null }): IngestPort {
         }
         throw new Error(error.message);
       }
+      // sf_create_implementation (0023) inserts a fixed column list that has
+      // no target_date, so the stored target is set in both columns here, the
+      // same value (withTargetPair). Only into an empty target_date. A failure
+      // is logged, never thrown: the project exists and is claimed.
+      if (patch["target_launch_date"]) {
+        const { error: targetError } = await db()
+          .from("implementations")
+          .update({ target_date: patch["target_launch_date"] })
+          .eq("id", data as string)
+          .is("target_date", null);
+        if (targetError)
+          console.error("[sf] could not set target_date on the new project", targetError);
+      }
       return { id: data as string };
     },
 
@@ -227,7 +241,11 @@ export function createIngestPort(ctx: { apiKeyId: string | null }): IngestPort {
     },
 
     async applyReplayFills(implId, fills, syncLogId) {
-      const { error } = await db().from("implementations").update(fills).eq("id", implId);
+      // A filled target launch fills target_date with it (withTargetPair).
+      const { error } = await db()
+        .from("implementations")
+        .update(withTargetPair(fills))
+        .eq("id", implId);
       if (error) throw new Error(error.message);
 
       await audit({

@@ -194,6 +194,8 @@ export function triageRowForCustomer360(record: Customer360): QueueRow | null {
     tier: impl.tier,
     target_launch_date: impl.target_launch_date,
     actual_launch_date: impl.actual_launch_date,
+    go_live_at: impl.go_live_at ?? impl.dates?.go_live ?? null,
+    live_done_on: record.deal_facts?.live_done_on ?? null,
     overdue_commitments: (record.commitments ?? []).filter(
       (c: any) => c.due_date && isOverdue(c.due_date),
     ).length,
@@ -260,7 +262,7 @@ function signalRow(impl: ImplementationRow, bundle: TriageBundle | undefined): Q
       highSignalPresent)
       ? overdueCommitment
       : null;
-  const launchSlipped = launchOverdue(impl);
+  const launchSlipped = launchOverdue(impl, bundle?.deal);
 
   // ---------- ACT NOW ----------
   if (severeEscalation) {

@@ -13,6 +13,7 @@
 import { launchAcceptanceGate } from "../launch-gate";
 import { LAUNCH_STAGE } from "../launch-gate";
 import { fmtDate, normalizeStage, stageLabel } from "../hub-format";
+import { launchedOn } from "../launch-state";
 import type { WaitingOn } from "../customer360-derive";
 import type { LifecycleStageId } from "../lifecycle";
 import { DAY_MS } from "./stage-history";
@@ -76,6 +77,9 @@ type ImplLike = {
   current_stage?: string | null;
   target_launch_date?: string | null;
   actual_launch_date?: string | null;
+  /** The Go-Live tick and the plan's live tick: each is a launch (launch-state.ts). */
+  go_live_at?: string | null;
+  live_done_on?: string | null;
 };
 
 type ApprovalLike = {
@@ -309,7 +313,7 @@ export type LaunchRiskInput = {
 export function launchDateAtRisk(input: LaunchRiskInput, now: Date = new Date()): AlertEvaluation {
   const { impl } = input;
   const withheld: AlertWithheld[] = [];
-  if (!impl.target_launch_date || impl.actual_launch_date) return { findings: [], withheld };
+  if (!impl.target_launch_date || launchedOn(impl)) return { findings: [], withheld };
 
   const target = new Date(impl.target_launch_date).getTime();
   if (Number.isNaN(target)) return { findings: [], withheld };

@@ -11,6 +11,7 @@ import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { isFlagOn } from "./app-config.server";
 import { waitingOn, type WaitingOn } from "./customer360-derive";
 import { normalizeStage } from "./hub-format";
+import { dealStagesFor } from "./server/deal-stage";
 import type { LifecycleStageId } from "./lifecycle";
 import {
   compareAll,
@@ -219,6 +220,8 @@ type ImplRow = {
   stage_entered_at: string | null;
   target_launch_date: string | null;
   actual_launch_date: string | null;
+  deal_id: string | null;
+  go_live_at: string | null;
   health_recorded: string | null;
   health_recorded_reason: string | null;
   health_computed: string | null;
@@ -243,7 +246,7 @@ async function loadInputs() {
     db()
       .from("implementations")
       .select(
-        "id, name, customer_id, current_stage, stage_entered_at, target_launch_date, actual_launch_date, health_recorded, health_recorded_reason, health_computed, owner_id",
+        "id, name, customer_id, deal_id, current_stage, stage_entered_at, target_launch_date, actual_launch_date, go_live_at, health_recorded, health_recorded_reason, health_computed, owner_id",
       ),
     db().from("customers").select("id, name"),
     db().from("team_members").select("id, name"),
@@ -292,8 +295,15 @@ async function loadInputs() {
     field_mappings: mappingsBySolution.get(s.id) ?? [],
   }));
 
+  // The plan's live tick, per project through its deal: a launch, like the
+  // Go-Live tick and the typed actual launch (launch-state.ts).
+  const dealFacts = await dealStagesFor((impls ?? []) as ImplRow[]);
+
   return {
-    impls: (impls ?? []) as ImplRow[],
+    impls: ((impls ?? []) as ImplRow[]).map((i) => ({
+      ...i,
+      live_done_on: dealFacts.get(i.id)?.live_done_on ?? null,
+    })),
     customerName: new Map<string, string>((customers ?? []).map((c: any) => [c.id, c.name])),
     teamName: new Map<string, string>((team ?? []).map((t: any) => [t.id, t.name])),
     history: history ?? [],
@@ -357,6 +367,8 @@ export async function loadSignals(now: Date = new Date()): Promise<SignalsView> 
       current_stage: impl.current_stage,
       target_launch_date: impl.target_launch_date,
       actual_launch_date: impl.actual_launch_date,
+      go_live_at: impl.go_live_at,
+      live_done_on: impl.live_done_on,
     };
 
     const champion = championGoneQuiet(

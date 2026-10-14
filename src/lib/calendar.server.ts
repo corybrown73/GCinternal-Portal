@@ -36,7 +36,7 @@ export async function loadCalendar(
   now: Date = new Date(),
 ): Promise<{ today: string; events: CalendarEvent[] }> {
   const today = teamToday(now);
-  const rows = await loadImplementations(scope, opts);
+  const rows = await loadImplementations(scope, { ...opts, includeSuperseded: true });
   if (!rows.length) return { today, events: [] };
 
   const ids = new Set(rows.map((r) => r.id));

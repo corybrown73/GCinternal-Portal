@@ -2,6 +2,8 @@ import { supabaseAdmin } from "@/integrations/supabase/client.server";
 
 import { dealStageFor } from "../deal-stage";
 import { dealValue } from "../deal-value";
+import { readIntake } from "../intake-answers";
+import { liveTickOf } from "../launch-state";
 import type { AccountStage } from "../presale-stages";
 
 export type DealStageFacts = {
@@ -10,6 +12,8 @@ export type DealStageFacts = {
   stage_entered_at: string | null;
   /** The deal is a test account (0085). */
   is_test: boolean;
+  /** The day the deal's plan ticked its live milestone, or null (launch-state.ts). */
+  live_done_on: string | null;
 };
 
 /**
@@ -28,7 +32,13 @@ export async function dealStagesFor(
   const dealIds = Array.from(new Set(impls.map((i) => i.deal_id).filter(Boolean))) as string[];
   const byDeal = new Map<
     string,
-    { stage: string; value: number | null; stage_entered_at: string | null; is_test: boolean }
+    {
+      stage: string;
+      value: number | null;
+      stage_entered_at: string | null;
+      is_test: boolean;
+      live_done_on: string | null;
+    }
   >();
   if (dealIds.length) {
     // `*` rather than a column list: is_test (0085) reads as false before
@@ -44,12 +54,14 @@ export async function dealStagesFor(
       sow_value: number | null;
       stage_entered_at: string | null;
       is_test?: boolean | null;
+      intake?: unknown;
     }>)
       byDeal.set(d.id, {
         stage: d.stage,
         value: dealValue(d),
         stage_entered_at: d.stage_entered_at ?? null,
         is_test: d.is_test === true,
+        live_done_on: d.intake ? liveTickOf(readIntake(d.intake)) : null,
       });
   }
   const out = new Map<string, DealStageFacts>();
@@ -63,6 +75,7 @@ export async function dealStagesFor(
       value: deal?.value ?? null,
       stage_entered_at: deal?.stage_entered_at ?? null,
       is_test: deal?.is_test ?? false,
+      live_done_on: deal?.live_done_on ?? null,
     });
   }
   return out;

@@ -22,6 +22,7 @@
  * Pure: no I/O.
  */
 import { fmtDate } from "../hub-format";
+import { launchedOn } from "../launch-state";
 import type { DwellComparison } from "./dwell";
 import { dwellVsTarget, targetFor, type ImplementationTargets } from "./dwell";
 import type { OpenStageSegment, StageSegment } from "./stage-history";
@@ -62,6 +63,9 @@ type SlipImpl = {
   id: string;
   target_launch_date?: string | null;
   actual_launch_date?: string | null;
+  /** The Go-Live tick and the plan's live tick: each is a launch (launch-state.ts). */
+  go_live_at?: string | null;
+  live_done_on?: string | null;
 };
 
 const dayDiff = (fromIso: string, toMs: number): number => {
@@ -84,9 +88,9 @@ export function slipAttribution(
   if (!impl.target_launch_date) {
     return { slipped: false, reason: "No target launch date is recorded, so there is no slip." };
   }
-  const endMs = impl.actual_launch_date
-    ? new Date(impl.actual_launch_date).getTime()
-    : now.getTime();
+  // The launch as recorded anywhere: typed, the Go-Live tick or the plan's live tick.
+  const launched = launchedOn(impl);
+  const endMs = launched ? new Date(launched).getTime() : now.getTime();
   if (Number.isNaN(endMs)) {
     return { slipped: false, reason: "The recorded launch date could not be read." };
   }
@@ -94,14 +98,14 @@ export function slipAttribution(
   if (slipDays <= 0) {
     return {
       slipped: false,
-      reason: impl.actual_launch_date
-        ? `Launched ${fmtDate(impl.actual_launch_date)}, on or before the ${fmtDate(impl.target_launch_date)} target.`
+      reason: launched
+        ? `Launched ${fmtDate(launched)}, on or before the ${fmtDate(impl.target_launch_date)} target.`
         : `Target launch ${fmtDate(impl.target_launch_date)} has not passed.`,
     };
   }
 
-  const basis = impl.actual_launch_date
-    ? `Actual launch ${fmtDate(impl.actual_launch_date)} against the target of ${fmtDate(impl.target_launch_date)}. Only the current target is stored — a date that was moved leaves no record.`
+  const basis = launched
+    ? `Actual launch ${fmtDate(launched)} against the target of ${fmtDate(impl.target_launch_date)}. Only the current target is stored — a date that was moved leaves no record.`
     : `Today against the target of ${fmtDate(impl.target_launch_date)}, with no actual launch recorded. Only the current target is stored — a date that was moved leaves no record.`;
 
   const mine = completed.filter((s) => s.implementation_id === impl.id);
