@@ -103,7 +103,7 @@ import { PartnerChoice } from "@/components/partner-choice";
 import { partnerWorkspace } from "@/lib/partner-journey";
 import { getPartnerProgress } from "@/lib/hub.functions";
 import { stageGuidanceFor } from "@/lib/stage-guidance";
-import { parseWonGate, type WonGateMissing } from "@/lib/won-gate";
+import { hasSowOnFile, parseWonGate, type WonGateMissing } from "@/lib/won-gate";
 import { liveWonGateMissing, parseGateParam } from "@/lib/deal-entry";
 import { ClosedWonGateNotice } from "@/components/closed-won-gate";
 import { ExistingCustomerLink } from "@/components/existing-customer-link";
@@ -492,7 +492,7 @@ export function StageFlow({ deal }: { deal: DealData }) {
     intake,
     owner: assignment.data?.owner?.name ?? null,
     gongReports: deal.gong_reports.length,
-    hasSow: Boolean(deal.sow_url),
+    hasSow: hasSowOnFile(deal.account),
     hasBrief: deal.briefs.some((b) => b.status === "complete" && b.generator === "llm"),
     hasLink: Boolean((deal.account as { welcome_share_url?: string | null }).welcome_share_url),
     timeline,
@@ -752,7 +752,7 @@ export function ImplementationStatusFacts({
     intake,
     owner: ownerName,
     gongReports: deal.gong_reports.length,
-    hasSow: Boolean(deal.sow_url),
+    hasSow: hasSowOnFile(deal.account),
     hasBrief: deal.briefs.some((b) => b.status === "complete" && b.generator === "llm"),
     hasLink: Boolean((deal.account as { welcome_share_url?: string | null }).welcome_share_url),
     timeline,
@@ -1041,7 +1041,7 @@ export function CurrentImplementationTab({
     intake,
     owner: ownerName,
     gongReports: deal.gong_reports.length,
-    hasSow: Boolean(deal.sow_url),
+    hasSow: hasSowOnFile(deal.account),
     hasBrief: deal.briefs.some((b) => b.status === "complete" && b.generator === "llm"),
     hasLink: Boolean((deal.account as { welcome_share_url?: string | null }).welcome_share_url),
     timeline,
@@ -1187,7 +1187,11 @@ export function CurrentImplementationTab({
           <span>
             <span className="text-muted-foreground">Next action</span>{" "}
             <span className="text-foreground">
-              {strip ? strip.nextAction : ws.nextStep ? ws.nextStep.label : "Nothing open"}
+              {strip
+                ? strip.nextAction
+                : ws.nextStep
+                  ? (ws.nextStep.next ?? ws.nextStep.label)
+                  : "Nothing open"}
             </span>
           </span>
           <span>

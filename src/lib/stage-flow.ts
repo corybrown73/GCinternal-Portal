@@ -17,7 +17,7 @@ import {
 import type { AccountStage } from "./presale-stages";
 import { isPartnerDeal } from "./partner-implementation";
 import { handoffChecks } from "./sales-handoff";
-import { TEAM_ZONE, shortDay, type Timeline } from "./onboarding-timeline";
+import { TEAM_ZONE, localIso, shortDay, type Timeline } from "./onboarding-timeline";
 
 /**
  * The deal's stages as a checklist: what each stage asks of the person who
@@ -271,6 +271,11 @@ export type TaskAction =
 export type FlowTask = {
   key: string;
   label: string;
+  /**
+   * The task as an action, for lists that show it as the next step: the
+   * label is the checkbox's state ("Intake completed"), this is the doing.
+   */
+  next?: string;
   /** One sentence: what doing it means. */
   hint: string;
   done: boolean;
@@ -535,6 +540,7 @@ function preKickoffTasks(a: IntakeAnswers): FlowTask[] {
     {
       key: "intake_complete",
       label: "Customer Pre-Kickoff Intake completed",
+      next: "Get the customer's Pre-Kickoff Intake in",
       hint: "Their answers — on their welcome page, or in GoCanvas: the process today, who is in the field, who will be in the room. Tick it if they answered elsewhere.",
       // Their answers on the welcome page (src/lib/sales-handoff.ts) count
       // without a tick; a tick records an intake that came in another way.
@@ -554,6 +560,7 @@ function preKickoffTasks(a: IntakeAnswers): FlowTask[] {
     {
       key: "prep",
       label: "Starting solution prepared",
+      next: "Prepare the starting solution",
       hint: "A first version built from the brief, the SOW and their intake, so Kickoff validates instead of starting blank.",
       done: prepDone === PREP_ITEMS.length,
       summary:
@@ -583,6 +590,7 @@ function processCallTasks(a: IntakeAnswers): FlowTask[] {
     {
       key: "process_understanding",
       label: "Enough process understanding to prepare for Kickoff?",
+      next: "Decide whether a Process Call is needed",
       hint: "From the brief, the SOW and their intake. Yes moves on; No books a Process Call first.",
       done: decision === "yes" || decision === "no",
       summary:
@@ -687,6 +695,34 @@ function kickoffBookingTask(a: IntakeAnswers): FlowTask {
     locked: null,
   };
 }
+
+/**
+ * A plan call as a next step: "Book the Stage 3 call" until it has a time,
+ * then "Hold the Stage 3 call (Thu, Oct 16)". Never the stage's own name.
+ * A booked call whose day has gone by, not ticked, is a tick-or-rebook, the
+ * same ask as the overdue-call reason (worded apart from it on purpose:
+ * Home's Due keys on that reason's exact text).
+ */
+export function meetingNext(
+  label: string,
+  date: string | null | undefined,
+  booked: boolean,
+  today: string = localIso(),
+): string {
+  const name = label
+    .split(" — ")[0]!
+    .replace(/\s+call$/i, "")
+    .trim();
+  if (booked && date && date < today) {
+    return `Tick the ${name} call if it was held (${shortDay(date)}), or rebook it`;
+  }
+  return booked
+    ? `Hold the ${name} call${date ? ` (${shortDay(date)})` : ""}`
+    : `Book the ${name} call`;
+}
+
+/** "Logs into the web portal" → "logs into the web portal". */
+const lowerFirst = (x: string) => x.charAt(0).toLowerCase() + x.slice(1);
 
 /**
  * The Onboarding stage: only what a person can honestly tick and a manager
@@ -811,6 +847,7 @@ function playbookOnboarding(a: IntakeAnswers, t: Timeline): FlowTask[] {
       date: m.date,
       done: Boolean(m.doneOn),
       summary: m.doneOn ? `Held ${shortDay(m.doneOn)}` : null,
+      next: meetingNext(m.label, m.date, Boolean(m.time)),
     });
   };
   const out: FlowTask[] = [
@@ -819,20 +856,27 @@ function playbookOnboarding(a: IntakeAnswers, t: Timeline): FlowTask[] {
       "between_1",
       "Between 1 and 2: they tested and sent what was missing; we prepared Stage 2",
       "If they have not tested, say so now — do not find out on the Stage 2 call.",
-      { date: at("homework")?.date ?? null },
+      {
+        date: at("homework")?.date ?? null,
+        next: "Check they tested and sent what was missing; prepare Stage 2",
+      },
     ),
     stage("working"),
     tick(
       "between_2",
       "Between 2 and 3: real users submitting; outputs and admin prepared",
       "Real submissions in, the agreed fixes made, and the Stage 3 attendees confirmed.",
-      { date: at("fieldtest")?.date ?? null },
+      {
+        date: at("fieldtest")?.date ?? null,
+        next: "Get real users submitting; prepare the outputs and admin",
+      },
     ),
     stage("adjust"),
     ...readinessFor(a).map((f) =>
       tick(f.key, f.label, "Checked with them, on their account.", {
         group: "Functional — what they can do without us",
         date: at("live")?.date ?? null,
+        next: `Check with them: ${lowerFirst(f.label)}`,
       }),
     ),
   ];
@@ -843,6 +887,7 @@ function playbookOnboarding(a: IntakeAnswers, t: Timeline): FlowTask[] {
     out.push({
       key: `svc:${s.id}`,
       label: `${s.name || s.label} complete`,
+      next: `Deliver ${s.name || s.label}`,
       hint:
         s.kind === "integration"
           ? "Connected, tested end to end, and live."
@@ -867,7 +912,10 @@ function playbookOnboarding(a: IntakeAnswers, t: Timeline): FlowTask[] {
       "closeout",
       "Close-out: parking lot reviewed, follow-ups scheduled, handed to Customer Success",
       "The core is done when they are Functional; anything left is scheduled on purpose, not left as unfinished implementation.",
-      { group: "Week 4" },
+      {
+        group: "Week 4",
+        next: "Close out: review the parking lot, schedule follow-ups, hand to Customer Success",
+      },
     ),
   );
   return out;
@@ -884,6 +932,10 @@ function onboardingTasks(a: IntakeAnswers, t: Timeline | null | undefined): Flow
     out.push({
       key: m.key,
       label: m.label,
+      next:
+        m.kind === "call"
+          ? meetingNext(m.label, m.date, Boolean(m.time))
+          : `Get them to: ${m.label}`,
       hint: m.detail,
       done: Boolean(m.doneOn),
       summary: m.doneOn ? `Done ${shortDay(m.doneOn)}` : null,
@@ -900,6 +952,7 @@ function onboardingTasks(a: IntakeAnswers, t: Timeline | null | undefined): Flow
     out.push({
       key: `svc:${s.id}`,
       label: `${s.name || s.label} complete`,
+      next: `Deliver ${s.name || s.label}`,
       hint:
         s.kind === "integration"
           ? "Connected, tested end to end, and live."
@@ -986,13 +1039,19 @@ export function tasksByStage(a: IntakeAnswers, t: Timeline | null | undefined): 
       "baseline_locked",
       "Plan and dates agreed with the customer — baseline locked",
       "The go-live the customer agreed to in Stage 1. It never moves; a later change is a new target with a reason.",
-      { group: "Working end to end" },
+      {
+        group: "Working end to end",
+        next: "Agree the plan and dates with the customer, and lock the baseline",
+      },
     ),
     tick(
       "e2e_working",
       "One submission went end to end on their account",
       "From the phone to the output, on real data, in their own account — not ours.",
-      { group: "Working end to end" },
+      {
+        group: "Working end to end",
+        next: "Get one submission through end to end on their account",
+      },
     ),
   );
   out.make_it_run.push(
@@ -1000,7 +1059,10 @@ export function tasksByStage(a: IntakeAnswers, t: Timeline | null | undefined): 
       "go_live",
       "Operational Go-Live: their people are using it for real",
       "The intended users submit real work without us. Time to value ends here.",
-      { group: "Operational Go-Live" },
+      {
+        group: "Operational Go-Live",
+        next: "Get their people using it for real (Operational Go-Live)",
+      },
     ),
   );
   // Purchased solutions: Ready to run waits on every launch-critical one
@@ -1012,6 +1074,7 @@ export function tasksByStage(a: IntakeAnswers, t: Timeline | null | undefined): 
     out.make_it_yours.push({
       key: `lc:${s.id}`,
       label: `${s.name || SOLUTION_LABEL[s.kind]} accepted (launch-critical)`,
+      next: `Get ${s.name || SOLUTION_LABEL[s.kind]} accepted (launch-critical)`,
       hint:
         s.acceptance?.trim() ||
         "Must be Accepted before Operational Go-Live. Managed on the Solutions card.",
@@ -1026,6 +1089,7 @@ export function tasksByStage(a: IntakeAnswers, t: Timeline | null | undefined): 
     out.complete.push({
       key: `disp:${s.id}`,
       label: `${s.name || SOLUTION_LABEL[s.kind]}: Accepted, Descoped or Transferred`,
+      next: `Settle ${s.name || SOLUTION_LABEL[s.kind]}: Accepted, Descoped or Transferred`,
       hint: "Every purchased solution ends one of three ways; the TIS cannot decide alone. On the Solutions card.",
       done: false,
       summary: SOLUTION_STATUS_LABEL[solutionStatus(s, done)],
@@ -1067,6 +1131,7 @@ function graduationChecks(a: IntakeAnswers, t: Timeline): FlowTask[] {
     return {
       key: g.key,
       label: g.label,
+      next: `Confirm ${lowerFirst(g.label)}`,
       hint: g.hint,
       done: Boolean(on),
       summary: on ? `Done ${stampDay(on)}` : null,
@@ -1379,8 +1444,13 @@ export function nextChecklistTask(input: StageFlowInput): string | null {
       : f.current;
   const stage = f.stages.find((s) => s.key === key);
   if (!stage) return null;
-  const next = stage.tasks.find((t) => !t.done && !t.locked) ?? stage.tasks.find((t) => !t.done);
-  return next?.label ?? null;
+  // An optional task (the graduation brief, the activation session) is never
+  // the next step: the deal page's workspace skips it too.
+  const next =
+    stage.tasks.find((t) => !t.done && !t.locked && !t.optional) ??
+    stage.tasks.find((t) => !t.done && !t.optional);
+  // The action, not the checkbox's state.
+  return next ? (next.next ?? next.label) : null;
 }
 
 /**
@@ -1446,7 +1516,8 @@ export function nudgesFor(args: {
   const out: Nudge[] = [];
   const visit = `${args.stage}@${args.enteredAt.slice(0, 10)}`;
   const current = args.flow.stages.find((s) => s.key === args.flow.current);
-  const next = current?.tasks.find((t) => !t.done)?.label ?? null;
+  const task = current?.tasks.find((t) => !t.done);
+  const next = task ? (task.next ?? task.label) : null;
   const unowned =
     (args.stage === "closed_won" || args.stage === "negotiate") &&
     !(

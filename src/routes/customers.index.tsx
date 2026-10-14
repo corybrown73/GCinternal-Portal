@@ -20,10 +20,13 @@ import { GRADUATED_STAGE } from "@/lib/claimed-owner";
 import { readShowTests } from "@/lib/test-accounts";
 import { ShowTestsToggle } from "@/components/show-tests-toggle";
 
-// Home's cache entry by default; the test-account view is its own entry.
+// Its own entry, not Home's ["home", scope]: Home asks for "mine" when no
+// scope is set and this list asks for the server default, so a shared key
+// let whichever page loaded first fill the other. It stays under "home" so
+// every save that refreshes Home refreshes this list too.
 const implementationsQuery = (scope: string | null, tests = false) =>
   queryOptions({
-    queryKey: tests ? ["home", scope, "tests"] : ["home", scope],
+    queryKey: tests ? ["home", "customers", scope, "tests"] : ["home", "customers", scope],
     queryFn: () =>
       getHome({ data: { ...(scope ? { scope } : {}), ...(tests ? { includeTests: true } : {}) } }),
   });

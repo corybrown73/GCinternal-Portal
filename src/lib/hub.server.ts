@@ -153,46 +153,53 @@ export async function loadImplementations(
     );
   };
 
-  return excludeTests(impls ?? [], isTest, opts.includeTests)
-    .filter(inScope)
-    .map((i: any) => {
-      const c: any = customerMap.get(i.customer_id) ?? {};
-      const ownerId = ownerOf(i);
-      return {
-        id: i.id,
-        name: i.name,
-        customer_id: i.customer_id,
-        customer_name: c.name ? demo.org(c.name, c.id) : "Unknown customer",
-        segment: c.segment ?? null,
-        industry: c.industry ?? null,
-        // The deal's own value when the project came from one; the customer's
-        // ARR otherwise. One number per card, the same one the pipeline shows.
-        arr: demo.arr(dealStages.get(i.id)?.value ?? c.arr ?? null),
-        current_stage: i.current_stage,
-        deal_stage:
-          dealStages.get(i.id)?.stage ??
-          dealStageFor({ deal_stage: null, current_stage: i.current_stage }),
-        deal_id: i.deal_id ?? null,
-        // The deal's clock when there is a deal: the same field the pipeline
-        // counts from, so "days in stage" is one number on every page.
-        stage_entered_at: dealStages.get(i.id)?.stage_entered_at ?? i.stage_entered_at,
-        status: i.status,
-        health_recorded: i.health_recorded ?? null,
-        health_recorded_reason: i.health_recorded_reason ?? null,
-        owner_name: ownerId ? (team.get(ownerId)?.name ?? null) : null,
-        is_test: isTest(i),
-        superseded: Boolean(i.superseded_by_implementation_id),
-        tier: i.tier,
-        target_launch_date: i.target_launch_date,
-        actual_launch_date: i.actual_launch_date,
-        overdue_commitments: (commitments ?? []).filter(
-          (m: any) => m.implementation_id === i.id && m.status === "open" && isOverdue(m.due_date),
-        ).length,
-        open_escalations: (escalations ?? []).filter(
-          (e: any) => e.implementation_id === i.id && e.status === "open",
-        ).length,
-      };
-    });
+  return (
+    excludeTests(impls ?? [], isTest, opts.includeTests)
+      // A superseded project was replaced by a newer one for the same deal: it
+      // is out of the book (claimed-owner's active book), so no count, queue or
+      // list says the deal twice. Customer 360 still opens it by id.
+      .filter((i: any) => !i.superseded_by_implementation_id)
+      .filter(inScope)
+      .map((i: any) => {
+        const c: any = customerMap.get(i.customer_id) ?? {};
+        const ownerId = ownerOf(i);
+        return {
+          id: i.id,
+          name: i.name,
+          customer_id: i.customer_id,
+          customer_name: c.name ? demo.org(c.name, c.id) : "Unknown customer",
+          segment: c.segment ?? null,
+          industry: c.industry ?? null,
+          // The deal's own value when the project came from one; the customer's
+          // ARR otherwise. One number per card, the same one the pipeline shows.
+          arr: demo.arr(dealStages.get(i.id)?.value ?? c.arr ?? null),
+          current_stage: i.current_stage,
+          deal_stage:
+            dealStages.get(i.id)?.stage ??
+            dealStageFor({ deal_stage: null, current_stage: i.current_stage }),
+          deal_id: i.deal_id ?? null,
+          // The deal's clock when there is a deal: the same field the pipeline
+          // counts from, so "days in stage" is one number on every page.
+          stage_entered_at: dealStages.get(i.id)?.stage_entered_at ?? i.stage_entered_at,
+          status: i.status,
+          health_recorded: i.health_recorded ?? null,
+          health_recorded_reason: i.health_recorded_reason ?? null,
+          owner_name: ownerId ? (team.get(ownerId)?.name ?? null) : null,
+          is_test: isTest(i),
+          superseded: Boolean(i.superseded_by_implementation_id),
+          tier: i.tier,
+          target_launch_date: i.target_launch_date,
+          actual_launch_date: i.actual_launch_date,
+          overdue_commitments: (commitments ?? []).filter(
+            (m: any) =>
+              m.implementation_id === i.id && m.status === "open" && isOverdue(m.due_date),
+          ).length,
+          open_escalations: (escalations ?? []).filter(
+            (e: any) => e.implementation_id === i.id && e.status === "open",
+          ).length,
+        };
+      })
+  );
 }
 
 export async function loadHome(

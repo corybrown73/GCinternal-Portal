@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { readIntake } from "../intake-answers";
 import { timelineFor } from "../onboarding-plan";
 import {
+  nextChecklistTask,
   readinessFor,
   stageFlow,
   taskKind,
@@ -52,7 +53,7 @@ function build(over: Partial<Record<string, unknown>> = {}, stage = "get_it_work
     homeworkDone: {},
     link: { sharedAt: "2026-09-16T10:00:00Z", openedAt: "2026-09-16T12:00:00Z" },
   };
-  return { intake, timeline, flow, input };
+  return { intake, timeline, flow, flowInput, input };
 }
 
 describe("the window of work", () => {
@@ -201,7 +202,8 @@ describe("who has the ball", () => {
     const w = workspaceFor(input);
     expect(w.ball).toEqual({
       who: "us",
-      detail: "Plan and dates agreed with the customer — baseline locked",
+      // The action, as Home and the Pipeline say it (QA 16), not the checkbox's state.
+      detail: "Agree the plan and dates with the customer, and lock the baseline",
       since: null,
     });
   });
@@ -264,6 +266,17 @@ describe("who has the ball", () => {
       "onboarding_complete",
     );
     expect(workspaceFor(input).ball).toBeNull();
+  });
+});
+
+describe("the next step is one line everywhere", () => {
+  it("at Graduate, the board's next step is the deal page's, never the optional brief", () => {
+    const { input, flowInput } = build({}, "onboarding_complete");
+    const ws = workspaceFor(input);
+    expect(ws.nextStep).not.toBeNull();
+    const next = nextChecklistTask(flowInput);
+    expect(next).toBe(ws.nextStep!.next ?? ws.nextStep!.label);
+    expect(next).not.toMatch(/brief/i);
   });
 });
 

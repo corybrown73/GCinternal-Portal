@@ -90,6 +90,10 @@ describe("stallFindings", () => {
     expect(stallFindings([deal({ is_test: true })], new Map(), TODAY)).toEqual([]);
   });
 
+  it("never raises a partner deal: its attention is its own milestones", () => {
+    expect(stallFindings([deal({ partner: true })], new Map(), TODAY)).toEqual([]);
+  });
+
   it("names Intake & Process, never the enum", () => {
     const [f] = stallFindings(
       [deal({ stage: "onboarding_kickoff", stage_entered_at: "2026-09-28T09:00:00Z" })],
@@ -132,6 +136,29 @@ describe("runStallAlerts", () => {
     fake.store["customers"]![0]!.is_test = true;
     expect(await runStallAlerts(TODAY)).toEqual({ raised: 0, already: 0 });
     expect(alerts()).toHaveLength(0);
+  });
+
+  it("leaves out a partner deal, by its project's journey or by its path", async () => {
+    fake.store["implementations"]![0]!.journey_type = "partner_implementation";
+    expect(await runStallAlerts(TODAY)).toEqual({ raised: 0, already: 0 });
+    fake.store["implementations"]![0]!.journey_type = null;
+    fake.store["portal_accounts"]![0]!.intake = { path: "partner_implementation" };
+    expect(await runStallAlerts(TODAY)).toEqual({ raised: 0, already: 0 });
+    expect(alerts()).toHaveLength(0);
+  });
+
+  it("reads partner from the live project only, as the board does", async () => {
+    // A superseded partner project with a newer standard replacement: not partner.
+    fake.store["implementations"]![0]!.journey_type = "partner_implementation";
+    fake.store["implementations"]![0]!.superseded_by_implementation_id = "impl-2";
+    fake.store["implementations"]!.push({
+      id: "impl-2",
+      deal_id: "deal-1",
+      created_at: "2026-10-02",
+      journey_type: "new_logo",
+    });
+    expect(await runStallAlerts(TODAY)).toEqual({ raised: 1, already: 0 });
+    expect(alerts()[0]).toMatchObject({ implementation_id: "impl-2" });
   });
 
   it("a new visit of the stage is a new alert", async () => {

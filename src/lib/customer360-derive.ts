@@ -2,6 +2,8 @@ import { GRADUATED_STAGE } from "./claimed-owner";
 import type { Customer360 } from "./hub-types";
 import { dealStageLabel } from "./deal-stage";
 import { LIFECYCLE_STAGES, LIFECYCLE_STAGE_MAP } from "./lifecycle";
+import type { DealFacts } from "./needs-action";
+import { STAGE_LIMITS, stuckLevel } from "./stage-flow";
 import {
   STAGE_FLAG_DAYS,
   daysSince,
@@ -154,6 +156,48 @@ type HealthImpl = {
   actual_launch_date?: string | null;
 };
 
+/** The deal's stage clock, as the deal facts carry it. */
+export type DealClock = Pick<DealFacts, "stage" | "business_days_in_stage" | "partner">;
+
+export type Stall = {
+  stalled: boolean;
+  days: number;
+  unit: "business" | "calendar";
+  /** The days past which it counts as stalled. */
+  limit: number | null;
+  /** Whose clock judged it: the deal's, or the implementation's own (no deal). */
+  clock: "deal" | "implementation";
+};
+
+/**
+ * One stall clock. With a deal, the deal's stage clock in business days
+ * against STAGE_LIMITS (the escalate limit: the same clock and line that put a
+ * deal in Act now on Home and red on the board). The implementation's own
+ * stage_entered_at in calendar days only for a project without a deal.
+ * Graduate is never stalled, and a partner deal's attention is its own
+ * milestones and work items (src/lib/partner-attention.ts), not stage age.
+ */
+export function stallOf(
+  impl: Pick<HealthImpl, "deal_stage" | "stage_entered_at">,
+  deal: DealClock | null | undefined,
+): Stall {
+  const graduated = impl.deal_stage === GRADUATED_STAGE || deal?.stage === GRADUATED_STAGE;
+  if (deal) {
+    const limit = STAGE_LIMITS[deal.stage]?.escalate ?? null;
+    const days = deal.business_days_in_stage;
+    const stalled = !graduated && !deal.partner && stuckLevel(deal.stage, days) === "escalate";
+    return { stalled, days, unit: "business", limit, clock: "deal" };
+  }
+  const days = daysSince(impl.stage_entered_at) ?? 0;
+  return {
+    stalled: !graduated && days > STAGE_FLAG_DAYS,
+    days,
+    unit: "calendar",
+    limit: STAGE_FLAG_DAYS,
+    clock: "implementation",
+  };
+}
+
 /** Same rule triage uses for a milestone that has slipped. */
 function milestoneMissed(m: any) {
   const status = (m.status ?? "").toLowerCase();
@@ -219,7 +263,8 @@ export function deriveHealth(record: Customer360, impl: HealthImpl): HealthResul
   const topRisk = bySeverity(open.risks);
   const topIssue = bySeverity(open.issues);
   const overdue = open.commitments.filter((c: any) => isOverdue(c.due_date));
-  const stalledDays = daysSince(impl.stage_entered_at) ?? 0;
+  const dealClock = (record as { deal_facts?: DealClock | null }).deal_facts ?? null;
+  const stall = stallOf(impl, dealClock);
   const badMilestone =
     milestones.find(milestoneMissed) ??
     milestones.find((m: any) => (m.status ?? "").toLowerCase() === "at_risk");
@@ -310,10 +355,15 @@ export function deriveHealth(record: Customer360, impl: HealthImpl): HealthResul
       "launch_overdue",
     );
   }
-  // Graduate is the end: time spent there is not a stall.
-  const stalled = stalledDays > STAGE_FLAG_DAYS && impl.deal_stage !== GRADUATED_STAGE;
-  if (stalled && (!isCsStage(impl.current_stage) || hasOtherOpenSignal(record))) {
-    return decide("at_risk", `Stalled ${stalledDays} days in current stage`, "stalled_stage");
+  // One clock (stallOf): the deal's when there is one. Graduate is never a stall.
+  if (stall.stalled && (!isCsStage(impl.current_stage) || hasOtherOpenSignal(record))) {
+    return decide(
+      "at_risk",
+      stall.clock === "deal"
+        ? `Stalled ${stall.days} business days in ${dealStageLabel(dealClock!.stage)}`
+        : `Stalled ${stall.days} days in current stage`,
+      "stalled_stage",
+    );
   }
   if (badMilestone) {
     return decide(

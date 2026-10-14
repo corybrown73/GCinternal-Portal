@@ -54,6 +54,7 @@ import {
 } from "@/lib/stage-flow";
 import { getWelcome } from "@/lib/welcome.functions";
 import { byKind, shortMeeting, workspaceFor, type WorkItem, type Workspace } from "@/lib/workspace";
+import { hasSowOnFile } from "@/lib/won-gate";
 import { cn } from "@/lib/utils";
 
 /**
@@ -119,7 +120,7 @@ function WorkspaceBody({
     intake,
     owner: impl.owner_name,
     gongReports: deal.gong_reports.length,
-    hasSow: Boolean(deal.sow_url),
+    hasSow: hasSowOnFile(deal.account),
     hasBrief: deal.briefs.some((b) => b.status === "complete" && b.generator === "llm"),
     hasLink: Boolean((deal.account as { welcome_share_url?: string | null }).welcome_share_url),
     timeline,
@@ -654,7 +655,8 @@ function NowPanel({
         </h2>
         {ws.nextStep ? (
           <p className="text-[12px] text-muted-foreground">
-            Next step: <span className="text-foreground">{ws.nextStep.label}</span>
+            Next step:{" "}
+            <span className="text-foreground">{ws.nextStep.next ?? ws.nextStep.label}</span>
           </p>
         ) : ws.now.length ? (
           <p className="text-[12px] text-status-ontrack-foreground">

@@ -43,6 +43,17 @@ export function completeGateMessage(
   return `${gatePrefix(toStage)} ${open} checklist step${open === 1 ? " is" : "s are"} still open. [checklist]`;
 }
 
+/**
+ * A SOW on file: the signed document, or its reference. The gate below, the
+ * board, the deal's checklist and the nudges all read it this way.
+ */
+export function hasSowOnFile(row: {
+  sow_document_path?: string | null;
+  sow_reference?: string | null;
+}): boolean {
+  return Boolean(row.sow_document_path) || Boolean(row.sow_reference?.trim());
+}
+
 /** What a deal still lacks, from the facts the record holds. */
 export function missingForClosedWon(facts: {
   reports: number;

@@ -180,3 +180,68 @@ describe("Home's triage with the deal's facts", () => {
     expect(triageRow(impl(), b).reason).toMatch(/escalation/i);
   });
 });
+
+describe("one stall clock (QA 7.8)", () => {
+  const longAgo = new Date(Date.now() - 40 * 86_400_000).toISOString();
+
+  it("judges a project with a deal by the deal's business days, not its own calendar date", () => {
+    const quiet = deal({ stage: "make_it_yours", business_days_in_stage: 2 });
+    const row = triageRow(impl({ stage_entered_at: longAgo }), bundle(quiet));
+    expect(row.reason).not.toMatch(/Stalled/);
+    expect(row.impact).toMatch(/2 business days in stage/);
+    const h = healthByImplementation([impl({ stage_entered_at: longAgo })], [bundle(quiet)]);
+    expect(h.get("i1")!.evidence.rule).not.toBe("stalled_stage");
+  });
+
+  it("calls it stalled at the deal's escalate limit, in business days", () => {
+    const stuck = deal({ stage: "make_it_yours", business_days_in_stage: 12 });
+    const h = healthByImplementation([impl()], [bundle(stuck)]);
+    expect(h.get("i1")!.level).toBe("at_risk");
+    expect(h.get("i1")!.reason).toMatch(/12 business days in Make it yours|Stuck 12 business days/);
+    expect(triageRow(impl(), bundle(stuck)).bucket).toBe("act_now");
+  });
+
+  it("leaves a partner deal's stall to its own milestones, and never stalls Graduate", () => {
+    const partner = deal({ stage: "make_it_yours", business_days_in_stage: 30, partner: true });
+    const h = healthByImplementation([impl()], [bundle({ ...partner, next_step: "x" })]);
+    expect(h.get("i1")!.evidence.rule).not.toBe("stalled_stage");
+    const grad = deal({ stage: "onboarding_complete", business_days_in_stage: 90 });
+    const g = healthByImplementation(
+      [impl({ deal_stage: "onboarding_complete", stage_entered_at: longAgo })],
+      [bundle(grad)],
+    );
+    expect(g.get("i1")!.evidence.rule).not.toBe("stalled_stage");
+  });
+
+  it("keeps the calendar clock for a project without a deal", () => {
+    const row = triageRow(impl({ deal_id: null, stage_entered_at: longAgo }), bundle(null));
+    expect(row.reason).toMatch(/Stalled \d+ days/);
+  });
+
+  it("says what to do when a stuck deal's checklist is empty, after anything the record names", () => {
+    const facts = deal({ stage: "closed_won", business_days_in_stage: 6, next_step: null });
+    const stuck = needsAction(facts).find((r) => r.reason.startsWith("Stuck"))!;
+    expect(stuck.next).toBeUndefined();
+    expect(stuck.fallbackNext).toBe("Move it to Intake & Process, or note what is holding it");
+    // Nothing else named: the move is the next step.
+    const row = triageRow(impl({ deal_stage: "closed_won" }), bundle(facts));
+    expect(row.next_action).toBe("Move it to Intake & Process, or note what is holding it");
+    // A launch date that has passed is said first (Home's Due keys on it).
+    const late = triageRow(
+      impl({ deal_stage: "closed_won", target_launch_date: "2026-01-05" }),
+      bundle(facts),
+    );
+    expect(late.next_action).toMatch(/^Launch date has passed/);
+  });
+
+  it("never calls a partner deal stuck by its stage's age: its milestones speak for it", () => {
+    const partner = deal({ stage: "closed_won", business_days_in_stage: 9, partner: true });
+    expect(needsAction(partner).some((r) => r.reason.startsWith("Stuck"))).toBe(false);
+    const row = triageRow(impl({ deal_stage: "closed_won" }), bundle(partner));
+    expect(row.bucket).not.toBe("act_now");
+    // The same deal, not a partner one, is stuck.
+    expect(
+      needsAction({ ...partner, partner: false }).some((r) => r.reason.startsWith("Stuck")),
+    ).toBe(true);
+  });
+});

@@ -25,6 +25,8 @@ export function guideSteps(input: {
   gongReports: number;
   aiBriefs: number;
   hasSow: boolean;
+  /** The signed SOW document itself, which the plan reads; defaults to hasSow. */
+  hasSowDocument?: boolean;
   shareUrl: string | null;
   stageHistory: Array<{ to_stage: string; occurred_at: string }>;
   wonStageKey: string;
@@ -36,6 +38,7 @@ export function guideSteps(input: {
   customerOpened?: boolean;
 }): GuideStep[] {
   const a: IntakeAnswers = readIntake(input.intake);
+  const sowDocument = input.hasSowDocument ?? input.hasSow;
   const status = intakeStatus(a);
   const close = closeDateFor({
     intake: a,
@@ -116,8 +119,8 @@ export function guideSteps(input: {
         a.has_sow === false
           ? "Nothing bought beyond the core: the plan stands on the flow alone."
           : "Press “Read the SOW into the plan” on the plan below. Ticks when the plan has actually read it — integrations come from here, never from the notes.",
-      done: a.has_sow === false || (input.hasSow && Boolean(a.timeline.sow_applied_at)),
-      panel: input.hasSow
+      done: a.has_sow === false || (sowDocument && Boolean(a.timeline.sow_applied_at)),
+      panel: sowDocument
         ? { key: "deal:plan", id: "panel-plan" }
         : { key: "deal:intake", id: "panel-intake" },
     },

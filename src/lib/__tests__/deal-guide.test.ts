@@ -5,6 +5,23 @@ import { guideSteps } from "../deal-guide";
 const history = [{ to_stage: "closed_won", occurred_at: "2026-09-09T15:00:00Z" }];
 
 describe("guideSteps", () => {
+  it("a SOW reference with no document: paper is done, reading the SOW points at the upload", () => {
+    const steps = guideSteps({
+      intake: { has_sow: true },
+      gongReports: 0,
+      aiBriefs: 0,
+      hasSow: true,
+      hasSowDocument: false,
+      shareUrl: null,
+      stageHistory: history,
+      wonStageKey: "closed_won",
+    });
+    expect(steps.find((s) => s.key === "paper")!.done).toBe(true);
+    const sow = steps.find((s) => s.key === "sow")!;
+    expect(sow.done).toBe(false);
+    expect(sow.panel.id).toBe("panel-intake");
+  });
+
   it("starts with the notes and points at one next thing", () => {
     const steps = guideSteps({
       intake: null,

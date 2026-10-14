@@ -286,7 +286,7 @@ function NeedsMe({
   const [watchOpen, setWatchOpen] = useState(false);
   const isOpen = activeFilter ? true : needsAttentionOpen;
 
-  const heading = activeFilter ? activeFilter.label : "Needs attention";
+  const heading = activeFilter ? activeFilter.label : "Need attention";
   const count = activeFilter ? activeFilter.rows.length : rows.length;
   const bodyRows = activeFilter ? activeFilter.rows : rows;
   const emptyMessage = activeFilter
@@ -611,7 +611,7 @@ const MY_BOOK_HELP = "Your book includes the implementations you own or are acti
 function MyBook({ t }: { t: Today }) {
   const parts: Array<{ label: string; value: number; color: string; help: string }> = [
     {
-      label: "Needs attention",
+      label: "Act now",
       value: t.book.needAttention,
       color: "#d03b3b",
       help: "Something needs action or is off track.",
@@ -621,6 +621,12 @@ function MyBook({ t }: { t: Today }) {
       value: t.book.waitingOn,
       color: "#fab219",
       help: "Someone else needs to do something before work can move forward.",
+    },
+    {
+      label: "Keep an eye on",
+      value: t.book.watch,
+      color: "#e07b39",
+      help: "Worth watching, not urgent yet.",
     },
     {
       label: "On track",

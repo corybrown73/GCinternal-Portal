@@ -1,4 +1,4 @@
-import type { ImplHealth } from "./customer360-derive";
+import { NEXT_ACTION_UNKNOWN, type ImplHealth } from "./customer360-derive";
 import type { QueueRow } from "./home-triage";
 import type { CommitmentRow } from "./hub-types";
 import { initials } from "./initials";
@@ -56,7 +56,7 @@ export type DayGroup = { key: string; title: string; sub: string; events: Upcomi
 
 export type Today = {
   tiles: { needAttention: number; waitingOn: number; upcoming: number; onTrack: number };
-  /** Act now, and the deals nobody owns: the rows the "Need attention" tile counts. */
+  /** Act now, and the deals nobody owns, each once: the rows the "Need attention" tile counts. */
   needsMe: NeedsMeRow[];
   /** Keep an eye on: not counted in the tile, listed under their own heading. */
   watch: NeedsMeRow[];
@@ -74,8 +74,11 @@ export type Today = {
   comingUp: DayGroup[];
   book: {
     total: number;
+    /** Act now, plus the projects whose unclaimed deal is said in Need attention. */
     needAttention: number;
     waitingOn: number;
+    /** Keep an eye on: needs-attention rows, not waiting and not going live. */
+    watch: number;
     moving: number;
     launching: number;
   };
@@ -199,7 +202,7 @@ function rowFromQueue(
     chip: chipFor(row, level, needsMe),
     reason: head,
     detail,
-    nextStep: next && !/hasn't been recorded/i.test(next) ? next : null,
+    nextStep: next && next !== NEXT_ACTION_UNKNOWN ? next : null,
     due: dueIso ? dueLabel(dueIso, today) : null,
     link: { customerId: row.impl.customer_id, implementationId: row.impl.id },
     rank: row.rank,
@@ -251,15 +254,34 @@ export function todayFor(input: TodayInput): Today {
   // row below is an additional tag, not a filter.)
   const bySeverity = (a: NeedsMeRow, b: NeedsMeRow) =>
     a.rank - b.rank || a.name.localeCompare(b.name);
+  // A deal whose implementation is in this list is said once, by the
+  // implementation's row. Only rows present here count: in "mine" an
+  // unowned implementation is not in my queue, so its deal row stays. An
+  // unclaimed deal stays too until its row is act now: on the day of the
+  // close "Nobody owns it" has not fired yet, and the deal must not drop
+  // out of Need attention for that day.
+  const queuedDeals = new Set(all.map((r) => r.impl.deal_id).filter(Boolean));
+  const actNowDeals = new Set(queue.act_now.map((r) => r.impl.deal_id).filter(Boolean));
+  const inbox = dealInbox.filter((d) =>
+    d.unclaimed ? !actNowDeals.has(d.id) : !queuedDeals.has(d.id),
+  );
+  const unclaimedDeals = inbox.filter((d) => d.unclaimed);
+  // That deal's project is then said by the deal's row alone: it leaves the
+  // watch, waiting and on-track lists and tiles, and My book counts it with
+  // act now, so the account is never under two headings at once.
+  const keptDeals = new Set(unclaimedDeals.map((d) => d.id));
+  const held = (r: QueueRow) =>
+    r.bucket !== "act_now" && Boolean(r.impl.deal_id) && keptDeals.has(r.impl.deal_id!);
+  const watchQueue = queue.needs_attention.filter((r) => !held(r));
+  const movingQueue = queue.moving.filter((r) => !held(r));
+  const heldCount = all.filter(held).length;
   const needsMe: NeedsMeRow[] = [
     ...queue.act_now.map((r) => rowFromQueue(r, health.get(r.impl.id)?.level, today, viewerName)),
-    ...dealInbox.filter((d) => d.unclaimed).map((d) => rowFromDeal(d, today)),
+    ...unclaimedDeals.map((d) => rowFromDeal(d, today)),
   ].sort(bySeverity);
   const watch: NeedsMeRow[] = [
-    ...queue.needs_attention.map((r) =>
-      rowFromQueue(r, health.get(r.impl.id)?.level, today, viewerName),
-    ),
-    ...dealInbox.filter((d) => !d.unclaimed && d.mine).map((d) => rowFromDeal(d, today)),
+    ...watchQueue.map((r) => rowFromQueue(r, health.get(r.impl.id)?.level, today, viewerName)),
+    ...inbox.filter((d) => !d.unclaimed && d.mine).map((d) => rowFromDeal(d, today)),
   ].sort(bySeverity);
 
   // COMING UP: this week by day and next week folded — booked calls, planned
@@ -286,8 +308,9 @@ export function todayFor(input: TodayInput): Today {
   }
 
   // WAITING ON: somebody else's move, on any account.
-  const waiting = all.filter((r) => r.dependency.party !== "none");
+  const waiting = all.filter((r) => r.dependency.party !== "none" && !held(r));
   const launching = all.filter((r) => {
+    if (held(r)) return false;
     const live = dealFactsOf(r)?.live_date ?? r.impl.target_launch_date;
     return (
       isOnboardingStage(r.impl.deal_stage) &&
@@ -296,13 +319,15 @@ export function todayFor(input: TodayInput): Today {
       live <= addBusinessDays(today, 10)
     );
   });
-  const needAttention = queue.act_now.length + dealInbox.filter((d) => d.unclaimed).length;
+  const needAttention = needsMe.length;
   const waitingOnQueueRows = waiting.filter((r) => r.bucket !== "act_now");
   const waitingOn = waitingOnQueueRows.length;
+  // My book splits the queue once: act now, waiting, going live, keep an
+  // eye on, on track. "On track" is the tile's bucket, never a wider one.
   const launchingIds = new Set(launching.map((r) => r.impl.id));
-  const moving = all.filter(
-    (r) => r.bucket !== "act_now" && r.dependency.party === "none" && !launchingIds.has(r.impl.id),
-  ).length;
+  const free = (r: QueueRow) => r.dependency.party === "none" && !launchingIds.has(r.impl.id);
+  const bookWatch = watchQueue.filter(free).length;
+  const moving = movingQueue.filter(free).length;
 
   // The same QueueRow-to-NeedsMeRow conversion and ordering `needsMe`/`watch`
   // already use, reused for the other three tiles' filter populations —
@@ -310,7 +335,7 @@ export function todayFor(input: TodayInput): Today {
   const waitingOnRows = waitingOnQueueRows
     .map((r) => rowFromQueue(r, health.get(r.impl.id)?.level, today, viewerName))
     .sort(bySeverity);
-  const onTrackRows = queue.moving
+  const onTrackRows = movingQueue
     .map((r) => rowFromQueue(r, health.get(r.impl.id)?.level, today, viewerName))
     .sort(bySeverity);
   const upcomingRows = all
@@ -336,7 +361,7 @@ export function todayFor(input: TodayInput): Today {
       needAttention,
       waitingOn,
       upcoming: upcomingImplIds.size,
-      onTrack: queue.moving.length,
+      onTrack: movingQueue.length,
     },
     needsMe,
     watch,
@@ -346,10 +371,12 @@ export function todayFor(input: TodayInput): Today {
     comingUp,
     book: {
       total,
-      needAttention: queue.act_now.length,
+      needAttention: queue.act_now.length + heldCount,
       waitingOn,
+      watch: bookWatch,
       moving,
-      launching: launching.filter((r) => r.bucket !== "act_now").length,
+      launching: launching.filter((r) => r.bucket !== "act_now" && r.dependency.party === "none")
+        .length,
     },
     stages,
   };

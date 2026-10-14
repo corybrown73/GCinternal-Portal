@@ -78,6 +78,8 @@ export function PlanSection({
       <WatchOutsPanel
         rows={watchOuts}
         hasBrief={Boolean(latestBrief) || deal.gong_reports.length > 0}
+        // The document itself: the plan and the watch-outs read only that,
+        // never a SOW reference (the checklist's hasSowOnFile).
         hasSow={Boolean(deal.sow_url)}
       />
       <TimelinePanel

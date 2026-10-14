@@ -5,10 +5,12 @@ import {
   hasOtherOpenSignal,
   isCsStage,
   launchOverdue,
+  NEXT_ACTION_UNKNOWN,
   nextAction,
   openItems,
   proveValueGapSummary,
   severityRank,
+  stallOf,
   waitingOn,
   whatMattersNow,
   type WaitingOn,
@@ -79,6 +81,8 @@ function asRecord(bundle: TriageBundle | undefined): Customer360 {
     milestones: bundle?.milestones ?? [],
     stage_history: [],
     approvals: [],
+    // The deal's stage clock, so health stalls by the clock triage uses.
+    deal_facts: bundle?.deal ?? null,
   } as unknown as Customer360;
 }
 
@@ -121,7 +125,7 @@ const milestoneMissed = (m: any) =>
  */
 export function triageRow(impl: ImplementationRow, bundle: TriageBundle | undefined): QueueRow {
   const record = asRecord(bundle);
-  const stalledDays = daysSince(impl.stage_entered_at) ?? 0;
+  const stall = stallOf(impl, bundle?.deal);
   const fromSignals = signalRow(impl, bundle);
   const reasons = needsAction(bundle?.deal);
   const top = reasons[0];
@@ -132,6 +136,7 @@ export function triageRow(impl: ImplementationRow, bundle: TriageBundle | undefi
         record,
         bundle,
         ...(top.next ? { next: top.next } : {}),
+        ...(top.fallbackNext ? { fallback: top.fallbackNext } : {}),
       })
     : null;
   if (fromSignals && fromDeal) return fromSignals.rank <= fromDeal.rank ? fromSignals : fromDeal;
@@ -144,7 +149,7 @@ export function triageRow(impl: ImplementationRow, bundle: TriageBundle | undefi
     reason: next
       ? `Nothing open · next: ${next}`
       : `Nothing open against it in ${dealStageLabel(impl.deal_stage)}`,
-    impact: impactLine(impl, dwellPart(impl, stalledDays)),
+    impact: impactLine(impl, dwellPart(impl, stall)),
     record,
     bundle,
     ...(next ? { next } : {}),
@@ -219,7 +224,8 @@ export function triageRowForCustomer360(record: Customer360): QueueRow | null {
 function signalRow(impl: ImplementationRow, bundle: TriageBundle | undefined): QueueRow | null {
   const record = asRecord(bundle);
   const open = openItems(record);
-  const stalledDays = daysSince(impl.stage_entered_at) ?? 0;
+  const stall = stallOf(impl, bundle?.deal);
+  const stalledDays = stall.days;
 
   const bySeverity = (rows: any[]) =>
     [...rows].sort((a, b) => severityRank(a.severity) - severityRank(b.severity))[0];
@@ -272,7 +278,7 @@ function signalRow(impl: ImplementationRow, bundle: TriageBundle | undefined): Q
   if (impl.status === "blocked") {
     return row(impl, "act_now", 0.5, "overview", {
       reason: `Blocked in ${dealStageLabel(impl.deal_stage)} — ${whatMattersNow(record)}`,
-      impact: impactLine(impl, dwellPart(impl, stalledDays)),
+      impact: impactLine(impl, dwellPart(impl, stall)),
       record,
       bundle,
       next: `Resolve it — ${whatMattersNow(record)}`,
@@ -323,8 +329,10 @@ function signalRow(impl: ImplementationRow, bundle: TriageBundle | undefined): Q
   // ---------- NEEDS ATTENTION ----------
   const midRisk = topRisk && severityRank(topRisk.severity) <= 2 ? topRisk : null;
   const midIssue = topIssue && severityRank(topIssue.severity) <= 2 ? topIssue : null;
-  // Graduate is the end: time spent there is not a stall.
-  const stalled = stalledDays > STAGE_FLAG_DAYS && impl.deal_stage !== GRADUATED_STAGE;
+  // One clock (stallOf). With a deal, needsAction already says "Stuck" from
+  // the deal's clock and STAGE_LIMITS, so this rule speaks only for a project
+  // without one. Graduate is never a stall.
+  const stalled = stall.clock === "implementation" && stall.stalled;
   const csStalled = stalled && isCsStage(impl.current_stage);
   const stalledCounts = stalled && (!csStalled || hasOtherOpenSignal(record));
 
@@ -432,7 +440,7 @@ function signalRow(impl: ImplementationRow, bundle: TriageBundle | undefined): Q
   if (acceptanceGate.blocked) {
     return row(impl, "needs_attention", 3.55, "solution", {
       reason: `Solution acceptance is preventing the move to Launch — ${acceptanceGate.reason}`,
-      impact: impactLine(impl, dwellPart(impl, stalledDays, true)),
+      impact: impactLine(impl, dwellPart(impl, stall, true)),
       record,
       bundle,
       next: acceptanceGate.outstanding[0] ?? "Record solution acceptance before moving to Launch",
@@ -441,7 +449,7 @@ function signalRow(impl: ImplementationRow, bundle: TriageBundle | undefined): Q
   if (impl.status === "at_risk") {
     return row(impl, "needs_attention", 3.6, "overview", {
       reason: `Flagged at risk — ${whatMattersNow(record)}`,
-      impact: impactLine(impl, dwellPart(impl, stalledDays, true)),
+      impact: impactLine(impl, dwellPart(impl, stall, true)),
       record,
       bundle,
       next: `Resolve it — ${whatMattersNow(record)}`,
@@ -456,9 +464,17 @@ function signalRow(impl: ImplementationRow, bundle: TriageBundle | undefined): Q
  * Graduate is the end, so it has no dwell clock (the Customers column shows
  * "—" there too).
  */
-function dwellPart(impl: ImplementationRow, days: number, named = false): string | null {
+function dwellPart(
+  impl: ImplementationRow,
+  stall: ReturnType<typeof stallOf>,
+  named = false,
+): string | null {
   if (impl.deal_stage === GRADUATED_STAGE) return null;
-  return named ? `${days}d in ${dealStageLabel(impl.deal_stage)}` : `${days}d in stage`;
+  const days =
+    stall.unit === "business"
+      ? `${stall.days} business day${stall.days === 1 ? "" : "s"}`
+      : `${stall.days}d`;
+  return named ? `${days} in ${dealStageLabel(impl.deal_stage)}` : `${days} in stage`;
 }
 
 function impactLine(impl: ImplementationRow, extra: string | null) {
@@ -481,10 +497,13 @@ function row(
     impact: string;
     record: Customer360;
     next?: string;
+    /** Said only when neither `next` nor the record names a next step. */
+    fallback?: string;
     bundle?: TriageBundle | undefined;
   },
 ): QueueRow {
   const bundle = parts.bundle;
+  const fromRecord = parts.next ?? nextAction(parts.record, impl);
   return {
     impl,
     bucket,
@@ -492,7 +511,7 @@ function row(
     tab,
     reason: parts.reason,
     impact: parts.impact,
-    next_action: parts.next ?? nextAction(parts.record, impl),
+    next_action: fromRecord === NEXT_ACTION_UNKNOWN && parts.fallback ? parts.fallback : fromRecord,
     facts: bundle?.deal ?? null,
     // Same inputs the record was built from, so the dependency on a row can
     // never disagree with the dependency Leadership shows for that row.

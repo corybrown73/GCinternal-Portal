@@ -35,6 +35,8 @@ import { FIELD_FUSION_STAGE } from "./field-fusion";
 import {
   explicitPartnerKeyFor,
   initialStageFor,
+  isPartnerDeal,
+  isPartnerJourney,
   partnerSelectionError,
   requiresPartnerTemplate,
   templateKeyFor,
@@ -244,7 +246,7 @@ export async function loadPipeline(
     db().from("portal_gong_reports").select("account_id"),
     db()
       .from("implementations")
-      .select("id,deal_id,created_at,owner_id")
+      .select("id,deal_id,created_at,owner_id,journey_type,partner_key")
       .is("superseded_by_implementation_id", null)
       .not("deal_id", "is", null)
       .order("created_at", { ascending: false }),
@@ -257,8 +259,18 @@ export async function loadPipeline(
     db().from("customers").select("*"),
   ]);
   const implByDeal = new Map<string, string>();
-  for (const i of (impls ?? []) as Array<{ id: string; deal_id: string }>) {
-    if (!implByDeal.has(i.deal_id)) implByDeal.set(i.deal_id, String(i.id));
+  const partnerDeals = new Set<string>();
+  for (const i of (impls ?? []) as Array<{
+    id: string;
+    deal_id: string;
+    journey_type?: string | null;
+    partner_key?: string | null;
+  }>) {
+    if (implByDeal.has(i.deal_id)) continue;
+    implByDeal.set(i.deal_id, String(i.id));
+    // Partner: the intake's path, or the deal's live (newest, not
+    // superseded) project — the rule deal-facts and the stall sweep read too.
+    if (isPartnerJourney(i)) partnerDeals.add(i.deal_id);
   }
   // The one owner rule (src/lib/claimed-owner.ts): the project's owner, else
   // the claim ledger's — an owner assigned at the close, before the project
@@ -366,13 +378,16 @@ export async function loadPipeline(
           intake: a.intake,
           owner: ownerName,
           gongReports: withNotes.has(a.id) ? 1 : 0,
-          hasSow: Boolean(a.sow_document_path),
+          hasSow: Boolean(a.sow_document_path) || Boolean(a.sow_reference?.trim()),
           hasBrief: withBrief.has(a.id),
           hasLink: Boolean((a as { welcome_share_url?: string | null }).welcome_share_url),
           ...(timeline && { timeline }),
         }),
         business_days_in_stage: inStage,
-        stuck: stuckLevel(a.stage, inStage),
+        // A partner deal is never stuck by its stage's age: its attention
+        // comes from its own milestones and work items (partner-attention.ts).
+        stuck:
+          isPartnerDeal(intake) || partnerDeals.has(a.id) ? "ok" : stuckLevel(a.stage, inStage),
       };
     });
   return { deals, stages };

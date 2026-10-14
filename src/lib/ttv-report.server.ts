@@ -1,7 +1,7 @@
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 
 import { localIso } from "./onboarding-timeline";
-import { buildTtvReport, type TtvDeal, type TtvReport } from "./ttv-report";
+import { buildTtvReport, type TtvDeal, type TtvReport, type TtvTransition } from "./ttv-report";
 
 const db = () => supabaseAdmin as any;
 
@@ -17,7 +17,9 @@ export async function loadTtvReport(opts: { sinceDays?: number } = {}): Promise<
   const [{ data: history }, { data: impls }] = await Promise.all([
     db()
       .from("portal_stage_transitions")
-      .select("account_id,to_stage,occurred_at")
+      .select(
+        "account_id,from_stage,to_stage,source,note,actor_profile_id,actor_api_key_id,occurred_at",
+      )
       .in("account_id", ids)
       .order("occurred_at", { ascending: true }),
     db()
@@ -42,11 +44,29 @@ export async function loadTtvReport(opts: { sinceDays?: number } = {}): Promise<
   );
   const hist = (history ?? []) as Array<{
     account_id: string;
+    from_stage: string | null;
     to_stage: string;
+    source: string | null;
+    note: string | null;
+    actor_profile_id: string | null;
+    actor_api_key_id: string | null;
     occurred_at: string;
   }>;
+  // The first entry into each stage, whoever made it: the report judges a
+  // backfill (source system), a skip or a bulk tick from the history itself.
   const firstTo = (id: string, ...stages: string[]) =>
     hist.find((h) => h.account_id === id && stages.includes(h.to_stage))?.occurred_at ?? null;
+  const historyOf = (id: string): TtvTransition[] =>
+    hist
+      .filter((h) => h.account_id === id)
+      .map((h) => ({
+        from: h.from_stage,
+        to: h.to_stage,
+        at: h.occurred_at,
+        source: h.source,
+        note: h.note,
+        actor: h.actor_profile_id ?? h.actor_api_key_id ?? null,
+      }));
   const implOf = new Map<string, any>();
   for (const i of (impls ?? []) as any[]) if (!implOf.has(i.deal_id)) implOf.set(i.deal_id, i);
 
@@ -58,6 +78,7 @@ export async function loadTtvReport(opts: { sinceDays?: number } = {}): Promise<
       owner: d.owner_name,
       closedAt: firstTo(d.id, "closed_won"),
       preKickoffAt: firstTo(d.id, "onboarding_kickoff"),
+      kickoffAt: firstTo(d.id, "kickoff"),
       workingAt: firstTo(d.id, "get_it_working", "in_onboarding"),
       yoursAt: firstTo(d.id, "make_it_yours"),
       runAt: firstTo(d.id, "make_it_run"),
@@ -68,6 +89,7 @@ export async function loadTtvReport(opts: { sinceDays?: number } = {}): Promise<
       targetOn: impl?.target_date ?? impl?.target_launch_date ?? null,
       outcome: impl?.complete_outcome ?? null,
       coverage: impl?.customer_id && amOf.get(impl.customer_id) ? "named_am" : "customer_success",
+      transitions: historyOf(d.id),
     };
   });
   const since = opts.sinceDays

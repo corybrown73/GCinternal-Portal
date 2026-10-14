@@ -311,7 +311,7 @@ export function workspaceFor(input: WorkspaceInput): Workspace {
     ball = {
       who: "us",
       detail: nextStep
-        ? nextStep.label
+        ? (nextStep.next ?? nextStep.label)
         : oursWaiting
           ? `${oursWaiting} open on our side`
           : closed

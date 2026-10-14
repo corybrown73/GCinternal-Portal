@@ -3,6 +3,7 @@ import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { appUrl } from "./app-url";
 import { claimedOwnersByDeal } from "./claimed-owner";
 import { readIntake } from "./intake-answers";
+import { hasSowOnFile } from "./won-gate";
 import { isOnboardingStage, kickoffEntryDate, plannedBeforeKickoff } from "./presale-stages";
 import { closeDateFor, timelineFor } from "./onboarding-plan";
 import { businessDaysBetween, localIso } from "./onboarding-timeline";
@@ -130,6 +131,7 @@ async function nudgeRun(
     stage_entered_at: string | null;
     intake: unknown;
     sow_document_path: string | null;
+    sow_reference?: string | null;
     welcome_share_url: string | null;
     customer_id: string | null;
     is_test?: boolean | null;
@@ -296,7 +298,7 @@ async function nudgeRun(
         intake,
         owner: owner?.name ?? (ownerId ? "owner" : null),
         gongReports: noteCount.get(id) ?? 0,
-        hasSow: Boolean(d.sow_document_path),
+        hasSow: hasSowOnFile(d),
         hasBrief: briefed.has(id),
         hasLink: Boolean(d.welcome_share_url),
         timeline,

@@ -1,8 +1,8 @@
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 
-import { claimedOwnersByDeal } from "../claimed-owner";
+import { claimedOwnersByDeal, latestImplementations } from "../claimed-owner";
 import { readIntake } from "../intake-answers";
-import { isPartnerJourney } from "../partner-implementation";
+import { isPartnerDeal, isPartnerJourney } from "../partner-implementation";
 import type { DealFacts } from "../needs-action";
 import { closeDateFor, timelineFor } from "../onboarding-plan";
 import { businessDaysBetween, localIso } from "../onboarding-timeline";
@@ -114,16 +114,19 @@ export async function dealFactsFor(
   const ownerIdByDeal = new Map<string, string | null>(
     [...claimedOwnersByDeal(impls ?? [], ledger ?? [])].map(([dealId, o]) => [dealId, o.id]),
   );
+  // Partner: the intake's path, or the deal's live (newest, not superseded)
+  // project — the board's and the stall sweep's rule.
   const partnerByDeal = new Map<string, boolean>();
   const implRows = (impls ?? []) as Array<{
     id: string;
     deal_id: string;
     owner_id: string | null;
+    superseded_by_implementation_id: string | null;
     journey_type: string | null;
     partner_key: string | null;
   }>;
-  for (const i of implRows)
-    if (!partnerByDeal.has(i.deal_id)) partnerByDeal.set(i.deal_id, isPartnerJourney(i));
+  for (const [dealId, i] of latestImplementations(implRows))
+    partnerByDeal.set(dealId, isPartnerJourney(i));
   const ownerIds = [...new Set([...ownerIdByDeal.values()].filter(Boolean))] as string[];
   const { data: members } = ownerIds.length
     ? await db().from("team_members").select("id,name").in("id", ownerIds)
@@ -186,7 +189,7 @@ export async function dealFactsFor(
       has_sow: hasSow,
       owner_name: owner,
       core_booked: booking?.done ?? false,
-      partner: partnerByDeal.get(d.id) ?? false,
+      partner: isPartnerDeal(intake) || (partnerByDeal.get(d.id) ?? false),
       next_step: nextChecklistTask(input),
       overdue_calls: isOnboardingStage(d.stage)
         ? timeline.milestones

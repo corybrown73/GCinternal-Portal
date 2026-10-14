@@ -1,6 +1,6 @@
 import { dealStageLabel } from "./deal-stage";
 import { shortDay } from "./onboarding-timeline";
-import { isOnboardingStage, type AccountStage } from "./presale-stages";
+import { STAGES, isOnboardingStage, type AccountStage } from "./presale-stages";
 import { stuckLevel } from "./stage-flow";
 
 /**
@@ -64,6 +64,8 @@ export type ActionReason = {
   impact: string;
   tab: "overview" | "journey" | "implementation";
   next?: string;
+  /** The next step only when nothing else names one: no checklist task, nothing on the record. */
+  fallbackNext?: string;
 };
 
 /**
@@ -83,6 +85,14 @@ const WORKED: ReadonlyArray<AccountStage> = [
 ];
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
+
+/** "Move it to Kickoff, or note what is holding it" (Field Fusion setup is a side path). */
+function movePrompt(stage: AccountStage): string {
+  const after = STAGES.slice(STAGES.indexOf(stage) + 1).find((s) => s !== "field_fusion_setup");
+  return after
+    ? `Move it to ${dealStageLabel(after)}, or note what is holding it`
+    : "Note what is holding it";
+}
 
 /** Ranked reasons, most urgent first. Empty when the deal is fine by its own facts. */
 export function needsAction(deal: DealFacts | null | undefined): ActionReason[] {
@@ -145,15 +155,19 @@ export function needsAction(deal: DealFacts | null | undefined): ActionReason[] 
     });
   }
 
+  // A partner deal's attention comes from its own milestones and work items
+  // (partner-attention), not the deal stage's age: the same rule as stallOf.
   const stuck = stuckLevel(deal.stage, deal.business_days_in_stage);
-  if (stuck !== "ok") {
+  if (stuck !== "ok" && !deal.partner) {
     out.push({
       bucket: stuck === "escalate" ? "act_now" : "needs_attention",
       rank: stuck === "escalate" ? 1.9 : 3.0,
       reason: `Stuck ${plural(deal.business_days_in_stage, "business day")} in ${where}`,
       impact: deal.next_step ? `next: ${deal.next_step}` : "nothing left on the checklist",
       tab: "overview",
-      ...(deal.next_step ? { next: deal.next_step } : {}),
+      // With nothing left on the checklist and nothing dated on the record
+      // (triage's nextAction), the move itself is the next step.
+      ...(deal.next_step ? { next: deal.next_step } : { fallbackNext: movePrompt(deal.stage) }),
     });
   }
 

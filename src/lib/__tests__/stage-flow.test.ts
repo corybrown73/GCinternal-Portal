@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { shortDay } from "../onboarding-timeline";
 
 import { readIntake } from "../intake-answers";
@@ -7,8 +7,10 @@ import {
   completedAfterTick,
   isWorkingStageKey,
   journeyStageDate,
+  meetingNext,
   latestStageTransition,
   showKickoffOutcomePrompt,
+  nextChecklistTask,
   stageFlow,
   stageTargetDate,
   targetDidChange,
@@ -390,7 +392,7 @@ describe("nudges", () => {
       flow: stageFlow(input({ stage: "onboarding_kickoff" })),
     });
     expect(slow[0]).toMatchObject({ to: "owner", level: "warn" });
-    expect(slow[0]!.line).toMatch(/Next: Customer Pre-Kickoff Intake completed/);
+    expect(slow[0]!.line).toMatch(/Next: Get the customer's Pre-Kickoff Intake in\./);
     const stuck = nudgesFor({
       name: "Maverick",
       stage: "onboarding_kickoff",
@@ -595,5 +597,52 @@ describe("completedAfterTick for the Kickoff-held confirmation", () => {
     const intake = readIntake(ready);
     const completed = completedAfterTick(intake, {}, "kickoff", true, "2026-09-25");
     expect(completed["live"]).toBeUndefined();
+  });
+});
+
+describe("the next step is an action (QA 16)", () => {
+  it("says what to do, not the checkbox's state", () => {
+    expect(nextChecklistTask(input({ stage: "onboarding_kickoff" }))).toBe(
+      "Get the customer's Pre-Kickoff Intake in",
+    );
+    // Home matches this one by its prefix: it stays a question.
+    expect(nextChecklistTask(input({ intake: { ...ready, path: null } }))).toMatch(
+      /^What type of deal/,
+    );
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("never names the current stage: it books or holds the stage's call", () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-09-23T12:00:00Z"));
+    const t = buildTimeline({ closeDate: "2026-09-22", path: "new_logo" });
+    const at = (stage: string, timeline = t) =>
+      nextChecklistTask(input({ stage, intake: { ...ready, path: "new_logo" }, timeline }));
+    expect(at("kickoff")).toBe("Book the Stage 1 call");
+    const booked = {
+      ...t,
+      milestones: t.milestones.map((m) => (m.key === "kickoff" ? { ...m, time: "10:00" } : m)),
+    };
+    expect(at("kickoff", booked)).toMatch(/^Hold the Stage 1 call \(/);
+    expect(at("kickoff")).not.toMatch(/Get it working$/);
+  });
+
+  it("asks to tick or rebook a booked call whose day has gone by", () => {
+    expect(meetingNext("Stage 1 — Get it working", "2026-10-09", true, "2026-10-13")).toBe(
+      `Tick the Stage 1 call if it was held (${shortDay("2026-10-09")}), or rebook it`,
+    );
+    // Not Nikki's overdue reason's exact text, which Home's Due keys on.
+    expect(meetingNext("Stage 1 — Get it working", "2026-10-09", true, "2026-10-13")).not.toBe(
+      "Tick Stage 1 — Get it working if it happened, or rebook it",
+    );
+    expect(meetingNext("Stage 1 — Get it working", "2026-10-13", true, "2026-10-13")).toMatch(
+      /^Hold the Stage 1 call/,
+    );
+    expect(meetingNext("Stage 1 — Get it working", "2026-10-09", false, "2026-10-13")).toBe(
+      "Book the Stage 1 call",
+    );
   });
 });

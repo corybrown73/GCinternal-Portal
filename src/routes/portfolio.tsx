@@ -264,28 +264,28 @@ function LeadershipPage() {
             onSelect={() => toggleFilter("act_now")}
           />
           <Metric
-            label="Needs attention"
+            label="Keep an eye on"
             value={rollup.needs_attention}
             tone={rollup.needs_attention ? "warn" : "good"}
             active={filter === "needs_attention"}
             onSelect={() => toggleFilter("needs_attention")}
           />
           <Metric
-            label="Blocked"
+            label={HEALTH_LABEL.blocked}
             value={rollup.health.blocked}
             tone={rollup.health.blocked ? "bad" : "muted"}
             active={filter === "blocked"}
             onSelect={() => toggleFilter("blocked")}
           />
           <Metric
-            label="At risk"
+            label={HEALTH_LABEL.at_risk}
             value={rollup.health.at_risk}
             tone={rollup.health.at_risk ? "warn" : "muted"}
             active={filter === "at_risk"}
             onSelect={() => toggleFilter("at_risk")}
           />
           <Metric
-            label="On track"
+            label={HEALTH_LABEL.on_track}
             value={rollup.health.on_track}
             tone="good"
             active={filter === "on_track"}

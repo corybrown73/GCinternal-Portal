@@ -405,6 +405,46 @@ describe("one fixture, every surface", () => {
     expect(facts.get("unowned")?.owner_name).toBeNull();
   });
 
+  it("the deal facts read partner as the board and the stall sweep do: the path, or the live project", async () => {
+    fake = createFakeSupabase({
+      ...rows,
+      portal_accounts: rows["portal_accounts"]!.map((d) =>
+        d["id"] === "grinder" ? { ...d, intake: { path: "partner_implementation" } } : d,
+      ),
+      implementations: [
+        ...rows["implementations"]!,
+        // Superseded partner project, replaced by a standard one: not partner.
+        impl("i-unowned-old", "unowned", null, {
+          journey_type: "partner_implementation",
+          superseded_by_implementation_id: "i-unowned",
+          created_at: "2026-01-01T00:00:00Z",
+        }),
+      ],
+    });
+    h.supabase.client = fake.client;
+    const facts = await dealFactsFor(["grinder", "unowned", "ledger"], "2026-10-09");
+    expect(facts.get("grinder")?.partner).toBe(true);
+    expect(facts.get("unowned")?.partner).toBe(false);
+    expect(facts.get("ledger")?.partner).toBe(false);
+  });
+
+  it("a superseded project is out of the book: the deal is counted once", async () => {
+    fake = createFakeSupabase({
+      ...rows,
+      implementations: [
+        ...rows["implementations"]!,
+        impl("i-grinder-old", "grinder", "teya", { superseded_by_implementation_id: "i-grinder" }),
+      ],
+    });
+    h.supabase.client = fake.client;
+    const implementations = await loadImplementations(null);
+    expect(implementations.filter((i) => i.deal_id === "grinder").map((i) => i.id)).toEqual([
+      "i-grinder",
+    ]);
+    const rollup = portfolioRollup(await loadLeadership(null));
+    expect(rollup.total).toBe(3);
+  });
+
   it("the list shows test accounts, marked, when asked for", async () => {
     const all = await loadImplementations(null, { includeTests: true });
     expect(all.find((i) => i.id === "i-ff")).toMatchObject({ is_test: true, owner_name: "Cory" });

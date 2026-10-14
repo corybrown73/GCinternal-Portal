@@ -1,6 +1,9 @@
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { deriveHealth, type HealthResult } from "./customer360-derive";
 import type { Customer360 } from "./hub-types";
+import { businessDaysBetween, localIso } from "./onboarding-timeline";
+import { isPartnerJourney } from "./partner-implementation";
+import { isStage } from "./presale-stages";
 
 const db = () => supabaseAdmin as any;
 
@@ -29,7 +32,7 @@ async function loadHealthInputs(implementationId: string) {
     db()
       .from("implementations")
       .select(
-        "id, deal_id, current_stage, stage_entered_at, target_launch_date, actual_launch_date",
+        "id, deal_id, current_stage, stage_entered_at, target_launch_date, actual_launch_date, journey_type, partner_key",
       )
       .eq("id", implementationId)
       .maybeSingle(),
@@ -40,10 +43,16 @@ async function loadHealthInputs(implementationId: string) {
     db().from("milestones").select("*").eq("implementation_id", implementationId),
   ]);
   if (!impl) return null;
-  // The deal's stage, so a graduated deal is never "stalled" (QA 21.2).
+  // The deal's stage and its clock: a graduated deal is never "stalled"
+  // (QA 21.2), and a project with a deal stalls by the deal's clock, as on Home.
   const { data: deal } = impl.deal_id
-    ? await db().from("portal_accounts").select("stage").eq("id", impl.deal_id).maybeSingle()
+    ? await db()
+        .from("portal_accounts")
+        .select("stage, stage_entered_at")
+        .eq("id", impl.deal_id)
+        .maybeSingle()
     : { data: null };
+  const stage = (deal?.stage as string | undefined) ?? null;
 
   // deriveHealth reads exactly these collections off the record.
   const record = {
@@ -52,9 +61,23 @@ async function loadHealthInputs(implementationId: string) {
     escalations: escalations ?? [],
     commitments: commitments ?? [],
     milestones: milestones ?? [],
+    deal_facts:
+      stage && isStage(stage)
+        ? {
+            stage,
+            business_days_in_stage: Math.max(
+              0,
+              businessDaysBetween(
+                String(deal?.stage_entered_at ?? localIso()).slice(0, 10),
+                localIso(),
+              ),
+            ),
+            partner: isPartnerJourney(impl),
+          }
+        : null,
   } as unknown as Customer360;
 
-  return { impl: { ...impl, deal_stage: (deal?.stage as string | undefined) ?? null }, record };
+  return { impl: { ...impl, deal_stage: stage }, record };
 }
 
 /** Recompute and cache health for one implementation. Returns null if it is gone. */

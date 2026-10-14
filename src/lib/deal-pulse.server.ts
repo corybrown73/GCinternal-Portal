@@ -3,6 +3,7 @@ import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { guideSteps, type GuideStep } from "./deal-guide";
 import { deliverablePhases, type DeliverablePhase } from "./deliverables";
 import { readIntake } from "./intake-answers";
+import { hasSowOnFile } from "./won-gate";
 import { closeDateFor, timelineFor } from "./onboarding-plan";
 import { dayCounter, todayIn, type DayCounter } from "./onboarding-timeline";
 import { loadPipelineStages } from "./pipeline-stages.server";
@@ -40,7 +41,7 @@ export async function loadDealPulse(dealId: string, today?: string): Promise<Dea
   ] = await Promise.all([
     db()
       .from("portal_accounts")
-      .select("id,intake,sow_document_path,welcome_share_url,welcome_opened_at")
+      .select("id,intake,sow_document_path,sow_reference,welcome_share_url,welcome_opened_at")
       .eq("id", dealId)
       .maybeSingle(),
     db().from("portal_stage_transitions").select("to_stage,occurred_at").eq("account_id", dealId),
@@ -70,7 +71,8 @@ export async function loadDealPulse(dealId: string, today?: string): Promise<Dea
     intake: deal.intake,
     gongReports: reports ?? 0,
     aiBriefs: briefs ?? 0,
-    hasSow: Boolean(deal.sow_document_path),
+    hasSow: hasSowOnFile(deal),
+    hasSowDocument: Boolean(deal.sow_document_path),
     shareUrl: (deal.welcome_share_url as string | null) ?? null,
     stageHistory,
     wonStageKey: won,

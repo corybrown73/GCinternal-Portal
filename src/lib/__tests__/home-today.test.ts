@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { NEXT_ACTION_UNKNOWN } from "../customer360-derive";
 import type { QueueRow } from "../home-triage";
 import { dueLabel, todayFor, type TodayInput } from "../home-today";
 import type { ImplementationRow } from "../hub-types";
@@ -361,5 +362,69 @@ describe("Today", () => {
     expect(dueLabel("2026-09-30", TODAY)).toEqual({ label: "Tomorrow", tone: "warning" });
     expect(dueLabel("2026-09-25", TODAY)).toEqual({ label: "Overdue", tone: "critical" });
     expect(dueLabel("2026-10-20", TODAY).tone).toBe("muted");
+  });
+
+  describe("each deal once (QA 7.1, 10.1)", () => {
+    it("drops the deal's inbox row when its implementation is in the list", () => {
+      const nobody = row({
+        impl: impl({ id: "i9", deal_id: "d9", customer_name: "Windows USA", owner_name: null }),
+        reason: "Nobody owns it · closed 3 business days ago",
+        next_action: "Assign an owner, or ask the pool to claim it",
+      });
+      const t = todayFor(
+        input({ queue: { act_now: [row(), nobody], needs_attention: [], moving: [] } }),
+      );
+      expect(t.needsMe.filter((r) => r.name === "Windows USA")).toHaveLength(1);
+      expect(t.needsMe.find((r) => r.name === "Windows USA")!.kind).toBe("implementation");
+      expect(t.tiles.needAttention).toBe(2);
+    });
+
+    it("keeps it when the implementation is not in this list (mine: nobody owns it)", () => {
+      const t = todayFor(input());
+      expect(t.needsMe.find((r) => r.name === "Windows USA")!.kind).toBe("deal");
+      expect(t.tiles.needAttention).toBe(2);
+    });
+  });
+
+  it("splits My book so On track is the tile's bucket and the parts add up (QA 7.2)", () => {
+    const watch = row({
+      impl: impl({
+        id: "i4",
+        deal_id: "d4",
+        customer_id: "c4",
+        customer_name: "Gale",
+        target_launch_date: null,
+      }),
+      bucket: "needs_attention",
+      rank: 2.8,
+      facts: { ...row().facts!, live_date: null, upcoming_calls: [] },
+    });
+    const moving = row({
+      impl: impl({
+        id: "i2",
+        deal_id: "d2",
+        customer_id: "c2",
+        customer_name: "Delta",
+        target_launch_date: null,
+      }),
+      bucket: "moving",
+      rank: 4,
+      facts: { ...row().facts!, live_date: null, upcoming_calls: [] },
+    });
+    const t = todayFor(
+      input({ queue: { act_now: [row()], needs_attention: [watch], moving: [moving] } }),
+    );
+    expect(t.book).toMatchObject({ needAttention: 1, watch: 1, moving: 1, waitingOn: 0 });
+    expect(t.book.moving).toBe(t.tiles.onTrack);
+    const b = t.book;
+    expect(b.needAttention + b.waitingOn + b.watch + b.moving + b.launching).toBe(b.total);
+  });
+
+  it("never shows the unknown next action as a next step (QA 16.3)", () => {
+    const r = row({ next_action: NEXT_ACTION_UNKNOWN });
+    const t = todayFor(
+      input({ dealInbox: [], queue: { act_now: [r], needs_attention: [], moving: [] } }),
+    );
+    expect(t.needsMe[0]!.nextStep).toBeNull();
   });
 });

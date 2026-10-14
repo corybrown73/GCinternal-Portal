@@ -8,7 +8,7 @@ import { Panel, NoRows } from "@/components/record";
 import { getLeadership } from "@/lib/hub.functions";
 import { getPipelineReport } from "@/lib/pipeline-report.functions";
 import { getTtvReport } from "@/lib/ttv-report.functions";
-import { TTV_TIMINGS, type Variance } from "@/lib/ttv-report";
+import { TTV_TIMINGS, type TtvExclusion, type Variance } from "@/lib/ttv-report";
 import { ownerLoad, portfolioRollup } from "@/lib/leadership";
 import type { Timing } from "@/lib/pipeline-report";
 import { fmtMoney } from "@/lib/hub-format";
@@ -67,12 +67,17 @@ export const Route = createFileRoute("/reports")({
   component: ReportsPage,
 });
 
-/* The status palette (dataviz reference): fixed, never reused for a series. */
+/*
+ * The status palette (dataviz reference): fixed, never reused for a series.
+ * These are deriveHealth's levels, not the tiles' buckets, so they are named
+ * apart: "Clear" is logged with nothing open, never "On track", and nothing
+ * logged is its own label.
+ */
 const HEALTH = [
   { key: "blocked", label: "Blocked", color: "#d03b3b" },
   { key: "at_risk", label: "At risk", color: "#fab219" },
-  { key: "on_track", label: "On track", color: "#0ca30c" },
-  { key: "no_signal", label: "No signal", color: "#c3c2b7" },
+  { key: "on_track", label: "Clear", color: "#0ca30c" },
+  { key: "no_signal", label: "Nothing logged", color: "#c3c2b7" },
 ] as const;
 
 function ReportsPage() {
@@ -113,14 +118,23 @@ function ReportsPage() {
             value={rollup.total}
             sub={`${rollup.owners} owner${rollup.owners === 1 ? "" : "s"}`}
           />
-          <Stat label="Need attention" value={rollup.act_now} sub="Act now" tone="critical" />
+          <Stat
+            label="Need attention"
+            value={rollup.need_attention}
+            sub={
+              rollup.need_attention > rollup.act_now
+                ? `Act now + ${rollup.need_attention - rollup.act_now} unclaimed`
+                : "Act now"
+            }
+            tone="critical"
+          />
           <Stat
             label="Keep an eye on"
-            value={rollup.needs_attention}
-            sub="Needs attention"
+            value={rollup.keep_an_eye_on}
+            sub="Worth watching"
             tone="warning"
           />
-          <Stat label="On track" value={rollup.moving} sub="Moving" tone="good" />
+          <Stat label="On track" value={rollup.on_track} sub="Moving" tone="good" />
           <Stat
             label="Unassigned"
             value={rollup.unassigned}
@@ -135,9 +149,9 @@ function ReportsPage() {
 
         <div className="grid items-start gap-4 xl:grid-cols-2">
           <Panel
-            title="Health across the book"
+            title="Health as logged"
             level="primary"
-            meta="From the same derivation Home and Leadership use"
+            meta="Risks, issues, commitments and milestones on the record, raised to At risk when the deal itself needs action now — a different measure from the tiles above"
           >
             <div className="space-y-3 px-3 py-3">
               <StackedBar
@@ -311,7 +325,7 @@ function ReportsPage() {
           }
         >
           <div className="space-y-3 px-3 py-3">
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
               {TTV_TIMINGS.map((t) => (
                 <TimingTile
                   key={t.key}
@@ -340,9 +354,10 @@ function ReportsPage() {
                   ? ` (TTV median ${ttv.data.coverage.customerSuccess.ttv.median} bd)`
                   : ""}
                 . Business days, from the stage history and the project dates; a deal counts once
-                its Go-Live is ticked.
+                its Go-Live is ticked. Every tile is out of the deals that closed.
               </p>
             ) : null}
+            {ttv.data?.excluded.length ? <DataQuality rows={ttv.data.excluded} /> : null}
           </div>
         </Panel>
 
@@ -454,6 +469,30 @@ function VarianceTile({ label, v }: { label: string; v: Variance }) {
   );
 }
 
+/** The spans the tiles left out, grouped by why: so a thin number is read as thin. */
+function DataQuality({ rows }: { rows: TtvExclusion[] }) {
+  const byReason = new Map<string, string[]>();
+  for (const r of rows) {
+    const list = byReason.get(r.reason) ?? [];
+    list.push(`${r.name} (${r.tile})`);
+    byReason.set(r.reason, list);
+  }
+  return (
+    <details className="text-[11px] text-muted-foreground">
+      <summary className="cursor-pointer">
+        Data quality: {rows.length} span{rows.length === 1 ? "" : "s"} left out of the tiles
+      </summary>
+      <ul className="mt-1 space-y-0.5">
+        {[...byReason].map(([reason, names]) => (
+          <li key={reason}>
+            <span className="font-medium text-foreground">{reason}:</span> {names.join(", ")}
+          </li>
+        ))}
+      </ul>
+    </details>
+  );
+}
+
 function TimingTile({
   label,
   hint,
@@ -461,8 +500,10 @@ function TimingTile({
 }: {
   label: string;
   hint?: string;
-  timing: Timing | null;
+  /** With `of` and `excluded` on a TTV tile: "n of N", and what was left out. */
+  timing: (Timing & { of?: number; excluded?: number }) | null;
 }) {
+  const excluded = timing?.excluded ? ` · excluded ${timing.excluded}` : "";
   return (
     <div className="rounded-lg border border-border bg-card px-4 py-3">
       <p className="text-[11px] font-medium uppercase tracking-[0.1em] text-muted-foreground">
@@ -472,7 +513,11 @@ function TimingTile({
       {!timing ? (
         <p className="mt-1 text-[12px] text-muted-foreground">Loading…</p>
       ) : timing.count === 0 ? (
-        <p className="mt-1 text-[12px] text-muted-foreground">No deal has made that move yet.</p>
+        <p className="mt-1 text-[12px] text-muted-foreground">
+          {timing.of !== undefined
+            ? `Not enough data: 0 of ${timing.of}${excluded}`
+            : "No deal has made that move yet."}
+        </p>
       ) : (
         <>
           <p className="mt-1 text-[26px] font-semibold leading-none tracking-tight">
@@ -482,8 +527,11 @@ function TimingTile({
             </span>
           </p>
           <p className="mt-1 text-[11px] text-muted-foreground">
-            Average {timing.average ?? "—"} · over {timing.count} deal
-            {timing.count === 1 ? "" : "s"}
+            Average {timing.average ?? "—"} ·{" "}
+            {timing.of !== undefined
+              ? `${timing.count} of ${timing.of}`
+              : `over ${timing.count} deal${timing.count === 1 ? "" : "s"}`}
+            {excluded}
             {timing.slowest ? ` · slowest ${timing.slowest.name} (${timing.slowest.days})` : ""}
           </p>
         </>

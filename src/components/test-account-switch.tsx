@@ -21,12 +21,13 @@ export function TestAccountSwitch({ dealId, state }: { dealId: string; state: Te
     onSuccess: () =>
       Promise.all(
         // Every list that counts it: the deal, the board, Home and the
-        // Customers list (both keyed under "home"), Home's deal inbox, the
+        // Customers list (both keyed under "home"), the Calendar, Home's deal inbox, the
         // Assign picker's counts, Reports.
         [
           ["deal", dealId],
           ["pipeline"],
           ["home"],
+          ["calendar"],
           ["deal-inbox"],
           ["assignment"],
           ["leadership"],

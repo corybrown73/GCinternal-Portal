@@ -39,6 +39,7 @@ import {
 import { LIFECYCLE_STAGES, type LifecycleStageId } from "./lifecycle";
 import { STAGE_FLAG_DAYS, daysSince, isOverdue, normalizeStage, stageLabel } from "./hub-format";
 import { daysUntilDate } from "./dates";
+import { isBeforeKickoff } from "./presale-stages";
 
 const DAY = 86_400_000;
 // Identical to the copy that was in home-triage.ts, which is exactly how the
@@ -68,8 +69,21 @@ export type PortfolioRollup = {
   total: number;
   health: Record<ImplHealth, number>;
   act_now: number;
+  /**
+   * Home's "Need attention": act now, plus each unclaimed deal before Kickoff
+   * that is not already act now (no project yet, or closed under a business
+   * day ago), once.
+   */
+  need_attention: number;
   needs_attention: number;
   moving: number;
+  /**
+   * Reports' "Keep an eye on" and "On track": needs_attention and moving less
+   * the unclaimed projects need_attention already counts, so Need attention +
+   * Keep an eye on + On track = total + the unclaimed deals with no project.
+   */
+  keep_an_eye_on: number;
+  on_track: number;
   /** Unclaimed projects plus unclaimed deals that have no project yet. */
   unassigned: number;
   /** Of `unassigned`, the deals before their project exists. */
@@ -90,12 +104,23 @@ export function portfolioRollup(data: LeadershipData): PortfolioRollup {
     const level = health.get(impl.id)?.level;
     if (level) counts[level] += 1;
   }
+  const actNow = new Set(queue.act_now.map((r) => r.impl.id));
+  const unclaimedHeld = new Set(
+    data.implementations
+      .filter((i) => isUnassignedProject(i) && isBeforeKickoff(i.deal_stage) && !actNow.has(i.id))
+      .map((i) => i.id),
+  );
+  const unclaimedNotActNow = unclaimedHeld.size;
+  const notHeld = (r: { impl: { id: string } }) => !unclaimedHeld.has(r.impl.id);
   return {
     total: data.implementations.length,
     health: counts,
     act_now: queue.act_now.length,
+    need_attention: queue.act_now.length + unclaimedNotActNow + (data.unclaimed_deals ?? []).length,
     needs_attention: queue.needs_attention.length,
     moving: queue.moving.length,
+    keep_an_eye_on: queue.needs_attention.filter(notHeld).length,
+    on_track: queue.moving.filter(notHeld).length,
     // "Unclaimed" by the shared rule (src/lib/claimed-owner.ts): a graduated
     // project with no owner is not waiting for one, and a deal at Negotiate &
     // Finalize or Closed Won with no TIS counts before its project exists, so
@@ -673,12 +698,15 @@ export function graduationGate(data: LeadershipData): GraduationGateRow[] {
   );
 }
 
-/** Health level label used by the roll-up strip, matching Customer 360 wording. */
+/**
+ * deriveHealth's levels, worded as Reports' "Health as logged" panel words
+ * them: "On track" is a bucket tile, so a level never borrows it.
+ */
 export const HEALTH_LABEL: Record<ImplHealth, string> = {
   blocked: "Blocked",
   at_risk: "At risk",
-  on_track: "On track",
-  no_signal: "No signal",
+  on_track: "Clear",
+  no_signal: "Nothing logged",
 };
 
 export { deriveHealth };
@@ -755,10 +783,10 @@ export type PortfolioFilterId =
 
 export const PORTFOLIO_FILTER_LABEL: Record<PortfolioFilterId, string> = {
   act_now: "Act now",
-  needs_attention: "Needs attention",
+  needs_attention: "Keep an eye on",
   blocked: "Blocked",
   at_risk: "At risk",
-  on_track: "On track",
+  on_track: HEALTH_LABEL.on_track,
   unassigned: "Unassigned",
 };
 
