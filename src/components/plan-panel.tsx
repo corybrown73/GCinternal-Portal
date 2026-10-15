@@ -121,13 +121,9 @@ export function PlanPanel({ implementationId }: { implementationId: string }) {
   if (isPending) {
     return <Panel title="Plan">{<NoRows label="Loading the plan…" />}</Panel>;
   }
-  if (!data?.enabled) {
-    return (
-      <Panel title="Plan">
-        <NoRows label="Templated plans are not switched on yet." />
-      </Panel>
-    );
-  }
+  // Switched off by its feature flag: no plan exists to show, so nothing is
+  // drawn. The panel returns when the flag is on.
+  if (!data?.enabled) return null;
   if (data.stages.length === 0) {
     return (
       <Panel title="Plan">
