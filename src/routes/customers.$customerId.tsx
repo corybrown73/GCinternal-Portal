@@ -71,7 +71,7 @@ import { AddCustomerContact, EditCustomerContact } from "@/components/customer-c
 import { EditableField } from "@/components/editable-field";
 import { setRecordField } from "@/lib/hub.functions";
 import type { EditableRecordField as EditableRecordFieldKey } from "@/lib/record-fields";
-import { AttachmentsPanel } from "@/components/attachments-panel";
+import { AttachmentsPanel, attachmentsQuery } from "@/components/attachments-panel";
 import { StageGatesPanel } from "@/components/stage-gates-panel";
 import { getPlan } from "@/lib/plan.functions";
 import type { LifecycleStageId } from "@/lib/lifecycle";
@@ -680,11 +680,66 @@ function HelpPicksFromDeal({ dealId }: { dealId: string }) {
 
 /** Everything the page used to spread over eight tabs, in one place, folded. */
 function DetailsTab({ record, customerId }: { record: Customer360; customerId: string }) {
-  const sections: Array<{ key: string; title: string; body: ReactNode }> = [
+  const impl = record.implementation!;
+  // Each section keeps the collapse key it had before, so a section someone
+  // opened stays open. Commitments is the one new key: it used to sit inside the
+  // delivery record and now has its own section.
+  const sections: Array<{ key: string; title: string; count?: number; body: ReactNode }> = [
     {
       key: "account",
-      title: "Account",
-      body: <AccountDetails record={record} customerId={customerId} />,
+      title: "Implementation record",
+      body: <AccountDetails record={record} customerId={customerId} part="implementation" />,
+    },
+    {
+      key: "customer",
+      title: "Customer and success",
+      body: <AccountDetails record={record} customerId={customerId} part="customer" />,
+    },
+    {
+      key: "commitments",
+      title: "Commitments",
+      count: record.commitments.length,
+      body: <JourneyTab record={record} customerId={customerId} part="commitments" />,
+    },
+    {
+      key: "solution",
+      title: "Solutions",
+      count: record.technical_solutions.length,
+      body: <SolutionTab record={record} customerId={customerId} />,
+    },
+    {
+      key: "requirements",
+      title: "Requirements",
+      count: record.requirements.length,
+      body: <RequirementsTab record={record} customerId={customerId} />,
+    },
+    {
+      key: "decisions",
+      title: "Decisions",
+      count: record.decisions.length,
+      body: <DecisionsTab record={record} customerId={customerId} />,
+    },
+    {
+      key: "risks",
+      title: "Risks and issues",
+      count: record.risks.length + record.issues.length + record.escalations.length,
+      body: <RisksTab record={record} customerId={customerId} />,
+    },
+    {
+      key: "evidence",
+      title: "Evidence and approvals",
+      count: record.evidence.length + record.approvals.length,
+      body: <EvidenceTab record={record} customerId={customerId} />,
+    },
+    {
+      key: "history",
+      title: "History",
+      body: (
+        <>
+          <JourneyTab record={record} customerId={customerId} part="history" />
+          <HistoryTab record={record} />
+        </>
+      ),
     },
     {
       key: "journey",
@@ -697,40 +752,14 @@ function DetailsTab({ record, customerId }: { record: Customer360; customerId: s
               Current Implementation, not here. */}
           <p className="px-3 pt-2 text-[12px] text-muted-foreground">
             Underlying delivery lifecycle, stage:{" "}
-            <b className="text-foreground">{stageLabel(record.implementation?.current_stage)}</b> —
-            project history, gates and templates. Not the implementation journey a TIS runs; that is
-            Current Implementation. Reference and record-keeping only.
+            <b className="text-foreground">{stageLabel(impl.current_stage)}</b> — project history,
+            gates and templates. Not the implementation journey a TIS runs; that is Current
+            Implementation. Reference and record-keeping only.
           </p>
-          <JourneyTab record={record} customerId={customerId} />
+          <JourneyTab record={record} customerId={customerId} part="delivery" />
         </>
       ),
     },
-    {
-      key: "solution",
-      title: "Solution",
-      body: <SolutionTab record={record} customerId={customerId} />,
-    },
-    {
-      key: "requirements",
-      title: "Requirements",
-      body: <RequirementsTab record={record} customerId={customerId} />,
-    },
-    {
-      key: "decisions",
-      title: "Decisions",
-      body: <DecisionsTab record={record} customerId={customerId} />,
-    },
-    {
-      key: "risks",
-      title: "Risks & issues",
-      body: <RisksTab record={record} customerId={customerId} />,
-    },
-    {
-      key: "evidence",
-      title: "Evidence",
-      body: <EvidenceTab record={record} customerId={customerId} />,
-    },
-    { key: "history", title: "History", body: <HistoryTab record={record} /> },
   ];
   return (
     <div className="space-y-3">
@@ -742,6 +771,7 @@ function DetailsTab({ record, customerId }: { record: Customer360; customerId: s
           collapsible
           defaultOpen={false}
           collapseKey={`customer:details:${s.key}`}
+          {...(s.count === undefined ? {} : { count: s.count })}
         >
           <div className="p-3">{s.body}</div>
         </Panel>
@@ -750,7 +780,17 @@ function DetailsTab({ record, customerId }: { record: Customer360; customerId: s
   );
 }
 
-function AccountDetails({ record, customerId }: { record: Customer360; customerId: string }) {
+function AccountDetails({
+  record,
+  customerId,
+  part,
+}: {
+  record: Customer360;
+  customerId: string;
+  /** Which area of the account to draw. Absent draws both, as before. */
+  part?: "implementation" | "customer";
+}) {
+  const show = (p: "implementation" | "customer") => !part || part === p;
   const impl = record.implementation!;
   const open = openItems(record);
   // Read from this project's own stages. `progress()` counts against the
@@ -788,414 +828,467 @@ function AccountDetails({ record, customerId }: { record: Customer360; customerI
   const gradEvidence = graduationEvidence(record, impl);
   return (
     <div className="space-y-4">
-      {/* First on the page, above everything descriptive: the three things
+      {show("implementation") ? (
+        <>
+          {/* First on the page, above everything descriptive: the three things
             that have to be true before this project moves on, and the control
             that moves it. Ticking the last one IS the prompt to advance. */}
-      {impl.deal_id ? null : (
-        <StageGatesSection customerId={customerId} implementationId={impl.id} />
-      )}
-      <Panel title="Current state" level="primary">
-        {/* Stage, health, target launch and progress used to head this
+          {impl.deal_id ? null : (
+            <StageGatesSection customerId={customerId} implementationId={impl.id} />
+          )}
+          <Panel title="Current state" level="primary">
+            {/* Stage, health, target launch and progress used to head this
               panel. They now live in the account rail, which is on screen from
               every tab rather than only this one — so repeating them here would
               be the same four facts twice on the same screen. What is left is
               what the rail deliberately does not carry: the reasoning. */}
-        <div className="space-y-2 px-3 py-3">
-          <PrimarySignal
-            label="Waiting on"
-            emphasis="medium"
-            value={
-              waiting.party === "none"
-                ? "No current dependency"
-                : // The specific person, when the record names one — the
-                  // generic party label only when it does not. Never parsed
-                  // back out of `reason`, which may itself contain " — "
-                  // (the owner's own role).
-                  waiting.owner
-                  ? `${waiting.owner.name}${
-                      waiting.owner.role ? ` — ${humanize(waiting.owner.role)}` : ""
-                    }`
-                  : WAITING_ON_LABEL[waiting.party]
-            }
-            detail={
-              waiting.party === "none"
-                ? undefined
-                : // Phase 6: the wait is dated from the record that decided it
-                  // (the approval, the commitment), never from stage entry.
-                  `${waiting.task}${waiting.since ? ` · since ${fmtDate(waiting.since)}` : ""}`
-            }
-          />
-          {valueGaps.length ? (
-            <p className="text-[12px] leading-snug text-muted-foreground">
-              Value proof · {valueGaps.length} success criteri
-              {valueGaps.length > 1 ? "a" : "on"} late — {valueGaps[0]!.reason}
-            </p>
-          ) : null}
-          {adoption ? (
-            <p className="text-[12px] leading-snug text-muted-foreground">
-              Usage · {ADOPTION_LEVEL_LABEL[adoption.level]} — {adoption.reason}
-            </p>
-          ) : null}
-        </div>
+            <div className="space-y-2 px-3 py-3">
+              <PrimarySignal
+                label="Waiting on"
+                emphasis="medium"
+                value={
+                  waiting.party === "none"
+                    ? "No current dependency"
+                    : // The specific person, when the record names one — the
+                      // generic party label only when it does not. Never parsed
+                      // back out of `reason`, which may itself contain " — "
+                      // (the owner's own role).
+                      waiting.owner
+                      ? `${waiting.owner.name}${
+                          waiting.owner.role ? ` — ${humanize(waiting.owner.role)}` : ""
+                        }`
+                      : WAITING_ON_LABEL[waiting.party]
+                }
+                detail={
+                  waiting.party === "none"
+                    ? undefined
+                    : // Phase 6: the wait is dated from the record that decided it
+                      // (the approval, the commitment), never from stage entry.
+                      `${waiting.task}${waiting.since ? ` · since ${fmtDate(waiting.since)}` : ""}`
+                }
+              />
+              {valueGaps.length ? (
+                <p className="text-[12px] leading-snug text-muted-foreground">
+                  Value proof · {valueGaps.length} success criteri
+                  {valueGaps.length > 1 ? "a" : "on"} late — {valueGaps[0]!.reason}
+                </p>
+              ) : null}
+              {adoption ? (
+                <p className="text-[12px] leading-snug text-muted-foreground">
+                  Usage · {ADOPTION_LEVEL_LABEL[adoption.level]} — {adoption.reason}
+                </p>
+              ) : null}
+            </div>
 
-        <div className="border-t border-border px-3 py-2">
-          <p className="mb-1 text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
-            Statement of work
-          </p>
-          <SowPanel
-            customerId={customerId}
-            implementation={{
-              id: impl.id,
-              name: impl.name,
-              owner_id: impl.owner_id,
-              sales_owner: impl.sales_owner,
-              tier: impl.tier,
-              status: impl.status,
-              sow_reference: impl.sow_reference,
-              sow_document_url: impl.sow_document_url,
-              sow_document_name: impl.sow_document_name,
-              sow_value: impl.sow_value,
-              sow_signed_date: impl.sow_signed_date,
-              contract_start_date: impl.contract_start_date,
-              target_launch_date: impl.target_launch_date,
-              actual_launch_date: impl.actual_launch_date,
-              customer_goals: impl.customer_goals,
-            }}
-          />
-        </div>
-        <div className="border-t border-border px-3 py-2">
-          <EditImplementation
-            customerId={customerId}
-            implementation={{
-              id: impl.id,
-              name: impl.name,
-              owner_id: impl.owner_id,
-              sales_owner: impl.sales_owner,
-              tier: impl.tier,
-              status: impl.status,
-              sow_reference: impl.sow_reference,
-              sow_value: impl.sow_value,
-              sow_signed_date: impl.sow_signed_date,
-              contract_start_date: impl.contract_start_date,
-              target_launch_date: impl.target_launch_date,
-              actual_launch_date: impl.actual_launch_date,
-              customer_goals: impl.customer_goals,
-            }}
-            team={record.team}
-          />
-        </div>
-      </Panel>
+            <div className="border-t border-border px-3 py-2">
+              <p className="mb-1 text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
+                Statement of work
+              </p>
+              <SowPanel
+                customerId={customerId}
+                implementation={{
+                  id: impl.id,
+                  name: impl.name,
+                  owner_id: impl.owner_id,
+                  sales_owner: impl.sales_owner,
+                  tier: impl.tier,
+                  status: impl.status,
+                  sow_reference: impl.sow_reference,
+                  sow_document_url: impl.sow_document_url,
+                  sow_document_name: impl.sow_document_name,
+                  sow_value: impl.sow_value,
+                  sow_signed_date: impl.sow_signed_date,
+                  contract_start_date: impl.contract_start_date,
+                  target_launch_date: impl.target_launch_date,
+                  actual_launch_date: impl.actual_launch_date,
+                  customer_goals: impl.customer_goals,
+                }}
+              />
+            </div>
+            <div className="border-t border-border px-3 py-2">
+              <EditImplementation
+                customerId={customerId}
+                implementation={{
+                  id: impl.id,
+                  name: impl.name,
+                  owner_id: impl.owner_id,
+                  sales_owner: impl.sales_owner,
+                  tier: impl.tier,
+                  status: impl.status,
+                  sow_reference: impl.sow_reference,
+                  sow_value: impl.sow_value,
+                  sow_signed_date: impl.sow_signed_date,
+                  contract_start_date: impl.contract_start_date,
+                  target_launch_date: impl.target_launch_date,
+                  actual_launch_date: impl.actual_launch_date,
+                  customer_goals: impl.customer_goals,
+                }}
+                team={record.team}
+              />
+            </div>
+          </Panel>
 
-      {/* Directly under the current state and above the goals: what sales
+          {/* Directly under the current state and above the goals: what sales
           learned is context for reading everything below it, and it is the
           thing a person new to the account wants first. */}
-      <FromSalesPanel implementationId={impl.id} />
+          <FromSalesPanel implementationId={impl.id} />
+        </>
+      ) : null}
+      {show("customer") ? (
+        <>
+          <Panel title="What the customer wants to achieve" level="primary">
+            <div className="px-3 py-3">
+              <CustomerGoalsPanel customerId={customerId} implementation={boardImpl} />
+            </div>
+            <div className="border-t border-border bg-surface px-3 py-2">
+              <p className="mb-1 text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
+                Discovery board (Miro) · supporting context
+              </p>
+              <DiscoveryBoardPanel customerId={customerId} implementation={boardImpl} />
+            </div>
+          </Panel>
 
-      <Panel title="What the customer wants to achieve" level="primary">
-        <div className="px-3 py-3">
-          <CustomerGoalsPanel customerId={customerId} implementation={boardImpl} />
-        </div>
-        <div className="border-t border-border bg-surface px-3 py-2">
-          <p className="mb-1 text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
-            Discovery board (Miro) · supporting context
-          </p>
-          <DiscoveryBoardPanel customerId={customerId} implementation={boardImpl} />
-        </div>
-      </Panel>
-
-      <Panel title="What success looks like" count={record.success_criteria.length} level="primary">
-        <p className="border-b border-border px-3 py-2 text-[11px] leading-relaxed text-muted-foreground">
-          Each measure records what success looks like, how it will be measured, the starting point
-          and target where they apply, and who owns it. Working context belongs in the {TIS_SHORT}{" "}
-          journal, not here.
-        </p>
-
-        {/* Kickoff intake: the named customer people outcomes and adoption are
-              owned by, and who confirms value. Reuses the customer contact record. */}
-        <div className="border-b border-border px-3 py-2">
-          <p className="text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
-            Customer contacts
-          </p>
-          {record.contacts.length ? (
-            <ul className="mt-1 divide-y divide-border border-y border-border">
-              {record.contacts.map((c) => (
-                <li key={c.id} className="py-1.5">
-                  <div className="flex flex-wrap items-baseline gap-2 text-[12px]">
-                    <span className="font-medium">{c.name}</span>
-                    <span className="rounded border border-border px-1 py-0.5 text-[10px] uppercase tracking-[0.08em] text-muted-foreground">
-                      {contactRoleLabel(c.role) ?? c.role}
-                    </span>
-                    <span className="text-[11px] text-muted-foreground">{dash(c.email)}</span>
-                    <span className="ml-auto">
-                      <EditCustomerContact customerId={customerId} contact={c} />
-                    </span>
-                  </div>
-                  {c.notes ? (
-                    <p className="mt-0.5 text-[11px] text-muted-foreground">{c.notes}</p>
-                  ) : null}
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="mt-0.5 text-[12px] text-muted-foreground">
-              No customer contacts recorded — outcome ownership, value confirmation and adoption
-              ownership cannot be attributed yet.
+          <Panel
+            title="What success looks like"
+            count={record.success_criteria.length}
+            level="primary"
+          >
+            <p className="border-b border-border px-3 py-2 text-[11px] leading-relaxed text-muted-foreground">
+              Each measure records what success looks like, how it will be measured, the starting
+              point and target where they apply, and who owns it. Working context belongs in the{" "}
+              {TIS_SHORT} journal, not here.
             </p>
-          )}
-          <div className="mt-1.5">
-            <AddCustomerContact customerId={customerId} />
-          </div>
-        </div>
-        {record.success_criteria.length ? (
-          <ul className="divide-y divide-border">
-            {record.success_criteria.map((s) => (
-              <SuccessCriterionRow
-                key={s.id}
-                criterion={s}
+
+            {/* Kickoff intake: the named customer people outcomes and adoption are
+              owned by, and who confirms value. Reuses the customer contact record. */}
+            <div className="border-b border-border px-3 py-2">
+              <p className="text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
+                Customer contacts
+              </p>
+              {record.contacts.length ? (
+                <ul className="mt-1 divide-y divide-border border-y border-border">
+                  {record.contacts.map((c) => (
+                    <li key={c.id} className="py-1.5">
+                      <div className="flex flex-wrap items-baseline gap-2 text-[12px]">
+                        <span className="font-medium">{c.name}</span>
+                        <span className="rounded border border-border px-1 py-0.5 text-[10px] uppercase tracking-[0.08em] text-muted-foreground">
+                          {contactRoleLabel(c.role) ?? c.role}
+                        </span>
+                        <span className="text-[11px] text-muted-foreground">{dash(c.email)}</span>
+                        <span className="ml-auto">
+                          <EditCustomerContact customerId={customerId} contact={c} />
+                        </span>
+                      </div>
+                      {c.notes ? (
+                        <p className="mt-0.5 text-[11px] text-muted-foreground">{c.notes}</p>
+                      ) : null}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="mt-0.5 text-[12px] text-muted-foreground">
+                  No customer contacts recorded — outcome ownership, value confirmation and adoption
+                  ownership cannot be attributed yet.
+                </p>
+              )}
+              <div className="mt-1.5">
+                <AddCustomerContact customerId={customerId} />
+              </div>
+            </div>
+            {record.success_criteria.length ? (
+              <ul className="divide-y divide-border">
+                {record.success_criteria.map((s) => (
+                  <SuccessCriterionRow
+                    key={s.id}
+                    criterion={s}
+                    customerId={customerId}
+                    implementationId={impl.id}
+                    team={record.team}
+                    contacts={record.contacts}
+                    evidence={record.evidence}
+                    currentStage={impl.current_stage}
+                  />
+                ))}
+              </ul>
+            ) : (
+              <div className="flex flex-wrap items-center gap-3 px-3 py-3">
+                <span className="text-[12px] text-muted-foreground">
+                  No success measures recorded yet. Add one so we can measure whether this
+                  implementation delivers value.
+                </span>
+              </div>
+            )}
+            <div className="border-t border-border px-3 py-2">
+              <AddSuccessCriterion
                 customerId={customerId}
                 implementationId={impl.id}
                 team={record.team}
                 contacts={record.contacts}
-                evidence={record.evidence}
-                currentStage={impl.current_stage}
               />
-            ))}
-          </ul>
-        ) : (
-          <div className="flex flex-wrap items-center gap-3 px-3 py-3">
-            <span className="text-[12px] text-muted-foreground">
-              No success measures recorded yet. Add one so we can measure whether this
-              implementation delivers value.
-            </span>
-          </div>
-        )}
-        <div className="border-t border-border px-3 py-2">
-          <AddSuccessCriterion
-            customerId={customerId}
-            implementationId={impl.id}
-            team={record.team}
-            contacts={record.contacts}
-          />
-        </div>
-      </Panel>
+            </div>
+          </Panel>
 
-      {/* Adoption is behavioural ("are they using it as intended?") and is kept
+          {/* Adoption is behavioural ("are they using it as intended?") and is kept
             deliberately separate from Value & success above. */}
-      <Panel
-        title="How the customer will use it"
-        count={record.adoption.length}
-        meta={adoption ? ADOPTION_LEVEL_LABEL[adoption.level] : undefined}
-        level="supporting"
-      >
-        <p className="border-b border-border px-3 py-2 text-[11px] text-muted-foreground">
-          Each row records how the customer is expected to use the solution — the intended users,
-          how often, and what counts as being in use. Usage observations underneath record what is
-          actually happening; the discovery board is supporting context only.
-        </p>
+          <Panel
+            title="How the customer will use it"
+            count={record.adoption.length}
+            meta={adoption ? ADOPTION_LEVEL_LABEL[adoption.level] : undefined}
+            level="supporting"
+          >
+            <p className="border-b border-border px-3 py-2 text-[11px] text-muted-foreground">
+              Each row records how the customer is expected to use the solution — the intended
+              users, how often, and what counts as being in use. Usage observations underneath
+              record what is actually happening; the discovery board is supporting context only.
+            </p>
 
-        {adoption?.workarounds.length ? (
-          <p className="border-b border-border px-3 py-2 text-[12px]">
-            <span className="text-muted-foreground">Workarounds still in use · </span>
-            {adoption.workarounds
-              .map((w) => `${w.name}${w.description ? ` (${w.description})` : ""}`)
-              .join("; ")}
-          </p>
-        ) : null}
-        {record.adoption.length ? (
-          <ul className="divide-y divide-border">
-            {record.adoption.map((a) => (
-              <AdoptionAreaRow
-                key={a.id}
-                area={a}
+            {adoption?.workarounds.length ? (
+              <p className="border-b border-border px-3 py-2 text-[12px]">
+                <span className="text-muted-foreground">Workarounds still in use · </span>
+                {adoption.workarounds
+                  .map((w) => `${w.name}${w.description ? ` (${w.description})` : ""}`)
+                  .join("; ")}
+              </p>
+            ) : null}
+            {record.adoption.length ? (
+              <ul className="divide-y divide-border">
+                {record.adoption.map((a) => (
+                  <AdoptionAreaRow
+                    key={a.id}
+                    area={a}
+                    customerId={customerId}
+                    team={record.team}
+                    contacts={record.contacts}
+                    evidence={record.evidence}
+                  />
+                ))}
+              </ul>
+            ) : (
+              <div className="px-3 py-3 text-[12px] text-muted-foreground">
+                No usage areas recorded yet.
+              </div>
+            )}
+            <div className="border-t border-border px-3 py-2">
+              <AddAdoptionArea
                 customerId={customerId}
+                implementationId={impl.id}
                 team={record.team}
                 contacts={record.contacts}
-                evidence={record.evidence}
               />
-            ))}
-          </ul>
-        ) : (
-          <div className="px-3 py-3 text-[12px] text-muted-foreground">
-            No usage areas recorded yet.
-          </div>
-        )}
-        <div className="border-t border-border px-3 py-2">
-          <AddAdoptionArea
-            customerId={customerId}
-            implementationId={impl.id}
-            team={record.team}
-            contacts={record.contacts}
-          />
-        </div>
-      </Panel>
-
-      {/* Read-only readiness view. Not a gate: it never blocks or moves a stage. */}
-      <Panel title="Ready to hand over" level="supporting" meta={readinessSummary.line}>
-        <p className="border-b border-border px-3 py-2 text-[11px] text-muted-foreground">
-          Read-only assessment of whether this customer is actually ready for handover to Customer
-          Success. Nothing here blocks stage movement.
-        </p>
-        <ul className="divide-y divide-border">
-          {readiness.map((area) => (
-            <li key={area.id} className="flex items-start gap-3 px-3 py-2">
-              <span
-                className={cn(
-                  "mt-0.5 shrink-0 rounded-sm border px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-[0.08em]",
-                  area.state === "ready"
-                    ? "border-border text-foreground"
-                    : area.state === "needs_attention"
-                      ? "border-destructive/60 text-destructive"
-                      : "border-border text-muted-foreground",
-                )}
-              >
-                {READINESS_STATE_LABEL[area.state]}
-              </span>
-              <div className="min-w-0">
-                <p className="text-[12px] font-medium">{area.label}</p>
-                <p className="text-[12px] text-muted-foreground">{area.reason}</p>
-              </div>
-              {area.tab && area.tab !== "overview" ? (
-                <Link
-                  to="/customers/$customerId"
-                  params={{ customerId }}
-                  search={tabSearch(area.tab as AnyTabId, impl)}
-                  className="ml-auto shrink-0 text-[11px] text-muted-foreground underline hover:text-foreground"
-                >
-                  {TAB_LABEL[resolveTab(area.tab)]}
-                </Link>
-              ) : null}
-            </li>
-          ))}
-        </ul>
-        {gradEvidence.hasRecord ? (
-          <>
-            <div className="border-t border-border px-3 py-2">
-              <p className="text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
-                Verified by structured records
-              </p>
-              <dl className="mt-2 grid grid-cols-2 gap-x-6 gap-y-2 md:grid-cols-4">
-                {gradEvidence.verified.map((f) => (
-                  <Field key={f.label} label={f.label} value={f.value} />
-                ))}
-              </dl>
             </div>
-            {gradEvidence.narrative.length ? (
-              <div className="border-t border-dashed border-border bg-muted/40 px-3 py-2">
-                <p className="text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
-                  Recorded as narrative — not independently verified
-                </p>
-                <ul className="mt-2 space-y-2">
-                  {gradEvidence.narrative.map((n) => (
-                    <li
-                      key={n.label}
-                      className="border-l-2 border-dashed border-muted-foreground/40 pl-2"
+          </Panel>
+        </>
+      ) : null}
+      {show("implementation") ? (
+        <>
+          {/* Read-only readiness view. Not a gate: it never blocks or moves a stage. */}
+          <Panel title="Ready to hand over" level="supporting" meta={readinessSummary.line}>
+            <p className="border-b border-border px-3 py-2 text-[11px] text-muted-foreground">
+              Read-only assessment of whether this customer is actually ready for handover to
+              Customer Success. Nothing here blocks stage movement.
+            </p>
+            <ul className="divide-y divide-border">
+              {readiness.map((area) => (
+                <li key={area.id} className="flex items-start gap-3 px-3 py-2">
+                  <span
+                    className={cn(
+                      "mt-0.5 shrink-0 rounded-sm border px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-[0.08em]",
+                      area.state === "ready"
+                        ? "border-border text-foreground"
+                        : area.state === "needs_attention"
+                          ? "border-destructive/60 text-destructive"
+                          : "border-border text-muted-foreground",
+                    )}
+                  >
+                    {READINESS_STATE_LABEL[area.state]}
+                  </span>
+                  <div className="min-w-0">
+                    <p className="text-[12px] font-medium">{area.label}</p>
+                    <p className="text-[12px] text-muted-foreground">{area.reason}</p>
+                  </div>
+                  {area.tab && area.tab !== "overview" ? (
+                    <Link
+                      to="/customers/$customerId"
+                      params={{ customerId }}
+                      search={tabSearch(area.tab as AnyTabId, impl)}
+                      className="ml-auto shrink-0 text-[11px] text-muted-foreground underline hover:text-foreground"
                     >
-                      <p className="text-[10px] uppercase tracking-[0.08em] text-muted-foreground">
-                        {n.label} · {n.source}
-                      </p>
-                      <p className="text-[12px] italic text-muted-foreground">{n.value}</p>
-                    </li>
-                  ))}
-                </ul>
-                {gradEvidence.corroboration ? (
-                  <p className="mt-2 border-t border-dashed border-border pt-2 text-[11px] text-destructive">
-                    {gradEvidence.corroboration}
+                      {TAB_LABEL[resolveTab(area.tab)]}
+                    </Link>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+            {gradEvidence.hasRecord ? (
+              <>
+                <div className="border-t border-border px-3 py-2">
+                  <p className="text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
+                    Verified by structured records
                   </p>
+                  <dl className="mt-2 grid grid-cols-2 gap-x-6 gap-y-2 md:grid-cols-4">
+                    {gradEvidence.verified.map((f) => (
+                      <Field key={f.label} label={f.label} value={f.value} />
+                    ))}
+                  </dl>
+                </div>
+                {gradEvidence.narrative.length ? (
+                  <div className="border-t border-dashed border-border bg-muted/40 px-3 py-2">
+                    <p className="text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
+                      Recorded as narrative — not independently verified
+                    </p>
+                    <ul className="mt-2 space-y-2">
+                      {gradEvidence.narrative.map((n) => (
+                        <li
+                          key={n.label}
+                          className="border-l-2 border-dashed border-muted-foreground/40 pl-2"
+                        >
+                          <p className="text-[10px] uppercase tracking-[0.08em] text-muted-foreground">
+                            {n.label} · {n.source}
+                          </p>
+                          <p className="text-[12px] italic text-muted-foreground">{n.value}</p>
+                        </li>
+                      ))}
+                    </ul>
+                    {gradEvidence.corroboration ? (
+                      <p className="mt-2 border-t border-dashed border-border pt-2 text-[11px] text-destructive">
+                        {gradEvidence.corroboration}
+                      </p>
+                    ) : null}
+                  </div>
                 ) : null}
-              </div>
-            ) : null}
-          </>
-        ) : (
-          <p className="border-t border-border px-3 py-2 text-[12px] text-muted-foreground">
-            No handover record exists yet — nothing is assumed on its behalf.
-          </p>
-        )}
-      </Panel>
+              </>
+            ) : (
+              <p className="border-t border-border px-3 py-2 text-[12px] text-muted-foreground">
+                No handover record exists yet — nothing is assumed on its behalf.
+              </p>
+            )}
+          </Panel>
 
-      {/* Phase 7. The writer for the record the panel above reads. Two tables
+          {/* Phase 7. The writer for the record the panel above reads. Two tables
             modelled this one event in 0003 and neither had a write path;
             cs_handoffs is now the record, graduations is deprecated and folded
             forward. Renders nothing while handover_record is off. */}
-      <HandoverRecordPanel implementationId={impl.id} team={record.team} />
+          <HandoverRecordPanel implementationId={impl.id} team={record.team} />
 
-      <Panel
-        title="Open items"
-        level="primary"
-        meta={`${
-          open.commitments.length + open.risks.length + open.issues.length + open.escalations.length
-        } open`}
-      >
-        <div className="grid grid-cols-2 divide-x divide-border border-b border-border md:grid-cols-4">
-          {(
-            [
-              ["Commitments", open.commitments.length],
-              ["Risks", open.risks.length],
-              ["Issues", open.issues.length],
-              ["Escalations", open.escalations.length],
-            ] as const
-          ).map(([k, v]) => (
-            <div key={k} className="px-3 py-2">
-              <div className="text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
-                {k}
-              </div>
-              <div className="font-mono text-[16px]">{v}</div>
+          <Panel
+            title="Open items"
+            level="primary"
+            meta={`${
+              open.commitments.length +
+              open.risks.length +
+              open.issues.length +
+              open.escalations.length
+            } open`}
+          >
+            <div className="grid grid-cols-2 divide-x divide-border border-b border-border md:grid-cols-4">
+              {(
+                [
+                  ["Commitments", open.commitments.length],
+                  ["Risks", open.risks.length],
+                  ["Issues", open.issues.length],
+                  ["Escalations", open.escalations.length],
+                ] as const
+              ).map(([k, v]) => (
+                <div key={k} className="px-3 py-2">
+                  <div className="text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
+                    {k}
+                  </div>
+                  <div className="font-mono text-[16px]">{v}</div>
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
-        <ul className="divide-y divide-border">
-          {[
-            ...open.escalations.map((e: any) => ({
-              id: `e-${e.id}`,
-              kind: "Escalation",
-              title: e.title,
-              severity: e.severity,
-              extra: e.status,
-            })),
-            ...open.risks.map((r: any) => ({
-              id: `r-${r.id}`,
-              kind: "Risk",
-              title: r.title,
-              severity: r.severity,
-              extra: `${r.likelihood} likelihood`,
-            })),
-            ...open.issues.map((r: any) => ({
-              id: `i-${r.id}`,
-              kind: "Issue",
-              title: r.title,
-              severity: r.severity,
-              extra: r.status,
-            })),
-            ...open.commitments.map((c: any) => ({
-              id: `c-${c.id}`,
-              kind: "Commitment",
-              title: c.description,
-              severity: null,
-              extra: c.due_date
-                ? `${isOverdue(c.due_date) ? "Overdue" : "Due"} ${fmtDate(c.due_date)}`
-                : "No due date",
-            })),
-          ]
-            .slice(0, 10)
-            .map((row) => (
-              <Row key={row.id} className="flex flex-wrap items-baseline gap-2">
-                <span className="w-20 shrink-0 text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
-                  {row.kind}
-                </span>
-                <span className="text-[13px]">{row.title}</span>
-                {row.severity ? <SeverityChip value={row.severity} /> : null}
-                <span className="text-[11px] text-muted-foreground">{row.extra}</span>
-              </Row>
-            ))}
-          {open.commitments.length +
-            open.risks.length +
-            open.issues.length +
-            open.escalations.length ===
-          0 ? (
-            <NoRows label="Nothing open" />
-          ) : null}
-        </ul>
-      </Panel>
+            <ul className="divide-y divide-border">
+              {[
+                ...open.escalations.map((e: any) => ({
+                  id: `e-${e.id}`,
+                  kind: "Escalation",
+                  title: e.title,
+                  severity: e.severity,
+                  extra: e.status,
+                })),
+                ...open.risks.map((r: any) => ({
+                  id: `r-${r.id}`,
+                  kind: "Risk",
+                  title: r.title,
+                  severity: r.severity,
+                  extra: `${r.likelihood} likelihood`,
+                })),
+                ...open.issues.map((r: any) => ({
+                  id: `i-${r.id}`,
+                  kind: "Issue",
+                  title: r.title,
+                  severity: r.severity,
+                  extra: r.status,
+                })),
+                ...open.commitments.map((c: any) => ({
+                  id: `c-${c.id}`,
+                  kind: "Commitment",
+                  title: c.description,
+                  severity: null,
+                  extra: c.due_date
+                    ? `${isOverdue(c.due_date) ? "Overdue" : "Due"} ${fmtDate(c.due_date)}`
+                    : "No due date",
+                })),
+              ]
+                .slice(0, 10)
+                .map((row) => (
+                  <Row key={row.id} className="flex flex-wrap items-baseline gap-2">
+                    <span className="w-20 shrink-0 text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
+                      {row.kind}
+                    </span>
+                    <span className="text-[13px]">{row.title}</span>
+                    {row.severity ? <SeverityChip value={row.severity} /> : null}
+                    <span className="text-[11px] text-muted-foreground">{row.extra}</span>
+                  </Row>
+                ))}
+              {open.commitments.length +
+                open.risks.length +
+                open.issues.length +
+                open.escalations.length ===
+              0 ? (
+                <NoRows label="Nothing open" />
+              ) : null}
+            </ul>
+          </Panel>
+        </>
+      ) : null}
     </div>
+  );
+}
+
+/**
+ * The rail's attachment summary: how many, and a way to the list. The list
+ * itself is on Resources, so it is not repeated here.
+ */
+function RailAttachments({
+  implementation,
+  customerId,
+}: {
+  implementation: Customer360["implementation"];
+  customerId: string;
+}) {
+  const files = useQuery(attachmentsQuery(implementation!.id));
+  const count = files.data?.length;
+  return (
+    <Panel title="Attachments" level="supporting" {...(count === undefined ? {} : { count })}>
+      <div className="px-3 py-2.5 text-[12px] text-muted-foreground">
+        {count === undefined
+          ? "Loading…"
+          : count === 0
+            ? "No documents or links yet."
+            : `${count} document${count === 1 ? "" : "s"} or link${count === 1 ? "" : "s"} on this implementation.`}
+        <div className="mt-1.5">
+          <Link
+            to="/customers/$customerId"
+            params={{ customerId }}
+            search={tabSearch("resources", implementation)}
+            className="text-[12px] font-medium text-primary hover:underline"
+          >
+            View in Resources →
+          </Link>
+        </div>
+      </div>
+    </Panel>
   );
 }
 
@@ -1326,7 +1419,7 @@ function AccountRail({
               implementationId={impl.id}
               customerId={customerId}
               field="arr"
-              label={impl.deal_id ? "Customer ARR" : "ARR"}
+              label="Customer ARR"
               value={record.customer.arr == null ? null : String(record.customer.arr)}
               type="number"
               format={(v) => (v == null || v === "" ? dash(null) : fmtMoney(Number(v)))}
@@ -1382,18 +1475,7 @@ function AccountRail({
               </ul>
             </Panel>
 
-            {/* Every SOW, board and deck for this account in one list — including
-          the ones still living in the SOW and discovery-board fields, which
-          are read alongside so nothing that exists today disappears. */}
-            <Suspense
-              fallback={
-                <Panel title="Attachments" level="supporting">
-                  <NoRows label="Loading…" />
-                </Panel>
-              }
-            >
-              <AttachmentsPanel implementationId={impl.id} />
-            </Suspense>
+            <RailAttachments implementation={impl} customerId={customerId} />
 
             {/* What was finished, frozen. Its own panel rather than a row in
           Attachments: these are not documents somebody uploaded, they are the
@@ -1484,7 +1566,7 @@ function AccountRail({
               implementationId={impl.id}
               customerId={customerId}
               field="arr"
-              label="ARR"
+              label="Customer ARR"
               value={record.customer.arr == null ? null : String(record.customer.arr)}
               format={(v) => (v ? fmtMoney(Number(v)) : "—")}
               type="number"
@@ -1881,8 +1963,18 @@ function AdoptionAreaRow({
 
 /* ---------------- 2. JOURNEY ---------------- */
 
-function JourneyTab({ record, customerId }: { record: Customer360; customerId: string }) {
+function JourneyTab({
+  record,
+  customerId,
+  part,
+}: {
+  record: Customer360;
+  customerId: string;
+  /** Which part of the journey to draw. Absent draws all of it, as before. */
+  part?: "delivery" | "commitments" | "history";
+}) {
   const impl = record.implementation!;
+  const show = (p: "delivery" | "commitments" | "history") => !part || part === p;
   const activeStage = normalizeStage(impl.current_stage);
   const activeIndex = LIFECYCLE_STAGES.findIndex((s) => s.id === activeStage);
   const launchGate = launchAcceptanceGate({
@@ -1909,279 +2001,303 @@ function JourneyTab({ record, customerId }: { record: Customer360; customerId: s
 
   return (
     <div className="space-y-4">
-      {/* THIS project's stages, from its own `stage_instances` — so an
+      {show("delivery") ? (
+        <>
+          {/* THIS project's stages, from its own `stage_instances` — so an
           integration journey shows Discovery / Design / Build / Validate /
           Launch rather than the new-logo eight. Falls back to the house
           lifecycle only when no journey has been applied, and says so on the
           rail when it does. */}
-      <div className="min-w-0 overflow-hidden rounded-md bg-surface px-4 py-3">
-        <ProjectRail project={journeyProject} />
-      </div>
+          <div className="min-w-0 overflow-hidden rounded-md bg-surface px-4 py-3">
+            <ProjectRail project={journeyProject} />
+          </div>
 
-      <div className="rounded-md bg-surface px-4 py-3.5">
-        {/* A partner implementation has one stage control: Current Implementation's
+          <div className="rounded-md bg-surface px-4 py-3.5">
+            {/* A partner implementation has one stage control: Current Implementation's
             gates panel, which holds its gate items and its move. */}
-        {isPartnerJourney(impl) ? (
-          <p className="text-[12px] text-muted-foreground">
-            This is a partner implementation. Its stage moves are made in Current Implementation,
-            where its gates and handoff are.
-          </p>
-        ) : (
-          <>
-            <div className="text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
-              Move to next stage
-            </div>
-            <div className="mt-2">
-              <AdvanceStage
-                customerId={customerId}
-                implementationId={impl.id}
-                currentStage={activeStage}
-                team={record.team}
-                gate={launchGate}
-              />
-            </div>
-          </>
-        )}
-      </div>
+            {isPartnerJourney(impl) ? (
+              <p className="text-[12px] text-muted-foreground">
+                This is a partner implementation. Its stage moves are made in Current
+                Implementation, where its gates and handoff are.
+              </p>
+            ) : (
+              <>
+                <div className="text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+                  Move to next stage
+                </div>
+                <div className="mt-2">
+                  <AdvanceStage
+                    customerId={customerId}
+                    implementationId={impl.id}
+                    currentStage={activeStage}
+                    team={record.team}
+                    gate={launchGate}
+                  />
+                </div>
+              </>
+            )}
+          </div>
 
-      {/* The sales → delivery handoff gate, next to the stage move it gates.
+          {/* The sales → delivery handoff gate, next to the stage move it gates.
           Renders an explanatory empty state while the flag is off. */}
-      <HandoffPanel customerId={customerId} implementationId={impl.id} />
+          <HandoffPanel customerId={customerId} implementationId={impl.id} hideWhenOff />
 
-      {/* The templated plan: stage instances and the work items on them.
+          {/* The templated plan: stage instances and the work items on them.
           Renders an explanatory empty state while the flag is off. */}
-      <PlanPanel implementationId={impl.id} />
+          <PlanPanel implementationId={impl.id} hideWhenOff />
 
-      {/* Phase 4: the customer-facing links onto that plan — issue, revoke,
+          {/* Phase 4: the customer-facing links onto that plan — issue, revoke,
           rotate, and preview exactly what the customer sees. */}
-      <ExternalSharePanel implementationId={impl.id} />
+          <ExternalSharePanel implementationId={impl.id} hideWhenOff />
 
-      {/* One thread per project, written by both sides. Placed under the links
+          {/* One thread per project, written by both sides. Placed under the links
           because the links are what put a customer contact IN it. */}
-      <ConversationPanel implementationId={impl.id} projectName={impl.name} />
+          <ConversationPanel implementationId={impl.id} projectName={impl.name} />
 
-      {/* Reads the SOW attached to this implementation, proposes a journey and
+          {/* Reads the SOW attached to this implementation, proposes a journey and
           lets the Technical Implementation Specialist choose what — if
           anything — to apply. */}
-      <Panel
-        title="Proposed journey from the SOW"
-        meta="Draft suggestion — only applied when you choose to"
-      >
-        <div className="px-3 py-2.5">
-          <SowAnalysisPanel
-            customerId={customerId}
-            customerName={record.customer.name}
-            implementationId={impl.id}
-            sowDocumentUrl={impl.sow_document_url}
-            sowDocumentName={impl.sow_document_name}
-            team={record.team}
-            currentGoals={impl.customer_goals}
-            requirementCount={record.requirements.length}
-            successMeasureCount={record.success_criteria.length}
-            startDate={impl.contract_start_date}
-          />
-        </div>
-      </Panel>
+          <Panel
+            title="Proposed journey from the SOW"
+            meta="Draft suggestion — only applied when you choose to"
+          >
+            <div className="px-3 py-2.5">
+              <SowAnalysisPanel
+                customerId={customerId}
+                customerName={record.customer.name}
+                implementationId={impl.id}
+                sowDocumentUrl={impl.sow_document_url}
+                sowDocumentName={impl.sow_document_name}
+                team={record.team}
+                currentGoals={impl.customer_goals}
+                requirementCount={record.requirements.length}
+                successMeasureCount={record.success_criteria.length}
+                startDate={impl.contract_start_date}
+              />
+            </div>
+          </Panel>
 
-      {/* The one place working notes are written and read. The stage timeline
+          {/* The one place working notes are written and read. The stage timeline
           below stays the record of how the implementation moved. */}
-      <Panel
-        // Phase 7 vocabulary: the acronym is expanded at its first user-visible
-        // use on this page. It is never expanded in the dense triage lists —
-        // "Waiting on Technical Implementation Specialist to…" is worse copy,
-        // not better.
-        title={`${TIS_SHORT} journal`}
-        count={record.journal.length}
-        level="reference"
-        meta={`${TIS_FULL} working notes, filed under the stage they were written in — currently ${stageLabel(impl.current_stage)}`}
-      >
-        <div className="py-1.5">
-          <JournalPanel
-            customerId={customerId}
-            implementationId={impl.id}
-            currentStage={impl.current_stage}
-            team={record.team}
-            entries={record.journal}
-          />
-        </div>
-      </Panel>
-
-      {/* Commitments: promises made during the journey. Read surface + write path
+          <Panel
+            // Phase 7 vocabulary: the acronym is expanded at its first user-visible
+            // use on this page. It is never expanded in the dense triage lists —
+            // "Waiting on Technical Implementation Specialist to…" is worse copy,
+            // not better.
+            title={`${TIS_SHORT} journal`}
+            count={record.journal.length}
+            level="reference"
+            meta={`${TIS_FULL} working notes, filed under the stage they were written in — currently ${stageLabel(impl.current_stage)}`}
+          >
+            <div className="py-1.5">
+              <JournalPanel
+                customerId={customerId}
+                implementationId={impl.id}
+                currentStage={impl.current_stage}
+                team={record.team}
+                entries={record.journal}
+              />
+            </div>
+          </Panel>
+        </>
+      ) : null}
+      {show("commitments") ? (
+        <>
+          {/* Commitments: promises made during the journey. Read surface + write path
           live together; Home/Leadership consume these rows as they already did. */}
-      <Panel
-        title="Commitments"
-        count={(record.commitments as any[]).length}
-        meta="Promises made to the customer or internally"
-        action={
-          <AddCommitment customerId={customerId} implementationId={impl.id} team={record.team} />
-        }
-      >
-        {(record.commitments as any[]).length ? (
-          <ul className="divide-y divide-border">
-            {(record.commitments as any[]).map((c) => (
-              <Row key={c.id}>
-                <div className="flex flex-wrap items-baseline gap-2">
-                  <span className="text-[13px]">{c.description}</span>
-                  <StatusChip status={c.status} />
-                  <span className="rounded-sm border border-border px-1.5 py-0.5 text-[10px] uppercase tracking-[0.08em] text-muted-foreground">
-                    {humanize(c.committed_to ?? "customer")}
-                  </span>
-                  {c.status === "open" && isOverdue(c.due_date) ? (
-                    <span className="text-[11px] text-destructive">Overdue</span>
-                  ) : null}
-                  <span className="ml-auto">
-                    <EditCommitment customerId={customerId} commitment={c} team={record.team} />
-                  </span>
-                </div>
-                <Meta
-                  items={[
-                    ["Owner", dash(c.owner_name)],
-                    ["Due", fmtDate(c.due_date)],
-                    ["Fulfilled", fmtDate(c.fulfilled_at)],
-                  ]}
-                />
-              </Row>
-            ))}
-          </ul>
-        ) : (
-          <NoRows label="No commitments recorded" />
-        )}
-      </Panel>
-
-      {launchStateConflict(impl) ? (
-        <div className="rounded-md border border-dashed border-border bg-muted/30 px-3 py-2.5">
-          <div className="text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
-            Data quality — launch state conflict
-          </div>
-          <p className="mt-1 text-[12px]">
-            Current stage is {stageLabel(impl.current_stage)}, which sits after Launch, but{" "}
-            <span className="font-mono">actual_launch_date</span> is not recorded. This is a record
-            completeness gap, not an operational blocker.
-          </p>
-        </div>
+          <Panel
+            title="Promises made to the customer or internally"
+            count={(record.commitments as any[]).length}
+            collapseKey="customer:details:Commitments"
+            action={
+              <AddCommitment
+                customerId={customerId}
+                implementationId={impl.id}
+                team={record.team}
+              />
+            }
+          >
+            {(record.commitments as any[]).length ? (
+              <ul className="divide-y divide-border">
+                {(record.commitments as any[]).map((c) => (
+                  <Row key={c.id}>
+                    <div className="flex flex-wrap items-baseline gap-2">
+                      <span className="text-[13px]">{c.description}</span>
+                      <StatusChip status={c.status} />
+                      <span className="rounded-sm border border-border px-1.5 py-0.5 text-[10px] uppercase tracking-[0.08em] text-muted-foreground">
+                        {humanize(c.committed_to ?? "customer")}
+                      </span>
+                      {c.status === "open" && isOverdue(c.due_date) ? (
+                        <span className="text-[11px] text-destructive">Overdue</span>
+                      ) : null}
+                      <span className="ml-auto">
+                        <EditCommitment customerId={customerId} commitment={c} team={record.team} />
+                      </span>
+                    </div>
+                    <Meta
+                      items={[
+                        ["Owner", dash(c.owner_name)],
+                        ["Due", fmtDate(c.due_date)],
+                        ["Fulfilled", fmtDate(c.fulfilled_at)],
+                      ]}
+                    />
+                  </Row>
+                ))}
+              </ul>
+            ) : (
+              <NoRows label="No commitments recorded" />
+            )}
+          </Panel>
+        </>
       ) : null}
+      {show("history") ? (
+        <>
+          {launchStateConflict(impl) ? (
+            <div className="rounded-md border border-dashed border-border bg-muted/30 px-3 py-2.5">
+              <div className="text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
+                Data quality — launch state conflict
+              </div>
+              <p className="mt-1 text-[12px]">
+                Current stage is {stageLabel(impl.current_stage)}, which sits after Launch, but{" "}
+                <span className="font-mono">actual_launch_date</span> is not recorded. This is a
+                record completeness gap, not an operational blocker.
+              </p>
+            </div>
+          ) : null}
 
-      {preHandoffHistory.length ? (
-        <div className="rounded-md border border-dashed border-border bg-muted/20 px-3 py-2.5">
-          <div className="text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
-            Pre-handoff — recorded before this app owned the journey
-          </div>
-          <ul className="mt-1.5 space-y-1">
-            {preHandoffHistory.map((h) => (
-              <li key={h.id} className="flex flex-wrap items-baseline gap-x-3 text-[12px]">
-                <span className="font-medium">{stageLabel(h.stage)}</span>
-                <span className="text-[11px] text-muted-foreground">
-                  <When value={h.entered_at} />
-                  {h.exited_at ? (
-                    <>
-                      {" → "}
-                      <When value={h.exited_at} />
-                    </>
-                  ) : null}
-                </span>
-              </li>
-            ))}
-          </ul>
-          <p className="mt-1.5 text-[11px] text-muted-foreground">
-            Not an implementation stage. Kept as historical fact only.
-          </p>
-        </div>
-      ) : null}
+          {preHandoffHistory.length ? (
+            <div className="rounded-md border border-dashed border-border bg-muted/20 px-3 py-2.5">
+              <div className="text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
+                Pre-handoff — recorded before this app owned the journey
+              </div>
+              <ul className="mt-1.5 space-y-1">
+                {preHandoffHistory.map((h) => (
+                  <li key={h.id} className="flex flex-wrap items-baseline gap-x-3 text-[12px]">
+                    <span className="font-medium">{stageLabel(h.stage)}</span>
+                    <span className="text-[11px] text-muted-foreground">
+                      <When value={h.entered_at} />
+                      {h.exited_at ? (
+                        <>
+                          {" → "}
+                          <When value={h.exited_at} />
+                        </>
+                      ) : null}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-1.5 text-[11px] text-muted-foreground">
+                Not an implementation stage. Kept as historical fact only.
+              </p>
+            </div>
+          ) : null}
 
-      <Panel title="Stage timeline" count={LIFECYCLE_STAGES.length} meta="From stage history">
-        <ul className="divide-y divide-border">
-          {LIFECYCLE_STAGES.map((stage, i) => {
-            const h = historyByStage.get(stage.id);
-            const state =
-              i === activeIndex
-                ? "current"
-                : h || (activeIndex > -1 && i < activeIndex)
-                  ? "completed"
-                  : "upcoming";
-            const days = duration(h);
-            return (
-              <li key={stage.id} className="flex gap-3 px-3 py-2.5">
-                <span className="w-6 shrink-0 pt-0.5 font-mono text-[11px] text-muted-foreground">
-                  {String(i + 1).padStart(2, "0")}
-                </span>
-                <span
-                  className={cn(
-                    "mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full",
-                    state === "current"
-                      ? "bg-primary"
-                      : state === "completed"
-                        ? "bg-status-ontrack-foreground"
-                        : "bg-muted-foreground/40",
-                  )}
-                />
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-baseline gap-2">
+          <Panel
+            title={isPartnerJourney(impl) ? "Standard deal-stage history" : "Stage timeline"}
+            count={LIFECYCLE_STAGES.length}
+            meta={
+              isPartnerJourney(impl)
+                ? "Administrative audit record. Not partner progress."
+                : "From stage history"
+            }
+          >
+            <ul className="divide-y divide-border">
+              {LIFECYCLE_STAGES.map((stage, i) => {
+                const h = historyByStage.get(stage.id);
+                const state =
+                  i === activeIndex
+                    ? "current"
+                    : h || (activeIndex > -1 && i < activeIndex)
+                      ? "completed"
+                      : "upcoming";
+                const days = duration(h);
+                return (
+                  <li key={stage.id} className="flex gap-3 px-3 py-2.5">
+                    <span className="w-6 shrink-0 pt-0.5 font-mono text-[11px] text-muted-foreground">
+                      {String(i + 1).padStart(2, "0")}
+                    </span>
                     <span
                       className={cn(
-                        "text-[13px]",
-                        state === "upcoming" ? "text-muted-foreground" : "font-medium",
+                        "mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full",
+                        state === "current"
+                          ? "bg-primary"
+                          : state === "completed"
+                            ? "bg-status-ontrack-foreground"
+                            : "bg-muted-foreground/40",
                       )}
-                    >
-                      {stage.label}
-                    </span>
-                    <span className="rounded-sm border border-border px-1.5 py-0.5 text-[10px] uppercase tracking-[0.08em] text-muted-foreground">
-                      {state}
-                    </span>
-                  </div>
-                  <p className="mt-0.5 text-[11px] text-muted-foreground">{stage.intent}</p>
-                  <Meta
-                    items={[
-                      ["Entered", <When key="entered" value={h?.entered_at} />],
-                      [
-                        "Exited",
-                        h?.exited_at ? (
-                          <When key="exited" value={h.exited_at} />
-                        ) : h ? (
-                          "in stage"
-                        ) : (
-                          "—"
-                        ),
-                      ],
-                      ["Duration", days == null ? "—" : `${days}d`],
-                      ["By", dash(h?.entered_by_name)],
-                    ]}
-                  />
-                  {h?.notes ? (
-                    <p className="mt-1 text-[12px] text-muted-foreground">{h.notes}</p>
-                  ) : null}
-                  {state === "current" ? (
-                    <div className="mt-2 rounded-sm border border-border bg-muted/50 px-2 py-1.5">
-                      <div className="text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
-                        Blocking progression
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-baseline gap-2">
+                        <span
+                          className={cn(
+                            "text-[13px]",
+                            state === "upcoming" ? "text-muted-foreground" : "font-medium",
+                          )}
+                        >
+                          {stage.label}
+                        </span>
+                        <span className="rounded-sm border border-border px-1.5 py-0.5 text-[10px] uppercase tracking-[0.08em] text-muted-foreground">
+                          {state}
+                        </span>
                       </div>
-                      {open.risks.length + open.issues.length + open.escalations.length ? (
-                        <ul className="mt-1 space-y-0.5">
-                          {[...open.escalations, ...open.risks, ...open.issues].map((x: any) => (
-                            <li
-                              key={x.id}
-                              className="flex flex-wrap items-baseline gap-2 text-[12px]"
-                            >
-                              <SeverityChip value={x.severity} />
-                              <span>{x.title}</span>
-                              <span className="text-[11px] text-muted-foreground">
-                                {humanize(x.status)}
-                              </span>
-                            </li>
-                          ))}
-                        </ul>
-                      ) : (
-                        <p className="mt-1 text-[12px] text-muted-foreground">
-                          Nothing open against this stage.
-                        </p>
-                      )}
+                      <p className="mt-0.5 text-[11px] text-muted-foreground">{stage.intent}</p>
+                      <Meta
+                        items={[
+                          ["Entered", <When key="entered" value={h?.entered_at} />],
+                          [
+                            "Exited",
+                            h?.exited_at ? (
+                              <When key="exited" value={h.exited_at} />
+                            ) : h ? (
+                              "in stage"
+                            ) : (
+                              "—"
+                            ),
+                          ],
+                          ["Duration", days == null ? "—" : `${days}d`],
+                          ["By", dash(h?.entered_by_name)],
+                        ]}
+                      />
+                      {h?.notes ? (
+                        <p className="mt-1 text-[12px] text-muted-foreground">{h.notes}</p>
+                      ) : null}
+                      {state === "current" ? (
+                        <div className="mt-2 rounded-sm border border-border bg-muted/50 px-2 py-1.5">
+                          <div className="text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
+                            Blocking progression
+                          </div>
+                          {open.risks.length + open.issues.length + open.escalations.length ? (
+                            <ul className="mt-1 space-y-0.5">
+                              {[...open.escalations, ...open.risks, ...open.issues].map(
+                                (x: any) => (
+                                  <li
+                                    key={x.id}
+                                    className="flex flex-wrap items-baseline gap-2 text-[12px]"
+                                  >
+                                    <SeverityChip value={x.severity} />
+                                    <span>{x.title}</span>
+                                    <span className="text-[11px] text-muted-foreground">
+                                      {humanize(x.status)}
+                                    </span>
+                                  </li>
+                                ),
+                              )}
+                            </ul>
+                          ) : (
+                            <p className="mt-1 text-[12px] text-muted-foreground">
+                              Nothing open against this stage.
+                            </p>
+                          )}
+                        </div>
+                      ) : null}
                     </div>
-                  ) : null}
-                </div>
-              </li>
-            );
-          })}
-        </ul>
-      </Panel>
+                  </li>
+                );
+              })}
+            </ul>
+          </Panel>
+        </>
+      ) : null}
     </div>
   );
 }
@@ -2198,9 +2314,9 @@ function SolutionTab({ record, customerId }: { record: Customer360; customerId: 
   return (
     <div className="space-y-4">
       <Panel
-        title="Solutions"
+        title="What the engineers are building"
         count={solutions.length}
-        meta="What the engineers are building"
+        collapseKey="customer:details:Solutions"
         action={
           <NewSolution implementationId={impl.id} customerId={customerId} team={record.team} />
         }
@@ -2315,9 +2431,9 @@ function RequirementsTab({ record, customerId }: { record: Customer360; customer
   const impl = record.implementation!;
   return (
     <Panel
-      title="Requirements"
+      title="Traceability and validation from linked records"
       count={record.requirements.length}
-      meta="Traceability and validation from linked records"
+      collapseKey="customer:details:Requirements"
       action={
         <AddRequirement customerId={customerId} implementationId={impl.id} team={record.team} />
       }
@@ -2372,9 +2488,9 @@ function DecisionsTab({ record, customerId }: { record: Customer360; customerId:
   const decisions = record.decisions as any[];
   return (
     <Panel
-      title="Decisions"
+      title="What was decided, by whom, when, and what it affects"
       count={decisions.length}
-      meta="What was decided, by whom, when, and what it affects"
+      collapseKey="customer:details:Decisions"
       action={<AddDecision customerId={customerId} implementationId={impl.id} />}
     >
       {decisions.length ? (

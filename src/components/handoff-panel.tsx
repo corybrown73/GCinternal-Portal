@@ -724,9 +724,12 @@ function Actions({
 export function HandoffPanel({
   customerId,
   implementationId,
+  hideWhenOff = false,
 }: {
   customerId: string;
   implementationId: string;
+  /** Draw nothing while the handoff gate is off, instead of its explanation. */
+  hideWhenOff?: boolean;
 }) {
   const { data, isPending } = useQuery({
     queryKey: ["handoff", implementationId],
@@ -741,6 +744,7 @@ export function HandoffPanel({
     );
   }
   if (!data?.enabled) {
+    if (hideWhenOff) return null;
     return (
       <Panel title="Handoff">
         <NoRows label="The handoff gate is not switched on yet." />
