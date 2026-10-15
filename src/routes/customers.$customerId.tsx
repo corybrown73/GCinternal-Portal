@@ -3,19 +3,15 @@ import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { Suspense } from "react";
 import { queryOptions, useMutation, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { ChevronRight, UserRound, ArrowRight } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 
-import { DeleteCustomerButton } from "@/components/delete-customer-button";
-
-import { CustomerLogo } from "@/components/customer-logo";
 import { PastImplementations } from "@/components/past-implementations";
 import { HelpPicksPanel } from "@/components/help-articles-panel";
-import { EditCustomerDialog } from "@/components/edit-customer-dialog";
 import { canEditDeal, useProfile } from "@/lib/auth";
 import { dealQuery } from "@/lib/deal-query";
 import { useQuery } from "@tanstack/react-query";
-import { AddServicesChoice } from "@/components/add-services-choice";
 import { CurrentImplementationTab } from "@/components/stage-flow";
+import { CustomerHeader } from "@/components/customer-header";
 import { CustomerOverview } from "@/components/customer-overview";
 import { HealthNote } from "@/components/health-note";
 import { PlanPanel } from "@/components/plan-panel";
@@ -85,7 +81,6 @@ import {
   Panel,
   PrimarySignal,
   SeverityChip,
-  StageBadge,
   StatusChip,
   PaceChip,
 } from "@/components/record";
@@ -329,178 +324,13 @@ function Customer360Page() {
   return (
     <div className="pb-16">
       {/* ---------------- PERSISTENT HEADER ---------------- */}
-      <header className="border-b border-border bg-surface">
-        <div className="flex flex-wrap items-start justify-between gap-4 px-6 pt-4">
-          <div className="min-w-0">
-            <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
-              <Link
-                to="/customers"
-                search={{ sort: "days", dir: "desc" }}
-                className="hover:underline"
-              >
-                Customers
-              </Link>
-              <ChevronRight className="h-3 w-3" />
-              <span>{customer.name}</span>
-            </div>
-            <div className="mt-1 flex items-center gap-2.5">
-              {/* The customer's own mark, top-left beside their name. Sized to
-                  the heading and never stretched — a logo that has been squashed
-                  reads as carelessness about the customer, which is the exact
-                  opposite of the point. `contain` letterboxes rather than crops,
-                  so a wide wordmark and a square badge both survive.
-                  Decorative: the name is right next to it, so alt is empty
-                  rather than a screen reader saying the name twice. */}
-              <CustomerLogo
-                customerId={customer.id}
-                customerName={customer.name}
-                logoUrl={customer.logo_url}
-              />
-              <h1 className="text-[17px] font-semibold tracking-tight">{customer.name}</h1>
-            </div>
-            {/* One customer, several projects: the add-on beside the original.
-                Newest first; the pill is the project, the badge its deal's
-                stage, and `?impl=` keeps the pick across tabs. */}
-            {record.implementations.length > 1 ? (
-              <div className="mt-1.5 flex flex-wrap items-center gap-1.5" aria-label="Projects">
-                {[...record.implementations]
-                  .sort((a, b) =>
-                    String(b.created_at ?? "").localeCompare(String(a.created_at ?? "")),
-                  )
-                  .map((s) => (
-                    <Link
-                      key={s.id}
-                      to="/customers/$customerId"
-                      params={{ customerId }}
-                      search={{ tab, impl: s.id }}
-                      aria-current={s.id === impl.id ? "true" : undefined}
-                      className={cn(
-                        "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px]",
-                        s.id === impl.id
-                          ? "border-primary bg-primary/10 text-foreground"
-                          : "border-border text-muted-foreground hover:text-foreground",
-                      )}
-                    >
-                      {s.name && s.name !== customer.name ? s.name : "Original project"}
-                      <span className="font-mono text-[10px] text-muted-foreground">
-                        {dealStageLabel(s.deal_stage)}
-                      </span>
-                    </Link>
-                  ))}
-              </div>
-            ) : null}
-            <p className="mt-2 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[12px] text-muted-foreground">
-              <StageBadge stage={impl.deal_stage} />
-              <StatusChip status={health.level} />
-              <HealthNote
-                recorded={impl.health_recorded}
-                recordedReason={impl.health_recorded_reason}
-                recordedAt={impl.health_recorded_at}
-                legacyStatus={impl.status}
-                computed={health.level}
-              />
-              <span className="inline-flex items-center gap-1 rounded-full border border-border bg-card px-2 py-0.5 text-[11px]">
-                <UserRound className="h-3 w-3" /> {impl.owner_name ?? "Unassigned"}
-              </span>
-              {[
-                impl.name && impl.name !== customer.name ? impl.name : null,
-                customer.industry,
-                impl.tier ? `Tier ${impl.tier}` : null,
-              ]
-                .filter(Boolean)
-                .map((x) => (
-                  <span
-                    key={String(x)}
-                    className="rounded-full border border-border bg-card px-2 py-0.5 text-[11px]"
-                  >
-                    {x}
-                  </span>
-                ))}
-              {/* Provenance, one click away and always in the same place.
-                  Everything a deal knows — the goal, the named contact, who
-                  sold it, what was said on the calls — was a join away and
-                  unreachable from here, so it got re-gathered by asking the
-                  customer questions they had already answered to sales. */}
-              {/* No "From deal" chip: the deal page redirects back here once
-                  a customer exists, so it only ever reloaded this page. */}
-              {impl.deal_id ? (
-                <Link
-                  to="/onboarding-plan/$dealId"
-                  params={{ dealId: impl.deal_id }}
-                  className="lift inline-flex items-center gap-1 rounded-full border border-primary/40 bg-card px-2 py-0.5 text-[11px] text-primary hover:text-foreground"
-                  title="The kickoff deck and the presenter workspace for this implementation"
-                >
-                  Kickoff deck
-                </Link>
-              ) : null}
-            </p>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <AddServicesChoice
-              customerId={customer.id}
-              dealId={impl.deal_id}
-              implementationId={impl.id}
-            />
-            <EditCustomerDialog
-              customer={customer}
-              implementationId={impl.id}
-              ownerId={impl.owner_id}
-              team={record.team}
-            />
-            <DeleteCustomerButton
-              customerId={customer.id}
-              customerName={customer.name}
-              implementations={record.implementations.length}
-            />
-            {/* "stage 3/8", a 3/8-wide progress bar, days-in-stage and the
-                target launch date all used to sit here. Every one of them was
-                computed against the hardcoded eight-stage lifecycle, so a
-                five-stage integration project read "stage 3/8" with a bar
-                two-fifths too short — and none of them said which of the
-                customer's projects they described. They now live on each
-                project's own lane below, measured against that project's own
-                stages. */}
-          </div>
-        </div>
-
-        {/* ONE customer profile, N project timelines.
-            A new logo signed in June and the integration they added in August
-            are two projects on this same profile, each with its own start
-            date, its own stages and its own pace. Each lane is that project's
-            board at a glance and deep-links to it through `?impl=`. With a
-            single project this collapses to just that project's rail. */}
-        {/* The deal's stages as one checklist: only the stage it is in, only
-            the next task open. It replaced the pulse strip, whose "next"
-            came from an older list and disagreed with this one. */}
-        {/* The full checklist is on the Record tab, under the tabs: it is
-            thirteen rows tall on Onboarding, and above the tab bar it pushed
-            the tabs a screen down on three of the five tabs. */}
-
-        {/* ONE TRACKER. With a deal behind it, the checklist above is where
-            this account stands; the project lanes, the earlier projects and
-            the attention band are the record behind it, on the Details tab.
-            Without a deal they are still the header. */}
-        {impl.deal_id ? null : <HeaderTrackers record={record} customerId={customerId} tab={tab} />}
-
-        <nav className="flex flex-wrap gap-px border-t border-border px-4">
-          {TABS.map((t) => (
-            <Link
-              key={t}
-              to="/customers/$customerId"
-              params={{ customerId }}
-              search={{ tab: t, ...(selectedImplId ? { impl: selectedImplId } : {}) }}
-              className={cn(
-                "-mb-px border-b-2 px-3 py-2 text-[12px] font-medium transition-colors",
-                t === tab
-                  ? "border-primary text-foreground"
-                  : "border-transparent text-muted-foreground hover:text-foreground",
-              )}
-            >
-              {TAB_LABEL[t]}
-            </Link>
-          ))}
-        </nav>
-      </header>
+      <CustomerHeader
+        record={record}
+        customerId={customerId}
+        tab={tab}
+        tabs={TABS.map((t) => ({ id: t, label: TAB_LABEL[t] }))}
+        selectedImplId={selectedImplId}
+      />
 
       {tab === "implementation" ? (
         <div className="px-6 py-4">
@@ -539,12 +369,14 @@ function Customer360Page() {
               <CustomerOverview record={record} customerId={customerId} />
             ) : null}
             {tab === "resources" ? <ResourcesTab record={record} /> : null}
-            {tab === "details" && impl.deal_id ? (
+            {tab === "details" ? (
+              // The project lanes and past projects, and the attention band for a
+              // project with no deal: the record behind the work, on Details.
               <HeaderTrackers
                 record={record}
                 customerId={customerId}
                 tab={tab}
-                showAttention={false}
+                showAttention={!impl.deal_id}
               />
             ) : null}
             {tab === "details" ? <DetailsTab record={record} customerId={customerId} /> : null}
@@ -1428,7 +1260,21 @@ function AccountRail({
         <Panel title="At a glance" level="supporting">
           <dl className="grid grid-cols-2 gap-x-4 gap-y-3 px-3 py-2.5">
             <Field label="Stage" value={dealStageLabel(impl.deal_stage)} />
-            <Field label="Health" value={<StatusChip status={health.level} />} />
+            <Field
+              label="Health"
+              value={
+                <span className="flex flex-col items-start gap-1">
+                  <StatusChip status={health.level} />
+                  <HealthNote
+                    recorded={impl.health_recorded}
+                    recordedReason={impl.health_recorded_reason}
+                    recordedAt={impl.health_recorded_at}
+                    legacyStatus={impl.status}
+                    computed={health.level}
+                  />
+                </span>
+              }
+            />
             <Field
               label="Progress"
               value={
