@@ -112,7 +112,14 @@ function ItemRow({ item, byId }: { item: PlanWorkItem; byId: Map<string, PlanWor
   );
 }
 
-export function PlanPanel({ implementationId }: { implementationId: string }) {
+export function PlanPanel({
+  implementationId,
+  hideWhenOff = false,
+}: {
+  implementationId: string;
+  /** Draw nothing while the plan feature is off, instead of its explanation. */
+  hideWhenOff?: boolean;
+}) {
   const { data, isPending } = useQuery({
     queryKey: ["plan", implementationId],
     queryFn: () => getPlan({ data: { implementationId } }),
@@ -121,9 +128,14 @@ export function PlanPanel({ implementationId }: { implementationId: string }) {
   if (isPending) {
     return <Panel title="Plan">{<NoRows label="Loading the plan…" />}</Panel>;
   }
-  // Switched off by its feature flag: no plan exists to show, so nothing is
-  // drawn. The panel returns when the flag is on.
-  if (!data?.enabled) return null;
+  if (!data?.enabled) {
+    if (hideWhenOff) return null;
+    return (
+      <Panel title="Plan">
+        <NoRows label="Templated plans are not switched on yet." />
+      </Panel>
+    );
+  }
   if (data.stages.length === 0) {
     return (
       <Panel title="Plan">

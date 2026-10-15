@@ -2040,15 +2040,15 @@ function JourneyTab({
 
           {/* The sales → delivery handoff gate, next to the stage move it gates.
           Renders an explanatory empty state while the flag is off. */}
-          <HandoffPanel customerId={customerId} implementationId={impl.id} />
+          <HandoffPanel customerId={customerId} implementationId={impl.id} hideWhenOff />
 
           {/* The templated plan: stage instances and the work items on them.
           Renders an explanatory empty state while the flag is off. */}
-          <PlanPanel implementationId={impl.id} />
+          <PlanPanel implementationId={impl.id} hideWhenOff />
 
           {/* Phase 4: the customer-facing links onto that plan — issue, revoke,
           rotate, and preview exactly what the customer sees. */}
-          <ExternalSharePanel implementationId={impl.id} />
+          <ExternalSharePanel implementationId={impl.id} hideWhenOff />
 
           {/* One thread per project, written by both sides. Placed under the links
           because the links are what put a customer contact IN it. */}
@@ -2106,9 +2106,9 @@ function JourneyTab({
           {/* Commitments: promises made during the journey. Read surface + write path
           live together; Home/Leadership consume these rows as they already did. */}
           <Panel
-            title="Commitments"
+            title="Promises made to the customer or internally"
             count={(record.commitments as any[]).length}
-            meta="Promises made to the customer or internally"
+            collapseKey="customer:details:Commitments"
             action={
               <AddCommitment
                 customerId={customerId}
@@ -2314,9 +2314,9 @@ function SolutionTab({ record, customerId }: { record: Customer360; customerId: 
   return (
     <div className="space-y-4">
       <Panel
-        title="Solutions"
+        title="What the engineers are building"
         count={solutions.length}
-        meta="What the engineers are building"
+        collapseKey="customer:details:Solutions"
         action={
           <NewSolution implementationId={impl.id} customerId={customerId} team={record.team} />
         }
@@ -2431,9 +2431,9 @@ function RequirementsTab({ record, customerId }: { record: Customer360; customer
   const impl = record.implementation!;
   return (
     <Panel
-      title="Requirements"
+      title="Traceability and validation from linked records"
       count={record.requirements.length}
-      meta="Traceability and validation from linked records"
+      collapseKey="customer:details:Requirements"
       action={
         <AddRequirement customerId={customerId} implementationId={impl.id} team={record.team} />
       }
@@ -2488,9 +2488,9 @@ function DecisionsTab({ record, customerId }: { record: Customer360; customerId:
   const decisions = record.decisions as any[];
   return (
     <Panel
-      title="Decisions"
+      title="What was decided, by whom, when, and what it affects"
       count={decisions.length}
-      meta="What was decided, by whom, when, and what it affects"
+      collapseKey="customer:details:Decisions"
       action={<AddDecision customerId={customerId} implementationId={impl.id} />}
     >
       {decisions.length ? (

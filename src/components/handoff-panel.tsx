@@ -724,9 +724,12 @@ function Actions({
 export function HandoffPanel({
   customerId,
   implementationId,
+  hideWhenOff = false,
 }: {
   customerId: string;
   implementationId: string;
+  /** Draw nothing while the handoff gate is off, instead of its explanation. */
+  hideWhenOff?: boolean;
 }) {
   const { data, isPending } = useQuery({
     queryKey: ["handoff", implementationId],
@@ -740,9 +743,14 @@ export function HandoffPanel({
       </Panel>
     );
   }
-  // Switched off by its feature flag: there is no gate to show and nothing to
-  // act on, so nothing is drawn. The panel returns when the flag is on.
-  if (!data?.enabled) return null;
+  if (!data?.enabled) {
+    if (hideWhenOff) return null;
+    return (
+      <Panel title="Handoff">
+        <NoRows label="The handoff gate is not switched on yet." />
+      </Panel>
+    );
+  }
   if (!data.completeness) {
     return (
       <Panel title="Handoff">

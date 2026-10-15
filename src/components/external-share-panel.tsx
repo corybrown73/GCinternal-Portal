@@ -31,7 +31,14 @@ import { ask } from "@/components/ui/ask";
  *  - "opened" here is the recorded beacon from a rendered page, not a GET, so
  *    an email scanner following the link does not show up as engagement.
  */
-export function ExternalSharePanel({ implementationId }: { implementationId: string }) {
+export function ExternalSharePanel({
+  implementationId,
+  hideWhenOff = false,
+}: {
+  implementationId: string;
+  /** Draw nothing while plan sharing is off, instead of its explanation. */
+  hideWhenOff?: boolean;
+}) {
   const qc = useQueryClient();
   const [tab, setTab] = useState<"links" | "preview" | "updates">("links");
   const [issued, setIssued] = useState<{ url: string; expires_at: string } | null>(null);
@@ -64,9 +71,14 @@ export function ExternalSharePanel({ implementationId }: { implementationId: str
 
   // The server refuses before it reads any of 0019-0022's schema, so this is
   // also what renders on a deploy whose migrations have not been applied yet.
-  // Switched off by its feature flag: no links can be issued, so nothing is
-  // drawn. The panel returns when the flag is on.
-  if (panel.data && !panel.data.enabled) return null;
+  if (panel.data && !panel.data.enabled) {
+    if (hideWhenOff) return null;
+    return (
+      <Panel title="Customer plan links">
+        <NoRows label="Sharing the plan with customers is not switched on yet." />
+      </Panel>
+    );
+  }
 
   return (
     <Panel
