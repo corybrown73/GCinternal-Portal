@@ -242,7 +242,10 @@ export function standardSnapshot(input: {
 const NOTHING_OPEN = "Nothing open";
 
 /**
- * A partner implementation's snapshot, from the partner's own progress only.
+ * A partner implementation's snapshot. Its dates are the partner's own: the Roll Out
+ * target and the recorded actual go-live. The implementation's target fields are
+ * not shown as a partner date, because the standard plan can write them, so they
+ * are not an authoritative partner target., from the partner's own progress only.
  * Nothing standard appears: no Functional by, and no standard plan or target.
  * While the progress is loading or has failed, the stage says so.
  */
@@ -259,7 +262,6 @@ export function partnerSnapshot(
       )
     : null;
   const graduation = progress ? partnerDashboardView(progress).graduationTarget : null;
-  const recordedGoLive = isoDay(impl.dates.target);
   const actual = actualGoLive(impl);
 
   return {
@@ -297,13 +299,6 @@ export function partnerSnapshot(
         hint: "The partner's Roll Out target",
         tint: graduation ? "good" : "unset",
         featured: true,
-      },
-      {
-        key: "recorded-go-live",
-        label: "Recorded go-live target",
-        value: recordedGoLive ? shortDay(recordedGoLive) : "Not set",
-        hint: "As recorded on the implementation",
-        tint: recordedGoLive ? "info" : "unset",
       },
       {
         key: "actual-go-live",

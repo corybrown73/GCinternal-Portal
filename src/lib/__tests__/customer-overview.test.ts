@@ -257,15 +257,22 @@ describe("partnerSnapshot", () => {
     expect(model.next).toBeNull();
   });
 
-  it("labels the implementation's recorded target as the recorded go-live target", () => {
+  it("never shows the implementation's target as a partner date, even when it is set", () => {
     const model = partnerSnapshot(impl({ dates: { target: "2026-11-01" } }), progress, {
       loading: false,
       failed: false,
     });
-    expect(model.dates.find((d) => d.key === "recorded-go-live")).toMatchObject({
-      label: "Recorded go-live target",
-      tint: "info",
+    expect(model.dates.map((d) => d.label)).not.toContain("Recorded go-live target");
+    expect(model.dates.map((d) => d.value).join(" ")).not.toMatch(/Nov/);
+  });
+
+  it("shows the partner's Roll Out target and actual go-live, and nothing else", () => {
+    const model = partnerSnapshot(impl({ actual_launch_date: "2026-10-20" }), progress, {
+      loading: false,
+      failed: false,
     });
+    expect(model.dates.map((d) => d.key)).toEqual(["graduation", "actual-go-live"]);
+    expect(model.dates[1]).toMatchObject({ value: expect.stringMatching(/Oct/), tint: "good" });
   });
 });
 

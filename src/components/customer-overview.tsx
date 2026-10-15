@@ -296,7 +296,9 @@ function DateRow({ tiles }: { tiles: DateTile[] }) {
         "mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2",
         tiles.length >= 4
           ? "lg:grid-cols-[minmax(0,1.4fr)_repeat(3,minmax(0,1fr))]"
-          : "lg:grid-cols-[minmax(0,1.4fr)_repeat(2,minmax(0,1fr))]",
+          : tiles.length === 3
+            ? "lg:grid-cols-[minmax(0,1.4fr)_repeat(2,minmax(0,1fr))]"
+            : "lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]",
       )}
       aria-label="Important dates"
     >
