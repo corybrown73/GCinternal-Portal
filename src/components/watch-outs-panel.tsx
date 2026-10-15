@@ -84,6 +84,21 @@ export function WatchOutsPanel({
                   </span>{" "}
                   “{r.quote}”
                 </p>
+                {r.against ? (
+                  <p
+                    className="mt-0.5 truncate text-[11px] italic text-muted-foreground/80"
+                    title={r.against.quote}
+                  >
+                    <span className="font-mono not-italic text-[10px] uppercase tracking-wider">
+                      {r.against.source === "sow"
+                        ? "SOW"
+                        : r.against.source === "brief"
+                          ? "Brief"
+                          : "Calls"}
+                    </span>{" "}
+                    “{r.against.quote}”
+                  </p>
+                ) : null}
               </div>
             </li>
           ))}

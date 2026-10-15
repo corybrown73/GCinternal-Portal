@@ -43,6 +43,8 @@ export function ImplementationFocusPanel({
 
   const [error, setError] = useState<string | null>(null);
   const [draftText, setDraftText] = useState("");
+  // Why the last "Generate" had nothing to propose; cleared on the next try.
+  const [emptyReason, setEmptyReason] = useState<string | null>(null);
 
   const focus = intake.implementation_focus;
   const agreed = Boolean(focus.validated_at);
@@ -54,8 +56,14 @@ export function ImplementationFocusPanel({
 
   const genMutation = useMutation({
     mutationFn: () => generate({ data: { dealId } }),
-    onMutate: () => setError(null),
-    onSuccess: invalidate,
+    onMutate: () => {
+      setError(null);
+      setEmptyReason(null);
+    },
+    onSuccess: (result) => {
+      setEmptyReason(result.empty ? result.reason : null);
+      invalidate();
+    },
     onError: (e) => setError(e instanceof Error ? e.message : "Could not generate."),
   });
 
@@ -134,6 +142,9 @@ export function ImplementationFocusPanel({
               >
                 {confirmMutation.isPending ? "Confirming…" : "Confirm implementation focus"}
               </button>
+            ) : null}
+            {emptyReason ? (
+              <span className="text-[11px] text-muted-foreground">{emptyReason}</span>
             ) : null}
           </div>
         ) : null}

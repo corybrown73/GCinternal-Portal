@@ -25,7 +25,9 @@ const db = () => supabaseAdmin as any;
 export async function buildOnboardingDeckInput(dealId: string): Promise<OnboardingDeckInput> {
   const { data: deal } = await db()
     .from("portal_accounts")
-    .select("id,name,display_name,intake,customer_id,logo_path,se_owner_id,am_owner_id")
+    .select(
+      "id,name,display_name,intake,customer_id,logo_path,se_owner_id,am_owner_id,sow_document_path,sow_document_url",
+    )
     .eq("id", dealId)
     .maybeSingle();
   if (!deal) throw new Error("Deal not found");
@@ -52,13 +54,29 @@ export async function buildOnboardingDeckInput(dealId: string): Promise<Onboardi
   // The talk track: the cards picked as "common forms in your industry — do
   // you want these?", then the rest of the industry's shelf. They are shown
   // and asked about, never scheduled.
-  const chosen = talkTrackTemplates(intake)
+  const picked = talkTrackTemplates(intake)
     .map((id) => byId.get(id))
     .filter(Boolean) as typeof library;
   const industryKey = (intake.industry ?? "").trim().toLowerCase();
-  const shelf = library.filter(
-    (t) => industryKey && t.industry.trim().toLowerCase() === industryKey && !chosen.includes(t),
-  );
+  // Nothing they already bought or named is offered back to them: a card
+  // that shares a distinctive word with a purchased service or a named form
+  // is theirs already. While the SOW is attached and unread, the shelf waits.
+  const { nextCardsNotOwned, sowAttachedButUnread } = await import("@/lib/already-bought");
+  const { chosen, shelf } = nextCardsNotOwned({
+    chosen: picked,
+    shelf: library.filter(
+      (t) => industryKey && t.industry.trim().toLowerCase() === industryKey && !picked.includes(t),
+    ),
+    owned: [
+      ...((intake.timeline.services ?? []) as Array<{ name: string }>).map((sv) => sv.name),
+      ...formsOnly(intake).map((f) => f.name),
+    ],
+    sowUnread: sowAttachedButUnread({
+      sowAttached: Boolean(deal.sow_document_path || deal.sow_document_url),
+      sowAppliedAt: intake.timeline.sow_applied_at,
+      services: intake.timeline.services,
+    }),
+  });
 
   let firstForm: OnboardingDeckInput["firstForm"] = null;
   // A person's unless the reading wrote the list: marked `ai_filled`, or —
@@ -121,7 +139,8 @@ export async function buildOnboardingDeckInput(dealId: string): Promise<Onboardi
   const synth = synthesisFromBrief(briefRow?.structured_json ?? null);
 
   const { loadHandoffContext } = await import("./handoff-context");
-  const context = await loadHandoffContext(dealId);
+  // The plan block is skipped: this builds the same timeline itself above.
+  const context = await loadHandoffContext(dealId, { plan: false });
   const lead = context?.project?.lead ?? context?.deal.seOwner ?? context?.deal.amOwner ?? null;
   const team = {
     lead,
@@ -234,15 +253,13 @@ export async function generateOnboardingDeck(
     .select("customer_id")
     .eq("id", dealId)
     .maybeSingle();
-  const { data: impl } = deal?.customer_id
-    ? await db()
-        .from("implementations")
-        .select("id")
-        .eq("customer_id", deal.customer_id)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle()
-    : { data: null };
+  // Filed on this deal's own project, never the customer's newest.
+  const { liveImplementationForDeal } = await import("./deal-implementation");
+  const impl = await liveImplementationForDeal<{ id: string }>(db(), {
+    dealId,
+    customerId: (deal?.customer_id as string | null) ?? null,
+    select: "id",
+  });
   if (impl?.id) {
     const { addAccountUpload } = await import("@/lib/attachments.server");
     await addAccountUpload({

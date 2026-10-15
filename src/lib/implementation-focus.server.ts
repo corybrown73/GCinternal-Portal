@@ -1,6 +1,10 @@
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { readIntake, type IntakeAnswers } from "./intake-answers";
-import { agreeImplementationFocus, proposeImplementationFocus } from "./implementation-focus";
+import {
+  agreeImplementationFocus,
+  nothingToProposeReason,
+  proposeImplementationFocus,
+} from "./implementation-focus";
 
 const db = () => supabaseAdmin as any;
 
@@ -14,30 +18,45 @@ const db = () => supabaseAdmin as any;
  * action a person presses, never something that runs on page load or
  * silently because a source changed underneath their edits.
  */
+export type GenerateFocusResult =
+  | { intake: IntakeAnswers; empty: false; reason: null }
+  /** Nothing to propose: nothing was saved, and `reason` says what is missing. */
+  | { intake: IntakeAnswers; empty: true; reason: string };
+
 export async function generateImplementationFocus(
   userId: string,
   dealId: string,
-): Promise<IntakeAnswers> {
+): Promise<GenerateFocusResult> {
   const { requireSalesEditor } = await import("./presale.server");
   await requireSalesEditor(userId);
   const { data: row } = await db()
     .from("portal_accounts")
-    .select("intake")
+    .select("intake,sow_document_path,sow_document_url")
     .eq("id", dealId)
     .maybeSingle();
   if (!row) throw new Error("Deal not found");
   const current = readIntake(row.intake);
   const proposed = proposeImplementationFocus(current);
-  if (proposed === null) return current;
+  if (proposed === null) return { intake: current, empty: false, reason: null };
+  // Nothing to propose: saving an empty list would wipe the reading's own
+  // items and say nothing. Leave the record alone and say what is missing.
+  if (proposed.length === 0) {
+    const reason =
+      nothingToProposeReason(current, {
+        sowAttached: Boolean(row.sow_document_path || row.sow_document_url),
+      }) ?? "Nothing to propose yet.";
+    return { intake: current, empty: true, reason };
+  }
   const { saveDealIntake } = await import("./presale.server");
   // A fresh proposal is the proposal's own, not the person's: the reading
   // may still add the brief's items behind these anchors.
-  return saveDealIntake(
+  const saved = await saveDealIntake(
     userId,
     dealId,
     { implementation_focus: { items: proposed, validated_at: null, validated_by: null } },
     { proposal: true },
   );
+  return { intake: saved, empty: false, reason: null };
 }
 
 /**

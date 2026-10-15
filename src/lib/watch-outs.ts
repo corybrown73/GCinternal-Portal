@@ -23,8 +23,12 @@ export type WatchOut = {
   key: string;
   /** conflict — the plan contradicts it; check — a person should look; ok — the plan meets it. */
   severity: "conflict" | "check" | "ok";
-  /** What kind of thing it is, so two readings of one fact dedupe as one. */
-  type: "deadline" | "absence" | "lead_time" | "expectation" | "scope";
+  /**
+   * What kind of thing it is, so two readings of one fact dedupe as one.
+   * `disagreement` is two sources against each other (the SOW and the
+   * calls), not a source against the plan.
+   */
+  type: "deadline" | "absence" | "lead_time" | "expectation" | "scope" | "disagreement";
   /** Who it is about, for an absence. */
   who?: string | null;
   title: string;
@@ -33,6 +37,8 @@ export type WatchOut = {
   quote: string;
   /** calls — the pasted notes, verbatim; brief — the AI's reading of them; sow — the SOW reader's notes. */
   source: "calls" | "brief" | "sow";
+  /** For a disagreement: the other source and its words. */
+  against?: { source: "calls" | "brief" | "sow"; quote: string };
 };
 
 /** A typed date with where it was read. */
@@ -140,6 +146,8 @@ export function watchOutsFor(args: {
   const fullLive = lastDate(t);
   const fieldTest = t.milestones.find((m) => m.key === "fieldtest")?.date ?? null;
   const names = (b?.stakeholders ?? []).map((s) => s.name).filter(Boolean);
+  // People and the customer's own name are never a place a date is about.
+  const notPlaces = [...names, ...(b?.account_name ? [b.account_name] : [])];
 
   // The notes as pasted come first, so a row quotes what was actually said.
   // The brief's own sentences follow for anything only its reading caught;
@@ -182,11 +190,16 @@ export function watchOutsFor(args: {
   const typed = typedDatesFor({ brief: args.brief, intake: args.intake });
   for (const d of [...(typed.sow ?? []), ...(typed.brief ?? [])]) {
     if (d.type === "deadline") {
-      const svc = serviceNamed(t, d.quote, firstForm);
+      const named = d.source === "sow" ? "The SOW names" : "The calls name";
+      const target = planTargetFor(t, d.quote, firstForm, notPlaces);
+      if (target.kind === "uncovered") {
+        out.push(uncoveredRow(`${d.source}-uncovered-${d.date}`, named, d.date, target, d));
+        continue;
+      }
+      const svc = target.kind === "service" ? target.svc : null;
       const planDate = svc ? svc.endsOn : fullLive;
       const what = svc ? `${svc.name} live` : "everything live";
       const late = planDate > d.date;
-      const named = d.source === "sow" ? "The SOW names" : "The calls name";
       out.push({
         key: `${d.source}-deadline-${d.date}-${svc?.name ?? "all"}`,
         type: "deadline",
@@ -254,7 +267,35 @@ export function watchOutsFor(args: {
       }
     }
     const dates = readCallDates ? datesIn(s, t.closeDate) : [];
-    if (dates.length && DEADLINE.test(s) && !ABSENCE.test(s)) {
+    // A date about one thing is read against that thing: a service on the
+    // plan, else nothing on the plan covers it and it is a check, never "met".
+    // Only a sentence about the whole go-live is read against everything live.
+    const target = dates.length ? planTargetFor(t, s, null, notPlaces) : null;
+    if (dates.length && DEADLINE.test(s) && !ABSENCE.test(s) && target?.kind === "uncovered") {
+      out.push(
+        uncoveredRow(`uncovered-${i}`, "The calls name", dates[0]!.iso, target, {
+          quote: s,
+          source,
+        }),
+      );
+    } else if (dates.length && DEADLINE.test(s) && !ABSENCE.test(s) && target?.kind === "service") {
+      const svc = target.svc;
+      const deadline = dates[0]!;
+      const late = svc.endsOn > deadline.iso;
+      out.push({
+        key: `deadline-svc-${i}`,
+        type: "deadline",
+        severity: late ? "conflict" : "ok",
+        title: late
+          ? `The calls name ${shortDay(deadline.iso)}; the plan has ${svc.name} live ${shortDay(svc.endsOn)}`
+          : `The calls name ${shortDay(deadline.iso)}: the plan has ${svc.name} live ${shortDay(svc.endsOn)}, ${daysBetween(svc.endsOn, deadline.iso)} days ahead`,
+        detail: late
+          ? `${daysBetween(deadline.iso, svc.endsOn)} days after what they said. Move the work, or say so on the kickoff.`
+          : "Met, as planned today. If a phase slips past this date, it is the date they said out loud.",
+        quote: s,
+        source,
+      });
+    } else if (dates.length && DEADLINE.test(s) && !ABSENCE.test(s)) {
       const deadline = dates[0]!;
       if (fullLive > deadline.iso) {
         out.push({
@@ -387,7 +428,19 @@ export function watchOutsFor(args: {
   for (const [i, s] of sowSentences.entries()) {
     const dates = readSowDates ? datesIn(s, t.closeDate) : [];
     if (!dates.length) continue;
-    const svc = serviceNamed(t, s, firstForm);
+    const target = planTargetFor(t, s, firstForm, notPlaces);
+    if (target.kind === "uncovered") {
+      for (const d of dates) {
+        out.push(
+          uncoveredRow(`sow-uncovered-${i}-${d.iso}`, "The SOW names", d.iso, target, {
+            quote: s,
+            source: "sow",
+          }),
+        );
+      }
+      continue;
+    }
+    const svc = target.kind === "service" ? target.svc : null;
     const planDate = svc ? svc.endsOn : fullLive;
     const what = svc ? `${svc.name} live` : "everything live";
     for (const d of dates) {
@@ -408,8 +461,460 @@ export function watchOutsFor(args: {
     }
   }
 
+  // The sources against each other: the SOW and the calls naming different
+  // dates, seats or phases for the same thing. Advisory checks, never moving
+  // a plan date; each names both sources in their own words.
+  out.push(
+    ...sourceDisagreements({
+      timeline: t,
+      intake: args.intake,
+      brief: b,
+      callSentences,
+      sowSentences,
+      typed,
+      firstForm,
+      names: notPlaces,
+    }),
+  );
+
   const rank = { conflict: 0, check: 1, ok: 2 };
   return dedupe(out).sort((a, b2) => rank[a.severity] - rank[b2.severity]);
+}
+
+/* ------------------------------------------------- what a date is about */
+
+/**
+ * A capitalised place or unit right before a word that makes it one
+ * ("Denver branch", "Denver go-live", "Tulsa crews", "Denver needs to be
+ * live"), or after "in"/"at".
+ */
+const PLACE_BEFORE =
+  /\b([A-Z][A-Za-z]+(?:\s+[A-Z][A-Za-z]+)?)\s+(?:branch(?:es)?|office|site|location|yard|depot|shop|region|division|crews?|team|go[- ]?live|roll[- ]?out|launch|cut[- ]?over|(?:needs?|has|have|must|should|will)\s+(?:to\s+)?(?:be|go)\s+live)\b/g;
+const PLACE_AFTER = /\b(?:in|at)\s+(?:the\s+)?([A-Z][A-Za-z]+)\b/g;
+/** "all branches", "every location", "each of the sites". */
+const ALL_SITES =
+  /\b(all|every|each)\s+(?:of\s+(?:the|our|their)\s+)?(branch(?:es)?|locations?|sites?|offices?|yards?|regions?|crews?|divisions?)\b/i;
+/** A sentence about the whole go-live, read against everything live. */
+const ABOUT_ALL =
+  /\b(go[- ]?live|be live|live|launch(?:ed|ing)?|in production|up and running|roll(?:ed)?[- ]?out|everything|whole|all of it|deadline|season|at the latest|no later)\b/i;
+const NOT_A_PLACE = new Set([
+  "the",
+  "our",
+  "their",
+  "we",
+  "they",
+  "sow",
+  "gocanvas",
+  "phase",
+  "stage",
+  "kickoff",
+  "go",
+  "all",
+  "each",
+  "every",
+  "monday",
+  "tuesday",
+  "wednesday",
+  "thursday",
+  "friday",
+  "saturday",
+  "sunday",
+]);
+
+/** The places and units a sentence names, as written ("Denver", "all branches"). */
+function placesIn(s: string, names: ReadonlyArray<string>): string[] {
+  const people = new Set(names.flatMap((n) => n.split(/\s+/)).map((w) => w.toLowerCase()));
+  const ok = (w: string) => {
+    const first = w.split(/\s+/)[0]!.toLowerCase();
+    return !NOT_A_PLACE.has(first) && !isMonthWord(first) && !people.has(first);
+  };
+  const out: string[] = [];
+  const all = ALL_SITES.exec(s);
+  if (all)
+    out.push(
+      `all ${all[2]!.toLowerCase().replace(/^(branch|location|site|office|yard|region|crew|division)$/, "$1s")}`,
+    );
+  for (const m of s.matchAll(PLACE_BEFORE)) if (ok(m[1]!)) out.push(m[1]!);
+  for (const m of s.matchAll(PLACE_AFTER)) if (ok(m[1]!)) out.push(m[1]!);
+  return [...new Set(out)];
+}
+
+type PlanTarget =
+  { kind: "service"; svc: Named } | { kind: "all" } | { kind: "uncovered"; thing: string | null };
+
+/**
+ * What on the plan a dated sentence is about: a service (or the first form)
+ * by name, the whole go-live, or nothing the plan dates — a place, every
+ * branch, a thing the plan does not carry. Nothing-on-the-plan is a check,
+ * never "met" against some other date.
+ */
+function planTargetFor(
+  t: Timeline,
+  s: string,
+  firstForm: string | null,
+  names: ReadonlyArray<string>,
+): PlanTarget {
+  const svc = serviceNamed(t, s, firstForm);
+  if (svc) return { kind: "service", svc };
+  const place = placesIn(s, names)[0];
+  if (place) return { kind: "uncovered", thing: place };
+  if (ABOUT_ALL.test(s)) return { kind: "all" };
+  return { kind: "uncovered", thing: kindMentioned(s) };
+}
+
+function uncoveredRow(
+  key: string,
+  named: string,
+  date: string,
+  target: { thing: string | null },
+  from: { quote: string; source: WatchOut["source"] },
+): WatchOut {
+  return {
+    key,
+    type: "deadline",
+    severity: "check",
+    title: target.thing
+      ? `${named} ${shortDay(date)} for ${target.thing}: nothing on the plan for it`
+      : `${named} ${shortDay(date)}: nothing on the plan is dated for it`,
+    detail:
+      "The plan does not cover this date, so it is not met by any other date on it. Put it on the plan, or agree with the customer what it means.",
+    quote: from.quote,
+    source: from.source,
+  };
+}
+
+/* --------------------------------------------- the sources, against each other */
+
+const SEATS_RE =
+  /\b(\d{1,3}(?:,\d{3})*|\d+)\s+(?:[A-Za-z-]+\s+){0,2}?(licen[cs]es?|seats?|users?)\b/i;
+const LICENSED_RE = /\b(licen[cs]es?|seats?)\b/i;
+const PHASE_RE = /\bphase\s*(\d|one|two|three|four)\b/i;
+/** A date that opens something ("rollout starts November 2"), not one it must be done by. */
+const STARTS_RE =
+  /\b(start(?:s|ing)?|begin(?:s|ning)?|kick(?:s|ing)?[- ]?off|commenc(?:e|es|ing))\b/i;
+const LATER_RE =
+  /\b(later|down the road|second phase|next phase|after (?:the )?(?:first form|form|go[- ]?live|launch|phase one|phase 1)|once (?:the )?(?:form|first form) is (?:live|working)|can wait)\b/i;
+const NOW_RE =
+  /\b(right away|from day one|day one|at kickoff|up front|immediately|alongside the (?:first )?form|at the same time as the form)\b/i;
+const NAME_GENERIC = new Set([
+  "integration",
+  "online",
+  "form",
+  "forms",
+  "report",
+  "custom",
+  "sync",
+  "phase",
+  "training",
+  "admin",
+  "service",
+  "services",
+  "data",
+  "load",
+  "setup",
+  "build",
+  "with",
+  "from",
+]);
+const ALIASES: Array<[RegExp, RegExp]> = [[/quickbooks/i, /\b(qbo|quickbooks|quick books)\b/i]];
+
+/**
+ * True when the sentence names this item: every distinctive word of its name
+ * ("Backflow", "QuickBooks"), its acronym ("SDA") or a known alias ("QBO").
+ * Every word, not any: "storm season" is not "Storm Damage Assessment".
+ */
+function namesItem(name: string, s: string): boolean {
+  for (const [isIt, alias] of ALIASES) if (isIt.test(name) && alias.test(s)) return true;
+  const words = name.split(/\W+/).filter(Boolean);
+  const acronym = words
+    .filter((w) => /^[A-Za-z]/.test(w))
+    .map((w) => w[0]!.toUpperCase())
+    .join("");
+  if (acronym.length >= 3 && new RegExp(`\\b${acronym}\\b`).test(s)) return true;
+  const lower = s.toLowerCase();
+  const distinct = words
+    .map((w) => w.toLowerCase().replace(/[^a-z0-9]/g, ""))
+    .filter((w) => w.length > 3 && !NAME_GENERIC.has(w));
+  return distinct.length > 0 && distinct.every((w) => new RegExp(`\\b${w}`).test(lower));
+}
+
+function seatsIn(s: string): number | null {
+  const m = SEATS_RE.exec(s);
+  if (!m) return null;
+  const n = Number(m[1]!.replace(/,/g, ""));
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+/** Every count a sentence gives, marked when it counts licences or seats rather than users. */
+function seatCountsIn(s: string): Array<{ n: number; licensed: boolean }> {
+  const out: Array<{ n: number; licensed: boolean }> = [];
+  for (const m of s.matchAll(new RegExp(SEATS_RE.source, "gi"))) {
+    const n = Number(m[1]!.replace(/,/g, ""));
+    if (Number.isFinite(n) && n > 0) out.push({ n, licensed: LICENSED_RE.test(m[2]!) });
+  }
+  return out;
+}
+
+/** The phase a sentence gives, as a number, or "later" for "after the form", or 1 for "right away". */
+function phaseIn(s: string): number | "later" | null {
+  const m = PHASE_RE.exec(s);
+  if (m) return num(m[1]!) ?? null;
+  if (LATER_RE.test(s)) return "later";
+  if (NOW_RE.test(s)) return 1;
+  return null;
+}
+
+function sourceLabel(src: WatchOut["source"]): string {
+  return src === "sow" ? "SOW" : src === "brief" ? "Brief" : "Calls";
+}
+
+type Dated = {
+  date: string;
+  quote: string;
+  source: WatchOut["source"];
+  /** Only a deadline is compared with a deadline, a start with a start. */
+  kind: "deadline" | "start";
+};
+
+/**
+ * Where the SOW and the calls disagree with each other: the seat count, a
+ * service's phase, and the date for the same place or item. Pure; every row
+ * is a check that names both sources with their quotes.
+ */
+export function sourceDisagreements(args: {
+  timeline: Timeline;
+  intake: IntakeAnswers;
+  brief: Partial<BriefJson> | null;
+  callSentences: ReadonlyArray<{ s: string; source: "calls" | "brief"; anchor?: string }>;
+  sowSentences: ReadonlyArray<string>;
+  typed: { sow: SourcedDate[] | null; brief: SourcedDate[] | null };
+  firstForm: string | null;
+  names: ReadonlyArray<string>;
+}): WatchOut[] {
+  const t = args.timeline;
+  const out: WatchOut[] = [];
+  const facts = args.intake.timeline.sow_facts ?? null;
+  const both = (
+    a: { source: WatchOut["source"]; quote: string },
+    b: { source: WatchOut["source"]; quote: string },
+  ) => `${sourceLabel(a.source)}: “${a.quote}” · ${sourceLabel(b.source)}: “${b.quote}”.`;
+
+  // SEATS. The SOW's count, kept at apply, against the counts the calls
+  // give: a licence or seat count first, then the brief's reading, then a
+  // count of users. Any count that matches the SOW means they agree ("3
+  // office users" next to "45 licenses" is not a second seat count).
+  if (facts?.seats) {
+    const sowQuote =
+      args.sowSentences.find((s) => seatsIn(s) === facts.seats) ?? `${facts.seats} seats`;
+    const counted = args.callSentences.flatMap((c) =>
+      seatCountsIn(c.s).map((k) => ({ ...k, quote: c.s, source: c.source })),
+    );
+    const briefSeats = args.brief?.kickoff?.licensed_seats ?? null;
+    const briefN = briefSeats ? seatsFromText(briefSeats) : null;
+    const candidates = [
+      ...counted.filter((c) => c.licensed),
+      ...(briefSeats && briefN !== null
+        ? [{ n: briefN, quote: briefSeats, source: "brief" as const }]
+        : []),
+      ...counted.filter((c) => !c.licensed),
+    ];
+    const fromCalls = candidates.some((c) => c.n === facts.seats) ? null : candidates[0];
+    if (fromCalls && fromCalls.n !== facts.seats) {
+      out.push({
+        key: `vs-seats-${facts.seats}-${fromCalls.n}`,
+        type: "disagreement",
+        severity: "check",
+        title: `Seats: the SOW says ${facts.seats}, the ${fromCalls.source === "brief" ? "brief says" : "calls say"} ${fromCalls.n}`,
+        detail: `${both({ source: "sow", quote: sowQuote }, fromCalls)} Agree the count before the kickoff; the account and the deck use one number.`,
+        quote: sowQuote,
+        source: "sow",
+        against: { source: fromCalls.source, quote: fromCalls.quote },
+      });
+    }
+  }
+
+  // PHASE. Each service the SOW names, against a sentence on the calls
+  // that names it and gives a phase ("phase 2", "later", "right away").
+  for (const svc of facts?.services ?? []) {
+    const said = args.callSentences.find((c) => namesItem(svc.name, c.s) && phaseIn(c.s) !== null);
+    if (!said) continue;
+    const callPhase = phaseIn(said.s)!;
+    const differs = callPhase === "later" ? svc.phase === 1 : callPhase !== svc.phase;
+    if (!differs) continue;
+    const sowQuote = svc.quote ?? `${svc.name} — phase ${svc.phase}`;
+    out.push({
+      key: `vs-phase-${svc.name.toLowerCase()}-${svc.phase}-${callPhase}`,
+      type: "disagreement",
+      severity: "check",
+      title: `${svc.name}: the SOW puts it in phase ${svc.phase}, the ${said.source === "brief" ? "brief" : "calls"} ${callPhase === "later" ? "in a later phase" : `in phase ${callPhase}`}`,
+      detail: `${both({ source: "sow", quote: sowQuote }, { source: said.source, quote: said.s })} Agree the phase with the customer; the plan keeps the phase it has until a person moves it.`,
+      quote: sowQuote,
+      source: "sow",
+      against: { source: said.source, quote: said.s },
+    });
+  }
+
+  // DATES. A date the SOW names and a date the calls name for the same
+  // place or item, when they differ. Like with like: a SOW start ("rollout
+  // starts Nov 2") never disagrees with a calls deadline ("live by Nov 9").
+  const typedDated = (ds: SourcedDate[], source: "sow" | "brief"): Dated[] =>
+    ds.flatMap((d) =>
+      d.type === "deadline" || d.type === "start"
+        ? [{ date: d.date, quote: d.quote, source, kind: d.type }]
+        : [],
+    );
+  const kindOf = (s: string): Dated["kind"] =>
+    STARTS_RE.test(s) && !DEADLINE.test(s) ? "start" : "deadline";
+  const sowDated: Dated[] = args.typed.sow
+    ? typedDated(args.typed.sow, "sow")
+    : args.sowSentences.flatMap((s) =>
+        datesIn(s, t.closeDate).map((d) => ({
+          date: d.iso,
+          quote: s,
+          source: "sow" as const,
+          kind: kindOf(s),
+        })),
+      );
+  const callDated: Dated[] = args.typed.brief ? typedDated(args.typed.brief, "brief") : [];
+  // The notes verbatim, when the brief typed no dates: only a sentence that
+  // names a day ("Nov 2"), never a month guessed into one. Each is a deadline
+  // (it passed DEADLINE), so it is only compared with the SOW's deadlines.
+  if (!args.typed.brief) {
+    for (const c of args.callSentences) {
+      if (ABSENCE.test(c.s) || !DEADLINE.test(c.s)) continue;
+      if (
+        !new RegExp(
+          `${MONTH_RE}\\s+\\d{1,2}\\b|\\b\\d{1,2}(?:st|nd|rd|th)?\\s+${MONTH_RE}`,
+          "i",
+        ).test(c.s)
+      )
+        continue;
+      const d = datesIn(c.s, c.anchor ?? t.closeDate)[0];
+      if (d) callDated.push({ date: d.iso, quote: c.s, source: c.source, kind: "deadline" });
+    }
+  }
+  const items = [
+    ...t.alongside.map((x) => x.name),
+    ...t.phases.flatMap((p) => p.services.map((x) => x.name)),
+    ...(args.firstForm ? [args.firstForm] : []),
+  ];
+  const company = new Set(words(args.brief?.account_name ?? "").filter((w) => w.length > 2));
+  /**
+   * The subjects a sentence names, each marked `sure` when it is a place
+   * ("Denver branch"), a plan item, or a capitalised word mid-sentence. A
+   * sentence's capitalised first word ("Admin training…") may be just a
+   * common word, so it only counts when the other side is sure of it.
+   */
+  const subjectsOf = (s: string): Map<string, { label: string; sure: boolean }> => {
+    const m = new Map<string, { label: string; sure: boolean }>();
+    // A proper noun both quotes use ("Denver") is the same subject, wherever
+    // it sits in the sentence. The customer's own name is not a subject.
+    const lead = /^\W*([A-Za-z]+)/.exec(s)?.[1] ?? "";
+    for (const p of properNounsIn(s, args.names)) {
+      if (company.has(p.toLowerCase())) continue;
+      const midSentence = new RegExp(`\\S\\s+${p}\\b`).test(s);
+      m.set(p.toLowerCase(), { label: p, sure: p !== lead || midSentence });
+    }
+    for (const p of placesIn(s, args.names)) m.set(p.toLowerCase(), { label: p, sure: true });
+    for (const name of items)
+      if (namesItem(name, s)) m.set(`item:${name.toLowerCase()}`, { label: name, sure: true });
+    return m;
+  };
+  const seen = new Set<string>();
+  for (const a of sowDated) {
+    const sa = subjectsOf(a.quote);
+    if (!sa.size) continue;
+    for (const c of callDated) {
+      if (c.date === a.date || c.kind !== a.kind) continue;
+      const sc = subjectsOf(c.quote);
+      const shared = [...sa.keys()].find((k) => sc.has(k) && (sa.get(k)!.sure || sc.get(k)!.sure));
+      if (!shared) continue;
+      const key = `vs-date-${shared}-${a.date}-${c.date}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push({
+        key,
+        type: "disagreement",
+        severity: "check",
+        title: `The SOW and the ${c.source === "brief" ? "brief" : "calls"} give different dates for ${sa.get(shared)!.label}: ${shortDay(a.date)} vs ${shortDay(c.date)}`,
+        detail: `${both(a, c)} Agree one date with the customer; neither moves the plan.`,
+        quote: a.quote,
+        source: "sow",
+        against: { source: c.source, quote: c.quote },
+      });
+    }
+  }
+  return out;
+}
+
+const NOT_A_SUBJECT = new Set([
+  ...NOT_A_PLACE,
+  "this",
+  "that",
+  "these",
+  "those",
+  "it",
+  "your",
+  "his",
+  "her",
+  "he",
+  "she",
+  "an",
+  "and",
+  "but",
+  "if",
+  "when",
+  "by",
+  "before",
+  "after",
+  "on",
+  "in",
+  "at",
+  "for",
+  "to",
+  "of",
+  "live",
+  "target",
+  "deadline",
+  "due",
+  "customer",
+  "client",
+  "need",
+  "needs",
+  "must",
+  "should",
+  "will",
+  "can",
+  "named",
+  "date",
+  "dates",
+  "qa",
+  "pdf",
+]);
+
+function words(s: string): string[] {
+  return s
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter(Boolean);
+}
+
+/** Capitalised words that are names of things, not months, days, people or sentence glue. */
+function properNounsIn(s: string, names: ReadonlyArray<string>): string[] {
+  const people = new Set(names.flatMap((n) => words(n)));
+  const out = new Set<string>();
+  for (const m of s.matchAll(/\b[A-Z][a-zA-Z]{2,}\b/g)) {
+    const w = m[0];
+    const lower = w.toLowerCase();
+    if (NOT_A_SUBJECT.has(lower) || isMonthWord(lower) || people.has(lower)) continue;
+    out.add(w);
+  }
+  return [...out];
+}
+
+function seatsFromText(text: string): number | null {
+  const n = Number(/\d[\d,]*/.exec(text)?.[0]?.replace(/,/g, ""));
+  return Number.isFinite(n) && n > 0 ? n : null;
 }
 
 /* ------------------------------------------------------------ helpers */
@@ -484,6 +989,11 @@ export function datesIn(sentence: string, anchor: string): Found[] {
   return found.sort((a, b) => a.iso.localeCompare(b.iso));
 }
 
+/** True for a month's name or abbreviation as a whole word: "Nov", "November" — not "Marshall". */
+function isMonthWord(word: string): boolean {
+  return new RegExp(`^${MONTH_RE}$`, "i").test(word);
+}
+
 /** "November", "Nov.", "Sept" → the month number. */
 function monthOf(word: string): number | undefined {
   const w = word.toLowerCase().replace(".", "");
@@ -530,7 +1040,7 @@ function weeksLabel(w: { min: number; max: number }): string {
 }
 
 const KIND_WORDS: Record<string, RegExp> = {
-  custom_pdf: /\b(pdf|report|document|output)\b/i,
+  custom_pdf: /\b(pdfs?|reports?|documents?|output)\b/i,
   integration:
     /\b(integration|sync|api|connector|export to|feed|kronos|quickbooks|sage|netsuite|salesforce|procore)\b/i,
   training: /\b(training|train|session for admins?|admin training)\b/i,

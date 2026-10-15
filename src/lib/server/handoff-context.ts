@@ -1,5 +1,8 @@
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 
+import { customerFacingName } from "../names";
+import { liveImplementationForDeal } from "./deal-implementation";
+
 const db = () => supabaseAdmin as any;
 
 /**
@@ -25,6 +28,8 @@ export type HandoffContext = {
   deal: {
     id: string;
     name: string;
+    /** The name the customer reads: the typed customer-facing name, else the deal name cleaned. */
+    customerFacingName: string;
     stage: string;
     domain: string | null;
     arr: number | null;
@@ -69,13 +74,79 @@ export type HandoffContext = {
     openRisks: Array<{ title: string; mitigation: string | null }>;
     solutions: string[];
   } | null;
+  /**
+   * The plan the welcome page and Kickoff View show, computed the same way
+   * (closeDateFor + timelineFor over the intake). It exists before the close:
+   * a deal not yet won is planned as if it closed today. Null for a partner
+   * deal, which runs its partner's journey instead (see planUnavailable).
+   */
+  plan: HandoffPlan | null;
+  /** Why there is no plan, when there is none. */
+  planUnavailable?: string;
   /** How many projects this customer already has. Feeds the path decision. */
   priorImplementations: number;
   /** What a model should say it does not know, rather than inventing. */
   gaps: string[];
 };
 
-export async function loadHandoffContext(dealId: string): Promise<HandoffContext | null> {
+export type HandoffPlan = {
+  /** How to read the dates below. */
+  basis: string;
+  /** Day 0 of the plan. */
+  closeDate: string;
+  /** intake — a person set it; stage — the day the deal was won; today — not won yet, planned as if today. */
+  closeSource: "intake" | "stage" | "today";
+  /** The plan's Functional (live) date: the first form in their users' hands. */
+  liveDate: string;
+  /** The day it actually went live, when marked. */
+  liveDoneOn: string | null;
+  /** Every step of the plan, in date order. `booked` is set for calls only: a time is recorded. */
+  milestones: Array<{
+    key: string;
+    label: string;
+    kind: string;
+    date: string;
+    booked: boolean | null;
+    doneOn: string | null;
+    phase: number;
+  }>;
+  /** Phases 2 and up, with their end dates. Tentative dates are earliest, not committed. */
+  phases: Array<{
+    phase: number;
+    label: string;
+    startsOn: string | null;
+    endsOn: string | null;
+    tentative: boolean;
+    services: string[];
+  }>;
+  /** The stored plan end on the project (target_date, else target_launch_date). Null before a project. */
+  planEnd: string | null;
+  /** The graduation date agreed with the customer (stage_targets.complete), when one is set. */
+  graduationTarget: string | null;
+  /** Agreed stage completion targets, when set. */
+  stageTargets: Record<string, string | null>;
+  /**
+   * Dates the signed SOW names, as the SOW reading typed them. ADVISORY: they
+   * are shown here and never written into the plan's dates, its stage
+   * targets or its overrides.
+   */
+  sowDates: {
+    advisory: true;
+    note: string;
+    dates: Array<{ type: string; date: string; end: string | null; quote: string }>;
+  };
+};
+
+export async function loadHandoffContext(
+  dealId: string,
+  opts: {
+    /**
+     * False skips the plan block. buildOnboardingDeckInput reads this context
+     * on every welcome page view and builds the same timeline itself.
+     */
+    plan?: boolean;
+  } = {},
+): Promise<HandoffContext | null> {
   const { data: deal } = await db()
     .from("portal_accounts")
     .select("*")
@@ -123,6 +194,7 @@ export async function loadHandoffContext(dealId: string): Promise<HandoffContext
   // without reading the PDF again. Never fatal: a context without it is
   // today's context.
   let reading: HandoffContext["sow"]["reading"] = null;
+  let readingDates: HandoffPlan["sowDates"]["dates"] | null = null;
   try {
     const { loadSowReading } = await import("./ai/readings");
     // By the file's path, not its bytes: this read serves pages, and a
@@ -131,12 +203,30 @@ export async function loadHandoffContext(dealId: string): Promise<HandoffContext
     if (kept?.reading.readable) {
       const { sowReadingSummary } = await import("../sow-plan");
       reading = sowReadingSummary(kept.reading);
+      readingDates = (kept.reading.dates ?? []).map((d) => ({
+        type: d.type,
+        date: d.date,
+        end: d.end ?? null,
+        quote: d.quote,
+      }));
     }
   } catch (e) {
     console.error("[handoff-context] could not load the SOW reading", e);
   }
 
-  const project = await loadProject(deal.customer_id as string | null);
+  const project = await loadProject(dealId, deal.customer_id as string | null);
+  let plan: HandoffContext["plan"] = null;
+  let planUnavailable: string | undefined;
+  if (opts.plan !== false) {
+    try {
+      const built = await loadPlan(deal, project?.id ?? null, readingDates);
+      plan = built.plan;
+      planUnavailable = built.unavailable;
+    } catch (e) {
+      console.error("[handoff-context] could not build the plan", e);
+      planUnavailable = "The plan could not be computed for this deal.";
+    }
+  }
   const priorImplementations = deal.customer_id
     ? Math.max(0, (await countImplementations(deal.customer_id as string)) - (project ? 1 : 0))
     : 0;
@@ -153,7 +243,13 @@ export async function loadHandoffContext(dealId: string): Promise<HandoffContext
   if (!deal.am_owner_id && !deal.se_owner_id) {
     gaps.push("Nobody is assigned on the GoCanvas side, so the team slide has no names.");
   }
-  if (!project) {
+  if (!project && plan) {
+    gaps.push(
+      `No project yet: the plan below is the proposed one, dated from close ${plan.closeDate}${
+        plan.closeSource === "today" ? " (not won yet, so planned as if it closed today)" : ""
+      }; there are no project stages and no task list.`,
+    );
+  } else if (!project) {
     gaps.push(
       "No project exists yet — there is no plan, no stages and no task list. The deck cannot show a timeline.",
     );
@@ -163,6 +259,7 @@ export async function loadHandoffContext(dealId: string): Promise<HandoffContext
     deal: {
       id: deal.id,
       name: deal.name,
+      customerFacingName: customerFacingName(deal) || deal.name,
       stage: deal.stage,
       domain: deal.domain ?? null,
       arr: deal.arr ?? null,
@@ -194,8 +291,108 @@ export async function loadHandoffContext(dealId: string): Promise<HandoffContext
     })),
     notes: (notes ?? []).map((n: any) => ({ recordedAt: n.created_at, markdown: n.body_md })),
     project,
+    plan,
+    ...(planUnavailable ? { planUnavailable } : {}),
     priorImplementations,
     gaps,
+  };
+}
+
+/**
+ * The plan block: the same shared helpers the welcome page and Kickoff View
+ * use (closeDateFor, timelineFor), never buildOnboardingDeckInput, which
+ * reads this context itself.
+ */
+async function loadPlan(
+  deal: Record<string, any>,
+  implementationId: string | null,
+  readingDates: HandoffPlan["sowDates"]["dates"] | null,
+): Promise<{ plan: HandoffPlan | null; unavailable?: string }> {
+  const { readIntake } = await import("../intake-answers");
+  const intake = readIntake(deal["intake"]);
+  const { isPartnerDeal } = await import("../partner-implementation");
+  if (isPartnerDeal(intake)) {
+    return {
+      plan: null,
+      unavailable:
+        "A partner implementation runs its partner's journey, not the standard plan. There are no standard plan dates to state.",
+    };
+  }
+  const [{ closeDateFor, timelineFor }, { loadPipelineStages }, { wonStage }] = await Promise.all([
+    import("../onboarding-plan"),
+    import("../pipeline-stages.server"),
+    import("../pipeline-stages"),
+  ]);
+  const [{ data: history }, stages, stored] = await Promise.all([
+    db()
+      .from("portal_stage_transitions")
+      .select("to_stage,occurred_at")
+      .eq("account_id", String(deal["id"])),
+    loadPipelineStages(),
+    implementationId
+      ? db()
+          .from("implementations")
+          .select("target_date,target_launch_date")
+          .eq("id", implementationId)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
+  ]);
+  const close = closeDateFor({
+    intake,
+    stageHistory: (history ?? []) as Array<{ to_stage: string; occurred_at: string }>,
+    wonStageKey: wonStage(stages).key,
+  });
+  const t = timelineFor(intake, close.date);
+  const targets = intake.timeline.stage_targets;
+  const sowDates =
+    readingDates ??
+    (intake.timeline.sow_dates ?? []).map((d) => ({
+      type: d.type,
+      date: d.date,
+      end: d.end ?? null,
+      quote: d.quote,
+    }));
+  const row = (stored as { data: Record<string, any> | null }).data;
+  return {
+    plan: {
+      basis:
+        close.source === "today"
+          ? "Proposed plan: the deal is not won yet, so every date assumes it closes today. Dates move with the real close."
+          : "The plan as the welcome page and Kickoff View show it today.",
+      closeDate: close.date,
+      closeSource: close.source,
+      liveDate: t.liveDate,
+      liveDoneOn: t.liveDoneOn,
+      milestones: [...t.milestones]
+        .sort((a, b) => a.date.localeCompare(b.date))
+        .map((m) => ({
+          key: m.key,
+          label: m.label,
+          kind: m.kind,
+          date: m.date,
+          booked: m.kind === "call" ? Boolean(m.time) : null,
+          doneOn: m.doneOn,
+          phase: m.phase,
+        })),
+      phases: t.phases.map((p) => ({
+        phase: p.phase,
+        label: p.label,
+        startsOn: p.startsOn,
+        endsOn: p.endsOn,
+        tentative: p.tentative,
+        services: p.services.map((s) => s.name),
+      })),
+      planEnd: (row?.["target_date"] as string | null) ?? row?.["target_launch_date"] ?? null,
+      graduationTarget: targets.complete.current_date ?? null,
+      stageTargets: Object.fromEntries(
+        Object.entries(targets).map(([k, v]) => [k, v.current_date ?? null]),
+      ),
+      sowDates: {
+        advisory: true,
+        note: "Dates the signed SOW names. Advisory only: they do not drive the plan, its stage targets or its overrides. Agree them with the customer; do not print them as plan dates.",
+        dates: sowDates,
+      },
+    },
   };
 }
 
@@ -207,15 +404,17 @@ async function countImplementations(customerId: string): Promise<number> {
   return count ?? 0;
 }
 
-async function loadProject(customerId: string | null): Promise<HandoffContext["project"]> {
-  if (!customerId) return null;
-  const { data: impl } = await db()
-    .from("implementations")
-    .select("id,name,journey_type,target_launch_date,owner_id")
-    .eq("customer_id", customerId)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+async function loadProject(
+  dealId: string,
+  customerId: string | null,
+): Promise<HandoffContext["project"]> {
+  // The deal's own live project, not the customer's newest: an existing
+  // customer's second deal must not read the first one's plan.
+  const impl = await liveImplementationForDeal<any>(db(), {
+    dealId,
+    customerId,
+    select: "id,name,journey_type,target_launch_date,owner_id",
+  });
   if (!impl) return null;
 
   const [

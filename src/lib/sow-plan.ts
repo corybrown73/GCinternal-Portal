@@ -538,12 +538,39 @@ export function rowWeeks(row: SowPlanRow): number {
  * panel; a paid form the intake already names is not added twice. Returns
  * the timeline keys to merge, and how many rows went on.
  */
+/**
+ * The SOW's own seat count and service phases, kept beside the plan for the
+ * watch-outs to read against the calls. Every row the SOW named, accepted
+ * or not: the point is what the document says, not what the plan took.
+ */
+export function sowFactsFrom(proposal: {
+  services: ReadonlyArray<Pick<SowPlanRow, "name" | "phase" | "evidence">>;
+  seats?: number | null;
+}): {
+  seats: number | null;
+  services: Array<{ name: string; phase: number; quote: string | null }>;
+} {
+  return {
+    seats: typeof proposal.seats === "number" && proposal.seats > 0 ? proposal.seats : null,
+    services: proposal.services.slice(0, 20).map((r) => ({
+      name: r.name.slice(0, 160),
+      phase: r.phase,
+      quote: r.evidence ? r.evidence.slice(0, 300) : null,
+    })),
+  };
+}
+
 export function sowTimelinePatch(
   intake: {
     wanted_forms: Array<{ name: string }>;
     timeline: { services?: unknown; removed_services?: string[]; session_minutes?: number | null };
   } & { timeline: Parameters<typeof normalizeServices>[1] },
-  proposal: { services: SowPlanRow[]; notes: string[]; dates?: TypedDate[] },
+  proposal: {
+    services: SowPlanRow[];
+    notes: string[];
+    dates?: TypedDate[];
+    seats?: number | null;
+  },
   makeId: (row: SowPlanRow) => string,
 ): { timeline: Record<string, unknown>; accepted: number; sessionMinutes: number | null } {
   const wanted = new Set(intake.wanted_forms.map((f) => normalizeServiceKey(f.name, "paid_form")));
@@ -576,6 +603,7 @@ export function sowTimelinePatch(
       sow_applied_at: new Date().toISOString(),
       sow_notes: proposal.notes.map((n) => n.slice(0, 300)).slice(0, 20),
       sow_dates: (proposal.dates ?? []).slice(0, 20),
+      sow_facts: sowFactsFrom(proposal),
       ...(sessionMinutes ? { session_minutes: sessionMinutes } : {}),
     },
   };

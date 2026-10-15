@@ -108,7 +108,7 @@ export const TOOLS: ToolDefinition[] = [
     name: "get_handoff_context",
     title: "Read everything about a deal",
     description:
-      "Everything needed to write the handoff deck, in one read: the deal record, the SOW, every Gong call note and onboarding note VERBATIM, and the project's plan if it exists. Also returns `gaps` — the things nobody recorded. Read those first: a deck written confidently over a gap is worse than one that says the answer is missing.",
+      "Everything needed to write the handoff deck, in one read: the deal record (with the customer-facing name), the SOW, every Gong call note and onboarding note VERBATIM, the deal's own project if it exists, and `plan` — the same plan the welcome page and Kickoff View show (close date and source, the Functional date, milestones with dates and whether each call is booked, phases with end dates, the stored plan end, the agreed graduation target). `plan.sowDates` are the dates the SOW names: advisory, never plan dates. Also returns `gaps` — the things nobody recorded. Read those first: a deck written confidently over a gap is worse than one that says the answer is missing.",
     inputSchema: {
       type: "object",
       properties: {
@@ -147,8 +147,17 @@ export const TOOLS: ToolDefinition[] = [
     name: "describe_deck_fields",
     title: "What the deck template accepts",
     description:
-      "The Client Kickoff Deck's field names, what each one is for, and which the portal fills by itself. Call this before generate_kickoff_deck.",
-    inputSchema: { type: "object", properties: {}, additionalProperties: false },
+      "The Client Kickoff Deck's field names, what each one is for, and which the portal fills by itself. Call this before generate_kickoff_deck. Pass dealId to also get that deal's customer-facing name and plan dates, so any date you write matches the welcome page.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        dealId: {
+          type: "string",
+          description: "Optional. The deal's uuid: adds its customer-facing name and plan dates.",
+        },
+      },
+      additionalProperties: false,
+    },
   },
   {
     name: "create_deal",

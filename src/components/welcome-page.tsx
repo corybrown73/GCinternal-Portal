@@ -34,6 +34,9 @@ import type { HandoffValue } from "@/lib/sales-handoff";
 import { byLabel, dueLabel, journeyOverviewItems } from "@/lib/welcome-journey";
 import { kickoffScreenList } from "@/components/kickoff-view";
 import { CustomerDashboard } from "@/components/customer-dashboard";
+import { DeckReviewBanner } from "@/components/deck-review-banner";
+import { ask } from "@/components/ui/ask";
+import { SHARE_CONFIRM, shareNeedsConfirm } from "@/lib/deck-review";
 import {
   EditCtx,
   Frame,
@@ -269,6 +272,7 @@ export function WelcomePage({
           />
         ) : null}
         {mode === "shared" ? <SharedBar view={view} icsBase={icsBase ?? null} /> : null}
+        {mode === "internal" && !present ? <DeckReviewBanner view={view} /> : null}
 
         {experience === "plan" ? (
           <CustomerDashboard
@@ -627,6 +631,9 @@ function Toolbar({
   const [sent, setSent] = useState<"idle" | "busy">("idle");
   const copy = async () => {
     if (!onCopyLink) return;
+    // Warn, never block: an unreviewed deck asks first, whether the link is
+    // minted now or already exists.
+    if (shareNeedsConfirm(view) && !(await ask({ ...SHARE_CONFIRM }))) return;
     setCopied("busy");
     let url: string | null = null;
     try {

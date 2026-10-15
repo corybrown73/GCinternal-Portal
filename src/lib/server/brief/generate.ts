@@ -15,6 +15,7 @@ import type { Account, Brief, GongReport } from "../../presale-types";
 import type { BriefJson } from "../schemas";
 import { appUrl } from "@/lib/app-url";
 import { stageDefinition } from "@/lib/lifecycle";
+import { customerFacingName } from "@/lib/names";
 import type { KickoffPerson, KickoffStage, KickoffTask } from "@/lib/kickoff-fields";
 
 /**
@@ -80,15 +81,20 @@ async function loadHandoffContext(
   };
 
   const customerId = (account as any).customer_id as string | null | undefined;
-  if (!customerId) return empty;
-
-  const { data: impl } = await admin
-    .from("implementations")
-    .select("id, name, target_launch_date, owner_id, contract_start_date")
-    .eq("customer_id", customerId)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  // This deal's own live project, not the customer's newest: a second deal
+  // for an existing customer must not print the first one's stages and date.
+  const { liveImplementationForDeal } = await import("../deal-implementation");
+  const impl = await liveImplementationForDeal<{
+    id: string;
+    name: string;
+    target_launch_date: string | null;
+    owner_id: string | null;
+    contract_start_date: string | null;
+  }>(admin, {
+    dealId: String((account as any).id),
+    customerId: customerId ?? null,
+    select: "id, name, target_launch_date, owner_id, contract_start_date",
+  });
   if (!impl) return empty;
 
   const [
@@ -314,7 +320,8 @@ export async function buildAndStoreDeck(
   const { buildKickoffData, kickoffFactsFromIntake } = await import("@/lib/kickoff-fields");
   const { readIntake } = await import("@/lib/intake-answers");
   const deckData = buildKickoffData({
-    clientName: account.name,
+    // The name the customer reads, never the opportunity's.
+    clientName: customerFacingName(account as any) || account.name,
     preparedAt: new Date().toISOString(),
     brief: json,
     intake: kickoffFactsFromIntake(readIntake((account as any).intake)),

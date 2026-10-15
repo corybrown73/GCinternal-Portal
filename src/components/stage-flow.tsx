@@ -122,6 +122,7 @@ import { ExistingCustomerLink } from "@/components/existing-customer-link";
 import { aeReplyDraft, googleCalendarLink } from "@/lib/ae-reply";
 import { customerLabel } from "@/lib/customer-labels";
 import { customerFacingName } from "@/lib/names";
+import { fromTheSowLine } from "@/lib/already-bought";
 import { cn } from "@/lib/utils";
 import { shortMeeting, workspaceFor } from "@/lib/workspace";
 
@@ -2261,11 +2262,11 @@ function ReviewBody({
           </dd>
           <dt className="text-muted-foreground">From the SOW</dt>
           <dd>
-            {services.length
-              ? services.map((sv) => `${sv.name} (phase ${sv.phase})`).join(" · ")
-              : deal.sow_url
-                ? "Core only — no services"
-                : "No SOW"}
+            {fromTheSowLine({
+              services,
+              sowAttached: Boolean(deal.sow_url),
+              sowAppliedAt: intake.timeline.sow_applied_at,
+            })}
           </dd>
           {blanks.length ? (
             <>

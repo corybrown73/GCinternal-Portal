@@ -33,6 +33,7 @@ const h = vi.hoisted(() => {
     if (op === "eq") return row[col] === val;
     if (op === "neq") return row[col] !== val;
     if (op === "in") return (val as any[]).includes(row[col]);
+    if (op === "is") return row[col] === val;
     throw new Error(`unsupported op ${op}`);
   };
 
@@ -81,6 +82,7 @@ const h = vi.hoisted(() => {
         eq: (col: string, val: any) => (filters.push({ col, op: "eq", val }), builder),
         neq: (col: string, val: any) => (filters.push({ col, op: "neq", val }), builder),
         in: (col: string, val: any[]) => (filters.push({ col, op: "in", val }), builder),
+        is: (col: string, val: any) => (filters.push({ col, op: "is", val }), builder),
         order: (col: string, o?: { ascending?: boolean }) => (
           (order = { col, asc: o?.ascending !== false }),
           builder
@@ -105,8 +107,14 @@ const h = vi.hoisted(() => {
 
 vi.mock("@/integrations/supabase/client.server", () => ({ supabaseAdmin: h.db }));
 vi.mock("../../integrations/supabase/client.server", () => ({ supabaseAdmin: h.db }));
+// The configured pipeline is its own read; the built-in stages stand in.
+vi.mock("../pipeline-stages.server", async () => {
+  const { BUILTIN_PIPELINE_STAGES } = await import("../pipeline-stages");
+  return { loadPipelineStages: async () => BUILTIN_PIPELINE_STAGES };
+});
 
 import { loadHandoffContext } from "../server/handoff-context";
+import { planSummary } from "../server/handoff-tools";
 
 const RIDGELINE = "4494053a-c3f0-4828-b292-781c6b64f45d";
 const DELTA = "22a9f075-2917-44c4-aa24-5795944dfd83";
@@ -192,6 +200,8 @@ beforeEach(() => {
       {
         id: DELTA_IMPL,
         customer_id: DELTA_CUSTOMER,
+        deal_id: DELTA,
+        superseded_by_implementation_id: null,
         name: "Delta Water Works",
         journey_type: "new_logo",
         target_launch_date: null,
@@ -268,7 +278,9 @@ describe("a deal that has not been handed off", () => {
     const gaps = ctx.gaps.join(" ");
     expect(gaps).toContain("No SOW is recorded");
     expect(gaps).toContain("Nobody is assigned");
-    expect(gaps).toContain("No project exists yet");
+    // Before the close there is still a plan: the proposed one, dated from today.
+    expect(gaps).toContain("No project yet: the plan below is the proposed one");
+    expect(gaps).not.toContain("there is no plan");
     // It has a call, so that gap must NOT be raised — the negative control on
     // a list that would otherwise be easy to over-report.
     expect(gaps).not.toContain("No call notes");
@@ -328,6 +340,8 @@ describe("a deal with a project", () => {
     seeded("implementations").push({
       id: "impl-2",
       customer_id: DELTA_CUSTOMER,
+      deal_id: "another-deal",
+      superseded_by_implementation_id: null,
       name: "Delta Water Works — QuickBooks",
       journey_type: "integration",
       target_launch_date: null,
@@ -381,5 +395,157 @@ describe("the SOW", () => {
     expect(ctx.sow.uploaded).toBe(false);
     expect(ctx.sow.documentUrl).toBe("https://drive.example/sow");
     expect(ctx.gaps.join(" ")).not.toContain("No SOW is recorded");
+  });
+});
+
+describe("the deal's own project, not the customer's newest", () => {
+  const DELTA_2 = "9b2f0c51-6a1d-4c1e-8f7e-0d6c2b1a0e11";
+  const IMPL_2 = "impl-delta-2";
+  const addSecondDeal = () => {
+    seeded("portal_accounts").push(
+      account({ id: DELTA_2, name: "Delta Water Works — services", customer_id: DELTA_CUSTOMER }),
+    );
+    seeded("implementations").push({
+      id: IMPL_2,
+      customer_id: DELTA_CUSTOMER,
+      deal_id: DELTA_2,
+      superseded_by_implementation_id: null,
+      name: "Delta Water Works — QuickBooks",
+      journey_type: "integration",
+      target_launch_date: "2026-12-01",
+      owner_id: null,
+      created_at: "2026-03-01T00:00:00Z",
+    });
+  };
+
+  it("reads each deal's own project when the customer has two", async () => {
+    addSecondDeal();
+    const first = (await loadHandoffContext(DELTA))!;
+    const second = (await loadHandoffContext(DELTA_2))!;
+    expect(first.project!.id).toBe(DELTA_IMPL);
+    expect(first.project!.journeyType).toBe("new_logo");
+    expect(second.project!.id).toBe(IMPL_2);
+    expect(second.project!.targetLaunchDate).toBe("2026-12-01");
+  });
+
+  it("skips a superseded project", async () => {
+    seeded("implementations").push({
+      id: "impl-newer-superseded",
+      customer_id: DELTA_CUSTOMER,
+      deal_id: DELTA,
+      superseded_by_implementation_id: DELTA_IMPL,
+      name: "Delta (superseded)",
+      journey_type: "new_logo",
+      target_launch_date: null,
+      owner_id: null,
+      created_at: "2026-04-01T00:00:00Z",
+    });
+    const ctx = (await loadHandoffContext(DELTA))!;
+    expect(ctx.project!.id).toBe(DELTA_IMPL);
+  });
+
+  it("falls back to the customer's legacy project only when the deal has none", async () => {
+    const impl = seeded("implementations")[0] as Row;
+    impl["deal_id"] = null;
+    const ctx = (await loadHandoffContext(DELTA))!;
+    expect(ctx.project!.id).toBe(DELTA_IMPL);
+
+    // Another deal's project is never borrowed.
+    addSecondDeal();
+    impl["deal_id"] = "another-deal";
+    seeded("implementations").pop();
+    const none = (await loadHandoffContext(DELTA))!;
+    expect(none.project).toBeNull();
+  });
+});
+
+describe("the plan block", () => {
+  it("is the proposed plan before the close, dated from today", async () => {
+    const ctx = (await loadHandoffContext(RIDGELINE))!;
+    expect(ctx.plan).not.toBeNull();
+    const plan = ctx.plan!;
+    expect(plan.closeSource).toBe("today");
+    expect(plan.liveDate).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(plan.liveDate >= plan.closeDate).toBe(true);
+    expect(plan.milestones.length).toBeGreaterThan(0);
+    expect(plan.milestones.some((m) => m.kind === "call" && m.booked === false)).toBe(true);
+    expect(plan.planEnd).toBeNull();
+    expect(plan.graduationTarget).toBeNull();
+  });
+
+  it("reads the close a person set, the agreed graduation and the stored plan end", async () => {
+    const delta = seeded("portal_accounts")[1] as Row;
+    delta["intake"] = {
+      timeline: {
+        close_date: "2026-09-21",
+        times: { kickoff: "10:00" },
+        stage_targets: { complete: { original_date: "2026-12-04", current_date: "2026-12-04" } },
+        sow_dates: [
+          {
+            type: "deadline",
+            date: "2026-11-09",
+            end: null,
+            who: null,
+            quote: "Denver branch go-live Nov 9",
+          },
+        ],
+      },
+    };
+    (seeded("implementations")[0] as Row)["target_date"] = "2026-12-07";
+    const ctx = (await loadHandoffContext(DELTA))!;
+    const plan = ctx.plan!;
+    expect(plan.closeDate).toBe("2026-09-21");
+    expect(plan.closeSource).toBe("intake");
+    expect(plan.graduationTarget).toBe("2026-12-04");
+    expect(plan.stageTargets["complete"]).toBe("2026-12-04");
+    expect(plan.planEnd).toBe("2026-12-07");
+    expect(plan.milestones.map((m) => m.date)).toEqual(
+      [...plan.milestones.map((m) => m.date)].sort(),
+    );
+    // SOW dates are shown, advisory, and never become plan dates.
+    expect(plan.sowDates.advisory).toBe(true);
+    expect(plan.sowDates.note).toContain("do not drive the plan");
+    expect(plan.sowDates.dates).toEqual([
+      { type: "deadline", date: "2026-11-09", end: null, quote: "Denver branch go-live Nov 9" },
+    ]);
+    expect(plan.milestones.some((m) => m.date === "2026-11-09")).toBe(false);
+    expect(ctx.gaps.join(" ")).not.toContain("No project");
+  });
+
+  it("is null for a partner deal, with the reason", async () => {
+    ridgeline()["intake"] = { path: "partner_implementation" };
+    const ctx = (await loadHandoffContext(RIDGELINE))!;
+    expect(ctx.plan).toBeNull();
+    expect(ctx.planUnavailable).toContain("partner");
+  });
+
+  it("is skipped when the caller builds the timeline itself", async () => {
+    const ctx = (await loadHandoffContext(RIDGELINE, { plan: false }))!;
+    expect(ctx.plan).toBeNull();
+  });
+
+  it("names the customer the way the customer reads it", async () => {
+    ridgeline()["name"] = "QA Test - Ridgeline Excavation (ATG) - SEP '26";
+    const ctx = (await loadHandoffContext(RIDGELINE))!;
+    expect(ctx.deal.name).toBe("QA Test - Ridgeline Excavation (ATG) - SEP '26");
+    expect(ctx.deal.customerFacingName).toBe("Ridgeline Excavation");
+  });
+});
+
+describe("what describe_deck_fields and generate_kickoff_deck read from the plan", () => {
+  it("summarises the plan's dates, with the SOW's dates kept advisory", async () => {
+    const ctx = (await loadHandoffContext(RIDGELINE))!;
+    const summary = planSummary(ctx) as any;
+    expect(summary.available).toBe(true);
+    expect(summary.functionalDate).toBe(ctx.plan!.liveDate);
+    expect(summary.calls.length).toBeGreaterThan(0);
+    expect(summary.sowDates.advisory).toBe(true);
+  });
+
+  it("says why there is none for a partner deal", async () => {
+    ridgeline()["intake"] = { path: "partner_implementation" };
+    const summary = planSummary((await loadHandoffContext(RIDGELINE))!) as any;
+    expect(summary.available).toBe(false);
+    expect(summary.reason).toContain("partner");
   });
 });

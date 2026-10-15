@@ -105,6 +105,21 @@ export const timelinePatchSchema = z
       .max(20)
       .optional(),
     sow_dates: z.array(typedDateSchema).max(20).nullable().optional(),
+    sow_facts: z
+      .object({
+        seats: z.number().int().min(0).nullable(),
+        services: z
+          .array(
+            z.object({
+              name: z.string().max(160),
+              phase: z.number().int().min(1).max(9),
+              quote: z.string().max(300).nullable(),
+            }),
+          )
+          .max(20),
+      })
+      .nullable()
+      .optional(),
     removed_services: z.array(z.string().max(160)).max(40).optional(),
     session_minutes: z.number().int().min(15).max(240).nullable().optional(),
     plan_edits: planEditsSchema.optional(),

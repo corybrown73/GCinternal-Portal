@@ -194,17 +194,36 @@ function authHelp(code: string, message: string, scope: string): string {
 
 async function runTool(name: string, args: Record<string, unknown>): Promise<string> {
   switch (name) {
-    case "describe_deck_fields":
+    case "describe_deck_fields": {
+      // With a deal: its customer-facing name and the plan's dates, read from
+      // the same context get_handoff_context returns.
+      const dealId = typeof args["dealId"] === "string" ? args["dealId"].trim() : "";
+      let forDeal: Record<string, unknown> | null = null;
+      if (dealId) {
+        const { loadHandoffContext } = await import("./handoff-context");
+        const context = await loadHandoffContext(dealId);
+        if (!context) throw new Error(`No deal with id ${dealId}`);
+        const { planSummary } = await import("./handoff-tools");
+        forDeal = {
+          dealId,
+          clientName: context.deal.customerFacingName,
+          plan: planSummary(context),
+          datesNote:
+            "Write dates from `plan` (the Functional date, the booked calls, the agreed graduation target). SOW dates are advisory and are not plan dates.",
+        };
+      }
       return JSON.stringify(
         {
           template: "Client Kickoff Deck",
           howToUse:
             "Supply only fields you can support from the notes. An omitted field renders as a visible placeholder for the presenter to complete; a wrong one gets read to the customer as fact.",
           groups: FIELD_GUIDE,
+          ...(forDeal ? { deal: forDeal } : {}),
         },
         null,
         2,
       );
+    }
 
     case "pipeline_report": {
       const n = (v: unknown) => (typeof v === "number" && Number.isInteger(v) ? v : undefined);

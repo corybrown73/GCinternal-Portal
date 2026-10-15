@@ -2,6 +2,7 @@ import { supabaseAdmin } from "@/integrations/supabase/client.server";
 
 import { deckKindFor } from "@/lib/deck-kind";
 import { TEMPLATE_FIELDS } from "@/lib/kickoff-fields";
+import { customerFacingName } from "@/lib/names";
 
 import { startOnboardingAtClose } from "./start-at-close";
 
@@ -99,11 +100,14 @@ export async function generateDeckFromMcp(args: {
   // A Partner Implementation has no kickoff deck. Refused here, not built as a New Logo deck.
   if (decision.kind === "partner") throw new Error(decision.reason);
 
+  // The name the customer reads: the typed customer-facing name, else the
+  // deal name without our markers. The same name the welcome page shows.
+  const clientName = customerFacingName(deal) || context.deal.name;
   const { buildKickoffData } = await import("@/lib/kickoff-fields");
   const base = buildKickoffData({
-    clientName: context.deal.name,
+    clientName,
     preparedAt: new Date().toISOString(),
-    brief: emptyBrief(context.deal.name),
+    brief: emptyBrief(clientName),
     team: teamFrom(context),
     clientPeople: [],
     stages: (context.project?.stages ?? []).map((s) => ({
@@ -151,7 +155,7 @@ export async function generateDeckFromMcp(args: {
   const { buildKickoffDeckFile } = await import("./brief/pptx");
   const deck = await buildKickoffDeckFile(deckData, await clientLogo(deal));
 
-  const implementationId = await implementationFor(deal.customer_id as string | null);
+  const implementationId = await implementationFor(args.dealId, deal.customer_id as string | null);
   if (!implementationId) {
     throw new Error(
       "This deal has no project yet, so there is no account for the deck to be filed against. Start onboarding from the deal first, then generate the deck.",
@@ -159,12 +163,12 @@ export async function generateDeckFromMcp(args: {
   }
 
   const { addAccountUpload } = await import("@/lib/attachments.server");
-  const title = `Client kickoff — ${context.deal.name}`;
+  const title = `Client kickoff — ${clientName}`;
   await addAccountUpload({
     implementationId,
     title,
     kind: "deck",
-    fileName: `${safeName(context.deal.name)}-client-kickoff.pptx`,
+    fileName: `${safeName(clientName)}-client-kickoff.pptx`,
     contentType: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
     dataBase64: Buffer.from(deck).toString("base64"),
     actorProfileId: null,
@@ -188,7 +192,11 @@ export async function generateDeckFromMcp(args: {
   return {
     filed: true,
     title,
+    clientName,
     account: `Filed in the account's Attachments. Open the project and look under Attachments.`,
+    // The plan the welcome page and Kickoff View show, so any date written
+    // into a field can be checked against it. SOW dates stay advisory.
+    plan: planSummary(context),
     deckKind: decision.kind,
     deckKindReason: decision.reason,
     fieldsFromYou: fromModel.length,
@@ -197,6 +205,28 @@ export async function generateDeckFromMcp(args: {
     note: missing.length
       ? "The blank fields render as visible placeholders on the slides, and are listed in slide one's speaker notes for the presenter."
       : "Every field the template asks for is filled.",
+  };
+}
+
+/** The plan's headline dates from the handoff context, for a model to check its fields against. */
+export function planSummary(
+  context: NonNullable<Awaited<ReturnType<typeof import("./handoff-context").loadHandoffContext>>>,
+) {
+  const p = context.plan;
+  if (!p) return { available: false, reason: context.planUnavailable ?? "No plan for this deal." };
+  return {
+    available: true,
+    basis: p.basis,
+    closeDate: p.closeDate,
+    closeSource: p.closeSource,
+    functionalDate: p.liveDate,
+    graduationTarget: p.graduationTarget,
+    planEnd: p.planEnd,
+    calls: p.milestones
+      .filter((m) => m.kind === "call")
+      .map((m) => ({ label: m.label, date: m.date, booked: m.booked })),
+    phases: p.phases.map((ph) => ({ label: ph.label, endsOn: ph.endsOn, tentative: ph.tentative })),
+    sowDates: p.sowDates,
   };
 }
 
@@ -264,16 +294,18 @@ function emptyBrief(name: string) {
   };
 }
 
-async function implementationFor(customerId: string | null): Promise<string | null> {
-  if (!customerId) return null;
-  const { data } = await db()
-    .from("implementations")
-    .select("id")
-    .eq("customer_id", customerId)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  return (data?.id as string | undefined) ?? null;
+/** The deal's own live project: the deck is filed where this deal's team looks. */
+async function implementationFor(
+  dealId: string,
+  customerId: string | null,
+): Promise<string | null> {
+  const { liveImplementationForDeal } = await import("./deal-implementation");
+  const row = await liveImplementationForDeal<{ id: string }>(db(), {
+    dealId,
+    customerId,
+    select: "id",
+  });
+  return row?.id ? String(row.id) : null;
 }
 
 async function clientLogo(deal: Record<string, any>): Promise<string | null> {

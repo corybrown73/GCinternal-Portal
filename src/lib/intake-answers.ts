@@ -492,6 +492,29 @@ export const intakeAnswersSchema = z.object({
        * them (the watch-outs then fall back to reading the notes' words).
        */
       sow_dates: z.array(typedDateSchema).max(20).nullable().default(null),
+      /**
+       * What the SOW itself said, kept as read at apply time so the
+       * watch-outs can set it against the calls: the seat count (which the
+       * intake's field_users drops when the calls give one) and each
+       * service's phase with the words it rests on. Advisory; nothing reads
+       * the plan from here. Null on a deal read before it was kept.
+       */
+      sow_facts: z
+        .object({
+          seats: z.number().int().min(0).nullable().default(null),
+          services: z
+            .array(
+              z.object({
+                name: z.string().max(160),
+                phase: z.number().int().min(1).max(9),
+                quote: z.string().max(300).nullable().default(null),
+              }),
+            )
+            .max(20)
+            .default([]),
+        })
+        .nullable()
+        .default(null),
       /** Service keys (see normalizeServiceKey) a person removed: a re-read never puts them back. */
       removed_services: z.array(z.string().max(160)).max(40).default([]),
       /** The core meetings' length when the SOW states one; null for the plan's own. */

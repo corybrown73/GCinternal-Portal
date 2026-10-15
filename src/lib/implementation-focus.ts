@@ -166,6 +166,31 @@ export function proposeImplementationFocus(
   }));
 }
 
+/**
+ * Why "Generate proposed focus" has nothing to propose, in the words the
+ * panel shows: each of the three sources it reads, and what is missing from
+ * it. Null when there is something to propose.
+ */
+export function nothingToProposeReason(
+  intake: Pick<IntakeAnswers, "wanted_forms" | "timeline" | "handoff">,
+  opts: { sowAttached?: boolean } = {},
+): string | null {
+  const services = normalizeServices(intake.timeline.services as ServiceSpec[], intake.timeline);
+  const sys = intake.handoff.answers["system_requirements"];
+  const hasSystems = typeof sys?.value === "string" && sys.value.trim().length > 0;
+  if (services.length || intake.wanted_forms.length || hasSystems) return null;
+  const missing = [
+    intake.timeline.sow_applied_at
+      ? "no purchased services on the SOW"
+      : opts.sowAttached === false
+        ? "no SOW on the deal"
+        : "SOW not read yet",
+    "no forms named on the intake",
+    "no systems on the handoff",
+  ];
+  return `Nothing to propose yet: ${missing.join(", ")}.`;
+}
+
 /** Lower case, letters and digits only, one space between words: the key two wordings of one item share. */
 function normalizedText(text: string): string {
   return text

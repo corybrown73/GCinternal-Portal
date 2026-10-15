@@ -51,7 +51,13 @@ import {
   type StageTargetUpdate,
 } from "@/lib/stage-targets";
 import { toolByKey, toolFromName, toolsForKind } from "@/lib/onboarding-tools";
-import { mergeProposal, rowWeeks, type SowPlanProposal, type SowPlanRow } from "@/lib/sow-plan";
+import {
+  mergeProposal,
+  rowWeeks,
+  sowFactsFrom,
+  type SowPlanProposal,
+  type SowPlanRow,
+} from "@/lib/sow-plan";
 import { proposePlanFromSowFn } from "@/lib/sow-plan.functions";
 import { isCall, planEvents } from "@/lib/welcome-events";
 import { getWelcome } from "@/lib/welcome.functions";
@@ -379,6 +385,11 @@ export function TimelinePanel({
       // The dates and exclusions the SOW names, for the watch-outs to read
       // against the plan. Before this they were shown once and dropped.
       sow_notes: proposal.proposal.notes.map((n) => n.slice(0, 300)).slice(0, 20),
+      // What the SOW itself says — its dates, seats and service phases — kept
+      // for the watch-outs to read against the calls. Advisory: the plan's
+      // dates never come from here.
+      sow_dates: (proposal.proposal.dates ?? []).slice(0, 20),
+      sow_facts: sowFactsFrom(proposal.proposal),
     });
     setProposal(null);
   };

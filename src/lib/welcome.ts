@@ -154,6 +154,10 @@ export type WelcomeView = {
    * ready. Internal only; the customer's view carries an empty list.
    */
   readiness: Array<{ key: string; label: string; hint: string }>;
+  /** Internal only: the AI reading's status, null when none ran or on the customer's copy. */
+  aiReading?: "queued" | "running" | "done" | "failed" | null;
+  /** Internal only: the Review step was approved (handoff_tasks.reviewed). Null on the customer's copy. */
+  reviewed?: boolean | null;
   /** Present when the viewer is internal and a link has been issued. */
   shareUrl: string | null;
   /** The link as a QR (PNG data URL), made on the server. Internal only. */
@@ -251,6 +255,9 @@ export function customerWelcomeView(view: WelcomeView): WelcomeView {
     ...view,
     // The Hub's own identifier for the deal never leaves the server on a customer's copy.
     dealId: "",
+    // Review state is ours: the customer's copy never carries it.
+    aiReading: null,
+    reviewed: null,
     implementationFocus: null,
     implementationFocusFallback: [],
     workflowStory: view.workflowStory ? { ...view.workflowStory, validatedBy: null } : null,

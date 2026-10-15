@@ -457,4 +457,20 @@ describe("reading the SOW twice", () => {
     );
     expect(patch.timeline["sow_dates"]).toEqual(parsed.dates);
   });
+
+  it("keeps what the SOW said about seats and phases, for the watch-outs", () => {
+    const patch = sowTimelinePatch(
+      { wanted_forms: [], timeline: {} } as never,
+      { services: [qb, { ...jsa, confidence: "uncertain" }], notes: [], seats: 45 },
+      (r) => r.kind,
+    );
+    // Every row the SOW named, accepted into the plan or not.
+    expect(patch.timeline["sow_facts"]).toEqual({
+      seats: 45,
+      services: [
+        { name: qb.name, phase: qb.phase, quote: qb.evidence },
+        { name: jsa.name, phase: jsa.phase, quote: jsa.evidence },
+      ],
+    });
+  });
 });

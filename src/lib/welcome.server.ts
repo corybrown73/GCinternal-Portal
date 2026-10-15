@@ -287,6 +287,11 @@ async function viewFor(
     clientLogoUrl,
     homeworkDone,
     readiness,
+    // Internal only: whether the deck was reviewed (the Review step's own
+    // key) and where the AI reading stands, for the "check before sharing"
+    // banner. The customer's copy carries neither.
+    aiReading: opts.internal ? (intake.ai_reading?.status ?? null) : null,
+    reviewed: opts.internal ? Boolean(intake.handoff_tasks["reviewed"]) : null,
     shareUrl: opts.internal ? ((deal.welcome_share_url as string | null) ?? null) : null,
     qrDataUrl:
       opts.internal && deal.welcome_share_url
