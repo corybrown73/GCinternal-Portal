@@ -3,7 +3,7 @@ import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { Suspense } from "react";
 import { queryOptions, useMutation, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, FileText } from "lucide-react";
 
 import { PastImplementations } from "@/components/past-implementations";
 import { HelpPicksPanel } from "@/components/help-articles-panel";
@@ -12,6 +12,8 @@ import { dealQuery } from "@/lib/deal-query";
 import { useQuery } from "@tanstack/react-query";
 import { CurrentImplementationTab } from "@/components/stage-flow";
 import { CustomerHeader } from "@/components/customer-header";
+import { CARD, TONE } from "@/components/current-implementation-context";
+import { showKickoffDeckLink } from "@/lib/customer-header";
 import { CustomerOverview } from "@/components/customer-overview";
 import { HealthNote } from "@/components/health-note";
 import { PlanPanel } from "@/components/plan-panel";
@@ -603,48 +605,60 @@ function projectInput(
  */
 function ResourcesTab({ record }: { record: Customer360 }) {
   const impl = record.implementation!;
+  // The standard kickoff deck is not offered to partner implementations; the
+  // same rule the header's Kickoff link uses.
+  const kickoffDealId = showKickoffDeckLink(impl) ? impl.deal_id : null;
   return (
     <div className="space-y-5">
-      {impl.deal_id ? (
-        <div className="space-y-2">
-          <ResourceGroupLabel>Help resources</ResourceGroupLabel>
-          <HelpPicksFromDeal dealId={impl.deal_id} />
-        </div>
-      ) : null}
-
       <div className="space-y-2">
-        <ResourceGroupLabel>Implementation files</ResourceGroupLabel>
-        <Panel
-          title="Files & links"
-          meta="Uploaded documents and links for this implementation"
-          level="primary"
-          collapsible
-          defaultOpen
-          collapseKey="customer:resources:files"
-        >
-          <AttachmentsPanel implementationId={impl.id} />
-        </Panel>
+        <ResourceGroupLabel>Customer documents</ResourceGroupLabel>
+        <AttachmentsPanel implementationId={impl.id} variant="documents" />
       </div>
 
-      {impl.deal_id ? (
-        <div className="space-y-2">
-          <ResourceGroupLabel>Kickoff deck</ResourceGroupLabel>
+      <div className="space-y-2">
+        <ResourceGroupLabel>Implementation resources</ResourceGroupLabel>
+        {impl.deal_id ? (
+          <HelpPicksFromDeal dealId={impl.deal_id} />
+        ) : (
+          <ResourceEmpty>No help articles yet.</ResourceEmpty>
+        )}
+      </div>
+
+      <div className="space-y-2">
+        <ResourceGroupLabel>Shared resources</ResourceGroupLabel>
+        {kickoffDealId ? (
           <Link
             to="/onboarding-plan/$dealId"
-            params={{ dealId: impl.deal_id }}
-            className="block rounded-md border border-border bg-card px-3 py-2 text-[12px] hover:bg-muted/60"
+            params={{ dealId: kickoffDealId }}
+            className={cn(CARD, "flex items-center gap-3 px-3 py-2.5 hover:bg-muted/60")}
           >
-            <span className="font-medium">Kickoff deck</span>
-            <span className="ml-1.5 rounded-sm bg-muted px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-              Customer-facing
+            <span
+              className={cn(
+                "flex h-7 w-7 shrink-0 items-center justify-center rounded-md",
+                TONE.info.chip,
+              )}
+            >
+              <FileText className="h-3.5 w-3.5" />
             </span>
-            <span className="mt-0.5 block text-muted-foreground">
-              View the plan, dates and customer responsibilities as the customer sees them. →
+            <span className="min-w-0 flex-1">
+              <span className="block text-[13px] font-medium">Kickoff deck</span>
+              <span className="block text-[11px] text-muted-foreground">
+                The plan, dates and customer responsibilities as the customer sees them
+              </span>
             </span>
+            <span className="shrink-0 text-[12px] font-medium text-primary">View →</span>
           </Link>
-        </div>
-      ) : null}
+        ) : (
+          <ResourceEmpty>No shared resources yet.</ResourceEmpty>
+        )}
+      </div>
     </div>
+  );
+}
+
+function ResourceEmpty({ children }: { children: ReactNode }) {
+  return (
+    <div className={cn(CARD, "px-3 py-2.5 text-[12px] text-muted-foreground")}>{children}</div>
   );
 }
 
@@ -661,7 +675,7 @@ function HelpPicksFromDeal({ dealId }: { dealId: string }) {
   const { profile } = useProfile();
   const q = useQuery(dealQuery(dealId));
   if (!q.data) return null;
-  return <HelpPicksPanel deal={q.data} editable={canEditDeal(profile?.role)} />;
+  return <HelpPicksPanel deal={q.data} editable={canEditDeal(profile?.role)} variant="resources" />;
 }
 
 /** Everything the page used to spread over eight tabs, in one place, folded. */

@@ -3,6 +3,7 @@ import { queryOptions, useMutation, useQueryClient, useSuspenseQuery } from "@ta
 import { useServerFn } from "@tanstack/react-start";
 import { ExternalLink, FileText, Link2, Paperclip, Trash2, Upload } from "lucide-react";
 
+import { TONE } from "@/components/current-implementation-context";
 import { NoRows, Panel } from "@/components/record";
 import { Button } from "@/components/ui/button";
 import {
@@ -12,6 +13,11 @@ import {
   openAttachment,
   uploadAttachment,
 } from "@/lib/attachments.functions";
+import {
+  attachmentActionLabel,
+  attachmentOpensDirectly,
+  attachmentRemovable,
+} from "@/lib/attachment-rows";
 import { fmtDate } from "@/lib/hub-format";
 import { cn } from "@/lib/utils";
 
@@ -48,11 +54,23 @@ function fmtSize(bytes: number | null): string | null {
  * made for this account" — splitting them would mean two lists, two add
  * buttons, and somebody deciding which one their artefact is.
  */
-export function AttachmentsPanel({ implementationId }: { implementationId: string }) {
+export function AttachmentsPanel({
+  implementationId,
+  variant = "list",
+}: {
+  implementationId: string;
+  /**
+   * "documents" is the Customer 360 Resources card: a count beside the title,
+   * a row per file with its kind and its action. "list" is the Details rail,
+   * which keeps its existing layout.
+   */
+  variant?: "list" | "documents";
+}) {
   const { data: files } = useSuspenseQuery(attachmentsQuery(implementationId));
   const [adding, setAdding] = useState<null | "link" | "file">(null);
   const queryClient = useQueryClient();
   const open = useServerFn(openAttachment);
+  const documents = variant === "documents";
 
   const refresh = () =>
     void queryClient.invalidateQueries({ queryKey: ["account-files", implementationId] });
@@ -66,11 +84,42 @@ export function AttachmentsPanel({ implementationId }: { implementationId: strin
     },
   });
 
+  const openRow = (f: FileRow) => {
+    if (attachmentOpensDirectly(f) && f.external_url) {
+      window.open(f.external_url, "_blank", "noopener,noreferrer");
+    } else {
+      openFile.mutate(f.id);
+    }
+  };
+
   return (
     <Panel
-      title="Attachments"
-      count={files.length}
-      level="supporting"
+      title={
+        documents ? (
+          <>
+            Documents &amp; links
+            <span
+              className={cn(
+                "ml-2 rounded-full px-2 py-px text-[12px] font-semibold",
+                TONE.info.chip,
+              )}
+            >
+              {files.length}
+            </span>
+          </>
+        ) : (
+          "Attachments"
+        )
+      }
+      {...(documents
+        ? {
+            meta: "Uploaded files and links for this implementation",
+            // The Resources key is kept from the previous layout, so a section
+            // that was folded stays folded for the people who folded it.
+            collapseKey: "customer:resources:files",
+          }
+        : { count: files.length })}
+      level={documents ? "primary" : "supporting"}
       action={
         <div className="flex gap-1">
           <Button
@@ -110,7 +159,20 @@ export function AttachmentsPanel({ implementationId }: { implementationId: strin
       ) : null}
 
       {files.length === 0 ? (
-        <NoRows label="No SOWs, boards or decks attached yet." />
+        documents ? (
+          <p className="px-3 py-3 text-[12px] text-muted-foreground">
+            No documents or links yet. Upload a SOW, board, deck or document, or add a link, and it
+            will appear here.
+          </p>
+        ) : (
+          <NoRows label="No SOWs, boards or decks attached yet." />
+        )
+      ) : documents ? (
+        <ul className="divide-y divide-border">
+          {files.map((f) => (
+            <DocumentRow key={f.id} file={f} onOpen={() => openRow(f)} onRemoved={refresh} />
+          ))}
+        </ul>
       ) : (
         <ul className="divide-y divide-border">
           {files.map((f) => (
@@ -161,6 +223,83 @@ export function AttachmentsPanel({ implementationId }: { implementationId: strin
         </ul>
       )}
     </Panel>
+  );
+}
+
+/** The fields a row needs from the server's list. */
+type FileRow = {
+  id: string;
+  kind: string;
+  title: string;
+  description: string | null;
+  external_url: string | null;
+  size_bytes: number | null;
+  added_by_name: string | null;
+  created_at: string;
+  origin: "file" | "field";
+};
+
+/**
+ * One document or link on the Resources card. The name and kind sit on the
+ * first line; size, date and uploader on the second. The action on the right
+ * is the same open or download as before, and only stored records get Remove.
+ */
+function DocumentRow({
+  file,
+  onOpen,
+  onRemoved,
+}: {
+  file: FileRow;
+  onOpen: () => void;
+  onRemoved: () => void;
+}) {
+  const link = Boolean(file.external_url);
+  const Icon = link ? Link2 : FileText;
+  const meta = [
+    fmtSize(file.size_bytes),
+    file.created_at ? fmtDate(file.created_at) : null,
+    file.added_by_name,
+    file.description,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
+  return (
+    <li className="flex items-center gap-3 px-3 py-2.5">
+      <span
+        className={cn(
+          "flex h-7 w-7 shrink-0 items-center justify-center rounded-md",
+          link ? TONE.good.chip : TONE.info.chip,
+        )}
+      >
+        <Icon className="h-3.5 w-3.5" />
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-[13px] font-medium">
+          {file.title}
+          <span className="ml-2 rounded-sm bg-muted px-1.5 py-px align-middle text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+            {KIND_LABEL.get(file.kind) ?? file.kind}
+          </span>
+        </p>
+        {meta ? <p className="truncate text-[11px] text-muted-foreground">{meta}</p> : null}
+      </div>
+      <button
+        type="button"
+        onClick={onOpen}
+        className="shrink-0 text-[12px] font-medium text-primary hover:underline"
+      >
+        {attachmentActionLabel(file)}
+      </button>
+      {/* A legacy row IS the SOW or board field on the implementation record, so
+          it is read-only here, and it says so. */}
+      {attachmentRemovable(file) ? (
+        <RemoveButton id={file.id} onDone={onRemoved} />
+      ) : (
+        <span className="shrink-0 text-[10px] uppercase tracking-wider text-muted-foreground">
+          On record
+        </span>
+      )}
+    </li>
   );
 }
 
