@@ -15,7 +15,8 @@ import { canEditDeal, useProfile } from "@/lib/auth";
 import { dealQuery } from "@/lib/deal-query";
 import { useQuery } from "@tanstack/react-query";
 import { AddServicesChoice } from "@/components/add-services-choice";
-import { CurrentImplementationTab, ImplementationStatusFacts } from "@/components/stage-flow";
+import { CurrentImplementationTab } from "@/components/stage-flow";
+import { CustomerOverview } from "@/components/customer-overview";
 import { HealthNote } from "@/components/health-note";
 import { PlanPanel } from "@/components/plan-panel";
 import { HandoffPanel } from "@/components/handoff-panel";
@@ -520,19 +521,23 @@ function Customer360Page() {
         </div>
       ) : null}
       <CollapsibleSections scope={`customer:${tab}`}>
-        {/* Content and rail, side by side on a wide screen and stacked below
-            `lg`. `items-start` is what lets the rail stick: a stretched grid
-            item is already as tall as the row, so `position: sticky` inside it
-            has nothing to travel through. */}
+        {/* Details, Resources and the rest: content and rail, side by side on a
+            wide screen and stacked below `lg`. `items-start` is what lets the
+            rail stick: a stretched grid item is already as tall as the row, so
+            `position: sticky` inside it has nothing to travel through. The
+            Overview has no rail; it is one column of its own cards. */}
         <div
           className={cn(
-            "grid items-start gap-4 px-6 py-4 lg:grid-cols-[minmax(0,1fr)_320px]",
+            "px-6 py-4",
+            tab !== "overview" && "grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_320px]",
             tab === "implementation" && "hidden",
           )}
         >
           <div className="min-w-0 space-y-3">
-            <SectionControls />
-            {tab === "overview" ? <OverviewTab record={record} customerId={customerId} /> : null}
+            {tab !== "overview" ? <SectionControls /> : null}
+            {tab === "overview" ? (
+              <CustomerOverview record={record} customerId={customerId} />
+            ) : null}
             {tab === "resources" ? <ResourcesTab record={record} /> : null}
             {tab === "details" && impl.deal_id ? (
               <HeaderTrackers
@@ -544,7 +549,9 @@ function Customer360Page() {
             ) : null}
             {tab === "details" ? <DetailsTab record={record} customerId={customerId} /> : null}
           </div>
-          <AccountRail record={record} customerId={customerId} full={tab === "details"} />
+          {tab !== "overview" ? (
+            <AccountRail record={record} customerId={customerId} full={tab === "details"} />
+          ) : null}
         </div>
       </CollapsibleSections>
     </div>
@@ -753,126 +760,7 @@ function projectInput(
 }
 
 /* ---------------- 1. OVERVIEW ---------------- */
-
-/**
- * THE OVERVIEW: tell me about this account. Who they are, who to talk to,
- * what they bought, and a pointer to the implementation in progress — not a
- * second place to run it from. Where the project actually stands, its tasks,
- * its guidance, its meetings and what it's waiting on all live on Current
- * Implementation now; this tab never duplicates them.
- */
-function OverviewTab({ record, customerId }: { record: Customer360; customerId: string }) {
-  const { customer } = record;
-  const impl = record.implementation!;
-  const stageLabel = FLOW_STAGES.find((s) => s.stage === impl.deal_stage)?.label ?? impl.deal_stage;
-  return (
-    <div className="space-y-4">
-      <section className="rounded-md border border-border bg-card p-4" aria-label="Account summary">
-        <h2 className="text-[13px] font-semibold">Account summary</h2>
-        <dl className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <Field label="Industry" value={dash(customer.industry)} />
-          <Field label="ARR" value={customer.arr == null ? dash(null) : fmtMoney(customer.arr)} />
-          <Field label="Sales owner" value={dash(impl.sales_owner)} />
-          <Field
-            label="Current SOW"
-            value={
-              impl.sow_document_url ? (
-                <a
-                  href={impl.sow_document_url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="underline"
-                >
-                  {impl.sow_document_name ?? "View SOW"}
-                </a>
-              ) : (
-                dash(null)
-              )
-            }
-          />
-        </dl>
-      </section>
-
-      <section className="rounded-md border border-border bg-card p-4" aria-label="Key contacts">
-        <h2 className="text-[13px] font-semibold">Key contacts</h2>
-        {record.contacts.length === 0 ? (
-          <p className="mt-1.5 text-[12px] text-muted-foreground">No contacts on file.</p>
-        ) : (
-          <ul className="mt-2 space-y-1">
-            {record.contacts.map((c) => (
-              <li key={c.id} className="text-[12px]">
-                <span className="font-medium">{c.name}</span>{" "}
-                <span className="text-muted-foreground">
-                  {c.role}
-                  {c.email ? ` · ${c.email}` : ""}
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-
-      {impl.deal_id ? <ProductsAndServices dealId={impl.deal_id} /> : null}
-
-      <section
-        className="rounded-md border border-border bg-card p-4"
-        aria-label="Current implementation summary"
-      >
-        <h2 className="text-[13px] font-semibold">Current implementation</h2>
-        <dl className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <Field label="Name" value={impl.name} />
-          <Field label="Stage" value={stageLabel} />
-          <Field label="Owner" value={dash(impl.owner_name)} />
-          {impl.deal_id ? (
-            <ImplementationStatusFacts dealId={impl.deal_id} ownerName={impl.owner_name} />
-          ) : (
-            <Field
-              label="Target"
-              value={impl.target_launch_date ? fmtDate(impl.target_launch_date) : dash(null)}
-            />
-          )}
-        </dl>
-        <Link
-          to="/customers/$customerId"
-          params={{ customerId }}
-          search={{ tab: "implementation", impl: impl.id }}
-          className="mt-3 inline-block text-[12px] font-medium text-primary hover:underline"
-        >
-          View Current Implementation →
-        </Link>
-      </section>
-    </div>
-  );
-}
-
-/**
- * What was purchased, as an account-level list — not the Technical Solutions
- * workflow (ownership, acceptance, the ball) that `SolutionsCard` runs on the
- * Current Implementation tab.
- */
-function ProductsAndServices({ dealId }: { dealId: string }) {
-  const q = useQuery(dealQuery(dealId));
-  if (!q.data) return null;
-  const intake = readIntake(q.data.account.intake);
-  const services = normalizeServices(intake.timeline.services as ServiceSpec[], intake.timeline);
-  if (!services.length) return null;
-  return (
-    <section
-      className="rounded-md border border-border bg-card p-4"
-      aria-label="Products and services"
-    >
-      <h2 className="text-[13px] font-semibold">Products &amp; services</h2>
-      <ul className="mt-2 space-y-1">
-        {services.map((s) => (
-          <li key={s.id} className="text-[12px]">
-            <span className="font-medium">{s.name}</span>{" "}
-            <span className="text-muted-foreground">· {SOLUTION_LABEL[s.kind]}</span>
-          </li>
-        ))}
-      </ul>
-    </section>
-  );
-}
+// The Overview lives in src/components/customer-overview.tsx.
 
 /**
  * Resources: what the customer and the team reach for — the help articles
