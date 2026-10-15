@@ -70,8 +70,8 @@ export function AccountRowList({
             ) : null}
             <span className="font-mono text-[11px] text-muted-foreground">
               {row.impl.arr != null ? `${fmtMoney(row.impl.arr)} ARR` : "ARR not recorded"}
-              {row.impl.target_launch_date
-                ? ` · launch ${fmtDate(row.impl.target_launch_date)}`
+              {(row.impl.plan_end ?? row.impl.target_launch_date)
+                ? ` · plan end ${fmtDate(row.impl.plan_end ?? row.impl.target_launch_date)}`
                 : ""}
             </span>
             <Link

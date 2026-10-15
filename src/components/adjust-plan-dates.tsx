@@ -44,9 +44,11 @@ const NOT_ADJUSTABLE_HERE = new Set(["close"]);
  * The save and the reason cannot come apart: the date and its history are
  * one database write, so a failed save changes neither.
  *
- * A second, separate option — "Change target graduation date" — sets
- * `implementations.target_date` directly, the field `ImplementationTargetSection`
- * shows as "Target graduation" and the one the Customers list reads. This is
+ * A second, separate option — "Change plan end date" — sets
+ * `implementations.target_date` (and `target_launch_date` with it) directly:
+ * the internal "Plan end" the Target graduation card shows under its
+ * headline and the one the Customers list reads. It is never the graduation
+ * date agreed with the customer (`stage_targets.complete`). This is
  * a different date from any plan milestone: `syncTargetLaunch()` normally
  * keeps it in step with the plan's own computed end, which is exactly the
  * "silently overwrite" this panel must not do to a date someone just set on
@@ -71,7 +73,7 @@ export function AdjustPlanDatesPanel({
   customerId: string;
   intake: IntakeAnswers;
   closeDate: string;
-  /** `record.implementation.dates.target` — the current target graduation date. */
+  /** `record.implementation.dates.target` — the current plan end date. */
   targetDate: string | null;
   editable: boolean;
 }) {
@@ -144,10 +146,10 @@ export function AdjustPlanDatesPanel({
       setMilestoneKey("");
       setNewDate("");
       setReason("");
-      // The date and its history are already saved. A failed target-launch
+      // The date and its history are already saved. A failed plan-end
       // sync is reported beside them, so the panel stays open to show it.
       if (saved?.syncError) {
-        setNotice(`Date saved. The target launch could not be updated: ${saved.syncError}`);
+        setNotice(`Date saved. The plan end could not be updated: ${saved.syncError}`);
       } else {
         setOpen(false);
       }
@@ -321,18 +323,19 @@ export function AdjustPlanDatesPanel({
               <ChevronRight
                 className={cn("h-3.5 w-3.5 text-muted-foreground", targetOpen && "rotate-90")}
               />
-              Change target graduation date
+              Change plan end date
             </button>
             {targetOpen ? (
               <div className="mt-2 space-y-2.5">
                 <p className="text-[11px] text-muted-foreground">
-                  Sets the target directly — a different change from moving a plan milestone above.
-                  Once given a reason here, this date holds until changed again; it will not be
-                  quietly replaced the next time a milestone above moves.
+                  Sets the internal plan end directly — a different change from moving a plan
+                  milestone above, and never the graduation date agreed with the customer. Once
+                  given a reason here, this date holds until changed again; it will not be quietly
+                  replaced the next time a milestone above moves.
                 </p>
                 <div className="flex flex-wrap items-end gap-2">
                   <label className="text-[11px] text-muted-foreground">
-                    New target date
+                    New plan end date
                     <input
                       type="date"
                       className="mt-0.5 block h-8 rounded-sm border border-border bg-background px-2 text-[12px] text-foreground"
@@ -391,7 +394,7 @@ export function AdjustPlanDatesPanel({
                     disabled={!targetValid || targetMutation.isPending}
                     onClick={() => targetMutation.mutate()}
                   >
-                    {targetMutation.isPending ? "Saving…" : "Save the target date"}
+                    {targetMutation.isPending ? "Saving…" : "Save the plan end date"}
                   </button>
                   {targetError ? (
                     <p className="text-[12px] text-destructive">{targetError}</p>

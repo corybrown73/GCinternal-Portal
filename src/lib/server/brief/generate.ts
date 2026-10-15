@@ -39,7 +39,6 @@ type HandoffContext = {
   successCriteria: Array<{ description: string; target: string | null }>;
   requirements: Array<{ title: string; inScope: boolean }>;
   solutions: string[];
-  targetLaunchDate: string | null;
 };
 
 /**
@@ -77,7 +76,6 @@ async function loadHandoffContext(
     successCriteria: [],
     requirements: [],
     solutions: [],
-    targetLaunchDate: null,
   };
 
   const customerId = (account as any).customer_id as string | null | undefined;
@@ -153,7 +151,6 @@ async function loadHandoffContext(
 
   return {
     team,
-    targetLaunchDate: (impl.target_launch_date as string | null) ?? null,
     stages: rows.map((st) => ({
       name: String(st["name"]),
       // The template names the stage; the lifecycle definition says what
@@ -316,6 +313,16 @@ export async function buildAndStoreDeck(
   // Who takes over, and the plan they run. Null when the deal has not been
   // handed off yet — the deck says so on the slide.
   const handoff = await loadHandoffContext(admin, account, ownerNames);
+  // The plan's Functional by date, read the way the welcome page reads it,
+  // so the deck's go-live card and the page say the same day.
+  const { loadHandoffPlan } = await import("../handoff-context");
+  const { functionalByDate } = await import("@/lib/date-labels");
+  const plan = await loadHandoffPlan(account as unknown as Record<string, any>, null, null)
+    .then((r) => r.plan)
+    .catch((e) => {
+      console.error("[deck] could not read the plan", e);
+      return null;
+    });
 
   const { buildKickoffData, kickoffFactsFromIntake } = await import("@/lib/kickoff-fields");
   const { readIntake } = await import("@/lib/intake-answers");
@@ -336,7 +343,7 @@ export async function buildAndStoreDeck(
     successCriteria: handoff.successCriteria,
     requirements: handoff.requirements,
     solutions: handoff.solutions,
-    targetLaunchDate: handoff.targetLaunchDate,
+    functionalBy: plan ? functionalByDate(plan) : null,
     // The deal's champion, only when their recorded role says they are the
     // technical contact. Putting the ops director on the IT slide because
     // they are the only contact we have is how a wrong name gets read out.

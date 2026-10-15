@@ -125,8 +125,8 @@ export const STATUS_LABEL: Record<CalendarStatus, string> = {
   overdue: "Overdue",
   completion_not_recorded: "Completion not recorded",
   cancelled: "Cancelled",
-  target_passed: "Target passed, go-live not recorded",
-  target_date: "Planned target date",
+  target_passed: "Plan end passed, go-live not recorded",
+  target_date: "Plan end date",
   went_live: "Went live",
 };
 
@@ -134,7 +134,7 @@ export const KIND_LABEL: Record<CalendarKind, string> = {
   meeting: "Meeting",
   commitment: "Commitment",
   milestone: "Milestone",
-  go_live: "Go-live",
+  go_live: "Plan end / go-live",
 };
 
 /** Where an event's date comes from, so the details can say so. */
@@ -455,7 +455,7 @@ export function buildCalendarEvents(source: CalendarSource): CalendarEvent[] {
     if (target && ISO_DAY.test(target)) {
       let status: CalendarStatus;
       let statusDetail: string | null;
-      // A target stays the planned date even once the real go-live is recorded:
+      // The plan end stays the planned date even once the real go-live is recorded:
       // it is history, not the customer's go-live. The real day is its own event.
       if (actual) {
         status = "target_date";
@@ -477,7 +477,7 @@ export function buildCalendarEvents(source: CalendarSource): CalendarEvent[] {
         time: null,
         timeZone: null,
         kind: "go_live",
-        title: "Target go-live",
+        title: "Plan end",
         status,
         statusDetail,
         owner: null,
@@ -500,8 +500,8 @@ export function buildCalendarEvents(source: CalendarSource): CalendarEvent[] {
         statusDetail: !target
           ? null
           : actual === target
-            ? "On the planned target date"
-            : `Planned target was ${dayLabel(target)}`,
+            ? "On the plan end date"
+            : `Plan end was ${dayLabel(target)}`,
         owner: null,
         stageLabel: null,
         source: "record",
@@ -625,7 +625,7 @@ export function detailRows(e: CalendarEvent): Array<{ label: string; value: stri
         e.source === "plan"
           ? "Planned on the implementation plan"
           : e.source === "target"
-            ? "Recorded target date"
+            ? "Recorded plan end date"
             : "Recorded",
     },
     { label: "Responsible", value: e.owner ?? "Not recorded" },

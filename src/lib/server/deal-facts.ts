@@ -80,7 +80,7 @@ export async function dealFactsFor(
     db()
       .from("implementations")
       .select(
-        "id,deal_id,owner_id,superseded_by_implementation_id,created_at,journey_type,partner_key",
+        "id,deal_id,owner_id,superseded_by_implementation_id,created_at,journey_type,partner_key,target_date,target_launch_date",
       )
       .in("deal_id", ids)
       .order("created_at", { ascending: false }),
@@ -117,6 +117,9 @@ export async function dealFactsFor(
   // Partner: the intake's path, or the deal's live (newest, not superseded)
   // project — the board's and the stall sweep's rule.
   const partnerByDeal = new Map<string, boolean>();
+  // The live project's plan end (target_date ?? target_launch_date), for
+  // "plan end is after the agreed graduation date".
+  const planEndByDeal = new Map<string, string | null>();
   const implRows = (impls ?? []) as Array<{
     id: string;
     deal_id: string;
@@ -124,9 +127,13 @@ export async function dealFactsFor(
     superseded_by_implementation_id: string | null;
     journey_type: string | null;
     partner_key: string | null;
+    target_date?: string | null;
+    target_launch_date?: string | null;
   }>;
-  for (const [dealId, i] of latestImplementations(implRows))
+  for (const [dealId, i] of latestImplementations(implRows)) {
     partnerByDeal.set(dealId, isPartnerJourney(i));
+    planEndByDeal.set(dealId, i.target_date ?? i.target_launch_date ?? null);
+  }
   const ownerIds = [...new Set([...ownerIdByDeal.values()].filter(Boolean))] as string[];
   const { data: members } = ownerIds.length
     ? await db().from("team_members").select("id,name").in("id", ownerIds)
@@ -185,6 +192,7 @@ export async function dealFactsFor(
       name: d.name,
       stage: d.stage,
       business_days_in_stage: Math.max(0, businessDaysBetween(entered, today)),
+      stage_entered_on: d.stage_entered_at ? entered : null,
       has_notes: noteTexts.length > 0,
       has_sow: hasSow,
       owner_name: owner,
@@ -230,6 +238,8 @@ export async function dealFactsFor(
       close_date: timeline.closeDate,
       live_date: timeline.liveDate,
       live_done_on: timeline.liveDoneOn,
+      plan_end: planEndByDeal.get(d.id) ?? null,
+      agreed_graduation: intake.timeline.stage_targets.complete.current_date ?? null,
       // Transcript proposals are an implementation's, not the deal's: the
       // caller that knows which implementation it is rendering overlays the
       // count (`withPendingProposals`), so a deal with two implementations

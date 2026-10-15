@@ -51,7 +51,7 @@ export const Route = createFileRoute("/customers/")({
       {
         name: "description",
         content:
-          "Every customer implementation with its stage, health, owner, tier, target launch date and time in the current stage.",
+          "Every customer implementation with its stage, health, owner, tier, plan end date and time in the current stage.",
       },
       { property: "og:title", content: "Customers — GoCanvas Handoff Hub" },
       {
@@ -148,7 +148,10 @@ function CustomersPage() {
           return factor * (a.tier ?? "").localeCompare(b.tier ?? "");
         case "launch":
           return (
-            factor * (a.target_launch_date ?? "9999").localeCompare(b.target_launch_date ?? "9999")
+            factor *
+            (a.plan_end ?? a.target_launch_date ?? "9999").localeCompare(
+              b.plan_end ?? b.target_launch_date ?? "9999",
+            )
           );
         default:
           return factor * (daysForSort(a) - daysForSort(b));
@@ -265,7 +268,7 @@ function CustomersPage() {
                 <Th label="Health" sortKey="status" />
                 <Th label="Owner" sortKey="owner" />
                 <Th label="Tier" sortKey="tier" />
-                <Th label="Target launch" sortKey="launch" />
+                <Th label="Plan end" sortKey="launch" />
                 <Th label="Days in stage" sortKey="days" />
               </tr>
             </thead>
@@ -310,13 +313,13 @@ function CustomersPage() {
                   </td>
                   <td className="px-3 py-1.5 text-[12px]">{r.owner_name ?? "Unassigned"}</td>
                   <td className="px-3 py-1.5 text-[12px]">{r.tier ?? "—"}</td>
-                  {/* The launch date carries its own pace: a date alone does
+                  {/* The plan end carries its own pace: a date alone does
                       not say whether it has already passed. */}
                   <td className="px-3 py-1.5 font-mono text-[12px]">
                     <PaceChip
                       quiet
-                      pace={datePace(r.target_launch_date, r.actual_launch_date)}
-                      label={fmtDate(r.target_launch_date)}
+                      pace={datePace(r.plan_end ?? r.target_launch_date, r.actual_launch_date)}
+                      label={fmtDate(r.plan_end ?? r.target_launch_date)}
                     />
                   </td>
                   {/* Was a bare `> 14` with no explanation. Same threshold, but

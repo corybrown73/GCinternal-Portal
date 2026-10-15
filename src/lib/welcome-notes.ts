@@ -139,7 +139,7 @@ export function speakerNotes(view: WelcomeView): {
             ]
           : []),
       ],
-      why: "Book all three calls before you leave this screen. A date that is on the calendar is a date; a date that is on a slide is a hope. If one does not work, move it now in the portal — the page updates in front of them.",
+      why: "Agree the dates of the next two sessions with them before you leave this screen, and send the invites. A date that is on the calendar is a date; a date that is on a slide is a hope. If one does not work, move it now in the portal — the page updates in front of them.",
       ifTheyAsk: [
         existing
           ? {
@@ -261,7 +261,7 @@ export function speakerNotes(view: WelcomeView): {
     sections: numbered,
     close: [
       `Send the customer their link right after the call. It has the dates, their homework as checkboxes, and it updates when a date moves.`,
-      `Book all three calls before you hang up. Confirm the field tester's name. Then start the clock.`,
+      `Agree the dates of the next two sessions before you hang up, and send the invites. Confirm the field tester's name. Then start the clock.`,
     ],
   };
 }

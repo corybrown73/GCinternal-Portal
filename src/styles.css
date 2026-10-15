@@ -5106,6 +5106,9 @@ body.gc-presenting {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
 }
+.gc-welcome .gc-dash-facts.is-three {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
 .gc-welcome .gc-dash-fact {
   min-width: 0;
   padding: 10px 14px;
@@ -5577,6 +5580,7 @@ body.gc-presenting {
     row-gap: 12px;
   }
   .gc-welcome .gc-dash-facts,
+  .gc-welcome .gc-dash-facts.is-three,
   .gc-welcome .gc-dash-stages {
     grid-template-columns: minmax(0, 1fr);
   }

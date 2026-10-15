@@ -201,7 +201,9 @@ function implMeta(impl: ImplementationRow) {
   return [
     impl.arr != null ? `${fmtMoney(impl.arr)} ARR` : null,
     impl.tier ?? impl.segment ?? null,
-    impl.target_launch_date ? `launch ${fmtDate(impl.target_launch_date)}` : null,
+    (impl.plan_end ?? impl.target_launch_date)
+      ? `plan end ${fmtDate(impl.plan_end ?? impl.target_launch_date)}`
+      : null,
   ]
     .filter(Boolean)
     .join(" · ");
@@ -385,7 +387,7 @@ function LeadershipPage() {
                       ? ` + ${o.pending_deals.length} deal${o.pending_deals.length === 1 ? "" : "s"}`
                       : ""}{" "}
                     · {o.act_now} act now · {o.blocked} blocked · {o.at_risk} at risk ·{" "}
-                    {o.launches_30d} launch ≤30d
+                    {o.launches_30d} plan end ≤30d
                   </span>
                   <span className="ml-auto font-mono text-[11px] text-muted-foreground">
                     {o.arr != null ? `${fmtMoney(o.arr)} ARR` : "ARR not recorded"}

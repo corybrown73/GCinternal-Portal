@@ -867,7 +867,7 @@ export const explainTargetChange = createServerFn({ method: "POST" })
     return explain(context.profile.id, data.changeId, data.reasonCode, data.note);
   });
 
-/** A TIS setting the target graduation date directly, with a mandatory reason. */
+/** A TIS setting the plan end date directly, with a mandatory reason. */
 export const setTargetGraduationDate = createServerFn({ method: "POST" })
   .middleware([requireDealEditor])
   .inputValidator((data: unknown) =>

@@ -120,7 +120,14 @@ npm run dev            # http://localhost:3000
 2. Commit and push to your branch. CI (lint, typecheck, tests, build, migrations up → down → up) runs on every push.
 3. Open a pull request into `main` on GitHub. Merge it once CI is green. That merge is the production deploy — nothing else is needed.
 
-Do not push straight to `main`, and do not expect a preview URL to be the live site. If a migration is part of the change, apply it to the Supabase project before the merge, with its `down` and probe files beside it (see `supabase/`).
+Do not push straight to `main`, and do not expect a preview URL to be the live site.
+
+**Production database migrations.** A pull request that needs a production database migration does not merge until someone with production access has applied that migration to the production database and verified it there. Code that depends on the migration is merged (and so deployed) only after that. The pull request says so itself:
+
+- **Dependency:** which migration (`supabase/migrations/NNNN_…sql`) and which code needs it.
+- **Deployment order:** 1. apply the migration to production; 2. verify it in production (the probe file, or the check the PR names); 3. merge the code.
+
+Keep the migration's `down` and probe files beside it (see `supabase/`).
 
 ### The pull request opens itself
 
@@ -129,6 +136,6 @@ Steps 3 and the merge are automated for every branch except `main` and `claude/*
 - a pull request into `main` is opened if there is not one already;
 - if CI is green and the change touches nothing guarded, it is squash-merged and the branch deleted — that is the deploy;
 - if CI is red, the PR gets a `ci-failed` label and a comment with the run; push a fix and it re-evaluates;
-- if the change touches a **guarded** path, the PR gets `needs-review` and waits for a person: `supabase/` (migrations have to run on production first), `package.json` / `package-lock.json`, `.github/`, and the stage model and gates (`src/lib/presale-stages.ts`, `stage-flow.ts`, `pipeline-stages.ts`, `won-gate.ts`, `sales-handoff.ts`, `src/lib/server/`).
+- if the change touches a **guarded** path, the PR gets `needs-review` and waits for a person: `supabase/` (a migration is applied and verified in production by someone with production access before the merge), `package.json` / `package-lock.json`, `.github/`, and the stage model and gates (`src/lib/presale-stages.ts`, `stage-flow.ts`, `pipeline-stages.ts`, `won-gate.ts`, `sales-handoff.ts`, `src/lib/server/`).
 
 So for most changes the whole flow is: work, push, done.

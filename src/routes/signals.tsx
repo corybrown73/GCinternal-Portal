@@ -265,7 +265,7 @@ function SignalsPage() {
               </li>
             ))}
             {slipped.length === 0 ? (
-              <NoRows label="No implementation is past its recorded target launch date." />
+              <NoRows label="No implementation is past its recorded plan end date." />
             ) : null}
           </ul>
         </Panel>

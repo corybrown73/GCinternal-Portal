@@ -27,7 +27,9 @@ export async function renderPlanPdf(plan: SharedPlan, planUrl: string): Promise<
     title: plan.customer_name,
     subtitle: plan.implementation_name,
     meta: `Stage: ${plan.stage_label}${
-      plan.target_launch_date ? `   ·   Target launch: ${plan.target_launch_date}` : ""
+      plan.target_launch_date
+        ? `   ·   Everything in your plan live by: ${plan.target_launch_date}`
+        : ""
     }`,
     dateFor: plan.generated_at,
   });

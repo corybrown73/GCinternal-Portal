@@ -61,6 +61,11 @@ export type QueueRow = {
   rank: number;
   /** The deal's own facts (plan calls, close and live dates), when the row has a deal. */
   facts: DealFacts | null;
+  /**
+   * The stage limit the row's reason is measured against (ISO day), when it
+   * is one (needsAction's `threshold`). Home shows it as "Stage limit", not "Due".
+   */
+  threshold?: string | null;
 };
 
 const DAY = 86_400_000;
@@ -137,6 +142,7 @@ export function triageRow(impl: ImplementationRow, bundle: TriageBundle | undefi
         bundle,
         ...(top.next ? { next: top.next } : {}),
         ...(top.fallbackNext ? { fallback: top.fallbackNext } : {}),
+        ...(top.threshold ? { threshold: top.threshold } : {}),
       })
     : null;
   if (fromSignals && fromDeal) return fromSignals.rank <= fromDeal.rank ? fromSignals : fromDeal;
@@ -319,10 +325,10 @@ function signalRow(impl: ImplementationRow, bundle: TriageBundle | undefined): Q
   }
   if (launchSlipped) {
     return row(impl, "act_now", 2, "journey", {
-      reason: `Target launch passed ${fmtDate(impl.target_launch_date)} — not launched (${Math.abs(
+      reason: `Plan end passed ${fmtDate(impl.target_launch_date)} — not launched (${Math.abs(
         daysUntil(impl.target_launch_date) ?? 0,
       )}d over)`,
-      impact: impactLine(impl, "launch date slipped, no actual launch recorded"),
+      impact: impactLine(impl, "plan end passed, no launch recorded"),
       record,
       bundle,
     });
@@ -483,7 +489,9 @@ function impactLine(impl: ImplementationRow, extra: string | null) {
   const parts = [
     impl.arr != null ? `${fmtMoney(impl.arr)} ARR` : null,
     impl.tier ?? impl.segment ?? null,
-    impl.target_launch_date ? `launch ${fmtDate(impl.target_launch_date)}` : null,
+    (impl.plan_end ?? impl.target_launch_date)
+      ? `plan end ${fmtDate(impl.plan_end ?? impl.target_launch_date)}`
+      : null,
     extra,
   ].filter(Boolean);
   return parts.length ? parts.join(" · ") : "No commercial context recorded.";
@@ -501,6 +509,8 @@ function row(
     next?: string;
     /** Said only when neither `next` nor the record names a next step. */
     fallback?: string;
+    /** The stage limit the reason is measured against, when it is one. */
+    threshold?: string;
     bundle?: TriageBundle | undefined;
   },
 ): QueueRow {
@@ -515,6 +525,7 @@ function row(
     impact: parts.impact,
     next_action: fromRecord === NEXT_ACTION_UNKNOWN && parts.fallback ? parts.fallback : fromRecord,
     facts: bundle?.deal ?? null,
+    threshold: parts.threshold ?? null,
     // Same inputs the record was built from, so the dependency on a row can
     // never disagree with the dependency Leadership shows for that row.
     dependency: waitingOn({

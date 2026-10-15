@@ -21,6 +21,7 @@ const LEGACY_STAGE_NAMES: ReadonlySet<string> = new Set([
   "Handover to Customer Success",
   "Complete",
 ]);
+import { planEndDate } from "./date-labels";
 import { datePace, dwellPace, worstPace, type Pace } from "./pace";
 
 /**
@@ -97,7 +98,7 @@ export type ProjectTimeline = {
   currentStageName: string;
   /** Time in the current stage against THAT stage's own target duration. */
   dwell: Pace;
-  /** The target launch date, against today or the actual launch. */
+  /** The plan end date (target_date ?? target_launch_date), against today or the actual launch. */
   launch: Pace;
   /** The worse of the two — what the lane is coloured by. */
   overall: Pace;
@@ -121,6 +122,8 @@ export type TimelineInput = {
   stage_entered_at?: string | null;
   created_at?: string | null;
   contract_start_date?: string | null;
+  /** The plan end is target_date ?? target_launch_date (date-labels.ts planEndDate). */
+  target_date?: string | null;
   target_launch_date?: string | null;
   actual_launch_date?: string | null;
   parent_implementation_id?: string | null;
@@ -163,7 +166,8 @@ export function buildProjectTimeline(
           : r.name,
     }));
   const isAddOn = Boolean(input.parent_implementation_id);
-  const launch = datePace(input.target_launch_date, input.actual_launch_date, now);
+  const planEnd = planEndDate(input);
+  const launch = datePace(planEnd, input.actual_launch_date, now);
 
   if (!rows.length) {
     // No journey has been applied to this project. Draw the house default and
@@ -195,7 +199,7 @@ export function buildProjectTimeline(
       launch,
       overall: worstPace([dwell, launch]),
       startedAt: input.contract_start_date ?? input.created_at ?? null,
-      targetLaunchDate: input.target_launch_date ?? null,
+      targetLaunchDate: planEnd,
       actualLaunchDate: input.actual_launch_date ?? null,
       // A default rail can never evidence completion.
       isComplete: false,
@@ -257,7 +261,7 @@ export function buildProjectTimeline(
       rows.find((r) => r.entered_at)?.entered_at ??
       input.created_at ??
       null,
-    targetLaunchDate: input.target_launch_date ?? null,
+    targetLaunchDate: planEnd,
     actualLaunchDate: input.actual_launch_date ?? null,
     isComplete,
     isAddOn,
@@ -280,7 +284,7 @@ export function railSummary(t: ProjectTimeline): string {
       ? `${t.total}-stage plan for this project.`
       : `No plan has been applied to this project, so the ${t.total} default stages are shown.`;
   const done = t.isComplete ? " Every stage is finished." : "";
-  return `${t.name}. ${plan} ${where}${done} ${t.dwell.reason} Target launch: ${t.launch.reason}`;
+  return `${t.name}. ${plan} ${where}${done} ${t.dwell.reason} Plan end: ${t.launch.reason}`;
 }
 
 /** A short, colour-free statement of where the project stands. */

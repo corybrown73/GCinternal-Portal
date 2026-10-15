@@ -1,3 +1,4 @@
+import { FUNCTIONAL_BY } from "./date-labels";
 import { firstFormName, type IntakeAnswers } from "./intake-answers";
 import { answerSource, answerValue } from "./sales-handoff";
 import type { BriefJson } from "./server/schemas";
@@ -119,7 +120,11 @@ export type KickoffInput = {
   requirements: KickoffRequirement[];
   /** Solution titles — the integrations slide. */
   solutions: string[];
-  targetLaunchDate: string | null;
+  /**
+   * The plan's "Functional by" date (timeline.liveDate, the ticked day once
+   * it is): the same date the welcome page shows. Never the stored plan end.
+   */
+  functionalBy: string | null;
   itContact: KickoffPerson | null;
   /** The merged intake's own facts; absent on a deck drawn before the prefill. */
   intake?: KickoffIntakeFacts | null;
@@ -471,12 +476,14 @@ export function buildKickoffData(input: KickoffInput): KickoffDeckData {
     // target is "by end of quarter two" or "against today's baseline", and
     // guessing puts a claim on a customer-facing slide.
   });
-  // The fourth card is go-live in the template, and repeated on the close.
-  const launch = shortDate(input.targetLaunchDate);
-  set("kpi_4_metric", "Go-live");
-  set("kpi_4_value", launch);
-  set("kpi_4_label", launch ? "target date, to confirm today" : null);
-  set("kpi_4_value_repeat", launch);
+  // The fourth card is the template's go-live, repeated on the close. It is
+  // the plan's "Functional by" date, the one the welcome page shows, so the
+  // deck and the page never name two dates for one thing.
+  const functional = shortDate(input.functionalBy);
+  set("kpi_4_metric", FUNCTIONAL_BY);
+  set("kpi_4_value", functional);
+  set("kpi_4_label", functional ? "planned date, to confirm today" : null);
+  set("kpi_4_value_repeat", functional);
 
   /* ------------------------------------------------------------------- 08 */
 

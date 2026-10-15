@@ -40,7 +40,7 @@ export function launchedOn(
   );
 }
 
-/** Target launch date has passed and nothing records a launch. */
+/** Plan end date (target_launch_date) has passed and nothing records a launch. */
 export function launchOverdue(
   impl: LaunchRecord & { target_launch_date?: string | null },
   plan?: { live_done_on?: string | null } | null,

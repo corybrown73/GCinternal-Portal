@@ -86,7 +86,7 @@ export function slipAttribution(
   now: Date = new Date(),
 ): SlipAttribution {
   if (!impl.target_launch_date) {
-    return { slipped: false, reason: "No target launch date is recorded, so there is no slip." };
+    return { slipped: false, reason: "No plan end date is recorded, so there is no slip." };
   }
   // The launch as recorded anywhere: typed, the Go-Live tick or the plan's live tick.
   const launched = launchedOn(impl);
@@ -99,14 +99,14 @@ export function slipAttribution(
     return {
       slipped: false,
       reason: launched
-        ? `Launched ${fmtDate(launched)}, on or before the ${fmtDate(impl.target_launch_date)} target.`
-        : `Target launch ${fmtDate(impl.target_launch_date)} has not passed.`,
+        ? `Launched ${fmtDate(launched)}, on or before the ${fmtDate(impl.target_launch_date)} plan end.`
+        : `Plan end ${fmtDate(impl.target_launch_date)} has not passed.`,
     };
   }
 
   const basis = launched
-    ? `Actual launch ${fmtDate(launched)} against the target of ${fmtDate(impl.target_launch_date)}. Only the current target is stored — a date that was moved leaves no record.`
-    : `Today against the target of ${fmtDate(impl.target_launch_date)}, with no actual launch recorded. Only the current target is stored — a date that was moved leaves no record.`;
+    ? `Actual launch ${fmtDate(launched)} against the plan end of ${fmtDate(impl.target_launch_date)}. Only the current plan end is stored — a date that was moved leaves no record.`
+    : `Today against the plan end of ${fmtDate(impl.target_launch_date)}, with no launch recorded. Only the current plan end is stored — a date that was moved leaves no record.`;
 
   const mine = completed.filter((s) => s.implementation_id === impl.id);
   const comparisons: DwellComparison[] = mine.map((s) =>

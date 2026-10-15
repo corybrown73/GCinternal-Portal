@@ -479,7 +479,10 @@ function Rows({ rows }: { rows: NeedsMeRow[] }) {
             <p className="text-[13px]">{r.nextStep ?? "—"}</p>
           </div>
           <div className="md:border-l md:border-border md:pl-4">
-            <p className="text-[11px] text-muted-foreground">Due</p>
+            {/* A stage limit is a threshold, not a deadline: never labelled "Due". */}
+            <p className="text-[11px] text-muted-foreground">
+              {!r.due && r.stageLimit ? "Stage limit" : "Due"}
+            </p>
             {r.due ? (
               <span
                 className={cn(
@@ -488,6 +491,16 @@ function Rows({ rows }: { rows: NeedsMeRow[] }) {
                 )}
               >
                 {r.due.label}
+              </span>
+            ) : r.stageLimit ? (
+              <span
+                className={cn(
+                  "inline-block rounded-sm px-1.5 py-px text-[12px] font-medium",
+                  TONE_CHIP[r.stageLimit.tone],
+                )}
+                title={`Stage limit ${r.stageLimit.label}: the day this crosses the stage's agreed limit. Not a customer deadline.`}
+              >
+                {r.stageLimit.label}
               </span>
             ) : (
               <span className="text-[12px] text-muted-foreground">—</span>

@@ -11,11 +11,11 @@ describe("formatTaskOffset", () => {
   it("names the basis in plain English", () => {
     expect(formatTaskOffset("stage_entry", 3)).toBe("stage entry +3d");
     expect(formatTaskOffset("project_start", 5)).toBe("project start +5d");
-    expect(formatTaskOffset("target_launch", 2)).toBe("target launch +2d");
+    expect(formatTaskOffset("target_launch", 2)).toBe("plan end +2d");
   });
 
   it("keeps a negative offset negative", () => {
-    expect(formatTaskOffset("target_launch", -14)).toBe("target launch -14d");
+    expect(formatTaskOffset("target_launch", -14)).toBe("plan end -14d");
   });
 
   it("drops the offset entirely when it is zero", () => {

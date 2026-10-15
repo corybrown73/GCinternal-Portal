@@ -179,7 +179,7 @@ function LaneMeta({ timeline }: { timeline: ProjectTimeline }) {
         Started <span className="font-mono">{fmtDate(timeline.startedAt)}</span>
       </span>
       <span className="inline-flex items-center gap-1.5">
-        {timeline.actualLaunchDate ? "Launched" : "Target launch"}
+        {timeline.actualLaunchDate ? "Launched" : "Plan end"}
         <PaceChip
           pace={timeline.launch}
           label={fmtDate(timeline.actualLaunchDate ?? timeline.targetLaunchDate)}

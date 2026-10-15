@@ -153,8 +153,20 @@ describe("Slide 1 — the cover's date is the agreed Graduate target, never the 
   it("the cover never prints the plan's Functional date as a target", () => {
     const view = viewWith({ journey: journeyWith("2026-12-04", "2026-10-23") as never });
     const markup = slide(view, 0);
-    expect(markup).toContain(`Graduation target ${shortDay("2026-12-04")}`);
-    expect(markup).not.toContain(shortDay("2026-10-26"));
+    expect(markup).toContain(`Target graduation ${shortDay("2026-12-04")}`);
+    // The plan's live date is named for what it is (QA follow-ups answer 5):
+    // "Functional by", the same day the kickoff .pptx and the customer's page show.
+    expect(markup).toContain(`Functional by ${shortDay("2026-10-26")}`);
+    expect(markup).not.toContain(`target ${shortDay("2026-10-26")}`);
+    expect(markup).not.toContain(`Target graduation ${shortDay("2026-10-26")}`);
+  });
+
+  it("a partner's cover has no Functional by date: its dates are the partner's", () => {
+    const view = viewWith({
+      path: "partner_implementation",
+      journey: journeyWith("2026-12-04", "2026-10-23") as never,
+    } as never);
+    expect(slide(view, 0)).not.toContain("Functional by");
   });
 
   it("shows the recorded business outcome under 'Your goal'", () => {

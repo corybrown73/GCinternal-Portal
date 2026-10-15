@@ -206,7 +206,10 @@ describe("Today", () => {
     const win = t.needsMe[0]!;
     expect(win.chip.label).toBe("Unclaimed");
     expect(win.nextStep).toBe("Assign an owner");
-    expect(win.due?.label).toBe("Today");
+    // Assigning an owner is a stage limit (a day after the stage entry), not a
+    // deadline: it is never labelled "Due" (QA follow-ups answer 4).
+    expect(win.due).toBeNull();
+    expect(win.stageLimit).toEqual({ date: "2026-09-24", label: "Sep 24", tone: "warning" });
   });
 
   describe("the Due column only shows a date that is the displayed next step's own deadline", () => {
@@ -260,7 +263,7 @@ describe("Today", () => {
       // the launch-review fallback — the reason mentions the launch, the
       // displayed next step does not.
       const r = row({
-        reason: "Target launch passed Oct 9 — not launched (3d over).",
+        reason: "Plan end passed Oct 9 — not launched (3d over).",
         next_action: "Close out the overdue commitment — Send the W9 (due Sep 20, Teya Rampaul)",
         impl: impl({ target_launch_date: "2026-10-09" }),
       });

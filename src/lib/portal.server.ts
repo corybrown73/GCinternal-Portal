@@ -1,6 +1,7 @@
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { customerFacingNameFor } from "./server/customer-facing-name";
 import { LIFECYCLE_STAGES } from "./lifecycle";
+import { planEndDate } from "./date-labels";
 import { normalizeStage } from "./hub-format";
 import {
   addComment,
@@ -110,6 +111,7 @@ export interface PortalImplementation {
   current_stage: string;
   stage_entered_at: string;
   status: string;
+  /** The plan end (target_date ?? target_launch_date), read as "Everything in your plan live by". */
   target_launch_date: string | null;
   actual_launch_date: string | null;
   /** 0..100 — completed milestones / total, else stage index / total stages. */
@@ -219,7 +221,7 @@ export async function loadPortalHome(userId: string): Promise<PortalHome> {
       current_stage: i.current_stage,
       stage_entered_at: i.stage_entered_at,
       status: i.status,
-      target_launch_date: i.target_launch_date,
+      target_launch_date: planEndDate(i),
       actual_launch_date: i.actual_launch_date,
       progress_pct: pct,
       milestones: own

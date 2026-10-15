@@ -741,7 +741,7 @@ function ProposalRow({
           {needsDate ? (
             <span className="mt-1.5 flex flex-wrap items-center gap-1.5">
               <span className="text-[11px] text-muted-foreground">
-                {planOwnsTarget ? "Moves the plan's live date to" : "New target date"}
+                {planOwnsTarget ? "Moves the plan's Functional by date to" : "New plan end date"}
               </span>
               <input
                 type="date"

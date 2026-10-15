@@ -339,7 +339,7 @@ function ReportsPage() {
               <div className="grid gap-3 sm:grid-cols-3">
                 <VarianceTile label="Go-Live vs tier expected" v={ttv.data.variance.vsTier} />
                 <VarianceTile label="Go-Live vs baseline" v={ttv.data.variance.vsBaseline} />
-                <VarianceTile label="Go-Live vs target" v={ttv.data.variance.vsTarget} />
+                <VarianceTile label="Go-Live vs plan end" v={ttv.data.variance.vsTarget} />
               </div>
             ) : null}
             {ttv.data ? (

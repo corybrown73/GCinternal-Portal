@@ -395,7 +395,7 @@ export function launchDateAtRisk(input: LaunchRiskInput, now: Date = new Date())
     severity: "warning",
     title: `Launch at risk: ${accountLabel(impl)} — ${fmtDate(impl.target_launch_date)}, ${daysRemaining}d away`,
     detail: [
-      `Target launch ${fmtDate(impl.target_launch_date)} is ${daysRemaining} day(s) away, in ${stageLabel(impl.current_stage)}, with ${evidence.length} named blocker(s):`,
+      `Plan end ${fmtDate(impl.target_launch_date)} is ${daysRemaining} day(s) away, in ${stageLabel(impl.current_stage)}, with ${evidence.length} named blocker(s):`,
       ...evidence.map((e) => `• ${e.fact}`),
     ].join("\n"),
     evidence,

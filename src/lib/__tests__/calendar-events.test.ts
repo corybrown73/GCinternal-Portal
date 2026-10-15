@@ -505,7 +505,7 @@ describe("go-live dates", () => {
     );
     const e = find(events, "go-live-target:impl-1");
     expect(e.status).toBe("target_passed");
-    expect(STATUS_LABEL[e.status]).toBe("Target passed, go-live not recorded");
+    expect(STATUS_LABEL[e.status]).toBe("Plan end passed, go-live not recorded");
   });
 
   it("shows the actual go-live on its own day, separate from the target", () => {
@@ -533,9 +533,9 @@ describe("go-live dates", () => {
       const target = find(events, "go-live-target:impl-1");
       expect(target.status).toBe("target_date");
       expect(target.status).not.toBe("went_live");
-      expect(target.title).toBe("Target go-live");
+      expect(target.title).toBe("Plan end");
       expect(target.date).toBe("2026-10-01");
-      expect(STATUS_LABEL[target.status]).toBe("Planned target date");
+      expect(STATUS_LABEL[target.status]).toBe("Plan end date");
       expect(target.statusDetail).toBe(`Actual go-live recorded ${dayLabel("2026-10-03")}`);
     });
 
@@ -544,7 +544,7 @@ describe("go-live dates", () => {
       expect(actual.status).toBe("went_live");
       expect(actual.title).toBe("Actual go-live");
       expect(actual.date).toBe("2026-10-03");
-      expect(actual.statusDetail).toBe(`Planned target was ${dayLabel("2026-10-01")}`);
+      expect(actual.statusDetail).toBe(`Plan end was ${dayLabel("2026-10-01")}`);
     });
 
     it("keeps both events, never merged into one", () => {
@@ -563,7 +563,7 @@ describe("go-live dates", () => {
       }),
     );
     expect(find(events, "go-live-target:impl-1").statusDetail).toBe("Went live on this date");
-    expect(find(events, "go-live-actual:impl-1").statusDetail).toBe("On the planned target date");
+    expect(find(events, "go-live-actual:impl-1").statusDetail).toBe("On the plan end date");
   });
 
   it("does not use the target status for a target that is still ahead", () => {
@@ -722,12 +722,10 @@ describe("month grid chips", () => {
     const several = customersWithSeveralImplementations(events);
     const a = find(events, "go-live-target:impl-1");
     const b = find(events, "go-live-target:impl-2");
-    expect(chipLabel(a, several)).toBe("Aquatic Facility Services · Field Forms · Target go-live");
-    expect(chipLabel(b, several)).toBe(
-      "Aquatic Facility Services · Safety Audits · Target go-live",
-    );
+    expect(chipLabel(a, several)).toBe("Aquatic Facility Services · Field Forms · Plan end");
+    expect(chipLabel(b, several)).toBe("Aquatic Facility Services · Safety Audits · Plan end");
     expect(chipTitle(a)).toBe(
-      "Go-live: Aquatic Facility Services · Field Forms · Target go-live. Status: Planned",
+      "Plan end / go-live: Aquatic Facility Services · Field Forms · Plan end. Status: Planned",
     );
     expect(chipTitle(a)).not.toBe(chipTitle(b));
   });
@@ -738,7 +736,7 @@ describe("month grid chips", () => {
     );
     const e = find(events, "go-live-target:impl-1");
     expect(chipLabel(e, customersWithSeveralImplementations(events))).toBe(
-      "Aquatic Facility Services · Target go-live",
+      "Aquatic Facility Services · Plan end",
     );
   });
 
@@ -772,6 +770,6 @@ describe("month grid chips", () => {
     );
     const e = find(events, "go-live-target:impl-1");
     expect(e.status).toBe("target_passed");
-    expect(chipTitle(e)).toContain("Status: Target passed, go-live not recorded");
+    expect(chipTitle(e)).toContain("Status: Plan end passed, go-live not recorded");
   });
 });

@@ -29,6 +29,8 @@ export type ImplementationRow = {
   superseded?: boolean;
   tier: string | null;
   target_launch_date: string | null;
+  /** The plan end: target_date ?? target_launch_date (date-labels.ts planEndDate). */
+  plan_end?: string | null;
   actual_launch_date: string | null;
   /** The plan's Go-Live tick (0073). A launch, like actual_launch_date (launch-state.ts). */
   go_live_at?: string | null;
@@ -497,6 +499,8 @@ export type ImplementationSummary = {
   stage_entered_at: string;
   status: string;
   owner_name: string | null;
+  /** With target_launch_date, the plan end (date-labels.ts planEndDate). */
+  target_date?: string | null;
   target_launch_date: string | null;
   /* ---- One customer, several project timelines. ------------------------
      A customer runs more than one project at a time and they start on

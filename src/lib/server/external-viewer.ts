@@ -9,6 +9,7 @@ import {
   type SharedPlanInputs,
 } from "@/lib/shared-plan";
 import { hashToken } from "./plan-tokens";
+import { planEndDate } from "@/lib/date-labels";
 
 /**
  * The single authorization + projection core for everything a customer can see
@@ -169,13 +170,14 @@ type ImplementationRow = {
   customer_id: string;
   name: string;
   current_stage: string;
+  target_date: string | null;
   target_launch_date: string | null;
   portal_key: string;
   owner_id: string | null;
 };
 
 const IMPL_COLUMNS =
-  "id, customer_id, name, current_stage, target_launch_date, portal_key, owner_id";
+  "id, customer_id, name, current_stage, target_date, target_launch_date, portal_key, owner_id";
 
 /**
  * Turn a reference into an implementation the viewer is actually allowed to
@@ -364,7 +366,8 @@ export async function loadSharedPlan(
     implementation: {
       name: impl.name,
       current_stage: impl.current_stage,
-      target_launch_date: impl.target_launch_date,
+      // The plan end, which the customer reads as "Everything in your plan live by".
+      target_launch_date: planEndDate(impl),
     },
     stage: stageLabel(impl.current_stage),
     workItems: allItems.map((w) => ({

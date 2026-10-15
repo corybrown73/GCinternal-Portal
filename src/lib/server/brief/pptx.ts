@@ -49,7 +49,7 @@ const SPEAKER_NOTES: Record<string, string> = {
     "Confirm the phase-one list and, more importantly, what is not in phase one. Scope creep starts here.",
   dividerPlan: "Shift gears. Everything after this has a name and a date attached to it.",
   timeline:
-    "Fill real dates before the call. Get verbal agreement on the go-live date here \u2014 it anchors everything else.",
+    "Fill real dates before the call. Get verbal agreement on the Functional by date here \u2014 it anchors everything else.",
   roles:
     "Every row needs a human name, not a department. A blank cell at the end of this slide becomes an action item.",
   training:
@@ -63,7 +63,7 @@ const SPEAKER_NOTES: Record<string, string> = {
   actions:
     "The one slide that has to be finished before the call ends. Read each row aloud, get a yes from the named owner.",
   close:
-    "Repeat the go-live date and the first action item out loud. Thank them by name and end early if you can.",
+    "Repeat the Functional by date and the first action item out loud. Thank them by name and end early if you can.",
 };
 
 /**
@@ -1277,7 +1277,7 @@ function slide17Close(pptx: Pptx, get: FieldReader): Slide {
     fontFace: BRAND.fontSans,
   });
   const items: Array<[string, string]> = [
-    ["Go-live", "kpi_4_value_repeat"],
+    ["Functional by", "kpi_4_value_repeat"],
     ["Next touchpoint", "next_meeting"],
     ["Your lead", "gc_lead_name"],
   ];

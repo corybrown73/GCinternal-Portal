@@ -3002,8 +3002,8 @@ export async function syncTargetLaunch(
           .maybeSingle()
       ).data;
 
-    // A person changed the target directly — "Change target graduation
-    // date" on Current Implementation — and gave the reason in the same
+    // A person changed the plan end directly — "Change plan end date" on
+    // Current Implementation — and gave the reason in the same
     // action. That holds until a person moves it again; the plan's own
     // recompute must not quietly replace it.
     const { targetOverrideHolds } = await import("./complexity-tiers");
@@ -3032,7 +3032,7 @@ export async function syncTargetLaunch(
     }
   } catch (e) {
     console.error("[plan] could not sync the target launch", e);
-    return e instanceof Error ? e.message : "The target launch could not be updated.";
+    return e instanceof Error ? e.message : "The plan end could not be updated.";
   }
   return null;
 }
@@ -3121,8 +3121,10 @@ export async function explainTargetChange(
 }
 
 /**
- * A TIS setting the target graduation date directly, not through a plan
- * milestone — "Change target graduation date" on Current Implementation.
+ * A TIS setting the plan end date directly, not through a plan milestone —
+ * "Change plan end date" on Current Implementation. Never the graduation
+ * date agreed with the customer (`stage_targets.complete`), which only the
+ * stage-target editor writes.
  *
  * Writes the same two places `syncTargetLaunch()` and `explainTargetChange()`
  * already write — `implementations.target_date`/`target_launch_date`, and a
@@ -3152,7 +3154,7 @@ export async function setTargetGraduationDate(
     .from("implementations")
     .update({ target_date: newDate, target_launch_date: newDate })
     .eq("id", implementationId);
-  if (error) throw new Error(`Could not save the target date: ${error.message}`);
+  if (error) throw new Error(`Could not save the plan end date: ${error.message}`);
   const at = new Date().toISOString();
   const { error: historyError } = await db()
     .from("target_date_changes")

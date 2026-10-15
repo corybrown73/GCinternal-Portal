@@ -141,7 +141,7 @@ export async function buildDeckPrompt(dealId: string): Promise<string> {
     lines.push(
       `- Name: ${ctx.project.name}`,
       `- Journey: ${ctx.project.journeyType ?? "not set"}`,
-      `- Target launch: ${ctx.project.targetLaunchDate ?? "not set"}`,
+      `- Plan end (internal, never shown to the customer): ${ctx.project.targetLaunchDate ?? "not set"}`,
       `- Implementation lead: ${ctx.project.lead ?? "not assigned"}`,
       `- Stages: ${ctx.project.stages.map((s) => s.name).join(" → ") || "none"}`,
     );

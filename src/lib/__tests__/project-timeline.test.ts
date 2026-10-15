@@ -309,7 +309,7 @@ describe("railSummary — the text alternative", () => {
     expect(text).toContain("Salesforce integration");
     expect(text).toContain("5-stage plan");
     expect(text).toContain("Stage 3 of 5: Build");
-    expect(text).toContain("Target launch:");
+    expect(text).toContain("Plan end:");
   });
 });
 

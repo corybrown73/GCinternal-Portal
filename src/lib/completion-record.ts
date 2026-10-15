@@ -134,8 +134,9 @@ export function buildImplementationDocument(
       ["Type", dash(clean(impl.journey_type))],
       ["Tier", dash(clean(impl.tier))],
       ["Started", dash(day(impl.contract_start_date) ?? day(impl.created_at))],
-      ["Target launch", dash(day(impl.target_launch_date))],
-      ["Actual launch", dash(day(impl.actual_launch_date))],
+      ["Plan end", dash(day(impl.target_date) ?? day(impl.target_launch_date))],
+      // The Go-Live milestone first; the typed launch date when it is all there is.
+      ["Actual go-live", dash(day(impl.go_live_at) ?? day(impl.actual_launch_date))],
       ["Completed", input.completedAt.slice(0, 10)],
       ["Implementation lead", dash(n(impl.owner_id))],
       ["Sold by", dash(clean(impl.sales_owner) ?? n(impl.sales_owner_id))],

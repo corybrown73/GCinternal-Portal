@@ -1,7 +1,8 @@
 import { dealStageLabel } from "./deal-stage";
-import { shortDay } from "./onboarding-timeline";
+import { addBusinessDays, shortDay } from "./onboarding-timeline";
+import { PLAN_END_SLIP_NEXT, planEndSlip, planEndSlipText } from "./plan-end-slip";
 import { STAGES, isOnboardingStage, type AccountStage } from "./presale-stages";
-import { stuckLevel } from "./stage-flow";
+import { STAGE_LIMITS, stuckLevel } from "./stage-flow";
 
 /**
  * Why a deal needs somebody today, from facts about the deal itself.
@@ -21,6 +22,8 @@ export type DealFacts = {
   stage: AccountStage;
   /** Business days since the deal entered its stage. */
   business_days_in_stage: number;
+  /** The day the deal entered its stage (ISO), the clock the counts above run from. */
+  stage_entered_on?: string | null;
   has_notes: boolean;
   has_sow: boolean;
   owner_name: string | null;
@@ -51,6 +54,10 @@ export type DealFacts = {
   live_date?: string | null;
   /** The day the plan's live milestone was ticked, or null: a launch (launch-state.ts). */
   live_done_on?: string | null;
+  /** The deal's project's plan end: target_date ?? target_launch_date. Internal. */
+  plan_end?: string | null;
+  /** The graduation date agreed with the customer (stage_targets.complete), when set. */
+  agreed_graduation?: string | null;
   /** Transcript proposals on THIS implementation that nobody has applied or dismissed (laid on per implementation by `withPendingProposals`). */
   pending_proposals?: number;
 };
@@ -68,6 +75,12 @@ export type ActionReason = {
   next?: string;
   /** The next step only when nothing else names one: no checklist task, nothing on the record. */
   fallbackNext?: string;
+  /**
+   * The stage limit this reason is measured against (ISO day): the day the
+   * deal's time in its stage crosses the agreed limit. A threshold, never a
+   * customer deadline, so Home labels it "Stage limit", not "Due".
+   */
+  threshold?: string;
 };
 
 /**
@@ -96,11 +109,22 @@ function movePrompt(stage: AccountStage): string {
     : "Note what is holding it";
 }
 
+/** Stage entry plus `days` business days, when the entry day is known. */
+function stageLimitDate(deal: DealFacts, days: number | undefined): string | undefined {
+  const entered = deal.stage_entered_on?.slice(0, 10);
+  if (!entered || !/^\d{4}-\d{2}-\d{2}$/.test(entered) || days === undefined) return undefined;
+  return addBusinessDays(entered, days);
+}
+
 /** Ranked reasons, most urgent first. Empty when the deal is fine by its own facts. */
 export function needsAction(deal: DealFacts | null | undefined): ActionReason[] {
   if (!deal || !WORKED.includes(deal.stage)) return [];
   const out: ActionReason[] = [];
   const where = dealStageLabel(deal.stage);
+  const ownerLimit = stageLimitDate(deal, 1);
+  // Partner deals are not held to the New Logo stage-age limits, so their
+  // reasons carry no stage-limit date.
+  const warnLimit = deal.partner ? undefined : stageLimitDate(deal, STAGE_LIMITS[deal.stage]?.warn);
 
   if (deal.watch_outs.length) {
     const titles = deal.watch_outs.map((w) => w.title);
@@ -124,6 +148,7 @@ export function needsAction(deal: DealFacts | null | undefined): ActionReason[] 
       impact: "nobody from implementation on the closing call",
       tab: "overview",
       next: "Assign a TIS, or ask the pool to claim it",
+      ...(ownerLimit ? { threshold: ownerLimit } : {}),
     });
   } else if (
     !deal.owner_name &&
@@ -138,6 +163,7 @@ export function needsAction(deal: DealFacts | null | undefined): ActionReason[] 
       impact: "the customer has no one to hear from",
       tab: "overview",
       next: "Assign an owner, or ask the pool to claim it",
+      ...(ownerLimit ? { threshold: ownerLimit } : {}),
     });
   }
 
@@ -170,6 +196,7 @@ export function needsAction(deal: DealFacts | null | undefined): ActionReason[] 
       // With nothing left on the checklist and nothing dated on the record
       // (triage's nextAction), the move itself is the next step.
       ...(deal.next_step ? { next: deal.next_step } : { fallbackNext: movePrompt(deal.stage) }),
+      ...(warnLimit ? { threshold: warnLimit } : {}),
     });
   }
 
@@ -185,6 +212,7 @@ export function needsAction(deal: DealFacts | null | undefined): ActionReason[] 
       impact: "the plan is built from what is here",
       tab: "overview",
       next: `Add the ${missing[0]}`,
+      ...(warnLimit ? { threshold: warnLimit } : {}),
     });
   }
 
@@ -208,6 +236,26 @@ export function needsAction(deal: DealFacts | null | undefined): ActionReason[] 
       impact: "the customer's dates are not set",
       tab: "overview",
       next: "Book the core meetings",
+      ...(warnLimit ? { threshold: warnLimit } : {}),
+    });
+  }
+
+  // The internal plan end has moved past the graduation date agreed with the
+  // customer. Said to the owner; neither date is changed. Partner dates come
+  // from the partner's milestones, so a partner deal never gets this.
+  const slip = planEndSlip({
+    planEnd: deal.plan_end,
+    agreed: deal.agreed_graduation,
+    partner: deal.partner,
+  });
+  if (slip) {
+    out.push({
+      bucket: "needs_attention",
+      rank: 3.1,
+      reason: planEndSlipText(slip),
+      impact: "the customer was given the earlier date",
+      tab: "implementation",
+      next: PLAN_END_SLIP_NEXT,
     });
   }
 

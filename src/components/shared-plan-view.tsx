@@ -74,8 +74,8 @@ export function SharedPlanView({
           {plan.target_launch_date ? (
             <>
               {" · "}
-              <CalendarDays className="inline h-3 w-3 align-[-2px]" /> target launch{" "}
-              <span className="font-mono">{plan.target_launch_date}</span>
+              <CalendarDays className="inline h-3 w-3 align-[-2px]" /> everything in your plan live
+              by <span className="font-mono">{plan.target_launch_date}</span>
             </>
           ) : null}
         </p>

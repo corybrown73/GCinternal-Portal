@@ -31,6 +31,12 @@ export type NeedsMeRow = {
   detail: string | null;
   nextStep: string | null;
   due: { label: string; tone: Tone } | null;
+  /**
+   * The stage limit the reason is measured against ("Stage limit Oct 9"),
+   * when the row has no Due date: a threshold, not a customer deadline
+   * (Nikki, QA follow-ups answer 4). Scheduled activities keep their Due.
+   */
+  stageLimit: { date: string; label: string; tone: Tone } | null;
   link: { customerId: string; implementationId?: string } | { dealId: string };
   rank: number;
   /**
@@ -149,6 +155,19 @@ function chipFor(
   return { label: "Watch", tone: "warning" };
 }
 
+/** A stage limit's day, "Oct 9": amber once crossed, muted before. */
+export function stageLimitLabel(
+  iso: string,
+  today: string,
+): { date: string; label: string; tone: Tone } {
+  const label = new Date(`${iso}T12:00:00Z`).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  });
+  return { date: iso, label, tone: iso <= today ? "warning" : "muted" };
+}
+
 /** The first sentence, and the rest as the detail line. */
 function splitReason(reason: string): { head: string; detail: string | null } {
   const m = reason.match(/^(.+?[.!?])\s+(.+)$/);
@@ -204,6 +223,7 @@ function rowFromQueue(
     detail,
     nextStep: next && next !== NEXT_ACTION_UNKNOWN ? next : null,
     due: dueIso ? dueLabel(dueIso, today) : null,
+    stageLimit: !dueIso && row.threshold ? stageLimitLabel(row.threshold, today) : null,
     link: { customerId: row.impl.customer_id, implementationId: row.impl.id },
     rank: row.rank,
     needsMe,
@@ -228,7 +248,12 @@ function rowFromDeal(d: DealInboxRow, today: string): NeedsMeRow {
     reason: unclaimed ? "No implementation owner assigned" : (d.next_step ?? "Before kickoff"),
     detail: `${d.stage_label} for ${days} business day${days === 1 ? "" : "s"}.`,
     nextStep: unclaimed ? "Assign an owner" : d.next_step,
-    due: unclaimed && days >= 1 ? { label: "Today", tone: "critical" } : null,
+    // Unclaimed: the owner limit is one business day from the stage entry, a
+    // threshold rather than a deadline, so it is a stage limit, not "Due".
+    due: null,
+    stageLimit: unclaimed
+      ? stageLimitLabel(addBusinessDays(d.stage_entered_at.slice(0, 10), 1), today)
+      : null,
     link: { dealId: d.id },
     rank: unclaimed ? 0.5 : 2.2,
     needsMe: false,
@@ -285,7 +310,7 @@ export function todayFor(input: TodayInput): Today {
   ].sort(bySeverity);
 
   // COMING UP: this week by day and next week folded — booked calls, planned
-  // calls, commitments due, and target launches. `comingUp` lists every
+  // calls, commitments due, and Functional by dates. `comingUp` lists every
   // event, undeduplicated — unchanged.
   const horizon = endOfNextWeek(today);
   const sevenDays = addDays(today, 7);
@@ -389,7 +414,7 @@ function dealFactsOf(r: QueueRow): QueueRow["facts"] {
 
 /**
  * Every dated thing on these accounts between today and the horizon: the
- * plan's calls (booked or planned), commitments due, target launches.
+ * plan's calls (booked or planned), commitments due, Functional by dates.
  * Sorted by day, then time. The Home strip and the Calendar both read it.
  */
 export function collectEvents(
@@ -420,7 +445,9 @@ export function collectEvents(
         key: `${r.impl.id}:live`,
         date: live,
         time: null,
-        label: "Target launch",
+        // The plan's live date is "Functional by"; a project with no plan
+        // falls back to its stored plan end, and says so.
+        label: facts?.live_date ? "Functional by" : "Plan end",
         account: r.impl.customer_name,
         kind: "launch",
         link: { customerId: r.impl.customer_id, implementationId: r.impl.id },

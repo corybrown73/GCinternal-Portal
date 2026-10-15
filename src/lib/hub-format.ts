@@ -192,11 +192,11 @@ export function humanize(value: string | null | undefined): string {
 const OFFSET_BASIS_LABELS: Record<string, string> = {
   project_start: "project start",
   stage_entry: "stage entry",
-  target_launch: "target launch",
+  target_launch: "plan end",
 };
 
 /**
- * A template task's due date as a phrase: "stage entry +3d", "target launch
+ * A template task's due date as a phrase: "stage entry +3d", "plan end
  * -14d", "on stage entry". The basis is echoed verbatim when it is one this
  * build does not know, so an added enum value degrades to readable rather than
  * to a wrong label.

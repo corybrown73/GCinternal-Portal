@@ -219,7 +219,7 @@ export async function loadHandoffContext(
   let planUnavailable: string | undefined;
   if (opts.plan !== false) {
     try {
-      const built = await loadPlan(deal, project?.id ?? null, readingDates);
+      const built = await loadHandoffPlan(deal, project?.id ?? null, readingDates);
       plan = built.plan;
       planUnavailable = built.unavailable;
     } catch (e) {
@@ -303,7 +303,7 @@ export async function loadHandoffContext(
  * use (closeDateFor, timelineFor), never buildOnboardingDeckInput, which
  * reads this context itself.
  */
-async function loadPlan(
+export async function loadHandoffPlan(
   deal: Record<string, any>,
   implementationId: string | null,
   readingDates: HandoffPlan["sowDates"]["dates"] | null,

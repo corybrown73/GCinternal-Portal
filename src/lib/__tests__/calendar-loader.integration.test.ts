@@ -317,7 +317,7 @@ suite("Calendar loader — integration against the QA database", () => {
     expect(e!.status).toBe("planned");
   });
 
-  it("keeps the planned target as history and gives the real go-live its own event", async () => {
+  it("keeps the plan end as history and gives the real go-live its own event", async () => {
     const events = await calendar();
     const target = events.find((x) => x.key === `go-live-target:${goLive.impl}`);
     const actual = events.find((x) => x.key === `go-live-actual:${goLive.impl}`);
@@ -326,7 +326,7 @@ suite("Calendar loader — integration against the QA database", () => {
     expect(actual?.status).toBe("went_live");
     expect(actual?.title).toBe("Actual go-live");
     expect(actual?.date).toBe("2026-10-30");
-    expect(actual?.statusDetail).toBe(`Planned target was ${dayLabel("2026-11-02")}`);
+    expect(actual?.statusDetail).toBe(`Plan end was ${dayLabel("2026-11-02")}`);
   });
 
   it("hides a test account by default, and shows it only when asked", async () => {

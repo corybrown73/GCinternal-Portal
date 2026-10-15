@@ -28,6 +28,7 @@ import {
   nextWorkingSession,
   type KickoffMoveItem,
 } from "@/lib/kickoff-view";
+import { FUNCTIONAL_BY, TARGET_GRADUATION, functionalByDate } from "@/lib/date-labels";
 import { shortDay } from "@/lib/onboarding-timeline";
 import { cn } from "@/lib/utils";
 import type { WelcomeView } from "@/lib/welcome";
@@ -57,6 +58,10 @@ function KickoffCover({ view }: { view: WelcomeView }) {
   const outcome = kickoffBusinessOutcome(view);
   const outcomeConfirmed = kickoffBusinessOutcomeConfirmed(view);
   const graduation = kickoffGraduationTarget(view.journey);
+  // The plan's Functional by date: the same day the customer's page and the
+  // kickoff .pptx show. A partner's dates are the partner's, so none here.
+  const functionalBy =
+    view.path === "partner_implementation" ? null : functionalByDate(view.timeline);
   return (
     <section className="wp-screen is-cover">
       <div className="wp-blob is-cover" />
@@ -108,7 +113,8 @@ function KickoffCover({ view }: { view: WelcomeView }) {
           ) : null}
           <p className="wp-prepared">
             {[
-              graduation ? `Graduation target ${shortDay(graduation)}` : null,
+              functionalBy ? `${FUNCTIONAL_BY} ${shortDay(functionalBy)}` : null,
+              graduation ? `${TARGET_GRADUATION} ${shortDay(graduation)}` : null,
               view.lead ? `Prepared by ${view.lead}, GoCanvas onboarding` : null,
             ]
               .filter(Boolean)

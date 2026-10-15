@@ -1,3 +1,4 @@
+import { functionalByDate } from "./date-labels";
 import { kickoffGraduationTarget } from "./kickoff-view";
 import { TESTING_HOMEWORK_COPY, type Milestone } from "./onboarding-timeline";
 import { HOMEWORK_TEXT } from "./welcome-journey";
@@ -48,6 +49,12 @@ export type DashboardHeader = {
     status: "booked" | "planned" | "to_schedule";
   } | null;
   graduation: { current: string | null; original: string | null; moved: boolean };
+  /**
+   * The plan's "Functional by" date (timeline.liveDate, the ticked day once it
+   * is): the same date the kickoff deck shows. Null for a partner, whose dates
+   * are the partner's.
+   */
+  functionalBy: string | null;
 };
 
 /**
@@ -110,6 +117,7 @@ export function dashboardHeader(
       original,
       moved: Boolean(original && current && original !== current),
     },
+    functionalBy: functionalByDate(view.timeline),
   };
 }
 
@@ -295,6 +303,7 @@ export function dashboardHeaderFor(
       stages: [],
       nextMilestone: null,
       graduation: { current: null, original: null, moved: false },
+      functionalBy: null,
     };
   }
   return dashboardHeader(view, today);
@@ -318,6 +327,7 @@ export function partnerDashboardHeader(partner: PartnerDashboardView): Dashboard
       original: null,
       moved: false,
     },
+    functionalBy: null,
   };
 }
 

@@ -127,7 +127,7 @@ export const NEW_LOGO_PLAN: readonly MilestoneSpec[] = [
     owner: "gocanvas",
     kind: "milestone",
     detail:
-      "We reply to your account executive's email the same day and book all three core meetings.",
+      "We reply, book your Kickoff, and agree the dates of the next two sessions with you there.",
     icon: "Flag",
   },
   {
@@ -363,7 +363,8 @@ export const EXISTING_PLAN: readonly MilestoneSpec[] = [
     label: "Welcome aboard",
     owner: "gocanvas",
     kind: "milestone",
-    detail: "Welcome email the same day, with all three meeting invites already in it.",
+    detail:
+      "Welcome email the same day, with your Kickoff invite in it. We agree the dates of the next two sessions with you there.",
     icon: "Flag",
   },
   {
@@ -452,7 +453,8 @@ export const CUSTOMER_BUILD_PLAN: readonly MilestoneSpec[] = [
     label: "Welcome aboard",
     owner: "gocanvas",
     kind: "milestone",
-    detail: "Welcome email the same day, with all three meeting invites already in it.",
+    detail:
+      "Welcome email the same day, with your Kickoff invite in it. We agree the dates of the next two sessions with you there.",
     icon: "Flag",
   },
   {

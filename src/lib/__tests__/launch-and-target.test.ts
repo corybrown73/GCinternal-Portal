@@ -148,24 +148,20 @@ const row = (over: Partial<ImplementationRow> = {}): ImplementationRow => ({
   ...over,
 });
 
-describe("Home triage: a ticked launch is not 'Target launch passed'", () => {
+describe("Home triage: a ticked launch is not 'Plan end passed'", () => {
   it("acts now on a passed target with no launch, with Home's 'Launch date has passed' text", () => {
     const r = triageRow(row(), undefined);
     expect(r.bucket).toBe("act_now");
-    expect(r.reason).toMatch(/^Target launch passed .* — not launched/);
+    expect(r.reason).toMatch(/^Plan end passed .* — not launched/);
     expect(r.next_action).toMatch(/^Launch date has passed \(/);
   });
 
   it("leaves it once the plan's live milestone is ticked, on the row or in the deal facts", () => {
-    expect(triageRow(row({ live_done_on: TICK }), undefined).reason).not.toMatch(
-      /Target launch passed/,
-    );
-    expect(triageRow(row({ go_live_at: TICK }), undefined).reason).not.toMatch(
-      /Target launch passed/,
-    );
+    expect(triageRow(row({ live_done_on: TICK }), undefined).reason).not.toMatch(/Plan end passed/);
+    expect(triageRow(row({ go_live_at: TICK }), undefined).reason).not.toMatch(/Plan end passed/);
     const bundle = { implementation_id: "i-bsi", deal: { live_done_on: TICK } } as never;
     const r = triageRow(row(), bundle);
-    expect(r.reason).not.toMatch(/Target launch passed/);
+    expect(r.reason).not.toMatch(/Plan end passed/);
     expect(r.next_action).not.toMatch(/^Launch date has passed/);
   });
 });
@@ -393,8 +389,8 @@ describe("loadImplementations and the Calendar (regression from dc4bd12)", () =>
         book.find((i) => i.id === id)!,
         undefined,
       ).reason;
-    expect(reason("i-bsi")).not.toMatch(/Target launch passed/);
-    expect(reason("i-southern")).toMatch(/^Target launch passed/);
+    expect(reason("i-bsi")).not.toMatch(/Plan end passed/);
+    expect(reason("i-southern")).toMatch(/^Plan end passed/);
   });
 });
 

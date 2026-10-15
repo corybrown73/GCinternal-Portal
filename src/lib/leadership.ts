@@ -203,7 +203,7 @@ export function leadershipAction(
     return {
       action: "rebaseline_launch",
       action_reason: launchOverdue(impl)
-        ? "The target launch date has passed with no actual launch recorded — the date needs renegotiating."
+        ? "The plan end date has passed with no launch recorded — the date needs renegotiating."
         : "Stage is past Launch with no actual launch date, so the recorded plan and reality disagree.",
     };
   }
@@ -351,7 +351,7 @@ export function ownerLoad(data: LeadershipData): OwnerLoadRow[] {
     if (r.act_now > 1) r.flags.push(`Carrying ${r.act_now} act-now accounts alone`);
     if (r.blocked > 0 && r.blocked === totalBlocked && totalBlocked > 0 && !r.unassigned)
       r.flags.push("Holds every blocked account in the portfolio");
-    if (r.launches_30d > 1) r.flags.push(`${r.launches_30d} launches inside 30 days`);
+    if (r.launches_30d > 1) r.flags.push(`${r.launches_30d} plan ends inside 30 days`);
   }
 
   return rows.sort(
@@ -491,9 +491,9 @@ export function launchBoard(data: LeadershipData): LaunchBoard {
   for (const impl of data.implementations) {
     const d = daysUntil(impl.target_launch_date);
     if (launchOverdue(impl)) {
-      slipped.push({ impl, detail: `${Math.abs(d ?? 0)}d past target, no actual launch recorded` });
+      slipped.push({ impl, detail: `${Math.abs(d ?? 0)}d past plan end, no launch recorded` });
     } else if (!launchedOn(impl) && d != null && d >= 0 && d <= 30) {
-      landing.push({ impl, detail: `${d}d to target launch` });
+      landing.push({ impl, detail: `${d}d to plan end` });
     }
     if (launchStateConflict(impl)) {
       conflict.push({

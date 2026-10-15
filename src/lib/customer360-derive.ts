@@ -110,7 +110,7 @@ export function nextAction(
 }
 
 /**
- * Target launch date has passed and nothing records a launch: the typed
+ * Plan end date has passed and nothing records a launch: the typed
  * actual launch, the Go-Live tick or the plan's live tick (launch-state.ts).
  */
 export { launchOverdue, launchedOn };
@@ -352,7 +352,7 @@ export function deriveHealth(record: Customer360, impl: HealthImpl): HealthResul
   if (launchOverdue(impl, dealClock)) {
     return decide(
       "at_risk",
-      `Target launch ${fmtDate(impl.target_launch_date)} passed with no actual launch recorded`,
+      `Plan end ${fmtDate(impl.target_launch_date)} passed with no launch recorded`,
       "launch_overdue",
     );
   }

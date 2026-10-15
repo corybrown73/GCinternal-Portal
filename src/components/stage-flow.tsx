@@ -52,6 +52,7 @@ import { getParkingLot } from "@/lib/parking-lot.functions";
 import { getWelcome } from "@/lib/welcome.functions";
 import { getKickoffCadence } from "@/lib/kickoff-cadence.functions";
 import { wonStage } from "@/lib/pipeline-stages";
+import { PLAN_END_SLIP_NEXT, planEndSlip, planEndSlipText } from "@/lib/plan-end-slip";
 import { isPreClose, type AccountStage } from "@/lib/presale-stages";
 import {
   finishImplementation,
@@ -286,6 +287,9 @@ function ImplementationTargetSection({
   const agreedMoved = Boolean(
     agreed.current && agreed.original && agreed.current !== agreed.original,
   );
+  // The internal plan end has moved past the date agreed with the customer:
+  // said here, never written into either date. Not for a partner.
+  const slip = planEndSlip({ planEnd: plan, agreed: agreed.current, partner: Boolean(partner) });
   return (
     <section className={cn(CARD, "px-4 py-3.5")} aria-label="Implementation target">
       <h2 className="text-[16px] font-semibold">
@@ -343,6 +347,11 @@ function ImplementationTargetSection({
           </>
         ) : null}
       </p>
+      {slip ? (
+        <p className="mt-1 text-[12px] text-amber-800 dark:text-amber-300">
+          {planEndSlipText(slip)}. {PLAN_END_SLIP_NEXT}.
+        </p>
+      ) : null}
       {open && impl.target_changes.length > 0 ? (
         <ul className="mt-2 space-y-1 text-[12px] text-muted-foreground">
           {impl.target_changes.map((c) => (

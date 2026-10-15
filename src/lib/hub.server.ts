@@ -2,6 +2,7 @@ import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { isPartnerJourney } from "./partner-implementation";
 import { technicalSolutionNextAction } from "./customer360-derive";
 import { normalizeStage } from "./hub-format";
+import { planEndDate } from "./date-labels";
 import { dealStageFor } from "./deal-stage";
 import { dealValue } from "./deal-value";
 import { dealStagesFor } from "./server/deal-stage";
@@ -198,6 +199,7 @@ export async function loadImplementations(
           superseded: Boolean(i.superseded_by_implementation_id),
           tier: i.tier,
           target_launch_date: i.target_launch_date,
+          plan_end: planEndDate(i),
           actual_launch_date: i.actual_launch_date,
           go_live_at: i.go_live_at ?? null,
           live_done_on: dealStages.get(i.id)?.live_done_on ?? null,
@@ -624,6 +626,7 @@ export async function loadCustomer360(
     health_recorded_reason: i.health_recorded_reason ?? null,
     health_recorded_at: i.health_recorded_at ?? null,
     owner_name: i.owner_id ? (team.get(i.owner_id)?.name ?? null) : null,
+    target_date: i.target_date ?? null,
     target_launch_date: i.target_launch_date ?? null,
     contract_start_date: i.contract_start_date ?? null,
     created_at: i.created_at ?? null,

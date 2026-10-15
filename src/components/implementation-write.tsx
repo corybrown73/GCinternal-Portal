@@ -550,11 +550,11 @@ export function NewImplementation({ customers }: { customers: CustomerOption[] }
                 />
               </label>
               <label className="block space-y-0.5">
-                <span className={labelClass}>Target launch date</span>
+                <span className={labelClass}>Plan end date</span>
                 <input
                   type="date"
                   className={inputClass}
-                  aria-label="Target launch date"
+                  aria-label="Plan end date"
                   value={draft.targetLaunchDate}
                   disabled={mutation.isPending}
                   onChange={(e) => set({ targetLaunchDate: e.target.value })}
@@ -723,6 +723,12 @@ export type EditableImplementation = {
   target_launch_date: string | null;
   actual_launch_date: string | null;
   customer_goals: string | null;
+  /**
+   * Set when a deal's plan keeps this project's plan end. The field below
+   * then edits target_launch_date alone (hub.server updateImplementation), so
+   * it is not called "Plan end date" there.
+   */
+  deal_id?: string | null;
 };
 
 /**
@@ -884,15 +890,23 @@ export function EditImplementation({
           </label>
         ) : null}
         <label className="block space-y-0.5">
-          <span className={labelClass}>Target launch date</span>
+          <span className={labelClass}>
+            {implementation.deal_id ? "Target launch date" : "Plan end date"}
+          </span>
           <input
             type="date"
             className={inputClass}
-            aria-label="Target launch date"
+            aria-label={implementation.deal_id ? "Target launch date" : "Plan end date"}
             value={draft.targetLaunchDate}
             disabled={disabled}
             onChange={(e) => set({ targetLaunchDate: e.target.value })}
           />
+          {implementation.deal_id ? (
+            <span className="block text-[11px] text-muted-foreground">
+              The plan sets the plan end. To move it, use Change plan end date in Current
+              Implementation.
+            </span>
+          ) : null}
         </label>
         <label className="block space-y-0.5">
           <span className={labelClass}>Went live on</span>

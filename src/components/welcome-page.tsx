@@ -1529,10 +1529,10 @@ function Plan({ view, page }: { view: WelcomeView; page: number }) {
       }
       band={
         t.training
-          ? `Target: live on ${shortDay(t.liveDate)}. Nobody should be left guessing on a job — we drive the pace, and your crew owns the jobs.`
+          ? `Functional by ${shortDay(t.liveDate)}. Nobody should be left guessing on a job — we drive the pace, and your crew owns the jobs.`
           : existing
-            ? `Target: ready on ${shortDay(t.liveDate)}. An integration reads specific fields — a form optimised for it first is what makes the mapping right, first time.`
-            : `Target: ${view.path === "new_logo" ? "Functional" : "live"} on ${shortDay(t.liveDate)}. No account should stall waiting on a form — we drive the pace, and you own the form.`
+            ? `Functional by ${shortDay(t.liveDate)}. An integration reads specific fields — a form optimised for it first is what makes the mapping right, first time.`
+            : `Functional by ${shortDay(t.liveDate)}. No account should stall waiting on a form — we drive the pace, and you own the form.`
       }
       bandIcon="Rocket"
     >
@@ -2573,8 +2573,8 @@ function Business({
       accent="it's yours"
       band={
         planEnd
-          ? `Target: ${t.training ? "crew live" : view.path === "existing" ? "form ready" : "first form live"} on ${shortDay(t.liveDate)}, everything in your plan live by ${shortDay(planEnd)}. If any of the three checks below is not true that day, we are not done — and we say so.`
-          : `Target: ${view.path === "existing" ? "ready" : view.path === "new_logo" ? "Functional" : "live"} on ${shortDay(t.liveDate)}. If any of the three checks below is not true that day, we are not done — and we say so.`
+          ? `Functional by ${shortDay(t.liveDate)}. Everything in your plan live by ${shortDay(planEnd)}. If any of the three checks below is not true that day, we are not done — and we say so.`
+          : `Functional by ${shortDay(t.liveDate)}. If any of the three checks below is not true that day, we are not done — and we say so.`
       }
       bandIcon="Rocket"
     >

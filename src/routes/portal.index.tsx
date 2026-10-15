@@ -54,7 +54,7 @@ function PortalHomePage() {
               <div className="text-right">
                 <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
                   <CalendarDays className="mr-1 inline h-3 w-3 align-[-2px]" />
-                  Target launch
+                  Everything in your plan live by
                 </p>
                 <p className="mt-0.5 font-mono text-[13px] font-medium">
                   {fmtDate(impl.target_launch_date)}

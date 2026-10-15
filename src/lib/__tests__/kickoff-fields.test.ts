@@ -61,7 +61,7 @@ function input(over: Partial<KickoffInput> = {}): KickoffInput {
     successCriteria: [],
     requirements: [],
     solutions: [],
-    targetLaunchDate: null,
+    functionalBy: null,
     itContact: null,
     ...over,
   };
@@ -311,7 +311,7 @@ describe("buildKickoffData", () => {
         requirements: [{ title: "req", inScope: true }],
         solutions: ["sol"],
         customerTasks: [{ title: "t", stage: "Build", owner: null, due: "2026-06-01" }],
-        targetLaunchDate: "2026-07-01",
+        functionalBy: "2026-07-01",
         itContact: { name: "Tom W", role: "IT Manager" },
       }),
     );
@@ -350,7 +350,7 @@ describe("buildKickoffData", () => {
           { description: "Work orders rekeyed per week", target: "0" },
           { description: "Inspections in-shift", target: null },
         ],
-        targetLaunchDate: "2026-07-01",
+        functionalBy: "2026-07-01",
       }),
     );
     expect(fields["kpi_1_value"]).toBe("0");
@@ -360,8 +360,10 @@ describe("buildKickoffData", () => {
     // A criterion with no target leaves the number blank rather than inventing.
     expect(missing).toContain("kpi_2_value");
     expect(fields["kpi_2_metric"]).toBe("Inspections in-shift");
-    // The fourth card is go-live, and the close repeats it.
+    // The fourth card is the plan's Functional by date, and the close repeats it.
+    expect(fields["kpi_4_metric"]).toBe("Functional by");
     expect(fields["kpi_4_value"]).toBe("Jul 1");
+    expect(fields["kpi_4_label"]).toBe("planned date, to confirm today");
     expect(fields["kpi_4_value_repeat"]).toBe("Jul 1");
   });
 

@@ -585,6 +585,7 @@ function projectInput(
     current_stage: impl.current_stage,
     stage_entered_at: impl.stage_entered_at,
     contract_start_date: impl.contract_start_date,
+    target_date: impl.dates?.target ?? null,
     target_launch_date: impl.target_launch_date,
     actual_launch_date: impl.actual_launch_date,
     created_at: summary?.created_at ?? null,
@@ -922,6 +923,7 @@ function AccountDetails({
                   target_launch_date: impl.target_launch_date,
                   actual_launch_date: impl.actual_launch_date,
                   customer_goals: impl.customer_goals,
+                  deal_id: impl.deal_id,
                 }}
                 team={record.team}
               />
@@ -1392,11 +1394,11 @@ function AccountRail({
               }
             />
             <Field
-              label="Target launch"
+              label="Plan end"
               value={
                 <PaceChip
                   pace={timeline.launch}
-                  label={fmtDate(impl.target_launch_date)}
+                  label={fmtDate(timeline.targetLaunchDate)}
                   className="font-mono"
                 />
               }

@@ -258,7 +258,13 @@ function DashHeader({
         </ol>
       ) : null}
 
-      <div className="gc-dash-facts">
+      <div className={cn("gc-dash-facts", header.functionalBy && "is-three")}>
+        {header.functionalBy ? (
+          <div className="gc-dash-fact">
+            <span className="gc-dash-fact-label">Functional by</span>
+            <span className="gc-dash-fact-value">{shortDay(header.functionalBy)}</span>
+          </div>
+        ) : null}
         <div className="gc-dash-fact">
           <span className="gc-dash-fact-label">Target graduation</span>
           <span className="gc-dash-fact-value">

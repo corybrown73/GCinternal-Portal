@@ -1,6 +1,7 @@
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 
 import { deckKindFor } from "@/lib/deck-kind";
+import { functionalByDate } from "@/lib/date-labels";
 import { TEMPLATE_FIELDS } from "@/lib/kickoff-fields";
 import { customerFacingName } from "@/lib/names";
 
@@ -126,7 +127,9 @@ export async function generateDeckFromMcp(args: {
     successCriteria: context.project?.successCriteria ?? [],
     requirements: context.project?.requirements ?? [],
     solutions: context.project?.solutions ?? [],
-    targetLaunchDate: context.project?.targetLaunchDate ?? null,
+    // The plan's Functional by date, the one the welcome page shows; never
+    // the project's stored plan end.
+    functionalBy: context.plan ? functionalByDate(context.plan) : null,
     itContact: null,
   });
 
