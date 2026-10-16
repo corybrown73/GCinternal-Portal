@@ -1368,7 +1368,13 @@ export function CurrentImplementationTab({
               {kickoffCorrection.kind !== "not_held" &&
               kickoffCorrection.kind !== "not_applicable" ? (
                 <div className="px-4 pb-4">
-                  <KickoffHeldRecord correction={kickoffCorrection} />
+                  <KickoffHeldRecord
+                    dealId={dealId}
+                    stage={deal.account.stage}
+                    completed={intake.timeline.completed}
+                    correction={kickoffCorrection}
+                    editable={editable}
+                  />
                 </div>
               ) : null}
               {stage.tasks.length > 0 ? (

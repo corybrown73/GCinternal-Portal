@@ -42,28 +42,54 @@ describe("KickoffHeldConfirm", () => {
 
 describe("KickoffHeldRecord", () => {
   const date = "2026-09-25";
-  function render(correction: Parameters<typeof KickoffHeldRecord>[0]["correction"]) {
-    return renderToStaticMarkup(createElement(KickoffHeldRecord, { correction }));
+  const completed = { kickoff: date, intake_done: "2026-09-20" };
+  function render(
+    correction: Parameters<typeof KickoffHeldRecord>[0]["correction"],
+    editable = true,
+  ) {
+    return renderToStaticMarkup(
+      createElement(
+        QueryClientProvider,
+        { client: new QueryClient() },
+        createElement(KickoffHeldRecord, {
+          dealId: "00000000-0000-4000-8000-0000000000d1",
+          stage: "get_it_working",
+          completed,
+          correction,
+          editable,
+        }),
+      ),
+    );
   }
+  /** The checkbox's own tag, so the disabled state is read from the control itself. */
+  const checkbox = (markup: string) => markup.match(/<input[^>]*type="checkbox"[^>]*>/)![0];
 
-  it("shows Kickoff held as ticked, with what unticking does, and says correction is not yet available", () => {
+  it("shows Kickoff held as ticked, with what unticking does, and an enabled control", () => {
     const markup = render({ kind: "auto", date });
     expect(markup).toContain("Kickoff held");
-    expect(markup).toContain('checked=""');
+    expect(checkbox(markup)).toContain('checked=""');
+    expect(checkbox(markup)).not.toContain("disabled");
     expect(markup).toContain("Unticking returns the deal to Kickoff");
-    expect(markup).toContain("Correcting a mistake is not available yet.");
+    expect(markup).not.toContain("not available yet");
+  });
+
+  it("keeps the control disabled for a viewer who cannot edit the deal, and says why", () => {
+    const markup = render({ kind: "auto", date }, false);
+    expect(checkbox(markup)).toContain("disabled");
+    expect(markup).toContain("Only a deal editor can change this.");
   });
 
   it("explains that later tasks are kept and asks first", () => {
-    expect(render({ kind: "confirm_later_work", date, laterTasksDone: 2 })).toContain(
-      "Later tasks are already done. Unticking keeps them",
-    );
+    const markup = render({ kind: "confirm_later_work", date, laterTasksDone: 2 });
+    expect(markup).toContain("Later tasks are already done. Unticking keeps them");
+    expect(checkbox(markup)).not.toContain("disabled");
   });
 
-  it("names the complete stage and asks for a stage-correction review when blocked", () => {
+  it("names the complete stage, asks for a stage-correction review, and cannot be unticked when blocked", () => {
     const markup = render({ kind: "blocked", date, completedStage: "get_it_working" });
     expect(markup).toContain("Get it working is already complete");
     expect(markup).toContain("stage-correction review");
+    expect(checkbox(markup)).toContain("disabled");
   });
 
   it("shows nothing when Kickoff is not held or does not apply", () => {
