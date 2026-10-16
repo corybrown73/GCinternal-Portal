@@ -37,7 +37,12 @@ import { addJournalEntry } from "@/lib/hub.functions";
 import { triageRowForCustomer360 } from "@/lib/home-triage";
 import type { Customer360 } from "@/lib/hub-types";
 import { readIntake, type IntakeAnswers } from "@/lib/intake-answers";
-import { JOURNAL_KIND_LABEL, JOURNAL_KINDS, type JournalKind } from "@/lib/journal-input";
+import {
+  isExceptionKind,
+  JOURNAL_KIND_LABEL,
+  NOTE_FORM_KINDS,
+  type JournalKind,
+} from "@/lib/journal-input";
 import { TIER_REASON_CODES, reasonLabel, type TargetReasonCode } from "@/lib/complexity-tiers";
 import { closeDateFor, timelineFor } from "@/lib/onboarding-plan";
 import { localIso, shortDay } from "@/lib/onboarding-timeline";
@@ -1187,7 +1192,7 @@ function NotesPanel({ record, customerId }: { record: Customer360; customerId: s
             disabled={m.isPending}
             onChange={(e) => setKind(e.target.value as JournalKind)}
           >
-            {JOURNAL_KINDS.map((k) => (
+            {NOTE_FORM_KINDS.map((k) => (
               <option key={k} value={k}>
                 {JOURNAL_KIND_LABEL[k]}
               </option>
@@ -1211,7 +1216,13 @@ function NotesPanel({ record, customerId }: { record: Customer360; customerId: s
             <li key={e.id} className="px-4 py-2.5">
               <p className="flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
                 {e.kind !== "note" ? (
-                  <span className="rounded-sm bg-amber-500/15 px-1 font-medium text-amber-800 dark:text-amber-300">
+                  <span
+                    className={
+                      isExceptionKind(e.kind)
+                        ? "rounded-sm bg-amber-500/15 px-1 font-medium text-amber-800 dark:text-amber-300"
+                        : "rounded-sm bg-muted px-1 font-medium text-foreground"
+                    }
+                  >
                     {JOURNAL_KIND_LABEL[e.kind]}
                   </span>
                 ) : null}

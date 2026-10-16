@@ -439,8 +439,7 @@ export function ToolsCard({
     <section className={cn(CARD, "px-4 py-3.5")} aria-label="Updates and tools">
       <h2 className="text-[16px] font-semibold">Updates and tools</h2>
       <div className="mt-2.5 grid gap-0.5">
-        {row("meeting", "Update from a customer meeting")}
-        {row("update", "Add an implementation update")}
+        {row("meeting", "Analyse meeting transcript")}
         {showPlanDates ? row("dates", "Adjust plan dates") : null}
         {parking ? (
           <button

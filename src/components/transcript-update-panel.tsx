@@ -384,7 +384,7 @@ export function TranscriptUpdatePanel({
   return (
     <section
       className="rounded-md border border-border bg-card"
-      aria-label="Update from customer meeting"
+      aria-label="Analyse meeting transcript"
     >
       <button
         type="button"

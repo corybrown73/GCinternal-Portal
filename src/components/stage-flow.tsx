@@ -16,6 +16,7 @@ import { SolutionsCard } from "@/components/solutions-card";
 import { TranscriptUpdatePanel } from "@/components/transcript-update-panel";
 import { WorkflowStoryPanel } from "@/components/workflow-story-panel";
 import { ImplementationUpdatePanel } from "@/components/implementation-update-panel";
+import { InternalNotesCard } from "@/components/internal-notes-card";
 import { ImplementationHistorySection } from "@/components/implementation-history";
 import { FactsStep, FlowStep, NotesIn, SowStep } from "@/components/intake-panel";
 import { assignDealFn, claimDealFn, getDealAssignment } from "@/lib/assignment.functions";
@@ -990,6 +991,15 @@ export function CurrentImplementationTab({
   const [viewing, setViewing] = useState<FlowStageKey | null>(null);
   const [manual, setManual] = useState<{ key: string; wasDone: boolean } | null>(null);
   const [openPanel, setOpenPanel] = useState<"meeting" | "update" | "dates" | null>(null);
+  // Opens one of the tool panels from the notes card and brings it into view.
+  const openTool = (which: "meeting" | "update") => {
+    setOpenPanel(which);
+    requestAnimationFrame(() =>
+      document
+        .getElementById(`tool-panel-${which}`)
+        ?.scrollIntoView({ behavior: "smooth", block: "start" }),
+    );
+  };
   const [parkingOpen, setParkingOpen] = useState(false);
   // Focus Mode: the journey and the full stage checklist are collapsed by default.
   const [journeyOpen, setJourneyOpen] = useState(false);
@@ -1382,6 +1392,13 @@ export function CurrentImplementationTab({
 
         <div className="min-w-0 space-y-4">
           <NeedsAttentionCard record={record} dealId={dealId} />
+          <InternalNotesCard
+            dealId={dealId}
+            implementationId={implementationId}
+            journal={record.journal}
+            onAddUpdate={() => openTool("update")}
+            onAnalyseTranscript={() => openTool("meeting")}
+          />
           <OwnershipCard
             owner={ownerName}
             ball={!strip && ws.ball ? { who: ws.ball.who, detail: ws.ball.detail } : null}
@@ -1436,7 +1453,7 @@ export function CurrentImplementationTab({
               </Link>
             }
           />
-          <div hidden={openPanel !== "meeting"}>
+          <div id="tool-panel-meeting" hidden={openPanel !== "meeting"}>
             <TranscriptUpdatePanel
               customerId={customerId}
               implementationId={implementationId}
@@ -1444,7 +1461,7 @@ export function CurrentImplementationTab({
               kickoffOutcome={kickoffOutcome}
             />
           </div>
-          <div hidden={openPanel !== "update"}>
+          <div id="tool-panel-update" hidden={openPanel !== "update"}>
             <ImplementationUpdatePanel implementationId={implementationId} />
           </div>
           {layout.showPlanDates ? (

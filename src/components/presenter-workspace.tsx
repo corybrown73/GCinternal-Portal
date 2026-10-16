@@ -32,6 +32,8 @@ import { bookMeetingPatch } from "@/lib/stage-flow";
 import type { StageTargetUpdate } from "@/lib/stage-targets";
 import type { WelcomeView } from "@/lib/welcome";
 import { getWelcome } from "@/lib/welcome.functions";
+import { PresenterNotesPanel } from "@/components/presenter-notes-panel";
+import { useNotesFeatures } from "@/lib/presenter-notes-query";
 import { cn } from "@/lib/utils";
 
 const ISO_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -85,6 +87,7 @@ function Workspace({
     today: localIso(),
   }).date;
 
+  const features = useNotesFeatures();
   const [active, setActive] = useState<SectionN>(1);
 
   return (
@@ -99,6 +102,15 @@ function Workspace({
           customer.
         </p>
       </header>
+
+      <PresenterNotesPanel dealId={dealId} />
+
+      <p className="mb-3 text-[12px] text-muted-foreground">
+        Fields marked <CustomerTag /> change what the customer sees.
+        {features.presenterSelections
+          ? " Everything else on this page, including the conversation guide and your private notes, stays here."
+          : " Everything else on this page, including the conversation guide, stays here."}
+      </p>
 
       <div
         role="tablist"
@@ -134,6 +146,7 @@ function Workspace({
             fieldKey="business_outcome"
             label="Business outcome, in their words"
             long
+            customerFacing
             onSaved={onSaved}
           />
           <HandoffText
@@ -141,6 +154,7 @@ function Workspace({
             intake={intake}
             fieldKey="success_measure"
             label="How they will know it worked"
+            customerFacing
             onSaved={onSaved}
           />
           <FirstFormField dealId={dealId} intake={intake} onSaved={onSaved} />
@@ -350,6 +364,15 @@ function StatusChip({
   );
 }
 
+/** Marks a field whose saved answer changes what the customer sees. */
+function CustomerTag() {
+  return (
+    <span className="rounded-full border border-border bg-background px-2 py-px text-[11px] font-medium text-foreground">
+      Updates the customer&apos;s welcome page
+    </span>
+  );
+}
+
 function FieldLabel({ label, children }: { label: string; children?: ReactNode }) {
   return (
     <div className="mb-1 flex flex-wrap items-center gap-2">
@@ -365,6 +388,7 @@ function HandoffText({
   fieldKey,
   label,
   long = false,
+  customerFacing = false,
   onSaved,
 }: {
   dealId: string;
@@ -372,6 +396,8 @@ function HandoffText({
   fieldKey: string;
   label: string;
   long?: boolean;
+  /** Shows on the customer's welcome page, so the label says so. */
+  customerFacing?: boolean;
   onSaved: () => void;
 }) {
   const save = useServerFn(saveHandoffAnswer);
@@ -390,6 +416,7 @@ function HandoffText({
   return (
     <div>
       <FieldLabel label={label}>
+        {customerFacing ? <CustomerTag /> : null}
         {saved ? (
           source === "ai" ? (
             <StatusChip tone="proposed">Proposed by the AI reading — check it</StatusChip>
@@ -472,6 +499,7 @@ function FirstFormField({
   return (
     <div>
       <FieldLabel label="First form">
+        <CustomerTag />
         {current ? (
           <StatusChip tone="entered">Named</StatusChip>
         ) : (

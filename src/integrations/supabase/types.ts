@@ -1398,6 +1398,62 @@ export type Database = {
           },
         ]
       }
+      presenter_note_picks: {
+        Row: {
+          created_at: string
+          deal_id: string
+          id: string
+          journal_entry_id: string
+          org_id: string
+          profile_id: string
+        }
+        Insert: {
+          created_at?: string
+          deal_id: string
+          id?: string
+          journal_entry_id: string
+          org_id: string
+          profile_id: string
+        }
+        Update: {
+          created_at?: string
+          deal_id?: string
+          id?: string
+          journal_entry_id?: string
+          org_id?: string
+          profile_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "presenter_note_picks_deal_id_fkey"
+            columns: ["deal_id"]
+            isOneToOne: false
+            referencedRelation: "portal_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "presenter_note_picks_journal_entry_id_fkey"
+            columns: ["journal_entry_id"]
+            isOneToOne: false
+            referencedRelation: "journal_entries"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "presenter_note_picks_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "orgs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "presenter_note_picks_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "portal_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       journal_entries: {
         Row: {
           attachment_name: string | null
@@ -1406,9 +1462,12 @@ export type Database = {
           created_at: string
           id: string
           implementation_id: string
+          kind: string
           links: string | null
+          meeting_date: string | null
           note: string
           org_id: string
+          participants: string | null
           stage: string
         }
         Insert: {
@@ -1418,9 +1477,12 @@ export type Database = {
           created_at?: string
           id?: string
           implementation_id: string
+          kind?: string
           links?: string | null
+          meeting_date?: string | null
           note: string
           org_id?: string
+          participants?: string | null
           stage: string
         }
         Update: {
@@ -1430,9 +1492,12 @@ export type Database = {
           created_at?: string
           id?: string
           implementation_id?: string
+          kind?: string
           links?: string | null
+          meeting_date?: string | null
           note?: string
           org_id?: string
+          participants?: string | null
           stage?: string
         }
         Relationships: [

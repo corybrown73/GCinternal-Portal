@@ -1052,6 +1052,8 @@ export async function loadCustomer360(
       attachment_url: j.attachment_url ?? null,
       attachment_name: j.attachment_name ?? null,
       kind: (j.kind ?? "note") as import("./journal-input").JournalKind,
+      meeting_date: j.meeting_date ?? null,
+      participants: j.participants ?? null,
       created_at: j.created_at,
     })),
     implementation: {
@@ -2997,6 +2999,10 @@ export async function createJournalEntry(args: {
   attachmentUrl: string | null;
   attachmentName: string | null;
   kind?: import("./journal-input").JournalKind;
+  /** Customer meetings only: the day the meeting happened (YYYY-MM-DD). */
+  meetingDate?: string | null;
+  /** Customer meetings only: who was there, as typed. */
+  participants?: string | null;
 }) {
   const { data: impl, error: readError } = await db()
     .from("implementations")
@@ -3005,6 +3011,8 @@ export async function createJournalEntry(args: {
     .maybeSingle();
   if (readError || !impl) throw new Error(readError?.message ?? "Implementation not found");
 
+  // This is the only effect of saving a note. It does not touch risks, issues,
+  // decisions, commitments, dates or the stage: a customer meeting is a record.
   const { error } = await db()
     .from("journal_entries")
     .insert({
@@ -3016,6 +3024,8 @@ export async function createJournalEntry(args: {
       attachment_url: args.attachmentUrl,
       attachment_name: args.attachmentName,
       kind: args.kind ?? "note",
+      meeting_date: args.meetingDate ?? null,
+      participants: args.participants ?? null,
     });
   if (error) throw new Error(`Could not save the note: ${error.message}`);
   return { ok: true, stage: impl.current_stage as string };

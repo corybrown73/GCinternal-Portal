@@ -184,7 +184,7 @@ describe("ToolsCard", () => {
     expect(markup).toContain("Parking Lot");
   });
 
-  it("omits plan dates and the Parking Lot for a partner, keeping the update actions", () => {
+  it("omits plan dates and the Parking Lot for a partner, keeping the transcript action", () => {
     const markup = renderToStaticMarkup(
       createElement(ToolsCard, {
         open: null,
@@ -196,8 +196,9 @@ describe("ToolsCard", () => {
     );
     expect(markup).not.toContain("Adjust plan dates");
     expect(markup).not.toContain("Parking Lot");
-    expect(markup).toContain("Update from a customer meeting");
-    expect(markup).toContain("Add an implementation update");
+    expect(markup).toContain("Analyse meeting transcript");
+    // Adding an update and recording a meeting live in the Internal notes card now.
+    expect(markup).not.toContain("Add an implementation update");
   });
 
   it("states the Parking Lot count and whether its editor is open", () => {
@@ -229,7 +230,7 @@ describe("ToolsCard", () => {
   it("marks the open panel's row as expanded", () => {
     const markup = renderToStaticMarkup(
       createElement(ToolsCard, {
-        open: "update",
+        open: "meeting",
         onOpen: noop,
         showPlanDates: true,
         parking: null,
@@ -237,7 +238,7 @@ describe("ToolsCard", () => {
       }),
     );
     expect(markup).toContain('aria-expanded="true"');
-    expect(markup).toContain("Add an implementation update");
+    expect(markup).toContain("Analyse meeting transcript");
   });
 });
 

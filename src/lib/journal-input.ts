@@ -5,8 +5,28 @@ import { z } from "zod";
  * server stamps whichever stage the implementation is in when the note is
  * written, so historical notes stay attached to the stage they belong to.
  */
-export const JOURNAL_KINDS = ["note", "scope", "customer", "internal_delivery"] as const;
+export const JOURNAL_KINDS = [
+  "note",
+  "scope",
+  "customer",
+  "internal_delivery",
+  "customer_meeting",
+] as const;
 export type JournalKind = (typeof JOURNAL_KINDS)[number];
+
+/**
+ * The exception kinds, listed explicitly. A kind is an exception only if it is
+ * in this list: a new kind (such as a customer meeting) is never one by default.
+ */
+export const EXCEPTION_JOURNAL_KINDS = ["scope", "customer", "internal_delivery"] as const;
+export type ExceptionJournalKind = (typeof EXCEPTION_JOURNAL_KINDS)[number];
+
+export function isExceptionKind(kind: JournalKind): kind is ExceptionJournalKind {
+  return (EXCEPTION_JOURNAL_KINDS as readonly string[]).includes(kind);
+}
+
+/** What the Add-note form may write: a plain note, or one of the exceptions. */
+export const NOTE_FORM_KINDS = ["note", ...EXCEPTION_JOURNAL_KINDS] as const;
 
 export const createJournalEntryInput = z.object({
   implementationId: z.string().uuid(),
@@ -19,9 +39,9 @@ export const createJournalEntryInput = z.object({
   /**
    * A plain note, or an exception of the operating model's three kinds:
    * Scope (it was sold or scoped wrong), Customer (their side is the delay),
-   * Internal delivery (ours is). Typed so the report can count them.
+   * Internal delivery (ours is). Customer meetings have their own form.
    */
-  kind: z.enum(JOURNAL_KINDS).default("note"),
+  kind: z.enum(NOTE_FORM_KINDS).default("note"),
 });
 
 export const JOURNAL_KIND_LABEL: Record<JournalKind, string> = {
@@ -29,7 +49,40 @@ export const JOURNAL_KIND_LABEL: Record<JournalKind, string> = {
   scope: "Exception — Scope",
   customer: "Exception — Customer",
   internal_delivery: "Exception — Internal delivery",
+  customer_meeting: "Customer meeting",
 };
+
+const MAX_PARTICIPANTS = 500;
+const MAX_MEETING_NOTE = 20000;
+
+function isCalendarDate(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const [y, m, d] = value.split("-").map(Number) as [number, number, number];
+  const date = new Date(Date.UTC(y, m - 1, d));
+  return date.getUTCFullYear() === y && date.getUTCMonth() === m - 1 && date.getUTCDate() === d;
+}
+
+/**
+ * A customer meeting recorded without a transcript. Saving it writes one
+ * journal entry and nothing else: no risk, issue, decision, commitment, date
+ * change or stage move comes from it.
+ */
+export const customerMeetingInput = z.object({
+  implementationId: z.string().uuid(),
+  meetingDate: z
+    .string()
+    .refine(isCalendarDate, "Enter the date the meeting happened, as YYYY-MM-DD."),
+  /** Optional: who was on the call, as typed. */
+  participants: z
+    .string()
+    .trim()
+    .max(MAX_PARTICIPANTS)
+    .transform((v) => (v === "" ? null : v))
+    .nullable(),
+  note: z.string().trim().min(1, "Write what was discussed.").max(MAX_MEETING_NOTE),
+});
+
+export type CustomerMeetingInput = z.infer<typeof customerMeetingInput>;
 
 export type CreateJournalEntryInput = z.infer<typeof createJournalEntryInput>;
 

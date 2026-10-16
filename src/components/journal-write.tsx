@@ -4,7 +4,7 @@ import { useServerFn } from "@tanstack/react-start";
 
 import { addJournalEntry, uploadAttachment } from "@/lib/hub.functions";
 import { fileToBase64, MAX_ATTACHMENT_BYTES } from "@/lib/attachment-client";
-import { JOURNAL_KIND_LABEL, splitLinks } from "@/lib/journal-input";
+import { isExceptionKind, JOURNAL_KIND_LABEL, splitLinks } from "@/lib/journal-input";
 import { OpenAttachment } from "@/components/sow-write";
 import { stageLabel } from "@/lib/hub-format";
 import type { JournalEntry } from "@/lib/hub-types";
@@ -180,7 +180,13 @@ export function JournalPanel({
                   {stageLabel(entry.stage)}
                 </span>
                 {entry.kind !== "note" ? (
-                  <span className="rounded-sm bg-amber-500/15 px-1 font-medium text-amber-800 dark:text-amber-300">
+                  <span
+                    className={
+                      isExceptionKind(entry.kind)
+                        ? "rounded-sm bg-amber-500/15 px-1 font-medium text-amber-800 dark:text-amber-300"
+                        : "rounded-sm bg-muted px-1 font-medium text-foreground"
+                    }
+                  >
                     {JOURNAL_KIND_LABEL[entry.kind]}
                   </span>
                 ) : null}
