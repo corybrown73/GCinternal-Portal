@@ -552,8 +552,12 @@ export type JournalEntry = {
   id: string;
   implementation_id: string;
   stage: string;
-  /** A plain note or one of the three exception kinds. */
-  kind: "note" | "scope" | "customer" | "internal_delivery";
+  /** A plain note, a customer meeting, or one of the three exception kinds. */
+  kind: "note" | "scope" | "customer" | "internal_delivery" | "customer_meeting";
+  /** Customer meetings: the day the meeting happened. Null for every other kind. */
+  meeting_date: string | null;
+  /** Customer meetings: who was there, as typed. */
+  participants: string | null;
   note: string;
   author_id: string | null;
   author_name: string | null;

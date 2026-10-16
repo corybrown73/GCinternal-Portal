@@ -72,6 +72,7 @@ import {
 import {
   attachmentPathInput,
   createJournalEntryInput,
+  customerMeetingInput,
   uploadAttachmentInput,
   uploadCustomerLogoInput,
 } from "./journal-input";
@@ -774,6 +775,19 @@ export const addJournalEntry = createServerFn({ method: "POST" })
     return createJournalEntry({
       ...data,
       authorId: data.authorId ?? context.profile.team_member_id ?? null,
+    });
+  });
+
+/** A customer meeting recorded without a transcript: one journal entry, nothing else. */
+export const addCustomerMeetingNote = createServerFn({ method: "POST" })
+  .middleware([requireInternalAuth])
+  .inputValidator((data: unknown) => customerMeetingInput.parse(data))
+  .handler(async ({ data, context }) => {
+    const { saveCustomerMeeting } = await import("./customer-meeting.server");
+    return saveCustomerMeeting({
+      input: data,
+      profileId: context.profile.id,
+      teamMemberId: context.profile.team_member_id ?? null,
     });
   });
 
