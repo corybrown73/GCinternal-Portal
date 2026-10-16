@@ -2,10 +2,20 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { kickoffConfirmPrompt, kickoffHeldPatch } from "../kickoff-held";
+import {
+  kickoffConfirmPrompt,
+  kickoffCorrectionFor,
+  kickoffFocusTask,
+  kickoffHeldPatch,
+} from "../kickoff-held";
 import { buildTimeline } from "../onboarding-timeline";
 import { EMPTY_INTAKE, readIntake } from "../intake-answers";
-import { showKickoffOutcomePrompt, stageFlow, type StageFlowInput } from "../stage-flow";
+import {
+  showKickoffOutcomePrompt,
+  stageFlow,
+  type FlowTask,
+  type StageFlowInput,
+} from "../stage-flow";
 
 const ROOT = join(__dirname, "..", "..", "..");
 
@@ -148,5 +158,128 @@ describe("a transcript does not complete Kickoff", () => {
       expect(source, rel).not.toMatch(/completed\s*[:[]\s*[^;\n]*kickoff/);
       expect(source, rel).not.toMatch(/completedAfterTick\([^)]*kickoff/);
     }
+  });
+});
+
+describe("what unticking Kickoff would do", () => {
+  const held = (extra: Record<string, string> = {}) => ({
+    ...newLogo,
+    timeline: { completed: { kickoff: "2026-09-25", ...extra } },
+  });
+
+  it("is not_held when Kickoff has not been recorded", () => {
+    expect(kickoffCorrectionFor(flowAt("get_it_working", newLogo), readIntake(newLogo))).toEqual({
+      kind: "not_held",
+    });
+  });
+
+  it("is auto when Kickoff is held and no later work exists", () => {
+    const intake = readIntake(held());
+    expect(kickoffCorrectionFor(flowAt("get_it_working", held()), intake)).toEqual({
+      kind: "auto",
+      date: "2026-09-25",
+    });
+  });
+
+  it("is auto while the deal is still in Kickoff", () => {
+    const intake = readIntake(held());
+    expect(kickoffCorrectionFor(flowAt("kickoff", held()), intake)).toEqual({
+      kind: "auto",
+      date: "2026-09-25",
+    });
+  });
+
+  it("asks first when later tasks are done but no later stage is complete", () => {
+    // A Make It Yours task is done while Get it working is still open: the
+    // later work must be kept, so the correction asks before it returns the deal.
+    const withLater = held({ working: "2026-10-02" });
+    const flow = flowAt("get_it_working", withLater);
+    expect(flow.stages.find((s) => s.key === "get_it_working")!.done).toBe(false);
+    expect(kickoffCorrectionFor(flow, readIntake(withLater))).toEqual({
+      kind: "confirm_later_work",
+      date: "2026-09-25",
+      laterTasksDone: 1,
+    });
+  });
+
+  it("is blocked once a later stage is complete", () => {
+    // Every Get it working task done: that stage is complete.
+    const giw = flowAt("get_it_working", held()).stages.find((st) => st.key === "get_it_working")!;
+    const marks = Object.fromEntries(giw.tasks.map((t) => [t.doneKey ?? t.key, "2026-10-03"]));
+    const completedLater = held(marks);
+    const flow = flowAt("get_it_working", completedLater);
+    expect(flow.stages.find((s) => s.key === "get_it_working")!.done).toBe(true);
+    expect(kickoffCorrectionFor(flow, readIntake(completedLater))).toEqual({
+      kind: "blocked",
+      date: "2026-09-25",
+      completedStage: "get_it_working",
+    });
+  });
+
+  it("is not_applicable to a partner implementation", () => {
+    const partner = {
+      ...EMPTY_INTAKE,
+      path: "partner_implementation" as const,
+      timeline: { completed: { kickoff: "2026-09-25" } },
+    };
+    const flow = flowAt("kickoff", partner, "partner_implementation");
+    expect(kickoffCorrectionFor(flow, readIntake(partner))).toEqual({ kind: "not_applicable" });
+  });
+});
+
+describe("the Kickoff focus card's words", () => {
+  const task = (over: Partial<FlowTask> = {}): FlowTask =>
+    ({
+      key: "kickoff",
+      label: "Stage 1 — Get it working",
+      hint: "",
+      done: false,
+      summary: null,
+      action: "tick",
+      locked: null,
+      doneKey: "kickoff",
+      next: "Tick the Stage 1 call if it was held",
+      ...over,
+    }) as FlowTask;
+
+  it("asks to book when the call is not booked", () => {
+    const intake = readIntake(newLogo);
+    expect(kickoffFocusTask(task(), "kickoff", intake, "2026-09-20").next).toBe(
+      "Book the Kickoff call",
+    );
+  });
+
+  it("names the Kickoff call and holds it while the date is ahead", () => {
+    const intake = readIntake({
+      ...newLogo,
+      timeline: { overrides: { kickoff: "2026-09-25" }, times: { kickoff: "10:00" } },
+    });
+    expect(
+      kickoffFocusTask(task({ date: "2026-09-25" }), "kickoff", intake, "2026-09-20").next,
+    ).toMatch(/^Hold the Kickoff call \(/);
+  });
+
+  it("asks for the confirmation, not a Stage 1 tick, once the call's day has passed", () => {
+    const intake = readIntake({
+      ...newLogo,
+      timeline: { overrides: { kickoff: "2026-09-25" }, times: { kickoff: "10:00" } },
+    });
+    const next = kickoffFocusTask(
+      task({ date: "2026-09-25" }),
+      "kickoff",
+      intake,
+      "2026-09-30",
+    ).next;
+    expect(next).toBe("Confirm Kickoff held once the call has happened, or rebook it");
+    expect(next).not.toMatch(/Stage 1/);
+  });
+
+  it("leaves every other task and stage alone", () => {
+    const intake = readIntake(newLogo);
+    const other = task({ key: "between_1", action: "tick" });
+    expect(kickoffFocusTask(other, "kickoff", intake, "2026-09-30")).toBe(other);
+    expect(kickoffFocusTask(task(), "get_it_working", intake, "2026-09-30").next).toBe(
+      "Tick the Stage 1 call if it was held",
+    );
   });
 });

@@ -14,8 +14,8 @@ import { ParkingLot } from "@/components/parking-lot";
 import { Field, StatusDot } from "@/components/record";
 import { SolutionsCard } from "@/components/solutions-card";
 import { TranscriptUpdatePanel } from "@/components/transcript-update-panel";
-import { KickoffHeldConfirm } from "@/components/kickoff-held-confirm";
-import { kickoffConfirmPrompt } from "@/lib/kickoff-held";
+import { KickoffHeldConfirm, KickoffHeldRecord } from "@/components/kickoff-held-confirm";
+import { kickoffConfirmPrompt, kickoffCorrectionFor, kickoffFocusTask } from "@/lib/kickoff-held";
 import { WorkflowStoryPanel } from "@/components/workflow-story-panel";
 import { ImplementationUpdatePanel } from "@/components/implementation-update-panel";
 import { ImplementationHistorySection } from "@/components/implementation-history";
@@ -1057,7 +1057,13 @@ export function CurrentImplementationTab({
     flow.current && CANONICAL_JOURNEY_KEYS.includes(flow.current) ? flow.current : null;
 
   const shown = viewing ?? currentInCanon ?? "pre_kickoff";
-  const stage = canonicalStages.find((s) => s.key === shown) ?? canonicalStages[0]!;
+  const viewedStage = canonicalStages.find((s) => s.key === shown) ?? canonicalStages[0]!;
+  // The Kickoff task reads as "Kickoff held" on this card (see kickoffFocusTask);
+  // the stage's own tasks and their state are unchanged.
+  const stage = {
+    ...viewedStage,
+    tasks: viewedStage.tasks.map((t) => kickoffFocusTask(t, shown, intake)),
+  };
   // Focus Mode's task rule, shared with the tests: the viewed stage's next task.
   const viewFocus = taskFocusFor(stage.tasks);
   const next = viewFocus.state === "next" ? viewFocus.next : null;
@@ -1073,6 +1079,7 @@ export function CurrentImplementationTab({
   // picked on the rail — the same stageFlow() the checklist itself reads.
   const kickoffOutcome = showKickoffOutcomePrompt(flow) ? { dealId, intake } : null;
   const kickoffFocusPrompt = kickoffConfirmPrompt(flow, shown, dealId, intake);
+  const kickoffCorrection = kickoffCorrectionFor(flow, intake);
 
   // Viewing a stage other than the actual current one: say so plainly, with
   // its position relative to current (completed/upcoming), and a way back.
@@ -1354,6 +1361,14 @@ export function CurrentImplementationTab({
               {kickoffFocusPrompt ? (
                 <div className="px-4 pb-4">
                   <KickoffHeldConfirm prompt={kickoffFocusPrompt} />
+                </div>
+              ) : null}
+              {/* Once held, the record stays visible after the deal moves on, so a
+                  mistake can be seen and corrected. */}
+              {kickoffCorrection.kind !== "not_held" &&
+              kickoffCorrection.kind !== "not_applicable" ? (
+                <div className="px-4 pb-4">
+                  <KickoffHeldRecord correction={kickoffCorrection} />
                 </div>
               ) : null}
               {stage.tasks.length > 0 ? (
