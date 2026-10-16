@@ -14,6 +14,8 @@ import { ParkingLot } from "@/components/parking-lot";
 import { Field, StatusDot } from "@/components/record";
 import { SolutionsCard } from "@/components/solutions-card";
 import { TranscriptUpdatePanel } from "@/components/transcript-update-panel";
+import { KickoffHeldConfirm } from "@/components/kickoff-held-confirm";
+import { kickoffConfirmPrompt } from "@/lib/kickoff-held";
 import { WorkflowStoryPanel } from "@/components/workflow-story-panel";
 import { ImplementationUpdatePanel } from "@/components/implementation-update-panel";
 import { ImplementationHistorySection } from "@/components/implementation-history";
@@ -1070,6 +1072,7 @@ export function CurrentImplementationTab({
   // Only the implementation's actual current stage, never a historical one
   // picked on the rail — the same stageFlow() the checklist itself reads.
   const kickoffOutcome = showKickoffOutcomePrompt(flow) ? { dealId, intake } : null;
+  const kickoffFocusPrompt = kickoffConfirmPrompt(flow, shown, dealId, intake);
 
   // Viewing a stage other than the actual current one: say so plainly, with
   // its position relative to current (completed/upcoming), and a way back.
@@ -1345,6 +1348,14 @@ export function CurrentImplementationTab({
                   Nothing to do yet at this stage.
                 </p>
               )}
+              {/* Kickoff has no checkbox in the task list, so its one explicit
+                  confirmation sits in the focus card, the same control the
+                  transcript panel offers. */}
+              {kickoffFocusPrompt ? (
+                <div className="px-4 pb-4">
+                  <KickoffHeldConfirm prompt={kickoffFocusPrompt} />
+                </div>
+              ) : null}
               {stage.tasks.length > 0 ? (
                 <div className="flex flex-wrap items-center justify-between gap-2 px-4 pb-4 pt-3 text-[13px]">
                   <span className="text-muted-foreground">

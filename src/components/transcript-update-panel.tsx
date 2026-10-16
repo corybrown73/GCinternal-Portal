@@ -6,6 +6,8 @@ import { ChevronDown, ChevronRight, Loader2, Sparkles, Upload } from "lucide-rea
 import { fileToBase64, MAX_ATTACHMENT_BYTES, textToBase64 } from "@/lib/attachment-client";
 import { uploadAttachment } from "@/lib/attachments.functions";
 import { documentUploadType } from "@/lib/document-upload";
+import { KickoffHeldConfirm } from "@/components/kickoff-held-confirm";
+import type { KickoffOutcomePrompt } from "@/lib/kickoff-held";
 import type { TeamOption } from "@/components/owner-picker";
 import {
   addEvidence,
@@ -16,10 +18,8 @@ import {
   pendingTranscriptWork,
 } from "@/lib/hub.functions";
 import type { IntakeAnswers } from "@/lib/intake-answers";
-import { localIso, shortDay } from "@/lib/onboarding-timeline";
-import { saveIntake } from "@/lib/presale.functions";
+import { shortDay } from "@/lib/onboarding-timeline";
 import { handoffQuestion } from "@/lib/sales-handoff";
-import { completedAfterTick } from "@/lib/stage-flow";
 import {
   attachmentReferenceFor,
   CONFIDENCE_LABEL,
@@ -37,10 +37,7 @@ import { cn } from "@/lib/utils";
  * the same stageFlow() the checklist itself reads — never derived here from
  * a viewed/historical stage, and never from transcript content).
  */
-export type KickoffOutcomePrompt = {
-  dealId: string;
-  intake: IntakeAnswers;
-};
+export type { KickoffOutcomePrompt } from "@/lib/kickoff-held";
 
 /** Case-insensitive best-effort match of a said name to a team member. Never applied without this control being explicitly confirmed. */
 function guessOwner(team: TeamOption[], name: string): string {
@@ -119,13 +116,12 @@ function dayOf(iso: string | null): string | null {
  * is it read while you wait.
  * Applying runs through the Hub's existing risk/issue/decision/record-field/
  * journal/plan/handoff write paths on the server, exactly as if entered by
- * hand. The one deliberate exception is Meeting outcome (below): while
- * Kickoff is the actual current stage and not done yet, the TIS can
- * explicitly confirm "Kickoff held" — never inferred from the transcript,
- * never automatic — which sets intake.timeline.completed.kickoff through the
- * exact same saveIntake call the Kickoff checklist tick already uses, so the
- * existing saveIntake → syncDealStage → transitionStage machinery (not this
- * component) performs the actual stage move.
+ * hand. The one deliberate exception is the Kickoff held confirmation (shown
+ * below, and in the Kickoff focus card): while Kickoff is the actual current
+ * stage and not done yet, the TIS can explicitly confirm it. It is never
+ * inferred from the transcript and never automatic. The confirmation is
+ * KickoffHeldConfirm, which saves through the existing saveIntake action, so
+ * the existing sync (not this component) performs the actual stage move.
  */
 export function TranscriptUpdatePanel({
   customerId: _customerId,
@@ -157,49 +153,6 @@ export function TranscriptUpdatePanel({
         ? 5000
         : false,
   });
-
-  const [kickoffChecked, setKickoffChecked] = useState(false);
-  const [kickoffPending, setKickoffPending] = useState(false);
-  const [kickoffError, setKickoffError] = useState<string | null>(null);
-  const saveIntakeFn = useServerFn(saveIntake);
-
-  /**
-   * The exact write the existing Kickoff checklist checkbox makes
-   * (OnboardingList's tick, in stage-flow.tsx) — same patch shape, same
-   * server fn. This component never calls transitionStage; saveIntake's own
-   * server-side syncDealStage does, if the gate is now satisfied. On
-   * success the control simply disappears once the refetched stage is no
-   * longer Kickoff — there is no local "it moved" state to reset.
-   */
-  const confirmKickoffHeld = async () => {
-    if (!kickoffOutcome || kickoffPending) return;
-    const { dealId, intake } = kickoffOutcome;
-    const t = intake.timeline;
-    const completed = completedAfterTick(intake, t.completed, "kickoff", true, localIso());
-    setKickoffChecked(true);
-    setKickoffError(null);
-    setKickoffPending(true);
-    try {
-      await saveIntakeFn({
-        data: {
-          dealId,
-          patch: { timeline: { ...t, completed, form_proven_on: t.form_proven_on } },
-        },
-      });
-      // The real transition already happened server-side inside that save
-      // (or it didn't, and the rail stays where it is) — refetch the same
-      // query Current Implementation reads rather than assuming the result.
-      await Promise.all([
-        qc.invalidateQueries({ queryKey: ["deal", dealId] }),
-        qc.invalidateQueries({ queryKey: ["welcome", dealId] }),
-      ]);
-    } catch (e) {
-      setKickoffChecked(false);
-      setKickoffError(e instanceof Error ? e.message : "Could not save. Try again.");
-    } finally {
-      setKickoffPending(false);
-    }
-  };
 
   const upload = useServerFn(uploadAttachment);
   const recordEvidence = useServerFn(addEvidence);
@@ -413,30 +366,7 @@ export function TranscriptUpdatePanel({
             apply it.
           </p>
 
-          {kickoffOutcome ? (
-            <div className="space-y-1 rounded-md border border-border bg-muted/30 p-2.5">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
-                Meeting outcome
-              </div>
-              <label className="flex items-start gap-2 text-[12px]">
-                <input
-                  type="checkbox"
-                  className="mt-0.5 h-3 w-3"
-                  checked={kickoffChecked}
-                  disabled={kickoffPending}
-                  onChange={() => void confirmKickoffHeld()}
-                />
-                <span>
-                  <span className="font-medium text-foreground">Kickoff held</span>
-                  <span className="mt-0.5 block text-[11px] text-muted-foreground">
-                    Completing this will move the implementation to Get It Working.
-                  </span>
-                </span>
-              </label>
-              {kickoffPending ? <p className="text-[11px] text-muted-foreground">Saving…</p> : null}
-              {kickoffError ? <p className="text-[11px] text-destructive">{kickoffError}</p> : null}
-            </div>
-          ) : null}
+          {kickoffOutcome ? <KickoffHeldConfirm prompt={kickoffOutcome} /> : null}
 
           <div className="space-y-1.5">
             <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
