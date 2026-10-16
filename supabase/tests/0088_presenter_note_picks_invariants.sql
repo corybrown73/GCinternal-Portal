@@ -112,6 +112,32 @@ insert into presenter_note_picks (org_id, profile_id, deal_id, journal_entry_id)
 values ('00000000-0000-4000-8000-000000000001', '00000000-0000-4000-8000-0000000000a1',
         '00000000-0000-4000-8000-0000000000d1', '00000000-0000-4000-8000-0000000000f3');
 
+-- Every organisation on the chain must agree. A deal in another organisation,
+-- with its implementation and note in this one, is refused.
+insert into portal_accounts (id, name, org_id) values
+  ('00000000-0000-4000-8000-0000000000d4', 'Probe deal in other org', '00000000-0000-4000-8000-0000000000b2');
+insert into implementations (id, customer_id, name, current_stage, deal_id) values
+  ('00000000-0000-4000-8000-0000000000e4', '00000000-0000-4000-8000-0000000000c1', 'Probe impl on other-org deal', 'build', '00000000-0000-4000-8000-0000000000d4');
+insert into journal_entries (id, implementation_id, stage, note, kind) values
+  ('00000000-0000-4000-8000-0000000000f6', '00000000-0000-4000-8000-0000000000e4', 'build', 'Note on other-org deal', 'note');
+select pg_temp.assert_refused(
+  $q$ insert into presenter_note_picks (org_id, profile_id, deal_id, journal_entry_id)
+      values ('00000000-0000-4000-8000-000000000001', '00000000-0000-4000-8000-0000000000a1',
+              '00000000-0000-4000-8000-0000000000d4', '00000000-0000-4000-8000-0000000000f6') $q$,
+  'organisation mismatch', 'a deal in another organisation cannot be the source of a selection');
+
+-- An implementation in another organisation, linked to a deal in this one, with
+-- its note recorded in this organisation: the implementation alone is refused.
+insert into implementations (id, customer_id, name, current_stage, deal_id, org_id) values
+  ('00000000-0000-4000-8000-0000000000e5', '00000000-0000-4000-8000-0000000000c1', 'Probe impl in other org', 'build', '00000000-0000-4000-8000-0000000000d1', '00000000-0000-4000-8000-0000000000b2');
+insert into journal_entries (id, implementation_id, stage, note, kind) values
+  ('00000000-0000-4000-8000-0000000000f7', '00000000-0000-4000-8000-0000000000e5', 'build', 'Note on other-org implementation', 'note');
+select pg_temp.assert_refused(
+  $q$ insert into presenter_note_picks (org_id, profile_id, deal_id, journal_entry_id)
+      values ('00000000-0000-4000-8000-000000000001', '00000000-0000-4000-8000-0000000000a1',
+              '00000000-0000-4000-8000-0000000000d1', '00000000-0000-4000-8000-0000000000f7') $q$,
+  'organisation mismatch', 'an implementation in another organisation cannot be the source of a selection');
+
 -- Removing a selection leaves the note in place.
 delete from presenter_note_picks where journal_entry_id = '00000000-0000-4000-8000-0000000000f1';
 select pg_temp.assert_count(

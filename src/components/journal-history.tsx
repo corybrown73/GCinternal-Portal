@@ -55,9 +55,12 @@ const FILTERS: Array<{ key: HistoryFilter; label: string }> = [
 export function JournalHistory({
   journal,
   presenter,
+  meetingsAvailable = true,
 }: {
   journal: JournalRow[];
   presenter: PresenterToggle | null;
+  /** False when this database has not received the customer meeting migration. */
+  meetingsAvailable?: boolean;
 }) {
   const [filter, setFilter] = useState<HistoryFilter>("all");
   const [search, setSearch] = useState("");
@@ -89,7 +92,7 @@ export function JournalHistory({
       </label>
 
       <div role="group" aria-label="Filter updates" className="mt-2 flex flex-wrap gap-1.5">
-        {FILTERS.map((f) => (
+        {FILTERS.filter((f) => meetingsAvailable || f.key !== "meetings").map((f) => (
           <button
             key={f.key}
             type="button"

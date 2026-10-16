@@ -35,3 +35,11 @@ export const dropPresenterNote = createServerFn({ method: "POST" })
     const { removePresenterNoteFor } = await import("./presenter-notes.server");
     return removePresenterNoteFor(data.dealId, data.journalEntryId, context.profile.id);
   });
+
+/** Which notes features this database can serve. Any internal user may ask. */
+export const getNotesFeatures = createServerFn({ method: "GET" })
+  .middleware([requireInternalAuth])
+  .handler(async () => {
+    const { notesFeatures } = await import("./presenter-notes.server");
+    return notesFeatures();
+  });

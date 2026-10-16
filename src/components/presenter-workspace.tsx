@@ -33,6 +33,7 @@ import type { StageTargetUpdate } from "@/lib/stage-targets";
 import type { WelcomeView } from "@/lib/welcome";
 import { getWelcome } from "@/lib/welcome.functions";
 import { PresenterNotesPanel } from "@/components/presenter-notes-panel";
+import { useNotesFeatures } from "@/lib/presenter-notes-query";
 import { cn } from "@/lib/utils";
 
 const ISO_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -86,6 +87,7 @@ function Workspace({
     today: localIso(),
   }).date;
 
+  const features = useNotesFeatures();
   const [active, setActive] = useState<SectionN>(1);
 
   return (
@@ -104,8 +106,10 @@ function Workspace({
       <PresenterNotesPanel dealId={dealId} />
 
       <p className="mb-3 text-[12px] text-muted-foreground">
-        Fields marked <CustomerTag /> change what the customer sees. Everything else on this page,
-        including the conversation guide and your private notes, stays here.
+        Fields marked <CustomerTag /> change what the customer sees.
+        {features.presenterSelections
+          ? " Everything else on this page, including the conversation guide and your private notes, stays here."
+          : " Everything else on this page, including the conversation guide, stays here."}
       </p>
 
       <div

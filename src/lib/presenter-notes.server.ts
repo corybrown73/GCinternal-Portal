@@ -150,3 +150,24 @@ export async function removePresenterNoteFor(
   if (error) throw new Error(error.message);
   return { ok: true };
 }
+
+/**
+ * Which parts of the notes features this database can serve. Customer meetings
+ * need migration 0087 (the kind, and the meeting fields it adds); presenter
+ * selections need 0088 (the selections table). The UI shows a feature only when
+ * its schema answers, so a database that has not received a migration shows no
+ * control that would fail when used.
+ */
+export async function notesFeatures(): Promise<{
+  customerMeetings: boolean;
+  presenterSelections: boolean;
+}> {
+  const [meetingFields, picks] = await Promise.all([
+    db().from("journal_entries").select("meeting_date,participants").limit(1),
+    db().from("presenter_note_picks").select("id").limit(1),
+  ]);
+  return {
+    customerMeetings: !meetingFields.error,
+    presenterSelections: !picks.error,
+  };
+}

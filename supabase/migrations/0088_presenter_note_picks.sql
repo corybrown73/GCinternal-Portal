@@ -25,9 +25,10 @@ create index if not exists presenter_note_picks_journal_idx on public.presenter_
 
 -- The database refuses a pick that the application should never write, so a
 -- bug in a server function cannot widen what a presenter can see:
+--   - the note must not be an exception record,
 --   - the note must be on an implementation of the same deal,
---   - the note must be in the same organisation as the pick and the person,
---   - the note must not be an exception record.
+--   - the signed-in person, the note, the implementation, the deal and the
+--     pick itself must all sit in one organisation.
 create or replace function public.presenter_note_pick_guard()
 returns trigger
 language plpgsql
@@ -35,6 +36,8 @@ set search_path = public
 as $$
 declare
   v_entry public.journal_entries%rowtype;
+  v_impl_org uuid;
+  v_deal_org uuid;
   v_profile_org uuid;
 begin
   select * into v_entry from public.journal_entries where id = new.journal_entry_id;
@@ -46,16 +49,22 @@ begin
     raise exception 'presenter pick refused: exception records cannot be selected';
   end if;
 
-  if not exists (
-    select 1 from public.implementations i
-    where i.id = v_entry.implementation_id and i.deal_id = new.deal_id
-  ) then
+  select i.org_id into v_impl_org
+  from public.implementations i
+  where i.id = v_entry.implementation_id and i.deal_id = new.deal_id;
+  if not found then
     raise exception 'presenter pick refused: the note is not on this deal''s implementation';
   end if;
 
-  select org_id into v_profile_org from public.portal_profiles where id = new.profile_id;
-  if v_entry.org_id <> new.org_id or v_profile_org is distinct from new.org_id then
-    raise exception 'presenter pick refused: organisation mismatch';
+  select a.org_id into v_deal_org from public.portal_accounts a where a.id = new.deal_id;
+  select p.org_id into v_profile_org from public.portal_profiles p where p.id = new.profile_id;
+
+  if new.org_id is distinct from v_entry.org_id
+     or new.org_id is distinct from v_impl_org
+     or new.org_id is distinct from v_deal_org
+     or new.org_id is distinct from v_profile_org then
+    raise exception 'presenter pick refused: organisation mismatch (selection %, note %, implementation %, deal %, person %)',
+      new.org_id, v_entry.org_id, v_impl_org, v_deal_org, v_profile_org;
   end if;
 
   return new;

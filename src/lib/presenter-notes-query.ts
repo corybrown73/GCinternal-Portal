@@ -4,6 +4,7 @@ import { useServerFn } from "@tanstack/react-start";
 import {
   choosePresenterNote,
   dropPresenterNote,
+  getNotesFeatures,
   getPresenterNotes,
 } from "@/lib/presenter-notes.functions";
 import type { PresenterNotesView } from "@/lib/presenter-notes";
@@ -33,4 +34,22 @@ export function usePresenterSelection(dealId: string) {
     onSuccess: refresh,
   });
   return { add, remove };
+}
+
+export type NotesFeatures = { customerMeetings: boolean; presenterSelections: boolean };
+
+/** Which features this database serves. Until it answers, nothing is offered. */
+export const NO_NOTES_FEATURES: NotesFeatures = {
+  customerMeetings: false,
+  presenterSelections: false,
+};
+
+export function useNotesFeatures(): NotesFeatures {
+  const load = useServerFn(getNotesFeatures);
+  const q = useQuery<NotesFeatures>({
+    queryKey: ["notes-features"],
+    queryFn: () => load({} as never),
+    staleTime: 60_000,
+  });
+  return q.data ?? NO_NOTES_FEATURES;
 }

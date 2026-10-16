@@ -7,7 +7,11 @@ import { When } from "@/components/when";
 import { fmtDate, stageLabel } from "@/lib/hub-format";
 import { isExceptionKind } from "@/lib/journal-input";
 import { journalBody, type JournalRow } from "@/lib/journal-view";
-import { usePresenterNotes, usePresenterSelection } from "@/lib/presenter-notes-query";
+import {
+  useNotesFeatures,
+  usePresenterNotes,
+  usePresenterSelection,
+} from "@/lib/presenter-notes-query";
 import { cn } from "@/lib/utils";
 
 const CARD = "rounded-lg border border-border bg-card";
@@ -39,6 +43,7 @@ export function InternalNotesCard({
 }) {
   const [mode, setMode] = useState<Mode>("summary");
   const recent = journal.slice(0, RECENT_COUNT);
+  const features = useNotesFeatures();
 
   return (
     <section className={cn(CARD, "px-4 py-3.5")} aria-label="Internal notes">
@@ -51,11 +56,13 @@ export function InternalNotesCard({
         <>
           <div className="mt-2.5 grid gap-0.5">
             <ActionRow label="Add internal update" onClick={onAddUpdate} />
-            <ActionRow
-              label="Record customer meeting"
-              disabled={!implementationId}
-              onClick={() => setMode("meeting")}
-            />
+            {features.customerMeetings ? (
+              <ActionRow
+                label="Record customer meeting"
+                disabled={!implementationId}
+                onClick={() => setMode("meeting")}
+              />
+            ) : null}
             <ActionRow label="Review previous updates" onClick={() => setMode("history")} />
           </div>
 
@@ -114,11 +121,20 @@ export function InternalNotesCard({
           >
             ← Back to internal notes
           </button>
-          <HistoryWithSelection
-            dealId={dealId}
-            implementationId={implementationId}
-            journal={journal}
-          />
+          {features.presenterSelections ? (
+            <HistoryWithSelection
+              dealId={dealId}
+              implementationId={implementationId}
+              journal={journal}
+              meetingsAvailable={features.customerMeetings}
+            />
+          ) : (
+            <JournalHistory
+              journal={journal}
+              presenter={null}
+              meetingsAvailable={features.customerMeetings}
+            />
+          )}
         </>
       ) : null}
     </section>
@@ -188,10 +204,12 @@ function HistoryWithSelection({
   dealId,
   implementationId,
   journal,
+  meetingsAvailable,
 }: {
   dealId: string;
   implementationId: string | null;
   journal: JournalRow[];
+  meetingsAvailable: boolean;
 }) {
   const presenter = usePresenterNotes(dealId);
   const { add, remove } = usePresenterSelection(dealId);
@@ -211,6 +229,7 @@ function HistoryWithSelection({
     <>
       <JournalHistory
         journal={journal}
+        meetingsAvailable={meetingsAvailable}
         presenter={
           sameImplementation
             ? {

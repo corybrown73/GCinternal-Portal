@@ -15,8 +15,11 @@ const { state, builder } = vi.hoisted(() => {
     inserts: [] as Call[],
     deletes: [] as Call[],
     insertError: null as { code?: string; message: string } | null,
+    // Tables the stub reports as missing, as PostgREST does before a migration.
+    missing: {} as Record<string, { message: string }>,
   };
   const single = (table: string, filters: unknown[][]) => {
+    if (state.missing[table]) return { data: null, error: state.missing[table] };
     const row = state.rows[table];
     if (!row) return { data: null, error: null };
     const list = Array.isArray(row) ? row : [row];
@@ -85,7 +88,11 @@ vi.mock("@/integrations/supabase/client.server", () => ({
   supabaseAdmin: { from: (table: string) => builder(table) },
 }));
 
-import { addPresenterNoteFor, removePresenterNoteFor } from "../presenter-notes.server";
+import {
+  addPresenterNoteFor,
+  notesFeatures,
+  removePresenterNoteFor,
+} from "../presenter-notes.server";
 
 const ORG = "00000000-0000-4000-8000-000000000001";
 const OTHER_ORG = "00000000-0000-4000-8000-0000000000b2";
@@ -111,6 +118,7 @@ function seed(overrides: { deal?: object; impl?: object; entry?: object; profile
 }
 
 beforeEach(() => {
+  state.missing = {};
   state.inserts.length = 0;
   state.deletes.length = 0;
   state.insertError = null;
@@ -198,5 +206,34 @@ describe("removing a selection", () => {
     );
     // Nothing is deleted from the journal: the only table written is the selections.
     expect(state.deletes.every((d) => d.table === "presenter_note_picks")).toBe(true);
+  });
+});
+
+describe("which notes features this database serves", () => {
+  it("offers both when the migrations are in place", async () => {
+    await expect(notesFeatures()).resolves.toEqual({
+      customerMeetings: true,
+      presenterSelections: true,
+    });
+  });
+
+  it("offers no customer meetings before 0087 adds the meeting fields", async () => {
+    state.missing["journal_entries"] = {
+      message: "column journal_entries.meeting_date does not exist",
+    };
+    await expect(notesFeatures()).resolves.toEqual({
+      customerMeetings: false,
+      presenterSelections: true,
+    });
+  });
+
+  it("offers no presenter selections before 0088 creates the table", async () => {
+    state.missing["presenter_note_picks"] = {
+      message: 'relation "presenter_note_picks" does not exist',
+    };
+    await expect(notesFeatures()).resolves.toEqual({
+      customerMeetings: true,
+      presenterSelections: false,
+    });
   });
 });

@@ -4,7 +4,11 @@ import { When } from "@/components/when";
 import { fmtDate, stageLabel } from "@/lib/hub-format";
 import { isExceptionKind, JOURNAL_KIND_LABEL } from "@/lib/journal-input";
 import { PRESENTER_PRIVACY_NOTE, type PresenterNote } from "@/lib/presenter-notes";
-import { usePresenterNotes, usePresenterSelection } from "@/lib/presenter-notes-query";
+import {
+  useNotesFeatures,
+  usePresenterNotes,
+  usePresenterSelection,
+} from "@/lib/presenter-notes-query";
 import { cn } from "@/lib/utils";
 
 /**
@@ -13,6 +17,14 @@ import { cn } from "@/lib/utils";
  * reference to this view; removing one deletes only that reference.
  */
 export function PresenterNotesPanel({ dealId }: { dealId: string }) {
+  // Shown only when the selections table exists here; otherwise there is nothing
+  // to select and nothing to show, so no control appears that would fail.
+  const features = useNotesFeatures();
+  if (!features.presenterSelections) return null;
+  return <PresenterSelectionsPanel dealId={dealId} />;
+}
+
+function PresenterSelectionsPanel({ dealId }: { dealId: string }) {
   const query = usePresenterNotes(dealId);
   const { add, remove } = usePresenterSelection(dealId);
   const [picking, setPicking] = useState(false);
