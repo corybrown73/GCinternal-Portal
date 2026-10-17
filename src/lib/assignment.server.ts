@@ -13,6 +13,7 @@ import {
 import type { HandoffNote } from "@/lib/field-fusion";
 import { isTrainingOnly, readIntake } from "@/lib/intake-answers";
 import { isPreClose } from "@/lib/presale-stages";
+import { paperworkOnFile } from "@/lib/won-gate";
 
 import { audit } from "./server/audit";
 import { sendEmail } from "./server/email";
@@ -390,8 +391,9 @@ export async function assignDeal(args: {
       .maybeSingle();
     shareUrl = (row?.welcome_share_url as string | null) ?? null;
     if (!shareUrl) {
-      const { issueWelcomeLinkAs } = await import("./welcome.server");
-      shareUrl = (await issueWelcomeLinkAs(args.actorProfileId ?? null, args.dealId)).url;
+      const { issueWelcomeLinkUnlessOff } = await import("./welcome.server");
+      shareUrl =
+        (await issueWelcomeLinkUnlessOff(args.actorProfileId ?? null, args.dealId))?.url ?? null;
     }
   } catch (e) {
     console.error("[assignment] could not issue the customer link", e);
@@ -679,7 +681,7 @@ export async function dealAssignment(dealId: string): Promise<DealAssignment> {
         .eq("account_id", dealId),
       db()
         .from("portal_accounts")
-        .select("sow_document_path,sow_reference,welcome_issued_at")
+        .select("sow_document_path,sow_document_url,sow_reference,intake,welcome_issued_at")
         .eq("id", dealId)
         .maybeSingle(),
       db()
@@ -751,8 +753,8 @@ export async function dealAssignment(dealId: string): Promise<DealAssignment> {
       { key: "gong", label: "Gong recording on the deal", done: (reports ?? 0) > 0 },
       {
         key: "sow",
-        label: "SOW uploaded",
-        done: Boolean(dealRow?.sow_document_path || dealRow?.sow_reference),
+        label: "SOW or contract on file",
+        done: dealRow ? paperworkOnFile(dealRow) !== null : false,
       },
       {
         key: "welcome",

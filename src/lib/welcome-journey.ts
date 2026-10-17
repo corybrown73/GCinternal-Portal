@@ -64,6 +64,58 @@ export function actualStageCompletionDate(
   return date && /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : null;
 }
 
+/** One row of the deal's own stage history (portal_stage_transitions). */
+export type DealStageTransition = { to_stage: string; occurred_at: string };
+
+/** The deal stages a completion is read from, in order. */
+const DEAL_STAGE_RANK: Partial<Record<AccountStage, number>> = {
+  get_it_working: 1,
+  make_it_yours: 2,
+  make_it_run: 3,
+  onboarding_complete: 4,
+};
+const TARGET_RANK: Record<StageTargetKey, number> = {
+  get_it_working: 1,
+  make_it_yours: 2,
+  make_it_run: 3,
+  // Graduate is complete on entering onboarding_complete itself.
+  complete: 3,
+};
+
+/**
+ * A stage's actual completion, from the deal's own stage moves: the first
+ * transition into any later stage since the deal was last at or before it
+ * (Graduate: into Onboarding complete). The same moves the TIS and the
+ * checklist make, so the customer's "completed" date is the day the stage
+ * was moved on, never the internal lifecycle track, which runs a stage
+ * behind the deal. None while the deal's latest move put it back at or
+ * before the stage: a stage the deal is in again is not completed, and once
+ * it is moved on again, that later day is its completion.
+ */
+export function stageCompletionFromTransitions(
+  transitions: readonly DealStageTransition[],
+  key: StageTargetKey,
+): string | null {
+  const after = TARGET_RANK[key];
+  const rank = (t: DealStageTransition) =>
+    DEAL_STAGE_RANK[normalizeStage(t.to_stage) ?? "prospect"] ?? 0;
+  const moves = transitions
+    .filter((t) => Boolean(t.occurred_at))
+    .sort((a, b) => a.occurred_at.localeCompare(b.occurred_at));
+  const latest = moves[moves.length - 1];
+  if (!latest || rank(latest) <= after) return null;
+  let lastAtOrBefore = -1;
+  moves.forEach((t, i) => {
+    if (rank(t) <= after) lastAtOrBefore = i;
+  });
+  const date =
+    moves
+      .slice(lastAtOrBefore + 1)
+      .find((t) => rank(t) > after)
+      ?.occurred_at.slice(0, 10) ?? null;
+  return date && /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : null;
+}
+
 export type SolutionBallView = {
   id: string;
   name: string;
@@ -258,6 +310,11 @@ export function customerJourney(input: {
   parkingLot: ReadonlyArray<{ request: string; target: string; status: string; owner?: string }>;
   leadName: string | null;
   stageHistory?: readonly ImplementationStageHistoryEntry[];
+  /**
+   * The deal's own stage moves. When given, each stage's completion date is
+   * read from these (stageCompletionFromTransitions), not stageHistory.
+   */
+  stageTransitions?: readonly DealStageTransition[];
   /** The rail's status for each stage (railStatuses). Absent: the stage dates alone decide. */
   railStatuses?: readonly RailStageStatus[];
 }): CustomerJourney | null {
@@ -287,7 +344,9 @@ export function customerJourney(input: {
             target: {
               originalDate: target.original_date,
               currentDate: target.current_date,
-              actualDate: actualStageCompletionDate(input.stageHistory ?? [], key),
+              actualDate: input.stageTransitions
+                ? stageCompletionFromTransitions(input.stageTransitions, key)
+                : actualStageCompletionDate(input.stageHistory ?? [], key),
             },
           }
         : {}),

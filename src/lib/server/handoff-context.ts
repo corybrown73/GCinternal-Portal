@@ -2,6 +2,7 @@ import { supabaseAdmin } from "@/integrations/supabase/client.server";
 
 import { customerFacingName } from "../names";
 import { liveImplementationForDeal } from "./deal-implementation";
+import { paperworkOnFile } from "../won-gate";
 
 const db = () => supabaseAdmin as any;
 
@@ -237,8 +238,19 @@ export async function loadHandoffContext(
       "No call notes have been uploaded for this deal. Anything about what the customer wants would be invention — say so rather than writing it.",
     );
   }
-  if (!deal.sow_reference && !deal.sow_document_path && !deal.sow_document_url) {
+  // One rule for the paperwork (paperworkOnFile): a SOW, a contract, or a
+  // stated reason there is no SOW.
+  const paper = paperworkOnFile(deal);
+  if (paper === null) {
     gaps.push("No SOW is recorded. Scope, value and dates cannot be stated as agreed facts.");
+  } else if (paper === "contract") {
+    gaps.push(
+      "No SOW: contract only. Scope is the core plan plus what the contract names; nothing beyond it is agreed.",
+    );
+  } else if (paper === "no_sow") {
+    gaps.push(
+      "No SOW, and the reason is recorded. Scope is the core plan; nothing beyond it is agreed.",
+    );
   }
   if (!deal.am_owner_id && !deal.se_owner_id) {
     gaps.push("Nobody is assigned on the GoCanvas side, so the team slide has no names.");

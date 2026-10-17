@@ -2,7 +2,9 @@ import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 
+import { adoptImplementationSow } from "@/lib/attachments.functions";
 import { getAttachmentLink, setImplementation, uploadAttachment } from "@/lib/hub.functions";
+import { invalidatePaperwork } from "@/lib/paperwork-cache";
 import { fileToBase64, MAX_ATTACHMENT_BYTES } from "@/lib/attachment-client";
 import { documentUploadType } from "@/lib/document-upload";
 import type { EditableImplementation } from "@/components/implementation-write";
@@ -70,6 +72,7 @@ export function SowPanel({
   const queryClient = useQueryClient();
   const save = useServerFn(setImplementation);
   const upload = useServerFn(uploadAttachment);
+  const adopt = useServerFn(adoptImplementationSow);
   const [open, setOpen] = useState(false);
   const [reference, setReference] = useState(implementation.sow_reference ?? "");
   const [file, setFile] = useState<File | null>(null);
@@ -87,6 +90,9 @@ export function SowPanel({
     mutationFn: async () => {
       let path = nullable(documentPath);
       let name = nullable(documentName);
+      // Making it the deal's SOW never stops this panel's own save; a failure
+      // is reported once the save is done.
+      let adoptError: unknown = null;
       if (file) {
         if (file.size > MAX_ATTACHMENT_BYTES) {
           throw new Error("That file is too large for this preview — keep it under 4 MB.");
@@ -103,8 +109,16 @@ export function SowPanel({
         });
         path = stored.path;
         name = stored.name;
+        // Every SOW upload is the deal's SOW (newest wins) and queues a
+        // reading. Adopted BEFORE this panel saves, so the file the project
+        // held until now is still on it to be kept under Files & links.
+        try {
+          await adopt({ data: { implementationId: implementation.id, path, name } });
+        } catch (e) {
+          adoptError = e;
+        }
       }
-      return save({
+      const saved = await save({
         data: {
           id: implementation.id,
           name: implementation.name,
@@ -123,9 +137,15 @@ export function SowPanel({
           customerGoals: implementation.customer_goals,
         },
       });
+      if (adoptError) throw adoptError;
+      return saved;
     },
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["customer360", customerId] });
+      // The deal, its pulse, Home and the welcome page read the same SOW now.
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["customer360", customerId] }),
+        invalidatePaperwork(queryClient, null),
+      ]);
       setFile(null);
       setOpen(false);
     },

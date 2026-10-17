@@ -34,7 +34,9 @@ import {
   uploadIntakeForm,
   uploadSow,
 } from "@/lib/presale.functions";
+import { invalidatePaperwork } from "@/lib/paperwork-cache";
 import { cn } from "@/lib/utils";
+import { paperworkOnFile } from "@/lib/won-gate";
 import { ask } from "@/components/ui/ask";
 
 /**
@@ -51,7 +53,7 @@ import { ask } from "@/components/ui/ask";
  * the record and writing it back whole: the second silently undid the
  * first. Chaining them keeps every answer.
  */
-function useIntakeSaver(dealId: string) {
+function useIntakeSaver(dealId: string, opts: { paperwork?: boolean } = {}) {
   const qc = useQueryClient();
   const save = useServerFn(saveIntake);
   const [error, setError] = useState<string | null>(null);
@@ -63,7 +65,11 @@ function useIntakeSaver(dealId: string) {
       return next;
     },
     onMutate: () => setError(null),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ["deal", dealId] }),
+    // The SOW answers change what every paperwork check reads, not only this page.
+    onSuccess: () =>
+      void (opts.paperwork
+        ? invalidatePaperwork(qc, dealId)
+        : qc.invalidateQueries({ queryKey: ["deal", dealId] })),
     onError: (e) => setError((e as Error).message),
   });
   return {
@@ -85,8 +91,9 @@ function SaveError({ error }: { error: string | null }) {
 export function SowStep({ deal, editable }: { deal: DealData; editable: boolean }) {
   const dealId = deal.account.id;
   const answers = readIntake(deal.account.intake);
-  const { set, busy, error } = useIntakeSaver(dealId);
-  const hasSowFile = Boolean(deal.sow_url);
+  const { set, busy, error } = useIntakeSaver(dealId, { paperwork: true });
+  // The SOW uploaded, linked or referenced (paperworkOnFile's "sow").
+  const hasSowFile = Boolean(deal.sow_url) || paperworkOnFile(deal.account) === "sow";
   const sowFacts = [
     deal.account.sow_reference,
     deal.account.sow_signed_date ? `signed ${deal.account.sow_signed_date}` : null,
@@ -144,12 +151,64 @@ export function SowStep({ deal, editable }: { deal: DealData; editable: boolean 
                 No SOW means nothing bought beyond the core. The contract says how many seats and
                 for how long, so implementation is not guessing.
               </p>
+              <NoSowReason
+                saved={answers.no_sow_reason ?? null}
+                editable={editable}
+                onSave={(why) => set({ no_sow_reason: why })}
+              />
             </div>
           ) : null}
         </>
       )}
       <SaveError error={error} />
     </div>
+  );
+}
+
+/**
+ * "Or say why there is no SOW": a written reason counts as the paperwork
+ * (paperworkOnFile's "no_sow") when there is no contract to upload either.
+ * Saved on blur through the intake saver; an emptied field clears it.
+ */
+export function NoSowReason({
+  saved,
+  editable,
+  onSave,
+}: {
+  saved: string | null;
+  editable: boolean;
+  onSave: (why: string | null) => void;
+}) {
+  const [why, setWhy] = useState(saved ?? "");
+  const ref = useRef<HTMLInputElement>(null);
+  // The record changed under the field (another tab saved): show it, unless
+  // the person is typing in it.
+  useEffect(() => {
+    if (typeof document === "undefined" || document.activeElement !== ref.current) {
+      setWhy(saved ?? "");
+    }
+  }, [saved]);
+  return (
+    <label className="mt-2 block space-y-1 text-[11px] text-muted-foreground">
+      or say why there is no SOW
+      <input
+        ref={ref}
+        type="text"
+        maxLength={1000}
+        className="w-full rounded-sm border border-border bg-background px-2 py-1 text-[12px] text-foreground focus:outline-none focus:ring-1 focus:ring-primary disabled:opacity-60"
+        value={why}
+        disabled={!editable}
+        onChange={(e) => setWhy(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") e.currentTarget.blur();
+        }}
+        onBlur={() => {
+          const next = why.trim() || null;
+          if (next !== (saved?.trim() || null)) onSave(next);
+        }}
+        placeholder="Three seats on a standard order form; no services were sold."
+      />
+    </label>
   );
 }
 
@@ -587,10 +646,9 @@ function PdfUpload({
     onSuccess: () => {
       // The upload queued the reading server-side (flag permitting); the
       // record says so on this refetch. The deal also feeds the Closed Won
-      // notice, and the board shows the SOW on the card.
-      void qc.invalidateQueries({ queryKey: ["deal", dealId] });
-      void qc.invalidateQueries({ queryKey: ["welcome", dealId] });
-      void qc.invalidateQueries({ queryKey: ["pipeline"] });
+      // notice, the board shows the SOW on the card, and Home, the pulse and
+      // the customer's page all read the same paperwork.
+      void invalidatePaperwork(qc, dealId);
     },
     onError: (e) => setError((e as Error).message),
   });

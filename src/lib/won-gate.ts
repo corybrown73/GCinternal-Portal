@@ -23,7 +23,11 @@ export type WonGateMissing = "notes" | "sow" | "checklist";
 
 export const WON_GATE_LABEL: Record<WonGateMissing, string> = {
   notes: "Gong brief or call note",
-  sow: "signed SOW or contract",
+  // Only the SOW (its document or its reference) clears the gate today: the
+  // database gate (0070) refuses a contract-only deal, so the words say SOW.
+  // TODO(0087): once migration 0087 (the paperwork gate) is applied, say
+  // "signed SOW or contract" again and let missingForClosedWon read paperworkOnFile.
+  sow: "signed SOW",
   checklist: "every checklist step done",
 };
 
@@ -44,17 +48,72 @@ export function completeGateMessage(
 }
 
 /**
- * A SOW on file: the signed document, or its reference. The gate below, the
- * board, the deal's checklist and the nudges all read it this way.
+ * What paperwork a deal has on file, by one rule every screen reads:
+ *
+ *  - "sow": the signed SOW uploaded (sow_document_path), linked ("Or link to
+ *    it", sow_document_url), or its reference typed in (sow_reference);
+ *  - "contract": no SOW, but the signed contract is uploaded (intake.contract);
+ *  - "no_sow": somebody said there is no SOW and wrote down why
+ *    (intake.has_sow === false and intake.no_sow_reason).
+ *
+ * null when none of these is true. A bare "No" with neither a contract nor a
+ * reason is not paperwork. Pure: the intake may be the raw jsonb or read.
  */
-export function hasSowOnFile(row: {
+export type PaperworkOnFile = "sow" | "contract" | "no_sow";
+
+export type PaperworkFacts = {
   sow_document_path?: string | null;
+  sow_document_url?: string | null;
   sow_reference?: string | null;
-}): boolean {
-  return Boolean(row.sow_document_path) || Boolean(row.sow_reference?.trim());
+  intake?: unknown;
+};
+
+const filled = (v: unknown): boolean => typeof v === "string" && v.trim() !== "";
+
+export function paperworkOnFile(row: PaperworkFacts): PaperworkOnFile | null {
+  if (filled(row.sow_document_path) || filled(row.sow_document_url) || filled(row.sow_reference)) {
+    return "sow";
+  }
+  const intake = (row.intake && typeof row.intake === "object" ? row.intake : {}) as {
+    has_sow?: unknown;
+    contract?: { path?: unknown } | null;
+    no_sow_reason?: unknown;
+  };
+  if (intake.contract && typeof intake.contract === "object" && filled(intake.contract.path)) {
+    return "contract";
+  }
+  if (intake.has_sow === false && filled(intake.no_sow_reason)) return "no_sow";
+  return null;
 }
 
-/** What a deal still lacks, from the facts the record holds. */
+/** How each kind of paperwork reads on a checklist line. */
+export function paperworkSummary(kind: PaperworkOnFile | null, intake?: unknown): string | null {
+  if (kind === "sow") return "SOW on file";
+  if (kind === "contract") return "Contract on file";
+  if (kind === "no_sow") {
+    const why = (intake as { no_sow_reason?: unknown } | null | undefined)?.no_sow_reason;
+    return filled(why) ? `No SOW: ${String(why).trim()}` : "No SOW";
+  }
+  return null;
+}
+
+/**
+ * Kept for callers that only need yes or no: true when paperworkOnFile
+ * finds a SOW, a contract or a stated reason there is no SOW.
+ */
+export function hasSowOnFile(row: PaperworkFacts): boolean {
+  return paperworkOnFile(row) !== null;
+}
+
+/**
+ * What a deal still lacks for Closed Won, from the facts the record holds.
+ *
+ * Deliberately narrower than paperworkOnFile: the database gate (0070) still
+ * accepts only the SOW's document path or a trimmed reference, so the app
+ * asks for exactly that and a move it lets through is never refused below.
+ * TODO(0087): when migration 0087 (the paperwork gate: SOW link, contract or
+ * a stated no-SOW reason) is applied in production, read paperworkOnFile here.
+ */
 export function missingForClosedWon(facts: {
   reports: number;
   sowPath: string | null | undefined;

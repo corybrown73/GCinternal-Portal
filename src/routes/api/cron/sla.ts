@@ -180,10 +180,16 @@ async function runSlaSweep(): Promise<Response> {
    * missed (a failed background recompute, a direct SQL edit, or time simply
    * passing — dwell and launch dates go stale on their own).
    */
-  const { recomputeAllHealth } = await import("@/lib/health.server");
-  const health = await recomputeAllHealth();
-  summary.health_recomputed = health.updated;
-  summary.health_failed = health.failed;
+  // Guarded like every other pass: a health failure must not skip the
+  // hour's reminders below, or fail the whole sweep.
+  try {
+    const { recomputeAllHealth } = await import("@/lib/health.server");
+    const health = await recomputeAllHealth();
+    summary.health_recomputed = health.updated;
+    summary.health_failed = health.failed;
+  } catch (e) {
+    console.error("[cron] health recompute failed", e);
+  }
 
   /* ---- 7. Deal nudges: the checklist's own limits (stage-flow.ts) ----
      The owner hears when a deal sits past its stage's limit or a training
@@ -195,6 +201,7 @@ async function runSlaSweep(): Promise<Response> {
     (summary as Record<string, number>)["deal_nudges_sent"] = n.sent;
     (summary as Record<string, number>)["deal_nudges_baselined"] = n.baselined;
     (summary as Record<string, number>)["deal_nudges_failed"] = n.failed;
+    (summary as Record<string, number>)["deal_nudges_held"] = n.held;
     // A read failed: nothing was sent or baselined this hour (the log says why).
     (summary as Record<string, number>)["deal_nudges_halted"] = n.halted ? 1 : 0;
   } catch (e) {

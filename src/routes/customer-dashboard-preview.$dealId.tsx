@@ -29,6 +29,8 @@ function CustomerDashboardPreviewPage() {
   const preview = useQuery({
     queryKey: ["customer-dashboard-preview", dealId],
     queryFn: () => load({ data: { dealId } }),
+    // Always the current record when the TIS opens it, never a cached copy.
+    refetchOnMount: "always",
   });
   const [today, setToday] = useState<string | null>(null);
   useEffect(() => setToday(localIso()), []);

@@ -30,7 +30,7 @@ vi.mock("../server/ai/client", () => h.ai);
 vi.mock("../server/audit", () => h.audit);
 
 import { sha256Hex } from "../server/ai/documents";
-import { proposePlanFromSow } from "../sow-plan.server";
+import { SYSTEM_PROMPT, proposePlanFromSow } from "../sow-plan.server";
 import { sowReadingSchema } from "../sow-plan";
 
 const DEAL = "22222222-2222-4222-8222-222222222222";
@@ -138,5 +138,13 @@ describe("proposePlanFromSow", () => {
     const content = h.ai.runStructured.mock.calls[0]![0].content as Array<Record<string, any>>;
     expect(content).toHaveLength(3);
     expect(content.some((b) => /DOCUMENT 2/.test(String(b["text"] ?? "")))).toBe(false);
+  });
+});
+
+describe("the reader's rule for a contract-only deal", () => {
+  it("reads a signed contract or order form, and refuses only a document that is neither", () => {
+    expect(SYSTEM_PROMPT).toMatch(/A signed contract or order form is readable/);
+    expect(SYSTEM_PROMPT).toMatch(/neither a SOW nor a signed contract or order form/);
+    expect(SYSTEM_PROMPT).not.toMatch(/If the document is not a SOW/);
   });
 });

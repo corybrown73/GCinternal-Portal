@@ -34,6 +34,7 @@ import {
 import { PartnerChoice } from "@/components/partner-choice";
 import { partnerSelectionPatch, type PartnerKey } from "@/lib/partner-implementation";
 import { WON_GATE_LABEL, type WonGateMissing } from "@/lib/won-gate";
+import { invalidatePaperwork } from "@/lib/paperwork-cache";
 import {
   ALREADY_STAGED,
   canAssignAtEntry,
@@ -183,7 +184,8 @@ export function NewDealDialog() {
   // `gate`: what the Closed Won gate said was missing, so the deal page
   // opens on it rather than on a bare "Not closed yet".
   const finish = (dealId: string, gate?: string) => {
-    queryClient.invalidateQueries({ queryKey: ["pipeline"] });
+    // The SOW may have been uploaded here: everything that reads it refetches.
+    void invalidatePaperwork(queryClient, dealId);
     setOpen(false);
     reset();
     navigate({ to: "/deals/$dealId", params: { dealId }, search: gate ? { gate } : {} });

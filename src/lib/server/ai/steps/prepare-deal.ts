@@ -160,6 +160,10 @@ export const sow: StepFn = async (job) => {
   const docs = await loadDealDocuments(account);
   // The SOW first; a contract alone (a seats-only deal) still says what was bought.
   const doc = docs.sow?.block ? docs.sow : docs.contract?.block ? docs.contract : null;
+  // No SOW: the contract is the scope document, labelled as the contract
+  // to the model and on the record, and never stamped as a SOW.
+  const fromContract = Boolean(doc) && doc !== docs.sow;
+  const source = fromContract ? "the contract" : "the SOW";
   if (!doc) {
     const problem = docs.sow?.problem ?? docs.contract?.problem ?? null;
     if (problem) {
@@ -205,6 +209,7 @@ export const sow: StepFn = async (job) => {
       read = await readSowDocument(dealId, doc, {
         jobId: job.id,
         contract: doc === docs.sow && docs.contract?.block ? docs.contract : null,
+        kind: fromContract ? "contract" : "sow",
       });
     } catch (e) {
       const detail = errText(e);
@@ -260,11 +265,11 @@ export const sow: StepFn = async (job) => {
     hasReports: (reports ?? []).length > 0,
   });
   await mergeIntake(dealId, intakePatch.patch as Record<string, unknown>, timeline);
-  if (accepted) filled.push(`${accepted} service${accepted === 1 ? "" : "s"} from the SOW`);
-  filled.push(...intakePatch.filled.map((s) => `${s} (from the SOW)`));
+  if (accepted) filled.push(`${accepted} service${accepted === 1 ? "" : "s"} from ${source}`);
+  filled.push(...intakePatch.filled.map((s) => `${s} (from ${source})`));
   const { stampSowFacts } = await import("../../../sow-plan.server");
-  const stamped = await stampSowFacts(dealId, proposal);
-  filled.push(...stamped.map((s) => `the SOW ${s}`));
+  const stamped = await stampSowFacts(dealId, proposal, { fromContract });
+  filled.push(...stamped.map((s) => `${source} ${s}`));
 
   // The SOW was read; a contract beside it that was not (too large with
   // the SOW, a file that is not a document) is said in words, not dropped.
@@ -515,10 +520,13 @@ export const verify: StepFn = async (job, ctx) => {
   if (error) throw new Error(`Could not complete the brief: ${error.message}`);
   const fields = Object.values(verified.verification?.fields ?? {});
   const unverified = fields.filter((s) => s !== "grounded").length;
+  // Talked about, not bought: said on the record so the TIS knows the
+  // deck and the customer's page left them out on purpose.
+  const discussed = verified.discussed_not_purchased?.length ?? 0;
   return briefBranch(
     {
       status: "ok",
-      detail: `Checked ${fields.length} item${fields.length === 1 ? "" : "s"}${unverified ? `, ${unverified} to confirm` : ""}${usage ? "" : " (the checker did not run)"}`,
+      detail: `Checked ${fields.length} item${fields.length === 1 ? "" : "s"}${unverified ? `, ${unverified} to confirm` : ""}${discussed ? `, ${discussed} discussed but not purchased (kept internal)` : ""}${usage ? "" : " (the checker did not run)"}`,
     },
     { ...(usage ? { usage } : {}), result: { brief_id: row.id, verified: fields.length } },
   );
@@ -602,8 +610,8 @@ export const finalize: StepFn = async (job, ctx: StepContext) => {
   // reply both point at it.
   if (!account.welcome_share_url) {
     try {
-      const { issueWelcomeLinkAs } = await import("../../../welcome.server");
-      await issueWelcomeLinkAs(null, dealId);
+      const { issueWelcomeLinkUnlessOff } = await import("../../../welcome.server");
+      await issueWelcomeLinkUnlessOff(null, dealId);
     } catch (e) {
       problems.push(`The customer's link was not made: ${errText(e)}`);
     }

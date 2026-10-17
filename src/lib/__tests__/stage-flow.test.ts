@@ -65,7 +65,9 @@ describe("the stage checklist", () => {
     expect(cw(f).tasks.map((t) => t.key)).toEqual(["type", "assign", "notes", "sow", "review"]);
     expect(cw(f).tasks[0]!.done).toBe(false);
     const review = cw(f).tasks.find((t) => t.key === "review")!;
-    expect(review.locked).toBe("Needs the type of deal, the Gong brief and the SOW first");
+    expect(review.locked).toBe(
+      "Needs the type of deal, the Gong brief and the SOW or contract first",
+    );
     const typed = stageFlow(input({ intake: { path: "dm_conversion" } }));
     expect(cw(typed).tasks[0]!.summary).toBe("Device Magic → GoCanvas");
   });
@@ -95,9 +97,39 @@ describe("the stage checklist", () => {
     expect(cw(f).tasks.find((t) => t.key === "review")!.summary).toMatch(/reading/);
   });
 
-  it("counts no SOW as answered", () => {
-    const f = stageFlow(input({ hasSow: false, intake: { ...ready, has_sow: false } }));
-    expect(cw(f).tasks.find((t) => t.key === "sow")!.done).toBe(true);
+  it("counts no SOW as answered only with a contract or a written reason", () => {
+    const sowTask = (over: Partial<StageFlowInput>) =>
+      cw(stageFlow(input(over))).tasks.find((t) => t.key === "sow")!;
+    // A bare "No" is not paperwork.
+    const bare = sowTask({ hasSow: false, intake: { ...ready, has_sow: false } });
+    expect(bare.done).toBe(false);
+    // The contract uploaded under "No — upload the contract".
+    const contract = sowTask({
+      hasSow: false,
+      intake: {
+        ...ready,
+        has_sow: false,
+        contract: { path: "deals/x/contract/c.pdf", name: "c.pdf", uploaded_at: "2026-10-01" },
+      },
+    });
+    expect(contract.done).toBe(true);
+    expect(contract.summary).toBe("Contract on file");
+    // "Or say why there is no SOW".
+    const reason = sowTask({
+      hasSow: false,
+      intake: { ...ready, has_sow: false, no_sow_reason: "Three seats on an order form" },
+    });
+    expect(reason.done).toBe(true);
+    expect(reason.summary).toBe("No SOW: Three seats on an order form");
+  });
+
+  it("reads the paperwork the caller passed, from paperworkOnFile", () => {
+    const sowTask = (over: Partial<StageFlowInput>) =>
+      cw(stageFlow(input(over))).tasks.find((t) => t.key === "sow")!;
+    expect(sowTask({ hasSow: false, paperwork: "sow" }).summary).toBe("SOW on file");
+    expect(sowTask({ hasSow: false, paperwork: "contract" }).done).toBe(true);
+    // paperwork wins over the older yes/no.
+    expect(sowTask({ hasSow: true, paperwork: null }).done).toBe(false);
   });
 
   it("moves Pre-kickoff to Kickoff when intake, the starting solution, the process-call decision and the booked kickoff are all in", () => {
@@ -416,7 +448,7 @@ describe("nudges", () => {
         { key: "adjust", label: "Training day 3", date: "2026-09-29", businessDaysLate: 1 },
       ],
     });
-    expect(n.map((x) => x.key)).toEqual(["make_it_yours@2026-09-21:overdue:working"]);
+    expect(n.map((x) => x.key)).toEqual(["overdue:working@2026-09-24"]);
   });
 });
 

@@ -151,6 +151,12 @@ export type KickoffDeckData = {
    * notes say when to drop them; a slide with nothing to say is dropped.
    */
   optionalSlides: { about: boolean; integrations: boolean; support: boolean; risks: boolean };
+  /**
+   * For the presenter only, on slide one's notes and never on a slide: what
+   * the customer said they need (quoted), and what the calls talked about
+   * that the SOW or the contract does not sell. Absent when there is none.
+   */
+  internal?: { requirements: string[]; discussed: string[] };
 };
 
 /** Every field the template defines, in slide order. The authority for `missing`. */
@@ -548,7 +554,13 @@ export function buildKickoffData(input: KickoffInput): KickoffDeckData {
   /* ------------------------------------------------------------------- 13 */
 
   input.solutions.slice(0, 3).forEach((s, i) => set(`integration_${i + 1}`, s));
-  k.integrations.slice(0, 3).forEach((s, i) => infer(`integration_${i + 1}`, s));
+  k.integrations.slice(0, 3).forEach((s, i) => {
+    infer(`integration_${i + 1}`, s);
+    // Inferred lines are on the CHECK THESE list already; the verifier's
+    // word reaches one the plan's solutions did not fill as well.
+    if (f[`integration_${i + 1}`] === clean(s)) fromBrief.add(`integration_${i + 1}`);
+    flag(`kickoff.integrations[${i}]`, `integration_${i + 1}`);
+  });
   set("it_contact", input.itContact ? `${input.itContact.name} · ${input.itContact.role}` : null);
   infer("it_contact", k.it_contact);
   flag("kickoff.it_contact", "it_contact");
@@ -624,7 +636,21 @@ export function buildKickoffData(input: KickoffInput): KickoffDeckData {
 
   const missing = TEMPLATE_FIELDS.filter((k) => !(k in f) && !optionalByDesign.has(k));
 
+  // The presenter's own list: the customer's needs as they said them, and
+  // what was talked about but not bought — so nobody presents it as scope.
+  const requirements = (input.brief.requirements ?? [])
+    .filter((r) => r.text?.trim())
+    .map((r) =>
+      r.quote?.trim() && r.quote.trim().toLowerCase() !== r.text.trim().toLowerCase()
+        ? `${r.text.trim()} — “${r.quote.trim()}”`
+        : r.text.trim(),
+    );
+  const discussed = (input.brief.discussed_not_purchased ?? [])
+    .map((d) => d.item?.trim())
+    .filter((s): s is string => Boolean(s));
+
   return {
+    ...(requirements.length || discussed.length ? { internal: { requirements, discussed } } : {}),
     fields: f,
     fromCalls: [...fromCalls].sort(
       (a, b) => TEMPLATE_FIELDS.indexOf(a) - TEMPLATE_FIELDS.indexOf(b),

@@ -423,6 +423,44 @@ export function watchOutsFor(args: {
     }
   }
 
+  // Talked about on the calls, not bought: the purchase check moved it off
+  // the deck and the customer's page. The TIS raises it before the kickoff.
+  for (const d of b?.discussed_not_purchased ?? []) {
+    const item = d.item?.trim();
+    if (!item) continue;
+    out.push({
+      key: `discussed-${item.toLowerCase().replace(/\W+/g, "-")}`,
+      type: "scope",
+      severity: "check",
+      title: `Discussed on the calls, not purchased: ${item}`,
+      detail:
+        "Neither the SOW nor the contract sells it, so it is off the deck and the customer's page. Settle it with the AE before the kickoff: a change order, or say plainly it is not part of this implementation.",
+      quote: d.quote?.trim() || item,
+      source: d.quote?.trim() ? "calls" : "brief",
+    });
+  }
+
+  // A need the customer stated that the signed document rules out.
+  for (const [i, r] of (b?.requirements ?? []).entries()) {
+    const words = requirementWords(r.text);
+    if (!words.length) continue;
+    const excluded = sowSentences.find(
+      (s) => EXCLUDES.test(s) && requirementWords(s).some((w) => words.includes(w)),
+    );
+    if (!excluded) continue;
+    out.push({
+      key: `need-excluded-${i}`,
+      type: "scope",
+      severity: "conflict",
+      title: `They need ${r.text.trim()}; the SOW rules it out`,
+      detail:
+        "Said on the calls as a need, excluded by the signed document. Settle it before the kickoff, or the first form is built without it.",
+      quote: r.quote?.trim() || r.text.trim(),
+      source: "calls",
+      against: { source: "sow", quote: excluded },
+    });
+  }
+
   // Dates the SOW names in prose, against the plan — only for a SOW read
   // before the reader typed its dates.
   for (const [i, s] of sowSentences.entries()) {
@@ -918,6 +956,78 @@ function seatsFromText(text: string): number | null {
 }
 
 /* ------------------------------------------------------------ helpers */
+
+/** A sentence that rules something out of what was sold. */
+const EXCLUDES =
+  /\b(not included|exclud\w*|out of scope|not in scope|does not (?:include|cover)|no (?:support|provision) for)\b/i;
+
+/** Words too common in a requirement to say which one it is. */
+const REQUIREMENT_STOP = new Set([
+  "the",
+  "and",
+  "with",
+  "for",
+  "each",
+  "every",
+  "form",
+  "forms",
+  "data",
+  "work",
+  "field",
+  "fields",
+  "need",
+  "needs",
+  "from",
+  "into",
+  "they",
+  "their",
+  "our",
+  "app",
+  "use",
+  "using",
+  "all",
+  "are",
+  "not",
+  "included",
+  "excluded",
+  "scope",
+  "out",
+  "sow",
+  "this",
+  "that",
+  "will",
+  "can",
+  "has",
+  "have",
+  "any",
+  "one",
+  "to",
+  "of",
+  "is",
+  "in",
+  "on",
+  "be",
+  "or",
+  "an",
+  "no",
+  "by",
+  "at",
+  "as",
+  "it",
+  "we",
+  "do",
+  "if",
+  "so",
+  "up",
+]);
+
+/** The words that say which need it is: "Scan QR codes" → scan, qr, codes. */
+function requirementWords(text: string): string[] {
+  return text
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter((w) => w.length >= 2 && !REQUIREMENT_STOP.has(w) && !/^\d+$/.test(w));
+}
 
 function sentencesFrom(texts: string[], splitSemicolons = false): string[] {
   return texts

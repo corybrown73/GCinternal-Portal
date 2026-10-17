@@ -56,6 +56,7 @@ class Builder implements PromiseLike<{ data: any; error: any }> {
     private readonly store: Rows,
     private readonly log: { inserts: Array<{ table: string; row: any }> },
     private readonly unique: UniqueIndexes = {},
+    private readonly maxRows: number | null = null,
   ) {}
 
   /** The first insert that a unique index refuses (nulls never collide, as in Postgres). */
@@ -202,6 +203,8 @@ class Builder implements PromiseLike<{ data: any; error: any }> {
     }
     if (this.limitTo !== null) out = out.slice(this.offset, this.offset + this.limitTo);
     else if (this.offset) out = out.slice(this.offset);
+    // PostgREST's db-max-rows: a read answers this many rows at most.
+    if (this.op.kind === "select" && this.maxRows !== null) out = out.slice(0, this.maxRows);
     return out;
   }
 
@@ -288,7 +291,12 @@ export type FakeSupabase = {
 
 export function createFakeSupabase(
   initial: Rows,
-  options: { objects?: Record<string, Uint8Array>; unique?: UniqueIndexes } = {},
+  options: {
+    objects?: Record<string, Uint8Array>;
+    unique?: UniqueIndexes;
+    /** Cap every select at this many rows, as PostgREST's db-max-rows does. */
+    maxRows?: number;
+  } = {},
 ): FakeSupabase {
   const store: Rows = JSON.parse(JSON.stringify(initial));
   const log = { inserts: [] as Array<{ table: string; row: any }> };
@@ -297,7 +305,8 @@ export function createFakeSupabase(
   const rpcs: FakeSupabase["rpcs"] = [];
 
   const client = {
-    from: (table: string) => new Builder(table, store, log, options.unique),
+    from: (table: string) =>
+      new Builder(table, store, log, options.unique, options.maxRows ?? null),
     storage: {
       from: (bucket: string) => ({
         upload: async (path: string, bytes: Uint8Array, opts?: { contentType?: string }) => {

@@ -68,9 +68,18 @@ export type HandoffInputs = {
   implementation: {
     customer_goals?: string | null;
     sow_document_url?: string | null;
+    /** Where a SOW uploaded on the deal lands on the implementation. */
+    sow_document_path?: string | null;
     sow_reference?: string | null;
     discovery_board_url?: string | null;
   };
+  /**
+   * The paperwork as the deal page reads it (won-gate's paperworkOnFile over
+   * the implementation and its deal): a SOW, a contract, or a stated reason
+   * there is no SOW. Computed by the caller so this module stays import-free;
+   * when absent, only the implementation's own SOW fields are read.
+   */
+  paperwork?: "sow" | "contract" | "no_sow" | null;
   packet: {
     integration_dependencies?: string | null;
     data_migration_needs?: string | null;
@@ -119,6 +128,14 @@ const DAY_TO_DAY = [
 
 export function handoffCompleteness(input: HandoffInputs): HandoffCompleteness {
   const { implementation: impl, packet } = input;
+  const paper =
+    input.paperwork !== undefined
+      ? input.paperwork
+      : filled(impl.sow_document_path) ||
+          filled(impl.sow_document_url) ||
+          filled(impl.sow_reference)
+        ? "sow"
+        : null;
 
   const buyer = hasRole(input.contacts, ECONOMIC_BUYER);
   const champion = hasRole(input.contacts, CHAMPION);
@@ -203,11 +220,15 @@ export function handoffCompleteness(input: HandoffInputs): HandoffCompleteness {
     {
       key: "sow_link",
       label: "SOW",
-      present: filled(impl.sow_document_url) || filled(impl.sow_reference),
+      present: paper !== null,
       detail:
-        filled(impl.sow_document_url) || filled(impl.sow_reference)
+        paper === "sow"
           ? "Attached or referenced."
-          : "No SOW document or reference on the implementation.",
+          : paper === "contract"
+            ? "No SOW: the signed contract is on the deal."
+            : paper === "no_sow"
+              ? "No SOW: the reason is recorded on the deal."
+              : "No SOW document, reference or contract on the implementation or its deal.",
       tab: "overview",
     },
     {

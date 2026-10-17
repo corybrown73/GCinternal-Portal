@@ -54,7 +54,7 @@ import {
 } from "@/lib/stage-flow";
 import { getWelcome } from "@/lib/welcome.functions";
 import { byKind, shortMeeting, workspaceFor, type WorkItem, type Workspace } from "@/lib/workspace";
-import { hasSowOnFile } from "@/lib/won-gate";
+import { paperworkOnFile } from "@/lib/won-gate";
 import { cn } from "@/lib/utils";
 
 /**
@@ -120,7 +120,7 @@ function WorkspaceBody({
     intake,
     owner: impl.owner_name,
     gongReports: deal.gong_reports.length,
-    hasSow: hasSowOnFile(deal.account),
+    paperwork: paperworkOnFile(deal.account),
     hasBrief: deal.briefs.some((b) => b.status === "complete" && b.generator === "llm"),
     hasLink: Boolean((deal.account as { welcome_share_url?: string | null }).welcome_share_url),
     timeline,

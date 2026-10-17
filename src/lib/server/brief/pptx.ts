@@ -90,6 +90,21 @@ function prepNotes(data: KickoffDeckData): string {
       data.fromCalls.join(", "),
     );
   }
+  // For the presenter only: never on a slide, never read out as scope.
+  if (data.internal?.requirements.length) {
+    lines.push(
+      "",
+      `WHAT THEY SAID THEY NEED — ${data.internal.requirements.length}, from the calls (internal; check the plan covers each):`,
+      ...data.internal.requirements.map((r) => `• ${r}`),
+    );
+  }
+  if (data.internal?.discussed.length) {
+    lines.push(
+      "",
+      `DISCUSSED, NOT PURCHASED — not in the SOW or the contract. Do not present as scope:`,
+      ...data.internal.discussed.map((d) => `• ${d}`),
+    );
+  }
   return lines.join("\n");
 }
 

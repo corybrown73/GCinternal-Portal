@@ -3,18 +3,21 @@ import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { appUrl } from "./app-url";
 import { claimedOwnersByDeal } from "./claimed-owner";
 import { readIntake } from "./intake-answers";
-import { hasSowOnFile } from "./won-gate";
+import { paperworkOnFile } from "./won-gate";
 import { isOnboardingStage, kickoffEntryDate, plannedBeforeKickoff } from "./presale-stages";
 import { closeDateFor, timelineFor } from "./onboarding-plan";
 import { businessDaysBetween, localIso } from "./onboarding-timeline";
 import { nudgesFor, stageFlow, type Nudge } from "./stage-flow";
-import { isPartnerJourney } from "./partner-implementation";
+import { isPartnerDeal, isPartnerJourney } from "./partner-implementation";
 import {
   partnerNudges,
   partnerOverdueByImplementation,
   type PartnerOverdue,
 } from "./partner-attention";
 import { isTestAccount } from "./test-accounts";
+import { latestImplementations } from "./claimed-owner";
+import { workedRecently } from "./deal-activity";
+import { ActivityReadError } from "./deal-activity.server";
 
 const db = () => supabaseAdmin as any;
 
@@ -49,13 +52,26 @@ export type NudgeRun = {
   baselined: number;
   /** Sends that failed; their recipients are tried again next hour. */
   failed: number;
+  /**
+   * Recipients the mailer did not deliver to (held by the email rule, or a
+   * deployment in log mode). Recorded, not counted as sent, and not retried.
+   */
+  held: number;
   /** Why the run stopped before sending anything (a read failed), or null. */
   halted: string | null;
 };
 
 type NudgedRow = {
   entity_id: string;
-  payload: { key?: string; to?: unknown; failed?: unknown; baseline?: unknown } | null;
+  /** When the reminder was recorded; the carry-over compares it to the call's date. */
+  created_at?: string | null;
+  payload: {
+    key?: string;
+    to?: unknown;
+    failed?: unknown;
+    held?: unknown;
+    baseline?: unknown;
+  } | null;
 };
 
 /** One read of the run; any error ends the run before it sends or stamps. */
@@ -96,7 +112,14 @@ export async function runDealNudges(
     now?: () => Date;
   } = {},
 ): Promise<NudgeRun> {
-  const run: NudgeRun = { sent: 0, skipped: 0, baselined: 0, failed: 0, halted: null };
+  const run: NudgeRun = {
+    sent: 0,
+    skipped: 0,
+    baselined: 0,
+    failed: 0,
+    held: 0,
+    halted: null,
+  };
   try {
     return await nudgeRun(run, opts);
   } catch (e) {
@@ -112,7 +135,8 @@ async function nudgeRun(
 ): Promise<NudgeRun> {
   const gap = opts.sendGapMs ?? NUDGE_SEND_GAP_MS;
   const sleep = opts.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
-  const hour = (opts.now?.() ?? new Date()).toISOString().slice(0, 13);
+  const nowAt = opts.now?.() ?? new Date();
+  const hour = nowAt.toISOString().slice(0, 13);
 
   // Not knowing whether the baseline ran is not a reason to mail everyone.
   const stamp = await db()
@@ -178,7 +202,7 @@ async function nudgeRun(
           .order("created_at", { ascending: false }),
         db()
           .from("portal_audit_log")
-          .select("entity_id,payload")
+          .select("entity_id,payload,created_at")
           .eq("action", "deal.nudged")
           .in("entity_id", ids),
         db()
@@ -222,12 +246,30 @@ async function nudgeRun(
   const ownerByDeal = new Map<string, string | null>(
     [...claimedOwnersByDeal(impls, ledger)].map(([dealId, o]) => [dealId, o.id]),
   );
-  // A deal whose newest implementation runs the partner journey: its nudges come
-  // from its own milestones and work items, never the standard checklist.
+  // The deal's live project: the newest one not superseded. Partner status,
+  // the reminder's link and the activity check all read this one project.
+  const liveImpl = latestImplementations(impls);
+  // A deal whose live project runs the partner journey: its nudges come from
+  // its own milestones and work items, never the standard checklist. (A deal
+  // whose intake chose the partner path is partner too, project or not: the
+  // board's and the stall sweep's rule.)
   const partnerImplByDeal = new Map<string, string>();
-  for (const i of impls)
-    if (!partnerImplByDeal.has(i.deal_id) && isPartnerJourney(i))
-      partnerImplByDeal.set(i.deal_id, i.id);
+  for (const [dealId, i] of liveImpl) if (isPartnerJourney(i)) partnerImplByDeal.set(dealId, i.id);
+  // Who logged work in the last few business days (deal-activity.ts): the
+  // 'Waiting:' reminder spares them. Ten calendar days covers three business
+  // days across a weekend and a holiday.
+  let lastWorked: Map<string, string>;
+  try {
+    const { loadPersonActivity } = await import("./deal-activity.server");
+    lastWorked = await loadPersonActivity({
+      dealIds: ids,
+      liveImplByDeal: new Map([...liveImpl].map(([dealId, i]) => [dealId, i.id])),
+      since: new Date(nowAt.getTime() - 10 * 86_400_000).toISOString(),
+    });
+  } catch (e) {
+    if (e instanceof ActivityReadError) throw new NudgeReadError(e.what, e);
+    throw e;
+  }
   const partnerIds = [...new Set(partnerImplByDeal.values())];
   const partnerReads = partnerIds.length
     ? await Promise.all([
@@ -250,6 +292,7 @@ async function nudgeRun(
       })
     : new Map();
   const record = nudgeRecord(sent);
+  const carriedFrom = overdueCarryOver(sent);
   const ownerIds = [...new Set([...ownerByDeal.values()].filter(Boolean))] as string[];
   const members = must<Array<{ id: string; name: string; email: string | null }>>(
     "the owners' names",
@@ -278,16 +321,18 @@ async function nudgeRun(
     const entered = String(d.stage_entered_at ?? new Date().toISOString());
     if (entered.slice(0, 10) < NUDGES_FROM) continue;
     const partnerImplId = partnerImplByDeal.get(id) ?? null;
+    const intake = readIntake(d.intake);
     let nudges: Nudge[];
-    if (partnerImplId) {
+    if (partnerImplId || isPartnerDeal(intake)) {
+      // No stage-age reminders for a partner deal; a partner deal with no
+      // project yet has no milestones to be late on either.
       nudges = partnerNudges({
         name: String(d.name),
         stage: String(d.stage),
         enteredAt: entered,
-        overdue: partnerOverdue.get(partnerImplId) ?? [],
+        overdue: partnerImplId ? (partnerOverdue.get(partnerImplId) ?? []) : [],
       });
     } else {
-      const intake = readIntake(d.intake);
       const hist = history.filter((h) => h.account_id === id);
       const timeline = timelineFor(
         intake,
@@ -298,7 +343,7 @@ async function nudgeRun(
         intake,
         owner: owner?.name ?? (ownerId ? "owner" : null),
         gongReports: noteCount.get(id) ?? 0,
-        hasSow: hasSowOnFile(d),
+        paperwork: paperworkOnFile(d),
         hasBrief: briefed.has(id),
         hasLink: Boolean(d.welcome_share_url),
         timeline,
@@ -328,11 +373,31 @@ async function nudgeRun(
         enteredAt: entered,
         flow,
         overdueCalls,
+        recentlyWorked: workedRecently(lastWorked.get(id), today),
       });
     }
     for (const n of nudges) {
       const seen = record.get(`${id}|${n.key}`);
       if (seen?.done) {
+        run.skipped += 1;
+        continue;
+      }
+      // One-time carry-over: an overdue call already reminded under the old
+      // per-visit key is recorded under its new key, silently, so the switch
+      // re-sends nothing (see overdueCarryOver).
+      const legacy = !seen && !baseline ? carriedFrom(id, n.key) : null;
+      if (legacy) {
+        const { error } = await db()
+          .from("portal_audit_log")
+          .insert({
+            actor_type: "system",
+            actor_id: null,
+            action: "deal.nudged",
+            entity_type: "account",
+            entity_id: id,
+            payload: { key: n.key, level: n.level, to: [], carried_from: legacy },
+          });
+        if (error) console.error("[nudge] could not carry over", n.key, error);
         run.skipped += 1;
         continue;
       }
@@ -373,30 +438,37 @@ async function nudgeRun(
         run.skipped += 1;
         continue;
       }
-      const link = d.customer_id
-        ? `${appUrl()}/customers/${d.customer_id}`
-        : `${appUrl()}/deals/${id}`;
+      const link = reminderLink(appUrl(), {
+        dealId: id,
+        customerId: d.customer_id,
+        liveImplId: liveImpl.get(id)?.id ?? null,
+      });
       const ok: string[] = [];
+      const held: string[] = [];
       const failed: string[] = [];
       for (const r of to) {
         if (sends > 0 && gap > 0) await sleep(gap);
         sends += 1;
         try {
-          await sendEmail({
+          const res = await sendEmail({
             to: r.email,
             kind: r.asOwner ? "assignment" : "notification",
             subject: n.subject,
             html: `<div style="font-family:sans-serif;max-width:560px;color:#0a1628"><p>${esc(n.line)}</p><p><a href="${link}" style="color:#039de7">Open the checklist</a></p><p style="font-size:12px;color:#888">GoCanvas Handoff Hub · one reminder per step</p></div>`,
           });
-          ok.push(r.email);
+          // Sent only when the mailer says it went: a held or logged email is
+          // recorded as held, so it is neither counted nor retried every hour.
+          if (res?.delivered === true) ok.push(r.email);
+          else held.push(r.email);
         } catch (e) {
           console.error("[nudge] could not send", e);
           failed.push(r.email);
         }
       }
       run.failed += failed.length;
-      // Nothing went through: no row, so the whole nudge is tried next hour.
-      if (!ok.length) continue;
+      run.held += held.length;
+      // Nothing delivered or held: no row, so the whole nudge is tried next hour.
+      if (!ok.length && !held.length) continue;
       await audit({
         actor_type: "system",
         actor_id: null,
@@ -407,10 +479,11 @@ async function nudgeRun(
           key: n.key,
           level: n.level,
           to: ok,
+          ...(held.length ? { held } : {}),
           ...(failed.length ? { failed } : {}),
         },
       });
-      run.sent += 1;
+      if (ok.length) run.sent += 1;
     }
   }
 
@@ -460,10 +533,78 @@ export function nudgeRecord(
     const key = `${r.entity_id}|${r.payload?.key ?? ""}`;
     const entry = out.get(key) ?? { done: false, to: new Set<string>() };
     for (const e of list(r.payload?.to)) entry.to.add(e);
+    // Held by the email rule: not delivered, and not tried again either.
+    for (const e of list(r.payload?.held)) entry.to.add(e);
     if (r.payload?.baseline === true || list(r.payload?.failed).length === 0) entry.done = true;
     out.set(key, entry);
   }
   return out;
+}
+
+/**
+ * Where "Open the checklist" goes: the deal's own live project, on its
+ * Current Implementation tab, not the customer's newest project (on a
+ * customer with several, that can be another deal's). A deal with no customer
+ * or no project yet opens the deal, which redirects to the right place.
+ */
+export function reminderLink(
+  base: string,
+  d: { dealId: string; customerId: string | null; liveImplId: string | null },
+): string {
+  if (d.customerId && d.liveImplId)
+    return `${base}/customers/${d.customerId}?tab=implementation&impl=${d.liveImplId}`;
+  return `${base}/deals/${d.dealId}`;
+}
+
+const OVERDUE_KEY = /^overdue:(.+)@(\d{4}-\d{2}-\d{2})$/;
+const LEGACY_OVERDUE_KEY = /^(?:partner:)?[a-z_]+@\d{4}-\d{2}-\d{2}:overdue:(.+)$/;
+
+/**
+ * Overdue reminders are keyed by the call and its date (`overdue:<key>@<date>`),
+ * no longer by the stage visit (`<stage>@<entered>:overdue:<key>`): moving to
+ * the next stage must not re-send a call already reminded, and moving the
+ * call's date still re-arms it.
+ *
+ * The switch is silent once: for a call reminded under the old key and never
+ * yet recorded under a new one, this names the old key, and the run records
+ * the new key without an email. After that the call has a new-format row, so
+ * old rows are ignored and a later date move reminds again as it should.
+ *
+ * Only a reminder about the call's CURRENT date carries over: one recorded
+ * before that date was about an earlier date the call has since moved from,
+ * so the call is reminded again, as moving its date has always re-armed it.
+ */
+export function overdueCarryOver(
+  rows: ReadonlyArray<NudgedRow>,
+): (dealId: string, key: string) => string | null {
+  const legacy = new Map<string, { key: string; on: string | null }>();
+  const current = new Set<string>();
+  for (const r of rows) {
+    const key = String(r.payload?.key ?? "");
+    const now = OVERDUE_KEY.exec(key);
+    if (now) {
+      current.add(`${r.entity_id}|${now[1]}`);
+      continue;
+    }
+    const old = LEGACY_OVERDUE_KEY.exec(key);
+    if (!old) continue;
+    const at = `${r.entity_id}|${old[1]}`;
+    const on = r.created_at ? String(r.created_at).slice(0, 10) : null;
+    const had = legacy.get(at);
+    // The newest reminder for the call speaks for it.
+    if (!had || (had.on !== null && (on === null || on > had.on))) legacy.set(at, { key, on });
+  }
+  return (dealId, key) => {
+    const m = OVERDUE_KEY.exec(key);
+    if (!m) return null;
+    const call = `${dealId}|${m[1]}`;
+    if (current.has(call)) return null;
+    const had = legacy.get(call);
+    if (!had) return null;
+    // Reminded before the call's current date: that was about another date.
+    if (had.on !== null && had.on < m[2]!) return null;
+    return had.key;
+  };
 }
 
 function recipients(

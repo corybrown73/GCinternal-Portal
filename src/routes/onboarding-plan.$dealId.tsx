@@ -7,7 +7,7 @@ import { PresenterWorkspace } from "@/components/presenter-workspace";
 import { WelcomePage } from "@/components/welcome-page";
 import { onWelcomeChanged } from "@/lib/presenter-workspace";
 import { saveIntake } from "@/lib/presale.functions";
-import { getWelcome, issueWelcomeLinkFn } from "@/lib/welcome.functions";
+import { getWelcome, issueWelcomeLinkFn, revokeWelcomeLinkFn } from "@/lib/welcome.functions";
 import { toggleScreen } from "@/lib/welcome";
 
 /**
@@ -38,6 +38,7 @@ function OnboardingPlanPage() {
   const qc = useQueryClient();
   const load = useServerFn(getWelcome);
   const issue = useServerFn(issueWelcomeLinkFn);
+  const revoke = useServerFn(revokeWelcomeLinkFn);
   const save = useServerFn(saveIntake);
 
   const query = useQuery({
@@ -103,6 +104,21 @@ function OnboardingPlanPage() {
         void qc.invalidateQueries({ queryKey: ["welcome", dealId] });
         void qc.invalidateQueries({ queryKey: ["deal", dealId] });
         return url;
+      }}
+      onReplaceLink={async () => {
+        // A new token; the old link stops working. The new link has not been
+        // sent, so "sent" is cleared until someone sends it.
+        const { url } = await issue({ data: { dealId } });
+        await save({ data: { dealId, patch: { welcome_shared_at: null } } as never });
+        void qc.invalidateQueries({ queryKey: ["welcome", dealId] });
+        void qc.invalidateQueries({ queryKey: ["deal", dealId] });
+        return url;
+      }}
+      onRevokeLink={async () => {
+        await revoke({ data: { dealId } });
+        await save({ data: { dealId, patch: { welcome_shared_at: null } } as never });
+        void qc.invalidateQueries({ queryKey: ["welcome", dealId] });
+        void qc.invalidateQueries({ queryKey: ["deal", dealId] });
       }}
       onEditText={async (key, text) => {
         const current = query.data?.textOverrides ?? {};

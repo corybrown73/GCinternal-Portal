@@ -220,6 +220,29 @@ export const intakeAnswersSchema = z.object({
   solutions_involved: z.boolean().nullable().default(null),
   /** Is there a SOW? A small deal has a contract and no SOW; either way the paper travels. */
   has_sow: z.boolean().nullable().default(null),
+  /**
+   * Why there is no SOW, in a person's words, when has_sow is false. With it
+   * the paperwork counts as on file without a contract (won-gate's
+   * paperworkOnFile). Optional and unbounded here so an old or odd record
+   * still reads; the saver caps what is written.
+   */
+  no_sow_reason: z.string().nullable().optional(),
+  /**
+   * SOWs a newer upload replaced before the deal had a project. Kept in the
+   * bucket, never deleted, and filed under the project's Files & links when
+   * it starts (server/deal-sow fileEarlierSows).
+   */
+  earlier_sows: z
+    .array(
+      z.object({
+        path: z.string().min(1),
+        name: z.string().nullable(),
+        replaced_at: z.string(),
+      }),
+    )
+    .optional()
+    // An odd entry never costs the rest of the intake.
+    .catch(undefined),
   /** The signed contract, when there is no SOW (or beside it): seats, term, price. */
   contract: z
     .object({ path: z.string().min(1), name: z.string().min(1), uploaded_at: z.string() })

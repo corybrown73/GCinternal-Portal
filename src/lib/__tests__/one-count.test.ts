@@ -91,11 +91,12 @@ const DEALS: Deal[] = [
     },
     project: { id: "iF", owner: "Saadiya" },
   },
-  // Keep an eye on: no SOW on the deal.
+  // Keep an eye on: no SOW or contract on the deal, at Kickoff (the paperwork
+  // is asked for from Closed Won through Kickoff only).
   {
     id: "dG",
     name: "Gale",
-    stage: "get_it_working",
+    stage: "kickoff",
     owner: "Cory",
     facts: { has_sow: false },
     project: { id: "iG", owner: "Cory" },

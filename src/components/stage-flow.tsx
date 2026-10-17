@@ -116,7 +116,7 @@ import {
 import { focusHeadline, journeyPosition, taskFocusFor } from "@/lib/current-implementation-focus";
 import { getPartnerProgress } from "@/lib/hub.functions";
 import { stageGuidanceFor } from "@/lib/stage-guidance";
-import { hasSowOnFile, parseWonGate, type WonGateMissing } from "@/lib/won-gate";
+import { paperworkOnFile, parseWonGate, type WonGateMissing } from "@/lib/won-gate";
 import { liveWonGateMissing, parseGateParam } from "@/lib/deal-entry";
 import { ClosedWonGateNotice } from "@/components/closed-won-gate";
 import { ExistingCustomerLink } from "@/components/existing-customer-link";
@@ -537,7 +537,7 @@ export function StageFlow({ deal }: { deal: DealData }) {
     intake,
     owner: assignment.data?.owner?.name ?? null,
     gongReports: deal.gong_reports.length,
-    hasSow: hasSowOnFile(deal.account),
+    paperwork: paperworkOnFile(deal.account),
     hasBrief: deal.briefs.some((b) => b.status === "complete" && b.generator === "llm"),
     hasLink: Boolean((deal.account as { welcome_share_url?: string | null }).welcome_share_url),
     timeline,
@@ -1020,7 +1020,7 @@ export function CurrentImplementationTab({
     intake,
     owner: ownerName,
     gongReports: deal.gong_reports.length,
-    hasSow: hasSowOnFile(deal.account),
+    paperwork: paperworkOnFile(deal.account),
     hasBrief: deal.briefs.some((b) => b.status === "complete" && b.generator === "llm"),
     hasLink: Boolean((deal.account as { welcome_share_url?: string | null }).welcome_share_url),
     timeline,
@@ -3150,9 +3150,16 @@ function OnboardingList({
         async () => {
           pending.current -= 1;
           if (pending.current > 0) return;
+          // The save can move the stage, Plan end, Go-Live and health: the side
+          // cards (customer360), the customer preview, Home and the Calendar
+          // re-read too, so they agree on this screen without a reload.
           await Promise.all([
             qc.invalidateQueries({ queryKey: ["deal", id] }),
             qc.invalidateQueries({ queryKey: ["welcome", id] }),
+            qc.invalidateQueries({ queryKey: ["customer360"] }),
+            qc.invalidateQueries({ queryKey: ["customer-dashboard-preview", id] }),
+            qc.invalidateQueries({ queryKey: ["home"] }),
+            qc.invalidateQueries({ queryKey: ["calendar"] }),
           ]);
           latest.current = null;
           setOptimistic({});

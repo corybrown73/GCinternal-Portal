@@ -9,6 +9,7 @@ import {
   customerJourney,
   dueLabel,
   journeyOverviewItems,
+  stageCompletionFromTransitions,
 } from "../welcome-journey";
 
 /**
@@ -210,6 +211,82 @@ describe("the customer's journey", () => {
       currentDate: null,
       actualDate: null,
     });
+  });
+
+  it("reads each stage's completion from the deal's own stage moves: the move past it since it was last in it", () => {
+    const intake = readIntake({ path: "new_logo" });
+    const journey = customerJourney({
+      stage: "onboarding_complete",
+      intake,
+      timeline: timelineFor(intake, CLOSE),
+      homeworkDone: {},
+      parkingLot: [],
+      leadName: null,
+      // The internal track one stage behind is no longer read.
+      stageHistory: [
+        { stage: "build", entered_at: "2026-10-15T09:00:00Z", exited_at: "2026-10-30T12:00:00Z" },
+      ],
+      stageTransitions: [
+        { to_stage: "get_it_working", occurred_at: "2026-10-01T15:00:00Z" },
+        // Straight past Make it yours: both earlier stages complete on this day.
+        { to_stage: "make_it_run", occurred_at: "2026-10-12T15:00:00Z" },
+        // A step back into Make it yours and forward again: it completed
+        // again on the later day. Get it working was never re-entered.
+        { to_stage: "make_it_yours", occurred_at: "2026-10-13T15:00:00Z" },
+        { to_stage: "make_it_run", occurred_at: "2026-10-14T15:00:00Z" },
+        { to_stage: "onboarding_complete", occurred_at: "2026-10-20T15:00:00Z" },
+      ],
+    })!;
+    const actual = (key: string) =>
+      journey.stages.find((s) => s.key === key)?.target?.actualDate ?? null;
+    expect(actual("get_it_working")).toBe("2026-10-12");
+    expect(actual("make_it_yours")).toBe("2026-10-14");
+    expect(actual("make_it_run")).toBe("2026-10-20");
+    expect(actual("complete")).toBe("2026-10-20");
+  });
+
+  it("dates a reworked stage from the day it was moved on again", () => {
+    // Rework: back to Get it working for three weeks, then on again.
+    const moves = [
+      { to_stage: "get_it_working", occurred_at: "2026-10-01T15:00:00Z" },
+      { to_stage: "make_it_yours", occurred_at: "2026-10-05T15:00:00Z" },
+      { to_stage: "get_it_working", occurred_at: "2026-10-06T15:00:00Z" },
+      { to_stage: "make_it_yours", occurred_at: "2026-10-27T15:00:00Z" },
+    ];
+    expect(stageCompletionFromTransitions(moves, "get_it_working")).toBe("2026-10-27");
+    expect(stageCompletionFromTransitions(moves.slice(0, 3), "get_it_working")).toBeNull();
+  });
+
+  it("has no completion date for a stage the deal has not moved past", () => {
+    expect(
+      stageCompletionFromTransitions(
+        [{ to_stage: "get_it_working", occurred_at: "2026-10-01T15:00:00Z" }],
+        "get_it_working",
+      ),
+    ).toBeNull();
+    expect(stageCompletionFromTransitions([], "complete")).toBeNull();
+  });
+
+  it("has no completion date for a stage the deal has moved back into", () => {
+    expect(
+      stageCompletionFromTransitions(
+        [
+          { to_stage: "get_it_working", occurred_at: "2026-10-01T15:00:00Z" },
+          { to_stage: "make_it_yours", occurred_at: "2026-10-12T15:00:00Z" },
+          { to_stage: "get_it_working", occurred_at: "2026-10-13T15:00:00Z" },
+        ],
+        "get_it_working",
+      ),
+    ).toBeNull();
+    expect(
+      stageCompletionFromTransitions(
+        [
+          { to_stage: "onboarding_complete", occurred_at: "2026-10-20T15:00:00Z" },
+          { to_stage: "make_it_run", occurred_at: "2026-10-21T15:00:00Z" },
+        ],
+        "complete",
+      ),
+    ).toBeNull();
   });
 
   it("uses the lifecycle's graduate entry as actual completion, not a planned date", () => {

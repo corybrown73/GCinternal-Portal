@@ -396,6 +396,28 @@ describe("the SOW", () => {
     expect(ctx.sow.documentUrl).toBe("https://drive.example/sow");
     expect(ctx.gaps.join(" ")).not.toContain("No SOW is recorded");
   });
+
+  it("names a contract-only deal as such, by paperworkOnFile, instead of 'No SOW is recorded'", async () => {
+    ridgeline()["intake"] = {
+      ...((ridgeline()["intake"] as object) ?? {}),
+      has_sow: false,
+      contract: { path: "deals/r/contract/c.pdf", name: "c.pdf", uploaded_at: "2026-10-01" },
+    };
+    const ctx = (await loadHandoffContext(RIDGELINE))!;
+    const gaps = ctx.gaps.join(" ");
+    expect(gaps).not.toContain("No SOW is recorded");
+    expect(gaps).toContain("No SOW: contract only.");
+  });
+
+  it("names a stated no-SOW reason as such", async () => {
+    ridgeline()["intake"] = {
+      ...((ridgeline()["intake"] as object) ?? {}),
+      has_sow: false,
+      no_sow_reason: "Three seats on an order form",
+    };
+    const ctx = (await loadHandoffContext(RIDGELINE))!;
+    expect(ctx.gaps.join(" ")).toContain("No SOW, and the reason is recorded.");
+  });
 });
 
 describe("the deal's own project, not the customer's newest", () => {

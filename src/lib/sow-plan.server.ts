@@ -21,7 +21,8 @@ import {
 
 const db = () => supabaseAdmin as any;
 
-const SYSTEM_PROMPT = `You read a signed Statement of Work for GoCanvas, a mobile forms product, and return JSON only.
+/** Exported for the test that a contract-only deal is still read. */
+export const SYSTEM_PROMPT = `You read a signed Statement of Work for GoCanvas, a mobile forms product, and return JSON only.
 
 The implementation team runs every customer the same way: phase 1 is the first form, built with the customer over three training calls in fifteen business days, with up to two more forms alongside it. Everything else the customer bought is a SERVICE from the catalogue below, assigned to a phase. Phase 1 services run alongside the form from the kickoff call. Phase 2 opens once the first form is proven in the field; phase 3 opens when phase 2 is live. Services in the same phase run at the same time.
 
@@ -39,7 +40,7 @@ Your job is the reading, not the calendar:
 - notes: exclusions, conditions, deadlines the customer must hit, anything the SOW says that a services list cannot hold. Do NOT repeat the reference, the signed date, the start date, the value or the contact here — they have their own fields. gaps: what the SOW leaves unsaid that the plan needs (which system, how many forms, who owns the mapping).
 - dates: every calendar date the SOW PRINTS that the plan has to respect, typed: {"type":"deadline"|"start"|"signed"|"absence","date":"YYYY-MM-DD","end":null,"who":null,"quote":"the sentence as printed"}. A go-live or production date the customer must hit is a deadline. Only when the document prints a day: "end of October" or "Q4" is a note, not a date — never turn a month or a season into a day. Empty when it prints none.
 - Never invent a service the SOW does not support. Fewer rows, well grounded, beats a full list.
-- If the document is not a SOW, is empty or unreadable, set readable=false, explain in problem, and leave services empty.
+- A signed contract or order form is readable: read it as the scope document. Only when the document is neither a SOW nor a signed contract or order form, or is empty or unreadable, set readable=false, explain in problem, and leave services empty.
 
 The same reading also carries what the plan cannot hold, for the people who run the rollout and the pages the customer reads. Every item is {"text": one line in plain words, "quote": the sentence as printed, "page": the page number when you can tell, else null}. Quote verbatim; never paraphrase inside a quote. Null or empty when the document does not say — never fill from what a SOW usually says.
 - deliverables: everything GoCanvas delivers under this SOW, one item each (up to 40).
@@ -169,6 +170,12 @@ export async function readSowDocument(
     jobId?: string | null | undefined;
     /** Read with the SOW: on a small deal it is where the seats and the term live. */
     contract?: import("./server/ai/documents").PreparedDocument | null | undefined;
+    /**
+     * What `doc` is. "contract" when the deal has no SOW and its signed
+     * contract is the scope document: it is labelled as the contract, never
+     * as a Statement of Work.
+     */
+    kind?: "sow" | "contract" | undefined;
   } = {},
 ): Promise<{
   proposal: SowReading;
@@ -176,6 +183,22 @@ export async function readSowDocument(
   model: string;
 }> {
   if (!doc.block) throw new Error(doc.problem ?? `${doc.name} could not be read.`);
+  if (opts.kind === "contract") {
+    // No SOW on this deal: the signed contract is the scope document, and
+    // the model is told so rather than handed it as a SOW.
+    const contractOnly: BetaContentBlockParam[] = [
+      {
+        type: "text",
+        text: `DOCUMENT 1 — the signed contract (${doc.name}). There is no Statement of Work on this deal; the contract is the scope document:`,
+      },
+      doc.block,
+      {
+        type: "text",
+        text: "Read this signed contract and return the JSON described in the system message, treating it as the scope document. Ground every item in the contract; say which page when you can. Anything a SOW would state that the contract does not is a gap, not a guess.",
+      },
+    ];
+    return runSowReading(dealId, contractOnly, opts.jobId ?? null);
+  }
   const contract =
     opts.contract?.block && opts.contract.sha256 !== doc.sha256 ? opts.contract : null;
   const content: BetaContentBlockParam[] = [
@@ -194,7 +217,19 @@ export async function readSowDocument(
         : "Read this Statement of Work and return the JSON described in the system message. Ground every item in the document; say which page when you can.",
     },
   ];
+  return runSowReading(dealId, content, opts.jobId ?? null);
+}
 
+/** The one model call behind readSowDocument, whatever the document is. */
+async function runSowReading(
+  dealId: string,
+  content: BetaContentBlockParam[],
+  jobId: string | null,
+): Promise<{
+  proposal: SowReading;
+  usage: import("./server/ai/client").AiUsage;
+  model: string;
+}> {
   const { runStructured, describeAiError } = await import("./server/ai/client");
   try {
     // A SOW is where a service gets mistaken for a form or a phase gets
@@ -206,7 +241,7 @@ export async function readSowDocument(
       content,
       maxTokens: 32000,
       dealId,
-      jobId: opts.jobId ?? null,
+      jobId,
     });
     return {
       proposal: normalizeProposal(result.data) as SowReading,
@@ -225,8 +260,17 @@ export async function readSowDocument(
  * start date as the plan's day 0. Only blanks are filled. Never throws —
  * the reading is the point, and a column that could not be written is
  * reported, not fatal.
+ *
+ * `fromContract`: the document read was the signed contract (no SOW on the
+ * deal). Its number and its signing date are the contract's, not a SOW's,
+ * so they are never stamped into sow_reference / sow_signed_date: those
+ * columns are how every screen decides "SOW on file".
  */
-export async function stampSowFacts(dealId: string, p: SowPlanProposal): Promise<string[]> {
+export async function stampSowFacts(
+  dealId: string,
+  p: SowPlanProposal,
+  opts: { fromContract?: boolean } = {},
+): Promise<string[]> {
   const stamped: string[] = [];
   try {
     const { data: deal } = await db()
@@ -244,8 +288,10 @@ export async function stampSowFacts(dealId: string, p: SowPlanProposal): Promise
       patch[col] = value;
       stamped.push(label);
     };
-    set("sow_reference", p.reference, "reference");
-    set("sow_signed_date", p.signed_date, "signed date");
+    if (!opts.fromContract) {
+      set("sow_reference", p.reference, "reference");
+      set("sow_signed_date", p.signed_date, "signed date");
+    }
     set("sow_value", p.value, "value");
     // An add-on deal is worth what its own SOW says. It never inherits the
     // customer's ARR, and the pipeline's total counts it once.

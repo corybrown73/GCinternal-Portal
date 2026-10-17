@@ -106,11 +106,31 @@ describe("what a deal needs, from its own facts", () => {
     );
     expect(r.map((x) => x.reason)).toEqual([
       "Nobody owns it · closed 1 business day ago",
-      "No Gong brief or SOW on the deal",
+      "No Gong brief, SOW or contract on the deal",
     ]);
     expect(
       needsAction(deal({ stage: "closed_won", owner_name: null, business_days_in_stage: 0 })),
     ).toEqual([]);
+  });
+
+  it("asks for the SOW or contract from Closed Won through Kickoff, not once the project is being delivered", () => {
+    const paperwork = (stage: DealFacts["stage"]) =>
+      needsAction(deal({ stage, has_sow: false, business_days_in_stage: 1 })).find((x) =>
+        x.reason.includes("SOW or contract"),
+      );
+    for (const stage of ["closed_won", "field_fusion_setup", "onboarding_kickoff", "kickoff"]) {
+      const r = paperwork(stage as DealFacts["stage"]);
+      expect(r, stage).toMatchObject({
+        reason: "No SOW or contract on the deal",
+        next: "Add the SOW or contract",
+      });
+    }
+    for (const stage of ["negotiate", "get_it_working", "make_it_yours", "make_it_run"]) {
+      expect(paperwork(stage as DealFacts["stage"]), stage).toBeUndefined();
+    }
+    // A missing Gong brief is still asked for later on; only the paperwork stops.
+    const later = needsAction(deal({ stage: "make_it_run", has_sow: false, has_notes: false }));
+    expect(later.map((x) => x.reason)).toContain("No Gong brief on the deal");
   });
 
   it("counts the meeting updates nobody has reviewed, linking to Current Implementation", () => {

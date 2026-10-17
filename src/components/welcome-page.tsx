@@ -13,8 +13,10 @@ import {
   Eye,
   EyeOff,
   Link2,
+  Link2Off,
   Play,
   Printer,
+  RefreshCw,
   Workflow,
   X,
 } from "lucide-react";
@@ -92,6 +94,8 @@ export function WelcomePage({
   onAnswer,
   onBall,
   onCopyLink,
+  onReplaceLink,
+  onRevokeLink,
   onMarkSent,
   onEditText,
   backHref,
@@ -114,6 +118,10 @@ export function WelcomePage({
   onBall?: (solutionId: string) => Promise<void> | void;
   /** Internal: issue or copy the customer's link. Resolves to the URL. */
   onCopyLink?: () => Promise<string>;
+  /** Internal: issue a new customer link; the old one stops working. Resolves to the new URL. */
+  onReplaceLink?: () => Promise<string>;
+  /** Internal: turn the customer link off; it stops working at once. */
+  onRevokeLink?: () => Promise<void>;
   /** Internal: the link went to the customer, by whatever channel. */
   onMarkSent?: () => Promise<void> | void;
   backHref?: string | null;
@@ -223,6 +231,8 @@ export function WelcomePage({
             }
             workspaceHref={workspaceHref}
             onCopyLink={mintForQr}
+            onReplaceLink={onReplaceLink}
+            onRevokeLink={onRevokeLink}
             onMarkSent={onMarkSent}
             onExportPptx={
               experience === "kickoff"
@@ -600,6 +610,8 @@ function Toolbar({
   experience,
   onPresent,
   onCopyLink,
+  onReplaceLink,
+  onRevokeLink,
   onMarkSent,
   onExportPptx,
   backHref,
@@ -616,6 +628,8 @@ function Toolbar({
   workspaceHref?: string | null | undefined;
   onPresent?: (() => void) | undefined;
   onCopyLink?: (() => Promise<string>) | undefined;
+  onReplaceLink?: (() => Promise<string>) | undefined;
+  onRevokeLink?: (() => Promise<void>) | undefined;
   onMarkSent?: (() => Promise<void> | void) | undefined;
   /** Every visible screen as a full-bleed slide. Reports progress while it renders. */
   onExportPptx?: ((report: (done: number, total: number) => void) => Promise<void>) | undefined;
@@ -653,6 +667,50 @@ function Toolbar({
       setCopied(view.shareUrl ? "failed" : "done");
     }
     setTimeout(() => setCopied("idle"), 2500);
+  };
+  // Replace or turn off a link that went somewhere it should not. Both ask
+  // first: the customer's current link stops working at once.
+  const [linkAction, setLinkAction] = useState<"idle" | "busy" | "replaced" | "failed">("idle");
+  const replace = async () => {
+    if (!onReplaceLink) return;
+    const yes = await ask({
+      title: "Replace the customer link?",
+      body: "A new link is made and the current one stops working at once. Send the new link to the customer.",
+      confirmLabel: "Replace link",
+      destructive: true,
+    });
+    if (!yes) return;
+    setLinkAction("busy");
+    try {
+      const url = await onReplaceLink();
+      try {
+        await navigator.clipboard.writeText(url);
+      } catch {
+        // The new link is on the record; Copy customer link copies it.
+      }
+      setLinkAction("replaced");
+    } catch {
+      setLinkAction("failed");
+    }
+    setTimeout(() => setLinkAction("idle"), 2500);
+  };
+  const revoke = async () => {
+    if (!onRevokeLink) return;
+    const yes = await ask({
+      title: "Turn off the customer link?",
+      body: "The link stops working at once for everyone who has it. You can create a new one later.",
+      confirmLabel: "Turn off link",
+      destructive: true,
+    });
+    if (!yes) return;
+    setLinkAction("busy");
+    try {
+      await onRevokeLink();
+      setLinkAction("idle");
+    } catch {
+      setLinkAction("failed");
+      setTimeout(() => setLinkAction("idle"), 2500);
+    }
   };
   return (
     <div className="wp-toolbar print:hidden">
@@ -781,6 +839,44 @@ function Toolbar({
                     ? "Copy customer link"
                     : "Create customer link"}
           </button>
+        ) : null}
+        {view.shareUrl && (onReplaceLink || onRevokeLink) ? (
+          <>
+            <span
+              className="wp-toolbar-meta"
+              title="The current customer link: when it was issued, and when the customer last opened it"
+            >
+              {view.issuedAt ? `Issued ${stampDay(view.issuedAt)}` : "Issued"}
+              {view.openedAt ? ` · last opened ${stampDay(view.openedAt)}` : " · not opened yet"}
+            </span>
+            {onReplaceLink ? (
+              <button
+                type="button"
+                className="wp-tool"
+                disabled={linkAction === "busy"}
+                title="Make a new link; the current one stops working"
+                onClick={() => void replace()}
+              >
+                <RefreshCw className="h-3.5 w-3.5" />{" "}
+                {linkAction === "replaced"
+                  ? "New link copied"
+                  : linkAction === "failed"
+                    ? "Did not work"
+                    : "Replace link"}
+              </button>
+            ) : null}
+            {onRevokeLink ? (
+              <button
+                type="button"
+                className="wp-tool"
+                disabled={linkAction === "busy"}
+                title="The customer link stops working for everyone who has it"
+                onClick={() => void revoke()}
+              >
+                <Link2Off className="h-3.5 w-3.5" /> Turn off link
+              </button>
+            ) : null}
+          </>
         ) : null}
       </div>
     </div>
