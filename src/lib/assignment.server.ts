@@ -41,6 +41,31 @@ export async function saveRules(raw: unknown): Promise<AssignmentRules> {
   return rules;
 }
 
+/**
+ * Whether the saved rules let a person take an account for themselves, read
+ * strictly from the stored value. Only the exact mode "claim" allows it. A
+ * missing setting, an unreadable one, and the "auto" mode each refuse, and each
+ * refusal says which it is. This is the one rule the claim server call and the
+ * Claim buttons both use.
+ */
+export type ClaimRulesState = "claim" | "auto" | "missing" | "invalid";
+
+export async function readClaimRulesState(): Promise<ClaimRulesState> {
+  const { data, error } = await db()
+    .from("portal_app_config")
+    .select("value")
+    .eq("key", RULES_KEY)
+    .maybeSingle();
+  if (error)
+    throw new Error("Could not read the assignment rules, so nothing was claimed. Try again.");
+  if (!data) return "missing";
+  const value = data.value as { mode?: unknown } | null;
+  if (!value || typeof value !== "object") return "invalid";
+  if (value.mode === "claim") return "claim";
+  if (value.mode === "auto") return "auto";
+  return "invalid";
+}
+
 /* -------------------------------------------------------------- pool */
 
 export type PoolRow = PoolMember & {
@@ -313,6 +338,12 @@ export async function assignDeal(args: {
   message?: "standard" | "field_fusion_setup" | "handoff";
   /** What the Field Fusion setup hands over, for the "handoff" message. */
   handoff?: HandoffNote | null;
+  /**
+   * Set only by claimDeal, which has already written the project's owner under
+   * the condition that it was empty. The owner is not written a second time, so
+   * a manager's change made in between is not overwritten.
+   */
+  ownerAlreadySet?: boolean;
 }): Promise<{
   assigneeName: string | null;
   teamMemberId: string;
@@ -343,7 +374,7 @@ export async function assignDeal(args: {
 
   const implementationId =
     args.implementationId ?? (await implementationForDeal(args.dealId, deal.customer_id ?? null));
-  if (implementationId) {
+  if (implementationId && !args.ownerAlreadySet) {
     const { error } = await db()
       .from("implementations")
       .update({ owner_id: chosen.teamMemberId })
@@ -603,6 +634,12 @@ function handoffBlock(h: HandoffNote | null): string {
 
 export type DealAssignment = {
   mode: "auto" | "claim";
+  /**
+   * Whether someone in the pool may take this account now: the saved rules are
+   * in claim mode, the deal has a project, and that project has no owner. The
+   * Claim buttons show from this, and claimDeal enforces the same rules.
+   */
+  claimable: boolean;
   owner: { teamMemberId: string; name: string; email: string | null } | null;
   last: AssignmentRow | null;
   weight: number;
@@ -708,8 +745,11 @@ export async function dealAssignment(dealId: string): Promise<DealAssignment> {
     };
   }
   const next = rules.mode === "claim" ? null : (pool.find((p) => p.rank === 1) ?? null);
+  const claimable =
+    (await readClaimRulesState()) === "claim" && Boolean(implementationId) && !owner;
   return {
     mode: rules.mode,
+    claimable,
     owner,
     last: l
       ? {
@@ -801,8 +841,14 @@ export function pickerMembers<
 /* ------------------------------------------------------------- claim */
 
 /**
- * The caller takes the account. They must be in the pool — matched by the
- * email on their profile — and the account must have no owner yet.
+ * The caller takes the account for themselves. Allowed only when the saved rules
+ * are in claim mode. The caller must also be in the pool, matched by the email on
+ * their profile, and the account must have a project with no owner yet.
+ *
+ * The owner is written with a condition that the project has none, so of two
+ * people claiming at once only one succeeds. Nothing is written unless every
+ * check passes. A manager's assignment is a separate path (assignDeal) and is
+ * not affected by these rules.
  */
 export async function claimDeal(profileId: string, dealId: string) {
   const { data: profile } = await db()
@@ -813,6 +859,23 @@ export async function claimDeal(profileId: string, dealId: string) {
   const email = String(profile?.email ?? "").toLowerCase();
   if (!email) throw new Error("No profile for this sign-in");
 
+  const state = await readClaimRulesState();
+  if (state === "missing") {
+    throw new Error(
+      "No assignment rules are saved, so accounts cannot be claimed. A manager assigns this account.",
+    );
+  }
+  if (state === "invalid") {
+    throw new Error(
+      "The assignment rules are not valid, so accounts cannot be claimed until a manager saves them again.",
+    );
+  }
+  if (state === "auto") {
+    throw new Error(
+      "Accounts are assigned by a manager in this workspace, so you cannot claim this one. Ask a manager to assign it.",
+    );
+  }
+
   const pool = await loadPool();
   const me = pool.find((p) => p.inPool && p.active && (p.email ?? "").toLowerCase() === email);
   if (!me) {
@@ -820,15 +883,47 @@ export async function claimDeal(profileId: string, dealId: string) {
       "You are not in the assignment pool. A manager adds people under Admin → Assignment.",
     );
   }
-  const current = await dealAssignment(dealId);
-  if (current.owner) {
-    throw new Error(`${current.owner.name} already owns this account.`);
+
+  const { data: deal } = await db()
+    .from("portal_accounts")
+    .select("customer_id")
+    .eq("id", dealId)
+    .maybeSingle();
+  if (!deal) throw new Error("Deal not found");
+  const implementationId = await implementationForDeal(
+    dealId,
+    (deal.customer_id as string | null) ?? null,
+  );
+  if (!implementationId) {
+    throw new Error("This deal has no project yet, so it cannot be claimed. A manager assigns it.");
   }
+
+  // The condition is part of the write: the owner is set only if the project
+  // still has none. A second claim, or a manager's change, that lands first
+  // leaves this write with nothing to update.
+  const { data: taken, error: takeError } = await db()
+    .from("implementations")
+    .update({ owner_id: me.teamMemberId })
+    .eq("id", implementationId)
+    .is("owner_id", null)
+    .select("id");
+  if (takeError) throw new Error(`Could not take the account: ${takeError.message}`);
+  if (!taken || taken.length === 0) {
+    const current = await dealAssignment(dealId);
+    throw new Error(
+      current.owner
+        ? `${current.owner.name} already owns this account.`
+        : "This account was just taken, so it cannot be claimed. Reload to see who owns it.",
+    );
+  }
+
   return assignDeal({
     dealId,
+    implementationId,
     teamMemberId: me.teamMemberId,
     actorProfileId: profileId,
     note: `Claimed by ${me.name}`,
+    ownerAlreadySet: true,
   });
 }
 

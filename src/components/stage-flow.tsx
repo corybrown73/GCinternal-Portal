@@ -2096,7 +2096,7 @@ function AssignBody({ dealId, editable }: { dealId: string; editable: boolean })
           </button>
         </>
       ) : null}
-      {!a.owner && inPool ? (
+      {a.claimable && inPool ? (
         <button
           type="button"
           className={cn(
@@ -2113,7 +2113,9 @@ function AssignBody({ dealId, editable }: { dealId: string; editable: boolean })
       ) : null}
       {!manager && !inPool && !a.owner ? (
         <p className="text-[12px] text-muted-foreground">
-          A manager assigns this, or someone in the assignment pool takes it.
+          {a.claimable
+            ? "A manager assigns this, or someone in the assignment pool takes it."
+            : "A manager assigns this."}
         </p>
       ) : null}
       {a.owner ? (

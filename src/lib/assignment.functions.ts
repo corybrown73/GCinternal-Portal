@@ -91,8 +91,10 @@ export const assignDealFn = createServerFn({ method: "POST" })
   });
 
 /**
- * Take an unowned account yourself. Anyone in the pool may; the deal must
- * have no owner yet, so a claim can never quietly take a colleague's account.
+ * Take an unowned account yourself. Allowed only when the saved assignment rules
+ * are in claim mode. The caller must be in the pool, and the account must have a
+ * project with no owner, so a claim can never take a colleague's account. The
+ * rules are enforced in claimDeal, which this function calls.
  */
 export const claimDealFn = createServerFn({ method: "POST" })
   .middleware([requireInternalAuth])
