@@ -1,4 +1,5 @@
 import { GRADUATED_STAGE } from "./claimed-owner";
+import { isOutstandingCommitment } from "./commitment-status";
 import type { Customer360 } from "./hub-types";
 import { dealStageLabel } from "./deal-stage";
 import { LIFECYCLE_STAGES, LIFECYCLE_STAGE_MAP } from "./lifecycle";
@@ -34,23 +35,29 @@ export function severityRank(value: string | null | undefined) {
  * commitment is ever finished. Every met commitment therefore counted as open,
  * on Home, on the 360, in health and in Leadership.
  *
- * `customer360-derive.test.ts` cross-checks these against the write-path enums,
- * so adding a status without deciding whether it is terminal fails CI rather
- * than quietly inflating an open count.
+ * `open-items.test.ts` cross-checks these against the write-path enums, so
+ * adding a status without deciding whether it is terminal fails CI rather than
+ * quietly inflating an open count.
  *
- * Judgement calls, stated: a MISSED commitment stays open (the obligation did
- * not go away by being broken), and a RENEGOTIATED one stays open (the new
- * terms are still owed). An in_progress issue or escalation is open.
+ * Commitments are not in this list. Their states (outstanding, completed,
+ * withdrawn) live in `commitment-status.ts`, which every internal surface
+ * reads.
+ *
+ * An in_progress issue or escalation is open.
  */
 export const TERMINAL_STATUSES = {
-  commitments: ["met"],
   risks: ["mitigated", "accepted", "closed"],
   issues: ["resolved", "closed"],
   escalations: ["resolved"],
 } as const;
 
-const isOpenFor = (kind: keyof typeof TERMINAL_STATUSES, status: string | null | undefined) =>
-  !(TERMINAL_STATUSES[kind] as readonly string[]).includes((status ?? "").toLowerCase());
+const isOpenFor = (
+  kind: "commitments" | keyof typeof TERMINAL_STATUSES,
+  status: string | null | undefined,
+) =>
+  kind === "commitments"
+    ? isOutstandingCommitment(status)
+    : !(TERMINAL_STATUSES[kind] as readonly string[]).includes((status ?? "").toLowerCase());
 
 export function openItems(record: Customer360) {
   return {

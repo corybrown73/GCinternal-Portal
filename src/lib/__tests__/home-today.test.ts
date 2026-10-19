@@ -431,3 +431,35 @@ describe("Today", () => {
     expect(t.needsMe[0]!.nextStep).toBeNull();
   });
 });
+
+describe("coming-up commitments follow the commitment states", () => {
+  const commitmentWith = (id: string, status: string) => ({
+    id,
+    description: `Commitment ${status}`,
+    due_date: "2026-09-30",
+    status,
+    committed_to: "customer",
+    owner_name: null,
+    owner_role: null,
+    implementation_id: "i1",
+    customer_id: "c1",
+    customer_name: "FGP Manufacturing",
+  });
+  const comingCommitmentKeys = (statuses: string[]) =>
+    todayFor(input({ commitments: statuses.map((s, i) => commitmentWith(`k${i}`, s)) }))
+      .comingUp.flatMap((g) => g.events)
+      .filter((e) => e.kind === "commitment")
+      .map((e) => e.key);
+
+  it("lists open, missed and renegotiated commitments as still to come", () => {
+    expect(comingCommitmentKeys(["open", "missed", "renegotiated"])).toEqual([
+      "commitment:k0",
+      "commitment:k1",
+      "commitment:k2",
+    ]);
+  });
+
+  it("does not list met, fulfilled or cancelled commitments as coming up", () => {
+    expect(comingCommitmentKeys(["met", "fulfilled", "cancelled"])).toEqual([]);
+  });
+});

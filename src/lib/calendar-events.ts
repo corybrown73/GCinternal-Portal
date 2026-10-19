@@ -4,6 +4,7 @@ import { timelineFor } from "./onboarding-plan";
 import { TEAM_ZONE } from "./onboarding-timeline";
 import { isUnbookedBeforeKickoff, plannedBeforeKickoff } from "./presale-stages";
 import type { IntakeAnswers } from "./intake-answers";
+import { commitmentState } from "./commitment-status";
 
 /**
  * The Calendar's event model, built only from records the Hub already keeps.
@@ -375,15 +376,18 @@ export function buildCalendarEvents(source: CalendarSource): CalendarEvent[] {
   for (const c of source.commitments) {
     const impl = impls.get(c.implementationId);
     if (!impl) continue;
-    const fulfilled = c.status === "fulfilled";
-    const date = c.dueDate ?? (fulfilled && c.fulfilledAt ? dayInZone(c.fulfilledAt) : null);
+    // Completed and withdrawn commitments are never overdue. Outstanding
+    // ones are, once their date has passed.
+    const state = commitmentState(c.status);
+    const date =
+      c.dueDate ?? (state === "completed" && c.fulfilledAt ? dayInZone(c.fulfilledAt) : null);
     if (!date || !ISO_DAY.test(date)) continue;
     let status: CalendarStatus;
     let statusDetail: string | null = null;
-    if (fulfilled) {
+    if (state === "completed") {
       status = "completed";
       statusDetail = c.fulfilledAt ? `Fulfilled ${dayLabel(dayInZone(c.fulfilledAt))}` : null;
-    } else if (c.status === "cancelled") {
+    } else if (state === "withdrawn") {
       status = "cancelled";
     } else if (date < source.today) {
       status = "overdue";
