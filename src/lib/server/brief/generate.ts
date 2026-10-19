@@ -308,10 +308,7 @@ export async function buildAndStoreDeck(
   if (!account) throw new Error("Account not found");
   // Refused before the deck is drawn or stored. A partner deal has no standard kickoff deck.
   const { assertDocumentAllowed } = await import("../document-guard.server");
-  await assertDocumentAllowed("kickoff-deck", accountId, {
-    customerId: (account as { customer_id?: string | null }).customer_id ?? null,
-    intake: (account as { intake?: unknown }).intake,
-  });
+  await assertDocumentAllowed("kickoff-deck", accountId);
 
   // The two owners are team_members ids on the deal. A deck that prints a uuid
   // where a name belongs is worse than one that prints nothing.

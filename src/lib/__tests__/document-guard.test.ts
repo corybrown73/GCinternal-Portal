@@ -18,7 +18,10 @@ describe("standard implementations generate both documents as before", () => {
 
   it("allows a standard deal that has no project yet", () => {
     expect(
-      documentRefusal("kickoff-deck", { implementation: null, intake: { path: "new_logo" } }),
+      documentRefusal("kickoff-deck", {
+        implementation: null,
+        intake: { path: "new_logo", partner_implementation: null },
+      }),
     ).toBeNull();
   });
 
@@ -48,7 +51,7 @@ describe("a partner deal before its project exists is refused too", () => {
   it("refuses on the intake path, so a standard deck cannot be drawn ahead of the start", () => {
     const reason = documentRefusal("kickoff-deck", {
       implementation: null,
-      intake: { path: "partner_implementation" },
+      intake: { path: "partner_implementation", partner_implementation: null },
     });
     expect(reason).not.toBeNull();
     expect(reason).toContain("partner deal");
@@ -57,7 +60,7 @@ describe("a partner deal before its project exists is refused too", () => {
   it("refuses a partner intake even when a standard project is linked, rather than falling through", () => {
     const reason = documentRefusal("onboarding-plan", {
       implementation: STANDARD,
-      intake: { path: "partner_implementation" },
+      intake: { path: "partner_implementation", partner_implementation: null },
     });
     expect(reason).not.toBeNull();
   });

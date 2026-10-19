@@ -70,10 +70,7 @@ export async function generateDeckFromMcp(args: {
   if (!deal) throw new Error(`No deal with id ${args.dealId}`);
   // Refused before anything is built or filed. A partner implementation has no standard kickoff deck.
   const { assertDocumentAllowed } = await import("./document-guard.server");
-  await assertDocumentAllowed("kickoff-deck", args.dealId, {
-    customerId: (deal.customer_id as string | null) ?? null,
-    intake: deal.intake,
-  });
+  await assertDocumentAllowed("kickoff-deck", args.dealId);
 
   const known = new Set(TEMPLATE_FIELDS);
   const supplied: Record<string, string> = {};

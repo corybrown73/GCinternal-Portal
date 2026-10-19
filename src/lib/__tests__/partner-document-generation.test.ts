@@ -16,6 +16,8 @@ const h = vi.hoisted(() => {
     uploads: [] as Row[],
     deckBuilds: 0,
     onboardingBuilds: 0,
+    // A table named here answers every read with this database error.
+    fail: {} as Record<string, string>,
   };
 
   const rowsOf = (table: string): Row[] =>
@@ -40,9 +42,16 @@ const h = vi.hoisted(() => {
       },
       order: () => builder,
       limit: () => builder,
-      maybeSingle: async () => ({ data: matching()[0] ?? null, error: null }),
+      maybeSingle: async () =>
+        state.fail[table]
+          ? { data: null, error: { message: state.fail[table] } }
+          : { data: matching()[0] ?? null, error: null },
       then: (res: (v: unknown) => unknown, rej: (e: unknown) => unknown) =>
-        Promise.resolve({ data: matching(), error: null }).then(res, rej),
+        Promise.resolve(
+          state.fail[table]
+            ? { data: null, error: { message: state.fail[table] } }
+            : { data: matching(), error: null },
+        ).then(res, rej),
       insert: (row: Row) => {
         state.writes.push({ target: table, op: "insert" });
         return Promise.resolve({ data: row, error: null });
@@ -176,6 +185,7 @@ function seed(opts: { intakePath?: string; implementation?: Record<string, unkno
   state.uploads = [];
   state.deckBuilds = 0;
   state.onboardingBuilds = 0;
+  state.fail = {};
 }
 
 /** Nothing was written, stored, removed or filed: the refusal left every existing document alone. */
@@ -276,5 +286,141 @@ describe("the brief's kickoff deck, drawn when a brief completes", () => {
     } catch (error) {
       expect(String((error as Error).message)).not.toContain(REFUSAL_PHRASE);
     }
+  });
+});
+
+/* ---------------------------------------------------------------------------
+ * A failed or incomplete read never allows generation (#80 correction).
+ * ------------------------------------------------------------------------- */
+
+import { assertDocumentAllowed } from "../server/document-guard.server";
+
+describe("a failed read cannot confirm that a deal is standard", () => {
+  it("refuses when the deal cannot be read, and the guard says so", async () => {
+    seed({});
+    state.fail = { portal_accounts: "connection reset" };
+    await expect(assertDocumentAllowed("kickoff-deck", DEAL)).rejects.toThrow(
+      /could not be read, so it cannot be checked/,
+    );
+  });
+
+  it("refuses every generator when the deal cannot be read, and builds, files and writes nothing", async () => {
+    seed({});
+    state.fail = { portal_accounts: "connection reset" };
+    await expect(generateDeckFromMcp({ dealId: DEAL, fields: {}, note: null })).rejects.toThrow();
+    await expect(buildAndStoreDeck(DEAL, "brief-1", {} as never)).rejects.toThrow();
+    await expect(generateOnboardingDeck(null, DEAL)).rejects.toThrow(/could not be read/);
+    expect(state.deckBuilds).toBe(0);
+    expect(state.onboardingBuilds).toBe(0);
+    expectNothingCreatedOrRemoved();
+  });
+
+  it("refuses when the project cannot be read, even though the deal reads fine", async () => {
+    seed({ implementation: { journey_type: "new_logo", partner_key: null } });
+    state.fail = { implementations: "statement timeout" };
+    await expect(assertDocumentAllowed("kickoff-deck", DEAL)).rejects.toThrow(
+      /project could not be read, so it cannot be checked/,
+    );
+  });
+
+  it("refuses every generator when the project cannot be read, and builds, files and writes nothing", async () => {
+    seed({ implementation: { journey_type: "new_logo", partner_key: null } });
+    state.fail = { implementations: "statement timeout" };
+    await expect(generateDeckFromMcp({ dealId: DEAL, fields: {}, note: null })).rejects.toThrow(
+      /could not be read/,
+    );
+    await expect(buildAndStoreDeck(DEAL, "brief-1", {} as never)).rejects.toThrow(
+      /could not be read/,
+    );
+    await expect(generateOnboardingDeck(null, DEAL)).rejects.toThrow(/could not be read/);
+    expect(state.deckBuilds).toBe(0);
+    expect(state.onboardingBuilds).toBe(0);
+    expectNothingCreatedOrRemoved();
+  });
+});
+
+describe("missing classification information cannot silently allow generation", () => {
+  it("refuses when the deal is not there to classify", async () => {
+    seed({});
+    state.accounts = [];
+    await expect(assertDocumentAllowed("onboarding-plan", DEAL)).rejects.toThrow(/was not found/);
+  });
+
+  it("refuses when the deal's record is missing the fields the check needs", async () => {
+    seed({});
+    state.accounts = [{ id: DEAL, name: "Acme Fleet" }];
+    await expect(assertDocumentAllowed("kickoff-deck", DEAL)).rejects.toThrow(
+      /record is incomplete/,
+    );
+  });
+
+  it("refuses when the project's record is missing its journey fields", async () => {
+    seed({ implementation: { id: IMPL } as never });
+    await expect(assertDocumentAllowed("kickoff-deck", DEAL)).rejects.toThrow(
+      /project's record is incomplete/,
+    );
+  });
+
+  it("refuses a deal with no project whose path is not recorded, rather than assuming standard", async () => {
+    seed({ implementation: null });
+    state.accounts[0]!.intake = { path: null, timeline: {}, ai_filled: [], person_set: [] };
+    await expect(assertDocumentAllowed("kickoff-deck", DEAL)).rejects.toThrow(
+      /path is not recorded/,
+    );
+    await expect(generateDeckFromMcp({ dealId: DEAL, fields: {}, note: null })).rejects.toThrow(
+      /path is not recorded/,
+    );
+    expect(state.deckBuilds).toBe(0);
+    expectNothingCreatedOrRemoved();
+  });
+
+  it("refuses a deal with no project whose stored intake does not parse", async () => {
+    seed({ implementation: null });
+    state.accounts[0]!.intake = "not an intake";
+    await expect(assertDocumentAllowed("onboarding-plan", DEAL)).rejects.toThrow(
+      /path is not recorded/,
+    );
+  });
+});
+
+describe("a successfully read standard deal still works", () => {
+  it("allows a standard deal with no project, once its path is recorded", async () => {
+    seed({ implementation: null });
+    await expect(assertDocumentAllowed("kickoff-deck", DEAL)).resolves.toBeUndefined();
+    await expect(assertDocumentAllowed("onboarding-plan", DEAL)).resolves.toBeUndefined();
+  });
+
+  it("allows a standard project on a deal that reads cleanly", async () => {
+    seed({ implementation: { journey_type: "new_logo", partner_key: null } });
+    await expect(assertDocumentAllowed("kickoff-deck", DEAL)).resolves.toBeUndefined();
+  });
+});
+
+describe("partner identification still blocks after the correction", () => {
+  it("blocks a partner identified by journey type", async () => {
+    seed({ implementation: { journey_type: "partner_implementation", partner_key: null } });
+    await expect(assertDocumentAllowed("kickoff-deck", DEAL)).rejects.toThrow(REFUSAL_PHRASE);
+  });
+
+  it("blocks a partner identified by partner key", async () => {
+    seed({ implementation: { journey_type: "new_logo", partner_key: "field_fusion_iq" } });
+    await expect(assertDocumentAllowed("onboarding-plan", DEAL)).rejects.toThrow(REFUSAL_PHRASE);
+  });
+
+  it("blocks a deal whose intake names a partner key before a project exists", async () => {
+    seed({ implementation: null });
+    state.accounts[0]!.intake = {
+      path: "new_logo",
+      partner_implementation: { partner_key: "field_fusion_iq" },
+      timeline: {},
+      ai_filled: [],
+      person_set: [],
+    };
+    await expect(assertDocumentAllowed("kickoff-deck", DEAL)).rejects.toThrow(REFUSAL_PHRASE);
+  });
+
+  it("blocks a legacy Field Fusion deal before a project exists", async () => {
+    seed({ implementation: null, intakePath: "field_fusion" });
+    await expect(assertDocumentAllowed("kickoff-deck", DEAL)).rejects.toThrow(REFUSAL_PHRASE);
   });
 });

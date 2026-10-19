@@ -1,5 +1,5 @@
 import type { IntakeAnswers } from "./intake-answers";
-import { isPartnerDeal, isPartnerJourney } from "./partner-implementation";
+import { implementationTypeFor, isPartnerDeal, isPartnerJourney } from "./partner-implementation";
 
 /**
  * Which documents a project may have generated. Pure, so the rule is stated
@@ -22,9 +22,19 @@ const DOCUMENT_NAME: Record<GeneratedDocument, string> = {
 export type DocumentSubject = {
   /** The project, if one exists. Its journey decides, by isPartnerJourney(). */
   implementation: { journey_type?: string | null; partner_key?: string | null } | null;
-  /** The deal's intake. A deal whose intake says partner is refused even before a project exists. */
-  intake: Pick<IntakeAnswers, "path"> | null;
+  /**
+   * The deal's intake. A deal whose intake says partner is refused even before a
+   * project exists. Both partner answers count: the intake path, and an explicit
+   * partner key, as the partner start reads them.
+   */
+  intake: Pick<IntakeAnswers, "path" | "partner_implementation"> | null;
 };
+
+/** Whether the deal's own answers say it is a partner deal. */
+export function intakeSaysPartner(intake: DocumentSubject["intake"]): boolean {
+  if (!intake) return false;
+  return isPartnerDeal(intake) || implementationTypeFor(intake).type === "partner_implementation";
+}
 
 /**
  * The reason a document cannot be generated for this subject, in words a person
@@ -35,7 +45,7 @@ export function documentRefusal(
   subject: DocumentSubject,
 ): string | null {
   const partnerProject = subject.implementation ? isPartnerJourney(subject.implementation) : false;
-  const partnerDeal = subject.intake ? isPartnerDeal(subject.intake) : false;
+  const partnerDeal = intakeSaysPartner(subject.intake);
   if (!partnerProject && !partnerDeal) return null;
 
   const name = DOCUMENT_NAME[document];
