@@ -248,7 +248,8 @@ export async function accountFileLink(id: string): Promise<{ url: string }> {
 }
 
 /**
- * Remove an attachment. Only its uploader may (see attachment-permissions.ts).
+ * Remove an attachment. The uploader may, and the exact admin role may
+ * (see attachment-permissions.ts).
  *
  * Every check runs here, on the server, against the row as it is stored. The
  * request supplies the id and the account it is about; the actor is the caller's
@@ -259,6 +260,8 @@ export async function accountFileLink(id: string): Promise<{ url: string }> {
  * an unreferenced object; if it went first, a failure would leave a row
  * pointing at a file that is gone.
  */
+type StoredFile = RemovableFile & { id: string; external_url: string | null };
+
 export async function removeAccountFile(args: {
   id: string;
   implementationId: string;
@@ -266,7 +269,7 @@ export async function removeAccountFile(args: {
 }) {
   const { data: row, error: readError } = await db()
     .from("account_files")
-    .select("id, implementation_id, storage_path, added_by")
+    .select("id, implementation_id, storage_path, external_url, added_by")
     .eq("id", args.id)
     .maybeSingle();
   if (readError) {
@@ -274,25 +277,42 @@ export async function removeAccountFile(args: {
   }
   if (!row) return { ok: true, removed: false };
 
-  const file = row as RemovableFile;
+  const file = row as StoredFile;
   const denial = removalDenial(args.actor, file, args.implementationId);
   if (denial) throw new Error(denial);
 
-  // The delete repeats the ownership filters, so a change between the read and
-  // this write cannot remove a file that was not the one verified.
-  const { data: deleted, error } = await db()
+  // The values the check relied on, copied out before the delete is built, so
+  // the delete matches exactly what was verified: the same account, uploader,
+  // stored file and link. A row changed since the check matches nothing, so a
+  // different file is never removed.
+  const verified = {
+    implementationId: file.implementation_id,
+    addedBy: file.added_by,
+    storagePath: file.storage_path,
+    externalUrl: file.external_url,
+  };
+  let match = db()
     .from("account_files")
     .delete()
     .eq("id", args.id)
-    .eq("implementation_id", args.implementationId)
-    .eq("added_by", args.actor.id)
-    .select("id");
+    .eq("implementation_id", verified.implementationId);
+  match =
+    verified.addedBy === null ? match.is("added_by", null) : match.eq("added_by", verified.addedBy);
+  match =
+    verified.storagePath === null
+      ? match.is("storage_path", null)
+      : match.eq("storage_path", verified.storagePath);
+  match =
+    verified.externalUrl === null
+      ? match.is("external_url", null)
+      : match.eq("external_url", verified.externalUrl);
+  const { data: deleted, error } = await match.select("id");
   if (error) throw new Error(error.message);
   if (!deleted || deleted.length === 0) {
     throw new Error("This attachment changed before it could be removed, so nothing was removed.");
   }
 
-  const path = file.storage_path;
+  const path = verified.storagePath;
   if (path) {
     try {
       // A SOW filed here may be the deal's SOW (or its project's): then only

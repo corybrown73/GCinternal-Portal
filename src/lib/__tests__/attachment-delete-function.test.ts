@@ -68,6 +68,15 @@ describe("deleteAttachment: the caller's session decides who is removing", () =>
     ]);
   });
 
+  it("passes the exact admin role from the session, and nothing from the body", async () => {
+    h.calls.length = 0;
+    await call({ id: FILE, implementationId: IMPL }, { id: COLLEAGUE, role: "admin" });
+    expect(h.calls[0].actor).toEqual({ id: COLLEAGUE, role: "admin" });
+    h.calls.length = 0;
+    await call({ id: FILE, implementationId: IMPL, role: "admin" }, { id: UPLOADER, role: "am" });
+    expect(h.calls[0].actor).toEqual({ id: UPLOADER, role: "am" });
+  });
+
   it("ignores any identity the request body claims for itself", async () => {
     h.calls.length = 0;
     await call({

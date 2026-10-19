@@ -102,10 +102,11 @@ export const openAttachment = createServerFn({ method: "POST" })
   });
 
 /**
- * Removes one attachment, if the caller uploaded it (issue #79). The account it
- * is about is part of the request, and the server checks that the attachment is
- * in that account. Who is asking comes from the session, never from the body: a
- * body claiming someone else's id is ignored, because the schema has no such field.
+ * Removes one attachment, if the caller may (issue #79): the uploader, or the
+ * exact admin role. The account the attachment is meant to be in is part of the
+ * request, and the server checks that the attachment is in that account. Who is
+ * asking comes from the session, never from the body: a body claiming someone
+ * else's id or role is ignored, because the schema has no such field.
  */
 export const deleteAttachment = createServerFn({ method: "POST" })
   .middleware([requireDealEditor])
