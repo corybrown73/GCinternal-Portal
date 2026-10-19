@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { TERMINAL_STATUSES, openItems, waitingOn } from "../customer360-derive";
 import {
-  COMMITMENT_STATUSES,
   ESCALATION_STATUSES,
   ISSUE_STATUSES,
   RISK_STATUSES,
+  COMMITMENT_STATUSES,
 } from "../delivery-input";
+import { commitmentState } from "../commitment-status";
 
 /**
  * These four tables each have their OWN status vocabulary. Treating them as one
@@ -18,8 +19,8 @@ import {
  * a write-path enum without deciding whether it is terminal.
  */
 
+// Commitments have their own rule (commitment-status.ts), tested below.
 const WRITE_PATH_ENUMS = {
-  commitments: COMMITMENT_STATUSES,
   risks: RISK_STATUSES,
   issues: ISSUE_STATUSES,
   escalations: ESCALATION_STATUSES,
@@ -27,7 +28,6 @@ const WRITE_PATH_ENUMS = {
 
 /** Every status the write paths allow, minus the ones we call terminal. */
 const OPEN_STATUSES = {
-  commitments: ["open", "missed", "renegotiated"],
   risks: ["open"],
   issues: ["open", "in_progress"],
   escalations: ["open", "in_progress"],
@@ -47,7 +47,18 @@ const rec = (over: Record<string, unknown[]>) =>
   }) as never;
 
 describe("open-item status vocabularies", () => {
-  it("classifies every status the write paths can produce, and invents none", () => {
+  it("classifies every commitment status the write path can produce, and invents none", () => {
+    // Every accepted commitment status has exactly one state, so none is unclassified.
+    const states = Object.fromEntries(COMMITMENT_STATUSES.map((s) => [s, commitmentState(s)]));
+    expect(states).toEqual({
+      open: "outstanding",
+      met: "completed",
+      missed: "outstanding",
+      renegotiated: "outstanding",
+    });
+  });
+
+  it("classifies every status the other write paths can produce, and invents none", () => {
     for (const kind of Object.keys(WRITE_PATH_ENUMS) as Array<keyof typeof WRITE_PATH_ENUMS>) {
       const allowed = [...WRITE_PATH_ENUMS[kind]] as string[];
       const terminal = [...TERMINAL_STATUSES[kind]] as string[];
@@ -147,5 +158,58 @@ describe("an unrecognised status", () => {
   it("treats a null or empty status as open too", () => {
     expect(openItems(rec({ risks: [{ id: "a", status: null }] })).risks).toHaveLength(1);
     expect(openItems(rec({ risks: [{ id: "b", status: "" }] })).risks).toHaveLength(1);
+  });
+});
+
+describe("commitments on the Customer 360", () => {
+  const dueInPast = "2020-01-01";
+
+  it("does not count a fulfilled or cancelled commitment as open (issue #81)", () => {
+    const open = openItems(
+      rec({
+        commitments: [
+          { id: "f", status: "fulfilled", due_date: dueInPast },
+          { id: "c", status: "cancelled", due_date: dueInPast },
+          { id: "o", status: "open", due_date: dueInPast },
+        ],
+      }),
+    );
+    expect(open.commitments.map((c: any) => c.id)).toEqual(["o"]);
+  });
+
+  it("keeps a missed or renegotiated commitment open until it is delivered", () => {
+    const open = openItems(
+      rec({
+        commitments: [
+          { id: "m", status: "missed", due_date: dueInPast },
+          { id: "r", status: "renegotiated", due_date: dueInPast },
+        ],
+      }),
+    );
+    expect(open.commitments.map((c: any) => c.id)).toEqual(["m", "r"]);
+  });
+
+  it("never treats a past-due fulfilled or cancelled commitment as waiting on anyone", () => {
+    const waiting = (status: string) =>
+      waitingOn({
+        technical_solutions: [],
+        approvals: [],
+        commitments: [
+          {
+            id: "x",
+            status,
+            due_date: dueInPast,
+            committed_to: "customer",
+            description: "Send the map",
+          },
+        ],
+        risks: [],
+        issues: [],
+        escalations: [],
+        decisions: [],
+      });
+    expect(waiting("fulfilled").party).not.toBe("customer");
+    expect(waiting("cancelled").party).not.toBe("customer");
+    expect(waiting("renegotiated").party).toBe("customer");
   });
 });

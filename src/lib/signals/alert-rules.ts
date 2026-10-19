@@ -20,6 +20,7 @@ import { DAY_MS } from "./stage-history";
 import { stagesBetween } from "./velocity";
 import type { EngagementSignal } from "./engagement";
 import { refutesSilence } from "./engagement";
+import { isOutstandingCommitment } from "../commitment-status";
 
 /** A customer-side ask must be unanswered this long before it is "gone quiet". */
 export const CHAMPION_QUIET_DAYS = 21;
@@ -187,7 +188,7 @@ export function championGoneQuiet(input: ChampionInput, now: Date = new Date()):
   const staleCommitment = input.commitments
     .filter(
       (c) =>
-        isOpenStatus(c.status) &&
+        isOutstandingCommitment(c.status) &&
         isCustomerSide(c.committed_to) &&
         (daysOld(c.due_date, now) ?? -1) >= CHAMPION_QUIET_DAYS,
     )

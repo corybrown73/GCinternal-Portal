@@ -1,6 +1,7 @@
 import { NEXT_ACTION_UNKNOWN, type ImplHealth } from "./customer360-derive";
 import type { QueueRow } from "./home-triage";
 import type { CommitmentRow } from "./hub-types";
+import { isOutstandingCommitment } from "./commitment-status";
 import { initials } from "./initials";
 import type { DealInboxRow } from "./presale.server";
 import { isOnboardingStage } from "./presale-stages";
@@ -455,6 +456,7 @@ export function collectEvents(
     }
   }
   for (const c of commitments) {
+    if (!isOutstandingCommitment(c.status)) continue;
     if (!c.due_date || c.due_date < today || c.due_date > horizon) continue;
     if (!byImpl.has(c.implementation_id)) continue;
     events.push({

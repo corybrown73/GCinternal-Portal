@@ -317,3 +317,33 @@ describe("engagement classification", () => {
     expect(refutesSilence(signal, daysAgo(30)).refuted).toBe(false);
   });
 });
+
+describe("championGoneQuiet: commitment states", () => {
+  // A customer-side commitment well past the quiet period, with no approval
+  // waiting. Only its status changes between cases.
+  const staleCommitment = (status: string) => ({
+    id: "c-1",
+    description: "Send the data map",
+    status,
+    due_date: daysAgo(CHAMPION_QUIET_DAYS + 10).slice(0, 10),
+    committed_to: "customer",
+    owner_name: "Dana Reed",
+  });
+  const fires = (status: string) =>
+    championGoneQuiet(
+      { impl, dependency: onCustomer, approvals: [], commitments: [staleCommitment(status)] },
+      NOW,
+    ).findings.length > 0;
+
+  it("does not fire on a met, fulfilled or cancelled commitment", () => {
+    expect(fires("met")).toBe(false);
+    expect(fires("fulfilled")).toBe(false);
+    expect(fires("cancelled")).toBe(false);
+  });
+
+  it("fires on an open, missed or renegotiated commitment the customer still owes", () => {
+    expect(fires("open")).toBe(true);
+    expect(fires("missed")).toBe(true);
+    expect(fires("renegotiated")).toBe(true);
+  });
+});

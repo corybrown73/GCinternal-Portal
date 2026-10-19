@@ -202,7 +202,7 @@ export function triageRowForCustomer360(record: Customer360): QueueRow | null {
     actual_launch_date: impl.actual_launch_date,
     go_live_at: impl.go_live_at ?? impl.dates?.go_live ?? null,
     live_done_on: record.deal_facts?.live_done_on ?? null,
-    overdue_commitments: (record.commitments ?? []).filter(
+    overdue_commitments: openItems(record).commitments.filter(
       (c: any) => c.due_date && isOverdue(c.due_date),
     ).length,
     open_escalations: (record.escalations ?? []).filter(

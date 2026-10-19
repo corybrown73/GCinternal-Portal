@@ -773,3 +773,53 @@ describe("month grid chips", () => {
     expect(chipTitle(e)).toContain("Status: Plan end passed, go-live not recorded");
   });
 });
+
+describe("commitment states on the calendar", () => {
+  // A due date before TODAY is the case that can wrongly read as overdue.
+  const PAST = "2026-10-02";
+  const statusOf = (status: string, over: Partial<CalendarCommitment> = {}) =>
+    find(
+      buildCalendarEvents(
+        source({ commitments: [commitment({ status, dueDate: PAST, ...over })] }),
+      ),
+      "commitment:c-1",
+    ).status;
+
+  it("shows a met commitment as completed, not overdue", () => {
+    expect(statusOf("met")).toBe("completed");
+  });
+
+  it("shows a fulfilled commitment as completed, not overdue", () => {
+    expect(statusOf("fulfilled")).toBe("completed");
+  });
+
+  it("shows a cancelled commitment as cancelled, never overdue, even past its date", () => {
+    expect(statusOf("cancelled")).toBe("cancelled");
+  });
+
+  it("keeps an open, missed or renegotiated commitment overdue once its date has passed", () => {
+    expect(statusOf("open")).toBe("overdue");
+    expect(statusOf("missed")).toBe("overdue");
+    expect(statusOf("renegotiated")).toBe("overdue");
+  });
+
+  it("keeps a renegotiated commitment outstanding even if a fulfilled date is recorded", () => {
+    // Only a delivered status closes it. A date on a renegotiated row is not delivery.
+    expect(statusOf("renegotiated", { fulfilledAt: "2026-10-05T10:00:00Z" })).toBe("overdue");
+  });
+
+  it("places a met commitment with no due date on the team's day it was met", () => {
+    const e = find(
+      buildCalendarEvents(
+        source({
+          commitments: [
+            commitment({ status: "met", dueDate: null, fulfilledAt: "2026-10-14T02:30:00Z" }),
+          ],
+        }),
+      ),
+      "commitment:c-1",
+    );
+    expect(e.status).toBe("completed");
+    expect(e.date).toBe("2026-10-13");
+  });
+});

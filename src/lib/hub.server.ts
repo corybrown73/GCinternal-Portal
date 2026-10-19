@@ -1,6 +1,7 @@
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { isPartnerJourney } from "./partner-implementation";
 import { technicalSolutionNextAction } from "./customer360-derive";
+import { isOutstandingCommitment } from "./commitment-status";
 import { normalizeStage } from "./hub-format";
 import { planEndDate } from "./date-labels";
 import { dealStageFor } from "./deal-stage";
@@ -205,7 +206,9 @@ export async function loadImplementations(
           live_done_on: dealStages.get(i.id)?.live_done_on ?? null,
           overdue_commitments: (commitments ?? []).filter(
             (m: any) =>
-              m.implementation_id === i.id && m.status === "open" && isOverdue(m.due_date),
+              m.implementation_id === i.id &&
+              isOutstandingCommitment(m.status) &&
+              isOverdue(m.due_date),
           ).length,
           open_escalations: (escalations ?? []).filter(
             (e: any) => e.implementation_id === i.id && e.status === "open",
@@ -234,11 +237,12 @@ export async function loadHome(
   const { data: commitmentRows } = await db()
     .from("commitments")
     .select("*")
-    .neq("status", "fulfilled")
     .order("due_date", { ascending: true });
 
+  // Home lists what is still owed. Completed and withdrawn commitments are not
+  // coming up, so they are dropped here, once, by the shared rule.
   const commitments: CommitmentRow[] = (commitmentRows ?? [])
-    .filter((c: any) => c.status !== "cancelled")
+    .filter((c: any) => isOutstandingCommitment(c.status))
     .filter((c: any) => keep(c.implementation_id))
     .map((c: any) => {
       const impl = implById.get(c.implementation_id);
