@@ -116,43 +116,50 @@ export function StageRail({
         {timelineHeadline(timeline)}
       </p>
 
-      <div className="relative hidden min-w-0 md:block">
-        <div
-          aria-hidden
-          className={cn(
-            "flex items-center gap-px overflow-x-auto",
-            // A rail drawn from a default is drawn as one: dashed, so it can
-            // never be mistaken for a plan somebody chose.
-            isDefault && "rounded-sm border border-dashed border-border/70 p-0.5",
-          )}
-        >
-          {timeline.stages.map((stage) => (
-            <span
-              key={stage.key}
-              data-state={stage.state}
-              title={stageTitle(stage)}
-              className={cn(CHIP_BASE, stageChipClass(stage, dimmed))}
-            >
-              {stage.state === "past" ? (
-                <Check className="mr-1 inline h-3 w-3 align-[-1px]" strokeWidth={3} />
-              ) : null}
-              {stage.name}
-              {stage.state === "current" && stage.days !== null ? (
-                <span className="ml-1.5 opacity-70">{stage.days}d</span>
-              ) : null}
-              {stage.inferred ? <span className="ml-1 opacity-60">~</span> : null}
-            </span>
-          ))}
-        </div>
-        {/* Fades whatever the scroller is cutting off. Left-aligned chips mean
+      {timeline.source === "partner_unavailable" ? (
+        <p className="text-[12px] text-muted-foreground">
+          Partner progress is unavailable, so this project&apos;s stages are not shown. Nothing has
+          been drawn from the standard plan in their place.
+        </p>
+      ) : (
+        <div className="relative hidden min-w-0 md:block">
+          <div
+            aria-hidden
+            className={cn(
+              "flex items-center gap-px overflow-x-auto",
+              // A rail drawn from a default is drawn as one: dashed, so it can
+              // never be mistaken for a plan somebody chose.
+              isDefault && "rounded-sm border border-dashed border-border/70 p-0.5",
+            )}
+          >
+            {timeline.stages.map((stage) => (
+              <span
+                key={stage.key}
+                data-state={stage.state}
+                title={stageTitle(stage)}
+                className={cn(CHIP_BASE, stageChipClass(stage, dimmed))}
+              >
+                {stage.state === "past" ? (
+                  <Check className="mr-1 inline h-3 w-3 align-[-1px]" strokeWidth={3} />
+                ) : null}
+                {stage.name}
+                {stage.state === "current" && stage.days !== null ? (
+                  <span className="ml-1.5 opacity-70">{stage.days}d</span>
+                ) : null}
+                {stage.inferred ? <span className="ml-1 opacity-60">~</span> : null}
+              </span>
+            ))}
+          </div>
+          {/* Fades whatever the scroller is cutting off. Left-aligned chips mean
             an un-overflowed rail ends in empty background, where a
             surface-to-transparent gradient is invisible — so this needs no
             scroll listener to avoid faking an edge that is not there. */}
-        <div
-          aria-hidden
-          className="pointer-events-none absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-surface to-transparent"
-        />
-      </div>
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-surface to-transparent"
+          />
+        </div>
+      )}
     </div>
   );
 }
@@ -195,6 +202,11 @@ function LaneMeta({ timeline }: { timeline: ProjectTimeline }) {
       )}
       {timeline.source === "lifecycle_default" ? (
         <DefaultStagesNote total={timeline.total} />
+      ) : null}
+      {timeline.source === "partner_journey" ? (
+        <span className="rounded-sm border border-border px-1.5 py-0.5 text-[10px] uppercase tracking-[0.08em]">
+          Partner journey
+        </span>
       ) : null}
     </div>
   );

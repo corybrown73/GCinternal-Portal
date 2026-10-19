@@ -636,7 +636,10 @@ export async function loadCustomer360(
     created_at: i.created_at ?? null,
     actual_launch_date: i.actual_launch_date ?? null,
     parent_implementation_id: i.parent_implementation_id ?? null,
+    journey_type: i.journey_type ?? null,
+    partner_key: i.partner_key ?? null,
     stages: [] as any[],
+    partner: null as import("./project-timeline").PartnerRail | null,
   }));
 
   // The customer's logo, as a signed URL.
@@ -824,6 +827,17 @@ export async function loadCustomer360(
       provenance: r.provenance ?? null,
     }));
   }
+
+  // A partner project's progress comes from the partner journey, read the same
+  // way the header reads it. Its stage instances can hold the standard plan, so
+  // they are not what the Projects section draws for it.
+  await Promise.all(
+    implementationSummaries.map(async (summary) => {
+      if (!isPartnerJourney(summary)) return;
+      const { partnerRailFor } = await import("./partner-journey.server");
+      summary.partner = await partnerRailFor(summary.id);
+    }),
+  );
 
   const named = (id: string | null | undefined) => (id ? (team.get(id)?.name ?? null) : null);
 

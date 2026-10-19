@@ -1,6 +1,7 @@
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { isPartnerJourney } from "./partner-implementation";
 import { partnerProgress, type PartnerProgress, type PartnerWorkItemRow } from "./partner-journey";
+import { partnerRailFrom, type PartnerRail } from "./project-timeline";
 
 const db = () => supabaseAdmin as any;
 
@@ -133,5 +134,28 @@ export async function partnerStateForDeal(dealId: string): Promise<PartnerDealSt
       error,
     });
     return { kind: "partner_unavailable", implementationId: identified.id };
+  }
+}
+
+/**
+ * A partner project's rail, read from the same partner progress the header
+ * shows. A project with no progress, or a read that fails, is `unavailable`:
+ * the rail says so rather than drawing the standard plan in its place. The
+ * loader is a parameter so that behaviour can be tested without a database.
+ */
+export async function partnerRailFor(
+  implementationId: string,
+  load: (id: string) => Promise<PartnerProgress | null> = loadPartnerProgress,
+): Promise<PartnerRail> {
+  try {
+    const progress = await load(implementationId);
+    if (!progress) return { status: "unavailable" };
+    return partnerRailFrom(progress);
+  } catch (error) {
+    console.error("[partner] could not read the partner journey for the project rail", {
+      implementationId,
+      error,
+    });
+    return { status: "unavailable" };
   }
 }

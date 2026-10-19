@@ -523,6 +523,14 @@ export type ImplementationSummary = {
    * default rather than passing the house stages off as this project's plan.
    */
   stages: ImplementationStageInstance[];
+  /** Which journey the project follows. Either field makes it a partner project. */
+  journey_type?: string | null;
+  partner_key?: string | null;
+  /**
+   * A partner project's own progress, read from the partner model. Null for a
+   * standard project. A partner project never draws `stages` in its place.
+   */
+  partner?: import("./project-timeline").PartnerRail | null;
 };
 
 /** A `stage_instances` row as the 360 projects it. Mirrors 0014's columns. */
