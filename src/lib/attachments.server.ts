@@ -1,4 +1,5 @@
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import { removalDenial, type RemovableFile, type RemovalActor } from "@/lib/attachment-permissions";
 
 const db = () => supabaseAdmin as any;
 const BUCKET = "attachments";
@@ -28,6 +29,8 @@ export type AccountFile = {
   content_type: string | null;
   size_bytes: number | null;
   added_by_name: string | null;
+  /** The uploader's profile id. Read by the Resources card to decide whether to show Remove; the server checks it again. */
+  added_by: string | null;
   created_at: string;
   /** "file" — a row in account_files. "field" — a legacy URL column. */
   origin: "file" | "field";
@@ -72,6 +75,7 @@ export async function loadAccountFiles(implementationId: string): Promise<Accoun
     content_type: (r["content_type"] as string | null) ?? null,
     size_bytes: (r["size_bytes"] as number | null) ?? null,
     added_by_name: r["added_by"] ? (nameOf.get(String(r["added_by"])) ?? null) : null,
+    added_by: (r["added_by"] as string | null) ?? null,
     created_at: String(r["created_at"]),
     origin: "file",
   }));
@@ -96,6 +100,7 @@ export async function loadAccountFiles(implementationId: string): Promise<Accoun
       content_type: null,
       size_bytes: null,
       added_by_name: null,
+      added_by: null,
       created_at: "",
       origin: "field",
     });
@@ -243,25 +248,51 @@ export async function accountFileLink(id: string): Promise<{ url: string }> {
 }
 
 /**
- * Remove an attachment.
+ * Remove an attachment. Only its uploader may (see attachment-permissions.ts).
+ *
+ * Every check runs here, on the server, against the row as it is stored. The
+ * request supplies the id and the account it is about; the actor is the caller's
+ * session. A read that fails, or a row that cannot be checked, removes nothing.
  *
  * The row goes first, the object second — the mirror of the upload order and
  * for the same reason. If the storage delete fails afterwards we are left with
  * an unreferenced object; if it went first, a failure would leave a row
  * pointing at a file that is gone.
  */
-export async function removeAccountFile(id: string) {
-  const { data: row } = await db()
+export async function removeAccountFile(args: {
+  id: string;
+  implementationId: string;
+  actor: RemovalActor;
+}) {
+  const { data: row, error: readError } = await db()
     .from("account_files")
-    .select("storage_path")
-    .eq("id", id)
+    .select("id, implementation_id, storage_path, added_by")
+    .eq("id", args.id)
     .maybeSingle();
+  if (readError) {
+    throw new Error("Could not check this attachment, so nothing was removed. Try again.");
+  }
   if (!row) return { ok: true, removed: false };
 
-  const { error } = await db().from("account_files").delete().eq("id", id);
-  if (error) throw new Error(error.message);
+  const file = row as RemovableFile;
+  const denial = removalDenial(args.actor, file, args.implementationId);
+  if (denial) throw new Error(denial);
 
-  const path = (row as Record<string, string | null>)["storage_path"];
+  // The delete repeats the ownership filters, so a change between the read and
+  // this write cannot remove a file that was not the one verified.
+  const { data: deleted, error } = await db()
+    .from("account_files")
+    .delete()
+    .eq("id", args.id)
+    .eq("implementation_id", args.implementationId)
+    .eq("added_by", args.actor.id)
+    .select("id");
+  if (error) throw new Error(error.message);
+  if (!deleted || deleted.length === 0) {
+    throw new Error("This attachment changed before it could be removed, so nothing was removed.");
+  }
+
+  const path = file.storage_path;
   if (path) {
     try {
       // A SOW filed here may be the deal's SOW (or its project's): then only

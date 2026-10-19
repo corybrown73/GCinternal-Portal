@@ -101,10 +101,27 @@ export const openAttachment = createServerFn({ method: "POST" })
     return accountFileLink(data.id);
   });
 
+/**
+ * Removes one attachment, if the caller uploaded it (issue #79). The account it
+ * is about is part of the request, and the server checks that the attachment is
+ * in that account. Who is asking comes from the session, never from the body: a
+ * body claiming someone else's id is ignored, because the schema has no such field.
+ */
 export const deleteAttachment = createServerFn({ method: "POST" })
   .middleware([requireDealEditor])
-  .inputValidator((data: unknown) => z.object({ id: z.string().uuid() }).parse(data))
-  .handler(async ({ data }) => {
+  .inputValidator((data: unknown) =>
+    z
+      .object({
+        id: z.string().uuid(),
+        implementationId: z.string().uuid(),
+      })
+      .parse(data),
+  )
+  .handler(async ({ data, context }) => {
     const { removeAccountFile } = await import("./attachments.server");
-    return removeAccountFile(data.id);
+    return removeAccountFile({
+      id: data.id,
+      implementationId: data.implementationId,
+      actor: { id: context.profile.id, role: context.profile.role },
+    });
   });

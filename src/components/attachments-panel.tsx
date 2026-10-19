@@ -13,11 +13,13 @@ import {
   openAttachment,
   uploadAttachment,
 } from "@/lib/attachments.functions";
+import { canRemoveAttachment } from "@/lib/attachment-permissions";
 import {
   attachmentActionLabel,
   attachmentOpensDirectly,
   attachmentRemovable,
 } from "@/lib/attachment-rows";
+import { useProfile } from "@/lib/auth";
 import { fmtDate } from "@/lib/hub-format";
 import { invalidatePaperwork } from "@/lib/paperwork-cache";
 import { cn } from "@/lib/utils";
@@ -68,6 +70,18 @@ export function AttachmentsPanel({
   variant?: "list" | "documents";
 }) {
   const { data: files } = useSuspenseQuery(attachmentsQuery(implementationId));
+  const { profile } = useProfile();
+  // Shows Remove only where the server would allow it. The server checks again.
+  const mayRemove = (f: FileRow) =>
+    canRemoveAttachment(
+      profile,
+      {
+        implementation_id: implementationId,
+        added_by: f.added_by,
+        storage_path: f.storage_path,
+      },
+      implementationId,
+    );
   const [adding, setAdding] = useState<null | "link" | "file">(null);
   const queryClient = useQueryClient();
   const open = useServerFn(openAttachment);
@@ -171,7 +185,14 @@ export function AttachmentsPanel({
       ) : documents ? (
         <ul className="divide-y divide-border">
           {files.map((f) => (
-            <DocumentRow key={f.id} file={f} onOpen={() => openRow(f)} onRemoved={refresh} />
+            <DocumentRow
+              key={f.id}
+              file={f}
+              implementationId={implementationId}
+              canRemove={mayRemove(f)}
+              onOpen={() => openRow(f)}
+              onRemoved={refresh}
+            />
           ))}
         </ul>
       ) : (
@@ -212,13 +233,13 @@ export function AttachmentsPanel({
               {/* A legacy row IS the SOW field on the implementation record.
                   Offering a delete here would blank a field the handoff
                   completeness check reads, from a screen that never said so. */}
-              {f.origin === "file" ? (
-                <RemoveButton id={f.id} onDone={refresh} />
-              ) : (
+              {f.origin !== "file" ? (
                 <span className="shrink-0 text-[10px] uppercase tracking-wider text-muted-foreground">
                   On record
                 </span>
-              )}
+              ) : mayRemove(f) ? (
+                <RemoveButton id={f.id} implementationId={implementationId} onDone={refresh} />
+              ) : null}
             </li>
           ))}
         </ul>
@@ -236,6 +257,8 @@ type FileRow = {
   external_url: string | null;
   size_bytes: number | null;
   added_by_name: string | null;
+  added_by: string | null;
+  storage_path: string | null;
   created_at: string;
   origin: "file" | "field";
 };
@@ -247,10 +270,14 @@ type FileRow = {
  */
 function DocumentRow({
   file,
+  implementationId,
+  canRemove,
   onOpen,
   onRemoved,
 }: {
   file: FileRow;
+  implementationId: string;
+  canRemove: boolean;
   onOpen: () => void;
   onRemoved: () => void;
 }) {
@@ -293,21 +320,32 @@ function DocumentRow({
       </button>
       {/* A legacy row IS the SOW or board field on the implementation record, so
           it is read-only here, and it says so. */}
-      {attachmentRemovable(file) ? (
-        <RemoveButton id={file.id} onDone={onRemoved} />
-      ) : (
+      {!attachmentRemovable(file) ? (
         <span className="shrink-0 text-[10px] uppercase tracking-wider text-muted-foreground">
           On record
         </span>
-      )}
+      ) : canRemove ? (
+        <RemoveButton id={file.id} implementationId={implementationId} onDone={onRemoved} />
+      ) : null}
     </li>
   );
 }
 
-function RemoveButton({ id, onDone }: { id: string; onDone: () => void }) {
+function RemoveButton({
+  id,
+  implementationId,
+  onDone,
+}: {
+  id: string;
+  implementationId: string;
+  onDone: () => void;
+}) {
   const [confirming, setConfirming] = useState(false);
   const del = useServerFn(deleteAttachment);
-  const m = useMutation({ mutationFn: () => del({ data: { id } }), onSuccess: onDone });
+  const m = useMutation({
+    mutationFn: () => del({ data: { id, implementationId } }),
+    onSuccess: onDone,
+  });
 
   if (!confirming) {
     return (
