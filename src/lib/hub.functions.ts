@@ -818,13 +818,13 @@ export const applySowProposalToImplementation = createServerFn({ method: "POST" 
   .handler(async ({ data, context }) => {
     // Throws when the session has no signed-in user, so nothing is written.
     signedInProfileId(context.profile);
-    // Attribution is the signed-in user's team member, read from the session.
-    // The request cannot name an author.
-    const { applySowProposal } = await import("./sow-analysis.server");
-    return applySowProposal({
-      ...data,
-      authorTeamMemberId: signedInTeamMemberId(context.profile),
-    });
+    // The author is the signed-in user's linked, active team member, read from the
+    // session. The request cannot name one. Refused before anything is written.
+    const { applySowProposal, resolveApplyingTeamMember } = await import("./sow-analysis.server");
+    const authorTeamMemberId = await resolveApplyingTeamMember(
+      signedInTeamMemberId(context.profile),
+    );
+    return applySowProposal({ ...data, authorTeamMemberId });
   });
 
 export const setSowDocumentForImplementation = createServerFn({ method: "POST" })

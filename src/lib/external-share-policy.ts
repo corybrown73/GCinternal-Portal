@@ -22,6 +22,30 @@ export function canManageExternalAccess(role: string | null | undefined): boolea
   return typeof role === "string" && (EXTERNAL_SHARING_ROLES as readonly string[]).includes(role);
 }
 
+/**
+ * Which external-sharing actions a role may see and use in the interface. Each
+ * entry is the server's own rule for that action, so the panel cannot offer an
+ * action the server would refuse. The server still checks every call.
+ */
+export type ExternalSharingControls = {
+  issueLink: boolean;
+  revokeLink: boolean;
+  rotateLink: boolean;
+  setPasscode: boolean;
+  snapshotActions: boolean;
+};
+
+export function externalSharingControls(role: string | null | undefined): ExternalSharingControls {
+  const may = canManageExternalAccess(role);
+  return {
+    issueLink: may,
+    revokeLink: may,
+    rotateLink: may,
+    setPasscode: may,
+    snapshotActions: may,
+  };
+}
+
 /** Throws unless the role may do the external-sharing action named. Unknown and missing roles are refused. */
 export function requireManage(
   role: string | null | undefined,
