@@ -237,6 +237,9 @@ export async function generateOnboardingDeck(
   actorProfileId: string | null,
   dealId: string,
 ): Promise<{ url: string; fileName: string; liveDate: string }> {
+  // Refused before anything is built, stored or filed. A partner implementation has no standard onboarding plan deck.
+  const { assertDocumentAllowed } = await import("./document-guard.server");
+  await assertDocumentAllowed("onboarding-plan", dealId);
   const input = await buildOnboardingDeckInput(dealId);
   const { buildOnboardingDeckFile } = await import("./brief/onboarding-deck");
   const deck = await buildOnboardingDeckFile(input);
