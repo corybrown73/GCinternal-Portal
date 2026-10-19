@@ -828,16 +828,21 @@ export async function loadCustomer360(
     }));
   }
 
-  // A partner project's progress comes from the partner journey, read the same
-  // way the header reads it. Its stage instances can hold the standard plan, so
-  // they are not what the Projects section draws for it.
+  // A partner project's progress is read once, here: the Projects rail takes
+  // its rail from it, and the page that shows the selected project takes the
+  // full progress from it, so that page does not read the same records again.
+  // The stage instances of a partner project are not what the rail draws for it.
+  const partnerProgressById = new Map<string, import("./partner-journey").PartnerProgress | null>();
   await Promise.all(
     implementationSummaries.map(async (summary) => {
       if (!isPartnerJourney(summary)) return;
-      const { partnerRailFor } = await import("./partner-journey.server");
-      summary.partner = await partnerRailFor(summary.id);
+      const { partnerJourneyFor } = await import("./partner-journey.server");
+      const read = await partnerJourneyFor(summary.id);
+      summary.partner = read.rail;
+      partnerProgressById.set(summary.id, read.progress);
     }),
   );
+  const selectedPartnerProgress = impl && partnerProgressById.get(impl.id);
 
   const named = (id: string | null | undefined) => (id ? (team.get(id)?.name ?? null) : null);
 
@@ -1059,6 +1064,9 @@ export async function loadCustomer360(
 
   return {
     ...base,
+    partner_progress: selectedPartnerProgress
+      ? { implementation_id: impl.id, progress: selectedPartnerProgress }
+      : null,
     journal: (journalRows ?? []).map((j: any) => ({
       id: j.id,
       implementation_id: j.implementation_id,

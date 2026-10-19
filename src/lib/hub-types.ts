@@ -367,6 +367,14 @@ export type Customer360 = {
   /** Every implementation this customer has, newest first — drives the selector. */
   implementations: ImplementationSummary[];
   /**
+   * The selected partner project's full partner progress, read once with the
+   * record so the page does not read it again. Null for a standard project.
+   */
+  partner_progress?: {
+    implementation_id: string;
+    progress: import("./partner-journey").PartnerProgress;
+  } | null;
+  /**
    * The selected implementation's deal facts (watch-outs, checklist next
    * step) — the same layer `dealFactsFor()` gives Home's triage, so
    * `triageRowForCustomer360` sees what `buildQueue` sees. Null without a

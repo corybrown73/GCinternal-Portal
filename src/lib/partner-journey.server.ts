@@ -138,24 +138,27 @@ export async function partnerStateForDeal(dealId: string): Promise<PartnerDealSt
 }
 
 /**
- * A partner project's rail, read from the same partner progress the header
- * shows. A project with no progress, or a read that fails, is `unavailable`:
- * the rail says so rather than drawing the standard plan in its place. The
- * loader is a parameter so that behaviour can be tested without a database.
+ * A partner project's progress, read once: the full progress for the page that
+ * shows it, and the rail for the Projects section. A project with no progress,
+ * or a read that fails, is `unavailable` in the rail; the rail never falls back
+ * to the standard plan. The loader is a parameter so that behaviour can be
+ * tested without a database.
  */
-export async function partnerRailFor(
+export type PartnerJourneyRead = { progress: PartnerProgress | null; rail: PartnerRail };
+
+export async function partnerJourneyFor(
   implementationId: string,
   load: (id: string) => Promise<PartnerProgress | null> = loadPartnerProgress,
-): Promise<PartnerRail> {
+): Promise<PartnerJourneyRead> {
   try {
     const progress = await load(implementationId);
-    if (!progress) return { status: "unavailable" };
-    return partnerRailFrom(progress);
+    if (!progress) return { progress: null, rail: { status: "unavailable" } };
+    return { progress, rail: partnerRailFrom(progress) };
   } catch (error) {
     console.error("[partner] could not read the partner journey for the project rail", {
       implementationId,
       error,
     });
-    return { status: "unavailable" };
+    return { progress: null, rail: { status: "unavailable" } };
   }
 }

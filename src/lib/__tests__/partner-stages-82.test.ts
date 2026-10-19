@@ -6,7 +6,7 @@ import { ProjectRail } from "@/components/project-timeline-rail";
 import { headerStage } from "@/lib/customer-header";
 import { PARTNER_JOURNEY } from "@/lib/partner-implementation";
 import { partnerProgress, type PartnerProgress } from "@/lib/partner-journey";
-import { partnerRailFor } from "@/lib/partner-journey.server";
+import { partnerJourneyFor } from "@/lib/partner-journey.server";
 import {
   adminStageHistory,
   buildProjectTimeline,
@@ -288,16 +288,17 @@ describe("partner progress that is missing or unavailable", () => {
   });
 
   it("loads partner progress through the same reader, and reports a read that fails as unavailable", async () => {
-    const rail = await partnerRailFor("impl-p", async () => {
+    const read = await partnerJourneyFor("impl-p", async () => {
       throw new Error("connection reset");
     });
-    expect(rail).toEqual({ status: "unavailable" });
+    expect(read.rail).toEqual({ status: "unavailable" });
+    expect(read.progress).toBeNull();
     expect(errorSpy).toHaveBeenCalled();
   });
 
   it("reports a project with no partner progress as unavailable", async () => {
-    const rail = await partnerRailFor("impl-p", async () => null);
-    expect(rail).toEqual({ status: "unavailable" });
+    const read = await partnerJourneyFor("impl-p", async () => null);
+    expect(read.rail).toEqual({ status: "unavailable" });
   });
 
   it("turns recorded partner progress into the rail's seven stages", async () => {
@@ -307,7 +308,9 @@ describe("partner progress that is missing or unavailable", () => {
       partner_setup: "completed",
       form_finalisation: "completed",
     });
-    const rail = await partnerRailFor("impl-p", async () => progress);
+    const read = await partnerJourneyFor("impl-p", async () => progress);
+    expect(read.progress).toBe(progress);
+    const rail = read.rail;
     expect(rail.status).toBe("ready");
     if (rail.status !== "ready") return;
     expect(rail.stages.map((s) => s.name)).toEqual(PARTNER_LABELS);

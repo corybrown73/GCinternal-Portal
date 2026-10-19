@@ -104,7 +104,13 @@ export type PartnerRailStage = {
  * any other stages in its place.
  */
 export type PartnerRail =
-  | { status: "ready"; current: string | null; stages: PartnerRailStage[] }
+  | {
+      status: "ready";
+      current: string | null;
+      stages: PartnerRailStage[];
+      /** The recorded Roll Out milestone: its target date, and when Roll Out was completed. */
+      rollOut: { target: string | null; completed: string | null };
+    }
   | { status: "unavailable" };
 
 export type ProjectTimeline = {
@@ -118,7 +124,9 @@ export type ProjectTimeline = {
   currentStageName: string;
   /** Time in the current stage against THAT stage's own target duration. */
   dwell: Pace;
-  /** The plan end date (target_date ?? target_launch_date), against today or the actual launch. */
+  /** What the target date is called here: the plan end, or a partner's Roll Out target. */
+  targetLabel: string;
+  /** The target date, against today or the actual launch. */
   launch: Pace;
   /** The worse of the two — what the lane is coloured by. */
   overall: Pace;
@@ -233,6 +241,7 @@ export function buildProjectTimeline(
       overall: worstPace([dwell, launch]),
       startedAt: input.contract_start_date ?? input.created_at ?? null,
       targetLaunchDate: planEnd,
+      targetLabel: "Plan end",
       actualLaunchDate: input.actual_launch_date ?? null,
       // A default rail can never evidence completion.
       isComplete: false,
@@ -295,6 +304,7 @@ export function buildProjectTimeline(
       input.created_at ??
       null,
     targetLaunchDate: planEnd,
+    targetLabel: "Plan end",
     actualLaunchDate: input.actual_launch_date ?? null,
     isComplete,
     isAddOn,
@@ -305,24 +315,31 @@ export function buildProjectTimeline(
  * A partner project's rail, read from its partner progress and nothing else.
  *
  * The seven stages are the partner journey, in order. Completion and the
- * current stage come from the partner model, never from a standard deal stage
- * or a stage instance. The partner model does not record when a stage was
- * entered, so no dwell is measured from one; a missing reading says so.
+ * current stage come from the partner model. The date indicator is the
+ * partner's own Roll Out target, from the recorded Roll Out milestone, and the
+ * Roll Out completion when there is one. The implementation's `target_date`,
+ * `target_launch_date` and `actual_launch_date` are never used here: they can
+ * hold a standard plan's dates, which are not this project's target. A partner
+ * with no recorded Roll Out target shows no target, rather than a date worked
+ * out from the standard stages.
  */
 function buildPartnerTimeline(input: TimelineInput, now: Date): ProjectTimeline {
-  const planEnd = planEndDate(input);
-  const launch = datePace(planEnd, input.actual_launch_date, now);
+  const partner = input.partner;
+  const rollOut = partner?.status === "ready" ? partner.rollOut : null;
+  const targetLaunchDate = rollOut?.target ?? null;
+  const actualLaunchDate = rollOut?.completed ?? null;
+  const launch = datePace(targetLaunchDate, actualLaunchDate, now);
   const common = {
     id: input.id,
     name: input.name,
     startedAt: input.contract_start_date ?? input.created_at ?? null,
-    targetLaunchDate: planEnd,
-    actualLaunchDate: input.actual_launch_date ?? null,
+    targetLaunchDate,
+    actualLaunchDate,
+    targetLabel: "Roll Out target",
     launch,
     isAddOn: Boolean(input.parent_implementation_id),
   };
 
-  const partner = input.partner;
   if (!partner || partner.status !== "ready") {
     const dwell: Pace = {
       level: "unknown",
@@ -395,8 +412,13 @@ export function partnerRailFrom(progress: {
     label: string;
     position: number;
     status: "completed" | "current" | "upcoming" | "skipped";
+    /** The earliest recorded target for the stage (its milestones'), else null. */
+    targetDate?: string | null;
+    /** The recorded completion of the stage, else null. */
+    completedDate?: string | null;
   }>;
 }): PartnerRail {
+  const rollOut = progress.stages.find((s) => s.key === "roll_out");
   return {
     status: "ready",
     current: progress.current,
@@ -406,6 +428,10 @@ export function partnerRailFrom(progress: {
       position: s.position,
       status: s.status,
     })),
+    rollOut: {
+      target: rollOut?.targetDate ?? null,
+      completed: rollOut?.completedDate ?? null,
+    },
   };
 }
 
@@ -428,7 +454,7 @@ export function adminStageHistory(
  */
 export function railSummary(t: ProjectTimeline): string {
   if (t.source === "partner_unavailable") {
-    return `${t.name}. Partner progress is unavailable for this project, so its stages are not shown. ${t.dwell.reason} Plan end: ${t.launch.reason}`;
+    return `${t.name}. Partner progress is unavailable for this project, so its stages are not shown. ${t.dwell.reason} ${t.targetLabel}: ${t.launch.reason}`;
   }
   const where =
     t.position > 0
@@ -441,7 +467,7 @@ export function railSummary(t: ProjectTimeline): string {
         ? `${t.total}-stage partner journey for this project.`
         : `No plan has been applied to this project, so the ${t.total} default stages are shown.`;
   const done = t.isComplete ? " Every stage is finished." : "";
-  return `${t.name}. ${plan} ${where}${done} ${t.dwell.reason} Plan end: ${t.launch.reason}`;
+  return `${t.name}. ${plan} ${where}${done} ${t.dwell.reason} ${t.targetLabel}: ${t.launch.reason}`;
 }
 
 /** A short, colour-free statement of where the project stands. */

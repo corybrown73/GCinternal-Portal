@@ -29,6 +29,7 @@ import { deriveHealth } from "@/lib/customer360-derive";
 import { dealStageLabel } from "@/lib/deal-stage";
 import type { Customer360, ImplementationSummary } from "@/lib/hub-types";
 import { getPartnerProgress } from "@/lib/hub.functions";
+import { PARTNER_PROGRESS_STALE_MS, seededPartnerProgress } from "@/lib/partner-progress-seed";
 import { isPartnerJourney } from "@/lib/partner-implementation";
 import { cn } from "@/lib/utils";
 
@@ -64,6 +65,9 @@ export function CustomerHeader({
     queryKey: ["partner-progress", impl?.id],
     queryFn: () => getPartnerProgress({ data: { implementationId: impl?.id ?? "" } }),
     enabled: Boolean(impl) && partner,
+    // The record already carries this project's progress when it is the selected one.
+    initialData: impl ? seededPartnerProgress(record, impl.id) : undefined,
+    staleTime: PARTNER_PROGRESS_STALE_MS,
   });
   if (!impl) return null;
 

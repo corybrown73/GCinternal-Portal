@@ -164,6 +164,16 @@ export function StageRail({
   );
 }
 
+/**
+ * The date the indicator shows. A partner project with no recorded Roll Out
+ * target says so, rather than showing a date from the standard plan.
+ */
+function targetText(timeline: ProjectTimeline): string {
+  const date = timeline.actualLaunchDate ?? timeline.targetLaunchDate;
+  if (date) return fmtDate(date);
+  return timeline.source.startsWith("partner") ? "Not recorded" : fmtDate(null);
+}
+
 /** Says out loud that these stages are a house default, not this project's plan. */
 function DefaultStagesNote({ total }: { total: number }) {
   return (
@@ -186,12 +196,8 @@ function LaneMeta({ timeline }: { timeline: ProjectTimeline }) {
         Started <span className="font-mono">{fmtDate(timeline.startedAt)}</span>
       </span>
       <span className="inline-flex items-center gap-1.5">
-        {timeline.actualLaunchDate ? "Launched" : "Plan end"}
-        <PaceChip
-          pace={timeline.launch}
-          label={fmtDate(timeline.actualLaunchDate ?? timeline.targetLaunchDate)}
-          className="font-mono"
-        />
+        {timeline.actualLaunchDate ? "Launched" : timeline.targetLabel}
+        <PaceChip pace={timeline.launch} label={targetText(timeline)} className="font-mono" />
       </span>
       {timeline.isComplete ? null : (
         <PaceChip
