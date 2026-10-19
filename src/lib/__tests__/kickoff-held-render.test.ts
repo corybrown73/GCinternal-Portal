@@ -42,7 +42,10 @@ describe("KickoffHeldConfirm", () => {
 
 describe("KickoffHeldRecord", () => {
   const date = "2026-09-25";
-  const completed = { kickoff: date, intake_done: "2026-09-20" };
+  const intake = {
+    path: "new_logo",
+    timeline: { completed: { kickoff: date, intake_done: "2026-09-20" } },
+  };
   function render(
     correction: Parameters<typeof KickoffHeldRecord>[0]["correction"],
     editable = true,
@@ -54,7 +57,7 @@ describe("KickoffHeldRecord", () => {
         createElement(KickoffHeldRecord, {
           dealId: "00000000-0000-4000-8000-0000000000d1",
           stage: "get_it_working",
-          completed,
+          intake,
           correction,
           editable,
         }),

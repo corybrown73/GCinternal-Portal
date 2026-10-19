@@ -8,11 +8,15 @@
 --
 -- The function is the only write. The server decides the policy (what counts as
 -- later progress, who may correct, whether confirmation was given) from the
--- current record, and passes the stage and completion it decided on. This
--- function re-checks both under a row lock and refuses if either has changed,
--- so the decision cannot be made on stale data. It writes nothing else: notes,
--- transcripts, tasks, deadlines, overrides and later completions are untouched,
--- and the stage move is recorded in the stage history and the audit log.
+-- deal as it reads it, and passes the stage and the whole intake it decided on.
+-- This function re-checks both under a row lock and refuses if either has
+-- changed. The whole intake, not just the completion record, because later
+-- progress is read from more than the record: the Complete stage's outcome is
+-- in the intake too. Every intake write locks the same row, so a write that
+-- lands after the server read is seen here and refused. It writes nothing else:
+-- notes, transcripts, tasks, deadlines, overrides and later completions are
+-- untouched, and the stage move is recorded in the stage history and the audit
+-- log.
 --
 -- Callable by the service role only; the app reaches it through the one server
 -- function that checks the signed-in person's deal-editor permission first.
@@ -20,7 +24,7 @@
 create or replace function public.portal_correct_kickoff_held(
   p_deal_id uuid,
   p_expected_stage portal_account_stage,
-  p_expected_completed jsonb,
+  p_expected_intake jsonb,
   p_actor_profile uuid,
   p_note text default null,
   p_later_tasks_done integer default 0
@@ -37,6 +41,7 @@ declare
   v_actor_role text;
   v_row portal_stage_transitions;
   v_partner boolean;
+  v_removed text;
 begin
   if auth.role() is distinct from 'service_role' then
     raise exception 'kickoff_correction_forbidden: only the server may correct Kickoff'
@@ -63,17 +68,17 @@ begin
       using errcode = '42501';
   end if;
 
-  -- Stale request: the stage or the completion record has changed since the
-  -- server decided. Nothing has been written.
+  -- Stale request: the stage or the intake has changed since the server
+  -- decided. Nothing has been written.
   if v_deal.stage <> p_expected_stage then
     raise exception 'kickoff_correction_stale: the deal has moved since it was opened'
       using errcode = '40001';
   end if;
-  v_completed := coalesce(v_deal.intake #> '{timeline,completed}', '{}'::jsonb);
-  if v_completed is distinct from p_expected_completed then
+  if v_deal.intake is distinct from p_expected_intake then
     raise exception 'kickoff_correction_stale: the plan changed since it was opened'
       using errcode = '40001';
   end if;
+  v_completed := coalesce(v_deal.intake #> '{timeline,completed}', '{}'::jsonb);
 
   if not (v_completed ? 'kickoff') then
     raise exception 'kickoff_correction_not_held: Kickoff is not recorded as held'
@@ -94,6 +99,7 @@ begin
   end if;
 
   -- One transaction: the record, the stage, the stage history and the audit log.
+  v_removed := v_completed ->> 'kickoff';
   v_completed := v_completed - 'kickoff';
   perform set_config('app.allow_stage_change', 'on', true);
   update portal_accounts
@@ -121,7 +127,7 @@ begin
     ('user', p_actor_profile, 'kickoff.held_unticked', 'account', p_deal_id,
      jsonb_build_object(
        'from_stage', v_deal.stage,
-       'removed_kickoff', p_expected_completed ->> 'kickoff',
+       'removed_kickoff', v_removed,
        'later_tasks_done', p_later_tasks_done,
        'note', p_note),
      v_deal.org_id);

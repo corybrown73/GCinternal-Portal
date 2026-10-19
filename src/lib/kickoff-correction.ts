@@ -3,12 +3,13 @@ import type { FlowStageKey } from "@/lib/stage-flow";
 
 /**
  * What the person saw when they unticked Kickoff held. The server checks it
- * against the record it reads now; a difference means the deal changed and
- * the person must look again before anything is written.
+ * against the deal it reads now; a difference means the deal changed and the
+ * person must look again before anything is written. The whole intake, not only
+ * the completion record: the Complete stage's outcome is read from it too.
  */
 export type KickoffCorrectionSnapshot = {
   stage: string;
-  completed: Record<string, string>;
+  intake: Record<string, unknown>;
   kind: "auto" | "confirm_later_work";
 };
 
@@ -17,10 +18,30 @@ export type KickoffCorrectionDecision =
   | { ok: false; reason: "stale" | "not_held" | "not_applicable" | "needs_confirmation" }
   | { ok: false; reason: "blocked"; completedStage: FlowStageKey };
 
-/** Same keys, same dates. Key order in the stored record does not matter. */
-export function sameCompleted(a: Record<string, string>, b: Record<string, string>): boolean {
-  const keys = Object.keys(a);
-  return keys.length === Object.keys(b).length && keys.every((k) => b[k] === a[k]);
+/**
+ * The same JSON value. Object key order does not matter, as it does not in the
+ * stored jsonb; arrays and scalars must match exactly.
+ */
+export function sameJson(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (Array.isArray(a) || Array.isArray(b)) {
+    return (
+      Array.isArray(a) &&
+      Array.isArray(b) &&
+      a.length === b.length &&
+      a.every((x, i) => sameJson(x, b[i]))
+    );
+  }
+  if (a && b && typeof a === "object" && typeof b === "object") {
+    const x = a as Record<string, unknown>;
+    const y = b as Record<string, unknown>;
+    const keys = Object.keys(x);
+    return (
+      keys.length === Object.keys(y).length &&
+      keys.every((k) => Object.prototype.hasOwnProperty.call(y, k) && sameJson(x[k], y[k]))
+    );
+  }
+  return false;
 }
 
 /**
@@ -31,13 +52,13 @@ export function sameCompleted(a: Record<string, string>, b: Record<string, strin
  */
 export function decideKickoffCorrection(input: {
   stage: string;
-  completed: Record<string, string>;
+  intake: Record<string, unknown>;
   correction: KickoffCorrection;
   expected: KickoffCorrectionSnapshot;
   confirmLaterWork: boolean;
 }): KickoffCorrectionDecision {
   const { correction, expected } = input;
-  if (input.stage !== expected.stage || !sameCompleted(input.completed, expected.completed)) {
+  if (input.stage !== expected.stage || !sameJson(input.intake, expected.intake)) {
     return { ok: false, reason: "stale" };
   }
   switch (correction.kind) {

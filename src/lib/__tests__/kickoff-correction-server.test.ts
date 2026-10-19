@@ -42,9 +42,13 @@ const newLogo = {
   handoff_tasks: { reviewed: "2026-09-22T15:00:00Z" },
 };
 
-/** The deal as the server reads it: the same record shape, the same flow rules. */
-function setDeal(stage: string, completed: Record<string, string>) {
-  const intake = { ...newLogo, timeline: { completed } };
+/** The deal as the server reads it: the same stored intake, the same flow rules. */
+function setDeal(
+  stage: string,
+  completed: Record<string, string>,
+  extra: Record<string, unknown> = {},
+) {
+  const intake = { ...newLogo, ...extra, timeline: { completed } };
   const parsed = readIntake(intake);
   const timeline = buildTimeline({
     closeDate: "2026-09-22",
@@ -65,10 +69,20 @@ function setDeal(stage: string, completed: Record<string, string>) {
   } as StageFlowInput);
 }
 
+/** What the page showed: the stage and intake on screen, and the decision it offered. */
+const shown = (
+  stage: string,
+  kind: "auto" | "confirm_later_work" = "auto",
+): { stage: string; intake: Record<string, unknown>; kind: "auto" | "confirm_later_work" } => ({
+  stage,
+  intake: state.account!.intake as Record<string, unknown>,
+  kind,
+});
+
 const input = (over: Partial<Parameters<typeof correctKickoffHeldForDeal>[0]> = {}) => ({
   dealId: DEAL,
   actorProfileId: ACTOR,
-  expected: { stage: "get_it_working", completed: held, kind: "auto" as const },
+  expected: shown("get_it_working"),
   confirmLaterWork: false,
   note: null,
   ...over,
@@ -83,8 +97,9 @@ beforeEach(() => {
 });
 
 describe("correctKickoffHeldForDeal", () => {
-  it("sends the decided, expected stage and record to the one database call, with the trusted actor", async () => {
+  it("sends the decided stage and the whole intake to the one database call, with the trusted actor", async () => {
     setDeal("get_it_working", held);
+    const intake = state.account!.intake;
     const result = await correctKickoffHeldForDeal(input());
     expect(result).toEqual({ stage: "kickoff", fromStage: "get_it_working" });
     expect(state.rpc).toHaveBeenCalledTimes(1);
@@ -93,7 +108,7 @@ describe("correctKickoffHeldForDeal", () => {
       {
         p_deal_id: DEAL,
         p_expected_stage: "get_it_working",
-        p_expected_completed: held,
+        p_expected_intake: intake,
         p_actor_profile: ACTOR,
         p_note: null,
         p_later_tasks_done: 0,
@@ -104,11 +119,7 @@ describe("correctKickoffHeldForDeal", () => {
   it("sends the later-task count only once the person has confirmed it", async () => {
     const later = { ...held, working: "2026-10-02" };
     setDeal("get_it_working", later);
-    const expected = {
-      stage: "get_it_working",
-      completed: later,
-      kind: "confirm_later_work" as const,
-    };
+    const expected = shown("get_it_working", "confirm_later_work");
     await expect(correctKickoffHeldForDeal(input({ expected }))).rejects.toThrow(
       /Confirm the correction first/,
     );
@@ -118,18 +129,48 @@ describe("correctKickoffHeldForDeal", () => {
     expect(state.rpc!.mock.calls[0]![1]).toMatchObject({ p_later_tasks_done: 1 });
   });
 
-  it("refuses a stale request before writing, when the page's stage or record is out of date", async () => {
+  it("refuses a stale request before writing, when the stage has moved", async () => {
+    setDeal("get_it_working", held);
+    const expected = shown("get_it_working");
     setDeal("make_it_yours", held);
-    await expect(correctKickoffHeldForDeal(input())).rejects.toThrow(/changed while this was open/);
+    await expect(correctKickoffHeldForDeal(input({ expected }))).rejects.toThrow(
+      /changed while this was open/,
+    );
+    expect(state.rpc).not.toHaveBeenCalled();
+  });
 
+  it("refuses a stale request when the completion record changed after the page loaded", async () => {
+    setDeal("get_it_working", held);
+    const expected = shown("get_it_working");
     setDeal("get_it_working", { ...held, intake_done: "2026-09-21" });
-    await expect(correctKickoffHeldForDeal(input())).rejects.toThrow(/changed while this was open/);
+    await expect(correctKickoffHeldForDeal(input({ expected }))).rejects.toThrow(
+      /changed while this was open/,
+    );
+    expect(state.rpc).not.toHaveBeenCalled();
+  });
+
+  it("refuses when the intake changed outside the completion record, such as the outcome", async () => {
+    // Complete stage, no outcome when the page loaded: automatic. Another
+    // person then records the outcome, which makes Complete done. The
+    // correction must not go ahead on the old answer.
+    setDeal("onboarding_complete", held);
+    const expected = shown("onboarding_complete");
+    setDeal("onboarding_complete", held, {
+      outcome: { kind: "proven", reason: null, at: "2026-10-01T00:00:00Z", by: null },
+    });
+    await expect(
+      correctKickoffHeldForDeal(input({ expected: { ...expected, stage: "onboarding_complete" } })),
+    ).rejects.toThrow(/changed while this was open/);
     expect(state.rpc).not.toHaveBeenCalled();
   });
 
   it("refuses when later work appeared after the page offered the plain correction", async () => {
+    setDeal("get_it_working", held);
+    const expected = shown("get_it_working");
     setDeal("get_it_working", { ...held, working: "2026-10-02" });
-    await expect(correctKickoffHeldForDeal(input())).rejects.toThrow(/changed while this was open/);
+    await expect(correctKickoffHeldForDeal(input({ expected }))).rejects.toThrow(
+      /changed while this was open/,
+    );
     expect(state.rpc).not.toHaveBeenCalled();
   });
 
@@ -139,12 +180,10 @@ describe("correctKickoffHeldForDeal", () => {
     type Stage = { key: string; tasks: Array<{ key: string; doneKey?: string | null }> };
     const giw = (state.flow as { stages: Stage[] }).stages.find((s) => s.key === "get_it_working")!;
     const marks = Object.fromEntries(giw.tasks.map((t) => [t.doneKey ?? t.key, "2026-10-03"]));
-    const completed = { ...held, ...marks };
-    setDeal("get_it_working", completed);
-    const expected = { stage: "get_it_working", completed, kind: "auto" as const };
-    await expect(correctKickoffHeldForDeal(input({ expected }))).rejects.toThrow(
-      /stage-correction review/,
-    );
+    setDeal("get_it_working", { ...held, ...marks });
+    await expect(
+      correctKickoffHeldForDeal(input({ expected: shown("get_it_working") })),
+    ).rejects.toThrow(/stage-correction review/);
     expect(state.rpc).not.toHaveBeenCalled();
   });
 
@@ -157,7 +196,16 @@ describe("correctKickoffHeldForDeal", () => {
 
   it("refuses a deal that does not exist", async () => {
     state.account = null;
-    await expect(correctKickoffHeldForDeal(input())).rejects.toThrow(/no longer exists/);
+    const expected = { stage: "get_it_working", intake: {}, kind: "auto" as const };
+    await expect(
+      correctKickoffHeldForDeal({
+        dealId: DEAL,
+        actorProfileId: ACTOR,
+        expected,
+        confirmLaterWork: false,
+        note: null,
+      }),
+    ).rejects.toThrow(/no longer exists/);
     expect(state.rpc).not.toHaveBeenCalled();
   });
 
@@ -195,6 +243,6 @@ describe("the correction's entry point", () => {
   it("takes the signed-in person from the server session, never from the request", () => {
     expect(source).toContain("actorProfileId: context.profile.id");
     const schema = source.slice(source.indexOf("inputValidator"), source.indexOf(".handler("));
-    expect(schema).not.toMatch(/profile|actor|stage:\s*z\.enum|classification/i);
+    expect(schema).not.toMatch(/profile|actor|classification/i);
   });
 });

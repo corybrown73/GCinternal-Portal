@@ -16,7 +16,7 @@ export const correctKickoffHeld = createServerFn({ method: "POST" })
         dealId: z.string().uuid(),
         expected: z.object({
           stage: z.string().min(1).max(40),
-          completed: z.record(z.string(), z.string()),
+          intake: z.record(z.string(), z.unknown()),
           kind: z.enum(["auto", "confirm_later_work"]),
         }),
         confirmLaterWork: z.boolean(),

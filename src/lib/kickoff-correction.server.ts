@@ -39,10 +39,9 @@ export async function correctKickoffHeldForDeal(input: {
   if (!built) throw new Error("This deal no longer exists.");
 
   const intake = readIntake(account.intake);
-  const completed = intake.timeline.completed;
   const decision = decideKickoffCorrection({
     stage: String(account.stage),
-    completed,
+    intake: account.intake as Record<string, unknown>,
     correction: kickoffCorrectionFor(built.flow, intake),
     expected: input.expected,
     confirmLaterWork: input.confirmLaterWork,
@@ -52,7 +51,7 @@ export async function correctKickoffHeldForDeal(input: {
   const { data, error: rpcError } = await db().rpc("portal_correct_kickoff_held", {
     p_deal_id: input.dealId,
     p_expected_stage: input.expected.stage,
-    p_expected_completed: input.expected.completed,
+    p_expected_intake: input.expected.intake,
     p_actor_profile: input.actorProfileId,
     p_note: input.note,
     p_later_tasks_done: decision.laterTasksDone,

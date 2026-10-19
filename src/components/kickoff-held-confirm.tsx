@@ -92,14 +92,15 @@ export function KickoffHeldConfirm({ prompt }: { prompt: KickoffOutcomePrompt })
 export function KickoffHeldRecord({
   dealId,
   stage,
-  completed,
+  intake,
   correction,
   editable,
 }: {
   dealId: string;
   /** The deal's stage as the page read it; the server refuses if it has moved. */
   stage: string;
-  completed: Record<string, string>;
+  /** The deal's intake as the page read it; the server refuses if it has changed. */
+  intake: Record<string, unknown>;
   correction: KickoffCorrection;
   editable: boolean;
 }) {
@@ -128,7 +129,7 @@ export function KickoffHeldRecord({
       await correctFn({
         data: {
           dealId,
-          expected: { stage, completed, kind: kind === "auto" ? "auto" : "confirm_later_work" },
+          expected: { stage, intake, kind: kind === "auto" ? "auto" : "confirm_later_work" },
           confirmLaterWork,
           note: null,
         },

@@ -1371,7 +1371,7 @@ export function CurrentImplementationTab({
                   <KickoffHeldRecord
                     dealId={dealId}
                     stage={deal.account.stage}
-                    completed={intake.timeline.completed}
+                    intake={deal.account.intake as Record<string, unknown>}
                     correction={kickoffCorrection}
                     editable={editable}
                   />

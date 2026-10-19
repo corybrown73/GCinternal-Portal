@@ -45,6 +45,12 @@ create function pg_temp.as_server() returns void language sql as $fn$
   select set_config('request.jwt.claim.role', 'service_role', true);
 $fn$;
 
+create function pg_temp.snap(p_completed jsonb) returns jsonb language sql as $fn$
+  select case when (intake #> '{timeline,completed}') = p_completed then intake
+              else jsonb_set(intake, '{timeline,completed}', p_completed) end
+    from portal_accounts where id = '00000000-0000-4000-8000-0000000000d1';
+$fn$;
+
 create function pg_temp.as_role(p_role text) returns void language sql as $fn$
   select set_config('request.jwt.claim.role', p_role, true);
 $fn$;
@@ -92,7 +98,7 @@ insert into journal_entries (id, implementation_id, stage, note, kind) values
 select pg_temp.as_server();
 select public.portal_correct_kickoff_held(
   '00000000-0000-4000-8000-0000000000d1', 'get_it_working',
-  '{"kickoff":"2026-09-25","working":"2026-10-02","intake_done":"2026-09-20"}'::jsonb,
+  pg_temp.snap('{"kickoff":"2026-09-25","working":"2026-10-02","intake_done":"2026-09-20"}'::jsonb),
   '00000000-0000-4000-8000-0000000000a1', 'Ticked by mistake', 1);
 
 select pg_temp.assert_eq(
@@ -123,7 +129,7 @@ select pg_temp.assert_eq(
 -- 2. A stale replay of the same request is refused: nothing moves twice.
 select pg_temp.assert_refused(
   $q$ select public.portal_correct_kickoff_held('00000000-0000-4000-8000-0000000000d1', 'get_it_working',
-        '{"kickoff":"2026-09-25","working":"2026-10-02","intake_done":"2026-09-20"}'::jsonb,
+        pg_temp.snap('{"kickoff":"2026-09-25","working":"2026-10-02","intake_done":"2026-09-20"}'::jsonb),
         '00000000-0000-4000-8000-0000000000a1', 'again', 0) $q$,
   'kickoff_correction_stale', 'a replayed correction is refused as stale');
 
@@ -136,14 +142,14 @@ update portal_accounts set stage = 'get_it_working',
 -- 3. Stale stage: the deal has moved since the server decided.
 select pg_temp.assert_refused(
   $q$ select public.portal_correct_kickoff_held('00000000-0000-4000-8000-0000000000d1', 'make_it_yours',
-        '{"kickoff":"2026-09-25","working":"2026-10-02","intake_done":"2026-09-20"}'::jsonb,
+        pg_temp.snap('{"kickoff":"2026-09-25","working":"2026-10-02","intake_done":"2026-09-20"}'::jsonb),
         '00000000-0000-4000-8000-0000000000a1', 'x', 0) $q$,
   'kickoff_correction_stale', 'a stale stage is refused');
 
 -- 4. Stale completion record: a later tick changed the snapshot.
 select pg_temp.assert_refused(
   $q$ select public.portal_correct_kickoff_held('00000000-0000-4000-8000-0000000000d1', 'get_it_working',
-        '{"kickoff":"2026-09-25","intake_done":"2026-09-20"}'::jsonb,
+        pg_temp.snap('{"kickoff":"2026-09-25","intake_done":"2026-09-20"}'::jsonb),
         '00000000-0000-4000-8000-0000000000a1', 'x', 0) $q$,
   'kickoff_correction_stale', 'a changed completion record is refused as stale');
 select pg_temp.assert_eq(
@@ -155,7 +161,7 @@ update portal_accounts set intake = jsonb_set(intake, '{timeline,completed}', '{
   where id = '00000000-0000-4000-8000-0000000000d1';
 select pg_temp.assert_refused(
   $q$ select public.portal_correct_kickoff_held('00000000-0000-4000-8000-0000000000d1', 'get_it_working',
-        '{"working":"2026-10-02"}'::jsonb,
+        pg_temp.snap('{"working":"2026-10-02"}'::jsonb),
         '00000000-0000-4000-8000-0000000000a1', 'x', 0) $q$,
   'kickoff_correction_not_held', 'a deal without Kickoff held is refused');
 update portal_accounts set intake = jsonb_set(intake, '{timeline,completed}', '{"kickoff":"2026-09-25","working":"2026-10-02","intake_done":"2026-09-20"}')
@@ -166,7 +172,7 @@ update portal_accounts set intake = jsonb_set(intake, '{path}', '"partner_implem
   where id = '00000000-0000-4000-8000-0000000000d1';
 select pg_temp.assert_refused(
   $q$ select public.portal_correct_kickoff_held('00000000-0000-4000-8000-0000000000d1', 'get_it_working',
-        '{"kickoff":"2026-09-25","working":"2026-10-02","intake_done":"2026-09-20"}'::jsonb,
+        pg_temp.snap('{"kickoff":"2026-09-25","working":"2026-10-02","intake_done":"2026-09-20"}'::jsonb),
         '00000000-0000-4000-8000-0000000000a1', 'x', 0) $q$,
   'kickoff_correction_not_applicable', 'a partner intake path is never corrected');
 update portal_accounts set intake = jsonb_set(intake, '{path}', '"new_logo"')
@@ -175,7 +181,7 @@ update implementations set journey_type = 'partner_implementation'
   where id = '00000000-0000-4000-8000-0000000000e1';
 select pg_temp.assert_refused(
   $q$ select public.portal_correct_kickoff_held('00000000-0000-4000-8000-0000000000d1', 'get_it_working',
-        '{"kickoff":"2026-09-25","working":"2026-10-02","intake_done":"2026-09-20"}'::jsonb,
+        pg_temp.snap('{"kickoff":"2026-09-25","working":"2026-10-02","intake_done":"2026-09-20"}'::jsonb),
         '00000000-0000-4000-8000-0000000000a1', 'x', 0) $q$,
   'kickoff_correction_not_applicable', 'a partner implementation journey is never corrected');
 update implementations set journey_type = null where id = '00000000-0000-4000-8000-0000000000e1';
@@ -184,18 +190,18 @@ update implementations set journey_type = null where id = '00000000-0000-4000-80
 --    Except the last check, these are the server calling on a person's behalf.
 select pg_temp.assert_refused(
   $q$ select public.portal_correct_kickoff_held('00000000-0000-4000-8000-0000000000d1', 'get_it_working',
-        '{"kickoff":"2026-09-25","working":"2026-10-02","intake_done":"2026-09-20"}'::jsonb,
+        pg_temp.snap('{"kickoff":"2026-09-25","working":"2026-10-02","intake_done":"2026-09-20"}'::jsonb),
         '00000000-0000-4000-8000-0000000000a2', 'x', 0) $q$,
   'kickoff_correction_forbidden', 'a customer login cannot correct Kickoff');
 select pg_temp.assert_refused(
   $q$ select public.portal_correct_kickoff_held('00000000-0000-4000-8000-0000000000d1', 'get_it_working',
-        '{"kickoff":"2026-09-25","working":"2026-10-02","intake_done":"2026-09-20"}'::jsonb,
+        pg_temp.snap('{"kickoff":"2026-09-25","working":"2026-10-02","intake_done":"2026-09-20"}'::jsonb),
         '00000000-0000-4000-8000-0000000000a3', 'x', 0) $q$,
   'kickoff_correction_forbidden', 'a person from another organisation cannot correct the deal');
 select pg_temp.as_role('authenticated');
 select pg_temp.assert_refused(
   $q$ select public.portal_correct_kickoff_held('00000000-0000-4000-8000-0000000000d1', 'get_it_working',
-        '{"kickoff":"2026-09-25","working":"2026-10-02","intake_done":"2026-09-20"}'::jsonb,
+        pg_temp.snap('{"kickoff":"2026-09-25","working":"2026-10-02","intake_done":"2026-09-20"}'::jsonb),
         '00000000-0000-4000-8000-0000000000a1', 'x', 0) $q$,
   'kickoff_correction_forbidden', 'a caller that is not the server is refused');
 select pg_temp.as_server();
@@ -223,7 +229,7 @@ create trigger probe_fail_audit before insert on portal_audit_log
 do $$
 begin
   perform public.portal_correct_kickoff_held('00000000-0000-4000-8000-0000000000d1', 'get_it_working',
-    '{"kickoff":"2026-09-25","working":"2026-10-02","intake_done":"2026-09-20"}'::jsonb,
+    pg_temp.snap('{"kickoff":"2026-09-25","working":"2026-10-02","intake_done":"2026-09-20"}'::jsonb),
     '00000000-0000-4000-8000-0000000000a1', 'x', 0);
   raise exception 'INVARIANT "a failed audit write aborts the correction" was accepted';
 exception when others then
@@ -245,7 +251,7 @@ select set_config('app.allow_stage_change', '', true);
 drop trigger probe_fail_audit on portal_audit_log;
 select public.portal_correct_kickoff_held(
   '00000000-0000-4000-8000-0000000000d1', 'kickoff',
-  '{"kickoff":"2026-09-25","working":"2026-10-02","intake_done":"2026-09-20"}'::jsonb,
+  pg_temp.snap('{"kickoff":"2026-09-25","working":"2026-10-02","intake_done":"2026-09-20"}'::jsonb),
   '00000000-0000-4000-8000-0000000000a1', 'In kickoff', 0);
 select pg_temp.assert_eq(
   $q$ select stage::text from portal_accounts where id = '00000000-0000-4000-8000-0000000000d1' $q$,
@@ -254,5 +260,44 @@ select pg_temp.assert_eq(
   $q$ select count(*)::text from portal_stage_transitions where account_id = '00000000-0000-4000-8000-0000000000d1'
         and note like 'Kickoff held unticked: In kickoff%' $q$,
   '0', 'no stage history row is written when the stage does not change');
+
+-- 11. A concurrent write that is not the completion record. The server decided
+--     "automatic" for a deal in Complete with no outcome. Another person then
+--     records the outcome, which makes Complete done and the decision blocked.
+--     The correction must refuse on the old decision, and write nothing.
+select pg_temp.as_server();
+select set_config('app.allow_stage_change', 'on', true);
+update portal_accounts set stage = 'onboarding_complete',
+  intake = jsonb_set(intake, '{timeline,completed}', '{"kickoff":"2026-09-25","intake_done":"2026-09-20"}')
+  where id = '00000000-0000-4000-8000-0000000000d1';
+select set_config('app.allow_stage_change', '', true);
+create temp table probe_snap as
+  select intake from portal_accounts where id = '00000000-0000-4000-8000-0000000000d1';
+update portal_accounts set intake = jsonb_set(intake, '{outcome}',
+  '{"kind": "proven", "reason": null, "at": "2026-10-01T00:00:00Z", "by": null}')
+  where id = '00000000-0000-4000-8000-0000000000d1';
+select pg_temp.assert_refused(
+  $q$ select public.portal_correct_kickoff_held('00000000-0000-4000-8000-0000000000d1', 'onboarding_complete',
+        (select intake from probe_snap), '00000000-0000-4000-8000-0000000000a1', 'race', 0) $q$,
+  'kickoff_correction_stale', 'an outcome recorded after the decision refuses the correction');
+select pg_temp.assert_eq(
+  $q$ select (stage::text = 'onboarding_complete' and (intake #> '{timeline,completed,kickoff}') = '"2026-09-25"'::jsonb
+        and (intake #> '{outcome,kind}') = '"proven"'::jsonb)::text
+        from portal_accounts where id = '00000000-0000-4000-8000-0000000000d1' $q$,
+  'true', 'the refused race writes nothing: the stage, the record and the outcome are as they were');
+select pg_temp.assert_eq(
+  $q$ select count(*)::text from portal_stage_transitions where account_id = '00000000-0000-4000-8000-0000000000d1'
+        and note like 'Kickoff held unticked: race%' $q$,
+  '0', 'the refused race writes no stage history');
+
+-- 12. Positive control: the same request with nothing changed since the decision
+--     is accepted, so the guard refuses only real changes.
+update portal_accounts set intake = intake - 'outcome'
+  where id = '00000000-0000-4000-8000-0000000000d1';
+select public.portal_correct_kickoff_held('00000000-0000-4000-8000-0000000000d1', 'onboarding_complete',
+  (select intake from probe_snap), '00000000-0000-4000-8000-0000000000a1', 'unchanged', 0);
+select pg_temp.assert_eq(
+  $q$ select stage::text from portal_accounts where id = '00000000-0000-4000-8000-0000000000d1' $q$,
+  'kickoff', 'an unchanged request is accepted and returns the deal to Kickoff');
 
 rollback;
