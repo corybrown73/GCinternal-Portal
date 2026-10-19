@@ -115,6 +115,7 @@ import {
 } from "@/components/current-implementation-context";
 import { focusHeadline, journeyPosition, taskFocusFor } from "@/lib/current-implementation-focus";
 import { getPartnerProgress } from "@/lib/hub.functions";
+import { PARTNER_PROGRESS_STALE_MS, seededPartnerProgress } from "@/lib/partner-progress-seed";
 import { stageGuidanceFor } from "@/lib/stage-guidance";
 import { paperworkOnFile, parseWonGate, type WonGateMissing } from "@/lib/won-gate";
 import { liveWonGateMissing, parseGateParam } from "@/lib/deal-entry";
@@ -280,8 +281,10 @@ function ImplementationTargetSection({
   const impl = record.implementation;
   const [open, setOpen] = useState(false);
   if (!impl) return null;
-  const plan = impl.dates.target;
-  const baseline = impl.dates.baseline;
+  // A partner's date is its own Roll Out target. The stored plan end can hold
+  // a standard plan's date, so it is never shown for a partner.
+  const plan = partner ? (partner.graduationTarget ?? null) : impl.dates.target;
+  const baseline = partner ? null : impl.dates.baseline;
   const changed = targetDidChange(baseline, plan);
   const health = deriveHealth(record, impl);
   const agreedMoved = Boolean(
@@ -327,10 +330,12 @@ function ImplementationTargetSection({
         </p>
       ) : null}
       <p className="mt-3 text-[12px] text-muted-foreground">
-        {partner ? "Recorded go-live target: " : "Plan end: "}
+        {partner ? "Roll Out target: " : "Plan end: "}
         <span className="inline-flex items-center gap-1 font-medium text-foreground">
-          {plan ? shortDay(plan) : "Not set"}
-          {plan ? <StatusDot status={health.level} className="text-[12px] font-normal" /> : null}
+          {plan ? shortDay(plan) : partner ? "Not recorded" : "Not set"}
+          {plan && !partner ? (
+            <StatusDot status={health.level} className="text-[12px] font-normal" />
+          ) : null}
         </span>
         {changed ? (
           <>
@@ -984,6 +989,8 @@ export function CurrentImplementationTab({
     queryKey: ["partner-progress", implementationId],
     queryFn: () => getPartnerProgress({ data: { implementationId } }),
     enabled: partner,
+    initialData: seededPartnerProgress(record, implementationId),
+    staleTime: PARTNER_PROGRESS_STALE_MS,
   });
   const [today, setToday] = useState<string | null>(null);
   useEffect(() => setToday(localIso()), []);

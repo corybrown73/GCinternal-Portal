@@ -636,7 +636,10 @@ export async function loadCustomer360(
     created_at: i.created_at ?? null,
     actual_launch_date: i.actual_launch_date ?? null,
     parent_implementation_id: i.parent_implementation_id ?? null,
+    journey_type: i.journey_type ?? null,
+    partner_key: i.partner_key ?? null,
     stages: [] as any[],
+    partner: null as import("./project-timeline").PartnerRail | null,
   }));
 
   // The customer's logo, as a signed URL.
@@ -824,6 +827,22 @@ export async function loadCustomer360(
       provenance: r.provenance ?? null,
     }));
   }
+
+  // A partner project's progress is read once, here: the Projects rail takes
+  // its rail from it, and the page that shows the selected project takes the
+  // full progress from it, so that page does not read the same records again.
+  // The stage instances of a partner project are not what the rail draws for it.
+  const partnerProgressById = new Map<string, import("./partner-journey").PartnerProgress | null>();
+  await Promise.all(
+    implementationSummaries.map(async (summary) => {
+      if (!isPartnerJourney(summary)) return;
+      const { partnerJourneyFor } = await import("./partner-journey.server");
+      const read = await partnerJourneyFor(summary.id);
+      summary.partner = read.rail;
+      partnerProgressById.set(summary.id, read.progress);
+    }),
+  );
+  const selectedPartnerProgress = impl && partnerProgressById.get(impl.id);
 
   const named = (id: string | null | undefined) => (id ? (team.get(id)?.name ?? null) : null);
 
@@ -1045,6 +1064,9 @@ export async function loadCustomer360(
 
   return {
     ...base,
+    partner_progress: selectedPartnerProgress
+      ? { implementation_id: impl.id, progress: selectedPartnerProgress }
+      : null,
     journal: (journalRows ?? []).map((j: any) => ({
       id: j.id,
       implementation_id: j.implementation_id,

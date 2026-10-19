@@ -367,6 +367,14 @@ export type Customer360 = {
   /** Every implementation this customer has, newest first — drives the selector. */
   implementations: ImplementationSummary[];
   /**
+   * The selected partner project's full partner progress, read once with the
+   * record so the page does not read it again. Null for a standard project.
+   */
+  partner_progress?: {
+    implementation_id: string;
+    progress: import("./partner-journey").PartnerProgress;
+  } | null;
+  /**
    * The selected implementation's deal facts (watch-outs, checklist next
    * step) — the same layer `dealFactsFor()` gives Home's triage, so
    * `triageRowForCustomer360` sees what `buildQueue` sees. Null without a
@@ -523,6 +531,14 @@ export type ImplementationSummary = {
    * default rather than passing the house stages off as this project's plan.
    */
   stages: ImplementationStageInstance[];
+  /** Which journey the project follows. Either field makes it a partner project. */
+  journey_type?: string | null;
+  partner_key?: string | null;
+  /**
+   * A partner project's own progress, read from the partner model. Null for a
+   * standard project. A partner project never draws `stages` in its place.
+   */
+  partner?: import("./project-timeline").PartnerRail | null;
 };
 
 /** A `stage_instances` row as the 360 projects it. Mirrors 0014's columns. */

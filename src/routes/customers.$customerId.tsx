@@ -22,7 +22,11 @@ import { ExternalSharePanel } from "@/components/external-share-panel";
 import { FromSalesPanel } from "@/components/from-sales-panel";
 import { ConversationPanel } from "@/components/conversation-panel";
 import { ProjectRail, ProjectTimelines } from "@/components/project-timeline-rail";
-import { buildProjectTimeline, type TimelineInput } from "@/lib/project-timeline";
+import {
+  adminStageHistory,
+  buildProjectTimeline,
+  type TimelineInput,
+} from "@/lib/project-timeline";
 import { AdvanceStage } from "@/components/stage-advance-write";
 import { launchAcceptanceGate } from "@/lib/launch-gate";
 import { nextLifecycleStage } from "@/lib/stage-advance-input";
@@ -591,6 +595,9 @@ function projectInput(
     created_at: summary?.created_at ?? null,
     parent_implementation_id: summary?.parent_implementation_id ?? null,
     stages: summary?.stages ?? [],
+    journey_type: impl.journey_type ?? null,
+    partner_key: impl.partner_key ?? null,
+    partner: summary?.partner ?? null,
   };
 }
 
@@ -752,10 +759,20 @@ function DetailsTab({ record, customerId }: { record: Customer360; customerId: s
               only — the canonical journey a TIS operates day to day lives on
               Current Implementation, not here. */}
           <p className="px-3 pt-2 text-[12px] text-muted-foreground">
-            Underlying delivery lifecycle, stage:{" "}
-            <b className="text-foreground">{stageLabel(impl.current_stage)}</b> — project history,
-            gates and templates. Not the implementation journey a TIS runs; that is Current
-            Implementation. Reference and record-keeping only.
+            {isPartnerJourney(impl) ? (
+              <>
+                Administrative: the standard deal stage recorded for this project is{" "}
+                <b className="text-foreground">{stageLabel(impl.current_stage)}</b>. It is not
+                partner progress; the partner journey is shown under Projects.
+              </>
+            ) : (
+              <>
+                Underlying delivery lifecycle, stage:{" "}
+                <b className="text-foreground">{stageLabel(impl.current_stage)}</b> — project
+                history, gates and templates. Not the implementation journey a TIS runs; that is
+                Current Implementation. Reference and record-keeping only.
+              </>
+            )}
           </p>
           <JourneyTab record={record} customerId={customerId} part="delivery" />
         </>
@@ -2089,7 +2106,11 @@ function JourneyTab({
             title={`${TIS_SHORT} journal`}
             count={record.journal.length}
             level="reference"
-            meta={`${TIS_FULL} working notes, filed under the stage they were written in — currently ${stageLabel(impl.current_stage)}`}
+            meta={
+              isPartnerJourney(impl)
+                ? `${TIS_FULL} working notes, filed under the stage they were written in`
+                : `${TIS_FULL} working notes, filed under the stage they were written in — currently ${stageLabel(impl.current_stage)}`
+            }
           >
             <div className="py-1.5">
               <JournalPanel
@@ -2194,110 +2215,134 @@ function JourneyTab({
             </div>
           ) : null}
 
-          <Panel
-            title={isPartnerJourney(impl) ? "Standard deal-stage history" : "Stage timeline"}
-            count={LIFECYCLE_STAGES.length}
-            meta={
-              isPartnerJourney(impl)
-                ? "Administrative audit record. Not partner progress."
-                : "From stage history"
-            }
-          >
-            <ul className="divide-y divide-border">
-              {LIFECYCLE_STAGES.map((stage, i) => {
-                const h = historyByStage.get(stage.id);
-                const state =
-                  i === activeIndex
-                    ? "current"
-                    : h || (activeIndex > -1 && i < activeIndex)
-                      ? "completed"
-                      : "upcoming";
-                const days = duration(h);
-                return (
-                  <li key={stage.id} className="flex gap-3 px-3 py-2.5">
-                    <span className="w-6 shrink-0 pt-0.5 font-mono text-[11px] text-muted-foreground">
-                      {String(i + 1).padStart(2, "0")}
-                    </span>
-                    <span
-                      className={cn(
-                        "mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full",
-                        state === "current"
-                          ? "bg-primary"
-                          : state === "completed"
-                            ? "bg-status-ontrack-foreground"
-                            : "bg-muted-foreground/40",
-                      )}
-                    />
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-baseline gap-2">
-                        <span
-                          className={cn(
-                            "text-[13px]",
-                            state === "upcoming" ? "text-muted-foreground" : "font-medium",
-                          )}
-                        >
-                          {stage.label}
-                        </span>
-                        <span className="rounded-sm border border-border px-1.5 py-0.5 text-[10px] uppercase tracking-[0.08em] text-muted-foreground">
-                          {state}
-                        </span>
-                      </div>
-                      <p className="mt-0.5 text-[11px] text-muted-foreground">{stage.intent}</p>
-                      <Meta
-                        items={[
-                          ["Entered", <When key="entered" value={h?.entered_at} />],
-                          [
-                            "Exited",
-                            h?.exited_at ? (
-                              <When key="exited" value={h.exited_at} />
-                            ) : h ? (
-                              "in stage"
-                            ) : (
-                              "—"
-                            ),
-                          ],
-                          ["Duration", days == null ? "—" : `${days}d`],
-                          ["By", dash(h?.entered_by_name)],
-                        ]}
+          {isPartnerJourney(impl) ? (
+            <Panel
+              title="Standard deal-stage history"
+              count={record.stage_history.length}
+              meta="Administrative audit record. Not partner progress; the partner journey is shown under Projects."
+            >
+              {adminStageHistory(record.stage_history).length ? (
+                <ul className="divide-y divide-border">
+                  {adminStageHistory(record.stage_history).map((h) => (
+                    <li
+                      key={h.id}
+                      className="flex flex-wrap items-baseline gap-x-3 px-3 py-2.5 text-[12px]"
+                    >
+                      <span className="font-medium">{stageLabel(h.stage)}</span>
+                      <span className="text-[11px] text-muted-foreground">
+                        <When value={h.entered_at} />
+                        {h.exited_at ? (
+                          <>
+                            {" → "}
+                            <When value={h.exited_at} />
+                          </>
+                        ) : null}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <NoRows label="No standard deal-stage history recorded" />
+              )}
+            </Panel>
+          ) : (
+            <Panel title="Stage timeline" count={LIFECYCLE_STAGES.length} meta="From stage history">
+              <ul className="divide-y divide-border">
+                {LIFECYCLE_STAGES.map((stage, i) => {
+                  const h = historyByStage.get(stage.id);
+                  const state =
+                    i === activeIndex
+                      ? "current"
+                      : h || (activeIndex > -1 && i < activeIndex)
+                        ? "completed"
+                        : "upcoming";
+                  const days = duration(h);
+                  return (
+                    <li key={stage.id} className="flex gap-3 px-3 py-2.5">
+                      <span className="w-6 shrink-0 pt-0.5 font-mono text-[11px] text-muted-foreground">
+                        {String(i + 1).padStart(2, "0")}
+                      </span>
+                      <span
+                        className={cn(
+                          "mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full",
+                          state === "current"
+                            ? "bg-primary"
+                            : state === "completed"
+                              ? "bg-status-ontrack-foreground"
+                              : "bg-muted-foreground/40",
+                        )}
                       />
-                      {h?.notes ? (
-                        <p className="mt-1 text-[12px] text-muted-foreground">{h.notes}</p>
-                      ) : null}
-                      {state === "current" ? (
-                        <div className="mt-2 rounded-sm border border-border bg-muted/50 px-2 py-1.5">
-                          <div className="text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
-                            Blocking progression
-                          </div>
-                          {open.risks.length + open.issues.length + open.escalations.length ? (
-                            <ul className="mt-1 space-y-0.5">
-                              {[...open.escalations, ...open.risks, ...open.issues].map(
-                                (x: any) => (
-                                  <li
-                                    key={x.id}
-                                    className="flex flex-wrap items-baseline gap-2 text-[12px]"
-                                  >
-                                    <SeverityChip value={x.severity} />
-                                    <span>{x.title}</span>
-                                    <span className="text-[11px] text-muted-foreground">
-                                      {humanize(x.status)}
-                                    </span>
-                                  </li>
-                                ),
-                              )}
-                            </ul>
-                          ) : (
-                            <p className="mt-1 text-[12px] text-muted-foreground">
-                              Nothing open against this stage.
-                            </p>
-                          )}
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-baseline gap-2">
+                          <span
+                            className={cn(
+                              "text-[13px]",
+                              state === "upcoming" ? "text-muted-foreground" : "font-medium",
+                            )}
+                          >
+                            {stage.label}
+                          </span>
+                          <span className="rounded-sm border border-border px-1.5 py-0.5 text-[10px] uppercase tracking-[0.08em] text-muted-foreground">
+                            {state}
+                          </span>
                         </div>
-                      ) : null}
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
-          </Panel>
+                        <p className="mt-0.5 text-[11px] text-muted-foreground">{stage.intent}</p>
+                        <Meta
+                          items={[
+                            ["Entered", <When key="entered" value={h?.entered_at} />],
+                            [
+                              "Exited",
+                              h?.exited_at ? (
+                                <When key="exited" value={h.exited_at} />
+                              ) : h ? (
+                                "in stage"
+                              ) : (
+                                "—"
+                              ),
+                            ],
+                            ["Duration", days == null ? "—" : `${days}d`],
+                            ["By", dash(h?.entered_by_name)],
+                          ]}
+                        />
+                        {h?.notes ? (
+                          <p className="mt-1 text-[12px] text-muted-foreground">{h.notes}</p>
+                        ) : null}
+                        {state === "current" ? (
+                          <div className="mt-2 rounded-sm border border-border bg-muted/50 px-2 py-1.5">
+                            <div className="text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
+                              Blocking progression
+                            </div>
+                            {open.risks.length + open.issues.length + open.escalations.length ? (
+                              <ul className="mt-1 space-y-0.5">
+                                {[...open.escalations, ...open.risks, ...open.issues].map(
+                                  (x: any) => (
+                                    <li
+                                      key={x.id}
+                                      className="flex flex-wrap items-baseline gap-2 text-[12px]"
+                                    >
+                                      <SeverityChip value={x.severity} />
+                                      <span>{x.title}</span>
+                                      <span className="text-[11px] text-muted-foreground">
+                                        {humanize(x.status)}
+                                      </span>
+                                    </li>
+                                  ),
+                                )}
+                              </ul>
+                            ) : (
+                              <p className="mt-1 text-[12px] text-muted-foreground">
+                                Nothing open against this stage.
+                              </p>
+                            )}
+                          </div>
+                        ) : null}
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            </Panel>
+          )}
         </>
       ) : null}
     </div>

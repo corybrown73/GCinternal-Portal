@@ -25,6 +25,7 @@ import {
 import { fmtDate, fmtMoney } from "@/lib/hub-format";
 import type { Customer360 } from "@/lib/hub-types";
 import { getPartnerProgress } from "@/lib/hub.functions";
+import { PARTNER_PROGRESS_STALE_MS } from "@/lib/partner-progress-seed";
 import { isPartnerJourney } from "@/lib/partner-implementation";
 import { getParkingLot } from "@/lib/parking-lot.functions";
 import { SOLUTION_LABEL } from "@/lib/onboarding-services";
@@ -119,6 +120,7 @@ function ImplementationSnapshot({
     queryKey: ["partner-progress", impl.id],
     queryFn: () => getPartnerProgress({ data: { implementationId: impl.id } }),
     enabled: partner,
+    staleTime: PARTNER_PROGRESS_STALE_MS,
   });
   const [today, setToday] = useState<string | null>(null);
   useEffect(() => setToday(localIso()), []);

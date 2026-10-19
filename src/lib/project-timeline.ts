@@ -22,6 +22,7 @@ const LEGACY_STAGE_NAMES: ReadonlySet<string> = new Set([
   "Complete",
 ]);
 import { planEndDate } from "./date-labels";
+import { isPartnerJourney } from "./partner-implementation";
 import { datePace, dwellPace, worstPace, type Pace } from "./pace";
 
 /**
@@ -85,7 +86,32 @@ export type RailStage = {
  * Where the rail came from. `lifecycle_default` means this project has no
  * stage instances and we are drawing the house default; the UI must say so.
  */
-export type TimelineSource = "stage_instances" | "lifecycle_default";
+export type TimelineSource =
+  "stage_instances" | "lifecycle_default" | "partner_journey" | "partner_unavailable";
+
+/** One stage of a partner journey, in the rail's own terms. */
+export type PartnerRailStage = {
+  key: string;
+  name: string;
+  /** 1 to 7, in the journey's order. */
+  position: number;
+  status: "completed" | "current" | "upcoming" | "skipped";
+};
+
+/**
+ * A partner project's own progress, read from the partner model. `unavailable`
+ * when that progress could not be read, so the rail says so instead of drawing
+ * any other stages in its place.
+ */
+export type PartnerRail =
+  | {
+      status: "ready";
+      current: string | null;
+      stages: PartnerRailStage[];
+      /** The recorded Roll Out milestone: its target date, and when Roll Out was completed. */
+      rollOut: { target: string | null; completed: string | null };
+    }
+  | { status: "unavailable" };
 
 export type ProjectTimeline = {
   id: string;
@@ -98,7 +124,9 @@ export type ProjectTimeline = {
   currentStageName: string;
   /** Time in the current stage against THAT stage's own target duration. */
   dwell: Pace;
-  /** The plan end date (target_date ?? target_launch_date), against today or the actual launch. */
+  /** What the target date is called here: the plan end, or a partner's Roll Out target. */
+  targetLabel: string;
+  /** The target date, against today or the actual launch. */
   launch: Pace;
   /** The worse of the two — what the lane is coloured by. */
   overall: Pace;
@@ -129,6 +157,15 @@ export type TimelineInput = {
   parent_implementation_id?: string | null;
   /** This project's own stages, if a journey has been applied to it. */
   stages?: StageInstanceRow[] | null;
+  /** Which journey the project follows. Either field makes it a partner project. */
+  journey_type?: string | null;
+  partner_key?: string | null;
+  /**
+   * A partner project's own progress. Read for partner projects only; a
+   * partner project with none recorded is shown as unavailable, never as the
+   * standard plan.
+   */
+  partner?: PartnerRail | null;
 };
 
 const dayMs = 86_400_000;
@@ -148,6 +185,10 @@ export function buildProjectTimeline(
   input: TimelineInput,
   now: Date = new Date(),
 ): ProjectTimeline {
+  // A partner project is drawn from the partner journey alone. Its stage
+  // instances can hold the standard plan, so they are never read for it.
+  if (isPartnerJourney(input)) return buildPartnerTimeline(input, now);
+
   // A journey template names its stages itself ("Plan Internally"), and the
   // first templates were written before the stages were renamed: a stage
   // still carrying one of those names is shown under the configured name. A
@@ -200,6 +241,7 @@ export function buildProjectTimeline(
       overall: worstPace([dwell, launch]),
       startedAt: input.contract_start_date ?? input.created_at ?? null,
       targetLaunchDate: planEnd,
+      targetLabel: "Plan end",
       actualLaunchDate: input.actual_launch_date ?? null,
       // A default rail can never evidence completion.
       isComplete: false,
@@ -262,10 +304,146 @@ export function buildProjectTimeline(
       input.created_at ??
       null,
     targetLaunchDate: planEnd,
+    targetLabel: "Plan end",
     actualLaunchDate: input.actual_launch_date ?? null,
     isComplete,
     isAddOn,
   };
+}
+
+/**
+ * A partner project's rail, read from its partner progress and nothing else.
+ *
+ * The seven stages are the partner journey, in order. Completion and the
+ * current stage come from the partner model. The date indicator is the
+ * partner's own Roll Out target, from the recorded Roll Out milestone, and the
+ * Roll Out completion when there is one. The implementation's `target_date`,
+ * `target_launch_date` and `actual_launch_date` are never used here: they can
+ * hold a standard plan's dates, which are not this project's target. A partner
+ * with no recorded Roll Out target shows no target, rather than a date worked
+ * out from the standard stages.
+ */
+function buildPartnerTimeline(input: TimelineInput, now: Date): ProjectTimeline {
+  const partner = input.partner;
+  const rollOut = partner?.status === "ready" ? partner.rollOut : null;
+  const targetLaunchDate = rollOut?.target ?? null;
+  const actualLaunchDate = rollOut?.completed ?? null;
+  const launch = datePace(targetLaunchDate, actualLaunchDate, now);
+  const common = {
+    id: input.id,
+    name: input.name,
+    startedAt: input.contract_start_date ?? input.created_at ?? null,
+    targetLaunchDate,
+    actualLaunchDate,
+    targetLabel: "Roll Out target",
+    launch,
+    isAddOn: Boolean(input.parent_implementation_id),
+  };
+
+  if (!partner || partner.status !== "ready") {
+    const dwell: Pace = {
+      level: "unknown",
+      reason: "Partner progress is unavailable, so time in stage is not shown.",
+    };
+    return {
+      ...common,
+      source: "partner_unavailable",
+      stages: [],
+      position: 0,
+      total: 0,
+      currentStageName: "Partner progress unavailable",
+      dwell,
+      overall: worstPace([dwell, launch]),
+      isComplete: false,
+    };
+  }
+
+  const stages: RailStage[] = partner.stages.map((s) => ({
+    key: s.key,
+    name: s.name,
+    state:
+      s.status === "completed"
+        ? "past"
+        : s.status === "current"
+          ? "current"
+          : s.status === "skipped"
+            ? "skipped"
+            : "future",
+    position: s.position,
+    target_duration_days: null,
+    entered_at: null,
+    days: null,
+    inferred: false,
+  }));
+
+  const currentIndex = stages.findIndex((s) => s.state === "current");
+  const isComplete =
+    stages.length > 0 && stages.every((s) => s.state === "past" || s.state === "skipped");
+  const dwell: Pace = isComplete
+    ? { level: "done", reason: "Every stage on this project's partner journey is finished." }
+    : dwellPace(null, null, now);
+
+  return {
+    ...common,
+    source: "partner_journey",
+    stages,
+    position: currentIndex >= 0 ? currentIndex + 1 : 0,
+    total: stages.length,
+    currentStageName:
+      currentIndex >= 0
+        ? stages[currentIndex]!.name
+        : isComplete
+          ? stages[stages.length - 1]!.name
+          : "Not started",
+    dwell,
+    overall: worstPace([dwell, launch]),
+    isComplete,
+  };
+}
+
+/**
+ * A partner progress read, in the rail's terms. Pure: whoever read the partner
+ * model passes its result here, and the stage order and status come with it.
+ */
+export function partnerRailFrom(progress: {
+  current: string | null;
+  stages: ReadonlyArray<{
+    key: string;
+    label: string;
+    position: number;
+    status: "completed" | "current" | "upcoming" | "skipped";
+    /** The earliest recorded target for the stage (its milestones'), else null. */
+    targetDate?: string | null;
+    /** The recorded completion of the stage, else null. */
+    completedDate?: string | null;
+  }>;
+}): PartnerRail {
+  const rollOut = progress.stages.find((s) => s.key === "roll_out");
+  return {
+    status: "ready",
+    current: progress.current,
+    stages: progress.stages.map((s) => ({
+      key: s.key,
+      name: s.label,
+      position: s.position,
+      status: s.status,
+    })),
+    rollOut: {
+      target: rollOut?.targetDate ?? null,
+      completed: rollOut?.completedDate ?? null,
+    },
+  };
+}
+
+/**
+ * The standard deal-stage history of a project, kept as an administrative
+ * record. Every row is kept, in the order it was recorded, with its own stage
+ * name and dates. Nothing here says which stage is current or complete.
+ */
+export function adminStageHistory(
+  rows: ReadonlyArray<{ id: string; stage: string; entered_at: string; exited_at: string | null }>,
+): Array<{ id: string; stage: string; entered_at: string; exited_at: string | null }> {
+  return [...rows].sort((a, b) => a.entered_at.localeCompare(b.entered_at));
 }
 
 /**
@@ -275,6 +453,9 @@ export function buildProjectTimeline(
  * this as its accessible name. It says the same thing the chips say.
  */
 export function railSummary(t: ProjectTimeline): string {
+  if (t.source === "partner_unavailable") {
+    return `${t.name}. Partner progress is unavailable for this project, so its stages are not shown. ${t.dwell.reason} ${t.targetLabel}: ${t.launch.reason}`;
+  }
   const where =
     t.position > 0
       ? `Stage ${t.position} of ${t.total}: ${t.currentStageName}.`
@@ -282,13 +463,16 @@ export function railSummary(t: ProjectTimeline): string {
   const plan =
     t.source === "stage_instances"
       ? `${t.total}-stage plan for this project.`
-      : `No plan has been applied to this project, so the ${t.total} default stages are shown.`;
+      : t.source === "partner_journey"
+        ? `${t.total}-stage partner journey for this project.`
+        : `No plan has been applied to this project, so the ${t.total} default stages are shown.`;
   const done = t.isComplete ? " Every stage is finished." : "";
-  return `${t.name}. ${plan} ${where}${done} ${t.dwell.reason} Plan end: ${t.launch.reason}`;
+  return `${t.name}. ${plan} ${where}${done} ${t.dwell.reason} ${t.targetLabel}: ${t.launch.reason}`;
 }
 
 /** A short, colour-free statement of where the project stands. */
 export function timelineHeadline(t: ProjectTimeline): string {
+  if (t.source === "partner_unavailable") return "Partner progress unavailable";
   if (t.position > 0) return `Stage ${t.position} of ${t.total} · ${t.currentStageName}`;
   return t.currentStageName;
 }
