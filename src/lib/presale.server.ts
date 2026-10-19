@@ -2975,11 +2975,17 @@ export async function syncTargetLaunch(
     const { implementationForDeal } = await import("./assignment.server");
     const implId = await implementationForDeal(dealId, account.customer_id ?? null);
     if (!implId) return null;
-    const { data: impl } = await db()
+    const { data: impl, error: implError } = await db()
       .from("implementations")
-      .select("target_date,target_launch_date,baseline_locked_at")
+      .select("target_date,target_launch_date,baseline_locked_at,journey_type,partner_key")
       .eq("id", implId)
       .maybeSingle();
+    if (implError) throw new Error(`The plan end could not be read: ${implError.message}`);
+    // A partner journey keeps the dates it was recorded with. The standard plan
+    // is not its plan: nothing is calculated from it and nothing is written. A
+    // missing row has nothing to write to, and a failed read is never a reason
+    // to fall back to the standard plan.
+    if (!impl || isPartnerJourney(impl)) return null;
     const { readIntake } = await import("./intake-answers");
     const { closeDateFor, timelineFor } = await import("./onboarding-plan");
     const [{ data: transitions }, stages] = await Promise.all([
@@ -2996,8 +3002,8 @@ export async function syncTargetLaunch(
     const target = t.phases.length
       ? (t.phases[t.phases.length - 1]?.endsOn ?? t.liveDate)
       : t.liveDate;
-    const was: string | null = impl?.target_date ?? impl?.target_launch_date ?? null;
-    if (was === target && impl?.target_date) return null;
+    const was: string | null = impl.target_date ?? impl.target_launch_date ?? null;
+    if (was === target && impl.target_date) return null;
 
     // The one read of the latest change row, reused below for both the
     // override check and the existing dedup logic rather than queried twice.
@@ -3026,7 +3032,7 @@ export async function syncTargetLaunch(
       .eq("id", implId);
     // After the baseline is locked, every move of the target is a row that
     // asks for its reason. Two nudges before anyone answers stay one row.
-    if (impl?.baseline_locked_at && was && was !== target) {
+    if (impl.baseline_locked_at && was && was !== target) {
       if (last && !last.reason_code) {
         await db()
           .from("target_date_changes")
