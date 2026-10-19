@@ -177,7 +177,8 @@ export async function analyzeSow(implementationId: string): Promise<SowAnalysisR
  */
 export async function applySowProposal(input: {
   implementationId: string;
-  authorId: string | null;
+  /** The signed-in user's team member, or null when the login has none. Set by the server, never the client. */
+  authorTeamMemberId: string | null;
   goals: string | null;
   requirements: string[];
   successMeasures: string[];
@@ -236,7 +237,7 @@ export async function applySowProposal(input: {
     await createJournalEntry({
       implementationId: input.implementationId,
       note: input.journeyNote,
-      authorId: input.authorId,
+      authorId: input.authorTeamMemberId,
       links: null,
       attachmentUrl: null,
       attachmentName: null,

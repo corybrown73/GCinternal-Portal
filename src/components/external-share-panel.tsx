@@ -16,6 +16,8 @@ import {
   setPlanLinkPasscode,
   sharePlanSnapshot,
 } from "@/lib/external-share.functions";
+import { useProfile } from "@/lib/auth";
+import { canManageExternalAccess } from "@/lib/external-share-policy";
 import { fmtDate, humanize } from "@/lib/hub-format";
 import { cn } from "@/lib/utils";
 import { When } from "@/components/when";
@@ -403,6 +405,9 @@ function UpdatesTab({
   guard: (fn: () => Promise<void>) => Promise<void>;
 }) {
   const qc = useQueryClient();
+  const { profile } = useProfile();
+  // The same roles the server checks. Everyone else can read the list, not act on it.
+  const mayManage = canManageExternalAccess(profile?.role);
   const [shareUrl, setShareUrl] = useState<string | null>(null);
   const snapshots = useQuery({
     queryKey: ["plan-snapshots", implementationId],
@@ -417,19 +422,21 @@ function UpdatesTab({
           A snapshot is frozen when it is generated. Corrections add a new version; the original is
           never edited.
         </p>
-        <button
-          type="button"
-          disabled={busy}
-          onClick={() =>
-            void guard(async () => {
-              await generatePlanSnapshot({ data: { implementationId } });
-              await refresh();
-            })
-          }
-          className="shrink-0 rounded-md border border-border px-2 py-1 text-[12px] disabled:opacity-40"
-        >
-          Generate now
-        </button>
+        {mayManage ? (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() =>
+              void guard(async () => {
+                await generatePlanSnapshot({ data: { implementationId } });
+                await refresh();
+              })
+            }
+            className="shrink-0 rounded-md border border-border px-2 py-1 text-[12px] disabled:opacity-40"
+          >
+            Generate now
+          </button>
+        ) : null}
       </div>
 
       {shareUrl ? (
@@ -448,39 +455,41 @@ function UpdatesTab({
                 {s.superseded ? " · superseded" : ""}
               </span>
             </span>
-            <span className="flex items-center gap-1.5">
-              {s.share_prefix_live ? (
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() =>
-                    void guard(async () => {
-                      await revokePlanSnapshotShare({ data: { snapshotId: s.id } });
-                      setShareUrl(null);
-                      await refresh();
-                    })
-                  }
-                  className="rounded-sm border border-border px-1.5 py-0.5 text-[11px]"
-                >
-                  Revoke share
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() =>
-                    void guard(async () => {
-                      const result = await sharePlanSnapshot({ data: { snapshotId: s.id } });
-                      setShareUrl(result.url);
-                      await refresh();
-                    })
-                  }
-                  className="rounded-sm border border-border px-1.5 py-0.5 text-[11px]"
-                >
-                  Share
-                </button>
-              )}
-            </span>
+            {mayManage ? (
+              <span className="flex items-center gap-1.5">
+                {s.share_prefix_live ? (
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() =>
+                      void guard(async () => {
+                        await revokePlanSnapshotShare({ data: { snapshotId: s.id } });
+                        setShareUrl(null);
+                        await refresh();
+                      })
+                    }
+                    className="rounded-sm border border-border px-1.5 py-0.5 text-[11px]"
+                  >
+                    Revoke share
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() =>
+                      void guard(async () => {
+                        const result = await sharePlanSnapshot({ data: { snapshotId: s.id } });
+                        setShareUrl(result.url);
+                        await refresh();
+                      })
+                    }
+                    className="rounded-sm border border-border px-1.5 py-0.5 text-[11px]"
+                  >
+                    Share
+                  </button>
+                )}
+              </span>
+            ) : null}
           </li>
         ))}
       </ul>

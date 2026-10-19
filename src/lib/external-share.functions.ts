@@ -1,6 +1,8 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireInternalAuth } from "@/integrations/supabase/internal-middleware";
+import { requireManage, SNAPSHOT_SHARING_ACTION } from "./external-share-policy";
+import { signedInProfileId } from "./session-identity";
 
 /**
  * The internal side of external access. Every function is
@@ -129,8 +131,12 @@ export const generatePlanSnapshot = createServerFn({ method: "POST" })
   )
   .middleware([requireInternalAuth])
   .handler(async ({ data, context }) => {
+    // The same roles as customer links. Checked here, not only in the interface,
+    // and before anything is read or written.
+    requireManage(context.profile.role, SNAPSHOT_SHARING_ACTION);
+    const actorId = signedInProfileId(context.profile);
     const { generateSnapshot } = await import("./snapshots.server");
-    return generateSnapshot(data.implementationId, context.profile.id, {
+    return generateSnapshot(data.implementationId, actorId, {
       supersedes: data.supersedes ?? null,
     });
   });
@@ -140,7 +146,10 @@ export const sharePlanSnapshot = createServerFn({ method: "POST" })
   .middleware([requireInternalAuth])
   .handler(async ({ data, context }) => {
     const { mintSnapshotShare } = await import("./snapshots.server");
-    return mintSnapshotShare(data.snapshotId, { id: context.profile.id });
+    return mintSnapshotShare(data.snapshotId, {
+      id: signedInProfileId(context.profile),
+      role: context.profile.role,
+    });
   });
 
 export const revokePlanSnapshotShare = createServerFn({ method: "POST" })
@@ -148,5 +157,8 @@ export const revokePlanSnapshotShare = createServerFn({ method: "POST" })
   .middleware([requireInternalAuth])
   .handler(async ({ data, context }) => {
     const { revokeSnapshotShare } = await import("./snapshots.server");
-    return revokeSnapshotShare(data.snapshotId, { id: context.profile.id });
+    return revokeSnapshotShare(data.snapshotId, {
+      id: signedInProfileId(context.profile),
+      role: context.profile.role,
+    });
   });

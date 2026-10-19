@@ -8,6 +8,7 @@ import { z } from "zod";
 import { EDITABLE_RECORD_FIELD_KEYS, type EditableRecordField } from "./record-fields";
 import { advanceStageInput } from "./stage-advance-input";
 import { analyzeSowInput, applySowProposalInput, setSowDocumentInput } from "./sow-analysis";
+import { signedInProfileId, signedInTeamMemberId } from "./session-identity";
 import { analyzeTranscriptInput, proposalDecisionInput } from "./transcript-analysis";
 import { SOLUTION_STATUSES } from "./solution-enums";
 import {
@@ -814,9 +815,16 @@ export const analyzeSowDocument = createServerFn({ method: "POST" })
 export const applySowProposalToImplementation = createServerFn({ method: "POST" })
   .middleware([requireInternalAuth])
   .inputValidator((data: unknown) => applySowProposalInput.parse(data))
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
+    // Throws when the session has no signed-in user, so nothing is written.
+    signedInProfileId(context.profile);
+    // Attribution is the signed-in user's team member, read from the session.
+    // The request cannot name an author.
     const { applySowProposal } = await import("./sow-analysis.server");
-    return applySowProposal(data);
+    return applySowProposal({
+      ...data,
+      authorTeamMemberId: signedInTeamMemberId(context.profile),
+    });
   });
 
 export const setSowDocumentForImplementation = createServerFn({ method: "POST" })

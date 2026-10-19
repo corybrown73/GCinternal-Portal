@@ -7,6 +7,7 @@ import { CONFIG_DEFAULTS, getConfigNumber } from "./server/app-config";
 import { generatePlanToken, hashPasscode } from "./server/plan-tokens";
 import { loadSharedPlan, type ExternalViewer } from "./server/external-viewer";
 import { recordPlanEvent } from "./external-plan.server";
+import { requireManage } from "./external-share-policy";
 import type { SharedPlan } from "./shared-plan";
 import { appUrl } from "./app-url";
 
@@ -33,16 +34,8 @@ function escapeHtml(s: string): string {
     .replaceAll('"', "&quot;");
 }
 
-/** Same shape as canEditSequences: managers, admins and the delivery roles. */
-export function canManageExternalAccess(role: string): boolean {
-  return ["admin", "super_admin", "manager", "implementation", "onboarding"].includes(role);
-}
-
-export function requireManage(role: string): void {
-  if (!canManageExternalAccess(role)) {
-    throw new Error("Forbidden: your role cannot issue or revoke customer links");
-  }
-}
+// The role list lives in external-share-policy.ts, where the interface reads it too.
+export { canManageExternalAccess, requireManage } from "./external-share-policy";
 
 /* ------------------------------------------------------------------------- */
 /* Panel                                                                      */

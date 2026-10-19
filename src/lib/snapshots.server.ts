@@ -6,6 +6,7 @@ import { ExternalAccessError, loadSharedPlan, requireViewEnabled } from "./serve
 import { generateSnapshotToken, hashToken } from "./server/plan-tokens";
 import { buildSnapshotDTO, type SharedPlan, type SharedPlanSnapshot } from "./shared-plan";
 import { recordPlanEvent } from "./external-plan.server";
+import { requireManage, SNAPSHOT_SHARING_ACTION } from "./external-share-policy";
 import { appUrl } from "./app-url";
 
 /**
@@ -133,10 +134,15 @@ export async function generateSnapshot(
 /* Share links                                                                */
 /* ------------------------------------------------------------------------- */
 
+/**
+ * Share a snapshot with a link. The role check comes first, so a refused caller
+ * learns nothing about the snapshot and writes nothing.
+ */
 export async function mintSnapshotShare(
   snapshotId: string,
-  actor: { id: string },
+  actor: { id: string; role: string | null | undefined },
 ): Promise<{ url: string; expires_at: string }> {
+  requireManage(actor.role, SNAPSHOT_SHARING_ACTION);
   const { data: snap } = await db()
     .from("plan_snapshots")
     .select("id, implementation_id")
@@ -177,10 +183,12 @@ export async function mintSnapshotShare(
   return { url: `${base}/plan/s/${minted.token}`, expires_at: expiresAt };
 }
 
+/** Revoke a snapshot's share link. The role check comes first, as for sharing. */
 export async function revokeSnapshotShare(
   snapshotId: string,
-  actor: { id: string },
+  actor: { id: string; role: string | null | undefined },
 ): Promise<{ ok: true }> {
+  requireManage(actor.role, SNAPSHOT_SHARING_ACTION);
   const { data: snap } = await db()
     .from("plan_snapshots")
     .select("id, implementation_id")
