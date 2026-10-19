@@ -422,3 +422,182 @@ describe("the manager's assignment workflow is unaffected", () => {
     expect(implRow()["owner_id"]).toBe(TM_BEN);
   });
 });
+
+/* ---------------------------------------------------------------------------
+ * Partial failures after the owner is written (Part 2 correction).
+ * The owner is set first, so each failure below must leave the owner and the
+ * assignment record agreeing, must not revert a manager's change, and must not
+ * remove any ledger row.
+ * ------------------------------------------------------------------------- */
+
+const failingChain = (message: string): any => {
+  const chain: any = {
+    eq: () => chain,
+    is: () => chain,
+    order: () => chain,
+    limit: () => chain,
+    maybeSingle: async () => ({ data: null, error: { message } }),
+    select: async () => ({ data: null, error: { message } }),
+  };
+  return chain;
+};
+
+/** Makes a read of one table fail when its column list matches. */
+function failSelect(table: string, when: (cols: string) => boolean, message = "read failed") {
+  const orig = fake.client.from;
+  fake.client.from = (t: string) => {
+    const builder = orig(t);
+    if (t !== table) return builder;
+    return new Proxy(builder, {
+      get(target, prop) {
+        if (prop === "select") {
+          return (cols?: string) =>
+            when(cols ?? "") ? failingChain(message) : target.select(cols);
+        }
+        const v = Reflect.get(target, prop, target);
+        return typeof v === "function" ? v.bind(target) : v;
+      },
+    });
+  };
+}
+
+/**
+ * Makes an insert into one table fail. With `persist`, the row is written and only
+ * the reply is lost. `beforeFail` runs first, to simulate a change landing in the window.
+ */
+function failInsert(
+  table: string,
+  opts: { persist?: boolean; once?: boolean; beforeFail?: () => void } = {},
+) {
+  const orig = fake.client.from;
+  let failures = 0;
+  fake.client.from = (t: string) => {
+    const builder = orig(t);
+    if (t !== table) return builder;
+    return new Proxy(builder, {
+      get(target, prop) {
+        if (prop === "insert") {
+          return (row: Record<string, unknown>) => ({
+            then(res: (v: unknown) => unknown, rej: (e: unknown) => unknown) {
+              return (async () => {
+                if (opts.once && failures > 0) return target.insert(row).then((v: any) => v);
+                failures += 1;
+                if (opts.persist) await target.insert(row);
+                opts.beforeFail?.();
+                return { data: null, error: { message: "write refused" } };
+              })().then(res, rej);
+            },
+          });
+        }
+        const v = Reflect.get(target, prop, target);
+        return typeof v === "function" ? v.bind(target) : v;
+      },
+    });
+  };
+}
+
+/** Makes releasing an owner (an update that sets owner_id to null) fail. */
+function failRelease() {
+  const orig = fake.client.from;
+  fake.client.from = (t: string) => {
+    const builder = orig(t);
+    if (t !== "implementations") return builder;
+    return new Proxy(builder, {
+      get(target, prop) {
+        if (prop === "update") {
+          return (patch: Record<string, unknown>) => {
+            if (patch["owner_id"] === null) return failingChain("release refused");
+            return target.update(patch);
+          };
+        }
+        const v = Reflect.get(target, prop, target);
+        return typeof v === "function" ? v.bind(target) : v;
+      },
+    });
+  };
+}
+
+/** The owner and the assignment record agree: no owner with a record, and no record without the owner. */
+function ownerMatchesRecord() {
+  const latest = ledger()[ledger().length - 1];
+  return (implRow()["owner_id"] ?? null) === (latest ? latest["team_member_id"] : null);
+}
+
+describe("a failure while choosing the assignee leaves no owner behind", () => {
+  it("releases the owner this claim set, writes no record, and reports the failure", async () => {
+    failSelect("portal_accounts", (cols) => cols.includes("arr"), "read failed");
+    await expectRefusedWithoutWrites(() => claimDeal(USER_ADA, DEAL), /Deal not found/);
+    expect(implRow()["owner_id"]).toBeNull();
+    expect(ownerMatchesRecord()).toBe(true);
+  });
+});
+
+describe("a failure writing the assignment record releases the owner", () => {
+  it("releases the owner, writes no record, sends no notice, and reports the failure", async () => {
+    failInsert("portal_assignments");
+    await expectRefusedWithoutWrites(
+      () => claimDeal(USER_ADA, DEAL),
+      /Could not record the assignment/,
+    );
+    expect(implRow()["owner_id"]).toBeNull();
+    expect(ledger()).toEqual([]);
+    expect(ownerMatchesRecord()).toBe(true);
+  });
+
+  it("lets the same person claim again once the failure is cleared", async () => {
+    failInsert("portal_assignments", { once: true });
+    await expect(claimDeal(USER_ADA, DEAL)).rejects.toThrow(/Could not record/);
+    await claimDeal(USER_ADA, DEAL);
+    expect(implRow()["owner_id"]).toBe(TM_ADA);
+    expect(ledger()).toHaveLength(1);
+    expect(ownerMatchesRecord()).toBe(true);
+  });
+});
+
+describe("a record written before its reply was lost keeps the claim", () => {
+  it("keeps the owner that matches the record, and tells the person to refresh", async () => {
+    failInsert("portal_assignments", { persist: true });
+    await expect(claimDeal(USER_ADA, DEAL)).rejects.toThrow(
+      /recorded, but a later step failed.*Refresh/s,
+    );
+    expect(implRow()["owner_id"]).toBe(TM_ADA);
+    expect(ledger()).toHaveLength(1);
+    expect(ownerMatchesRecord()).toBe(true);
+  });
+});
+
+describe("a manager's assignment is never reverted by a failed claim", () => {
+  it("leaves the manager's owner in place when the claim's record fails", async () => {
+    failInsert("portal_assignments", {
+      beforeFail: () => {
+        fake.store["implementations"]![0]!["owner_id"] = TM_BEN;
+      },
+    });
+    await expect(claimDeal(USER_ADA, DEAL)).rejects.toThrow(/Could not record/);
+    expect(implRow()["owner_id"]).toBe(TM_BEN);
+    expect(ledger()).toEqual([]);
+  });
+});
+
+describe("a release that itself fails is logged, and the claim's own error is still reported", () => {
+  it("reports the original error and records the inconsistency for reconciliation", async () => {
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    failInsert("portal_assignments");
+    failRelease();
+    await expect(claimDeal(USER_ADA, DEAL)).rejects.toThrow(/Could not record/);
+    expect(logged).toHaveBeenCalledWith(
+      expect.stringContaining("could not release the owner"),
+      expect.anything(),
+    );
+    logged.mockRestore();
+  });
+});
+
+describe("concurrent claims during a failed claim never give two owners", () => {
+  it("keeps the owner and the record in agreement after two claimants race a failing first attempt", async () => {
+    failInsert("portal_assignments", { once: true });
+    await Promise.allSettled([claimDeal(USER_ADA, DEAL), claimDeal(USER_BEN, DEAL)]);
+    expect(ledger().length).toBeLessThanOrEqual(1);
+    expect(ownerMatchesRecord()).toBe(true);
+  });
+});

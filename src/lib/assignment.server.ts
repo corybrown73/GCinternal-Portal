@@ -898,6 +898,10 @@ export async function claimDeal(profileId: string, dealId: string) {
     throw new Error("This deal has no project yet, so it cannot be claimed. A manager assigns it.");
   }
 
+  // Read before the owner is written, so a failed claim can tell whether its own
+  // record was written afterwards. If this read fails, nothing has been written yet.
+  const recordedBefore = await ledgerRowIds(dealId);
+
   // The condition is part of the write: the owner is set only if the project
   // still has none. A second claim, or a manager's change, that lands first
   // leaves this write with nothing to update.
@@ -917,14 +921,109 @@ export async function claimDeal(profileId: string, dealId: string) {
     );
   }
 
-  return assignDeal({
-    dealId,
-    implementationId,
-    teamMemberId: me.teamMemberId,
-    actorProfileId: profileId,
-    note: `Claimed by ${me.name}`,
-    ownerAlreadySet: true,
-  });
+  try {
+    return await assignDeal({
+      dealId,
+      implementationId,
+      teamMemberId: me.teamMemberId,
+      actorProfileId: profileId,
+      note: `Claimed by ${me.name}`,
+      ownerAlreadySet: true,
+    });
+  } catch (error) {
+    const outcome = await settleFailedClaim({
+      dealId,
+      implementationId,
+      teamMemberId: me.teamMemberId,
+      actorProfileId: profileId,
+      recordedBefore,
+    });
+    if (outcome === "recorded") {
+      throw new Error(
+        "Your claim was recorded, but a later step failed, so you may not have been notified. Refresh to see the account.",
+      );
+    }
+    throw error;
+  }
+}
+
+/** The assignment ledger's rows for a deal, keyed by id. */
+async function ledgerRowIds(
+  dealId: string,
+): Promise<
+  Map<string, { team_member_id: string; actor_profile_id: string | null; source: string }>
+> {
+  const { data, error } = await db()
+    .from("portal_assignments")
+    .select("id,team_member_id,actor_profile_id,source")
+    .eq("deal_id", dealId);
+  if (error) throw new Error(`Could not read the assignment record: ${error.message}`);
+  return new Map(
+    ((data ?? []) as any[]).map((r) => [
+      String(r.id),
+      {
+        team_member_id: String(r.team_member_id),
+        actor_profile_id: (r.actor_profile_id as string | null) ?? null,
+        source: String(r.source),
+      },
+    ]),
+  );
+}
+
+/**
+ * A claim that fails after it set the owner settles the owner against the record.
+ *
+ * If this claim's record was written, the claim stands: the owner and the record
+ * agree, and the failure was a later step (a reply or a notice). If no record was
+ * written, the owner this claim set is released. That release is conditional on
+ * the owner still being this person, so a manager's change or another claim is
+ * never reverted. No ledger row is removed. If the record cannot be checked, the
+ * owner is kept and the case is logged for reconciliation.
+ */
+async function settleFailedClaim(args: {
+  dealId: string;
+  implementationId: string;
+  teamMemberId: string;
+  actorProfileId: string;
+  recordedBefore: Map<string, unknown>;
+}): Promise<"recorded" | "released" | "kept"> {
+  let recorded: boolean;
+  try {
+    const after = await ledgerRowIds(args.dealId);
+    recorded = [...after].some(
+      ([id, row]) =>
+        !args.recordedBefore.has(id) &&
+        row.team_member_id === args.teamMemberId &&
+        row.actor_profile_id === args.actorProfileId &&
+        row.source === "manual",
+    );
+  } catch (e) {
+    console.error(
+      `[assignment] claim on ${args.dealId} failed and its record could not be checked; the owner is kept for reconciliation`,
+      e,
+    );
+    return "kept";
+  }
+  if (recorded) {
+    console.error(
+      `[assignment] claim on ${args.dealId} was recorded before a later step failed; the owner is kept`,
+    );
+    return "recorded";
+  }
+  const { error } = await db()
+    .from("implementations")
+    .update({ owner_id: null })
+    .eq("id", args.implementationId)
+    .eq("owner_id", args.teamMemberId)
+    .select("id");
+  if (error) {
+    console.error(
+      `[assignment] could not release the owner set by a failed claim on ${args.dealId}`,
+      error,
+    );
+    return "kept";
+  }
+  return "released";
 }
 
 /**
