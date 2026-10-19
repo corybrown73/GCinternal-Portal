@@ -1,19 +1,20 @@
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
-import { intakeAnswersSchema, type IntakeAnswers } from "@/lib/intake-answers";
 import { documentRefusal, type GeneratedDocument } from "@/lib/document-guard";
 
 const db = () => supabaseAdmin as any;
 
 /**
  * Refuses a document unless the deal and its project were read successfully and
- * show a standard journey. Every generator calls this before it builds, stores
+ * show no partner evidence. Every generator calls this before it builds, stores
  * or files anything, so no entry point can skip it.
  *
- * A failed read is never taken as confirmation that a project is standard. Every
- * read's error is checked, and a result that is missing a classification field
- * refuses too, with a message that says what could not be checked. This module
- * reads the rows itself rather than through liveImplementationForDeal, which
- * drops query errors, so the shared helper and its other callers are unchanged.
+ * A failed read is never taken as confirmation that a deal is standard. Every
+ * read's error is checked, and a result missing a field the check needs refuses
+ * too, with a message that says what could not be checked. This module reads the
+ * rows itself rather than through liveImplementationForDeal, which drops query
+ * errors, so the shared helper and its other callers are unchanged.
+ *
+ * What the intake says is decided by documentRefusal (see readIntakeReading).
  */
 
 const DEAL_READ_FAILED =
@@ -26,8 +27,6 @@ const PROJECT_READ_FAILED =
   "The project could not be read, so it cannot be checked for a partner journey. Nothing was generated; try again.";
 const PROJECT_INCOMPLETE =
   "The project's record is incomplete, so it cannot be checked for a partner journey. Nothing was generated.";
-const PATH_NOT_RECORDED =
-  "This deal has no project yet and its path is not recorded, so it cannot be told apart from a partner deal. Record the deal's path, then generate again. Nothing was generated.";
 
 type DealRow = { customer_id: string | null; intake: unknown };
 type ProjectRow = { journey_type: string | null; partner_key: string | null };
@@ -88,29 +87,16 @@ function checkedProject(row: unknown): ProjectRow {
 
 /**
  * Throws unless the document may be generated for this deal. Resolves only when
- * the deal and its project were both read, and neither is a partner journey.
+ * the deal and its project were both read successfully, and neither the project
+ * nor the intake shows a partner journey, and the intake can be read.
  */
 export async function assertDocumentAllowed(
   document: GeneratedDocument,
   dealId: string,
 ): Promise<void> {
   const deal = await readDeal(dealId);
-  const customerId = deal.customer_id ?? null;
-  const project = await readLiveProject(dealId, customerId);
+  const project = await readLiveProject(dealId, deal.customer_id ?? null);
 
-  // The intake only classifies a deal before its project exists, or adds a
-  // partner answer. A stored intake that does not parse is not read as standard.
-  const parsed = intakeAnswersSchema.safeParse(deal.intake ?? null);
-  const intake: IntakeAnswers | null = parsed.success ? parsed.data : null;
-
-  if (!project) {
-    // No project yet: the deal's recorded path is the only classification there is.
-    if (!intake || !intake.path) throw new Error(PATH_NOT_RECORDED);
-  }
-
-  const reason = documentRefusal(document, {
-    implementation: project,
-    intake,
-  });
+  const reason = documentRefusal(document, { implementation: project, intake: deal.intake });
   if (reason) throw new Error(reason);
 }

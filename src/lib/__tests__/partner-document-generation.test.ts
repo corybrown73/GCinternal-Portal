@@ -153,14 +153,23 @@ const IMPL = "33333333-3333-3333-3333-333333333333";
 
 const REFUSAL_PHRASE = "is generated for a partner";
 
-function seed(opts: { intakePath?: string; implementation?: Record<string, unknown> | null }) {
+function seed(opts: {
+  intakePath?: string;
+  /** The stored intake exactly as given. Overrides intakePath when present. */
+  intake?: unknown;
+  implementation?: Record<string, unknown> | null;
+}) {
+  const intake =
+    "intake" in opts
+      ? opts.intake
+      : { path: opts.intakePath ?? "new_logo", timeline: {}, ai_filled: [], person_set: [] };
   state.accounts = [
     {
       id: DEAL,
       name: "Acme Fleet",
       display_name: null,
       customer_id: CUSTOMER,
-      intake: { path: opts.intakePath ?? "new_logo", timeline: {}, ai_filled: [], person_set: [] },
+      intake,
       logo_path: null,
       sow_document_path: null,
       sow_document_url: null,
@@ -361,30 +370,16 @@ describe("missing classification information cannot silently allow generation", 
     );
   });
 
-  it("refuses a deal with no project whose path is not recorded, rather than assuming standard", async () => {
-    seed({ implementation: null });
-    state.accounts[0]!.intake = { path: null, timeline: {}, ai_filled: [], person_set: [] };
-    await expect(assertDocumentAllowed("kickoff-deck", DEAL)).rejects.toThrow(
-      /path is not recorded/,
-    );
-    await expect(generateDeckFromMcp({ dealId: DEAL, fields: {}, note: null })).rejects.toThrow(
-      /path is not recorded/,
-    );
-    expect(state.deckBuilds).toBe(0);
-    expectNothingCreatedOrRemoved();
-  });
-
-  it("refuses a deal with no project whose stored intake does not parse", async () => {
-    seed({ implementation: null });
-    state.accounts[0]!.intake = "not an intake";
+  it("refuses a deal whose stored intake does not parse, rather than reading it as standard", async () => {
+    seed({ implementation: null, intake: "not an intake" });
     await expect(assertDocumentAllowed("onboarding-plan", DEAL)).rejects.toThrow(
-      /path is not recorded/,
+      /intake could not be read/,
     );
   });
 });
 
 describe("a successfully read standard deal still works", () => {
-  it("allows a standard deal with no project, once its path is recorded", async () => {
+  it("allows a standard deal with no project", async () => {
     seed({ implementation: null });
     await expect(assertDocumentAllowed("kickoff-deck", DEAL)).resolves.toBeUndefined();
     await expect(assertDocumentAllowed("onboarding-plan", DEAL)).resolves.toBeUndefined();
@@ -422,5 +417,166 @@ describe("partner identification still blocks after the correction", () => {
   it("blocks a legacy Field Fusion deal before a project exists", async () => {
     seed({ implementation: null, intakePath: "field_fusion" });
     await expect(assertDocumentAllowed("kickoff-deck", DEAL)).rejects.toThrow(REFUSAL_PHRASE);
+  });
+});
+
+/* ---------------------------------------------------------------------------
+ * Intake classification across all three entry points (#80 correction).
+ * An intake that records no path, or was never saved, is the standard default
+ * and is allowed. Explicit partner evidence refuses. An intake that cannot be
+ * read refuses, with a standard project or without one. A failed read refuses.
+ * ------------------------------------------------------------------------- */
+
+const STANDARD_PROJECT = { journey_type: "new_logo", partner_key: null };
+const STANDARD_INTAKE_NO_PATH = {
+  path: null,
+  partner_implementation: null,
+  timeline: {},
+  ai_filled: [],
+  person_set: [],
+};
+
+const ENTRY_POINTS = [
+  {
+    name: "the kickoff deck over MCP",
+    run: () => generateDeckFromMcp({ dealId: DEAL, fields: {}, note: null }),
+    builds: () => state.deckBuilds,
+  },
+  {
+    name: "the brief's kickoff deck",
+    run: () => buildAndStoreDeck(DEAL, "brief-1", {} as never),
+    builds: () => state.deckBuilds,
+  },
+  {
+    name: "the onboarding plan deck",
+    run: () => generateOnboardingDeck(null, DEAL),
+    builds: () => state.onboardingBuilds,
+  },
+];
+
+/** Words only a guard refusal or a failed read produces. */
+const GUARD_WORDS =
+  /is generated for a partner|could not be read|could not be ruled out|cannot be checked|was not found|record is incomplete/;
+
+/** The generator was not stopped by the guard. Its later steps may still fail on this fixture. */
+async function expectNotRefused(run: () => Promise<unknown>) {
+  try {
+    await run();
+  } catch (error) {
+    expect(String((error as Error).message)).not.toMatch(GUARD_WORDS);
+  }
+}
+
+describe.each(ENTRY_POINTS)("$name: intake classification", (entry) => {
+  it("allows a standard deal whose intake records no path and has no project", async () => {
+    seed({ implementation: null, intake: STANDARD_INTAKE_NO_PATH });
+    await expect(assertDocumentAllowed("kickoff-deck", DEAL)).resolves.toBeUndefined();
+    await expectNotRefused(entry.run);
+  });
+
+  it("allows a standard project whose intake records no path", async () => {
+    seed({ implementation: STANDARD_PROJECT, intake: STANDARD_INTAKE_NO_PATH });
+    await expect(assertDocumentAllowed("onboarding-plan", DEAL)).resolves.toBeUndefined();
+    await expectNotRefused(entry.run);
+  });
+
+  it("allows a deal whose intake was never saved, with no project or a standard one", async () => {
+    seed({ implementation: null, intake: null });
+    await expect(assertDocumentAllowed("kickoff-deck", DEAL)).resolves.toBeUndefined();
+    await expectNotRefused(entry.run);
+
+    seed({ implementation: STANDARD_PROJECT, intake: null });
+    await expect(assertDocumentAllowed("onboarding-plan", DEAL)).resolves.toBeUndefined();
+    await expectNotRefused(entry.run);
+  });
+
+  it("refuses a malformed intake on a standard project, and builds, files and writes nothing", async () => {
+    seed({
+      implementation: STANDARD_PROJECT,
+      intake: { path: "not_a_path", timeline: {} },
+    });
+    await expect(entry.run()).rejects.toThrow(/intake could not be read/);
+    expect(entry.builds()).toBe(0);
+    expectNothingCreatedOrRemoved();
+  });
+
+  it("refuses a malformed intake with no project, and builds, files and writes nothing", async () => {
+    seed({ implementation: null, intake: "not an intake" });
+    await expect(entry.run()).rejects.toThrow(/intake could not be read/);
+    expect(entry.builds()).toBe(0);
+    expectNothingCreatedOrRemoved();
+  });
+
+  it("refuses a malformed intake that still names a partner on a standard project", async () => {
+    seed({
+      implementation: STANDARD_PROJECT,
+      intake: {
+        path: "partner_implementation",
+        partner_implementation: { partner_key: "not_registered" },
+        timeline: {},
+      },
+    });
+    await expect(entry.run()).rejects.toThrow(REFUSAL_PHRASE);
+    expect(entry.builds()).toBe(0);
+    expectNothingCreatedOrRemoved();
+  });
+
+  it("refuses an explicit partner key while the path is not recorded, with no project", async () => {
+    seed({
+      implementation: null,
+      intake: {
+        ...STANDARD_INTAKE_NO_PATH,
+        partner_implementation: { partner_key: "field_fusion_iq" },
+      },
+    });
+    await expect(entry.run()).rejects.toThrow(REFUSAL_PHRASE);
+    expect(entry.builds()).toBe(0);
+    expectNothingCreatedOrRemoved();
+  });
+
+  it("refuses an explicit partner key while the path is not recorded, on a standard project", async () => {
+    seed({
+      implementation: STANDARD_PROJECT,
+      intake: {
+        ...STANDARD_INTAKE_NO_PATH,
+        partner_implementation: { partner_key: "field_fusion_iq" },
+      },
+    });
+    await expect(entry.run()).rejects.toThrow(REFUSAL_PHRASE);
+    expect(entry.builds()).toBe(0);
+    expectNothingCreatedOrRemoved();
+  });
+
+  it("refuses a legacy Field Fusion path with no project", async () => {
+    seed({ implementation: null, intake: { ...STANDARD_INTAKE_NO_PATH, path: "field_fusion" } });
+    await expect(entry.run()).rejects.toThrow(REFUSAL_PHRASE);
+    expect(entry.builds()).toBe(0);
+    expectNothingCreatedOrRemoved();
+  });
+
+  it("refuses a partner path that has no partner chosen yet, with no project", async () => {
+    seed({
+      implementation: null,
+      intake: { ...STANDARD_INTAKE_NO_PATH, path: "partner_implementation" },
+    });
+    await expect(entry.run()).rejects.toThrow(REFUSAL_PHRASE);
+    expect(entry.builds()).toBe(0);
+    expectNothingCreatedOrRemoved();
+  });
+
+  it("refuses when the deal cannot be read, even when its path would read as standard", async () => {
+    seed({ implementation: null, intake: STANDARD_INTAKE_NO_PATH });
+    state.fail = { portal_accounts: "connection reset" };
+    await expect(entry.run()).rejects.toThrow();
+    expect(entry.builds()).toBe(0);
+    expectNothingCreatedOrRemoved();
+  });
+
+  it("refuses when the project cannot be read, even when the intake reads as standard", async () => {
+    seed({ implementation: STANDARD_PROJECT, intake: STANDARD_INTAKE_NO_PATH });
+    state.fail = { implementations: "statement timeout" };
+    await expect(entry.run()).rejects.toThrow();
+    expect(entry.builds()).toBe(0);
+    expectNothingCreatedOrRemoved();
   });
 });
