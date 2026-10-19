@@ -33,6 +33,7 @@ import {
   type HandoffValue,
 } from "@/lib/sales-handoff";
 import { cn } from "@/lib/utils";
+import { paperworkOnFile } from "@/lib/won-gate";
 
 const inputClass =
   "w-full rounded-sm border border-border bg-background px-2 py-1 text-[13px] text-foreground outline-none focus:ring-1 focus:ring-ring disabled:opacity-60";
@@ -395,12 +396,17 @@ function CommitmentsNone({ deal, intake }: { deal: DealData; intake: IntakeAnswe
 }
 
 function SourceMaterial({ deal, intake }: { deal: DealData; intake: IntakeAnswers }) {
-  const sow =
-    Boolean(deal.account.sow_document_path) || Boolean(deal.account.sow_reference?.trim());
+  const paper = paperworkOnFile(deal.account);
   const notes = deal.gong_reports.length;
   const forms = intake.uploaded_forms.length;
   const parts = [
-    sow ? "SOW on file" : "no SOW yet",
+    paper === "sow"
+      ? "SOW on file"
+      : paper === "contract"
+        ? "contract on file (no SOW)"
+        : paper === "no_sow"
+          ? "no SOW (reason given)"
+          : "no SOW or contract yet",
     `${notes} call note${notes === 1 ? "" : "s"}`,
     forms ? `${forms} uploaded form${forms === 1 ? "" : "s"}` : "no forms uploaded",
   ];

@@ -62,7 +62,8 @@ import { daysSince, fmtDate, fmtMoney } from "@/lib/hub-format";
 import { When } from "@/components/when";
 import { Working } from "@/components/working";
 import type { EditableDealField } from "@/lib/presale-fields";
-import { parseWonGate, type WonGateMissing } from "@/lib/won-gate";
+import { paperworkOnFile, parseWonGate, type WonGateMissing } from "@/lib/won-gate";
+import { invalidatePaperwork } from "@/lib/paperwork-cache";
 import { ClosedWonGateNotice } from "@/components/closed-won-gate";
 import { liveWonGateMissing } from "@/lib/deal-entry";
 import type { AccountStage } from "@/lib/presale-stages";
@@ -360,7 +361,7 @@ export function DealRecord({ deal, embedded = false }: { deal: DealData; embedde
             <Panel
               id="panel-gong"
               title="Notes & documents"
-              meta={`${deal.gong_reports.length} call note${deal.gong_reports.length === 1 ? "" : "s"} · SOW ${deal.sow_url ? "on file" : "missing"} · ${deal.notes.length} sales note${deal.notes.length === 1 ? "" : "s"}`}
+              meta={`${deal.gong_reports.length} call note${deal.gong_reports.length === 1 ? "" : "s"} · ${paperLabel(paperworkOnFile(account))} · ${deal.notes.length} sales note${deal.notes.length === 1 ? "" : "s"}`}
               level="primary"
               collapsible
               // Step 1 of the front door collects the notes and the paper now;
@@ -700,6 +701,14 @@ function StartOnboarding({ deal }: { deal: DealData }) {
 
 /* ---------- Notes & Gong reports ---------- */
 
+/** The paperwork, as the Notes & documents line names it (paperworkOnFile). */
+function paperLabel(kind: ReturnType<typeof paperworkOnFile>): string {
+  if (kind === "sow") return "SOW on file";
+  if (kind === "contract") return "contract on file";
+  if (kind === "no_sow") return "no SOW (reason given)";
+  return "SOW missing";
+}
+
 /**
  * What was sold.
  *
@@ -839,10 +848,9 @@ function SowDocument({ deal, editable }: { deal: DealData; editable: boolean }) 
     },
     onSuccess: async () => {
       setError(null);
-      // The deal feeds the Closed Won notice; the welcome page reads the SOW too.
-      void qc.invalidateQueries({ queryKey: ["welcome", account.id] });
-      void qc.invalidateQueries({ queryKey: ["pipeline"] });
-      await qc.invalidateQueries({ queryKey: ["deal", account.id] });
+      // The deal feeds the Closed Won notice; the welcome page, the pulse,
+      // Home and the customer's page read the same SOW.
+      await invalidatePaperwork(qc, account.id);
     },
     onError: (e: unknown) => setError(e instanceof Error ? e.message : "Upload failed."),
   });
@@ -1124,6 +1132,8 @@ function ReportsPanel({ deal }: { deal: DealData }) {
 /* ---------- Account brief ---------- */
 
 type DiscoveryQuestion = { question: string; why_it_matters: string; category: string };
+type BriefRequirementRow = { text: string; kind: string; quote: string; source: string };
+type DiscussedRow = { item: string; quote: string | null };
 
 /**
  * The brief IS the welcome page now. The seventeen-slide PowerPoint this
@@ -1148,6 +1158,18 @@ function BriefsPanel({ deal }: { deal: DealData }) {
   )
     ? (latestComplete!.structured_json as { discovery_questions: DiscoveryQuestion[] })
         .discovery_questions
+    : [];
+  // Internal: what the customer said they need, and what the calls talked
+  // about that the SOW or the contract does not sell. Never on a customer page.
+  const latestJson = (latestComplete?.structured_json ?? null) as {
+    requirements?: unknown;
+    discussed_not_purchased?: unknown;
+  } | null;
+  const requirements: BriefRequirementRow[] = Array.isArray(latestJson?.requirements)
+    ? (latestJson!.requirements as BriefRequirementRow[]).filter((r) => r?.text?.trim())
+    : [];
+  const discussed: DiscussedRow[] = Array.isArray(latestJson?.discussed_not_purchased)
+    ? (latestJson!.discussed_not_purchased as DiscussedRow[]).filter((d) => d?.item?.trim())
     : [];
 
   return (
@@ -1237,6 +1259,51 @@ function BriefsPanel({ deal }: { deal: DealData }) {
                   </span>
                   {" · "}
                   {q.why_it_matters}
+                </p>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
+      {requirements.length > 0 ? (
+        <div className="border-t border-border">
+          <p className="bg-surface px-3 py-1.5 text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+            What they said they need · latest brief · internal
+          </p>
+          <ul className="divide-y divide-border">
+            {requirements.map((r, i) => (
+              <li key={i} className="px-3 py-2">
+                <p className="text-[13px]">{r.text}</p>
+                {r.quote ? (
+                  <p className="mt-0.5 text-[11px] text-muted-foreground">
+                    <span className="font-mono text-[10px] uppercase tracking-wider">
+                      {r.kind.replace(/_/g, " ")}
+                    </span>
+                    {" · “"}
+                    {r.quote}
+                    {"”"}
+                    {r.source ? ` — ${r.source}` : ""}
+                  </p>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
+      {discussed.length > 0 ? (
+        <div className="border-t border-border">
+          <p className="bg-surface px-3 py-1.5 text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+            Discussed on the calls, not purchased · internal
+          </p>
+          <ul className="divide-y divide-border">
+            {discussed.map((d, i) => (
+              <li key={i} className="px-3 py-2">
+                <p className="text-[13px]">{d.item}</p>
+                <p className="mt-0.5 text-[11px] text-muted-foreground">
+                  Not in the SOW or the contract, so it is off the deck and the customer&apos;s
+                  page.{d.quote ? ` “${d.quote}”` : ""}
                 </p>
               </li>
             ))}

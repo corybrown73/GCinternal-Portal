@@ -84,8 +84,22 @@ vi.mock("../assignment.server", () => ({ implementationForDeal: async () => null
 vi.mock("../server/help/articles.server", () => ({ helpOpensFor: async () => ({}) }));
 vi.mock("../server/audit", () => ({ audit: async () => {} }));
 vi.mock("../app-url", () => ({ appUrl: () => "https://hub.example" }));
+// The customer's writes merge into the stand-in row, so a re-read sees them.
+vi.mock("../server/intake-merge", () => ({
+  mergeIntake: async (dealId: string, patch: Record<string, unknown>) => {
+    const row = (h.state.tables["portal_accounts"] ?? []).find((r) => r["id"] === dealId);
+    if (row) row["intake"] = { ...(row["intake"] as object), ...patch };
+  },
+}));
 
-const { openWelcome, loadWelcome, customerPreviewView } = await import("../welcome.server");
+const {
+  openWelcome,
+  loadWelcome,
+  customerPreviewView,
+  confirmSolutionTested,
+  tickWelcomeHomework,
+} = await import("../welcome.server");
+const { resetRateLimits, WELCOME_WRITE_LIMIT } = await import("../server/rate-limit");
 
 const TOKEN = "gcwl_" + "a".repeat(43);
 
@@ -173,6 +187,11 @@ describe("customer link access", () => {
 
   it("refuses a well-formed link that matches no deal", async () => {
     expect(await openWelcome("gcwl_" + "b".repeat(43))).toBeNull();
+  });
+
+  it("fails a read the database could not answer, rather than calling the link gone", async () => {
+    h.state.failing.add("portal_accounts");
+    await expect(openWelcome(TOKEN)).rejects.toThrow(/Could not read the link/);
   });
 
   it("refuses the old link once it has been revoked or rotated", async () => {
@@ -431,5 +450,53 @@ describe("a partner deal before Closed Won", () => {
     const view = await openWelcome(TOKEN);
     expect(view?.partnerDeal).toBe(false);
     expect(view?.partnerName).toBeNull();
+  });
+});
+
+describe("the customer's 'tested, it works'", () => {
+  it("answers with the customer's copy of the journey: no internal note or blocker", async () => {
+    resetRateLimits();
+    const row = h.state.tables["portal_accounts"]![0]!;
+    row["intake"] = intakeAnswersSchema.parse({
+      ...intake,
+      timeline: {
+        completed: { "s1:kickoff": "2026-10-02", "s1:build": "2026-10-05" },
+        services: [
+          { id: "s1", kind: "custom_pdf", name: "Invoice PDF", phase: 2 },
+          {
+            id: "s2",
+            kind: "integration",
+            name: "QuickBooks Online",
+            phase: 2,
+            tier: 2,
+            ball: {
+              who: "blocked_internal",
+              person: null,
+              date: null,
+              note: "waiting on our API keys",
+            },
+          },
+        ],
+      },
+    });
+    const journey = await confirmSolutionTested(TOKEN, "s1");
+    const text = JSON.stringify(journey);
+    expect(journey?.solutions.length).toBe(2);
+    expect(text).not.toContain("waiting on our API keys");
+    expect(text).not.toContain("The customer said it works");
+    expect(journey?.solutions.every((s) => s.note === null)).toBe(true);
+    expect(journey?.solutions.some((s) => s.blocked === "internal")).toBe(false);
+  });
+});
+
+describe("the link's rate limit (best-effort, per instance)", () => {
+  it("refuses writes past the per-token budget, and a fresh window allows them again", async () => {
+    resetRateLimits();
+    for (let i = 0; i < WELCOME_WRITE_LIMIT.limit; i += 1) {
+      await tickWelcomeHomework(TOKEN, "app", i % 2 === 0);
+    }
+    await expect(tickWelcomeHomework(TOKEN, "app", true)).rejects.toThrow(/Too many requests/);
+    resetRateLimits();
+    await expect(tickWelcomeHomework(TOKEN, "app", true)).resolves.toBeTruthy();
   });
 });

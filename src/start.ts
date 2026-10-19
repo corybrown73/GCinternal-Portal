@@ -1,6 +1,7 @@
 import { createStart, createCsrfMiddleware, createMiddleware } from "@tanstack/react-start";
 
 import { renderErrorPage } from "./lib/error-page";
+import { isPublicLinkPath, withPublicLinkHeaders } from "./lib/public-link-headers";
 import { attachSupabaseAuth } from "@/integrations/supabase/auth-attacher";
 
 const errorMiddleware = createMiddleware().server(async ({ next }) => {
@@ -32,6 +33,14 @@ const planMiddleware = createMiddleware().server(async ({ next }) => {
   return next();
 });
 
+// The token-bearing customer links (/welcome, /plan, /view, /go): noindex,
+// no referrer and no shared caching, as real headers (public-link-headers.ts).
+const publicLinkHeadersMiddleware = createMiddleware().server(async ({ next, pathname }) => {
+  const result = await next();
+  if (!isPublicLinkPath(pathname)) return result;
+  return { ...result, response: withPublicLinkHeaders(result.response) };
+});
+
 // Start installs this automatically when src/start.ts is absent; defining the
 // file opts out, so re-add it explicitly to keep server functions protected
 // from cross-site requests.
@@ -46,5 +55,5 @@ export const startInstance = createStart(() => ({
   // shell still SSRs); loaders then run with the attached session.
   defaultSsr: false,
   functionMiddleware: [attachSupabaseAuth],
-  requestMiddleware: [errorMiddleware, csrfMiddleware, planMiddleware],
+  requestMiddleware: [errorMiddleware, publicLinkHeadersMiddleware, csrfMiddleware, planMiddleware],
 }));

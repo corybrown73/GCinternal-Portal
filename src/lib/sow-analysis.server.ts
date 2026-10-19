@@ -247,15 +247,24 @@ export async function applySowProposal(input: {
   return applied;
 }
 
-/** Points the implementation at a newly uploaded SOW file. Nothing else changes. */
+/**
+ * Points the implementation at a newly uploaded SOW file. A stored file goes
+ * in the path column too, which the reading prefers, so the analysis reads
+ * the file the panel names. Nothing else changes.
+ */
 export async function setSowDocument(input: {
   implementationId: string;
   documentUrl: string;
   documentName: string;
 }) {
+  const stored = storagePathFor({ sow_document_url: input.documentUrl }).path;
   const { error } = await db()
     .from("implementations")
-    .update({ sow_document_url: input.documentUrl, sow_document_name: input.documentName })
+    .update({
+      sow_document_url: input.documentUrl,
+      sow_document_name: input.documentName,
+      ...(stored ? { sow_document_path: stored } : {}),
+    })
     .eq("id", input.implementationId);
   if (error) throw new Error("Could not attach that SOW.");
   return { ok: true };

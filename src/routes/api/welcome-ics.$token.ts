@@ -14,6 +14,13 @@ async function handle(params: unknown, request: Request): Promise<Response> {
   try {
     return await serve(token, request);
   } catch (e) {
+    const { RateLimitedError } = await import("@/lib/server/rate-limit");
+    if (e instanceof RateLimitedError) {
+      return new Response(e.message, {
+        status: 429,
+        headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" },
+      });
+    }
     // A customer's calendar link must never show the app's error page: say
     // what failed in one line, and log it where the next person can find it.
     console.error("[welcome-ics]", token.slice(0, 12), e);
@@ -26,7 +33,8 @@ async function handle(params: unknown, request: Request): Promise<Response> {
 
 async function serve(token: string, request: Request): Promise<Response> {
   const { openWelcome } = await import("@/lib/welcome.server");
-  const view = await openWelcome(token);
+  // Its own budget: the page's polling never spends a calendar download's.
+  const view = await openWelcome(token, "click");
   if (!view) return new Response("Not found", { status: 404 });
 
   const only = new URL(request.url).searchParams.get("event");

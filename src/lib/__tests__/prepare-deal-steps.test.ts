@@ -28,7 +28,9 @@ const h = vi.hoisted(() => {
       })),
     },
     email: { sendEmail: vi.fn(async () => ({ delivered: true, reason: null })) },
-    welcome: { issueWelcomeLinkAs: vi.fn(async () => ({ url: "https://x/w/t", issuedAt: "" })) },
+    welcome: {
+      issueWelcomeLinkUnlessOff: vi.fn(async () => ({ url: "https://x/w/t", issuedAt: "" })),
+    },
     audit: { audit: vi.fn(async () => {}) },
   };
   state.forward = new Proxy({}, { get: (_t, prop) => state.supabase.client?.[prop] });
@@ -252,7 +254,7 @@ beforeEach(() => {
     return { data, usage, model: "claude-opus-5-5", stop_reason: "end_turn", attempts: 1, ms: 1 };
   });
   h.email.sendEmail.mockClear();
-  h.welcome.issueWelcomeLinkAs.mockClear();
+  h.welcome.issueWelcomeLinkUnlessOff.mockClear();
   h.audit.audit.mockClear();
   process.env["ANTHROPIC_API_KEY"] = "test-key";
 });
@@ -483,6 +485,7 @@ describe("sow", () => {
     expect(h.sow.stampSowFacts).toHaveBeenCalledWith(
       DEAL,
       expect.objectContaining({ reference: "SOW-42" }),
+      { fromContract: false },
     );
     expect(account().intake.ai_reading.step).toBe("sow");
   });
@@ -497,6 +500,7 @@ describe("sow", () => {
       {
         jobId: "job-1",
         contract: expect.objectContaining({ sha256: sha256Hex(CONTRACT), name: "contract.pdf" }),
+        kind: "sow",
       },
     );
     expect(out.problems).toBeUndefined();
@@ -545,6 +549,7 @@ describe("sow", () => {
     expect(h.sow.readSowDocument).toHaveBeenCalledWith(DEAL, expect.anything(), {
       jobId: "job-1",
       contract: null,
+      kind: "sow",
     });
   });
 
@@ -557,12 +562,21 @@ describe("sow", () => {
     expect(h.sow.readSowDocument).toHaveBeenCalledWith(
       DEAL,
       expect.objectContaining({ sha256: sha256Hex(CONTRACT), name: "contract.pdf" }),
-      { jobId: "job-1", contract: null },
+      { jobId: "job-1", contract: null, kind: "contract" },
     );
     expect(fake.store["portal_ai_readings"]![0]).toMatchObject({
       source_hash: sha256Hex(CONTRACT),
       source_path: CONTRACT_PATH,
     });
+    // Labelled as the contract, and never stamped as a SOW: a contract's
+    // number is not a SOW reference, so the deal does not read "SOW on file".
+    expect(h.sow.stampSowFacts).toHaveBeenCalledWith(
+      DEAL,
+      expect.objectContaining({ reference: "SOW-42" }),
+      { fromContract: true },
+    );
+    expect(out.filled).toContain("2 services from the contract");
+    expect(out.filled?.some((f) => /the SOW/.test(f))).toBe(false);
   });
 
   it("reads the SOW alone and says so when the contract beside it cannot be read", async () => {
@@ -579,6 +593,7 @@ describe("sow", () => {
     expect(h.sow.readSowDocument).toHaveBeenCalledWith(DEAL, expect.anything(), {
       jobId: "job-1",
       contract: null,
+      kind: "sow",
     });
     expect(out.result?.["branches"]).toMatchObject({ sow: { status: "ok" } });
     expect(out.problems?.[0]).toMatch(
@@ -897,7 +912,7 @@ describe("finalize", () => {
       ctx,
     );
     expect(out.result).toMatchObject({ status: "done", notified: true });
-    expect(h.welcome.issueWelcomeLinkAs).toHaveBeenCalledWith(null, DEAL);
+    expect(h.welcome.issueWelcomeLinkUnlessOff).toHaveBeenCalledWith(null, DEAL);
     expect(account().intake.ai_reading).toMatchObject({
       status: "done",
       job_id: "job-1",
@@ -941,7 +956,7 @@ describe("finalize", () => {
       ctx,
     );
     expect(out.result).toMatchObject({ status: "failed", notified: false });
-    expect(h.welcome.issueWelcomeLinkAs).not.toHaveBeenCalled();
+    expect(h.welcome.issueWelcomeLinkUnlessOff).not.toHaveBeenCalled();
     expect(h.email.sendEmail).not.toHaveBeenCalled();
     expect(account().intake.ai_reading).toMatchObject({
       status: "failed",

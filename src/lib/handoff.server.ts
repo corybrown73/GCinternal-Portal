@@ -1,5 +1,6 @@
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { isFlagOn } from "./app-config.server";
+import { paperworkOnFile } from "./won-gate";
 import {
   handoffCompleteness,
   type HandoffCompleteness,
@@ -85,10 +86,23 @@ function toPacket(row: any): HandoffPacket {
 async function gatherInputs(implementationId: string, packetRow: any) {
   const { data: impl } = await db()
     .from("implementations")
-    .select("id, customer_id, customer_goals, sow_document_url, sow_reference, discovery_board_url")
+    .select(
+      "id, customer_id, deal_id, customer_goals, sow_document_url, sow_document_path, sow_reference, discovery_board_url",
+    )
     .eq("id", implementationId)
     .maybeSingle();
   if (!impl) return null;
+
+  // The paperwork by the deal page's rule: the implementation's own SOW, or
+  // the deal's SOW, contract or stated no-SOW reason.
+  const { data: dealRow } = impl.deal_id
+    ? await db()
+        .from("portal_accounts")
+        .select("sow_document_path, sow_document_url, sow_reference, intake")
+        .eq("id", impl.deal_id)
+        .maybeSingle()
+    : { data: null };
+  const paperwork = paperworkOnFile(impl) ?? (dealRow ? paperworkOnFile(dealRow) : null);
 
   const [{ data: criteria }, { data: contacts }, { data: commitments }, { data: risks }] =
     await Promise.all([
@@ -116,6 +130,7 @@ async function gatherInputs(implementationId: string, packetRow: any) {
 
   return {
     implementation: impl,
+    paperwork,
     packet: packetRow ?? {},
     successCriteria: criteria ?? [],
     contacts: contacts ?? [],

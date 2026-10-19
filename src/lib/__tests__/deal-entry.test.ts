@@ -198,7 +198,7 @@ describe("a deal entered at Closed Won", () => {
     expect(deal(id).stage).toBe("negotiate");
     // Stage history reads in words, without the gate's machine tag.
     expect(h.moves.at(-1)?.note).toBe(
-      "Entered as Closed Won; held at Negotiate & Finalize — no signed SOW or contract yet",
+      "Entered as Closed Won; held at Negotiate & Finalize — no signed SOW yet",
     );
     // Nothing the close starts happened.
     expect(h.fake.store.implementations).toHaveLength(0);
@@ -381,7 +381,7 @@ describe("the refusal handed to the deal page", () => {
 
   it("writes the hold note in words", () => {
     expect(heldNote("Closed Won", "Negotiate & Finalize", ["notes", "sow"], WON_GATE_LABEL)).toBe(
-      "Entered as Closed Won; held at Negotiate & Finalize — no Gong brief or call note and no signed SOW or contract yet",
+      "Entered as Closed Won; held at Negotiate & Finalize — no Gong brief or call note and no signed SOW yet",
     );
   });
 });

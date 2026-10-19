@@ -302,6 +302,50 @@ export const verificationSchema = z4.object({
 });
 export type BriefVerification = z4.infer<typeof verificationSchema>;
 
+/** What kind of capability a customer requirement is. */
+export const REQUIREMENT_KINDS = [
+  "form_feature",
+  "data",
+  "output",
+  "device",
+  "compliance",
+  "integration",
+  "other",
+] as const;
+export type RequirementKind = (typeof REQUIREMENT_KINDS)[number];
+
+/**
+ * One specific capability the customer said they need — scan a QR code on
+ * each bin, take a photo, capture a signature, work offline, a PDF to the
+ * office. Quoted word for word, never merged or summarised, and never a
+ * purchase: what was bought is the SOW's or the contract's. INTERNAL: shown
+ * to the TIS and in the deck's notes, never on a customer page.
+ */
+export const briefRequirementSchema = z4.object({
+  text: z4.string(),
+  kind: z4.enum(REQUIREMENT_KINDS),
+  quote: z4.string(),
+  /** "SOW", "contract", or the title of the call notes it came from. */
+  source: z4.string(),
+});
+export type BriefRequirement = z4.infer<typeof briefRequirementSchema>;
+
+/**
+ * Something the calls talked about that neither the SOW nor the contract
+ * sells: an integration, a scope line, a focus item. Moved here by code
+ * after the check (splitPurchased), so it never reaches a slide, a customer
+ * page or the customer-visible handoff answers. INTERNAL: open questions and
+ * watch-outs.
+ */
+export const discussedItemSchema = z4.object({
+  item: z4.string(),
+  /** Where in the brief it stood before it was moved. */
+  from: z4.enum(["integration", "expansion", "scope", "focus"]),
+  quote: z4.string().nullable(),
+  source: z4.string().nullable(),
+});
+export type DiscussedItem = z4.infer<typeof discussedItemSchema>;
+
 /** The first pass: who they are, how they work today, what they want, who is who. */
 export const briefCoreSchema = z4.object({
   account_name: z4.string(),
@@ -315,6 +359,12 @@ export const briefCoreSchema = z4.object({
   dates: z4.array(briefDateSchema),
   discovery_questions: z4.array(discoveryQuestionSchema),
   process_gaps: z4.array(z4.string()),
+  /**
+   * Required in the model's output schema (a default is still "required"
+   * there); a core kept on the brief row before it existed — a job in
+   * flight across a deploy — still parses, with the list empty.
+   */
+  requirements: z4.array(briefRequirementSchema).default([]),
 });
 export type BriefCore = z4.infer<typeof briefCoreSchema>;
 
@@ -351,6 +401,10 @@ export const briefJsonSchema = z4.object({
   /** Optional so briefs written before it existed still read. */
   onboarding: onboardingSchema.optional(),
   welcome: welcomeSchema.optional(),
+  /** The customer's specific needs, quoted. Absent on briefs written before it existed. */
+  requirements: z4.array(briefRequirementSchema).optional(),
+  /** Talked about, not bought. Absent on briefs written before the purchase check. */
+  discussed_not_purchased: z4.array(discussedItemSchema).optional(),
   verification: verificationSchema.optional(),
 });
 export type BriefJson = z4.infer<typeof briefJsonSchema>;

@@ -2,6 +2,7 @@ import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { firstFormName as firstFormNameOf } from "./intake-answers";
 import { nextChecklistTask, stageFlow } from "./stage-flow";
 import { TERM_LABELS } from "./terms";
+import { paperworkOnFile } from "./won-gate";
 import { resolveAccountId, transitionStage, upsertAccount } from "./server/accounts";
 import { accountUpsertSchema } from "./server/schemas";
 import {
@@ -353,7 +354,8 @@ export async function loadPipeline(
         se_owner_name: a.se_owner_id ? (names.get(a.se_owner_id) ?? null) : null,
         path: intake.path,
         has_notes: withNotes.has(a.id),
-        has_sow: Boolean(a.sow_document_path) || Boolean(a.sow_reference?.trim()),
+        // Paperwork on file, by the one rule: a SOW, a contract or a stated no-SOW reason.
+        has_sow: paperworkOnFile(a) !== null,
         // A POC until it is won: the form marks it, the close ends it.
         ff_poc: intake.field_fusion.poc && !isAtOrPast(stages, a.stage, wonStage(stages).key),
         owner_name: ownerName,
@@ -378,7 +380,7 @@ export async function loadPipeline(
           intake: a.intake,
           owner: ownerName,
           gongReports: withNotes.has(a.id) ? 1 : 0,
-          hasSow: Boolean(a.sow_document_path) || Boolean(a.sow_reference?.trim()),
+          paperwork: paperworkOnFile(a),
           hasBrief: withBrief.has(a.id),
           hasLink: Boolean((a as { welcome_share_url?: string | null }).welcome_share_url),
           ...(timeline && { timeline }),
@@ -1325,15 +1327,13 @@ export async function uploadDealSow(
     .upload(path, binary, { contentType, upsert: false });
   if (upErr) throw new Error(`Could not upload the SOW: ${upErr.message}`);
 
-  const { error } = await db()
-    .from("portal_accounts")
-    .update({
-      sow_document_path: path,
-      sow_document_name: args.fileName,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", args.dealId);
-  if (error) {
+  // The deal and its live project point at the new SOW (newest wins), and an
+  // unanswered "Is there a SOW?" becomes yes (server/deal-sow).
+  const { pointDealAtSow, retireAllReplaced } = await import("./server/deal-sow");
+  let pointed: Awaited<ReturnType<typeof pointDealAtSow>>;
+  try {
+    pointed = await pointDealAtSow(args.dealId, path, args.fileName);
+  } catch (e) {
     // The row failed, so nothing points at the object. Remove it rather than
     // leaving a customer's contract in the bucket unreachable.
     try {
@@ -1341,20 +1341,24 @@ export async function uploadDealSow(
     } catch {
       /* the row is what matters */
     }
-    throw new Error(error.message);
+    throw e;
   }
 
-  // Replacing a SOW removes the one it replaced: a superseded contract sitting
-  // in the bucket with nothing pointing at it is a document nobody can find
-  // and nobody can delete.
-  const previous = (before as any).sow_document_path as string | null;
-  if (previous && previous !== path) {
-    try {
-      await db().storage.from("attachments").remove([previous]);
-    } catch (e) {
-      console.error("[sow] uploaded the new SOW but could not remove the old object", e);
-    }
-  }
+  // The SOW it replaced (the deal's, and a file the project's own SOW
+  // columns held) is never deleted: kept under Files & links once the deal
+  // has a project, listed on the deal until the project starts before that.
+  const previous =
+    pointed?.previousPath ?? ((before as any).sow_document_path as string | null) ?? null;
+  await retireAllReplaced({
+    dealId: args.dealId,
+    pointed: {
+      previousPath: previous,
+      previousName: pointed?.previousName ?? null,
+      projectPrevious: pointed?.projectPrevious ?? [],
+    },
+    newPath: path,
+    actorProfileId: userId,
+  });
 
   const { recordActivity } = await import("./activity.server");
   await recordActivity(
@@ -2106,6 +2110,13 @@ export async function startOnboardingAs(
     customerId,
     source: "presale",
   });
+
+  // SOWs the deal replaced before it had a project were kept and listed on
+  // the deal; they belong under this project's Files & links now.
+  {
+    const { fileEarlierSows } = await import("./server/deal-sow");
+    await fileEarlierSows({ dealId: account.id, implementationId: implId, actorProfileId: userId });
+  }
 
   // A partner's plan was applied inside create_partner_implementation, in the
   // same transaction, so it is not applied twice here.

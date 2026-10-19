@@ -99,6 +99,17 @@ const WORKED: ReadonlyArray<AccountStage> = [
   "make_it_run",
 ];
 
+/**
+ * Where a missing SOW or contract is asked for: Closed Won through Kickoff.
+ * Get it working → Make it run are delivery; the paperwork prompt stops there.
+ */
+export const PAPERWORK_STAGES: ReadonlyArray<AccountStage> = [
+  "closed_won",
+  "field_fusion_setup",
+  "onboarding_kickoff",
+  "kickoff",
+];
+
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
 /** "Move it to Kickoff, or note what is holding it" (Field Fusion setup is a side path). */
@@ -200,15 +211,23 @@ export function needsAction(deal: DealFacts | null | undefined): ActionReason[] 
     });
   }
 
-  const missing = [!deal.has_notes ? "Gong brief" : null, !deal.has_sow ? "SOW" : null].filter(
-    Boolean,
-  ) as string[];
-  // Before the close the paperwork is still being written; it is asked for at Closed Won.
+  // has_sow is paperworkOnFile: a SOW, a contract, or a stated no-SOW reason.
+  // Before the close the paperwork is still being written, and once the
+  // project is past Kickoff it is being delivered: the paperwork is asked
+  // for from Closed Won through Kickoff only.
+  const askPaperwork = PAPERWORK_STAGES.includes(deal.stage);
+  const missing = [
+    !deal.has_notes ? "Gong brief" : null,
+    !deal.has_sow && askPaperwork ? "SOW or contract" : null,
+  ].filter(Boolean) as string[];
   if (missing.length && deal.stage !== "negotiate") {
     out.push({
       bucket: "needs_attention",
       rank: 2.8,
-      reason: `No ${missing.join(" or ")} on the deal`,
+      reason:
+        missing.length > 1
+          ? "No Gong brief, SOW or contract on the deal"
+          : `No ${missing[0]} on the deal`,
       impact: "the plan is built from what is here",
       tab: "overview",
       next: `Add the ${missing[0]}`,

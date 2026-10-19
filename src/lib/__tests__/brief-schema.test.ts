@@ -211,6 +211,10 @@ describe("the brief in two passes", () => {
             { ...plan.kickoff.roles[0]!, quote: "not in the calls", source: "calls", page: null },
           ],
           it_contact: null,
+          integrations: [],
+        },
+        welcome: {
+          focus_items: [{ ...plan.welcome.focus_items[0]!, source: "sow", page: 1 }],
         },
         stakeholders: [
           { ...core.stakeholders[0]!, quote: "Dana is the champion", source: "calls", page: null },
@@ -241,6 +245,7 @@ describe("the brief in two passes", () => {
         "goals[0]": "unverified",
         "goals[1]": "grounded",
         "dates[0]": "grounded",
+        "welcome.focus_items[0]": "grounded",
         "onboarding.forms[0]": "grounded",
         "onboarding.forms[1]": "dropped",
         "onboarding.flow": "grounded",

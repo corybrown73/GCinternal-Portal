@@ -19,6 +19,7 @@ import {
   attachmentRemovable,
 } from "@/lib/attachment-rows";
 import { fmtDate } from "@/lib/hub-format";
+import { invalidatePaperwork } from "@/lib/paperwork-cache";
 import { cn } from "@/lib/utils";
 
 const KINDS = [
@@ -388,6 +389,7 @@ function AddFile({ implementationId, onDone }: { implementationId: string; onDon
   const [file, setFile] = useState<File | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const upload = useServerFn(uploadAttachment);
+  const queryClient = useQueryClient();
 
   const m = useMutation({
     mutationFn: async () => {
@@ -412,7 +414,11 @@ function AddFile({ implementationId, onDone }: { implementationId: string; onDon
         },
       });
     },
-    onSuccess: onDone,
+    onSuccess: () => {
+      // A SOW filed here becomes the deal's SOW: every paperwork check re-reads.
+      if (kind === "sow") void invalidatePaperwork(queryClient, null);
+      onDone();
+    },
   });
 
   return (

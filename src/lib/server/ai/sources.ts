@@ -6,7 +6,7 @@ import { supabaseAdmin } from "@/integrations/supabase/client.server";
 
 import { readIntake, type IntakeAnswers } from "../../intake-answers";
 import type { Account, GongReport, OnboardingNote } from "../../presale-types";
-import { buildBriefUserPrompt, SOW_ATTACHED_NOTE, summaryAsReport } from "../brief/prompt";
+import { buildBriefUserPrompt, purchaseRecordNote, summaryAsReport } from "../brief/prompt";
 import {
   fitDocumentsToRequest,
   prepareDocument,
@@ -168,10 +168,13 @@ export function sharedPrefix(
     blocks.push(contract.block);
   }
   const notes: string[] = [];
-  if (readable) notes.push(SOW_ATTACHED_NOTE);
-  else if (s.sow?.problem ?? opts.sowProblem) {
+  // The record of what was bought, named every time: the SOW, else the
+  // contract, else neither — so the calls are never read as the sale.
+  const record = purchaseRecordOf({ sow: readable, contract });
+  if (!readable && (s.sow?.problem ?? opts.sowProblem)) {
     notes.push(`The SOW on file could not be read (${s.sow?.problem ?? opts.sowProblem}).`);
   }
+  notes.push(purchaseRecordNote(record));
   // A contract on file that did not make it into the request is said, so
   // the brief does not take its absence for "no contract".
   if (s.contract?.problem && !contract) {
@@ -182,12 +185,29 @@ export function sharedPrefix(
   const reports = s.reports.length ? s.reports : [summaryAsReport(s.account)].filter(isReport);
   notes.push(buildBriefUserPrompt(s.account as Account, reports, s.notes));
   if (opts.sowReading) {
+    // Labelled by the document it read: on a contract-only deal the kept
+    // reading is the contract's, and calling it the SOW invited the model
+    // to look for services it never sold.
+    const doc = record === "contract" ? "CONTRACT" : "SOW";
     notes.push(
-      `WHAT THE SIGNED SOW SAYS, ALREADY EXTRACTED (JSON, one reading of the document above; the forms, seats, dates and services here were read from the SOW and agree with it):\n${JSON.stringify(opts.sowReading)}`,
+      `WHAT THE SIGNED ${doc} SAYS, ALREADY EXTRACTED (JSON, one reading of the document above; the forms, seats, dates, services and integrations here were read from the ${doc === "SOW" ? "SOW" : "contract"} and agree with it — they are what was bought):\n${JSON.stringify(opts.sowReading)}`,
     );
   }
   blocks.push({ type: "text", text: notes.join("\n\n---\n\n") });
   return blocks;
+}
+
+/**
+ * Which document records the sale: a readable SOW, else a readable
+ * contract (or order form), else none. Pure.
+ */
+export function purchaseRecordOf(docs: {
+  sow: Pick<PreparedDocument, "block" | "problem"> | null;
+  contract: Pick<PreparedDocument, "block" | "problem"> | null;
+}): "sow" | "contract" | null {
+  if (docs.sow?.block && !docs.sow.problem) return "sow";
+  if (docs.contract?.block && !docs.contract.problem) return "contract";
+  return null;
 }
 
 function isReport(r: GongReport | null): r is GongReport {

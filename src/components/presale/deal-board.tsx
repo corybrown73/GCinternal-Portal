@@ -135,7 +135,7 @@ function DealCard({
         ) : null}
         {deal.has_sow !== undefined ? (
           <span
-            title={deal.has_sow ? "Signed SOW on file" : "No SOW yet"}
+            title={deal.has_sow ? "SOW or contract on file" : "No SOW or contract yet"}
             className={cn(
               "rounded-sm px-1 py-px",
               deal.has_sow

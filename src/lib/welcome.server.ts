@@ -5,6 +5,8 @@ import { readIntake } from "./intake-answers";
 import { appUrl } from "@/lib/app-url";
 import { industryIcon } from "@/lib/industry-icons";
 import {
+  customerHomeworkView,
+  customerIntakeView,
   customerWelcomeView,
   HOMEWORK_KEYS,
   implementationFocusFallbackView,
@@ -17,6 +19,13 @@ import { kickoffFocusContent } from "@/lib/kickoff-view";
 
 import { audit } from "./server/audit";
 import { hashToken } from "./server/plan-tokens";
+import {
+  enforceRateLimit,
+  takeRateLimit,
+  WELCOME_CLICK_LIMIT,
+  WELCOME_READ_LIMIT,
+  WELCOME_WRITE_LIMIT,
+} from "./server/rate-limit";
 
 const db = () => supabaseAdmin as any;
 
@@ -37,6 +46,22 @@ const db = () => supabaseAdmin as any;
  */
 
 const TOKEN_PREFIX = "gcwl_";
+
+/**
+ * Per-token budgets on the public reads and writes (server/rate-limit.ts).
+ * Best-effort: in memory, per server instance. Keyed by the token's hash,
+ * never the raw token.
+ */
+function limitLink(token: string, kind: "read" | "click" | "write"): void {
+  enforceRateLimit(
+    `welcome:${kind}:${hashToken(token)}`,
+    kind === "read"
+      ? WELCOME_READ_LIMIT
+      : kind === "click"
+        ? WELCOME_CLICK_LIMIT
+        : WELCOME_WRITE_LIMIT,
+  );
+}
 
 function shareUrlFor(token: string): string {
   return `${appUrl()}/welcome/${token}`;
@@ -220,10 +245,7 @@ async function viewFor(
   }
 
   const lot = await parkingLotFor(String(deal.id));
-  const stageHistory = await implementationStageHistoryForDeal(
-    String(deal.id),
-    deal.customer_id ? String(deal.customer_id) : null,
-  );
+  const stageTransitions = await stageTransitionsForDeal(String(deal.id));
   const railStatuses = await railStatusesForDeal(String(deal.id));
   // A partner deal's dashboard comes from its partner progress. If that cannot
   // load for a known partner, the dashboard says so; a standard deal is unaffected.
@@ -307,6 +329,7 @@ async function viewFor(
     // link merely existing, which happens at assignment.
     sharedAt: opts.internal ? (readIntake(deal.intake).welcome_shared_at ?? null) : null,
     openedAt: opts.internal ? (deal.welcome_opened_at ?? null) : null,
+    issuedAt: opts.internal && deal.welcome_share_url ? (deal.welcome_issued_at ?? null) : null,
     hiddenScreens: (await import("./intake-answers")).readIntake(deal.intake)
       .welcome_hidden_screens,
     textOverrides: (await import("./intake-answers")).readIntake(deal.intake).welcome_text,
@@ -349,7 +372,7 @@ async function viewFor(
             homeworkDone,
             parkingLot: lot,
             leadName,
-            stageHistory,
+            stageTransitions,
             railStatuses,
           }),
     partner,
@@ -386,23 +409,25 @@ async function railStatusesForDeal(
   }
 }
 
-async function implementationStageHistoryForDeal(
+/**
+ * The deal's own stage moves, for each stage's "completed" date on the
+ * customer's journey (stageCompletionFromTransitions). Never the internal
+ * implementation_stage_history track, which runs a stage behind the deal.
+ * Never throws: a read that fails shows no completion dates.
+ */
+async function stageTransitionsForDeal(
   dealId: string,
-  customerId: string | null,
-): Promise<import("./welcome-journey").ImplementationStageHistoryEntry[]> {
+): Promise<import("./welcome-journey").DealStageTransition[]> {
   try {
-    const { implementationForDeal } = await import("./assignment.server");
-    const implementationId = await implementationForDeal(dealId, customerId);
-    if (!implementationId) return [];
     const { data, error } = await db()
-      .from("implementation_stage_history")
-      .select("stage,entered_at,exited_at")
-      .eq("implementation_id", implementationId)
-      .order("entered_at", { ascending: true });
+      .from("portal_stage_transitions")
+      .select("to_stage,occurred_at")
+      .eq("account_id", dealId)
+      .order("occurred_at", { ascending: true });
     if (error) throw error;
-    return (data ?? []) as import("./welcome-journey").ImplementationStageHistoryEntry[];
+    return (data ?? []) as import("./welcome-journey").DealStageTransition[];
   } catch (error) {
-    console.error("[welcome] could not read implementation stage history", error);
+    console.error("[welcome] could not read the deal's stage history", error);
     return [];
   }
 }
@@ -494,6 +519,42 @@ export async function issueWelcomeLinkAs(
   return { url, issuedAt };
 }
 
+/**
+ * Did a person turn the customer link off, with no link issued since? The
+ * audit log is the record: the latest of "link_revoked" and "link_issued"
+ * for the deal. A read that fails throws: not knowing is never taken as
+ * "on", so the system does not bring back a link a person turned off. Its
+ * callers (assignment, the deal's reading) report the link as not made.
+ */
+export async function welcomeLinkTurnedOff(dealId: string): Promise<boolean> {
+  const { data, error } = await db()
+    .from("portal_audit_log")
+    .select("action, created_at")
+    .eq("entity_type", "account")
+    .eq("entity_id", dealId)
+    .in("action", ["welcome.link_revoked", "welcome.link_issued"])
+    .order("created_at", { ascending: false })
+    .limit(1);
+  if (error) {
+    console.error("[welcome] could not read the link's history", dealId, error);
+    throw new Error("Could not read whether the customer link was turned off.");
+  }
+  return (data?.[0]?.action as string | undefined) === "welcome.link_revoked";
+}
+
+/**
+ * The system's own issue (a reading, an assignment): never brings back a
+ * link a person turned off. Null then; a person issues a new one from the
+ * deck when they want one.
+ */
+export async function issueWelcomeLinkUnlessOff(
+  actorId: string | null,
+  dealId: string,
+): Promise<{ url: string; issuedAt: string } | null> {
+  if (await welcomeLinkTurnedOff(dealId)) return null;
+  return issueWelcomeLinkAs(actorId, dealId);
+}
+
 export async function revokeWelcomeLink(userId: string, dealId: string): Promise<void> {
   const { requireSalesEditor } = await import("./presale.server");
   await requireSalesEditor(userId);
@@ -512,21 +573,38 @@ export async function revokeWelcomeLink(userId: string, dealId: string): Promise
   });
 }
 
+/**
+ * The deal a link opens. Null only when the read worked and no deal has the
+ * link (unknown, revoked, replaced). A failed read throws: a database blip
+ * must never tell the customer their link is gone, and the page's poll keeps
+ * what it showed until the next read.
+ */
 async function dealForToken(token: string): Promise<any | null> {
   if (!token.startsWith(TOKEN_PREFIX) || token.length < 20 || token.length > 120) return null;
-  const { data } = await db()
+  const { data, error } = await db()
     .from("portal_accounts")
     .select(DEAL_COLUMNS)
     .eq("welcome_token_hash", hashToken(token))
     .maybeSingle();
+  if (error) throw new Error("Could not read the link. Try again in a moment.");
   return data ?? null;
 }
 
+const OPEN_STAMP_EVERY_MS = 15 * 60_000;
+
 /** The customer's door. Null for any bad token — one neutral message, no detail. */
-export async function openWelcome(token: string): Promise<WelcomeView | null> {
+export async function openWelcome(
+  token: string,
+  budget: "read" | "click" = "read",
+): Promise<WelcomeView | null> {
+  // The page's own reads, or a calendar download on the click budget.
+  limitLink(token, budget);
   const deal = await dealForToken(token);
   if (!deal) return null;
-  if (!deal.welcome_opened_at) {
+  // "Last opened", not only the first open: re-stamped at most every fifteen
+  // minutes, so the page's ten-second poll is not a write every time.
+  const last = deal.welcome_opened_at ? Date.parse(String(deal.welcome_opened_at)) : NaN;
+  if (!deal.welcome_opened_at || !(Date.now() - last < OPEN_STAMP_EVERY_MS)) {
     await db()
       .from("portal_accounts")
       .update({ welcome_opened_at: new Date().toISOString() })
@@ -541,6 +619,8 @@ export async function openWelcome(token: string): Promise<WelcomeView | null> {
  * Null for anything else — never an open redirect.
  */
 export async function followHelpLink(token: string, articleId: string): Promise<string | null> {
+  // Over the read budget: the same neutral "not found" as a bad link.
+  if (!takeRateLimit(`welcome:click:${hashToken(token)}`, WELCOME_CLICK_LIMIT)) return null;
   const deal = await dealForToken(token);
   if (!deal) return null;
   const { readIntake } = await import("./intake-answers");
@@ -562,6 +642,7 @@ export async function answerWelcomeIntake(
   key: string,
   value: import("./sales-handoff").HandoffValue,
 ): Promise<NonNullable<WelcomeView["intake"]>> {
+  limitLink(token, "write");
   const deal = await dealForToken(token);
   if (!deal) throw new Error("This link isn't available");
   const { readIntake } = await import("./intake-answers");
@@ -606,7 +687,8 @@ export async function answerWelcomeIntake(
     .select("intake")
     .eq("id", deal.id)
     .maybeSingle();
-  return customerPrompt(readIntake(after?.intake)) ?? { known: [], needed: [] };
+  // Through the same allow-list as the page's own read of these questions.
+  return customerIntakeView(customerPrompt(readIntake(after?.intake)) ?? { known: [], needed: [] });
 }
 
 /**
@@ -619,6 +701,7 @@ export async function confirmSolutionTested(
   token: string,
   solutionId: string,
 ): Promise<import("./welcome-journey").CustomerJourney | null> {
+  limitLink(token, "write");
   const deal = await dealForToken(token);
   if (!deal) throw new Error("This link isn't available");
   const { readIntake } = await import("./intake-answers");
@@ -659,7 +742,11 @@ export async function confirmSolutionTested(
     payload: { solution_id: solutionId },
   });
   const after = await dealForToken(token);
-  return after ? ((await viewFor(after, { internal: false, token })).journey ?? null) : null;
+  // Through the customer projection, like every read of the link: the
+  // internal notes and blockers on the other solutions never reach the browser.
+  return after
+    ? (customerWelcomeView(await viewFor(after, { internal: false, token })).journey ?? null)
+    : null;
 }
 
 /** The one public write: a homework box, ticked or unticked. */
@@ -668,6 +755,7 @@ export async function tickWelcomeHomework(
   key: HomeworkKey,
   done: boolean,
 ): Promise<Record<string, string>> {
+  limitLink(token, "write");
   const deal = await dealForToken(token);
   if (!deal) throw new Error("This link isn't available");
   const current = { ...((deal.welcome_homework ?? {}) as Record<string, string>) };
@@ -678,5 +766,6 @@ export async function tickWelcomeHomework(
     .update({ welcome_homework: current })
     .eq("id", deal.id);
   if (error) throw new Error("That didn't save");
-  return current;
+  // Only the homework keys the page ticks, as on every read of the link.
+  return customerHomeworkView(current);
 }

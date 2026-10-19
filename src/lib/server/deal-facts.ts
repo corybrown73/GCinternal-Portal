@@ -15,6 +15,7 @@ import {
 } from "../presale-stages";
 import { isKickoffBooked, nextChecklistTask, stageFlow } from "../stage-flow";
 import { watchOutsFor } from "../watch-outs";
+import { paperworkOnFile } from "../won-gate";
 
 const db = () => supabaseAdmin as any;
 
@@ -63,7 +64,7 @@ export async function dealFactsFor(
     db()
       .from("portal_accounts")
       .select(
-        "id,name,stage,stage_entered_at,intake,sow_document_path,sow_reference,welcome_share_url",
+        "id,name,stage,stage_entered_at,intake,sow_document_path,sow_document_url,sow_reference,welcome_share_url",
       )
       .in("id", ids),
     db()
@@ -157,6 +158,7 @@ export async function dealFactsFor(
     stage_entered_at: string | null;
     intake: unknown;
     sow_document_path: string | null;
+    sow_document_url?: string | null;
     sow_reference: string | null;
     welcome_share_url: string | null;
   }>) {
@@ -168,14 +170,16 @@ export async function dealFactsFor(
       closeDateFor({ intake, stageHistory, wonStageKey: "closed_won", today }).date,
     );
     const noteTexts = notesByDeal.get(d.id) ?? [];
-    const hasSow = Boolean(d.sow_document_path) || Boolean(d.sow_reference?.trim());
+    // One rule for the paperwork: a SOW, a contract or a stated no-SOW reason.
+    const paperwork = paperworkOnFile(d);
+    const hasSow = paperwork !== null;
     const owner = ownerByDeal.get(d.id) ?? null;
     const input = {
       stage: d.stage,
       intake,
       owner,
       gongReports: noteTexts.length,
-      hasSow,
+      paperwork,
       hasBrief: briefByDeal.has(d.id),
       hasLink: Boolean(d.welcome_share_url),
       timeline,

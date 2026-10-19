@@ -8,6 +8,13 @@ import type { AccountStage } from "./presale-stages";
 const db = () => supabaseAdmin as any;
 
 /**
+ * How far back the report looks for person activity. A deal quiet for longer
+ * reads as quiet since it entered its stage, which is already far past the
+ * three-business-day line.
+ */
+const ACTIVITY_LOOKBACK_DAYS = 120;
+
+/**
  * Today's report, from the same board the team looks at (loadPipeline: the
  * checklist's next task, the stuck limits, the owners) plus the stage
  * history for the timings and the last thing that happened on each deal.
@@ -18,19 +25,24 @@ export async function loadPipelineReport(
   const { loadPipeline } = await import("./presale.server");
   const { deals } = await loadPipeline(null);
   const ids = deals.map((d) => d.id);
-  const [{ data: history }, { data: notes }, { data: briefs }] = await Promise.all([
+  const [{ data: history }, { data: briefs }, { data: impls }] = await Promise.all([
     db()
       .from("portal_stage_transitions")
       .select("account_id,to_stage,occurred_at")
       .in("account_id", ids)
       .order("occurred_at", { ascending: true }),
-    db().from("portal_gong_reports").select("account_id,created_at").in("account_id", ids),
     db()
       .from("portal_briefs")
       .select("account_id")
       .eq("status", "complete")
       .eq("generator", "llm")
       .in("account_id", ids),
+    db()
+      .from("implementations")
+      .select("id,deal_id,created_at")
+      .in("deal_id", ids)
+      .is("superseded_by_implementation_id", null)
+      .order("created_at", { ascending: false }),
   ]);
   const hist = (history ?? []) as Array<{
     account_id: string;
@@ -39,21 +51,38 @@ export async function loadPipelineReport(
   }>;
   const firstTo = (id: string, stage: string) =>
     hist.find((h) => h.account_id === id && h.to_stage === stage)?.occurred_at ?? null;
-  const lastMove = new Map<string, string>();
-  for (const h of hist) lastMove.set(h.account_id, h.occurred_at);
-  const lastNote = new Map<string, string>();
-  for (const n of (notes ?? []) as Array<{ account_id: string; created_at: string }>)
-    if ((lastNote.get(n.account_id) ?? "") < n.created_at) lastNote.set(n.account_id, n.created_at);
   const briefed = new Set(
     ((briefs ?? []) as Array<{ account_id: string }>).map((b) => b.account_id),
   );
+  // "Untouched" uses the reminders' definition of work (deal-activity.ts): a
+  // person logging something on the deal or its live project — notes, actions,
+  // ticks, files, stage moves, date changes. A system write to the deal row
+  // no longer counts. Entering the current stage counts as a touch.
+  const { latestImplementations } = await import("./claimed-owner");
+  const liveImpl = latestImplementations(
+    (impls ?? []) as Array<{ id: string; deal_id: string | null }>,
+  );
+  let worked: Map<string, string> | null = null;
+  try {
+    const { loadPersonActivity } = await import("./deal-activity.server");
+    worked = await loadPersonActivity({
+      dealIds: ids,
+      liveImplByDeal: new Map([...liveImpl].map(([dealId, i]) => [dealId, String(i.id)])),
+      since: new Date(Date.now() - ACTIVITY_LOOKBACK_DAYS * 86_400_000).toISOString(),
+    });
+  } catch (e) {
+    // Better the old, looser signal (any write to the deal) than calling
+    // every deal untouched because one read failed.
+    console.error("[pipeline report] could not read recent activity", e);
+  }
 
   const rows: ReportDeal[] = deals.map((d) => {
     const intake = readIntake(d.intake);
     const activity = [
-      String((d as { updated_at?: string }).updated_at ?? d.stage_entered_at),
-      lastMove.get(d.id) ?? "",
-      lastNote.get(d.id) ?? "",
+      String(d.stage_entered_at ?? (d as { updated_at?: string }).updated_at ?? ""),
+      worked
+        ? (worked.get(d.id) ?? "")
+        : String((d as { updated_at?: string }).updated_at ?? d.stage_entered_at),
     ].sort();
     return {
       id: d.id,

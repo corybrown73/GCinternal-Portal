@@ -14,6 +14,8 @@ import {
   type BriefPlan,
 } from "../schemas";
 import { BRIEF_SYSTEM_PROMPT } from "./prompt";
+import type { PurchaseRecord } from "./purchased";
+import { finalizeRequirements } from "./requirements";
 import { verifyBrief } from "./verify";
 
 /**
@@ -32,6 +34,8 @@ export type BriefContext = {
   sources: DealSources;
   /** The kept SOW reading, when one exists: the brief agrees with it rather than reading the SOW a third way. */
   sowReading: SowReading | null;
+  /** Which document records what was bought — and so which one `sowReading` read. */
+  purchaseRecord: PurchaseRecord;
   /** Every pass sends exactly this first, its own task after it. */
   prefix: BetaContentBlockParam[];
   /** One system prompt for all three passes; the client caches it per pass across deals. */
@@ -46,7 +50,7 @@ export async function buildBriefContext(
   dealId: string,
   opts: { sources?: DealSources | undefined; jobId?: string | null | undefined } = {},
 ): Promise<BriefContext> {
-  const { loadDealSources, sharedPrefix } = await import("../ai/sources");
+  const { loadDealSources, purchaseRecordOf, sharedPrefix } = await import("../ai/sources");
   const sources = opts.sources ?? (await loadDealSources(dealId));
   // The reading of the document the sow step read — the SOW, else the
   // contract on a seats-only deal — and only of those bytes: an older
@@ -61,6 +65,7 @@ export async function buildBriefContext(
     dealId,
     sources,
     sowReading,
+    purchaseRecord: purchaseRecordOf(sources),
     prefix: sharedPrefix(sources, { sowReading }),
     system: BRIEF_SYSTEM_PROMPT,
     effort: await aiEffort("brief"),
@@ -91,7 +96,13 @@ export async function runBriefCore(
     dealId: ctx.dealId,
     jobId: ctx.jobId ?? null,
   });
-  return { core: result.data, usage: result.usage };
+  // The customer's needs, tidied and with the literal backstop behind the
+  // model's list: a QR code the calls name is never lost.
+  const core = {
+    ...result.data,
+    requirements: finalizeRequirements(result.data.requirements, ctx.sources.callsText),
+  };
+  return { core, usage: result.usage };
 }
 
 export async function runBriefPlan(
@@ -134,16 +145,23 @@ export async function runBriefVerify(
       callsText: ctx.sources.callsText,
       sow: readableSow(ctx),
       jobId: ctx.jobId ?? null,
+      purchase: { reading: ctx.sowReading, record: ctx.purchaseRecord },
     },
     brief,
     now,
   );
 }
 
-/** The SOW when it was read, for the verifier's text check; null when it could not be. */
+/**
+ * The document a "sow" quote is checked against: the SOW when it was
+ * read, else the contract (a seats-only deal's record of the sale); null
+ * when neither could be.
+ */
 export function readableSow(ctx: Pick<BriefContext, "sources">): PreparedDocument | null {
   const sow = ctx.sources.sow;
-  return sow && !sow.problem ? sow : null;
+  if (sow && !sow.problem) return sow;
+  const contract = ctx.sources.contract;
+  return contract && !contract.problem ? contract : null;
 }
 
 /** The three passes in a row: a person's brief, or a test of the whole. */

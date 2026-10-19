@@ -56,8 +56,10 @@ function WelcomeTokenPage() {
     refetchInterval: 10_000,
     refetchIntervalInBackground: false,
   });
+  // A read that answers null is a link turned off or replaced: the page
+  // stops showing the plan at once. A failed read keeps the current view.
   useEffect(() => {
-    if (live.data) setView(live.data);
+    if (live.data !== undefined) setView(live.data);
   }, [live.data]);
 
   if (!view) {

@@ -1,5 +1,6 @@
 import { flowAnswered, intakeStatus, readIntake, type IntakeAnswers } from "./intake-answers";
 import { closeDateFor, timelineFor } from "./onboarding-plan";
+import { paperworkOnFile, type PaperworkOnFile } from "./won-gate";
 
 /**
  * The deal page's order of work, computed from the record. Pure, so the
@@ -25,6 +26,12 @@ export function guideSteps(input: {
   gongReports: number;
   aiBriefs: number;
   hasSow: boolean;
+  /**
+   * The deal's paperwork by paperworkOnFile (a SOW, a contract, or a stated
+   * no-SOW reason). When given, it alone decides the paper step; otherwise
+   * hasSow is a SOW and the intake is read for a contract or a reason.
+   */
+  paperwork?: PaperworkOnFile | null;
   /** The signed SOW document itself, which the plan reads; defaults to hasSow. */
   hasSowDocument?: boolean;
   shareUrl: string | null;
@@ -39,6 +46,13 @@ export function guideSteps(input: {
 }): GuideStep[] {
   const a: IntakeAnswers = readIntake(input.intake);
   const sowDocument = input.hasSowDocument ?? input.hasSow;
+  // Any upload ticks the paper step: no Yes/No click is needed first.
+  const paper: PaperworkOnFile | null =
+    input.paperwork !== undefined
+      ? input.paperwork
+      : input.hasSow
+        ? "sow"
+        : paperworkOnFile({ intake: input.intake });
   const status = intakeStatus(a);
   const close = closeDateFor({
     intake: a,
@@ -76,8 +90,8 @@ export function guideSteps(input: {
           ? "Say whether there is a SOW. Upload it, or the contract — seats and term travel with the deal."
           : a.has_sow
             ? "Upload the signed SOW under step 1."
-            : "No SOW: upload the contract under step 1 so the seat count is on the record.",
-      done: a.has_sow === true ? input.hasSow : a.has_sow === false ? Boolean(a.contract) : false,
+            : "No SOW: upload the contract under step 1 so the seat count is on the record, or say why there is no SOW.",
+      done: paper !== null,
       panel: { key: "deal:intake", id: "panel-intake" },
     },
     {

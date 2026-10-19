@@ -5,6 +5,7 @@ import { groundOnboarding, quoteHolds, quoteInText } from "@/lib/onboarding-grou
 import { aiConfigured } from "../ai/config";
 import { runStructured, type AiUsage } from "../ai/client";
 import type { PreparedDocument } from "../ai/documents";
+import { splitPurchased, type PurchaseReading, type PurchaseRecord } from "./purchased";
 import {
   onboardingSchema,
   STAKEHOLDER_ROLE_KINDS,
@@ -56,6 +57,18 @@ export const verifiedBriefSchema = z4.object({
       }),
     ),
     it_contact: quotedValue,
+    /** Each "System · what it does" line kept, with the words it rests on. */
+    integrations: z4.array(z4.object({ value: z4.string(), ...grounded })),
+  }),
+  welcome: z4.object({
+    focus_items: z4.array(
+      z4.object({
+        text: z4.string(),
+        source_type: z4.enum(["sow", "gong", "intake"]),
+        source_label: z4.string(),
+        ...grounded,
+      }),
+    ),
   }),
   stakeholders: z4.array(
     z4.object({
@@ -88,8 +101,15 @@ export type VerifyContext = {
   /** The brief passes' shared effort, so the verifier's request matches their cached prefix. */
   effort?: import("../ai/config").AiEffort | undefined;
   callsText: string;
+  /** The document a "sow" quote is checked against: the SOW, else the contract. */
   sow: PreparedDocument | null;
   jobId?: string | null | undefined;
+  /**
+   * The kept reading of the SOW or the contract and which it was. When
+   * given, the purchased-scope rule runs after the check, on every path —
+   * the checker's answer, or the grounded first reading when it did not run.
+   */
+  purchase?: { reading: PurchaseReading | null; record: PurchaseRecord } | undefined;
 };
 
 type Grounded = { quote: string; source: "calls" | "sow" | "notes"; page: number | null };
@@ -110,6 +130,24 @@ export function itemHolds(
     return Boolean(sow?.text) && quoteInText(item.quote, sow!.text!);
   }
   return quoteHolds(item.quote, item.source, callsText);
+}
+
+/**
+ * A requirement's quote, by the same rule: one from the SOW or the
+ * contract is checked against the document's text when it is text, one
+ * from the calls must be in them. Never dropped for it — marked.
+ */
+function requirementHolds(
+  r: { quote: string; source: string },
+  callsText: string,
+  sow: PreparedDocument | null,
+): boolean {
+  const fromDocument = /^(sow|contract|statement of work|order form)\b/i.test(r.source.trim());
+  return itemHolds(
+    { quote: r.quote, source: fromDocument ? "sow" : "calls", page: null },
+    callsText,
+    sow,
+  );
 }
 
 /**
@@ -144,9 +182,44 @@ export function applyVerification(
   single("kickoff.licensed_seats", verified.kickoff.licensed_seats, !!brief.kickoff.licensed_seats);
   single("kickoff.renewal_date", verified.kickoff.renewal_date, !!brief.kickoff.renewal_date);
   single("kickoff.it_contact", verified.kickoff.it_contact, !!brief.kickoff.it_contact);
+  // An answer with no word on the integrations (a checker from before they
+  // were asked for) leaves them as they were, each marked to confirm.
+  const asked = verified.kickoff.integrations as
+    VerifiedBrief["kickoff"]["integrations"] | undefined;
+  const integrations = asked
+    ? list("kickoff.integrations", asked, brief.kickoff.integrations.length).map((x) => x.value)
+    : brief.kickoff.integrations.map((value, i) => {
+        fields[`kickoff.integrations[${i}]`] = "unverified";
+        return value;
+      });
   const stakeholders = list("stakeholders", verified.stakeholders, brief.stakeholders.length);
   const goals = list("goals", verified.goals, brief.goals.length);
   const dates = list("dates", verified.dates, (brief.dates ?? []).length);
+  // The welcome page's focus items, when the brief has a welcome block; the
+  // same rule when the answer said nothing about them.
+  const focusAsked = (verified.welcome as VerifiedBrief["welcome"] | undefined)?.focus_items;
+  const focus = brief.welcome
+    ? focusAsked
+      ? list("welcome.focus_items", focusAsked, brief.welcome.focus_items.length).map(
+          ({ text, source_type, source_label, quote }) => ({
+            text,
+            source_type,
+            source_label,
+            quote,
+          }),
+        )
+      : brief.welcome.focus_items.map((f, i) => {
+          fields[`welcome.focus_items[${i}]`] = "unverified";
+          return f;
+        })
+    : null;
+  // The requirements are not the checker's to change: each is marked by
+  // whether its words are found, and kept either way.
+  (brief.requirements ?? []).forEach((r, i) => {
+    fields[`requirements[${i}]`] = requirementHolds(r, input.callsText, input.sow)
+      ? "grounded"
+      : "unverified";
+  });
 
   // The onboarding block as before: the code rules drop what cannot be
   // quoted, and the map says which forms and whether the flow held.
@@ -184,8 +257,10 @@ export function applyVerification(
       licensed_seats: verified.kickoff.licensed_seats?.value ?? null,
       renewal_date: verified.kickoff.renewal_date?.value ?? null,
       it_contact: verified.kickoff.it_contact?.value ?? null,
+      integrations,
     },
     ...(onboarding ? { onboarding } : {}),
+    ...(brief.welcome && focus ? { welcome: { ...brief.welcome, focus_items: focus } } : {}),
     verification: { checked_at: input.checkedAt, fields },
   };
 }
@@ -198,6 +273,13 @@ export function unverifiedMap(brief: BriefJson, checkedAt: string): BriefVerific
   if (brief.kickoff.licensed_seats) fields["kickoff.licensed_seats"] = "unverified";
   if (brief.kickoff.renewal_date) fields["kickoff.renewal_date"] = "unverified";
   if (brief.kickoff.it_contact) fields["kickoff.it_contact"] = "unverified";
+  brief.kickoff.integrations.forEach(
+    (_, i) => (fields[`kickoff.integrations[${i}]`] = "unverified"),
+  );
+  (brief.welcome?.focus_items ?? []).forEach(
+    (_, i) => (fields[`welcome.focus_items[${i}]`] = "unverified"),
+  );
+  (brief.requirements ?? []).forEach((_, i) => (fields[`requirements[${i}]`] = "unverified"));
   brief.stakeholders.forEach((_, i) => (fields[`stakeholders[${i}]`] = "unverified"));
   brief.goals.forEach((_, i) => (fields[`goals[${i}]`] = "unverified"));
   (brief.dates ?? []).forEach((_, i) => (fields[`dates[${i}]`] = "unverified"));
@@ -223,9 +305,18 @@ export async function verifyBrief(
   const onboarding = groundOnboarding(brief.onboarding, ctx.callsText);
   const grounded: BriefJson = { ...brief, ...(onboarding ? { onboarding } : {}) };
   const checkedAt = now().toISOString();
+  // What was bought, after whichever check ran: the rule is code, so it
+  // holds when the checker did not.
+  const purchased = (b: BriefJson): BriefJson =>
+    ctx.purchase
+      ? splitPurchased(b, ctx.purchase.reading, {
+          record: ctx.purchase.record,
+          callsText: ctx.callsText,
+        })
+      : b;
   if (!aiConfigured()) {
     return {
-      brief: { ...grounded, verification: unverifiedMap(grounded, checkedAt) },
+      brief: purchased({ ...grounded, verification: unverifiedMap(grounded, checkedAt) }),
       usage: null,
     };
   }
@@ -244,17 +335,19 @@ export async function verifyBrief(
       jobId: ctx.jobId ?? null,
     });
     return {
-      brief: applyVerification(grounded, data, {
-        callsText: ctx.callsText,
-        sow: ctx.sow,
-        checkedAt,
-      }),
+      brief: purchased(
+        applyVerification(grounded, data, {
+          callsText: ctx.callsText,
+          sow: ctx.sow,
+          checkedAt,
+        }),
+      ),
       usage,
     };
   } catch (e) {
     console.error("[brief] the verifier did not run; the grounded first reading stands", e);
     return {
-      brief: { ...grounded, verification: unverifiedMap(grounded, checkedAt) },
+      brief: purchased({ ...grounded, verification: unverifiedMap(grounded, checkedAt) }),
       usage: null,
     };
   }

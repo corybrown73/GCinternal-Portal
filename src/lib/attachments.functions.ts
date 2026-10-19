@@ -62,6 +62,37 @@ export const uploadAttachment = createServerFn({ method: "POST" })
     return addAccountUpload({ ...data, actorProfileId: context.profile.id });
   });
 
+/**
+ * The customer page's "Attach SOW" stored a file (under sow/): make it the
+ * deal's SOW too and queue the reading, as a deal-page upload does.
+ */
+export const adoptImplementationSow = createServerFn({ method: "POST" })
+  .middleware([requireDealEditor])
+  .inputValidator((data: unknown) =>
+    z
+      .object({
+        implementationId: z.string().uuid(),
+        // Only what storeAttachment wrote for a SOW: a path in the sow/ folder.
+        path: z
+          .string()
+          .min(5)
+          .max(400)
+          .regex(/^sow\/[A-Za-z0-9._-]+$/),
+        name: z.string().trim().min(1).max(255),
+      })
+      .parse(data),
+  )
+  .handler(async ({ data, context }) => {
+    const { adoptUploadedSow } = await import("./server/deal-sow");
+    return adoptUploadedSow({
+      implementationId: data.implementationId,
+      path: data.path,
+      name: data.name,
+      actorProfileId: context.profile.id,
+      source: "customer_sow_panel",
+    });
+  });
+
 export const openAttachment = createServerFn({ method: "POST" })
   .middleware([requireInternalAuth])
   .inputValidator((data: unknown) => z.object({ id: z.string().uuid() }).parse(data))

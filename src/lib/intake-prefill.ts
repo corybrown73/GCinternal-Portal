@@ -348,13 +348,52 @@ export function prefillHandoffFromSynthesis(
     write("agreed_start", `${start.date}${start.quote ? ` — ${start.quote}` : ""}`, start.quote);
   }
 
+  // "Systems and requirements" is shared with the customer: only what was
+  // bought goes there. The brief's integrations are the purchased ones once
+  // the purchase check has run; a line it moved to "discussed, not
+  // purchased" is never written here, whatever an older brief still holds.
+  // A line still marked "unverified" (no reading of the SOW or contract
+  // says it was sold, or none showed the words) stays internal too, as an
+  // open question, until a person confirms it.
+  const discussed = (b.discussed_not_purchased ?? []).filter((d) => d.item?.trim());
+  const notBought = new Set(discussed.map((d) => d.item.trim().toLowerCase()));
+  const checks = b.verification?.fields ?? {};
+  const named = (b.kickoff?.integrations ?? [])
+    .map((s, i) => ({ s, unconfirmed: checks[`kickoff.integrations[${i}]`] === "unverified" }))
+    .filter(({ s }) => s?.trim() && !notBought.has(s.trim().toLowerCase()));
+  const unconfirmed = named.filter((n) => n.unconfirmed).map((n) => n.s.trim());
   const systems = [
-    ...(b.kickoff?.integrations ?? []),
+    ...named.filter((n) => !n.unconfirmed).map((n) => n.s),
     ...(b.kickoff?.it_contact ? [`IT contact: ${b.kickoff.it_contact}`] : []),
   ].filter(Boolean);
   if (systems.length) write("system_requirements", systems.join("\n"), systems[0] ?? null);
+  else if (b.discussed_not_purchased !== undefined || unconfirmed.length) {
+    // A reading that checked what was bought and found nothing to connect
+    // (or nothing confirmed yet) takes back its own earlier answer here — one
+    // written before the check could have named a system only the calls
+    // mentioned. A person's or the customer's answer is never touched.
+    const current = intake.handoff.answers["system_requirements"];
+    if (current && current.source === "ai" && isAnswered(current.value)) {
+      answers["system_requirements"] = { value: null, source: "ai", at, by: null, quote: null };
+      filled.push(
+        `${handoffQuestion("system_requirements")?.label ?? "system_requirements"} (cleared: ${unconfirmed.length ? "to confirm against the SOW or contract" : "nothing to connect was bought"})`,
+      );
+    }
+  }
 
-  const open = (b.risks_open_items ?? []).filter(Boolean);
+  // Open questions are internal (not shared): what the calls left
+  // unanswered, and what they talked about that nobody bought.
+  const risks = (b.risks_open_items ?? []).filter(Boolean);
+  const said = risks.join("\n").toLowerCase();
+  const open = [
+    ...risks,
+    ...discussed
+      .filter((d) => !said.includes(d.item.trim().toLowerCase()))
+      .map((d) => `Discussed on the calls, not purchased: ${d.item.trim()}`),
+    ...unconfirmed
+      .filter((u) => !said.includes(u.toLowerCase()))
+      .map((u) => `Integration to confirm against the SOW or contract: ${u}`),
+  ];
   if (open.length) write("open_questions", open.join("\n"), open[0] ?? null);
 
   // The customer's half, drafted from the calls for them to confirm.

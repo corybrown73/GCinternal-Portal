@@ -18,6 +18,7 @@ import type { AccountStage } from "./presale-stages";
 import { isPartnerDeal } from "./partner-implementation";
 import { handoffChecks } from "./sales-handoff";
 import { TEAM_ZONE, localIso, shortDay, type Timeline } from "./onboarding-timeline";
+import { paperworkOnFile, paperworkSummary, type PaperworkOnFile } from "./won-gate";
 
 /**
  * The deal's stages as a checklist: what each stage asks of the person who
@@ -300,7 +301,16 @@ export type StageFlowInput = {
   /** The implementation owner's name, when there is one. */
   owner: string | null;
   gongReports: number;
-  hasSow: boolean;
+  /**
+   * The deal's paperwork, by paperworkOnFile: a SOW, a contract, or a stated
+   * reason there is no SOW. The live callers pass it.
+   */
+  paperwork?: PaperworkOnFile | null;
+  /**
+   * The older yes/no, read only when `paperwork` is not given: true is a SOW;
+   * false falls back to what the intake itself holds (contract, no-SOW reason).
+   */
+  hasSow?: boolean;
   /** An AI brief has completed. */
   hasBrief: boolean;
   /** The customer's welcome link exists. */
@@ -414,7 +424,15 @@ function closedWonTasks(
   assignable: boolean,
 ): FlowTask[] {
   const hasNotes = input.gongReports > 0;
-  const paperDone = input.hasSow || a.has_sow === false;
+  // One rule (paperworkOnFile): a SOW, a contract, or a written reason there
+  // is no SOW. A bare "No" with neither no longer ticks the step.
+  const paper: PaperworkOnFile | null =
+    input.paperwork !== undefined
+      ? input.paperwork
+      : input.hasSow
+        ? "sow"
+        : paperworkOnFile({ intake: input.intake });
+  const paperDone = paper !== null;
   const flowDone = a.path !== null && flowAnswered(a);
   const built = input.hasBrief && input.hasLink;
   const reading = a.ai_reading;
@@ -423,7 +441,7 @@ function closedWonTasks(
   const before: string[] = [];
   if (a.path === null) before.push("the type of deal");
   if (!hasNotes) before.push("the Gong brief");
-  if (!paperDone) before.push("the SOW");
+  if (!paperDone) before.push("the SOW or contract");
   return [
     {
       key: "type",
@@ -461,7 +479,7 @@ function closedWonTasks(
       label: "Add the SOW",
       hint: "The signed SOW. Integrations and services come from it, never from the notes.",
       done: paperDone,
-      summary: input.hasSow ? "SOW on file" : a.has_sow === false ? "No SOW — core only" : null,
+      summary: paperworkSummary(paper, input.intake),
       action: "sow",
       locked: null,
     },
@@ -1512,6 +1530,12 @@ export function nudgesFor(args: {
   flow: StageFlow;
   /** Business days late, per training call not ticked, on Onboarding. */
   overdueCalls?: Array<{ key: string; label: string; date: string; businessDaysLate: number }>;
+  /**
+   * A person logged work on the deal or its live project within the last
+   * three business days (deal-activity.ts): the 'Waiting:' reminder is spared.
+   * 'Stuck:' still goes out.
+   */
+  recentlyWorked?: boolean;
 }): Nudge[] {
   const out: Nudge[] = [];
   const visit = `${args.stage}@${args.enteredAt.slice(0, 10)}`;
@@ -1548,7 +1572,7 @@ export function nudgesFor(args: {
     );
   }
   const level = stuckLevel(args.stage, args.businessDaysInStage);
-  if (level !== "ok" && !unowned) {
+  if (level !== "ok" && !unowned && !(level === "warn" && args.recentlyWorked)) {
     const where = current?.label ?? args.stage;
     out.push({
       key: `${visit}:${level}`,
@@ -1565,20 +1589,23 @@ export function nudgesFor(args: {
 /**
  * The overdue rule, shared by the standard checklist and a partner's own
  * milestones and work items: an item two business days late or more, to its
- * owner, once per visit to the stage.
+ * owner, once per call and date (`overdue:<key>@<date>`). Moving to the next
+ * stage does not re-send it; moving the item's date re-arms it. Rows sent
+ * under the old per-visit key are carried over silently by the sweep
+ * (overdueCarryOver in nudges.server.ts).
  */
 export function overdueNudges(args: {
   name: string;
-  visit: string;
+  /** The stage visit; no longer part of the key (kept for callers). */
+  visit?: string;
   overdueCalls?:
     Array<{ key: string; label: string; date: string; businessDaysLate: number }> | undefined;
 }): Nudge[] {
   const out: Nudge[] = [];
-  const visit = args.visit;
   for (const c of args.overdueCalls ?? []) {
     if (c.businessDaysLate < 2) continue;
     out.push({
-      key: `${visit}:overdue:${c.key}`,
+      key: `overdue:${c.key}@${c.date}`,
       level: "warn",
       to: "owner",
       subject: `Overdue: ${args.name} — ${c.label}`,

@@ -8,6 +8,8 @@ import {
   setSowDocumentForImplementation,
   uploadAttachment,
 } from "@/lib/hub.functions";
+import { adoptImplementationSow } from "@/lib/attachments.functions";
+import { invalidatePaperwork } from "@/lib/paperwork-cache";
 import { fileToBase64, MAX_ATTACHMENT_BYTES } from "@/lib/attachment-client";
 import {
   CONFIDENCE_LABEL,
@@ -165,6 +167,7 @@ export function SowAnalysisPanel({
   const applyProposal = useServerFn(applySowProposalToImplementation);
   const attachSow = useServerFn(setSowDocumentForImplementation);
   const upload = useServerFn(uploadAttachment);
+  const adopt = useServerFn(adoptImplementationSow);
 
   type Run = {
     id: number;
@@ -214,6 +217,12 @@ export function SowAnalysisPanel({
             dataBase64: await fileToBase64(newFile),
           },
         });
+        // Every SOW upload is the deal's SOW (newest wins) and queues a
+        // reading. Adopted before the project is pointed at it, so the file
+        // the project held until now is still there to keep under Files & links.
+        await adopt({
+          data: { implementationId, path: stored.path, name: stored.name },
+        });
         await attachSow({
           data: {
             implementationId,
@@ -221,7 +230,11 @@ export function SowAnalysisPanel({
             documentName: stored.name,
           },
         });
-        await queryClient.invalidateQueries({ queryKey: ["customer360", customerId] });
+        // The deal, its pulse, Home and the welcome page read the same SOW now.
+        await Promise.all([
+          queryClient.invalidateQueries({ queryKey: ["customer360", customerId] }),
+          invalidatePaperwork(queryClient, null),
+        ]);
       }
       return analyze({ data: { implementationId } });
     },

@@ -600,6 +600,8 @@ export const saveIntake = createServerFn({ method: "POST" })
             training_only: z.boolean().optional(),
             solutions_involved: z.boolean().nullable().optional(),
             has_sow: z.boolean().nullable().optional(),
+            // "Or say why there is no SOW": a stated reason counts as the paperwork.
+            no_sow_reason: z.string().trim().max(1000).nullable().optional(),
             existing: z
               .object({
                 form_final: z.boolean().nullable().optional(),

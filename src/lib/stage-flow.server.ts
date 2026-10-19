@@ -2,7 +2,7 @@ import { supabaseAdmin } from "@/integrations/supabase/client.server";
 
 import { isPreClose, type AccountStage } from "./presale-stages";
 import { STAGE_GATE, stageFlow } from "./stage-flow";
-import { hasSowOnFile } from "./won-gate";
+import { paperworkOnFile } from "./won-gate";
 
 const db = () => supabaseAdmin as any;
 
@@ -64,7 +64,9 @@ export async function flowForDeal(
 ): Promise<{ account: { id: string; stage: string }; flow: ReturnType<typeof stageFlow> } | null> {
   const { data: account } = await db()
     .from("portal_accounts")
-    .select("id,stage,intake,customer_id,sow_document_path,sow_reference,welcome_share_url")
+    .select(
+      "id,stage,intake,customer_id,sow_document_path,sow_document_url,sow_reference,welcome_share_url",
+    )
     .eq("id", dealId)
     .maybeSingle();
   if (!account) return null;
@@ -130,7 +132,7 @@ export async function flowForDeal(
     intake: account.intake,
     owner,
     gongReports: reports ?? 0,
-    hasSow: hasSowOnFile(account),
+    paperwork: paperworkOnFile(account),
     hasBrief: (briefs ?? 0) > 0,
     hasLink: Boolean(account.welcome_share_url),
     timeline,

@@ -192,7 +192,27 @@ export async function addAccountUpload(args: {
     }
     throw new Error(error.message);
   }
-  return { ok: true, id: data.id as string };
+  // A SOW filed here is the deal's SOW too (newest wins), and the reading is
+  // queued. The file stays in this list either way; adopting it never fails
+  // the upload that already succeeded.
+  let becameDealSow = false;
+  if (args.kind === "sow") {
+    try {
+      const { adoptUploadedSow } = await import("./server/deal-sow");
+      const r = await adoptUploadedSow({
+        implementationId: args.implementationId,
+        path,
+        name: args.fileName,
+        actorProfileId: args.actorProfileId,
+        source: "files_and_links",
+        bytes: new Uint8Array(binary),
+      });
+      becameDealSow = r.adopted;
+    } catch (e) {
+      console.error("[attachments] saved the SOW but could not make it the deal's SOW", e);
+    }
+  }
+  return { ok: true, id: data.id as string, becameDealSow };
 }
 
 /**
@@ -244,6 +264,10 @@ export async function removeAccountFile(id: string) {
   const path = (row as Record<string, string | null>)["storage_path"];
   if (path) {
     try {
+      // A SOW filed here may be the deal's SOW (or its project's): then only
+      // the row goes, and the file the deal points at stays.
+      const { sowObjectReferenced } = await import("./server/deal-sow");
+      if (await sowObjectReferenced(path)) return { ok: true, removed: true };
       await db().storage.from(BUCKET).remove([path]);
     } catch (e) {
       console.error("[attachments] row removed but the object remains", e);

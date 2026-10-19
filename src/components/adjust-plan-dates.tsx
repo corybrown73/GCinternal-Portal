@@ -3,6 +3,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { ChevronRight } from "lucide-react";
 
+import { functionalRecordedWarning, graduationNote } from "@/lib/adjust-plan-notes";
 import { TIER_REASON_CODES, type TargetReasonCode } from "@/lib/complexity-tiers";
 import type { IntakeAnswers } from "@/lib/intake-answers";
 import { timelineFor } from "@/lib/onboarding-plan";
@@ -86,6 +87,8 @@ export function AdjustPlanDatesPanel({
   const [reason, setReason] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  // A milestone move was saved: the graduation line stays in view after it.
+  const [savedMove, setSavedMove] = useState(false);
 
   const [targetOpen, setTargetOpen] = useState(false);
   const [targetNewDate, setTargetNewDate] = useState("");
@@ -116,6 +119,14 @@ export function AdjustPlanDatesPanel({
         // moved, which is what "preserve completed milestones" means here.
         .filter(({ m, after }) => !m.doneOn && m.date !== after.date)
     : [];
+  const functionalWarning =
+    preview && selected
+      ? functionalRecordedWarning({
+          liveDoneOn: current.liveDoneOn,
+          milestoneLabel: selected.label,
+          newDate,
+        })
+      : null;
 
   const valid =
     editable &&
@@ -139,10 +150,15 @@ export function AdjustPlanDatesPanel({
     onMutate: () => {
       setError(null);
       setNotice(null);
+      setSavedMove(false);
     },
     onSuccess: (saved) => {
       void qc.invalidateQueries({ queryKey: ["deal", dealId] });
       void qc.invalidateQueries({ queryKey: ["customer360", customerId] });
+      void qc.invalidateQueries({ queryKey: ["customer-dashboard-preview", dealId] });
+      void qc.invalidateQueries({ queryKey: ["home"] });
+      void qc.invalidateQueries({ queryKey: ["calendar"] });
+      setSavedMove(true);
       setMilestoneKey("");
       setNewDate("");
       setReason("");
@@ -183,6 +199,9 @@ export function AdjustPlanDatesPanel({
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["deal", dealId] });
       void qc.invalidateQueries({ queryKey: ["customer360", customerId] });
+      void qc.invalidateQueries({ queryKey: ["customer-dashboard-preview", dealId] });
+      void qc.invalidateQueries({ queryKey: ["home"] });
+      void qc.invalidateQueries({ queryKey: ["calendar"] });
       setTargetOpen(false);
       setTargetNewDate("");
       setTargetReasonCode("");
@@ -202,6 +221,9 @@ export function AdjustPlanDatesPanel({
         <ChevronRight className={cn("h-3.5 w-3.5 text-muted-foreground", open && "rotate-90")} />
         Adjust plan dates
       </button>
+      {savedMove && !preview ? (
+        <p className="px-4 pb-2.5 text-[11px] text-muted-foreground">{graduationNote(intake)}</p>
+      ) : null}
       {open ? (
         <div className="space-y-2.5 border-t border-border px-4 py-3">
           <p className="text-[11px] text-muted-foreground">
@@ -288,6 +310,17 @@ export function AdjustPlanDatesPanel({
                       ))}
                     </ul>
                   ) : null}
+                  {functionalWarning ? (
+                    <p
+                      role="status"
+                      className="border-t border-amber-500/40 bg-amber-500/10 px-3 py-1.5 text-[12px] text-amber-800 dark:text-amber-300"
+                    >
+                      {functionalWarning}
+                    </p>
+                  ) : null}
+                  <p className="border-t border-border px-3 py-1.5 text-[11px] text-muted-foreground">
+                    {graduationNote(intake)}
+                  </p>
                 </div>
               ) : null}
 

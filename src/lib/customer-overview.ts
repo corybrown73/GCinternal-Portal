@@ -5,7 +5,7 @@ import { closeDateFor, timelineFor } from "@/lib/onboarding-plan";
 import { normalizeServices, type ServiceSpec } from "@/lib/onboarding-services";
 import { shortDay } from "@/lib/onboarding-timeline";
 import { wonStage } from "@/lib/pipeline-stages";
-import { hasSowOnFile } from "@/lib/won-gate";
+import { paperworkOnFile } from "@/lib/won-gate";
 import { workspaceFor, type WorkspaceInput } from "@/lib/workspace";
 import {
   partnerDashboardView,
@@ -148,7 +148,7 @@ export function standardSnapshot(input: {
           intake,
           owner: impl.owner_name,
           gongReports: deal.gong_reports.length,
-          hasSow: hasSowOnFile(deal.account),
+          paperwork: paperworkOnFile(deal.account),
           hasBrief: deal.briefs.some((b) => b.status === "complete" && b.generator === "llm"),
           hasLink: Boolean(
             (deal.account as { welcome_share_url?: string | null }).welcome_share_url,
