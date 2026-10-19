@@ -1,32 +1,29 @@
 import {
   customerCommitmentView,
-  isCustomerVisibleCommitment,
+  isCustomerCommitment,
   type CommitmentState,
 } from "./commitment-status";
 
 /**
- * The customer portal's view of commitments, as pure functions so the rules
- * can be tested without a database. The words and the overdue test come from
- * commitment-status.ts, the same ones the shared plan uses.
+ * GoCanvas promises, as the customer portal shows them. Pure functions, so the
+ * rules can be tested without a database. The words and the overdue test come
+ * from commitment-status.ts, the same ones the shared plan uses.
+ *
+ * A commitment is shown here only when `committed_to` is exactly "customer".
+ * Anything else was made to our own team, or to someone we have not named for
+ * the customer, and is not part of this view.
  */
-export type CommitmentStep = {
+export type CustomerCommitment = {
   id: string;
-  kind: "commitment";
   title: string;
   due_date: string | null;
   overdue: boolean;
-  /** Who the item sits with, when recorded (commitments.committed_to). */
-  who: string | null;
   implementation_name: string;
   state: CommitmentState;
   status_label: string;
 };
 
-/**
- * Commitments the customer may see, in the shared customer words. Made to our
- * own team is left out. `today` is YYYY-MM-DD, the same day the shared plan uses.
- */
-export function commitmentSteps(
+export function customerCommitments(
   rows: ReadonlyArray<{
     id: string;
     implementation_id: string;
@@ -37,18 +34,16 @@ export function commitmentSteps(
   }>,
   implementationName: ReadonlyMap<string, string>,
   today: string,
-): CommitmentStep[] {
+): CustomerCommitment[] {
   return rows
-    .filter((c) => isCustomerVisibleCommitment(c.committed_to))
+    .filter((c) => isCustomerCommitment(c.committed_to))
     .map((c) => {
       const view = customerCommitmentView(c, today);
       return {
         id: c.id,
-        kind: "commitment" as const,
         title: c.description,
         due_date: c.due_date,
         overdue: view.overdue,
-        who: c.committed_to ?? null,
         implementation_name: implementationName.get(c.implementation_id) ?? "",
         state: view.state,
         status_label: view.status_label,
@@ -56,15 +51,24 @@ export function commitmentSteps(
     });
 }
 
+/** Earliest due first; an undated item goes last. */
+const byDueAscending = (a: CustomerCommitment, b: CustomerCommitment) =>
+  (a.due_date ?? "9999").localeCompare(b.due_date ?? "9999");
+
 /**
- * Items still to do come first, in due-date order. Done and withdrawn follow.
- * A step without a state (a milestone) counts as still to do.
+ * "What we owe you": every promise still owed, including renegotiated and
+ * missed ones, until it is actually delivered or withdrawn.
  */
-export function orderNextSteps<T extends { due_date: string | null; state?: CommitmentState }>(
-  steps: readonly T[],
-): T[] {
-  const rank = (s: T) => (s.state !== undefined && s.state !== "outstanding" ? 1 : 0);
-  return [...steps].sort(
-    (a, b) => rank(a) - rank(b) || (a.due_date ?? "9999").localeCompare(b.due_date ?? "9999"),
-  );
+export function owedToCustomer(items: readonly CustomerCommitment[]): CustomerCommitment[] {
+  return items.filter((c) => c.state === "outstanding").sort(byDueAscending);
+}
+
+/**
+ * "History": promises that are done or withdrawn. Most recently due first, so
+ * the latest settled item is at the top.
+ */
+export function commitmentHistory(items: readonly CustomerCommitment[]): CustomerCommitment[] {
+  return items
+    .filter((c) => c.state !== "outstanding")
+    .sort((a, b) => (b.due_date ?? "0000").localeCompare(a.due_date ?? "0000"));
 }

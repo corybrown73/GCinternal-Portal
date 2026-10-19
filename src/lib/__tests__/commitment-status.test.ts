@@ -6,7 +6,7 @@ import {
   commitmentState,
   customerCommitmentView,
   customerStatusLabel,
-  isCustomerVisibleCommitment,
+  isCustomerCommitment,
   isOutstandingCommitment,
 } from "../commitment-status";
 import { COMMITMENT_STATUSES } from "../delivery-input";
@@ -97,17 +97,23 @@ describe("customerStatusLabel", () => {
   });
 });
 
-describe("isCustomerVisibleCommitment", () => {
-  it("hides a commitment made to our own team, whatever the case or spacing", () => {
-    expect(isCustomerVisibleCommitment("internal")).toBe(false);
-    expect(isCustomerVisibleCommitment("Internal")).toBe(false);
-    expect(isCustomerVisibleCommitment("  internal ")).toBe(false);
+describe("isCustomerCommitment", () => {
+  it("shows a commitment only when it is exactly for the customer, ignoring case and spacing", () => {
+    expect(isCustomerCommitment("customer")).toBe(true);
+    expect(isCustomerCommitment("Customer")).toBe(true);
+    expect(isCustomerCommitment("  CUSTOMER ")).toBe(true);
   });
 
-  it("shows a commitment to the customer, or to a named party", () => {
-    expect(isCustomerVisibleCommitment("customer")).toBe(true);
-    expect(isCustomerVisibleCommitment("Ada")).toBe(true);
-    expect(isCustomerVisibleCommitment(null)).toBe(true);
+  it("hides our own team's commitments, and anything not exactly the customer", () => {
+    expect(isCustomerCommitment("internal")).toBe(false);
+    expect(isCustomerCommitment("Internal")).toBe(false);
+    expect(isCustomerCommitment("customers")).toBe(false);
+    expect(isCustomerCommitment("customer contact")).toBe(false);
+    expect(isCustomerCommitment("Ada")).toBe(false);
+    expect(isCustomerCommitment("GoCanvas team")).toBe(false);
+    expect(isCustomerCommitment("")).toBe(false);
+    expect(isCustomerCommitment(null)).toBe(false);
+    expect(isCustomerCommitment(undefined)).toBe(false);
   });
 });
 

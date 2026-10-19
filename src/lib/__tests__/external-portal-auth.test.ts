@@ -253,7 +253,7 @@ function seed(): Rows {
         implementation_id: IMPL_A,
         description: "Ship the integration guide",
         due_date: "2026-09-01",
-        committed_to: "Ada",
+        committed_to: "customer",
         fulfilled_at: null,
       },
     ],
@@ -1146,7 +1146,7 @@ describe("8. customer commitment states (#81)", () => {
     implementation_id: IMPL_A,
     description,
     due_date: PAST,
-    committed_to: "Ada",
+    committed_to: "customer",
     status,
     fulfilled_at: null,
     ...over,
@@ -1215,17 +1215,26 @@ describe("8. customer commitment states (#81)", () => {
   it("never shows a commitment made to our own team, through any door", async () => {
     withCommitments([
       row("i", "Internal follow-up with the crew", "open", { committed_to: "internal" }),
-      row("v", "Visible to Ada", "open"),
+      row("v", "Visible to the customer", "open"),
     ]);
     const plan = await loadSharedPlan(viewerA, KEY_A);
-    expect(plan.our_commitments.map((c) => c.description)).toEqual(["Visible to Ada"]);
+    expect(plan.our_commitments.map((c) => c.description)).toEqual(["Visible to the customer"]);
 
     const preview = await loadSharedPlan({ kind: "preview", profileId: OWNER }, KEY_A);
     expect(JSON.stringify(preview)).not.toContain("Internal follow-up with the crew");
-
     await generateSnapshot(IMPL_A, null);
     const content = fake.store["plan_snapshots"]![0]!.content;
     expect(JSON.stringify(content)).not.toContain("Internal follow-up with the crew");
+  });
+
+  it("shows only a promise whose audience is exactly the customer, not a named person", async () => {
+    withCommitments([
+      row("n", "Promised to a named person", "open", { committed_to: "Ada" }),
+      row("b", "Promised with no audience", "open", { committed_to: null }),
+      row("c", "Promised to the customer", "open", { committed_to: " Customer " }),
+    ]);
+    const plan = await loadSharedPlan(viewerA, KEY_A);
+    expect(plan.our_commitments.map((c) => c.description)).toEqual(["Promised to the customer"]);
   });
 
   it("the weekly snapshot owes only outstanding items, and names only the overdue ones", async () => {

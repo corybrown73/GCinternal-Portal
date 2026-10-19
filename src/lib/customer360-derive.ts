@@ -578,11 +578,6 @@ function formatOwner(name: string, role: string | null | undefined): string {
 /** Solution statuses that mean technical work is still outstanding. */
 const SOLUTION_OPEN = ["draft", "in_review", "review", "in_progress", "in_build", "build"];
 
-const isCustomerSide = (value: string | null | undefined) => {
-  const v = (value ?? "").toLowerCase();
-  return v.includes("customer") || v.includes("client");
-};
-
 export type WaitingOnInput = {
   technical_solutions?: any[];
   approvals?: any[];
@@ -668,30 +663,32 @@ export function waitingOn(input: WaitingOnInput): WaitingOn {
     }
   }
 
-  // 3. Customer-facing commitment already past due. `committed_to` is a party
-  // label ("customer"), not a specific contact, so no owner is invented here.
-  const customerCommitment = commitments.find(
-    (c: any) => isCustomerSide(c.committed_to) && isOverdue(c.due_date),
-  );
-  if (customerCommitment) {
-    const task = `deliver a commitment past due ${fmtDate(customerCommitment.due_date)}: ${customerCommitment.description}`;
-    return {
-      party: "customer",
-      reason: `Waiting on the customer to ${task}`,
-      since: customerCommitment.due_date ?? null,
-      source: "commitments",
-      owner: null,
-      task,
-    };
-  }
-
-  // 4. Implementation-side (TIS) work that is open.
+  // Implementation-side (TIS) work that is open. A commitment is a promise we
+  // make, so an outstanding one is ours to deliver, whoever it was made to. It
+  // is never the customer's to do.
   const bySeverity = (rows: any[]) =>
     [...rows].sort((a, b) => severityRank(a.severity) - severityRank(b.severity))[0];
   const ownerOf = (row: any): { name: string; role: string | null } | null =>
     row.owner_name ? { name: row.owner_name, role: row.owner_role ?? null } : null;
   const who = (owner: { name: string; role: string | null } | null) =>
     owner ? formatOwner(owner.name, owner.role) : WAITING_ON_LABEL.tis;
+
+  // A promise past its due date is the most urgent of our commitments.
+  const overdueCommitment = commitments.find(
+    (c: any) => isOutstandingCommitment(c.status) && isOverdue(c.due_date),
+  );
+  if (overdueCommitment) {
+    const owner = ownerOf(overdueCommitment);
+    const task = `deliver a commitment past due ${fmtDate(overdueCommitment.due_date)}: ${overdueCommitment.description}`;
+    return {
+      party: "tis",
+      reason: `Waiting on ${who(owner)} to ${task}`,
+      since: overdueCommitment.due_date ?? null,
+      source: "commitments",
+      owner,
+      task,
+    };
+  }
 
   const esc = bySeverity(escalations);
   if (esc) {
@@ -732,7 +729,7 @@ export function waitingOn(input: WaitingOnInput): WaitingOn {
       task,
     };
   }
-  const tisCommitment = commitments.find((c: any) => !isCustomerSide(c.committed_to));
+  const tisCommitment = commitments.find((c: any) => isOutstandingCommitment(c.status));
   if (tisCommitment) {
     const owner = ownerOf(tisCommitment);
     const task = `close an open commitment: ${tisCommitment.description}`;

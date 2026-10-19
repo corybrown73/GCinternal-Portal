@@ -68,7 +68,7 @@ describe("renderPlanPdf", () => {
           {
             description: "Shipped the guide",
             due_date: null,
-            committed_to: "Ada",
+            committed_to: "customer",
             done: true,
             state: "completed",
             status_label: "Done",
@@ -77,7 +77,7 @@ describe("renderPlanPdf", () => {
           {
             description: "Dropped the paper process",
             due_date: "2026-03-01",
-            committed_to: "Ada",
+            committed_to: "customer",
             done: false,
             state: "withdrawn",
             status_label: "Withdrawn",
@@ -86,7 +86,7 @@ describe("renderPlanPdf", () => {
           {
             description: "Deliver the report",
             due_date: "2026-03-01",
-            committed_to: "Ada",
+            committed_to: "customer",
             done: false,
             state: "outstanding",
             status_label: "Renegotiated — Outstanding",
@@ -103,6 +103,53 @@ describe("renderPlanPdf", () => {
     expect(text).toContain("Withdrawn");
     expect(text).toContain("Renegotiated");
     expect(text).toContain("Overdue");
+  });
+
+  it("lists what is owed first, then history with the done and withdrawn ones (#81)", async () => {
+    const bytes = await renderPlanPdf(
+      {
+        ...base,
+        our_commitments: [
+          {
+            description: "Shipped the guide",
+            due_date: null,
+            committed_to: "customer",
+            done: true,
+            state: "completed",
+            status_label: "Done",
+            overdue: false,
+          },
+          {
+            description: "Deliver the report",
+            due_date: "2026-03-01",
+            committed_to: "customer",
+            done: false,
+            state: "outstanding",
+            status_label: "Missed — Outstanding",
+            overdue: true,
+          },
+          {
+            description: "Dropped the paper process",
+            due_date: "2026-02-01",
+            committed_to: "customer",
+            done: false,
+            state: "withdrawn",
+            status_label: "Withdrawn",
+            overdue: false,
+          },
+        ],
+      },
+      "https://example.test/plan/x",
+    );
+    const text = Buffer.from(bytes).toString("latin1");
+    const owed = text.indexOf("What we owe you");
+    const history = text.indexOf("History");
+    expect(owed).toBeGreaterThan(-1);
+    expect(history).toBeGreaterThan(owed);
+    expect(text.indexOf("Deliver the report")).toBeGreaterThan(owed);
+    expect(text.indexOf("Deliver the report")).toBeLessThan(history);
+    expect(text.indexOf("Shipped the guide")).toBeGreaterThan(history);
+    expect(text.indexOf("Dropped the paper process")).toBeGreaterThan(history);
   });
 
   it("separates what is still open from what is already done", async () => {

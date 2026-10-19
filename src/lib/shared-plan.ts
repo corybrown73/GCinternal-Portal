@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { customerCommitmentView, isCustomerVisibleCommitment } from "./commitment-status";
+import { customerCommitmentView, isCustomerCommitment } from "./commitment-status";
 
 /**
  * The customer-facing projection. Pure: no I/O, no Supabase, no request.
@@ -467,10 +467,11 @@ export function buildSharedPlanDTO(inputs: SharedPlanInputs): SharedPlan {
     stage_intent: inputs.stage.intent,
     target_launch_date: inputs.implementation.target_launch_date,
     your_tasks,
-    // Made to our own team is never shown to the customer. The rest follow the
-    // shared commitment rules, so "done" comes from the status, not a date.
+    // Only promises whose audience is exactly "customer" are shown. Everything
+    // else was made to our own team or to someone not named for the customer,
+    // and is left out. "Done" comes from the status, not a date.
     our_commitments: inputs.commitments
-      .filter((c) => isCustomerVisibleCommitment(c.committed_to))
+      .filter((c) => isCustomerCommitment(c.committed_to))
       .map((c) => {
         const view = customerCommitmentView(c, today);
         return {

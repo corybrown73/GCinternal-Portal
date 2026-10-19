@@ -371,10 +371,7 @@ export async function loadSignals(now: Date = new Date()): Promise<SignalsView> 
       live_done_on: impl.live_done_on,
     };
 
-    const champion = championGoneQuiet(
-      { impl: context, dependency, approvals, commitments, engagement },
-      now,
-    );
+    const champion = championGoneQuiet({ impl: context, dependency, approvals, engagement }, now);
     const launch = launchDateAtRisk(
       {
         impl: context,

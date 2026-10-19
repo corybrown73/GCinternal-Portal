@@ -1,7 +1,8 @@
 /**
  * What a commitment's status means to the Hub: outstanding, completed or
- * withdrawn. One place, read by the internal Customer 360, Home, the calendar
- * and the internal alerts. The customer's own views are not read from here.
+ * withdrawn. One place, read by the internal Customer 360, Home, the calendar,
+ * the internal alerts, and every customer surface (shared plan, its PDF and
+ * snapshot, the portal). Who a promise is for is decided by isCustomerCommitment.
  *
  * The accepted vocabulary is `COMMITMENT_STATUSES` in `delivery-input.ts`, and
  * the database holds the stored text as written. Nothing here changes either,
@@ -60,12 +61,17 @@ export function customerStatusLabel(status: string | null | undefined): string {
 }
 
 /**
- * Commitments made to our own team are not for the customer. The write path
- * records the audience as `internal` (COMMITMENT_AUDIENCES); anything else is
- * a party the customer can see.
+ * A GoCanvas promise to the customer: `committed_to` is exactly "customer",
+ * ignoring case and surrounding spaces. This is the only audience the customer
+ * ever sees a commitment under. Nothing is inferred from a name, a blank, or
+ * any other wording: "internal", a person's name and a missing audience are all
+ * left out.
+ *
+ * Read by the shared plan (the live page, its PDF, the snapshot), the customer
+ * portal, the completion record and the internal triage, so they agree.
  */
-export function isCustomerVisibleCommitment(committedTo: string | null | undefined): boolean {
-  return (committedTo ?? "").trim().toLowerCase() !== "internal";
+export function isCustomerCommitment(committedTo: string | null | undefined): boolean {
+  return typeof committedTo === "string" && committedTo.trim().toLowerCase() === "customer";
 }
 
 export type CustomerCommitmentView = {

@@ -1,4 +1,5 @@
 import { GRADUATED_STAGE } from "./claimed-owner";
+import { isCustomerCommitment } from "./commitment-status";
 import type { Customer360, ImplementationRow, TriageBundle } from "./hub-types";
 import {
   deriveHealth,
@@ -260,12 +261,10 @@ function signalRow(impl: ImplementationRow, bundle: TriageBundle | undefined): Q
   const criticalRisk = topRisk && severityRank(topRisk.severity) === 0 ? topRisk : null;
   const highSignalPresent =
     Boolean(severeEscalation) || (topRisk != null && severityRank(topRisk.severity) <= 1);
+  // A promise made to the customer that is overdue, or any overdue commitment
+  // alongside a high-severity signal. Audience is exact: see isCustomerCommitment.
   const customerFacingOverdue =
-    overdueCommitment &&
-    (String(overdueCommitment.committed_to ?? "")
-      .toLowerCase()
-      .includes("customer") ||
-      highSignalPresent)
+    overdueCommitment && (isCustomerCommitment(overdueCommitment.committed_to) || highSignalPresent)
       ? overdueCommitment
       : null;
   const launchSlipped = launchOverdue(impl, bundle?.deal);
@@ -307,9 +306,7 @@ function signalRow(impl: ImplementationRow, bundle: TriageBundle | undefined): Q
   if (customerFacingOverdue) {
     return row(impl, "act_now", 1.5, "overview", {
       reason: `Commitment overdue${
-        String(customerFacingOverdue.committed_to ?? "")
-          .toLowerCase()
-          .includes("customer")
+        isCustomerCommitment(customerFacingOverdue.committed_to)
           ? " to customer"
           : " alongside a high-severity signal"
       }: ${customerFacingOverdue.description} (due ${fmtDate(customerFacingOverdue.due_date)})`,
