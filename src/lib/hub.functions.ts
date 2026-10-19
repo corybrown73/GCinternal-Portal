@@ -8,6 +8,7 @@ import { z } from "zod";
 import { EDITABLE_RECORD_FIELD_KEYS, type EditableRecordField } from "./record-fields";
 import { advanceStageInput } from "./stage-advance-input";
 import { analyzeSowInput, applySowProposalInput, setSowDocumentInput } from "./sow-analysis";
+import { signedInProfileId, signedInTeamMemberId } from "./session-identity";
 import { analyzeTranscriptInput, proposalDecisionInput } from "./transcript-analysis";
 import { SOLUTION_STATUSES } from "./solution-enums";
 import {
@@ -814,9 +815,16 @@ export const analyzeSowDocument = createServerFn({ method: "POST" })
 export const applySowProposalToImplementation = createServerFn({ method: "POST" })
   .middleware([requireInternalAuth])
   .inputValidator((data: unknown) => applySowProposalInput.parse(data))
-  .handler(async ({ data }) => {
-    const { applySowProposal } = await import("./sow-analysis.server");
-    return applySowProposal(data);
+  .handler(async ({ data, context }) => {
+    // Throws when the session has no signed-in user, so nothing is written.
+    signedInProfileId(context.profile);
+    // The author is the signed-in user's linked, active team member, read from the
+    // session. The request cannot name one. Refused before anything is written.
+    const { applySowProposal, resolveApplyingTeamMember } = await import("./sow-analysis.server");
+    const authorTeamMemberId = await resolveApplyingTeamMember(
+      signedInTeamMemberId(context.profile),
+    );
+    return applySowProposal({ ...data, authorTeamMemberId });
   });
 
 export const setSowDocumentForImplementation = createServerFn({ method: "POST" })

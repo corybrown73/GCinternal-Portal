@@ -377,9 +377,13 @@ export const TIMING_SOURCE_LABEL: Record<ProposedTiming["source"], string> = {
  * Implementation Specialist (TIS) ticks what should
  * be written, and anything not ticked is left exactly as it is.
  */
+/**
+ * What the client may send when applying a reviewed proposal. There is no author
+ * field: who applied it is the signed-in user, set by the server. A body that
+ * names an author has that field dropped by this schema and never read.
+ */
 export const applySowProposalInput = z.object({
   implementationId: z.string().uuid(),
-  authorId: z.string().uuid().nullable(),
   /** Appended to existing goals — never replaces them. */
   goals: z.string().trim().min(1).nullable(),
   requirements: z.array(z.string().trim().min(1)).max(60),

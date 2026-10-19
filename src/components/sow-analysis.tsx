@@ -28,8 +28,6 @@ import {
 import { LIFECYCLE_STAGES, STAGE_ALIASES } from "@/lib/lifecycle";
 import { fmtDate } from "@/lib/hub-format";
 import { downloadSowAnalysisPdf } from "@/lib/sow-pdf";
-import type { TeamOption } from "@/components/owner-picker";
-import { OwnerPicker } from "@/components/owner-picker";
 import { Working } from "@/components/working";
 
 const buttonClass =
@@ -144,7 +142,6 @@ export function SowAnalysisPanel({
   implementationId,
   sowDocumentUrl,
   sowDocumentName,
-  team,
   currentGoals,
   requirementCount,
   successMeasureCount,
@@ -155,7 +152,6 @@ export function SowAnalysisPanel({
   implementationId: string;
   sowDocumentUrl: string | null;
   sowDocumentName: string | null;
-  team: TeamOption[];
   currentGoals?: string | null;
   requirementCount?: number;
   successMeasureCount?: number;
@@ -179,8 +175,6 @@ export function SowAnalysisPanel({
 
   const [runs, setRuns] = useState<Run[]>([]);
   const [activeId, setActiveId] = useState<number | null>(null);
-  const [group, setGroup] = useState("");
-  const [authorId, setAuthorId] = useState("");
   const [newFile, setNewFile] = useState<File | null>(null);
   /** Elapsed seconds while a run is in flight, so a slow read looks busy, not stuck. */
   const [elapsed, setElapsed] = useState(0);
@@ -307,7 +301,6 @@ export function SowAnalysisPanel({
       return applyProposal({
         data: {
           implementationId,
-          authorId: authorId === "" ? null : authorId,
           goals: applyGoals && proposedGoals !== "" ? proposedGoals : null,
           requirements: analysis.extraction.requirements
             .filter((_, i) => pickedRequirements[i])
@@ -739,19 +732,9 @@ export function SowAnalysisPanel({
                 </Checkbox>
 
                 <div className="flex flex-wrap items-center gap-2">
-                  <div className="min-w-64">
-                    <OwnerPicker
-                      team={team}
-                      group={group}
-                      ownerId={authorId}
-                      disabled={apply.isPending}
-                      personLabel="Applied by"
-                      onChange={(next) => {
-                        setGroup(next.group);
-                        setAuthorId(next.ownerId);
-                      }}
-                    />
-                  </div>
+                  <p className="text-[12px] text-muted-foreground">
+                    Applied as you, the signed-in user.
+                  </p>
                   <button
                     type="button"
                     className={primaryButtonClass}

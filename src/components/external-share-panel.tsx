@@ -16,6 +16,8 @@ import {
   setPlanLinkPasscode,
   sharePlanSnapshot,
 } from "@/lib/external-share.functions";
+import { useProfile } from "@/lib/auth";
+import { externalSharingControls } from "@/lib/external-share-policy";
 import { fmtDate, humanize } from "@/lib/hub-format";
 import { cn } from "@/lib/utils";
 import { When } from "@/components/when";
@@ -49,6 +51,9 @@ export function ExternalSharePanel({
   const [canComplete, setCanComplete] = useState(true);
   const [passcode, setPasscode] = useState("");
   const [busy, setBusy] = useState(false);
+  // What this viewer may act on. The server refuses the same calls for everyone else.
+  const { profile } = useProfile();
+  const controls = externalSharingControls(profile?.role);
 
   const panel = useQuery({
     queryKey: ["external-share", implementationId],
@@ -136,94 +141,100 @@ export function ExternalSharePanel({
             </div>
           ) : null}
 
-          <form
-            className="flex flex-wrap items-end gap-2 border-b border-border px-3 py-2.5"
-            onSubmit={(e) => {
-              e.preventDefault();
-              void guard(async () => {
-                const result = await issuePlanLink({
-                  data: {
-                    implementationId,
-                    contactId: contactId || null,
-                    email: contactId ? null : email || null,
-                    name: name || null,
-                    canComplete,
-                    passcode: passcode || null,
-                    sendEmailToContact: true,
-                  },
+          {controls.issueLink ? (
+            <form
+              className="flex flex-wrap items-end gap-2 border-b border-border px-3 py-2.5"
+              onSubmit={(e) => {
+                e.preventDefault();
+                void guard(async () => {
+                  const result = await issuePlanLink({
+                    data: {
+                      implementationId,
+                      contactId: contactId || null,
+                      email: contactId ? null : email || null,
+                      name: name || null,
+                      canComplete,
+                      passcode: passcode || null,
+                      sendEmailToContact: true,
+                    },
+                  });
+                  setIssued({ url: result.url, expires_at: result.expires_at });
+                  setEmail("");
+                  setName("");
+                  setPasscode("");
+                  setContactId("");
+                  await refresh();
                 });
-                setIssued({ url: result.url, expires_at: result.expires_at });
-                setEmail("");
-                setName("");
-                setPasscode("");
-                setContactId("");
-                await refresh();
-              });
-            }}
-          >
-            <label className="text-[11px] text-muted-foreground">
-              Contact
-              <select
-                value={contactId}
-                onChange={(e) => setContactId(e.target.value)}
-                className="mt-0.5 block rounded-md border border-border bg-background px-2 py-1 text-[12px]"
-              >
-                <option value="">New person…</option>
-                {(panel.data?.contacts ?? []).map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                    {c.email ? ` · ${c.email}` : ""}
-                  </option>
-                ))}
-              </select>
-            </label>
-            {contactId ? null : (
-              <>
-                <label className="text-[11px] text-muted-foreground">
-                  Name
-                  <input
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    className="mt-0.5 block rounded-md border border-border bg-background px-2 py-1 text-[12px]"
-                  />
-                </label>
-                <label className="text-[11px] text-muted-foreground">
-                  Email
-                  <input
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    className="mt-0.5 block rounded-md border border-border bg-background px-2 py-1 text-[12px]"
-                  />
-                </label>
-              </>
-            )}
-            <label className="text-[11px] text-muted-foreground">
-              Passcode (optional)
-              <input
-                value={passcode}
-                onChange={(e) => setPasscode(e.target.value)}
-                placeholder="delivered separately"
-                className="mt-0.5 block rounded-md border border-border bg-background px-2 py-1 text-[12px]"
-              />
-            </label>
-            <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-              <input
-                type="checkbox"
-                checked={canComplete}
-                onChange={(e) => setCanComplete(e.target.checked)}
-              />
-              Can complete tasks
-            </label>
-            <button
-              type="submit"
-              disabled={busy}
-              className="rounded-md border border-border px-2.5 py-1 text-[12px] disabled:opacity-40"
+              }}
             >
-              <Link2 className="mr-1 inline h-3 w-3 align-[-2px]" />
-              Issue link
-            </button>
-          </form>
+              <label className="text-[11px] text-muted-foreground">
+                Contact
+                <select
+                  value={contactId}
+                  onChange={(e) => setContactId(e.target.value)}
+                  className="mt-0.5 block rounded-md border border-border bg-background px-2 py-1 text-[12px]"
+                >
+                  <option value="">New person…</option>
+                  {(panel.data?.contacts ?? []).map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                      {c.email ? ` · ${c.email}` : ""}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              {contactId ? null : (
+                <>
+                  <label className="text-[11px] text-muted-foreground">
+                    Name
+                    <input
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      className="mt-0.5 block rounded-md border border-border bg-background px-2 py-1 text-[12px]"
+                    />
+                  </label>
+                  <label className="text-[11px] text-muted-foreground">
+                    Email
+                    <input
+                      type="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      className="mt-0.5 block rounded-md border border-border bg-background px-2 py-1 text-[12px]"
+                    />
+                  </label>
+                </>
+              )}
+              <label className="text-[11px] text-muted-foreground">
+                Passcode (optional)
+                <input
+                  value={passcode}
+                  onChange={(e) => setPasscode(e.target.value)}
+                  placeholder="delivered separately"
+                  className="mt-0.5 block rounded-md border border-border bg-background px-2 py-1 text-[12px]"
+                />
+              </label>
+              <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                <input
+                  type="checkbox"
+                  checked={canComplete}
+                  onChange={(e) => setCanComplete(e.target.checked)}
+                />
+                Can complete tasks
+              </label>
+              <button
+                type="submit"
+                disabled={busy}
+                className="rounded-md border border-border px-2.5 py-1 text-[12px] disabled:opacity-40"
+              >
+                <Link2 className="mr-1 inline h-3 w-3 align-[-2px]" />
+                Issue link
+              </button>
+            </form>
+          ) : (
+            <p className="border-b border-border px-3 py-2 text-[12px] text-muted-foreground">
+              Customer links are issued by managers and by the implementation and onboarding roles.
+            </p>
+          )}
 
           {panel.data && panel.data.grants.length === 0 ? (
             <NoRows label="No links issued yet." />
@@ -255,7 +266,11 @@ export function ExternalSharePanel({
                     ) : null}
                   </div>
                   <div className="flex items-center gap-1.5">
-                    {g.live ? (
+                    {/* Rotate, passcode and revoke each check their own control. */}
+                    {g.live &&
+                    controls.rotateLink &&
+                    controls.setPasscode &&
+                    controls.revokeLink ? (
                       <>
                         <button
                           type="button"
@@ -310,6 +325,8 @@ export function ExternalSharePanel({
                           Revoke
                         </button>
                       </>
+                    ) : g.live ? (
+                      <span className="text-[11px] text-muted-foreground">active</span>
                     ) : (
                       <span className="text-[11px] text-muted-foreground">
                         {g.revoked_at
@@ -356,7 +373,12 @@ export function ExternalSharePanel({
 
       {tab === "preview" ? <PreviewTab implementationId={implementationId} /> : null}
       {tab === "updates" ? (
-        <UpdatesTab implementationId={implementationId} busy={busy} guard={guard} />
+        <UpdatesTab
+          implementationId={implementationId}
+          busy={busy}
+          guard={guard}
+          snapshotActions={controls.snapshotActions}
+        />
       ) : null}
     </Panel>
   );
@@ -397,12 +419,16 @@ function UpdatesTab({
   implementationId,
   busy,
   guard,
+  snapshotActions,
 }: {
   implementationId: string;
   busy: boolean;
   guard: (fn: () => Promise<void>) => Promise<void>;
+  /** The server's rule for generating, sharing and revoking snapshots. Everyone else can read the list. */
+  snapshotActions: boolean;
 }) {
   const qc = useQueryClient();
+  const mayManage = snapshotActions;
   const [shareUrl, setShareUrl] = useState<string | null>(null);
   const snapshots = useQuery({
     queryKey: ["plan-snapshots", implementationId],
@@ -417,19 +443,21 @@ function UpdatesTab({
           A snapshot is frozen when it is generated. Corrections add a new version; the original is
           never edited.
         </p>
-        <button
-          type="button"
-          disabled={busy}
-          onClick={() =>
-            void guard(async () => {
-              await generatePlanSnapshot({ data: { implementationId } });
-              await refresh();
-            })
-          }
-          className="shrink-0 rounded-md border border-border px-2 py-1 text-[12px] disabled:opacity-40"
-        >
-          Generate now
-        </button>
+        {mayManage ? (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() =>
+              void guard(async () => {
+                await generatePlanSnapshot({ data: { implementationId } });
+                await refresh();
+              })
+            }
+            className="shrink-0 rounded-md border border-border px-2 py-1 text-[12px] disabled:opacity-40"
+          >
+            Generate now
+          </button>
+        ) : null}
       </div>
 
       {shareUrl ? (
@@ -448,39 +476,41 @@ function UpdatesTab({
                 {s.superseded ? " · superseded" : ""}
               </span>
             </span>
-            <span className="flex items-center gap-1.5">
-              {s.share_prefix_live ? (
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() =>
-                    void guard(async () => {
-                      await revokePlanSnapshotShare({ data: { snapshotId: s.id } });
-                      setShareUrl(null);
-                      await refresh();
-                    })
-                  }
-                  className="rounded-sm border border-border px-1.5 py-0.5 text-[11px]"
-                >
-                  Revoke share
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() =>
-                    void guard(async () => {
-                      const result = await sharePlanSnapshot({ data: { snapshotId: s.id } });
-                      setShareUrl(result.url);
-                      await refresh();
-                    })
-                  }
-                  className="rounded-sm border border-border px-1.5 py-0.5 text-[11px]"
-                >
-                  Share
-                </button>
-              )}
-            </span>
+            {mayManage ? (
+              <span className="flex items-center gap-1.5">
+                {s.share_prefix_live ? (
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() =>
+                      void guard(async () => {
+                        await revokePlanSnapshotShare({ data: { snapshotId: s.id } });
+                        setShareUrl(null);
+                        await refresh();
+                      })
+                    }
+                    className="rounded-sm border border-border px-1.5 py-0.5 text-[11px]"
+                  >
+                    Revoke share
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() =>
+                      void guard(async () => {
+                        const result = await sharePlanSnapshot({ data: { snapshotId: s.id } });
+                        setShareUrl(result.url);
+                        await refresh();
+                      })
+                    }
+                    className="rounded-sm border border-border px-1.5 py-0.5 text-[11px]"
+                  >
+                    Share
+                  </button>
+                )}
+              </span>
+            ) : null}
           </li>
         ))}
       </ul>

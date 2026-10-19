@@ -2087,7 +2087,6 @@ function JourneyTab({
                 implementationId={impl.id}
                 sowDocumentUrl={impl.sow_document_url}
                 sowDocumentName={impl.sow_document_name}
-                team={record.team}
                 currentGoals={impl.customer_goals}
                 requirementCount={record.requirements.length}
                 successMeasureCount={record.success_criteria.length}

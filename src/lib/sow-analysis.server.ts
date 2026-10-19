@@ -175,9 +175,47 @@ export async function analyzeSow(implementationId: string): Promise<SowAnalysisR
  * Apply a reviewed SOW proposal. Additive only: goals are appended, records are
  * inserted, and nothing already recorded is updated or removed.
  */
+/**
+ * The team member a proposal is recorded as applied by. The working note it saves
+ * is authored by a team member, so a login with no usable team member link has no
+ * one to record. Refusal is checked before anything is written.
+ *
+ * `teamMemberId` comes from the signed-in profile, never from the request. The
+ * team member must still exist and be active: a link that has gone stale is
+ * refused, not used.
+ */
+export async function resolveApplyingTeamMember(teamMemberId: string | null): Promise<string> {
+  const relink =
+    "Ask an admin to link your profile to your team member record, then apply it again. Nothing was applied.";
+  if (!teamMemberId) {
+    throw new Error(
+      `Your sign-in is not linked to a team member, so this proposal cannot be recorded as applied by you. ${relink}`,
+    );
+  }
+  const { data, error } = await db()
+    .from("team_members")
+    .select("id, active")
+    .eq("id", teamMemberId)
+    .maybeSingle();
+  if (error)
+    throw new Error("Could not check your team member link, so nothing was applied. Try again.");
+  if (!data) {
+    throw new Error(
+      `The team member your sign-in was linked to no longer exists, so this proposal cannot be recorded as applied by you. ${relink}`,
+    );
+  }
+  if (data.active !== true) {
+    throw new Error(
+      `The team member your sign-in is linked to is no longer active, so this proposal cannot be recorded as applied by you. ${relink}`,
+    );
+  }
+  return data.id as string;
+}
+
 export async function applySowProposal(input: {
   implementationId: string;
-  authorId: string | null;
+  /** The signed-in user's team member, resolved by resolveApplyingTeamMember. Never from the request. */
+  authorTeamMemberId: string;
   goals: string | null;
   requirements: string[];
   successMeasures: string[];
@@ -236,7 +274,7 @@ export async function applySowProposal(input: {
     await createJournalEntry({
       implementationId: input.implementationId,
       note: input.journeyNote,
-      authorId: input.authorId,
+      authorId: input.authorTeamMemberId,
       links: null,
       attachmentUrl: null,
       attachmentName: null,
