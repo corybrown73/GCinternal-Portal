@@ -1,6 +1,5 @@
 /**
- * The completion record: what was actually done, frozen at the moment it was
- * finished.
+ * The completion record: what was done, frozen at the moment it was finished.
  *
  * THIS MODULE IS PURE. It takes rows already loaded and projects them into one
  * document. Nothing here queries, and nothing that renders a completion record
@@ -9,11 +8,23 @@
  * point: six months later "what did we build for them?" has an answer that is
  * what happened, not what the current state of nine screens says today.
  *
+ * WHAT IS PUBLIC. A completion record is reachable by anyone holding its link,
+ * with no login and no expiry, so it is written for a reader outside GoCanvas.
+ * Only these things go into it:
+ *   - the customer, project and dates in the headline,
+ *   - stage names, and the dates each stage was entered and left,
+ *   - commitments whose `committed_to` is exactly "customer",
+ *   - work items whose `visibility` is exactly "shared".
+ * Everything else is listed as withheld, in words that say it is internal. The
+ * loaders read only the columns these rules can use, so the rest never reaches
+ * this module. Nothing is admitted because its free text reads as harmless:
+ * a field is public because it is structurally marked so, or it is not public.
+ *
  * IT RECORDS ABSENCE. A section with nothing in it stays in the document and
  * says so. A completion record that silently omits "Risks" reads as a project
  * with no risks; one that says "No risks were recorded" reads as a project
- * where nobody wrote any down. Those are very different facts and only one of
- * them is true.
+ * where nobody wrote any down. A withheld section says what it holds and that
+ * it is internal, so it is never read as an absence either.
  *
  * NOTHING IS SCORED. No completeness percentage, no health grade, no
  * computed verdict on how the work went. Everything in a completion record is
@@ -64,9 +75,34 @@ export function day(v: unknown): string | null {
 
 const dash = (v: string | null) => v ?? "—";
 
+/**
+ * A commitment belongs in the public record only when it is owed to the
+ * customer: `committed_to` is exactly "customer", ignoring case and surrounding
+ * spaces. Anything else — "internal", a name, a blank — is left out, and
+ * nothing is read from the commitment's own text to decide otherwise.
+ */
+export function isCustomerCommitment(committedTo: unknown): boolean {
+  return typeof committedTo === "string" && committedTo.trim().toLowerCase() === "customer";
+}
+
+/** A task belongs in the public record only when it was shared: `visibility` is exactly "shared". */
+export function isSharedWorkItem(item: { visibility?: unknown }): boolean {
+  return item.visibility === "shared";
+}
+
+const isDone = (w: { status?: unknown }) => w.status === "done" || w.status === "complete";
+
+/** A section the public record does not carry. It says what it holds and that it is internal. */
+const withheld = (heading: string, emptyNote: string): CompletionSection => ({
+  heading,
+  note: null,
+  entries: [],
+  emptyNote,
+});
+
 /* --------------------------------------------------------------- the shapes
- * Loose on purpose. The loader hands over whatever the table has; this module
- * reads the columns it needs and tolerates the rest being absent, because a
+ * Loose on purpose. The loader hands over the columns it selected; this module
+ * reads the ones it needs and tolerates the rest being absent, because a
  * completion record must still generate when a row is half-filled. Refusing to
  * record what was done because a field is null would be the worst possible
  * failure mode for this feature.
@@ -76,20 +112,14 @@ export type Row = any;
 
 export type ImplementationCompletionInput = {
   customerName: string;
+  /** id, name, contract_start_date, created_at, go_live_at, actual_launch_date. */
   implementation: Row;
   completedAt: string;
-  /** team_members id → name, so the document names people rather than uuids. */
-  named: (id: string | null | undefined) => string | null;
+  /** stage, entered_at, exited_at. Nothing else from stage history is read. */
   stageHistory: Row[];
-  solutions: Row[];
-  mappingCountBySolution: Map<string, number>;
-  requirements: Row[];
-  decisions: Row[];
-  risks: Row[];
-  issues: Row[];
+  /** description, committed_to, status, made_at, due_date, fulfilled_at. */
   commitments: Row[];
-  approvals: Row[];
-  successCriteria: Row[];
+  /** title, status, visibility, stage_key. */
   workItems: Row[];
   stageLabel: (key: string) => string;
 };
@@ -97,15 +127,9 @@ export type ImplementationCompletionInput = {
 export type SolutionCompletionInput = {
   customerName: string;
   implementationName: string;
+  /** id, title, created_at. */
   solution: Row;
   completedAt: string;
-  named: (id: string | null | undefined) => string | null;
-  notes: Row[];
-  mappings: Row[];
-  decisions: Row[];
-  approvals: Row[];
-  evidence: Row[];
-  requirementTitle: string | null;
 };
 
 /* --------------------------------------------------------- the two documents */
@@ -114,11 +138,11 @@ export function buildImplementationDocument(
   input: ImplementationCompletionInput,
 ): CompletionDocument {
   const impl = input.implementation;
-  const n = input.named;
 
-  const done = input.workItems.filter((w) => w.status === "done" || w.status === "complete");
-  const notDone = input.workItems.filter((w) => !(w.status === "done" || w.status === "complete"));
-  const overrides = input.stageHistory.filter((h) => h.advanced_with_gaps);
+  const shared = input.workItems.filter(isSharedWorkItem);
+  const sharedDone = shared.filter(isDone);
+  const sharedOpen = shared.filter((w) => !isDone(w));
+  const customerCommitments = input.commitments.filter((c) => isCustomerCommitment(c.committed_to));
 
   return {
     schema: 1,
@@ -131,176 +155,84 @@ export function buildImplementationDocument(
     headline: [
       ["Customer", input.customerName],
       ["Project", String(impl.name ?? "—")],
-      ["Type", dash(clean(impl.journey_type))],
-      ["Tier", dash(clean(impl.tier))],
       ["Started", dash(day(impl.contract_start_date) ?? day(impl.created_at))],
-      ["Plan end", dash(day(impl.target_date) ?? day(impl.target_launch_date))],
       // The Go-Live milestone first; the typed launch date when it is all there is.
       ["Actual go-live", dash(day(impl.go_live_at) ?? day(impl.actual_launch_date))],
       ["Completed", input.completedAt.slice(0, 10)],
-      ["Implementation lead", dash(n(impl.owner_id))],
-      ["Sold by", dash(clean(impl.sales_owner) ?? n(impl.sales_owner_id))],
     ],
     sections: [
       {
         heading: "How the project moved",
-        note: "Each stage, when it was entered, and by whom.",
+        note: "Each stage, and when it was entered and left.",
         emptyNote: "No stage history was recorded for this project.",
         entries: input.stageHistory.map((h) => ({
           title: input.stageLabel(String(h.stage)),
-          detail: clean(h.notes),
+          detail: null,
           meta: [
             ["Entered", dash(day(h.entered_at))],
             ["Left", dash(day(h.exited_at))],
-            ["By", dash(clean(h.entered_by))],
-            ...(h.advanced_with_gaps
-              ? ([["Moved on with criteria outstanding", "Yes"]] as Array<[string, string]>)
-              : []),
           ],
         })),
       },
-      {
-        heading: "What was built",
-        note: "Each solution the engineers delivered on this account.",
-        emptyNote: "No solutions were recorded against this project.",
-        entries: input.solutions.map((s) => ({
-          title: String(s.title),
-          detail: clean(s.design_summary),
-          meta: [
-            ["Status at completion", String(s.status ?? "—")],
-            ["Built by", dash(n(s.owner_id))],
-            ["Field mappings", String(input.mappingCountBySolution.get(String(s.id)) ?? 0)],
-            ["How it is set up", dash(clean(s.configuration_details))],
-          ],
-        })),
-      },
-      {
-        heading: "What the customer asked for",
-        note: "The requirements this work answered to.",
-        emptyNote: "No requirements were recorded for this project.",
-        entries: input.requirements.map((r) => ({
-          title: String(r.title),
-          detail: clean(r.description),
-          meta: [
-            ["Status", String(r.status ?? "—")],
-            ["Priority", dash(clean(r.priority))],
-            ["Scope", dash(clean(r.scope_status))],
-            ["Category", dash(clean(r.category))],
-          ],
-        })),
-      },
-      {
-        heading: "Decisions taken",
-        note: "What was settled along the way, and by whom.",
-        emptyNote: "No decisions were recorded for this project.",
-        entries: input.decisions.map((d) => ({
-          title: String(d.title),
-          detail: clean(d.description),
-          meta: [
-            ["Decided", dash(day(d.decision_date) ?? day(d.created_at))],
-            ["By", dash(clean(d.decided_by))],
-            ["Status", String(d.status ?? "—")],
-            ["Why", dash(clean(d.rationale))],
-          ],
-        })),
-      },
-      {
-        heading: "Risks and issues",
-        note: "What was raised, and how each one ended.",
-        emptyNote: "No risks or issues were recorded for this project.",
-        entries: [
-          ...input.risks.map((r) => ({
-            title: `Risk — ${String(r.title)}`,
-            detail: clean(r.description),
-            meta: [
-              ["Status", String(r.status ?? "—")],
-              ["Raised", dash(day(r.identified_at))],
-              ["Resolved", dash(day(r.resolved_at))],
-              ["Severity", dash(clean(r.severity))],
-              // A risk records the mitigation, not a resolution — the column
-              // an issue has and a risk does not.
-              ["What was done about it", dash(clean(r.mitigation))],
-            ] as Array<[string, string]>,
-          })),
-          ...input.issues.map((i) => ({
-            title: `Issue — ${String(i.title)}`,
-            detail: clean(i.description),
-            meta: [
-              ["Status", String(i.status ?? "—")],
-              ["Raised", dash(day(i.raised_at))],
-              ["Resolved", dash(day(i.resolved_at))],
-              ["Severity", dash(clean(i.severity))],
-              ["How it ended", dash(clean(i.resolution))],
-            ] as Array<[string, string]>,
-          })),
-        ],
-      },
+      withheld(
+        "What was built",
+        "The solutions built for this project are internal and are not part of this public record.",
+      ),
+      withheld(
+        "What the customer asked for",
+        "The requirements for this project are internal and are not part of this public record.",
+      ),
+      withheld(
+        "Decisions taken",
+        "Decisions taken on this project are internal and are not part of this public record.",
+      ),
+      withheld(
+        "Risks and issues",
+        "Risks and issues on this project are internal and are not part of this public record.",
+      ),
       {
         heading: "What we committed to",
         note: "Promises made to the customer during delivery.",
-        emptyNote: "No commitments were recorded for this project.",
-        entries: input.commitments.map((c) => ({
+        emptyNote: "No commitments made to the customer were recorded for this project.",
+        entries: customerCommitments.map((c) => ({
           title: clean(c.description) ?? "Commitment",
           detail: null,
           meta: [
-            ["Made to", dash(clean(c.committed_to))],
             ["Status", String(c.status ?? "—")],
             ["Made", dash(day(c.made_at))],
             ["Due", dash(day(c.due_date))],
             ["Fulfilled", dash(day(c.fulfilled_at))],
-            ["Owner", dash(n(c.owner_id))],
           ],
         })),
       },
-      {
-        heading: "What the customer signed off",
-        emptyNote: "No approvals were recorded for this project.",
-        entries: input.approvals.map((a) => ({
-          title: String(a.title ?? "Approval"),
-          detail: null,
-          meta: [
-            ["Status", String(a.status ?? "—")],
-            ["Approver", dash(clean(a.approver_name))],
-            ["Role", dash(clean(a.approver_role))],
-            ["Requested", dash(day(a.requested_at))],
-            ["Decided", dash(day(a.decided_at))],
-          ],
-        })),
-      },
-      {
-        heading: "What success was measured against",
-        note: "The criteria agreed with the customer, and what was observed.",
-        emptyNote: "No success criteria were recorded for this project.",
-        entries: input.successCriteria.map((c) => ({
-          title: String(c.description),
-          detail: clean(c.metric),
-          meta: [
-            ["Status", String(c.status ?? "—")],
-            ["Baseline", dash(clean(c.baseline_value))],
-            ["Target", dash(clean(c.target_value))],
-            ["Measured", dash(clean(c.measured_value))],
-          ],
-        })),
-      },
+      withheld(
+        "What the customer signed off",
+        "Sign-off records for this project are internal and are not part of this public record.",
+      ),
+      withheld(
+        "What success was measured against",
+        "The success criteria for this project are internal and are not part of this public record.",
+      ),
       {
         heading: "The plan, as completed",
-        note: `${done.length} of ${input.workItems.length} task(s) were ticked. ${
-          notDone.length === 0
-            ? "Nothing was left open."
-            : `${notDone.length} were still open at completion, listed below.`
-        }${
-          overrides.length === 0
-            ? ""
-            : ` ${overrides.length} stage(s) were advanced with criteria outstanding.`
-        }`,
-        emptyNote: "This project had no plan attached.",
-        entries: notDone.map((w) => ({
+        note:
+          shared.length === 0
+            ? null
+            : `${sharedDone.length} of ${shared.length} shared task(s) were ticked. ${
+                sharedOpen.length === 0
+                  ? "No shared task was left open."
+                  : `${sharedOpen.length} shared task(s) were still open at completion, listed below.`
+              }`,
+        emptyNote:
+          shared.length === 0
+            ? "No tasks were shared with the customer for this project."
+            : "No shared tasks were open at completion.",
+        entries: sharedOpen.map((w) => ({
           title: String(w.title),
           detail: null,
           meta: [
-            ["Stage", input.stageLabel(String(w.stage_key ?? ""))],
+            ["Stage", dash(clean(input.stageLabel(String(w.stage_key ?? ""))))],
             ["Status at completion", String(w.status ?? "—")],
-            ["Whose", dash(clean(w.party))],
           ],
         })),
       },
@@ -310,7 +242,6 @@ export function buildImplementationDocument(
 
 export function buildSolutionDocument(input: SolutionCompletionInput): CompletionDocument {
   const s = input.solution;
-  const n = input.named;
 
   return {
     schema: 1,
@@ -324,88 +255,38 @@ export function buildSolutionDocument(input: SolutionCompletionInput): Completio
       ["Customer", input.customerName],
       ["Project", input.implementationName],
       ["Solution", String(s.title)],
-      ["Status at completion", String(s.status ?? "—")],
-      ["Built by", dash(n(s.owner_id))],
       ["Started", dash(day(s.created_at))],
       ["Completed", input.completedAt.slice(0, 10)],
-      ["Answers requirement", dash(input.requirementTitle)],
     ],
     sections: [
-      {
-        heading: "What it does",
-        emptyNote: "Nobody wrote down what this solution does.",
-        entries: clean(s.design_summary)
-          ? [{ title: "In the engineer's words", detail: clean(s.design_summary) }]
-          : [],
-      },
-      {
-        heading: "How it is set up",
-        emptyNote: "No configuration detail was recorded.",
-        entries: clean(s.configuration_details)
-          ? [{ title: "Configuration", detail: clean(s.configuration_details) }]
-          : [],
-      },
-      {
-        heading: "Field mapping",
-        note: "Every field that moves, where it comes from and where it lands.",
-        emptyNote: "No field mappings were recorded for this solution.",
-        entries: input.mappings.map((m) => ({
-          title: `${dash(clean(m.source_field))} → ${dash(clean(m.target_field))}`,
-          detail: clean(m.transformation_notes),
-          meta: [
-            ["Source system", dash(clean(m.source_system))],
-            ["Required", m.required == null ? "—" : m.required ? "Yes" : "No"],
-            ["Status", dash(clean(m.status))],
-          ],
-        })),
-      },
-      {
-        heading: "The build log",
-        note: "The engineers' notes, oldest first.",
-        emptyNote: "No notes were written on this solution.",
-        entries: input.notes.map((note) => ({
-          title: String(note.note_type ?? "note"),
-          detail: clean(note.content),
-          meta: [
-            ["Written", dash(day(note.created_at))],
-            ["By", dash(n(note.created_by))],
-          ],
-        })),
-      },
-      {
-        heading: "Decisions taken",
-        emptyNote: "No decisions were linked to this solution.",
-        entries: input.decisions.map((d) => ({
-          title: String(d.title),
-          detail: clean(d.description) ?? clean(d.rationale),
-          meta: [["Decided", dash(day(d.decision_date) ?? day(d.created_at))]],
-        })),
-      },
-      {
-        heading: "Proof it works",
-        emptyNote: "No evidence was attached to this solution.",
-        entries: input.evidence.map((e) => ({
-          title: String(e.title ?? "Evidence"),
-          detail: clean(e.description),
-          meta: [
-            ["Kind", dash(clean(e.type))],
-            ["Recorded", dash(day(e.created_at))],
-          ],
-        })),
-      },
-      {
-        heading: "Sign-off",
-        emptyNote: "This solution was not signed off.",
-        entries: input.approvals.map((a) => ({
-          title: String(a.title ?? "Approval"),
-          detail: null,
-          meta: [
-            ["Status", String(a.status ?? "—")],
-            ["Approver", dash(clean(a.approver_name))],
-            ["Decided", dash(day(a.decided_at))],
-          ],
-        })),
-      },
+      withheld(
+        "What it does",
+        "What this solution does is internal and is not part of this public record.",
+      ),
+      withheld(
+        "How it is set up",
+        "How this solution is set up is internal and is not part of this public record.",
+      ),
+      withheld(
+        "Field mapping",
+        "The field mappings for this solution are internal and are not part of this public record.",
+      ),
+      withheld(
+        "The build log",
+        "Engineering build notes are internal and are not part of this public record.",
+      ),
+      withheld(
+        "Decisions taken",
+        "Decisions taken on this solution are internal and are not part of this public record.",
+      ),
+      withheld(
+        "Proof it works",
+        "The evidence for this solution is internal and is not part of this public record.",
+      ),
+      withheld(
+        "Sign-off",
+        "Sign-off records for this solution are internal and are not part of this public record.",
+      ),
     ],
   };
 }

@@ -53,6 +53,35 @@ project with no risks section, and only one of them is true.
 Nothing is scored. There is no completeness percentage and no verdict on how the
 work went — every line is something a person recorded, reproduced.
 
+## What the public record contains
+
+The PDF and the Salesforce note come from the same frozen document, and the
+link is public: anyone holding it can read it. So the document carries only
+what is intentionally safe to share outside GoCanvas.
+
+**Included**
+
+- The customer, the project or solution name, and the dates in the headline.
+- Stage names, and the dates each stage was entered and left.
+- Commitments whose `committed_to` is exactly `customer` (ignoring case and
+  surrounding spaces): the description, status and dates.
+- Work items whose `visibility` is exactly `shared`: the title, stage and status.
+  Only shared tasks that were still open are listed; the count covers shared
+  tasks only.
+
+**Withheld**
+
+Every other section stays in the document, with its heading, and says that it
+is internal. This covers solutions, requirements, decisions, risks and issues,
+sign-off, and success criteria, and solution field mappings, configuration and
+build notes. Stage comments, who entered a stage, and the owners of anything
+are never included.
+
+Nothing is admitted because its free text reads as harmless. A field is public
+only when it is structurally marked so.
+
+Records issued before this rule are frozen and are not changed by it.
+
 ## The PDF
 
 `GET /api/completion-record/{token}` — `application/pdf`, no login, no expiry.
