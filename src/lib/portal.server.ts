@@ -1,4 +1,6 @@
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import { commitmentSteps, orderNextSteps } from "./customer-commitments";
+import type { CommitmentState } from "./commitment-status";
 import { customerFacingNameFor } from "./server/customer-facing-name";
 import { LIFECYCLE_STAGES } from "./lifecycle";
 import { planEndDate } from "./date-labels";
@@ -128,6 +130,9 @@ export interface PortalNextStep {
   /** Who the item sits with, when recorded (commitments.committed_to). */
   who: string | null;
   implementation_name: string;
+  /** Commitments only: the shared state and the words the customer sees. */
+  state?: CommitmentState;
+  status_label?: string;
 }
 
 export interface PortalActivityItem {
@@ -179,8 +184,7 @@ export async function loadPortalHome(userId: string): Promise<PortalHome> {
         db()
           .from("commitments")
           .select("id, implementation_id, description, due_date, status, committed_to")
-          .in("implementation_id", implIds)
-          .eq("status", "open"),
+          .in("implementation_id", implIds),
         db()
           .from("implementation_stage_history")
           .select("id, implementation_id, stage, entered_at")
@@ -245,16 +249,12 @@ export async function loadPortalHome(userId: string): Promise<PortalHome> {
   // owner (owner_id is an internal team member), so we surface open
   // commitments (with who they're committed to) and upcoming incomplete
   // milestones with due dates.
-  const nextSteps: PortalNextStep[] = [
-    ...(commitments ?? []).map((c: any) => ({
-      id: c.id,
-      kind: "commitment" as const,
-      title: c.description,
-      due_date: c.due_date,
-      overdue: pastDue(c.due_date),
-      who: c.committed_to ?? null,
-      implementation_name: implName.get(c.implementation_id) ?? "",
-    })),
+  // Commitments use the shared customer rules (customer-commitments.ts): done and
+  // withdrawn stay visible with their label, and only outstanding ones can be
+  // overdue. The day is the same UTC day the shared plan uses.
+  const today = new Date().toISOString().slice(0, 10);
+  const nextSteps: PortalNextStep[] = orderNextSteps([
+    ...commitmentSteps(commitments ?? [], implName, today),
     ...(milestones ?? [])
       .filter((m: any) => !milestoneDone(m) && m.target_date)
       .map((m: any) => ({
@@ -266,7 +266,7 @@ export async function loadPortalHome(userId: string): Promise<PortalHome> {
         who: null,
         implementation_name: implName.get(m.implementation_id) ?? "",
       })),
-  ].sort((a, b) => (a.due_date ?? "9999").localeCompare(b.due_date ?? "9999"));
+  ]);
 
   const activity: PortalActivityItem[] = [
     ...(history ?? []).map((h: any) => ({

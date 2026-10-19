@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { renderPlanPdf } from "../server/plan-pdf";
+import { planPdfFileName, renderPlanPdf } from "../server/plan-pdf";
 import type { SharedPlan } from "../shared-plan";
 
 const base: SharedPlan = {
@@ -60,6 +60,51 @@ describe("renderPlanPdf", () => {
     expect(pages).toBeGreaterThan(2);
   });
 
+  it("marks a done, a withdrawn and an outstanding commitment the way the screen words them (#81)", async () => {
+    const bytes = await renderPlanPdf(
+      {
+        ...base,
+        our_commitments: [
+          {
+            description: "Shipped the guide",
+            due_date: null,
+            committed_to: "Ada",
+            done: true,
+            state: "completed",
+            status_label: "Done",
+            overdue: false,
+          },
+          {
+            description: "Dropped the paper process",
+            due_date: "2026-03-01",
+            committed_to: "Ada",
+            done: false,
+            state: "withdrawn",
+            status_label: "Withdrawn",
+            overdue: false,
+          },
+          {
+            description: "Deliver the report",
+            due_date: "2026-03-01",
+            committed_to: "Ada",
+            done: false,
+            state: "outstanding",
+            status_label: "Renegotiated — Outstanding",
+            overdue: true,
+          },
+        ],
+      },
+      "https://example.test/plan/x",
+    );
+    const text = Buffer.from(bytes).toString("latin1");
+    expect(text).toContain("[x] Shipped the guide");
+    expect(text).toContain("[-] Dropped the paper process");
+    expect(text).toContain("[ ] Deliver the report");
+    expect(text).toContain("Withdrawn");
+    expect(text).toContain("Renegotiated");
+    expect(text).toContain("Overdue");
+  });
+
   it("separates what is still open from what is already done", async () => {
     const bytes = await renderPlanPdf(
       {
@@ -99,5 +144,13 @@ describe("renderPlanPdf", () => {
   it("carries the live link, because the PDF is a snapshot and the page is not", async () => {
     const bytes = await renderPlanPdf(base, "https://example.test/plan/tok123");
     expect(Buffer.from(bytes).toString("latin1")).toContain("plan/tok123");
+  });
+
+  it("names the download in plain ASCII, so the response header can be sent", () => {
+    // An em dash in the name used to make the header invalid and every plan PDF fail.
+    const name = planPdfFileName("Café Nord — Field/Ops");
+    expect(name).toBe("Café Nord - Field-Ops - project plan.pdf".replace("é", "-"));
+    expect(/^[\x20-\x7e]+$/.test(name)).toBe(true);
+    expect(name).not.toMatch(/[\\/:*?"<>|]/);
   });
 });

@@ -3,6 +3,9 @@ import type { SharedPlan } from "@/lib/shared-plan";
 
 import { MARKS, openBrandedPdf, PDF_BODY_SOFT } from "@/lib/pdf-kit";
 
+/** A withdrawn commitment: not done, and not owed. */
+const WITHDRAWN_MARK = "[-]";
+
 /**
  * The customer's project plan, as a PDF.
  *
@@ -22,6 +25,17 @@ import { MARKS, openBrandedPdf, PDF_BODY_SOFT } from "@/lib/pdf-kit";
  * the URL. Chrome and type come from `pdf-kit`; this file only decides what
  * the document says.
  */
+/**
+ * The download's file name. A header value must be plain ASCII, so anything
+ * else (an em dash, an accent) is replaced: a non-ASCII character here made
+ * every plan PDF fail with a 500.
+ */
+export function planPdfFileName(customerName: string): string {
+  return `${customerName} - project plan.pdf`
+    .replace(/[\\/:*?"<>|]/g, "-")
+    .replace(/[^\x20-\x7e]/g, "-");
+}
+
 export async function renderPlanPdf(plan: SharedPlan, planUrl: string): Promise<Uint8Array> {
   const pdf = await openBrandedPdf({
     title: plan.customer_name,
@@ -85,8 +99,16 @@ export async function renderPlanPdf(plan: SharedPlan, planUrl: string): Promise<
     pdf.line("Nothing outstanding on our side.", { color: BRAND.fg2 });
   }
   for (const c of plan.our_commitments) {
-    pdf.line(`${c.done ? MARKS.done : MARKS.open}  ${c.description}`, { size: 10.5 });
-    const meta = [c.due_date ? `Due ${c.due_date}` : null, c.committed_to].filter(Boolean);
+    const state = c.state ?? (c.done ? "completed" : "outstanding");
+    const mark =
+      state === "completed" ? MARKS.done : state === "withdrawn" ? WITHDRAWN_MARK : MARKS.open;
+    pdf.line(`${mark}  ${c.description}`, { size: 10.5 });
+    const meta = [
+      c.due_date ? `Due ${c.due_date}` : null,
+      c.committed_to,
+      c.status_label ?? null,
+      c.overdue ? "Overdue" : null,
+    ].filter(Boolean);
     if (meta.length) {
       pdf.line(meta.join("   ·   "), { size: 8.5, color: BRAND.fg2, gap: 11, indent: 16 });
     }

@@ -52,7 +52,8 @@ export async function renderSnapshotPdf(snapshot: SharedPlanSnapshot): Promise<U
     pdf.line("Nothing outstanding on our side.", { color: BRAND.fg2 });
   }
   for (const c of snapshot.we_owe) {
-    pdf.line(`${MARKS.open}  ${c.description}${c.due_date ? ` — due ${c.due_date}` : ""}`);
+    const label = c.status_label ? ` — ${c.status_label}` : "";
+    pdf.line(`${MARKS.open}  ${c.description}${c.due_date ? ` — due ${c.due_date}` : ""}${label}`);
   }
 
   if (snapshot.next_milestone) {

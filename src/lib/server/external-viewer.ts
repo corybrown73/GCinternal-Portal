@@ -265,7 +265,7 @@ export async function loadSharedPlan(
         .eq("implementation_id", impl.id),
       db()
         .from("commitments")
-        .select("description, due_date, committed_to, fulfilled_at")
+        .select("description, due_date, committed_to, status, fulfilled_at")
         .eq("implementation_id", impl.id),
     ]);
 

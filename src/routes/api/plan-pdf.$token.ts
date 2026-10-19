@@ -26,13 +26,12 @@ async function handle(params: unknown): Promise<Response> {
 
   try {
     const { appUrl } = await import("@/lib/app-url");
-    const { renderPlanPdf } = await import("@/lib/server/plan-pdf");
+    const { renderPlanPdf, planPdfFileName } = await import("@/lib/server/plan-pdf");
     const bytes = await renderPlanPdf(result.plan, `${appUrl()}/plan/${token}`);
-    const name = `${result.plan.customer_name} — project plan.pdf`.replace(/[\\/:*?"<>|]/g, "-");
     return new Response(bytes as unknown as BodyInit, {
       headers: {
         "content-type": "application/pdf",
-        "content-disposition": `inline; filename="${name}"`,
+        "content-disposition": `inline; filename="${planPdfFileName(result.plan.customer_name)}"`,
         "cache-control": "no-store",
         "referrer-policy": "no-referrer",
         "x-robots-tag": "noindex, nofollow",

@@ -102,12 +102,17 @@ function PortalHomePage() {
                         className={cn(
                           "text-[13px]",
                           step.overdue && "text-status-risk-foreground font-medium",
+                          step.state && step.state !== "outstanding"
+                            ? "text-muted-foreground line-through"
+                            : null,
                         )}
                       >
                         {step.title}
                       </p>
                       <p className="mt-0.5 text-[11px] text-muted-foreground">
-                        {step.kind === "commitment" ? "Commitment" : "Milestone"}
+                        {step.kind === "commitment"
+                          ? (step.status_label ?? "Commitment")
+                          : "Milestone"}
                         {step.who ? ` · with ${step.who}` : ""} · {step.implementation_name}
                       </p>
                     </div>

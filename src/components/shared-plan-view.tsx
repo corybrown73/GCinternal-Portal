@@ -142,17 +142,25 @@ export function SharedPlanView({
               ) : null}
             </li>
           ))}
-          {plan.our_commitments.map((c, i) => (
-            <li key={`c-${i}`} className="px-4 py-3">
-              <p className={cn("text-[13px]", c.done && "text-muted-foreground line-through")}>
-                {c.description}
-              </p>
-              <p className="mt-0.5 font-mono text-[11px] text-muted-foreground">
-                {c.due_date ? `due ${shortDay(c.due_date)}` : "no date"}
-                {c.committed_to ? ` · to ${c.committed_to}` : ""}
-              </p>
-            </li>
-          ))}
+          {plan.our_commitments.map((c, i) => {
+            // Snapshots stored before the status rules carry only `done`.
+            const settled = (c.state ?? (c.done ? "completed" : "outstanding")) !== "outstanding";
+            return (
+              <li key={`c-${i}`} className="px-4 py-3">
+                <p className={cn("text-[13px]", settled && "text-muted-foreground line-through")}>
+                  {c.description}
+                </p>
+                <p className="mt-0.5 font-mono text-[11px] text-muted-foreground">
+                  {c.due_date ? `due ${shortDay(c.due_date)}` : "no date"}
+                  {c.committed_to ? ` · to ${c.committed_to}` : ""}
+                  {` · ${c.status_label ?? (c.done ? "Done" : "Outstanding")}`}
+                  {c.overdue ? (
+                    <span className="text-status-blocked-foreground"> · Overdue</span>
+                  ) : null}
+                </p>
+              </li>
+            );
+          })}
         </ul>
       </section>
 

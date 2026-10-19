@@ -1137,3 +1137,114 @@ describe("12. flag enforcement", () => {
     expect(items().find((w) => w.id === WI_A_SHARED)!.status).toBe("not_started");
   });
 });
+
+describe("8. customer commitment states (#81)", () => {
+  // Due long ago, so a commitment that is still owed is overdue.
+  const PAST = "2020-01-01";
+  const row = (id: string, description: string, status: string | null, over: object = {}) => ({
+    id,
+    implementation_id: IMPL_A,
+    description,
+    due_date: PAST,
+    committed_to: "Ada",
+    status,
+    fulfilled_at: null,
+    ...over,
+  });
+  const withCommitments = (rows: object[]) => {
+    fake.store["commitments"] = rows;
+  };
+  const ours = async () => (await loadSharedPlan(viewerA, KEY_A)).our_commitments;
+  const find = (list: Array<{ description: string }>, description: string) =>
+    list.find((c) => c.description === description) as any;
+
+  it("shows a met commitment as Done even with no completion date, never overdue", async () => {
+    withCommitments([row("m", "Ship the guide", "met")]);
+    const c = find(await ours(), "Ship the guide");
+    expect(c.state).toBe("completed");
+    expect(c.done).toBe(true);
+    expect(c.status_label).toBe("Done");
+    expect(c.overdue).toBe(false);
+  });
+
+  it("shows a fulfilled commitment as Done", async () => {
+    withCommitments([row("f", "Ship the guide", "fulfilled", { fulfilled_at: "2020-01-02" })]);
+    const c = find(await ours(), "Ship the guide");
+    expect(c.status_label).toBe("Done");
+    expect(c.overdue).toBe(false);
+  });
+
+  it("shows a cancelled commitment as Withdrawn: visible, not done, not owed, not overdue", async () => {
+    withCommitments([row("c", "Drop the paper process", "cancelled")]);
+    const list = await ours();
+    const c = find(list, "Drop the paper process");
+    expect(c).toBeDefined();
+    expect(c.state).toBe("withdrawn");
+    expect(c.done).toBe(false);
+    expect(c.status_label).toBe("Withdrawn");
+    expect(c.overdue).toBe(false);
+  });
+
+  it("keeps a renegotiated commitment outstanding, even with a completion date recorded", async () => {
+    withCommitments([
+      row("r", "Deliver the report", "renegotiated", { fulfilled_at: "2020-01-02" }),
+    ]);
+    const c = find(await ours(), "Deliver the report");
+    expect(c.state).toBe("outstanding");
+    expect(c.done).toBe(false);
+    expect(c.status_label).toBe("Renegotiated — Outstanding");
+    expect(c.overdue).toBe(true);
+  });
+
+  it("keeps a missed commitment outstanding, with its missed status visible", async () => {
+    withCommitments([row("m", "Send the data map", "missed")]);
+    const c = find(await ours(), "Send the data map");
+    expect(c.state).toBe("outstanding");
+    expect(c.status_label).toBe("Missed — Outstanding");
+    expect(c.overdue).toBe(true);
+  });
+
+  it("shows an unrecognised status as outstanding rather than dropping it", async () => {
+    withCommitments([row("u", "Confirm the logins", "sort_of_done_ish")]);
+    const c = find(await ours(), "Confirm the logins");
+    expect(c).toBeDefined();
+    expect(c.state).toBe("outstanding");
+    expect(c.status_label).toBe("Outstanding");
+  });
+
+  it("never shows a commitment made to our own team, through any door", async () => {
+    withCommitments([
+      row("i", "Internal follow-up with the crew", "open", { committed_to: "internal" }),
+      row("v", "Visible to Ada", "open"),
+    ]);
+    const plan = await loadSharedPlan(viewerA, KEY_A);
+    expect(plan.our_commitments.map((c) => c.description)).toEqual(["Visible to Ada"]);
+
+    const preview = await loadSharedPlan({ kind: "preview", profileId: OWNER }, KEY_A);
+    expect(JSON.stringify(preview)).not.toContain("Internal follow-up with the crew");
+
+    await generateSnapshot(IMPL_A, null);
+    const content = fake.store["plan_snapshots"]![0]!.content;
+    expect(JSON.stringify(content)).not.toContain("Internal follow-up with the crew");
+  });
+
+  it("the weekly snapshot owes only outstanding items, and names only the overdue ones", async () => {
+    withCommitments([
+      row("m", "Shipped already", "met"),
+      row("c", "Withdrawn", "cancelled"),
+      row("r", "Renegotiated and still owed", "renegotiated"),
+      row("o", "Open and overdue", "open"),
+    ]);
+    await generateSnapshot(IMPL_A, null);
+    const content = fake.store["plan_snapshots"]![0]!.content;
+    expect(content.we_owe.map((c: any) => c.description).sort()).toEqual([
+      "Open and overdue",
+      "Renegotiated and still owed",
+    ]);
+    const attention = content.attention.join("\n");
+    expect(attention).toContain("Open and overdue");
+    expect(attention).toContain("Renegotiated and still owed");
+    expect(attention).not.toContain("Shipped already");
+    expect(attention).not.toContain("Withdrawn");
+  });
+});

@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { customerCommitmentView, isCustomerVisibleCommitment } from "./commitment-status";
 
 /**
  * The customer-facing projection. Pure: no I/O, no Supabase, no request.
@@ -61,7 +62,15 @@ export const SHARED_TASK_KEYS = [
 
 export const SHARED_MILESTONE_KEYS = ["name", "status", "target_date", "completed_date"] as const;
 
-export const SHARED_COMMITMENT_KEYS = ["description", "due_date", "committed_to", "done"] as const;
+export const SHARED_COMMITMENT_KEYS = [
+  "description",
+  "due_date",
+  "committed_to",
+  "done",
+  "state",
+  "status_label",
+  "overdue",
+] as const;
 
 export const SHARED_DOCUMENT_KEYS = ["ref", "file_name", "size_bytes", "uploaded_at"] as const;
 
@@ -132,7 +141,12 @@ export type SharedCommitment = {
   description: string;
   due_date: string | null;
   committed_to: string | null;
+  /** True only when delivered (met or fulfilled). Kept for stored snapshots. */
   done: boolean;
+  /** Written from #81 on. Snapshots stored before it carry only `done`. */
+  state?: "outstanding" | "completed" | "withdrawn";
+  status_label?: string;
+  overdue?: boolean;
 };
 
 export type SharedContact = { name: string; email: string | null };
@@ -244,6 +258,7 @@ export type SharedPlanInputs = {
     description: string;
     due_date: string | null;
     committed_to: string | null;
+    status: string | null;
     fulfilled_at: string | null;
   }>;
   comments: Array<{ work_item_id: string; author: string; body: string; created_at: string }>;
@@ -342,6 +357,7 @@ const CLOSED_STATUSES = new Set(["done", "skipped"]);
  */
 export function buildSharedPlanDTO(inputs: SharedPlanInputs): SharedPlan {
   const now = inputs.now ?? new Date();
+  const today = dayKey(now);
 
   const commentsByItem = new Map<string, SharedComment[]>();
   for (const c of inputs.comments) {
@@ -451,12 +467,22 @@ export function buildSharedPlanDTO(inputs: SharedPlanInputs): SharedPlan {
     stage_intent: inputs.stage.intent,
     target_launch_date: inputs.implementation.target_launch_date,
     your_tasks,
-    our_commitments: inputs.commitments.map((c) => ({
-      description: c.description,
-      due_date: c.due_date,
-      committed_to: c.committed_to,
-      done: !!c.fulfilled_at,
-    })),
+    // Made to our own team is never shown to the customer. The rest follow the
+    // shared commitment rules, so "done" comes from the status, not a date.
+    our_commitments: inputs.commitments
+      .filter((c) => isCustomerVisibleCommitment(c.committed_to))
+      .map((c) => {
+        const view = customerCommitmentView(c, today);
+        return {
+          description: c.description,
+          due_date: c.due_date,
+          committed_to: c.committed_to,
+          done: view.done,
+          state: view.state,
+          status_label: view.status_label,
+          overdue: view.overdue,
+        };
+      }),
     milestones: inputs.milestones.map((m) => ({
       name: m.name,
       status: m.status,
@@ -519,7 +545,7 @@ export function buildSnapshotDTO(
     }));
 
   const you_owe = plan.your_tasks.filter((t) => t.owner === "you" && t.status === "open");
-  const we_owe = plan.our_commitments.filter((c) => !c.done);
+  const we_owe = plan.our_commitments.filter((c) => c.state === "outstanding");
   const today = dayKey(now);
 
   const attention: string[] = [];
@@ -530,9 +556,7 @@ export function buildSnapshotDTO(
     attention.push(`"${m.name}" moved from ${m.was ?? "no date"} to ${m.now ?? "no date"}.`);
   }
   for (const c of we_owe) {
-    if (c.due_date && c.due_date < today) {
-      attention.push(`We owe you "${c.description}", due ${c.due_date}.`);
-    }
+    if (c.overdue) attention.push(`We owe you "${c.description}", due ${c.due_date}.`);
   }
 
   const next_milestone =
