@@ -1,4 +1,5 @@
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import { removalDenial, type RemovableFile, type RemovalActor } from "@/lib/attachment-permissions";
 
 const db = () => supabaseAdmin as any;
 const BUCKET = "attachments";
@@ -28,6 +29,8 @@ export type AccountFile = {
   content_type: string | null;
   size_bytes: number | null;
   added_by_name: string | null;
+  /** The uploader's profile id. Read by the Resources card to decide whether to show Remove; the server checks it again. */
+  added_by: string | null;
   created_at: string;
   /** "file" — a row in account_files. "field" — a legacy URL column. */
   origin: "file" | "field";
@@ -72,6 +75,7 @@ export async function loadAccountFiles(implementationId: string): Promise<Accoun
     content_type: (r["content_type"] as string | null) ?? null,
     size_bytes: (r["size_bytes"] as number | null) ?? null,
     added_by_name: r["added_by"] ? (nameOf.get(String(r["added_by"])) ?? null) : null,
+    added_by: (r["added_by"] as string | null) ?? null,
     created_at: String(r["created_at"]),
     origin: "file",
   }));
@@ -96,6 +100,7 @@ export async function loadAccountFiles(implementationId: string): Promise<Accoun
       content_type: null,
       size_bytes: null,
       added_by_name: null,
+      added_by: null,
       created_at: "",
       origin: "field",
     });
@@ -243,25 +248,71 @@ export async function accountFileLink(id: string): Promise<{ url: string }> {
 }
 
 /**
- * Remove an attachment.
+ * Remove an attachment. The uploader may, and the exact admin role may
+ * (see attachment-permissions.ts).
+ *
+ * Every check runs here, on the server, against the row as it is stored. The
+ * request supplies the id and the account it is about; the actor is the caller's
+ * session. A read that fails, or a row that cannot be checked, removes nothing.
  *
  * The row goes first, the object second — the mirror of the upload order and
  * for the same reason. If the storage delete fails afterwards we are left with
  * an unreferenced object; if it went first, a failure would leave a row
  * pointing at a file that is gone.
  */
-export async function removeAccountFile(id: string) {
-  const { data: row } = await db()
+type StoredFile = RemovableFile & { id: string; external_url: string | null };
+
+export async function removeAccountFile(args: {
+  id: string;
+  implementationId: string;
+  actor: RemovalActor;
+}) {
+  const { data: row, error: readError } = await db()
     .from("account_files")
-    .select("storage_path")
-    .eq("id", id)
+    .select("id, implementation_id, storage_path, external_url, added_by")
+    .eq("id", args.id)
     .maybeSingle();
+  if (readError) {
+    throw new Error("Could not check this attachment, so nothing was removed. Try again.");
+  }
   if (!row) return { ok: true, removed: false };
 
-  const { error } = await db().from("account_files").delete().eq("id", id);
-  if (error) throw new Error(error.message);
+  const file = row as StoredFile;
+  const denial = removalDenial(args.actor, file, args.implementationId);
+  if (denial) throw new Error(denial);
 
-  const path = (row as Record<string, string | null>)["storage_path"];
+  // The values the check relied on, copied out before the delete is built, so
+  // the delete matches exactly what was verified: the same account, uploader,
+  // stored file and link. A row changed since the check matches nothing, so a
+  // different file is never removed.
+  const verified = {
+    implementationId: file.implementation_id,
+    addedBy: file.added_by,
+    storagePath: file.storage_path,
+    externalUrl: file.external_url,
+  };
+  let match = db()
+    .from("account_files")
+    .delete()
+    .eq("id", args.id)
+    .eq("implementation_id", verified.implementationId);
+  match =
+    verified.addedBy === null ? match.is("added_by", null) : match.eq("added_by", verified.addedBy);
+  match =
+    verified.storagePath === null
+      ? match.is("storage_path", null)
+      : match.eq("storage_path", verified.storagePath);
+  match =
+    verified.externalUrl === null
+      ? match.is("external_url", null)
+      : match.eq("external_url", verified.externalUrl);
+  const { data: deleted, error } = await match.select("id");
+  if (error) throw new Error(error.message);
+  if (!deleted || deleted.length === 0) {
+    throw new Error("This attachment changed before it could be removed, so nothing was removed.");
+  }
+
+  const path = verified.storagePath;
   if (path) {
     try {
       // A SOW filed here may be the deal's SOW (or its project's): then only

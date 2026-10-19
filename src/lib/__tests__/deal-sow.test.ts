@@ -171,7 +171,11 @@ describe("a SOW filed under Files & links (kind SOW)", () => {
       actorProfileId: USER,
     });
     const path = fake.uploads[0]!.path;
-    await removeAccountFile(out.id);
+    await removeAccountFile({
+      id: out.id,
+      implementationId: IMPL,
+      actor: { id: USER, role: "am" },
+    });
     expect(fake.store["account_files"]).toEqual([]);
     expect(removed).not.toContain(path);
     expect(deal().sow_document_path).toBe(path);
@@ -186,7 +190,11 @@ describe("a SOW filed under Files & links (kind SOW)", () => {
       dataBase64: b64(PDF),
       actorProfileId: USER,
     });
-    await removeAccountFile(other.id);
+    await removeAccountFile({
+      id: other.id,
+      implementationId: IMPL,
+      actor: { id: USER, role: "am" },
+    });
     expect(removed).toContain(fake.uploads[1]!.path);
   });
 
