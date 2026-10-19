@@ -189,7 +189,7 @@ describe("commitments on the Customer 360", () => {
     expect(open.commitments.map((c: any) => c.id)).toEqual(["m", "r"]);
   });
 
-  it("never treats a past-due fulfilled or cancelled commitment as waiting on anyone", () => {
+  it("never treats a past-due fulfilled or cancelled commitment as waiting on anyone (#81)", () => {
     const waiting = (status: string) =>
       waitingOn({
         technical_solutions: [],
@@ -208,8 +208,9 @@ describe("commitments on the Customer 360", () => {
         escalations: [],
         decisions: [],
       });
-    expect(waiting("fulfilled").party).not.toBe("customer");
-    expect(waiting("cancelled").party).not.toBe("customer");
-    expect(waiting("renegotiated").party).toBe("customer");
+    expect(waiting("fulfilled").party).toBe("none");
+    expect(waiting("cancelled").party).toBe("none");
+    // A promise GoCanvas made to the customer is ours to deliver, not theirs.
+    expect(waiting("renegotiated").party).toBe("tis");
   });
 });

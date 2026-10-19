@@ -1,4 +1,11 @@
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import {
+  commitmentHistory,
+  customerCommitments,
+  owedToCustomer,
+  type CustomerCommitment,
+} from "./customer-commitments";
+import { customerTaskSteps, type CustomerTaskStep } from "./customer-next-steps";
 import { customerFacingNameFor } from "./server/customer-facing-name";
 import { LIFECYCLE_STAGES } from "./lifecycle";
 import { planEndDate } from "./date-labels";
@@ -119,16 +126,11 @@ export interface PortalImplementation {
   milestones: PortalMilestone[];
 }
 
-export interface PortalNextStep {
-  id: string;
-  kind: "commitment" | "milestone";
-  title: string;
-  due_date: string | null;
-  overdue: boolean;
-  /** Who the item sits with, when recorded (commitments.committed_to). */
-  who: string | null;
-  implementation_name: string;
-}
+/** A task the customer owns, from work_items with party = customer and visibility = shared. */
+export type PortalNextStep = CustomerTaskStep;
+
+/** A GoCanvas promise to the customer, in the words the customer sees. */
+export type PortalCommitment = CustomerCommitment;
 
 export interface PortalActivityItem {
   id: string;
@@ -141,18 +143,18 @@ export interface PortalHome {
   customers: Array<{ id: string; name: string }>;
   customer_name: string;
   implementations: PortalImplementation[];
+  /** The customer's own shared tasks. "Your next steps". */
   next_steps: PortalNextStep[];
+  /** GoCanvas promises still owed, renegotiated and missed included. "What we owe you". */
+  we_owe: PortalCommitment[];
+  /** GoCanvas promises done or withdrawn. "History". */
+  commitment_history: PortalCommitment[];
   activity: PortalActivityItem[];
 }
 
 function milestoneDone(m: { status: string | null; completed_date: string | null }): boolean {
   if (m.completed_date) return true;
   return ["complete", "completed", "done"].includes((m.status ?? "").toLowerCase());
-}
-
-function pastDue(date: string | null): boolean {
-  if (!date) return false;
-  return new Date(date).getTime() < Date.now();
 }
 
 export async function loadPortalHome(userId: string): Promise<PortalHome> {
@@ -170,25 +172,33 @@ export async function loadPortalHome(userId: string): Promise<PortalHome> {
   const customerName = (customers ?? []).map((c: any) => c.name).join(" · ") || "Customer";
   const implIds = (impls ?? []).map((i: any) => i.id);
 
-  const [{ data: milestones }, { data: commitments }, { data: history }] = implIds.length
-    ? await Promise.all([
-        db()
-          .from("milestones")
-          .select("id, implementation_id, name, status, target_date, completed_date, stage")
-          .in("implementation_id", implIds),
-        db()
-          .from("commitments")
-          .select("id, implementation_id, description, due_date, status, committed_to")
-          .in("implementation_id", implIds)
-          .eq("status", "open"),
-        db()
-          .from("implementation_stage_history")
-          .select("id, implementation_id, stage, entered_at")
-          .in("implementation_id", implIds)
-          .order("entered_at", { ascending: false })
-          .limit(6),
-      ])
-    : [{ data: [] }, { data: [] }, { data: [] }];
+  // Only the customer's own shared tasks are read here. The filter is repeated
+  // in customerTaskSteps, so a change to this query cannot widen the view.
+  const [{ data: milestones }, { data: commitments }, { data: history }, { data: tasks }] =
+    implIds.length
+      ? await Promise.all([
+          db()
+            .from("milestones")
+            .select("id, implementation_id, name, status, target_date, completed_date, stage")
+            .in("implementation_id", implIds),
+          db()
+            .from("commitments")
+            .select("id, implementation_id, description, due_date, status, committed_to")
+            .in("implementation_id", implIds),
+          db()
+            .from("implementation_stage_history")
+            .select("id, implementation_id, stage, entered_at")
+            .in("implementation_id", implIds)
+            .order("entered_at", { ascending: false })
+            .limit(6),
+          db()
+            .from("work_items")
+            .select("id, implementation_id, title, status, party, visibility, due_at")
+            .in("implementation_id", implIds)
+            .eq("party", "customer")
+            .eq("visibility", "shared"),
+        ])
+      : [{ data: [] }, { data: [] }, { data: [] }, { data: [] }];
 
   const customerById = new Map<string, string>(
     (customers ?? []).map((c: any) => [c.id as string, c.name as string]),
@@ -241,32 +251,13 @@ export async function loadPortalHome(userId: string): Promise<PortalHome> {
 
   const implName = new Map(implementations.map((i) => [i.id, i.name]));
 
-  // "Your next steps" — best effort: milestones don't carry a customer-side
-  // owner (owner_id is an internal team member), so we surface open
-  // commitments (with who they're committed to) and upcoming incomplete
-  // milestones with due dates.
-  const nextSteps: PortalNextStep[] = [
-    ...(commitments ?? []).map((c: any) => ({
-      id: c.id,
-      kind: "commitment" as const,
-      title: c.description,
-      due_date: c.due_date,
-      overdue: pastDue(c.due_date),
-      who: c.committed_to ?? null,
-      implementation_name: implName.get(c.implementation_id) ?? "",
-    })),
-    ...(milestones ?? [])
-      .filter((m: any) => !milestoneDone(m) && m.target_date)
-      .map((m: any) => ({
-        id: m.id,
-        kind: "milestone" as const,
-        title: m.name,
-        due_date: m.target_date,
-        overdue: pastDue(m.target_date),
-        who: null,
-        implementation_name: implName.get(m.implementation_id) ?? "",
-      })),
-  ].sort((a, b) => (a.due_date ?? "9999").localeCompare(b.due_date ?? "9999"));
+  // The same UTC day the shared plan uses, so the two views agree on what is overdue.
+  const today = new Date().toISOString().slice(0, 10);
+  // "Your next steps": the customer's own shared tasks only. GoCanvas promises
+  // are shown under "What we owe you", never here.
+  const nextSteps: PortalNextStep[] = customerTaskSteps(tasks ?? [], implName, today);
+  // "What we owe you" and "History": the GoCanvas promises, split by state.
+  const promises = customerCommitments(commitments ?? [], implName, today);
 
   const activity: PortalActivityItem[] = [
     ...(history ?? []).map((h: any) => ({
@@ -292,6 +283,8 @@ export async function loadPortalHome(userId: string): Promise<PortalHome> {
     customer_name: customerName,
     implementations,
     next_steps: nextSteps.slice(0, 12),
+    we_owe: owedToCustomer(promises),
+    commitment_history: commitmentHistory(promises),
     activity,
   };
 }

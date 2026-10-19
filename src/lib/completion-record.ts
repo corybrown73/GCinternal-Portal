@@ -31,6 +31,8 @@
  * something a person recorded, reproduced.
  */
 
+import { isCustomerCommitment } from "./commitment-status";
+
 export type CompletionEntry = {
   title: string;
   detail?: string | null;
@@ -75,15 +77,7 @@ export function day(v: unknown): string | null {
 
 const dash = (v: string | null) => v ?? "—";
 
-/**
- * A commitment belongs in the public record only when it is owed to the
- * customer: `committed_to` is exactly "customer", ignoring case and surrounding
- * spaces. Anything else — "internal", a name, a blank — is left out, and
- * nothing is read from the commitment's own text to decide otherwise.
- */
-export function isCustomerCommitment(committedTo: unknown): boolean {
-  return typeof committedTo === "string" && committedTo.trim().toLowerCase() === "customer";
-}
+export { isCustomerCommitment };
 
 /** A task belongs in the public record only when it was shared: `visibility` is exactly "shared". */
 export function isSharedWorkItem(item: { visibility?: unknown }): boolean {

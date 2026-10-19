@@ -77,12 +77,12 @@ function PortalHomePage() {
       )}
 
       <div className="grid gap-6 md:grid-cols-2">
-        {/* Your next steps */}
+        {/* Your next steps: the tasks the customer owns, shared with them. */}
         <section className="rounded-md border border-border bg-card">
           <header className="border-b border-border px-4 py-2.5">
             <h2 className="text-[13px] font-semibold">Your next steps</h2>
             <p className="text-[11px] text-muted-foreground">
-              What&apos;s coming up — items past their date are flagged.
+              Tasks that are yours to do — items past their date are flagged.
             </p>
           </header>
           <ul className="divide-y divide-border">
@@ -92,10 +92,7 @@ function PortalHomePage() {
               </li>
             ) : (
               data.next_steps.map((step) => (
-                <li
-                  key={`${step.kind}-${step.id}`}
-                  className={cn("px-4 py-2.5", step.overdue && "bg-status-risk")}
-                >
+                <li key={step.id} className={cn("px-4 py-2.5", step.overdue && "bg-status-risk")}>
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <p
@@ -107,8 +104,7 @@ function PortalHomePage() {
                         {step.title}
                       </p>
                       <p className="mt-0.5 text-[11px] text-muted-foreground">
-                        {step.kind === "commitment" ? "Commitment" : "Milestone"}
-                        {step.who ? ` · with ${step.who}` : ""} · {step.implementation_name}
+                        {step.implementation_name}
                       </p>
                     </div>
                     <span
@@ -127,6 +123,54 @@ function PortalHomePage() {
           </ul>
         </section>
 
+        {/* What we owe you: GoCanvas promises, still owed until delivered. */}
+        <section className="rounded-md border border-border bg-card">
+          <header className="border-b border-border px-4 py-2.5">
+            <h2 className="text-[13px] font-semibold">What we owe you</h2>
+            <p className="text-[11px] text-muted-foreground">
+              What GoCanvas has committed to — still owed until it is delivered.
+            </p>
+          </header>
+          <ul className="divide-y divide-border">
+            {data.we_owe.length === 0 ? (
+              <li className="px-4 py-6 text-center text-[12px] text-muted-foreground">
+                Nothing is owed to you right now.
+              </li>
+            ) : (
+              data.we_owe.map((item) => (
+                <li key={item.id} className={cn("px-4 py-2.5", item.overdue && "bg-status-risk")}>
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p
+                        className={cn(
+                          "text-[13px]",
+                          item.overdue && "text-status-risk-foreground font-medium",
+                        )}
+                      >
+                        {item.title}
+                      </p>
+                      <p className="mt-0.5 text-[11px] text-muted-foreground">
+                        {item.status_label} · {item.implementation_name}
+                      </p>
+                    </div>
+                    <span
+                      className={cn(
+                        "shrink-0 font-mono text-[11px]",
+                        item.overdue ? "text-status-risk-foreground" : "text-muted-foreground",
+                      )}
+                    >
+                      {item.overdue ? "overdue · " : ""}
+                      {fmtDate(item.due_date)}
+                    </span>
+                  </div>
+                </li>
+              ))
+            )}
+          </ul>
+        </section>
+      </div>
+
+      <div className="grid gap-6 md:grid-cols-2">
         {/* Recent activity */}
         <section className="rounded-md border border-border bg-card">
           <header className="border-b border-border px-4 py-2.5">
@@ -153,6 +197,39 @@ function PortalHomePage() {
                   <span className="shrink-0 font-mono text-[10px] text-muted-foreground">
                     <When value={item.at} />
                   </span>
+                </li>
+              ))
+            )}
+          </ul>
+        </section>
+
+        {/* History: promises that were delivered or withdrawn. */}
+        <section className="rounded-md border border-border bg-card">
+          <header className="border-b border-border px-4 py-2.5">
+            <h2 className="text-[13px] font-semibold">History</h2>
+            <p className="text-[11px] text-muted-foreground">
+              Commitments that were delivered or withdrawn.
+            </p>
+          </header>
+          <ul className="divide-y divide-border">
+            {data.commitment_history.length === 0 ? (
+              <li className="px-4 py-6 text-center text-[12px] text-muted-foreground">
+                Nothing has been delivered or withdrawn yet.
+              </li>
+            ) : (
+              data.commitment_history.map((item) => (
+                <li key={item.id} className="px-4 py-2.5">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-[13px] text-muted-foreground line-through">{item.title}</p>
+                      <p className="mt-0.5 text-[11px] text-muted-foreground">
+                        {item.status_label} · {item.implementation_name}
+                      </p>
+                    </div>
+                    <span className="shrink-0 font-mono text-[11px] text-muted-foreground">
+                      {fmtDate(item.due_date)}
+                    </span>
+                  </div>
                 </li>
               ))
             )}

@@ -1,7 +1,10 @@
 import { BRAND } from "@/lib/brand";
-import type { SharedPlan } from "@/lib/shared-plan";
+import type { SharedCommitment, SharedPlan } from "@/lib/shared-plan";
 
 import { MARKS, openBrandedPdf, PDF_BODY_SOFT } from "@/lib/pdf-kit";
+
+/** A withdrawn commitment: not done, and not owed. */
+const WITHDRAWN_MARK = "[-]";
 
 /**
  * The customer's project plan, as a PDF.
@@ -22,6 +25,17 @@ import { MARKS, openBrandedPdf, PDF_BODY_SOFT } from "@/lib/pdf-kit";
  * the URL. Chrome and type come from `pdf-kit`; this file only decides what
  * the document says.
  */
+/**
+ * The download's file name. A header value must be plain ASCII, so anything
+ * else (an em dash, an accent) is replaced: a non-ASCII character here made
+ * every plan PDF fail with a 500.
+ */
+export function planPdfFileName(customerName: string): string {
+  return `${customerName} - project plan.pdf`
+    .replace(/[\\/:*?"<>|]/g, "-")
+    .replace(/[^\x20-\x7e]/g, "-");
+}
+
 export async function renderPlanPdf(plan: SharedPlan, planUrl: string): Promise<Uint8Array> {
   const pdf = await openBrandedPdf({
     title: plan.customer_name,
@@ -80,16 +94,37 @@ export async function renderPlanPdf(plan: SharedPlan, planUrl: string): Promise<
     }
   }
 
-  pdf.section("With us", "What GoCanvas has committed to.");
-  if (plan.our_commitments.length === 0) {
-    pdf.line("Nothing outstanding on our side.", { color: BRAND.fg2 });
-  }
-  for (const c of plan.our_commitments) {
-    pdf.line(`${c.done ? MARKS.done : MARKS.open}  ${c.description}`, { size: 10.5 });
-    const meta = [c.due_date ? `Due ${c.due_date}` : null, c.committed_to].filter(Boolean);
+  // Outstanding promises are owed until delivered, renegotiated and missed
+  // included. Done and withdrawn ones are history.
+  const commitmentState = (c: SharedCommitment) =>
+    c.state ?? (c.done ? "completed" : "outstanding");
+  const writeCommitment = (c: SharedCommitment) => {
+    const state = commitmentState(c);
+    const mark =
+      state === "completed" ? MARKS.done : state === "withdrawn" ? WITHDRAWN_MARK : MARKS.open;
+    pdf.line(`${mark}  ${c.description}`, { size: 10.5 });
+    const meta = [
+      c.due_date ? `Due ${c.due_date}` : null,
+      c.status_label ?? null,
+      c.overdue ? "Overdue" : null,
+    ].filter(Boolean);
     if (meta.length) {
       pdf.line(meta.join("   ·   "), { size: 8.5, color: BRAND.fg2, gap: 11, indent: 16 });
     }
+  };
+
+  const owed = plan.our_commitments.filter((c) => commitmentState(c) === "outstanding");
+  const history = plan.our_commitments.filter((c) => commitmentState(c) !== "outstanding");
+
+  pdf.section("What we owe you", "What GoCanvas has committed to, until it is delivered.");
+  if (owed.length === 0) {
+    pdf.line("Nothing is owed to you right now.", { color: BRAND.fg2 });
+  }
+  for (const c of owed) writeCommitment(c);
+
+  if (history.length) {
+    pdf.section("History", "Commitments that were delivered or withdrawn.");
+    for (const c of history) writeCommitment(c);
   }
 
   pdf.section("The road to launch");

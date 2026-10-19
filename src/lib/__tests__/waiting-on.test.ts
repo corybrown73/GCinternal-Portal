@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { fmtDate } from "../hub-format";
 import { waitingOn, WAITING_ON_LABEL } from "../customer360-derive";
 
 /**
@@ -119,7 +120,7 @@ describe("waitingOn — owner resolution", () => {
     expect(commitment.owner).toEqual({ name: "Jo", role: "TIS" });
   });
 
-  it("never invents an owner for a customer-side overdue commitment", () => {
+  it("never makes the customer the one waiting on a promise GoCanvas made to them", () => {
     const w = waitingOn({
       commitments: [
         {
@@ -131,8 +132,47 @@ describe("waitingOn — owner resolution", () => {
         },
       ],
     });
-    expect(w.party).toBe("customer");
+    expect(w.party).toBe("tis");
+    expect(w.reason).not.toContain("customer");
+    expect(w.reason).toBe(
+      `Waiting on ${WAITING_ON_LABEL.tis} to deliver a commitment past due ${fmtDate("2020-01-01")}: Send the field user list`,
+    );
     expect(w.owner).toBeNull();
+  });
+
+  it("keeps the owner of an overdue promise to the customer, so someone can act on it", () => {
+    const w = waitingOn({
+      commitments: [
+        {
+          id: "c1",
+          status: "open",
+          description: "Send the field user list",
+          committed_to: "customer",
+          owner_name: "Jo",
+          owner_role: "TIS",
+          due_date: "2020-01-01",
+        },
+      ],
+    });
+    expect(w.party).toBe("tis");
+    expect(w.owner).toEqual({ name: "Jo", role: "TIS" });
+  });
+
+  it("does not wait on anyone for a promise that is already met or withdrawn", () => {
+    for (const status of ["met", "fulfilled", "cancelled"]) {
+      const w = waitingOn({
+        commitments: [
+          {
+            id: "c1",
+            status,
+            description: "Send the field user list",
+            committed_to: "customer",
+            due_date: "2020-01-01",
+          },
+        ],
+      });
+      expect(w.party, status).toBe("none");
+    }
   });
 
   it("uses the decision's free-text decided_by as a name, with no role — never a resolvable team_members role", () => {

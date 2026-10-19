@@ -118,6 +118,11 @@ function SnapshotPage() {
                   due {c.due_date}
                 </span>
               ) : null}
+              {c.status_label ? (
+                <span className="ml-2 font-mono text-[11px] text-muted-foreground">
+                  {c.status_label}
+                </span>
+              ) : null}
             </li>
           ))
         )}

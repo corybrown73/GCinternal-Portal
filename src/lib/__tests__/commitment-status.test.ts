@@ -2,7 +2,13 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { commitmentState, isOutstandingCommitment } from "../commitment-status";
+import {
+  commitmentState,
+  customerCommitmentView,
+  customerStatusLabel,
+  isCustomerCommitment,
+  isOutstandingCommitment,
+} from "../commitment-status";
 import { COMMITMENT_STATUSES } from "../delivery-input";
 
 /**
@@ -72,4 +78,79 @@ describe("internal surfaces read commitment status through the shared rule", () 
       expect(source).not.toMatch(/["']status["']\s*,\s*["'](fulfilled|cancelled)["']/);
     });
   }
+});
+
+/** What a customer is told about each status (#81, customer-facing). */
+describe("customerStatusLabel", () => {
+  it("words each accepted and legacy status the way the customer sees it", () => {
+    expect(customerStatusLabel("met")).toBe("Done");
+    expect(customerStatusLabel("fulfilled")).toBe("Done");
+    expect(customerStatusLabel("cancelled")).toBe("Withdrawn");
+    expect(customerStatusLabel("renegotiated")).toBe("Renegotiated — Outstanding");
+    expect(customerStatusLabel("missed")).toBe("Missed — Outstanding");
+    expect(customerStatusLabel("open")).toBe("Outstanding");
+  });
+
+  it("shows an unknown or missing status as Outstanding, not as nothing", () => {
+    expect(customerStatusLabel("sort_of_done_ish")).toBe("Outstanding");
+    expect(customerStatusLabel(null)).toBe("Outstanding");
+  });
+});
+
+describe("isCustomerCommitment", () => {
+  it("shows a commitment only when it is exactly for the customer, ignoring case and spacing", () => {
+    expect(isCustomerCommitment("customer")).toBe(true);
+    expect(isCustomerCommitment("Customer")).toBe(true);
+    expect(isCustomerCommitment("  CUSTOMER ")).toBe(true);
+  });
+
+  it("hides our own team's commitments, and anything not exactly the customer", () => {
+    expect(isCustomerCommitment("internal")).toBe(false);
+    expect(isCustomerCommitment("Internal")).toBe(false);
+    expect(isCustomerCommitment("customers")).toBe(false);
+    expect(isCustomerCommitment("customer contact")).toBe(false);
+    expect(isCustomerCommitment("Ada")).toBe(false);
+    expect(isCustomerCommitment("GoCanvas team")).toBe(false);
+    expect(isCustomerCommitment("")).toBe(false);
+    expect(isCustomerCommitment(null)).toBe(false);
+    expect(isCustomerCommitment(undefined)).toBe(false);
+  });
+});
+
+describe("customerCommitmentView", () => {
+  const TODAY = "2026-10-19";
+
+  it("treats met as Done even with no date, and never overdue", () => {
+    expect(customerCommitmentView({ status: "met", due_date: null }, TODAY)).toEqual({
+      state: "completed",
+      done: true,
+      status_label: "Done",
+      overdue: false,
+    });
+    expect(customerCommitmentView({ status: "met", due_date: "2020-01-01" }, TODAY).overdue).toBe(
+      false,
+    );
+  });
+
+  it("never shows a withdrawn commitment as owed or overdue", () => {
+    const v = customerCommitmentView({ status: "cancelled", due_date: "2020-01-01" }, TODAY);
+    expect(v.state).toBe("withdrawn");
+    expect(v.done).toBe(false);
+    expect(v.overdue).toBe(false);
+  });
+
+  it("keeps a renegotiated commitment outstanding, whatever its completion date", () => {
+    const v = customerCommitmentView({ status: "renegotiated", due_date: "2020-01-01" }, TODAY);
+    expect(v.state).toBe("outstanding");
+    expect(v.done).toBe(false);
+    expect(v.overdue).toBe(true);
+  });
+
+  it("is overdue only when its due day is before today, on the shared day basis", () => {
+    expect(customerCommitmentView({ status: "open", due_date: TODAY }, TODAY).overdue).toBe(false);
+    expect(customerCommitmentView({ status: "open", due_date: "2026-10-18" }, TODAY).overdue).toBe(
+      true,
+    );
+    expect(customerCommitmentView({ status: "open", due_date: null }, TODAY).overdue).toBe(false);
+  });
 });

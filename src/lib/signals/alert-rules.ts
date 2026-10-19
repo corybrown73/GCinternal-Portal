@@ -20,7 +20,6 @@ import { DAY_MS } from "./stage-history";
 import { stagesBetween } from "./velocity";
 import type { EngagementSignal } from "./engagement";
 import { refutesSilence } from "./engagement";
-import { isOutstandingCommitment } from "../commitment-status";
 
 /** A customer-side ask must be unanswered this long before it is "gone quiet". */
 export const CHAMPION_QUIET_DAYS = 21;
@@ -95,15 +94,6 @@ type ApprovalLike = {
   approved_entity_id?: string | null;
 };
 
-type CommitmentLike = {
-  id?: string | null;
-  description?: string | null;
-  status?: string | null;
-  due_date?: string | null;
-  committed_to?: string | null;
-  owner_name?: string | null;
-};
-
 type EscalationLike = {
   id?: string | null;
   title?: string | null;
@@ -126,10 +116,6 @@ const CLOSED = [
 ];
 const isOpenStatus = (value: string | null | undefined) =>
   !CLOSED.includes(String(value ?? "").toLowerCase());
-const isCustomerSide = (value: string | null | undefined) => {
-  const v = String(value ?? "").toLowerCase();
-  return v.includes("customer") || v.includes("client");
-};
 
 const daysOld = (iso: string | null | undefined, now: Date): number | null => {
   if (!iso) return null;
@@ -150,7 +136,6 @@ export type ChampionInput = {
   /** The already-derived dependency. Condition 2 is that it points at the customer. */
   dependency: WaitingOn;
   approvals: ApprovalLike[];
-  commitments: CommitmentLike[];
   /** Phase 4 telemetry, if the table exists. Refutes only; never originates. */
   engagement?: EngagementSignal | undefined;
 };
@@ -159,8 +144,11 @@ export type ChampionInput = {
  * Silence is not observable. An unanswered question is.
  *
  * Fires only when: the implementation is live, the dependency is on the
- * customer, a NAMED customer-side ask has gone unanswered for
+ * customer, a NAMED customer-side ask (an approval) has gone unanswered for
  * CHAMPION_QUIET_DAYS, and telemetry does not positively contradict it.
+ *
+ * A commitment is not an ask. A promise GoCanvas made to the customer cannot be
+ * left unanswered by them, so it never counts as a silent champion.
  */
 export function championGoneQuiet(input: ChampionInput, now: Date = new Date()): AlertEvaluation {
   const { impl, dependency } = input;
@@ -185,27 +173,15 @@ export function championGoneQuiet(input: ChampionInput, now: Date = new Date()):
     )
     .sort((a, b) => String(a.requested_at).localeCompare(String(b.requested_at)))[0];
 
-  const staleCommitment = input.commitments
-    .filter(
-      (c) =>
-        isOutstandingCommitment(c.status) &&
-        isCustomerSide(c.committed_to) &&
-        (daysOld(c.due_date, now) ?? -1) >= CHAMPION_QUIET_DAYS,
-    )
-    .sort((a, b) => String(a.due_date).localeCompare(String(b.due_date)))[0];
-
-  if (!staleApproval && !staleCommitment) {
+  if (!staleApproval) {
     return { findings: [], withheld };
   }
 
   // Condition 4: somebody must be named, or this is a data-quality problem
   // rather than a champion problem, and the alert would be unactionable.
-  const approvalName = staleApproval
-    ? ((staleApproval.approver_name?.trim() || staleApproval.approver_role?.trim()) ?? null)
-    : null;
-  const commitmentName = staleCommitment ? (staleCommitment.committed_to?.trim() ?? null) : null;
-  const champion = approvalName || commitmentName;
-  if (!champion) {
+  const approvalName =
+    (staleApproval.approver_name?.trim() || staleApproval.approver_role?.trim()) ?? null;
+  if (!approvalName) {
     withheld.push({
       kind: "champion_gone_quiet",
       implementation_id: impl.id,
@@ -215,24 +191,14 @@ export function championGoneQuiet(input: ChampionInput, now: Date = new Date()):
     return { findings: [], withheld };
   }
 
-  const askedAt = staleApproval?.requested_at ?? staleCommitment?.due_date ?? null;
+  const askedAt = staleApproval.requested_at ?? null;
   const evidence: EvidenceItem[] = [];
-  if (staleApproval) {
-    evidence.push({
-      source: "approvals",
-      id: staleApproval.id ?? null,
-      fact: `Approval "${staleApproval.title ?? "untitled"}" requested ${fmtDate(staleApproval.requested_at)} with ${approvalName ?? "nobody"} named, still undecided after ${daysOld(staleApproval.requested_at, now)}d.`,
-      at: staleApproval.requested_at ?? null,
-    });
-  }
-  if (staleCommitment) {
-    evidence.push({
-      source: "commitments",
-      id: staleCommitment.id ?? null,
-      fact: `Commitment "${staleCommitment.description ?? "untitled"}" owed by ${commitmentName ?? "the customer"} was due ${fmtDate(staleCommitment.due_date)}, ${daysOld(staleCommitment.due_date, now)}d ago and still open.`,
-      at: staleCommitment.due_date ?? null,
-    });
-  }
+  evidence.push({
+    source: "approvals",
+    id: staleApproval.id ?? null,
+    fact: `Approval "${staleApproval.title ?? "untitled"}" requested ${fmtDate(staleApproval.requested_at)} with ${approvalName ?? "nobody"} named, still undecided after ${daysOld(staleApproval.requested_at, now)}d.`,
+    at: staleApproval.requested_at ?? null,
+  });
   evidence.push({
     source: "waiting_on",
     id: null,
@@ -272,7 +238,7 @@ export function championGoneQuiet(input: ChampionInput, now: Date = new Date()):
     implementation_id: impl.id,
     customer_id: impl.customer_id ?? null,
     severity: "warning",
-    title: `Champion gone quiet: ${accountLabel(impl)} — ${champion}, ${days}d`,
+    title: `Champion gone quiet: ${accountLabel(impl)} — ${approvalName}, ${days}d`,
     detail: [
       `${accountLabel(impl)} has been waiting on the customer for ${days} days.`,
       ...evidence.map((e) => `• ${e.fact}`),
@@ -280,12 +246,11 @@ export function championGoneQuiet(input: ChampionInput, now: Date = new Date()):
     evidence,
     payload: {
       rule: "champion_gone_quiet",
-      champion,
+      champion: approvalName,
       quiet_days: days,
       quiet_window_days: CHAMPION_QUIET_DAYS,
       asked_at: askedAt,
-      approval_id: staleApproval?.id ?? null,
-      commitment_id: staleCommitment?.id ?? null,
+      approval_id: staleApproval.id ?? null,
       waiting_on_party: dependency.party,
       engagement_available: input.engagement?.available ?? false,
     },

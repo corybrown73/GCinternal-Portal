@@ -3,7 +3,7 @@ import { shortDay } from "@/lib/onboarding-timeline";
 import { stampDay } from "@/lib/stage-flow";
 import { CalendarDays, CheckCircle2, Circle, Lock, MessageSquare, Paperclip } from "lucide-react";
 
-import type { SharedMessage, SharedPlan, SharedTask } from "@/lib/shared-plan";
+import type { SharedCommitment, SharedMessage, SharedPlan, SharedTask } from "@/lib/shared-plan";
 import { cn } from "@/lib/utils";
 
 /**
@@ -51,6 +51,9 @@ export function SharedPlanView({
 }) {
   const yours = plan.your_tasks.filter((t) => t.owner === "you");
   const ours = plan.your_tasks.filter((t) => t.owner === "us");
+  // Outstanding promises are owed until delivered; done and withdrawn are history.
+  const owed = plan.our_commitments.filter((c) => commitmentState(c) === "outstanding");
+  const history = plan.our_commitments.filter((c) => commitmentState(c) !== "outstanding");
 
   const grouped: Array<[SharedTask["bucket"], SharedTask[]]> = (
     ["overdue", "due_today", "this_week", "later", "done"] as const
@@ -127,9 +130,9 @@ export function SharedPlanView({
           <h2 className="text-[13px] font-medium">With GoCanvas</h2>
         </header>
         <ul className="divide-y divide-border">
-          {plan.our_commitments.length === 0 && ours.length === 0 ? (
+          {ours.length === 0 ? (
             <li className="px-4 py-6 text-center text-[13px] text-muted-foreground">
-              Nothing outstanding on our side.
+              No shared tasks on our side right now.
             </li>
           ) : null}
           {ours.map((task) => (
@@ -142,19 +145,36 @@ export function SharedPlanView({
               ) : null}
             </li>
           ))}
-          {plan.our_commitments.map((c, i) => (
-            <li key={`c-${i}`} className="px-4 py-3">
-              <p className={cn("text-[13px]", c.done && "text-muted-foreground line-through")}>
-                {c.description}
-              </p>
-              <p className="mt-0.5 font-mono text-[11px] text-muted-foreground">
-                {c.due_date ? `due ${shortDay(c.due_date)}` : "no date"}
-                {c.committed_to ? ` · to ${c.committed_to}` : ""}
-              </p>
-            </li>
-          ))}
         </ul>
       </section>
+
+      <section className="rounded-md border border-border bg-card">
+        <header className="border-b border-border px-4 py-2.5">
+          <h2 className="text-[13px] font-medium">What we owe you</h2>
+        </header>
+        <ul className="divide-y divide-border">
+          {owed.length === 0 ? (
+            <li className="px-4 py-6 text-center text-[13px] text-muted-foreground">
+              Nothing is owed to you right now.
+            </li>
+          ) : (
+            owed.map((c, i) => <CommitmentRow key={`o-${i}`} commitment={c} />)
+          )}
+        </ul>
+      </section>
+
+      {history.length > 0 ? (
+        <section className="rounded-md border border-border bg-card">
+          <header className="border-b border-border px-4 py-2.5">
+            <h2 className="text-[13px] font-medium">History</h2>
+          </header>
+          <ul className="divide-y divide-border">
+            {history.map((c, i) => (
+              <CommitmentRow key={`h-${i}`} commitment={c} />
+            ))}
+          </ul>
+        </section>
+      ) : null}
 
       <ConversationPanel plan={plan} actions={actions} />
 
@@ -190,6 +210,31 @@ export function SharedPlanView({
         </p>
       ) : null}
     </div>
+  );
+}
+
+/**
+ * A promise's state. Snapshots stored before the status rules carry only `done`,
+ * so that is the fallback.
+ */
+function commitmentState(c: SharedCommitment): NonNullable<SharedCommitment["state"]> {
+  return c.state ?? (c.done ? "completed" : "outstanding");
+}
+
+/** One GoCanvas promise, in the words the customer sees. */
+function CommitmentRow({ commitment: c }: { commitment: SharedCommitment }) {
+  const finished = commitmentState(c) !== "outstanding";
+  return (
+    <li className="px-4 py-3">
+      <p className={cn("text-[13px]", finished && "text-muted-foreground line-through")}>
+        {c.description}
+      </p>
+      <p className="mt-0.5 font-mono text-[11px] text-muted-foreground">
+        {c.due_date ? `due ${shortDay(c.due_date)}` : "no date"}
+        {` · ${c.status_label ?? (c.done ? "Done" : "Outstanding")}`}
+        {c.overdue ? <span className="text-status-blocked-foreground"> · Overdue</span> : null}
+      </p>
+    </li>
   );
 }
 

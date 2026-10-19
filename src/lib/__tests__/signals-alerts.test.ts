@@ -49,7 +49,7 @@ const impl = {
 describe("championGoneQuiet", () => {
   it("fires on an unanswered, dated, named ask and names it as evidence", () => {
     const out = championGoneQuiet(
-      { impl, dependency: onCustomer, approvals: [staleApproval], commitments: [] },
+      { impl, dependency: onCustomer, approvals: [staleApproval] },
       NOW,
     );
     expect(out.findings).toHaveLength(1);
@@ -74,7 +74,6 @@ describe("championGoneQuiet", () => {
           task: "",
         },
         approvals: [staleApproval],
-        commitments: [],
       },
       NOW,
     );
@@ -87,7 +86,6 @@ describe("championGoneQuiet", () => {
         impl,
         dependency: onCustomer,
         approvals: [{ ...staleApproval, requested_at: daysAgo(CHAMPION_QUIET_DAYS - 1) }],
-        commitments: [],
       },
       NOW,
     );
@@ -101,7 +99,6 @@ describe("championGoneQuiet", () => {
         impl,
         dependency: onCustomer,
         approvals: [{ ...staleApproval, approver_name: null }],
-        commitments: [],
       },
       NOW,
     );
@@ -115,7 +112,6 @@ describe("championGoneQuiet", () => {
         impl: { ...impl, current_stage: "graduate-to-cs" },
         dependency: onCustomer,
         approvals: [staleApproval],
-        commitments: [],
       },
       NOW,
     );
@@ -136,7 +132,7 @@ describe("championGoneQuiet", () => {
       90,
     );
     const out = championGoneQuiet(
-      { impl, dependency: onCustomer, approvals: [staleApproval], commitments: [], engagement },
+      { impl, dependency: onCustomer, approvals: [staleApproval], engagement },
       NOW,
     );
     expect(out.findings).toEqual([]);
@@ -150,7 +146,7 @@ describe("championGoneQuiet", () => {
       90,
     );
     const out = championGoneQuiet(
-      { impl, dependency: onCustomer, approvals: [staleApproval], commitments: [], engagement },
+      { impl, dependency: onCustomer, approvals: [staleApproval], engagement },
       NOW,
     );
     expect(out.findings).toHaveLength(1);
@@ -163,7 +159,6 @@ describe("championGoneQuiet", () => {
         impl,
         dependency: onCustomer,
         approvals: [staleApproval],
-        commitments: [],
         engagement: TELEMETRY_UNAVAILABLE("the table does not exist yet"),
       },
       NOW,
@@ -318,32 +313,19 @@ describe("engagement classification", () => {
   });
 });
 
-describe("championGoneQuiet: commitment states", () => {
-  // A customer-side commitment well past the quiet period, with no approval
-  // waiting. Only its status changes between cases.
-  const staleCommitment = (status: string) => ({
-    id: "c-1",
-    description: "Send the data map",
-    status,
-    due_date: daysAgo(CHAMPION_QUIET_DAYS + 10).slice(0, 10),
-    committed_to: "customer",
-    owner_name: "Dana Reed",
+describe("championGoneQuiet: a promise is not an ask", () => {
+  it("does not fire from the customer dependency alone, with no approval waiting", () => {
+    const result = championGoneQuiet({ impl, dependency: onCustomer, approvals: [] }, NOW);
+    expect(result.findings).toEqual([]);
   });
-  const fires = (status: string) =>
-    championGoneQuiet(
-      { impl, dependency: onCustomer, approvals: [], commitments: [staleCommitment(status)] },
+
+  it("still fires on a named, unanswered approval, and names the approval as the cause", () => {
+    const result = championGoneQuiet(
+      { impl, dependency: onCustomer, approvals: [staleApproval] },
       NOW,
-    ).findings.length > 0;
-
-  it("does not fire on a met, fulfilled or cancelled commitment", () => {
-    expect(fires("met")).toBe(false);
-    expect(fires("fulfilled")).toBe(false);
-    expect(fires("cancelled")).toBe(false);
-  });
-
-  it("fires on an open, missed or renegotiated commitment the customer still owes", () => {
-    expect(fires("open")).toBe(true);
-    expect(fires("missed")).toBe(true);
-    expect(fires("renegotiated")).toBe(true);
+    );
+    expect(result.findings).toHaveLength(1);
+    expect(result.findings[0]!.payload["approval_id"]).toBe(staleApproval.id);
+    expect(result.findings[0]!.payload).not.toHaveProperty("commitment_id");
   });
 });
