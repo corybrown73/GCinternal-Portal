@@ -51,3 +51,47 @@ export function graduatedSectionOffered(stageFilter: string | undefined): boolea
 export function graduatedCount(graduated: readonly SplittableRow[]): number {
   return graduated.filter((row) => !row.is_test).length;
 }
+
+/**
+ * Whether the main (active) table is shown. Selecting the graduated stage hides it:
+ * an empty active table above the graduated section would only be noise.
+ */
+export function showActiveTable(stageFilter: string | undefined): boolean {
+  return stageFilter !== GRADUATED_STAGE;
+}
+
+/**
+ * A reader's click on the graduated section, kept for the stage filter it was made under.
+ * A click made under one stage filter does not carry over to another.
+ */
+export type GraduatedChoice = { forStage: string | undefined; open: boolean } | null;
+
+/**
+ * Whether the graduated section is expanded. Collapsed by default; expanded by default
+ * when the graduated stage is selected. A click made under the same stage filter wins.
+ */
+export function graduatedSectionOpen(
+  choice: GraduatedChoice,
+  stageFilter: string | undefined,
+): boolean {
+  if (choice && choice.forStage === stageFilter) return choice.open;
+  return stageFilter === GRADUATED_STAGE;
+}
+
+/**
+ * The empty-state message for a section. `filtered` is true when a stage or status
+ * filter is applied, so the message can tell the reader that clearing one may help.
+ */
+export function customerListEmptyMessage(
+  section: "active" | "graduated",
+  filtered: boolean,
+): string {
+  if (section === "graduated") {
+    return filtered
+      ? "No graduated customers match these filters. Try clearing a filter."
+      : "No graduated customers in this view.";
+  }
+  return filtered
+    ? "No active customers match these filters. Try clearing a filter."
+    : "No active customers in this view.";
+}

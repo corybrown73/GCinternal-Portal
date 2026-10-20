@@ -20,9 +20,13 @@ import { errorMessage } from "@/lib/error-message";
 import { GRADUATED_STAGE } from "@/lib/claimed-owner";
 import type { ImplHealth } from "@/lib/customer360-derive";
 import {
+  customerListEmptyMessage,
   graduatedCount,
   graduatedSectionOffered,
+  graduatedSectionOpen,
   partitionCustomerRows,
+  showActiveTable,
+  type GraduatedChoice,
 } from "@/lib/customer-list-sections";
 import { readShowTests } from "@/lib/test-accounts";
 import { ShowTestsToggle } from "@/components/show-tests-toggle";
@@ -131,10 +135,7 @@ function CustomersPage() {
   const navigate = useNavigate({ from: Route.fullPath });
   // A click is kept for the stage filter it was made under, so each stage filter starts
   // from its own default: collapsed, or open when the filter asks for graduated customers.
-  const [graduatedChoice, setGraduatedChoice] = useState<{
-    forStage: string | undefined;
-    open: boolean;
-  } | null>(null);
+  const [graduatedChoice, setGraduatedChoice] = useState<GraduatedChoice>(null);
 
   const setSearch = (patch: Record<string, unknown>) =>
     navigate({ search: (prev: CustomerSearch) => ({ ...prev, ...patch }) });
@@ -178,10 +179,8 @@ function CustomersPage() {
 
   const { active, graduated } = partitionCustomerRows(rows);
   const offerGraduated = graduatedSectionOffered(stage);
-  const graduatedOpen =
-    graduatedChoice && graduatedChoice.forStage === stage
-      ? graduatedChoice.open
-      : stage === GRADUATED_STAGE;
+  const graduatedOpen = graduatedSectionOpen(graduatedChoice, stage);
+  const filtered = Boolean(stage || status);
   const graduatedTotal = graduatedCount(graduated);
 
   // The count is the real book; test accounts shown are counted apart, in
@@ -224,13 +223,6 @@ function CustomersPage() {
       </tr>
     </thead>
   );
-
-  const noMatchLabel =
-    rows.length === 0
-      ? "No implementations match these filters. Try clearing a filter."
-      : stage === GRADUATED_STAGE
-        ? "Graduated customers are listed below."
-        : "No active customers match these filters. Try clearing a filter.";
 
   return (
     <>
@@ -308,24 +300,26 @@ function CustomersPage() {
           }}
         />
 
-        <div className="w-full overflow-x-auto rounded-md border border-border bg-card">
-          <table className="w-full text-left">
-            <caption className="sr-only">Active customers</caption>
-            {columnHeads}
-            <tbody className="divide-y divide-border">
-              {active.map((r) => (
-                <CustomerRow key={r.id} row={r} status={levelOf(r.id)} />
-              ))}
-              {active.length === 0 ? (
-                <tr>
-                  <td colSpan={7}>
-                    <NoRows label={noMatchLabel} />
-                  </td>
-                </tr>
-              ) : null}
-            </tbody>
-          </table>
-        </div>
+        {showActiveTable(stage) ? (
+          <div className="w-full overflow-x-auto rounded-md border border-border bg-card">
+            <table className="w-full text-left">
+              <caption className="sr-only">Active customers</caption>
+              {columnHeads}
+              <tbody className="divide-y divide-border">
+                {active.map((r) => (
+                  <CustomerRow key={r.id} row={r} status={levelOf(r.id)} />
+                ))}
+                {active.length === 0 ? (
+                  <tr>
+                    <td colSpan={7}>
+                      <NoRows label={customerListEmptyMessage("active", filtered)} />
+                    </td>
+                  </tr>
+                ) : null}
+              </tbody>
+            </table>
+          </div>
+        ) : null}
 
         {offerGraduated ? (
           <section aria-label="Graduated customers">
@@ -358,7 +352,7 @@ function CustomersPage() {
                   {graduated.length === 0 ? (
                     <tr>
                       <td colSpan={7}>
-                        <NoRows label="No graduated customers match these filters." />
+                        <NoRows label={customerListEmptyMessage("graduated", filtered)} />
                       </td>
                     </tr>
                   ) : null}

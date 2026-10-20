@@ -2,10 +2,13 @@ import { describe, expect, it } from "vitest";
 
 import { GRADUATED_STAGE } from "../claimed-owner";
 import {
+  customerListEmptyMessage,
   graduatedCount,
   graduatedSectionOffered,
+  graduatedSectionOpen,
   isGraduatedRow,
   partitionCustomerRows,
+  showActiveTable,
 } from "../customer-list-sections";
 
 const row = (id: string, deal_stage: string | null, extra: Partial<{ is_test: boolean }> = {}) => ({
@@ -83,5 +86,65 @@ describe("the graduated count", () => {
 
   it("is zero when no graduated row is given", () => {
     expect(graduatedCount([])).toBe(0);
+  });
+});
+
+describe("selecting the graduated stage", () => {
+  it("hides the active table, so no empty table sits above the graduated section", () => {
+    expect(showActiveTable(GRADUATED_STAGE)).toBe(false);
+  });
+
+  it("keeps the active table for no stage filter and for any active stage", () => {
+    expect(showActiveTable(undefined)).toBe(true);
+    expect(showActiveTable("make_it_run")).toBe(true);
+  });
+
+  it("opens the graduated section by default", () => {
+    expect(graduatedSectionOpen(null, GRADUATED_STAGE)).toBe(true);
+  });
+
+  it("keeps the section collapsed by default in the normal view", () => {
+    expect(graduatedSectionOpen(null, undefined)).toBe(false);
+    expect(graduatedSectionOpen(null, "make_it_run")).toBe(false);
+  });
+
+  it("honours a click made under the graduated stage filter", () => {
+    expect(graduatedSectionOpen({ forStage: GRADUATED_STAGE, open: false }, GRADUATED_STAGE)).toBe(
+      false,
+    );
+  });
+
+  it("does not carry a click made in the normal view into the graduated stage", () => {
+    // The reader collapsed or opened it under no stage filter. Selecting the graduated
+    // stage starts from that stage's own default: expanded.
+    expect(graduatedSectionOpen({ forStage: undefined, open: true }, GRADUATED_STAGE)).toBe(true);
+    expect(graduatedSectionOpen({ forStage: undefined, open: false }, GRADUATED_STAGE)).toBe(true);
+  });
+
+  it("does not carry a click made under the graduated stage into the normal view", () => {
+    expect(graduatedSectionOpen({ forStage: GRADUATED_STAGE, open: true }, undefined)).toBe(false);
+  });
+});
+
+describe("empty-state messages", () => {
+  it("says there are no active customers in the normal view, and offers a filter hint otherwise", () => {
+    expect(customerListEmptyMessage("active", false)).toBe("No active customers in this view.");
+    expect(customerListEmptyMessage("active", true)).toBe(
+      "No active customers match these filters. Try clearing a filter.",
+    );
+  });
+
+  it("says there are no graduated customers in the normal view, and offers a filter hint otherwise", () => {
+    expect(customerListEmptyMessage("graduated", false)).toBe(
+      "No graduated customers in this view.",
+    );
+    expect(customerListEmptyMessage("graduated", true)).toBe(
+      "No graduated customers match these filters. Try clearing a filter.",
+    );
+  });
+
+  it("never describes the graduated section as the active one", () => {
+    expect(customerListEmptyMessage("graduated", true)).not.toMatch(/active/i);
+    expect(customerListEmptyMessage("active", true)).not.toMatch(/graduated/i);
   });
 });
