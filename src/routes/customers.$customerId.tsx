@@ -7,7 +7,7 @@ import { ArrowRight, FileText } from "lucide-react";
 
 import { PastImplementations } from "@/components/past-implementations";
 import { HelpPicksPanel } from "@/components/help-articles-panel";
-import { canEditDeal, useProfile } from "@/lib/auth";
+import { canEditDeal, canManage, useProfile } from "@/lib/auth";
 import { dealQuery } from "@/lib/deal-query";
 import { useQuery } from "@tanstack/react-query";
 import { CurrentImplementationTab } from "@/components/stage-flow";
@@ -1345,6 +1345,9 @@ function AccountRail({
   /** Details shows the whole rail; Overview and Deck show the glance and the people. */
   full?: boolean;
 }) {
+  // Only an admin, super admin or manager changes the owner. The server refuses anyone else.
+  const { profile: viewer } = useProfile();
+  const mayAssignOwner = canManage(viewer?.role);
   const impl = record.implementation!;
   const timeline = buildProjectTimeline(projectInput(record, impl));
   const health = deriveHealth(record, impl);
@@ -1561,6 +1564,7 @@ function AccountRail({
               implementationId={impl.id}
               customerId={customerId}
               field="owner_id"
+              readOnly={!mayAssignOwner}
               label="Implementation owner"
               value={impl.owner_id ?? null}
               display={dash(impl.owner_name)}
@@ -3188,12 +3192,15 @@ function EditableRecordField({
   options,
   format,
   placeholder,
+  readOnly,
 }: {
   implementationId: string;
   customerId: string;
   field: EditableRecordFieldKey;
   label: string;
   value: string | null;
+  /** Shows the value without an editor. The server refuses the change for this field too. */
+  readOnly?: boolean;
   display?: React.ReactNode;
   type?: "text" | "number" | "date" | "select";
   options?: ReadonlyArray<{ value: string; label: string }>;
@@ -3220,6 +3227,7 @@ function EditableRecordField({
       {...(options ? { options } : {})}
       {...(format ? { format } : {})}
       {...(placeholder ? { placeholder } : {})}
+      {...(readOnly ? { disabled: true } : {})}
       onSave={(next) => m.mutateAsync(next)}
     />
   );

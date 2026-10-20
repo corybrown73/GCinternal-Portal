@@ -420,6 +420,16 @@ export async function createDeal(
   entry?: DealEntryResult;
 }> {
   await requireSalesEditor(userId);
+  // Naming someone as the owner of an account is an assignment, which only a manager
+  // makes. Checked before anything is written, so a refusal leaves no deal behind.
+  if (input.coverForTeamMemberId) {
+    const { actorMayAssignOwner } = await import("./owner-change.server");
+    if (!(await actorMayAssignOwner(userId))) {
+      throw new Error(
+        "Only an admin, super admin or manager can create an account for a colleague.",
+      );
+    }
+  }
   // Checked before anything is written: a wrong pick must not leave a deal behind.
   if (input.amOwnerId) {
     const allowed = ownerOptionsByRole(await profileDirectory()).am;
@@ -480,6 +490,8 @@ export async function createDeal(
         p_source: "manual",
         p_actor_profile: userId,
         p_note: `Created while covering for ${member.name}`,
+        p_mode: "manager",
+        p_actor_kind: "user",
       });
       if (recordError) console.error("[presale] could not record the covered owner", recordError);
     }

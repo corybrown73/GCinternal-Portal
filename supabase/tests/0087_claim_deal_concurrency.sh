@@ -35,9 +35,16 @@ D8=00000000-0000-4000-8000-0000000d8208   # pre-project claim, then project crea
 I8=00000000-0000-4000-8000-0000000e8208
 D9=00000000-0000-4000-8000-0000000d8209   # claim races an uncommitted project
 I9=00000000-0000-4000-8000-0000000e8209
-ALL_DEALS="'$D1','$D5','$D2','$D6','$D7','$D8','$D9'"
-ALL_IMPLS="'$I2','$I6','$I7','$I8','$I9'"
-ALL_TMS="'$ADA','$BEN','$CY'"
+GUS=00000000-0000-4000-8000-0000000a8005   # in the pool, no login: can be removed
+HAL=00000000-0000-4000-8000-0000000a8006   # removal first, then an assignment
+D10=00000000-0000-4000-8000-0000000d8210   # assignment to Gus races his removal
+D11=00000000-0000-4000-8000-0000000d8211   # a clear races a claim
+I11=00000000-0000-4000-8000-0000000e8211
+D12=00000000-0000-4000-8000-0000000d8212   # a stale expected owner
+I12=00000000-0000-4000-8000-0000000e8212
+ALL_DEALS="'$D1','$D5','$D2','$D6','$D7','$D8','$D9','$D10','$D11','$D12'"
+ALL_IMPLS="'$I2','$I6','$I7','$I8','$I9','$I11','$I12'"
+ALL_TMS="'$ADA','$BEN','$CY','$GUS','$HAL'"
 ALL_PROFILES="'$ADA_P','$BEN_P','$CY_P','$MGR_P'"
 
 cleanup() {
@@ -50,6 +57,10 @@ cleanup() {
   $DB_CMD -c "delete from customers where id = '$CUST';" >/dev/null 2>&1
   $DB_CMD -c "delete from auth.users where id in ($ALL_PROFILES);" >/dev/null 2>&1
 }
+# The history is append-only, so a rerun on the same database would find the owners
+# of the last run. Run it on a freshly built database (bash apply.sh).
+FRESH=$($DB_CMD -c "select count(*) from implementation_owner_history where deal_id in ($ALL_DEALS);" 2>/dev/null)
+[ "${FRESH:-0}" = 0 ] || fail "this database already holds the history of an earlier run; rebuild it first (bash /tmp/claude-0/apply.sh)"
 cleanup
 trap cleanup EXIT
 
@@ -65,15 +76,29 @@ insert into team_members (id, name, email, role, active) values
   ('$ADA', 'Ada', 'ada.$TAG@$DOM', 'am', true),
   ('$BEN', 'Ben', 'ben.$TAG@$DOM', 'se', true),
   ('$CY', 'Cy', 'cy.$TAG@$DOM', 'se', true);
-insert into portal_assignment_pool (team_member_id, active) values ('$ADA', true), ('$BEN', true), ('$CY', true);
+insert into team_members (id, name, email, role, active) values
+  ('$GUS', 'Gus', 'gus.$TAG@$DOM', 'se', true), ('$HAL', 'Hal', 'hal.$TAG@$DOM', 'se', true);
+insert into portal_assignment_pool (team_member_id, active) values
+  ('$ADA', true), ('$BEN', true), ('$CY', true), ('$GUS', true), ('$HAL', true);
 insert into portal_accounts (id, name, customer_id) values
   ('$D1', 'C1 $TAG', '$CUST'), ('$D5', 'C5 $TAG', '$CUST'), ('$D2', 'C2 $TAG', '$CUST'),
   ('$D6', 'C6 $TAG', '$CUST'), ('$D7', 'C7 $TAG', '$CUST'), ('$D8', 'C8 $TAG', '$CUST'),
-  ('$D9', 'C9 $TAG', '$CUST');
+  ('$D9', 'C9 $TAG', '$CUST'), ('$D10', 'C10 $TAG', '$CUST'), ('$D11', 'C11 $TAG', '$CUST'),
+  ('$D12', 'C12 $TAG', '$CUST');
+-- The fixture owner of I11 is written under a fixture context, which the history records.
+select portal_owner_context(null, 'system', 'rule_assignment', 'probe fixture');
 insert into implementations (id, deal_id, customer_id, name, current_stage, owner_id) values
   ('$I2', '$D2', '$CUST', 'P2', 'closed_won', null),
   ('$I6', '$D6', '$CUST', 'P6', 'closed_won', null),
-  ('$I7', '$D7', '$CUST', 'P7', 'closed_won', null);
+  ('$I7', '$D7', '$CUST', 'P7', 'closed_won', null),
+  ('$I11', '$D11', '$CUST', 'P11', 'closed_won', '$BEN'),
+  ('$I12', '$D12', '$CUST', 'P12', 'closed_won', null);
+select set_config('portal.owner_change', '', true);
+-- Only a manager may assign or remove. The first signup in a database is an admin,
+-- so the manager's role is set explicitly, with the role guard off for this statement.
+alter table portal_profiles disable trigger portal_profiles_role_guard;
+update portal_profiles set role = 'manager' where id = '$MGR_P';
+alter table portal_profiles enable trigger portal_profiles_role_guard;
 insert into portal_app_config (key, value) values ('assignment_rules', '$RULES')
   on conflict (key) do update set value = excluded.value;
 " >/dev/null || fail "could not commit fixtures"
@@ -138,7 +163,7 @@ echo "PASS: two claimants on a project: one owner, and the owner matches the new
 # S3. A manager assigns while someone claims. Ada's claim holds the project 3s;
 #     the manager's assignment waits, then replaces the owner under the same lock.
 session s3a 0 "begin; $(claim_sql $D6 $ADA $ADA_P claim-ada); select pg_sleep(3); commit;"
-session s3b 1 "begin; select portal_record_assignment('$D6', '$CY', 1, '{}', 'manual', '$MGR_P', 'Reassigned by a manager'); commit;"
+session s3b 1 "begin; select portal_record_assignment('$D6', '$CY', 1, '{}', 'manual', '$MGR_P', 'Reassigned by a manager', 'manager', 'user'); commit;"
 wait
 A=$(outcome s3a); B=$(outcome s3b)
 echo "S3 claim then manager: claim=$A | manager=$B"
@@ -151,7 +176,7 @@ NEWEST=$($DB_CMD -c "select team_member_id from portal_assignments where deal_id
 echo "PASS: a manager assigning during a claim ends with the manager as owner, and the record agrees"
 
 # S3b. The other order: a manager holds the project, and the claim waits, then is refused.
-session s3c 0 "begin; select portal_record_assignment('$D7', '$CY', 1, '{}', 'manual', '$MGR_P', 'Assigned by a manager'); select pg_sleep(3); commit;"
+session s3c 0 "begin; select portal_record_assignment('$D7', '$CY', 1, '{}', 'manual', '$MGR_P', 'Assigned by a manager', 'manager', 'user'); select pg_sleep(3); commit;"
 session s3d 1 "begin; $(claim_sql $D7 $BEN $BEN_P claim-ben); commit;"
 wait
 A=$(outcome s3c); B=$(outcome s3d)
@@ -191,5 +216,71 @@ echo "$B" | grep -q "ownership_retry" || fail "the claim did not ask for a retry
 N=$($DB_CMD -c "select count(*) from portal_assignments where deal_id='$D9';")
 [ "$N" = 0 ] || fail "the refused claim wrote $N records"
 echo "PASS: a claim that races a project being created is refused for retry, and writes nothing"
+
+# ---------------------------------------------------------------------------
+# S6. A manager assigns Gus to a deal while a manager removes Gus. Gus has no login,
+#     so the removal is allowed unless it sees the assignment. Whichever commits
+#     first, the other is refused: never both.
+session s6a 0 "begin; select portal_record_assignment('$D10', '$GUS', 1, '{}', 'manual', '$MGR_P', 'Chosen by hand', 'manager', 'user'); select pg_sleep(3); commit;"
+session s6b 1 "begin; select portal_deactivate_team_member('$GUS', '$MGR_P'); commit;"
+wait
+A=$(outcome s6a); B=$(outcome s6b)
+echo "S6 assign to Gus races his removal: assign=$A | remove=$B"
+if [ "$A" = ok ] && [ "$B" = ok ]; then fail "Gus was assigned and removed at once: an owner who is not on the team"; fi
+if [ "$A" != ok ] && [ "$B" != ok ]; then fail "neither the assignment nor the removal went through: $A | $B"; fi
+GUS_ACTIVE=$($DB_CMD -c "select active from team_members where id='$GUS';")
+if [ "$A" = ok ]; then
+  echo "$B" | grep -q "still owns" || fail "the removal did not see the assignment: $B"
+  [ "$GUS_ACTIVE" = t ] || fail "Gus was removed although he owns a deal"
+else
+  echo "$A" | grep -q "not on the team" || fail "the assignment was refused for the wrong reason: $A"
+  [ "$GUS_ACTIVE" = f ] || fail "the removal did not stand"
+fi
+echo "PASS: an assignment and a removal of the same person never both succeed"
+
+# S6c. The other order: a removal holds Hal 3s; an assignment to Hal arrives during it.
+session s6c 0 "begin; select portal_deactivate_team_member('$HAL', '$MGR_P'); select pg_sleep(3); commit;"
+session s6d 1 "begin; select portal_record_assignment('$D10', '$HAL', 1, '{}', 'manual', '$MGR_P', 'Chosen by hand', 'manager', 'user'); commit;"
+wait
+A=$(outcome s6c); B=$(outcome s6d)
+echo "S6c removal races an assignment to the same person: remove=$A | assign=$B"
+[ "$A" = ok ] || fail "the removal of Hal, who owns nothing, was refused: $A"
+echo "$B" | grep -q "not on the team" || fail "an assignment to a removed person was not refused: $B"
+N=$($DB_CMD -c "select count(*) from portal_assignments where team_member_id='$HAL';")
+[ "$N" = 0 ] || fail "the refused assignment wrote $N records"
+echo "PASS: an assignment that arrives during a removal is refused, and writes nothing"
+
+# ---------------------------------------------------------------------------
+# S7. A manager clears Ben's project while Ada claims it. The claim waits for the
+#     clear, then sees no owner and takes it. Both are recorded, in order.
+session s7a 0 "begin; select portal_set_implementation_owner('$I11', null, '$MGR_P', 'Cleared for review', true, '$BEN'); select pg_sleep(3); commit;"
+session s7b 1 "begin; $(claim_sql $D11 $ADA $ADA_P claim-ada-after-clear); commit;"
+wait
+A=$(outcome s7a); B=$(outcome s7b)
+echo "S7 clear races a claim: clear=$A | claim=$B"
+[ "$A" = ok ] || fail "the clear was refused: $A"
+[ "$B" = ok ] || fail "the claim after the clear was refused: $B"
+OWNER=$($DB_CMD -c "select owner_id from implementations where id='$I11';")
+[ "$OWNER" = "$ADA" ] || fail "the owner after the clear and the claim is $OWNER, not Ada"
+LAST=$($DB_CMD -c "select new_owner_id from implementation_owner_history where implementation_id='$I11' order by seq desc limit 1;")
+[ "$LAST" = "$ADA" ] || fail "the history's newest owner disagrees with the project: $LAST"
+CLEARS=$($DB_CMD -c "select count(*) from implementation_owner_history where implementation_id='$I11' and source='clear' and new_owner_id is null;")
+[ "$CLEARS" = 1 ] || fail "the clear wrote $CLEARS history rows, expected one"
+echo "PASS: a clear and a claim on one project serialise, and the history records both in order"
+
+# ---------------------------------------------------------------------------
+# S8. A manager assigns an unowned project, having seen it unowned, while Ada claims
+#     it. The claim lands first; the manager's expected owner no longer matches, so
+#     the manager is refused rather than overwriting the claim.
+session s8a 0 "begin; $(claim_sql $D12 $ADA $ADA_P claim-ada-first); select pg_sleep(3); commit;"
+session s8b 1 "begin; select portal_set_implementation_owner('$I12', '$CY', '$MGR_P', 'Assigned by a manager', true, null); commit;"
+wait
+A=$(outcome s8a); B=$(outcome s8b)
+echo "S8 manager with a stale view races a claim: claim=$A | manager=$B"
+[ "$A" = ok ] || fail "the claim was refused: $A"
+echo "$B" | grep -q "owner_changed" || fail "the manager overwrote the claim, or was refused for the wrong reason: $B"
+OWNER=$($DB_CMD -c "select owner_id from implementations where id='$I12';")
+[ "$OWNER" = "$ADA" ] || fail "the claim was overwritten: owner is $OWNER"
+echo "PASS: a manager acting on a stale view cannot overwrite a claim that landed first"
 
 echo "PASS: all overlapping-session scenarios"

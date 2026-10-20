@@ -517,9 +517,23 @@ describe("the one-off owner repair (QA 8.1)", () => {
 });
 
 describe("removing a team member (owner guard)", () => {
-  it("refuses while a deal is claimed through the ledger alone", async () => {
-    await expect(removeTeamMember("cory")).rejects.toThrow(/still owns 1 account/);
+  // Simulated: the database counts what a person owns and refuses (portal_deactivate_team_member,
+  // 0087_ownership.sql section 9 checks the count itself, including a claim with no project).
+  it("passes the refusal from the database through, and leaves the person active", async () => {
+    fake.handlers["portal_deactivate_team_member"] = () => ({
+      data: null,
+      error: { message: "Cory still owns 1 account. Reassign them first, then remove." },
+    });
+    await expect(removeTeamMember("cory", "profile-manager")).rejects.toThrow(
+      /still owns 1 account/,
+    );
     expect(fake.store["team_members"]!.find((m) => m.id === "cory")!.active).toBe(true);
+    expect(fake.rpcs).toEqual([
+      expect.objectContaining({
+        fn: "portal_deactivate_team_member",
+        args: { p_team_member: "cory", p_actor_profile: "profile-manager" },
+      }),
+    ]);
   });
 });
 

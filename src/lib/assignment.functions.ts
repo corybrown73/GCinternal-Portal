@@ -116,5 +116,5 @@ export const removeTeamMember = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     assertCanManage(context.profile);
     const { removeTeamMember: remove } = await import("./assignment.server");
-    return remove(data.teamMemberId);
+    return remove(data.teamMemberId, context.profile.id);
   });

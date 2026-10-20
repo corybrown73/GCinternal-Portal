@@ -451,6 +451,34 @@ export const setRecordField = createServerFn({ method: "POST" })
     });
   });
 
+/**
+ * Assign, reassign or clear an account's owner. Only an admin, super admin or manager;
+ * the database checks the same. `expectedOwnerId`, when sent, refuses the change if the
+ * owner is no longer the one the person saw (no blind overwrite of a newer claim).
+ */
+export const setImplementationOwnerFn = createServerFn({ method: "POST" })
+  .middleware([requireInternalAuth])
+  .inputValidator((data: unknown) =>
+    z
+      .object({
+        implementationId: z.string().uuid(),
+        ownerId: z.string().uuid().nullable(),
+        expectedOwnerId: z.string().uuid().nullable().optional(),
+        reason: z.string().trim().max(300).nullable().optional(),
+      })
+      .parse(data),
+  )
+  .handler(async ({ data, context }) => {
+    const { setImplementationOwner } = await import("./hub.server");
+    return setImplementationOwner({
+      implementationId: data.implementationId,
+      ownerId: data.ownerId,
+      actorProfileId: context.profile.id,
+      reason: data.reason ?? null,
+      expectedOwnerId: data.expectedOwnerId,
+    });
+  });
+
 export const updateCustomer = createServerFn({ method: "POST" })
   .middleware([requireInternalAuth])
   .inputValidator((data: unknown) =>

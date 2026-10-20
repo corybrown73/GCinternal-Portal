@@ -128,7 +128,7 @@ const baseRows = (): Rows => ({
     { id: USER_CY, email: "cy@gocanvas.com", full_name: "Cy" },
     { id: USER_LEFT, email: "left@gocanvas.com", full_name: "Left" },
     { id: USER_NOEMAIL, email: null, full_name: "No Email" },
-    { id: MANAGER, email: "manager@gocanvas.com", full_name: "Manager" },
+    { id: MANAGER, email: "manager@gocanvas.com", full_name: "Manager", role: "manager" },
   ],
   portal_accounts: [
     {
@@ -159,7 +159,7 @@ let fake: ReturnType<typeof createFakeSupabase>;
 
 /** The database's answer, as the client receives it. */
 const accept = (implementationId: string | null = IMPL) => ({
-  data: { implementation_id: implementationId, ledger_id: "ledger-1" },
+  data: { implementation_id: implementationId, ledger_id: "ledger-1", assigned: true },
   error: null,
 });
 const refuse = (message: string) => ({ data: null, error: { message } });
@@ -476,6 +476,8 @@ describe("a manager's assignment is recorded by the database, with no claim rule
         p_source: "manual",
         p_actor_profile: MANAGER,
         p_note: "Chosen by hand",
+        p_mode: "manager",
+        p_actor_kind: "user",
       }),
     ]);
     expect(h.audits).toEqual([

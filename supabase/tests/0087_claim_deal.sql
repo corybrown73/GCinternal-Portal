@@ -43,8 +43,15 @@ insert into auth.users (id, email) values
   ('00000000-0000-4000-8000-00000000f001', 'ada@gocanvas.com'),
   ('00000000-0000-4000-8000-00000000f002', 'ben@gocanvas.com'),
   ('00000000-0000-4000-8000-00000000f003', 'cy@gocanvas.com'),
-  ('00000000-0000-4000-8000-00000000f004', 'dee@gocanvas.com');
+  ('00000000-0000-4000-8000-00000000f004', 'dee@gocanvas.com'),
+  ('00000000-0000-4000-8000-00000000f005', 'mgr@gocanvas.com');
 -- portal_profiles rows are created by the signup trigger from auth.users, as in production.
+-- The manager is the only profile whose role lets it assign an owner by hand.
+-- The role guard refuses a role change from a non-admin session, so the test sets the
+-- role with the guard off for this one statement. The transaction is rolled back.
+alter table portal_profiles disable trigger portal_profiles_role_guard;
+update portal_profiles set role = 'manager' where id = '00000000-0000-4000-8000-00000000f005';
+alter table portal_profiles enable trigger portal_profiles_role_guard;
 
 -- Four deals: 1 pre-project and unowned; 2 with a project that has no owner; 3
 -- with a project owned by Ben; 4 pre-project, claimed by Ben in the ledger.
@@ -53,9 +60,14 @@ insert into portal_accounts (id, name, customer_id) values
   ('00000000-0000-4000-8000-00000000d002', 'Project unowned', '00000000-0000-4000-8000-00000000c001'),
   ('00000000-0000-4000-8000-00000000d003', 'Project owned', '00000000-0000-4000-8000-00000000c001'),
   ('00000000-0000-4000-8000-00000000d004', 'Pre-project owned', '00000000-0000-4000-8000-00000000c001');
+-- The guard refuses an owner written outside the ownership functions, so the fixture
+-- owner is written under an explicit fixture context (its history row says so).
+select portal_owner_context(null, 'system', 'rule_assignment', 'test fixture');
 insert into implementations (id, deal_id, customer_id, name, current_stage, owner_id) values
   ('00000000-0000-4000-8000-00000000e002', '00000000-0000-4000-8000-00000000d002', '00000000-0000-4000-8000-00000000c001', 'P2', 'closed_won', null),
   ('00000000-0000-4000-8000-00000000e003', '00000000-0000-4000-8000-00000000d003', '00000000-0000-4000-8000-00000000c001', 'P3', 'closed_won', '00000000-0000-4000-8000-00000000a002');
+-- Back to no authorisation, so the guard is exercised by the probes below.
+select set_config('portal.owner_change', '', true);
 -- now() is the same for every statement in one transaction, so the fixture record is
 -- dated in the past: the records written below are then the newest.
 insert into portal_assignments (deal_id, team_member_id, weight, source, created_at) values
@@ -155,7 +167,7 @@ select pg_temp.assert_eq(
 
 -- 7. A manager's assignment replaces an owner, under the same locks, and records it.
 select portal_record_assignment('00000000-0000-4000-8000-00000000d003', '00000000-0000-4000-8000-00000000a001',
-  2, '{}', 'manual', '00000000-0000-4000-8000-00000000f001', 'Reassigned by a manager');
+  2, '{}', 'manual', '00000000-0000-4000-8000-00000000f005', 'Reassigned by a manager', 'manager', 'user');
 select pg_temp.assert_eq(
   (select owner_id from implementations where id = '00000000-0000-4000-8000-00000000e003'),
   '00000000-0000-4000-8000-00000000a001'::uuid, 'a manager assignment replaces the owner');
@@ -165,7 +177,7 @@ select pg_temp.assert_eq(
 
 -- 8. A manager's assignment on a pre-project deal writes the record, not an owner.
 select portal_record_assignment('00000000-0000-4000-8000-00000000d004', '00000000-0000-4000-8000-00000000a001',
-  2, '{}', 'manual', '00000000-0000-4000-8000-00000000f001', 'Chosen by hand');
+  2, '{}', 'manual', '00000000-0000-4000-8000-00000000f005', 'Chosen by hand', 'manager', 'user');
 select pg_temp.assert_eq(
   (select team_member_id from portal_assignments where deal_id = '00000000-0000-4000-8000-00000000d004'
     order by created_at desc limit 1),
@@ -179,7 +191,9 @@ select portal_inherit_pre_project_owner('00000000-0000-4000-8000-00000000e005');
 select pg_temp.assert_eq(
   (select owner_id from implementations where id = '00000000-0000-4000-8000-00000000e005'),
   '00000000-0000-4000-8000-00000000a001'::uuid, 'a new project inherits the pre-project owner');
+select portal_owner_context(null, 'system', 'rule_assignment', 'test fixture');
 update implementations set owner_id = '00000000-0000-4000-8000-00000000a002' where id = '00000000-0000-4000-8000-00000000e005';
+select set_config('portal.owner_change', '', true);
 select pg_temp.assert_eq(
   portal_inherit_pre_project_owner('00000000-0000-4000-8000-00000000e005'), false,
   'inheritance reports nothing set when the project already has an owner');
