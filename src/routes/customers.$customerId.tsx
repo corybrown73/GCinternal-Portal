@@ -12,6 +12,7 @@ import { dealQuery } from "@/lib/deal-query";
 import { useQuery } from "@tanstack/react-query";
 import { CurrentImplementationTab } from "@/components/stage-flow";
 import { CustomerHeader } from "@/components/customer-header";
+import { CustomerEmailComposer } from "@/components/customer-email-composer";
 import { CARD, TONE } from "@/components/current-implementation-context";
 import { showKickoffDeckLink } from "@/lib/customer-header";
 import { CustomerOverview } from "@/components/customer-overview";
@@ -337,6 +338,14 @@ function Customer360Page() {
         tabs={TABS.map((t) => ({ id: t, label: TAB_LABEL[t] }))}
         selectedImplId={selectedImplId}
       />
+
+      <div className="flex justify-end px-6 pt-3">
+        <CustomerEmailComposer
+          customerId={customerId}
+          implementationId={impl.id}
+          implementationName={impl.name}
+        />
+      </div>
 
       {tab === "implementation" ? (
         <div className="px-6 py-4">
