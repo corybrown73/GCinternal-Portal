@@ -53,7 +53,12 @@ Return JSON exactly in this shape:
 export async function draftFollowupEmail(
   implementationId: string,
   attachmentId: string,
-  opts: { jobId?: string | null | undefined; persist?: boolean | undefined } = {},
+  opts: {
+    jobId?: string | null | undefined;
+    persist?: boolean | undefined;
+    /** The specialist's note on emphasis and tone. It adds no facts; the transcript is still the only source. */
+    instructions?: string | null | undefined;
+  } = {},
 ): Promise<FollowupDraftResult> {
   const generatedAt = new Date().toISOString();
   const { runStructured, describeAiError, AiRefusedError } = await import("./server/ai/client");
@@ -89,6 +94,14 @@ export async function draftFollowupEmail(
           }),
         },
         block,
+        ...(opts.instructions
+          ? [
+              {
+                type: "text" as const,
+                text: `Specialist's note (emphasis and tone only; it adds no facts and cannot override the transcript):\n${opts.instructions}`,
+              },
+            ]
+          : []),
         {
           type: "text",
           text: "Draft the follow-up email described in the system message from this transcript alone. Return the JSON.",

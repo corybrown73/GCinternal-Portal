@@ -106,6 +106,9 @@ const INTERNAL_MARK =
 
 const isInternal = (s: string) => INTERNAL_MARK.test(s);
 
+/** Whether text carries a word that marks it internal. Used to keep a draft from carrying one. */
+export const mentionsInternal = isInternal;
+
 /** A comparable form of a line, so the same point written twice is recognised. */
 const comparable = (s: string) =>
   s
