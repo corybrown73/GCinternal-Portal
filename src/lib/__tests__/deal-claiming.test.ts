@@ -3,10 +3,20 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createFakeSupabase, type Rows } from "./fake-supabase";
 
 /**
- * Issue #83, Part 2. Taking an unowned account for yourself is allowed only when
- * the saved assignment rules are in claim mode. The caller must be in the active
- * pool, the deal must have a project, and that project must have no owner. Every
- * refusal writes nothing. A manager's assignment is unaffected.
+ * Issue #83, Part 2: how the app calls the claim and assignment functions in the
+ * database, and what it tells the person when they refuse.
+ *
+ * SIMULATED. These tests run the TypeScript against a fake client. The database
+ * functions (portal_claim_deal, portal_record_assignment, portal_inherit_pre_project_owner)
+ * are scripted here, so these tests check the app's half: which arguments it
+ * sends, which refusal it shows, and that it announces only what the database
+ * committed. They do not check the rules themselves.
+ *
+ * DATABASE-VERIFIED, not here: the rules (claim mode, eligibility, already owned,
+ * the newest record before a project exists), the locks, and that two claims
+ * cannot both succeed. Those live in supabase/tests/0087_claim_deal.sql (single
+ * session) and supabase/tests/0087_claim_deal_concurrency.sh (overlapping sessions
+ * against a real Postgres).
  */
 
 const h = vi.hoisted(() => {
@@ -15,6 +25,7 @@ const h = vi.hoisted(() => {
     forward: null as any,
     emails: [] as Array<Record<string, unknown>>,
     audits: [] as Array<Record<string, unknown>>,
+    emailFails: false,
   };
   state.forward = new Proxy({}, { get: (_t, prop) => state.client?.[prop] });
   return state;
@@ -51,6 +62,7 @@ vi.mock("../../integrations/supabase/client.server", () => ({ supabaseAdmin: h.f
 
 vi.mock("../server/email", () => ({
   sendEmail: async (message: Record<string, unknown>) => {
+    if (h.emailFails) throw new Error("smtp down");
     h.emails.push(message);
   },
 }));
@@ -145,15 +157,27 @@ const baseRows = (): Rows => ({
 
 let fake: ReturnType<typeof createFakeSupabase>;
 
+/** The database's answer, as the client receives it. */
+const accept = (implementationId: string | null = IMPL) => ({
+  data: { implementation_id: implementationId, ledger_id: "ledger-1" },
+  error: null,
+});
+const refuse = (message: string) => ({ data: null, error: { message } });
+
 beforeEach(() => {
   fake = createFakeSupabase(baseRows());
   h.client = fake.client;
   h.emails.length = 0;
   h.audits.length = 0;
+  h.emailFails = false;
+  fake.handlers["portal_claim_deal"] = () => accept();
+  fake.handlers["portal_record_assignment"] = () => accept();
 });
 
 const implRow = () => fake.store["implementations"]!.find((r) => r["id"] === IMPL)!;
-const ledger = () => fake.store["portal_assignments"] ?? [];
+const callsTo = (fn: string) => fake.rpcs.filter((c) => c.fn === fn).map((c) => c.args);
+const claimCalls = () => callsTo("portal_claim_deal");
+const recordCalls = () => callsTo("portal_record_assignment");
 // The fake creates an empty table the first time a read touches it. Only rows count.
 const snapshot = () =>
   JSON.stringify(
@@ -162,7 +186,7 @@ const snapshot = () =>
     ),
   );
 
-/** A refusal: the message, and nothing written, emailed or audited. */
+/** A refusal: the message, and nothing written, emailed or audited on this side. */
 async function expectRefusedWithoutWrites(run: () => Promise<unknown>, message: RegExp) {
   const before = snapshot();
   await expect(run()).rejects.toThrow(message);
@@ -175,74 +199,173 @@ function setRules(value: unknown) {
   fake.store["portal_app_config"] = [{ key: "assignment_rules", value }];
 }
 
-describe("claiming is allowed when the rules are in claim mode and the person is eligible", () => {
-  it("takes an unowned project for an eligible employee, with a ledger row, an audit entry and an email", async () => {
-    await claimDeal(USER_ADA, DEAL);
-    expect(implRow()["owner_id"]).toBe(TM_ADA);
-    expect(ledger()).toEqual([
+describe("a claim asks the database, with the signed-in person's team member", () => {
+  it("sends the claimant, the weight and the note, and announces the committed claim once", async () => {
+    const result = await claimDeal(USER_ADA, DEAL);
+
+    expect(claimCalls()).toEqual([
       expect.objectContaining({
-        deal_id: DEAL,
-        implementation_id: IMPL,
-        team_member_id: TM_ADA,
-        source: "manual",
-        note: "Claimed by Ada",
-        actor_profile_id: USER_ADA,
+        p_deal: DEAL,
+        p_team_member: TM_ADA,
+        p_actor_profile: USER_ADA,
+        p_weight: expect.any(Number),
+        p_breakdown: expect.any(Object),
+        p_note: "Claimed by Ada",
       }),
     ]);
     expect(h.audits).toEqual([
       expect.objectContaining({ action: "implementation.assigned", actor_id: USER_ADA }),
     ]);
+    expect(h.emails).toEqual([expect.objectContaining({ to: "ada@gocanvas.com" })]);
+    expect(result).toEqual(
+      expect.objectContaining({
+        teamMemberId: TM_ADA,
+        assigneeName: "Ada",
+        source: "manual",
+        notified: true,
+      }),
+    );
+  });
+
+  it("does not take the team member from the request: the caller's own pool entry is used", async () => {
+    await claimDealFn({
+      data: { dealId: DEAL, teamMemberId: TM_BEN, owner_id: TM_BEN, claimable: true },
+      context: { profile: { id: USER_ADA, email: "ada@gocanvas.com", role: "am" } },
+    } as never);
+    expect(claimCalls()).toEqual([expect.objectContaining({ p_team_member: TM_ADA })]);
+  });
+
+  it("does not check the project itself: a deal with no project is sent to the database as well", async () => {
+    fake.store["implementations"] = [];
+    await claimDeal(USER_ADA, DEAL);
+    expect(claimCalls()).toEqual([
+      expect.objectContaining({ p_deal: DEAL, p_team_member: TM_ADA }),
+    ]);
     expect(h.emails).toHaveLength(1);
   });
 
-  it("is reported as claimable to the people who can see the Claim button", async () => {
+  it("keeps the claim when the notice cannot be sent, and reports the assignee as not notified", async () => {
+    h.emailFails = true;
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    const result = await claimDeal(USER_ADA, DEAL);
+    expect(result).toEqual(expect.objectContaining({ notified: false, teamMemberId: TM_ADA }));
+    expect(claimCalls()).toHaveLength(1);
+    expect(logged).toHaveBeenCalledWith(
+      expect.stringContaining("could not email the assignee"),
+      expect.anything(),
+    );
+    logged.mockRestore();
+  });
+});
+
+describe("the Claim buttons follow the rules the database enforces", () => {
+  it("is claimable in claim mode when nobody owns the account", async () => {
     const a = await dealAssignment(DEAL);
     expect(a.mode).toBe("claim");
     expect(a.claimable).toBe(true);
     expect(a.owner).toBeNull();
   });
-});
 
-describe("claiming is refused in manager-assignment mode", () => {
-  it("refuses an eligible employee when the rules are in auto mode, and writes nothing", async () => {
-    setRules(AUTO);
-    await expectRefusedWithoutWrites(() => claimDeal(USER_ADA, DEAL), /assigned by a manager/);
-    expect(implRow()["owner_id"]).toBeNull();
-  });
-
-  it("is not claimable in the interface when the rules are in auto mode", async () => {
-    setRules(AUTO);
+  it("is claimable before a project exists, as closing a deal in claim mode already allows", async () => {
+    fake.store["implementations"] = [];
     const a = await dealAssignment(DEAL);
-    expect(a.mode).toBe("auto");
-    expect(a.claimable).toBe(false);
+    expect(a.claimable).toBe(true);
   });
-});
 
-describe("missing or invalid assignment configuration refuses claiming, with a reason", () => {
-  it("refuses when no rules have been saved, and says so", async () => {
-    fake.store["portal_app_config"] = [];
-    await expectRefusedWithoutWrites(
-      () => claimDeal(USER_ADA, DEAL),
-      /No assignment rules are saved/,
-    );
-    expect((await dealAssignment(DEAL)).claimable).toBe(false);
+  it("is not claimable once a project owner is set, and names the owner", async () => {
+    fake.store["implementations"]![0]!["owner_id"] = TM_BEN;
+    const a = await dealAssignment(DEAL);
+    expect(a.claimable).toBe(false);
+    expect(a.owner).toEqual(expect.objectContaining({ teamMemberId: TM_BEN, name: "Ben" }));
+  });
+
+  it("is not claimable before a project exists when the newest assignment record names an owner", async () => {
+    fake.store["implementations"] = [];
+    fake.store["portal_assignments"] = [
+      {
+        id: "ledger-old",
+        deal_id: DEAL,
+        team_member_id: TM_BEN,
+        weight: 1,
+        breakdown: {},
+        source: "manual",
+        note: "Claimed by Ben",
+        created_at: "2026-10-02T00:00:00Z",
+      },
+    ];
+    const a = await dealAssignment(DEAL);
+    expect(a.claimable).toBe(false);
+    expect(a.owner).toEqual(expect.objectContaining({ teamMemberId: TM_BEN }));
   });
 
   it.each([
+    ["auto", AUTO],
+    ["missing", undefined],
     ["an upper-case mode", { ...CLAIM, mode: "Claim" }],
-    ["a missing mode", { window_days: 90 }],
     ["a string instead of an object", "claim"],
-    ["an empty value", {}],
-  ])("refuses a stored value with %s, and says the rules are not valid", async (_label, value) => {
-    setRules(value);
-    await expectRefusedWithoutWrites(() => claimDeal(USER_ADA, DEAL), /not valid/);
+  ])("is not claimable with %s rules", async (_label, value) => {
+    if (value === undefined) fake.store["portal_app_config"] = [];
+    else setRules(value);
     expect((await dealAssignment(DEAL)).claimable).toBe(false);
   });
 });
 
-describe("the person must be eligible for the pool", () => {
+describe("a refusal from the database is shown in its own words, and nothing is announced", () => {
+  it.each([
+    [
+      "auto mode",
+      "claim_refused:rules_auto|Accounts are assigned by a manager in this workspace, so you cannot claim this one. Ask a manager to assign it.",
+      /Accounts are assigned by a manager/,
+    ],
+    [
+      "missing rules",
+      "claim_refused:rules_missing|No assignment rules are saved, so accounts cannot be claimed. A manager assigns this account.",
+      /No assignment rules are saved/,
+    ],
+    [
+      "invalid rules",
+      "claim_refused:rules_invalid|The assignment rules are not valid, so accounts cannot be claimed until a manager saves them again.",
+      /not valid/,
+    ],
+    [
+      "an existing owner",
+      "claim_refused:already_owned|Ben already owns this account.",
+      /Ben already owns this account\./,
+    ],
+    [
+      "a project taken mid-claim",
+      "claim_refused:already_owned|This account was just taken, so it cannot be claimed. Reload to see who owns it.",
+      /just taken/,
+    ],
+  ])("shows the refusal for %s and writes nothing", async (_label, message, expected) => {
+    fake.handlers["portal_claim_deal"] = () => refuse(message);
+    await expectRefusedWithoutWrites(() => claimDeal(USER_ADA, DEAL), expected);
+  });
+
+  it("asks the person to try again when the project changed during the claim", async () => {
+    fake.handlers["portal_claim_deal"] = () =>
+      refuse(
+        "ownership_retry: the project for this deal changed while it was being updated. Try again.",
+      );
+    await expectRefusedWithoutWrites(
+      () => claimDeal(USER_ADA, DEAL),
+      /The project for this deal changed while the assignment was being made\. Try again\./,
+    );
+  });
+
+  it("reports any other database error as a failure to take the account", async () => {
+    fake.handlers["portal_claim_deal"] = () => refuse("connection reset");
+    await expectRefusedWithoutWrites(
+      () => claimDeal(USER_ADA, DEAL),
+      /Could not take the account: connection reset/,
+    );
+  });
+});
+
+describe("a person who is not eligible is refused before the database is asked", () => {
   it("refuses an internal user who is not in the pool", async () => {
     await expectRefusedWithoutWrites(() => claimDeal(USER_CY, DEAL), /not in the assignment pool/);
+    expect(claimCalls()).toEqual([]);
   });
 
   it("refuses a pool member whose team membership has been deactivated", async () => {
@@ -250,6 +373,7 @@ describe("the person must be eligible for the pool", () => {
       () => claimDeal(USER_LEFT, DEAL),
       /not in the assignment pool/,
     );
+    expect(claimCalls()).toEqual([]);
   });
 
   it("refuses a profile with no email, which cannot be matched to the pool", async () => {
@@ -257,6 +381,7 @@ describe("the person must be eligible for the pool", () => {
       () => claimDeal(USER_NOEMAIL, DEAL),
       /No profile for this sign-in/,
     );
+    expect(claimCalls()).toEqual([]);
   });
 
   it("refuses an unknown profile", async () => {
@@ -264,29 +389,31 @@ describe("the person must be eligible for the pool", () => {
       () => claimDeal("11111111-1111-4111-8111-1111111111ff", DEAL),
       /No profile for this sign-in/,
     );
+    expect(claimCalls()).toEqual([]);
+  });
+
+  it("refuses a deal that does not exist", async () => {
+    fake.store["portal_accounts"] = [];
+    await expectRefusedWithoutWrites(() => claimDeal(USER_ADA, DEAL), /Deal not found/);
+    expect(claimCalls()).toEqual([]);
   });
 });
 
-describe("a deal that is already owned, or has no project, cannot be claimed", () => {
-  it("refuses when the project already has an owner, and names them", async () => {
-    fake.store["implementations"]![0]!["owner_id"] = TM_BEN;
-    await expectRefusedWithoutWrites(
-      () => claimDeal(USER_ADA, DEAL),
-      /Ben already owns this account/,
-    );
-    expect(implRow()["owner_id"]).toBe(TM_BEN);
-    expect(ledger()).toEqual([]);
-  });
+describe("two claims at once: the database lets one through, and the app reports the other", () => {
+  // Simulated. The database serializes the two claims; the real behaviour under
+  // overlapping sessions is verified by supabase/tests/0087_claim_deal_concurrency.sh.
+  it("announces one claim and refuses the other with the owner's name", async () => {
+    let owner: string | null = null;
+    fake.handlers["portal_claim_deal"] = (args) => {
+      if (owner) {
+        return refuse(
+          `claim_refused:already_owned|${owner === TM_ADA ? "Ada" : "Ben"} already owns this account.`,
+        );
+      }
+      owner = String(args["p_team_member"]);
+      return accept();
+    };
 
-  it("refuses a deal with no project, because a project is where ownership is held", async () => {
-    fake.store["implementations"] = [];
-    await expectRefusedWithoutWrites(() => claimDeal(USER_ADA, DEAL), /no project yet/);
-    expect((await dealAssignment(DEAL)).claimable).toBe(false);
-  });
-});
-
-describe("concurrent claims of the same deal", () => {
-  it("lets exactly one of two eligible employees take the account", async () => {
     const results = await Promise.allSettled([
       claimDeal(USER_ADA, DEAL),
       claimDeal(USER_BEN, DEAL),
@@ -295,88 +422,41 @@ describe("concurrent claims of the same deal", () => {
     const rejected = results.filter((r) => r.status === "rejected") as PromiseRejectedResult[];
     expect(fulfilled).toHaveLength(1);
     expect(rejected).toHaveLength(1);
-    expect(String(rejected[0]!.reason.message)).toMatch(/already owns|just taken/);
-    expect(ledger()).toHaveLength(1);
-    expect(implRow()["owner_id"]).toBe(ledger()[0]!["team_member_id"]);
-  });
-
-  it("does not let a claim overwrite a manager's assignment that lands first", async () => {
-    const orig = fake.client.from;
-    let managerWrote = false;
-    fake.client.from = (table: string) => {
-      const builder = orig(table);
-      if (table !== "implementations") return builder;
-      return new Proxy(builder, {
-        get(target, prop) {
-          if (prop === "update" && !managerWrote) {
-            managerWrote = true;
-            // A manager assigns the project between the claim's check and its write.
-            fake.store["implementations"]![0]!["owner_id"] = TM_BEN;
-          }
-          const v = Reflect.get(target, prop, target);
-          return typeof v === "function" ? v.bind(target) : v;
-        },
-      });
-    };
-    await expect(claimDeal(USER_ADA, DEAL)).rejects.toThrow(/already owns|just taken/);
-    expect(implRow()["owner_id"]).toBe(TM_BEN);
-    expect(ledger()).toEqual([]);
-  });
-
-  it("is refused when the project cannot be written to, and says nothing was taken", async () => {
-    const orig = fake.client.from;
-    fake.client.from = (table: string) => {
-      const builder = orig(table);
-      if (table !== "implementations") return builder;
-      return new Proxy(builder, {
-        get(target, prop) {
-          if (prop === "update") {
-            const chain: any = {
-              eq: () => chain,
-              is: () => chain,
-              select: async () => ({ data: null, error: { message: "write refused" } }),
-            };
-            return () => chain;
-          }
-          const v = Reflect.get(target, prop, target);
-          return typeof v === "function" ? v.bind(target) : v;
-        },
-      });
-    };
-    await expectRefusedWithoutWrites(
-      () => claimDeal(USER_ADA, DEAL),
-      /Could not take the account: write refused/,
-    );
+    expect(String(rejected[0]!.reason.message)).toMatch(/already owns this account/);
+    expect(h.audits).toHaveLength(1);
+    expect(h.emails).toHaveLength(1);
   });
 });
 
-describe("the server function enforces the rules even when called directly", () => {
+describe("the server function leaves the rules to the database, even when called directly", () => {
   const callClaim = (data: Record<string, unknown>, email = "ada@gocanvas.com", id = USER_ADA) =>
     claimDealFn({ data, context: { profile: { id, email, role: "am" } } } as never);
 
-  it("refuses a direct call in auto mode, even from an eligible employee", async () => {
+  it("passes a direct call to the database, which refuses it in auto mode", async () => {
     setRules(AUTO);
+    fake.handlers["portal_claim_deal"] = () =>
+      refuse(
+        "claim_refused:rules_auto|Accounts are assigned by a manager in this workspace, so you cannot claim this one. Ask a manager to assign it.",
+      );
     await expectRefusedWithoutWrites(() => callClaim({ dealId: DEAL }), /assigned by a manager/);
+    expect(claimCalls()).toHaveLength(1);
   });
 
-  it("allows a direct call in claim mode, and ignores a team member named in the body", async () => {
-    await callClaim({ dealId: DEAL, teamMemberId: TM_BEN, owner_id: TM_BEN, claimable: true });
-    expect(implRow()["owner_id"]).toBe(TM_ADA);
-  });
-
-  it("refuses a direct call from a profile that is not in the pool", async () => {
+  it("refuses a direct call from a profile that is not in the pool, before the database", async () => {
     await expectRefusedWithoutWrites(
       () => callClaim({ dealId: DEAL }, "cy@gocanvas.com", USER_CY),
       /not in the assignment pool/,
     );
+    expect(claimCalls()).toEqual([]);
   });
 
   it("refuses a direct call with no usable deal id, before anything is read", async () => {
     await expect(callClaim({ dealId: "not-an-id" })).rejects.toThrow();
+    expect(fake.rpcs).toEqual([]);
   });
 });
 
-describe("the manager's assignment workflow is unaffected", () => {
+describe("a manager's assignment is recorded by the database, with no claim rules applied", () => {
   const assignAs = (data: Record<string, unknown>, role = "manager") =>
     assignDealFn({
       data,
@@ -386,218 +466,66 @@ describe("the manager's assignment workflow is unaffected", () => {
   it.each([
     ["claim", CLAIM],
     ["auto", AUTO],
-  ])("lets a manager assign a named person by hand in %s mode", async (_label, rules) => {
+  ])("records a named person chosen by a manager in %s mode", async (_label, rules) => {
     setRules(rules);
     await assignAs({ dealId: DEAL, teamMemberId: TM_BEN });
-    expect(implRow()["owner_id"]).toBe(TM_BEN);
-    expect(ledger()).toEqual([
+    expect(recordCalls()).toEqual([
       expect.objectContaining({
-        team_member_id: TM_BEN,
-        source: "manual",
-        actor_profile_id: MANAGER,
+        p_deal: DEAL,
+        p_team_member: TM_BEN,
+        p_source: "manual",
+        p_actor_profile: MANAGER,
+        p_note: "Chosen by hand",
       }),
     ]);
+    expect(h.audits).toEqual([
+      expect.objectContaining({ action: "implementation.assigned", actor_id: MANAGER }),
+    ]);
+    expect(h.emails).toEqual([expect.objectContaining({ to: "ben@gocanvas.com" })]);
   });
 
-  it("lets a manager reassign an account that already has an owner", async () => {
+  it("lets a manager reassign an account that already has an owner: the app does not refuse it", async () => {
     fake.store["implementations"]![0]!["owner_id"] = TM_BEN;
     setRules(AUTO);
     await assignAs({ dealId: DEAL, teamMemberId: TM_ADA });
-    expect(implRow()["owner_id"]).toBe(TM_ADA);
+    expect(recordCalls()).toEqual([expect.objectContaining({ p_team_member: TM_ADA })]);
   });
 
-  it("keeps the manager's direct assignDeal path working in claim mode", async () => {
+  it("does not pass a project id: the database finds the project under its lock", async () => {
     await assignDeal({
       dealId: DEAL,
-      implementationId: IMPL,
+      implementationId: "not-the-project",
       teamMemberId: TM_CY,
       actorProfileId: MANAGER,
     });
-    expect(implRow()["owner_id"]).toBe(TM_CY);
+    expect(recordCalls()).toHaveLength(1);
+    expect(recordCalls()[0]).not.toHaveProperty("p_implementation");
   });
 
-  it("does not let a manager-assigned owner be overwritten by a claim", async () => {
+  it("reports a retry from the database and announces nothing", async () => {
+    fake.handlers["portal_record_assignment"] = () =>
+      refuse(
+        "ownership_retry: the project for this deal changed while it was being updated. Try again.",
+      );
+    await expectRefusedWithoutWrites(
+      () => assignAs({ dealId: DEAL, teamMemberId: TM_BEN }),
+      /changed while the assignment was being made\. Try again\./,
+    );
+  });
+
+  it("reports a record that could not be written, and announces nothing", async () => {
+    fake.handlers["portal_record_assignment"] = () => refuse("write refused");
+    await expectRefusedWithoutWrites(
+      () => assignAs({ dealId: DEAL, teamMemberId: TM_BEN }),
+      /Could not record the assignment: write refused/,
+    );
+  });
+
+  it("does not let a claim overwrite a manager's owner: the database refuses it, and the app says who owns it", async () => {
+    fake.handlers["portal_claim_deal"] = () =>
+      refuse("claim_refused:already_owned|Ben already owns this account.");
     await assignAs({ dealId: DEAL, teamMemberId: TM_BEN });
     await expect(claimDeal(USER_ADA, DEAL)).rejects.toThrow(/Ben already owns this account/);
-    expect(implRow()["owner_id"]).toBe(TM_BEN);
-  });
-});
-
-/* ---------------------------------------------------------------------------
- * Partial failures after the owner is written (Part 2 correction).
- * The owner is set first, so each failure below must leave the owner and the
- * assignment record agreeing, must not revert a manager's change, and must not
- * remove any ledger row.
- * ------------------------------------------------------------------------- */
-
-const failingChain = (message: string): any => {
-  const chain: any = {
-    eq: () => chain,
-    is: () => chain,
-    order: () => chain,
-    limit: () => chain,
-    maybeSingle: async () => ({ data: null, error: { message } }),
-    select: async () => ({ data: null, error: { message } }),
-  };
-  return chain;
-};
-
-/** Makes a read of one table fail when its column list matches. */
-function failSelect(table: string, when: (cols: string) => boolean, message = "read failed") {
-  const orig = fake.client.from;
-  fake.client.from = (t: string) => {
-    const builder = orig(t);
-    if (t !== table) return builder;
-    return new Proxy(builder, {
-      get(target, prop) {
-        if (prop === "select") {
-          return (cols?: string) =>
-            when(cols ?? "") ? failingChain(message) : target.select(cols);
-        }
-        const v = Reflect.get(target, prop, target);
-        return typeof v === "function" ? v.bind(target) : v;
-      },
-    });
-  };
-}
-
-/**
- * Makes an insert into one table fail. With `persist`, the row is written and only
- * the reply is lost. `beforeFail` runs first, to simulate a change landing in the window.
- */
-function failInsert(
-  table: string,
-  opts: { persist?: boolean; once?: boolean; beforeFail?: () => void } = {},
-) {
-  const orig = fake.client.from;
-  let failures = 0;
-  fake.client.from = (t: string) => {
-    const builder = orig(t);
-    if (t !== table) return builder;
-    return new Proxy(builder, {
-      get(target, prop) {
-        if (prop === "insert") {
-          return (row: Record<string, unknown>) => ({
-            then(res: (v: unknown) => unknown, rej: (e: unknown) => unknown) {
-              return (async () => {
-                if (opts.once && failures > 0) return target.insert(row).then((v: any) => v);
-                failures += 1;
-                if (opts.persist) await target.insert(row);
-                opts.beforeFail?.();
-                return { data: null, error: { message: "write refused" } };
-              })().then(res, rej);
-            },
-          });
-        }
-        const v = Reflect.get(target, prop, target);
-        return typeof v === "function" ? v.bind(target) : v;
-      },
-    });
-  };
-}
-
-/** Makes releasing an owner (an update that sets owner_id to null) fail. */
-function failRelease() {
-  const orig = fake.client.from;
-  fake.client.from = (t: string) => {
-    const builder = orig(t);
-    if (t !== "implementations") return builder;
-    return new Proxy(builder, {
-      get(target, prop) {
-        if (prop === "update") {
-          return (patch: Record<string, unknown>) => {
-            if (patch["owner_id"] === null) return failingChain("release refused");
-            return target.update(patch);
-          };
-        }
-        const v = Reflect.get(target, prop, target);
-        return typeof v === "function" ? v.bind(target) : v;
-      },
-    });
-  };
-}
-
-/** The owner and the assignment record agree: no owner with a record, and no record without the owner. */
-function ownerMatchesRecord() {
-  const latest = ledger()[ledger().length - 1];
-  return (implRow()["owner_id"] ?? null) === (latest ? latest["team_member_id"] : null);
-}
-
-describe("a failure while choosing the assignee leaves no owner behind", () => {
-  it("releases the owner this claim set, writes no record, and reports the failure", async () => {
-    failSelect("portal_accounts", (cols) => cols.includes("arr"), "read failed");
-    await expectRefusedWithoutWrites(() => claimDeal(USER_ADA, DEAL), /Deal not found/);
-    expect(implRow()["owner_id"]).toBeNull();
-    expect(ownerMatchesRecord()).toBe(true);
-  });
-});
-
-describe("a failure writing the assignment record releases the owner", () => {
-  it("releases the owner, writes no record, sends no notice, and reports the failure", async () => {
-    failInsert("portal_assignments");
-    await expectRefusedWithoutWrites(
-      () => claimDeal(USER_ADA, DEAL),
-      /Could not record the assignment/,
-    );
-    expect(implRow()["owner_id"]).toBeNull();
-    expect(ledger()).toEqual([]);
-    expect(ownerMatchesRecord()).toBe(true);
-  });
-
-  it("lets the same person claim again once the failure is cleared", async () => {
-    failInsert("portal_assignments", { once: true });
-    await expect(claimDeal(USER_ADA, DEAL)).rejects.toThrow(/Could not record/);
-    await claimDeal(USER_ADA, DEAL);
-    expect(implRow()["owner_id"]).toBe(TM_ADA);
-    expect(ledger()).toHaveLength(1);
-    expect(ownerMatchesRecord()).toBe(true);
-  });
-});
-
-describe("a record written before its reply was lost keeps the claim", () => {
-  it("keeps the owner that matches the record, and tells the person to refresh", async () => {
-    failInsert("portal_assignments", { persist: true });
-    await expect(claimDeal(USER_ADA, DEAL)).rejects.toThrow(
-      /recorded, but a later step failed.*Refresh/s,
-    );
-    expect(implRow()["owner_id"]).toBe(TM_ADA);
-    expect(ledger()).toHaveLength(1);
-    expect(ownerMatchesRecord()).toBe(true);
-  });
-});
-
-describe("a manager's assignment is never reverted by a failed claim", () => {
-  it("leaves the manager's owner in place when the claim's record fails", async () => {
-    failInsert("portal_assignments", {
-      beforeFail: () => {
-        fake.store["implementations"]![0]!["owner_id"] = TM_BEN;
-      },
-    });
-    await expect(claimDeal(USER_ADA, DEAL)).rejects.toThrow(/Could not record/);
-    expect(implRow()["owner_id"]).toBe(TM_BEN);
-    expect(ledger()).toEqual([]);
-  });
-});
-
-describe("a release that itself fails is logged, and the claim's own error is still reported", () => {
-  it("reports the original error and records the inconsistency for reconciliation", async () => {
-    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
-    failInsert("portal_assignments");
-    failRelease();
-    await expect(claimDeal(USER_ADA, DEAL)).rejects.toThrow(/Could not record/);
-    expect(logged).toHaveBeenCalledWith(
-      expect.stringContaining("could not release the owner"),
-      expect.anything(),
-    );
-    logged.mockRestore();
-  });
-});
-
-describe("concurrent claims during a failed claim never give two owners", () => {
-  it("keeps the owner and the record in agreement after two claimants race a failing first attempt", async () => {
-    failInsert("portal_assignments", { once: true });
-    await Promise.allSettled([claimDeal(USER_ADA, DEAL), claimDeal(USER_BEN, DEAL)]);
-    expect(ledger().length).toBeLessThanOrEqual(1);
-    expect(ownerMatchesRecord()).toBe(true);
+    expect(h.audits).toEqual([expect.objectContaining({ actor_id: MANAGER })]);
   });
 });

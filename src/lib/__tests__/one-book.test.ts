@@ -494,6 +494,19 @@ describe("the one-off owner repair (QA 8.1)", () => {
       fake.store["implementations"]!.find((i) => i.id === id)!.owner_id as string | null;
     expect(owner("i-copyfail")).toBeNull();
 
+    // Scripted to the function's contract (0087): sets the owner from the deal's
+    // newest record when the project has none. Its locking is verified in
+    // supabase/tests/0087_claim_deal.sql, not here.
+    fake.handlers["portal_inherit_pre_project_owner"] = ({ p_implementation }) => {
+      const impl = fake.store["implementations"]!.find((i) => i.id === p_implementation)!;
+      const latest = [...(fake.store["portal_assignments"] ?? [])]
+        .filter((a) => a.deal_id === impl.deal_id)
+        .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))[0];
+      if (impl.owner_id !== null || !latest) return { data: false, error: null };
+      impl.owner_id = latest.team_member_id;
+      return { data: true, error: null };
+    };
+
     const done = await reconcileImplementationOwners({ apply: true });
     expect(done.applied).toBe(1);
     expect(owner("i-copyfail")).toBe("cory");

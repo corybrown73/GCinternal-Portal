@@ -278,6 +278,9 @@ class Builder implements PromiseLike<{ data: any; error: any }> {
   }
 }
 
+export type RpcResult = { data: any; error: any };
+export type RpcHandler = (args: Record<string, any>) => RpcResult | Promise<RpcResult>;
+
 export type FakeSupabase = {
   client: any;
   store: Rows;
@@ -287,6 +290,12 @@ export type FakeSupabase = {
   objects: Map<string, Uint8Array>;
   /** Every `rpc` call, in order. */
   rpcs: Array<{ fn: string; args: Record<string, any> }>;
+  /**
+   * Scripted results for named RPCs, set per test. A registered handler answers
+   * instead of the built-in ones. The handler stands in for the database function:
+   * what the function decides is scripted, not re-implemented here.
+   */
+  handlers: Record<string, RpcHandler>;
 };
 
 export function createFakeSupabase(
@@ -303,6 +312,7 @@ export function createFakeSupabase(
   const uploads: FakeSupabase["uploads"] = [];
   const objects = new Map<string, Uint8Array>(Object.entries(options.objects ?? {}));
   const rpcs: FakeSupabase["rpcs"] = [];
+  const handlers: Record<string, RpcHandler> = {};
 
   const client = {
     from: (table: string) =>
@@ -332,6 +342,8 @@ export function createFakeSupabase(
     // intake.timeline. Emulated so a merge-only writer can be exercised here.
     rpc: async (fn: string, args: Record<string, any>) => {
       rpcs.push({ fn, args });
+      const handler = handlers[fn];
+      if (handler) return handler(args);
       if (fn !== "portal_merge_intake") {
         return { data: null, error: { message: `fake-supabase: unsupported rpc ${fn}` } };
       }
@@ -347,5 +359,5 @@ export function createFakeSupabase(
     },
   };
 
-  return { client, store, inserts: log.inserts, uploads, objects, rpcs };
+  return { client, store, inserts: log.inserts, uploads, objects, rpcs, handlers };
 }

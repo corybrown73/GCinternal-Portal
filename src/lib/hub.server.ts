@@ -2255,6 +2255,17 @@ export async function createImplementation(args: {
     );
   }
 
+  // A project made for a deal takes the owner the deal already has in its record
+  // (a claim or an assignment made before the project existed), as onboarding does.
+  // Never throws: the project exists, and an owner can be set by hand.
+  if (args.patch["deal_id"] && !impl.owner_id) {
+    const { error: inheritError } = await db().rpc("portal_inherit_pre_project_owner", {
+      p_implementation: impl.id,
+    });
+    if (inheritError)
+      console.error("[hub] could not carry the deal's owner onto the new project", inheritError);
+  }
+
   const { error: historyError } = await db()
     .from("implementation_stage_history")
     .insert({
