@@ -1,6 +1,7 @@
+import { useState } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { queryOptions, useSuspenseQuery } from "@tanstack/react-query";
-import { ArrowDown, ArrowUp } from "lucide-react";
+import { ArrowDown, ArrowUp, ChevronDown, ChevronRight } from "lucide-react";
 
 import { PageBody, PageHeader } from "@/components/page";
 import { SavedViews } from "@/components/saved-views";
@@ -17,6 +18,16 @@ import { datePace, dwellPace } from "@/lib/pace";
 import { cn } from "@/lib/utils";
 import { errorMessage } from "@/lib/error-message";
 import { GRADUATED_STAGE } from "@/lib/claimed-owner";
+import type { ImplHealth } from "@/lib/customer360-derive";
+import {
+  customerListEmptyMessage,
+  graduatedCount,
+  graduatedSectionOffered,
+  graduatedSectionOpen,
+  partitionCustomerRows,
+  showActiveTable,
+  type GraduatedChoice,
+} from "@/lib/customer-list-sections";
 import { readShowTests } from "@/lib/test-accounts";
 import { ShowTestsToggle } from "@/components/show-tests-toggle";
 
@@ -33,6 +44,9 @@ const implementationsQuery = (scope: string | null, tests = false) =>
 
 const SORTS = ["customer", "stage", "status", "owner", "tier", "launch", "days"] as const;
 type SortKey = (typeof SORTS)[number];
+
+/** One row of the list, as the home data returns it. */
+type CustomerRowData = Awaited<ReturnType<typeof getHome>>["implementations"][number];
 
 type CustomerSearch = {
   stage?: string;
@@ -119,6 +133,9 @@ function CustomersPage() {
   const { stage, status, sort, dir, scope, tests } = Route.useSearch();
   const { data } = useSuspenseQuery(implementationsQuery(param, tests === true));
   const navigate = useNavigate({ from: Route.fullPath });
+  // A click is kept for the stage filter it was made under, so each stage filter starts
+  // from its own default: collapsed, or open when the filter asks for graduated customers.
+  const [graduatedChoice, setGraduatedChoice] = useState<GraduatedChoice>(null);
 
   const setSearch = (patch: Record<string, unknown>) =>
     navigate({ search: (prev: CustomerSearch) => ({ ...prev, ...patch }) });
@@ -130,6 +147,8 @@ function CustomersPage() {
   const health = healthByImplementation(data.implementations, data.triage);
   const levelOf = (id: string) => health.get(id)?.level ?? "no_signal";
 
+  // The filters and the sort apply to every row, before the rows are divided between
+  // the main table and the graduated section, so both follow the same rules.
   const rows = data.implementations
     .filter((r) => (stage ? r.deal_stage === stage : true))
     .filter((r) => (status ? levelOf(r.id) === status : true))
@@ -158,6 +177,12 @@ function CustomersPage() {
       }
     });
 
+  const { active, graduated } = partitionCustomerRows(rows);
+  const offerGraduated = graduatedSectionOffered(stage);
+  const graduatedOpen = graduatedSectionOpen(graduatedChoice, stage);
+  const filtered = Boolean(stage || status);
+  const graduatedTotal = graduatedCount(graduated);
+
   // The count is the real book; test accounts shown are counted apart, in
   // the shown rows as in the total, so the numerator never passes it.
   const testCount = data.implementations.filter((r) => r.is_test).length;
@@ -183,11 +208,27 @@ function CustomersPage() {
     </th>
   );
 
+  // The same column headings on both tables, so the graduated section reads as the
+  // same list, sorted the same way.
+  const columnHeads = (
+    <thead className="border-b border-border bg-surface text-[10px] text-muted-foreground">
+      <tr>
+        <Th label="Customer" sortKey="customer" />
+        <Th label="Stage" sortKey="stage" />
+        <Th label="Health" sortKey="status" />
+        <Th label="Owner" sortKey="owner" />
+        <Th label="Tier" sortKey="tier" />
+        <Th label="Plan end" sortKey="launch" />
+        <Th label="Days in stage" sortKey="days" />
+      </tr>
+    </thead>
+  );
+
   return (
     <>
       <PageHeader
         title="Customers"
-        description="One row per customer implementation. Longest in its current stage first; click a heading to sort another way."
+        description="One row per customer implementation. Longest in its current stage first; click a heading to sort another way. Graduated customers are listed beneath the table."
         actions={
           <div className="flex items-center gap-2">
             <span className="font-mono text-[11px] text-muted-foreground">
@@ -259,100 +300,141 @@ function CustomersPage() {
           }}
         />
 
-        <div className="w-full overflow-x-auto rounded-md border border-border bg-card">
-          <table className="w-full text-left">
-            <thead className="border-b border-border bg-surface text-[10px] text-muted-foreground">
-              <tr>
-                <Th label="Customer" sortKey="customer" />
-                <Th label="Stage" sortKey="stage" />
-                <Th label="Health" sortKey="status" />
-                <Th label="Owner" sortKey="owner" />
-                <Th label="Tier" sortKey="tier" />
-                <Th label="Plan end" sortKey="launch" />
-                <Th label="Days in stage" sortKey="days" />
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {rows.map((r) => (
-                <tr key={r.id} className="group hover:bg-muted/60">
-                  <td className="px-3 py-1.5">
-                    <Link
-                      to="/customers/$customerId"
-                      params={{ customerId: r.customer_id }}
-                      search={{ impl: r.id }}
-                      className="block text-[13px] font-medium hover:underline"
-                    >
-                      {r.customer_name}
-                      {r.is_test ? (
-                        <span
-                          title="A test account: left out of every count"
-                          className="ml-2 rounded-sm border border-dashed border-border px-1 py-px text-[10px] font-normal uppercase tracking-wider text-muted-foreground"
-                        >
-                          Test
-                        </span>
-                      ) : null}
-                      <span className="ml-2 text-[11px] font-normal text-muted-foreground">
-                        {r.name && r.name !== r.customer_name
-                          ? r.name
-                          : [r.industry, r.segment].filter(Boolean).join(" · ") || "—"}
-                      </span>
-                    </Link>
-                  </td>
-                  <td className="px-3 py-1.5">
-                    <StageBadge stage={r.deal_stage} />
-                  </td>
-                  <td className="px-3 py-1.5">
-                    <StatusDot status={levelOf(r.id)} />
-                    <HealthNote
-                      recorded={r.health_recorded}
-                      recordedReason={r.health_recorded_reason}
-                      legacyStatus={r.status}
-                      computed={levelOf(r.id)}
-                      className="mt-0.5 block text-[10px] text-muted-foreground"
-                    />
-                  </td>
-                  <td className="px-3 py-1.5 text-[12px]">{r.owner_name ?? "Unassigned"}</td>
-                  <td className="px-3 py-1.5 text-[12px]">{r.tier ?? "—"}</td>
-                  {/* The plan end carries its own pace: a date alone does
-                      not say whether it has already passed. */}
-                  <td className="px-3 py-1.5 font-mono text-[12px]">
-                    <PaceChip
-                      quiet
-                      pace={datePace(r.plan_end ?? r.target_launch_date, r.actual_launch_date)}
-                      label={fmtDate(r.plan_end ?? r.target_launch_date)}
-                    />
-                  </td>
-                  {/* Was a bare `> 14` with no explanation. Same threshold, but
-                      the chip now says it is a general one rather than this
-                      stage's own target — this list does not load
-                      stage_instances, and inventing a target would be worse
-                      than naming the fallback. The 360 uses the real one. */}
-                  <td className="px-3 py-1.5 font-mono text-[12px]">
-                    {/* Graduate is the end: no clock to run. */}
-                    {r.deal_stage === GRADUATED_STAGE ? (
-                      <span className="text-muted-foreground">—</span>
-                    ) : (
-                      <PaceChip
-                        quiet
-                        pace={dwellPace(r.stage_entered_at, null)}
-                        label={`${businessDaysIn(r.stage_entered_at)}bd`}
-                      />
-                    )}
-                  </td>
-                </tr>
-              ))}
-              {rows.length === 0 ? (
-                <tr>
-                  <td colSpan={7}>
-                    <NoRows label="No implementations match these filters. Try clearing a filter." />
-                  </td>
-                </tr>
-              ) : null}
-            </tbody>
-          </table>
-        </div>
+        {showActiveTable(stage) ? (
+          <div className="w-full overflow-x-auto rounded-md border border-border bg-card">
+            <table className="w-full text-left">
+              <caption className="sr-only">Active customers</caption>
+              {columnHeads}
+              <tbody className="divide-y divide-border">
+                {active.map((r) => (
+                  <CustomerRow key={r.id} row={r} status={levelOf(r.id)} />
+                ))}
+                {active.length === 0 ? (
+                  <tr>
+                    <td colSpan={7}>
+                      <NoRows label={customerListEmptyMessage("active", filtered)} />
+                    </td>
+                  </tr>
+                ) : null}
+              </tbody>
+            </table>
+          </div>
+        ) : null}
+
+        {offerGraduated ? (
+          <section aria-label="Graduated customers">
+            <button
+              type="button"
+              aria-expanded={graduatedOpen}
+              aria-controls="graduated-customers"
+              onClick={() => setGraduatedChoice({ forStage: stage, open: !graduatedOpen })}
+              className="flex w-full items-center gap-1.5 rounded-md border border-border bg-surface px-3 py-1.5 text-left text-[10px] font-semibold uppercase tracking-[0.1em] text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              {graduatedOpen ? (
+                <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
+              ) : (
+                <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
+              )}
+              Graduated customers ({graduatedTotal})
+            </button>
+            <div
+              id="graduated-customers"
+              hidden={!graduatedOpen}
+              className="w-full overflow-x-auto rounded-b-md border border-t-0 border-border bg-card"
+            >
+              <table className="w-full text-left">
+                <caption className="sr-only">Graduated customers</caption>
+                {columnHeads}
+                <tbody className="divide-y divide-border">
+                  {graduated.map((r) => (
+                    <CustomerRow key={r.id} row={r} status={levelOf(r.id)} />
+                  ))}
+                  {graduated.length === 0 ? (
+                    <tr>
+                      <td colSpan={7}>
+                        <NoRows label={customerListEmptyMessage("graduated", filtered)} />
+                      </td>
+                    </tr>
+                  ) : null}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        ) : null}
       </PageBody>
     </>
+  );
+}
+
+/** One customer row. Both the main table and the graduated section render through it. */
+function CustomerRow({ row: r, status }: { row: CustomerRowData; status: ImplHealth }) {
+  return (
+    <tr className="group hover:bg-muted/60">
+      <td className="px-3 py-1.5">
+        <Link
+          to="/customers/$customerId"
+          params={{ customerId: r.customer_id }}
+          search={{ impl: r.id }}
+          className="block text-[13px] font-medium hover:underline"
+        >
+          {r.customer_name}
+          {r.is_test ? (
+            <span
+              title="A test account: left out of every count"
+              className="ml-2 rounded-sm border border-dashed border-border px-1 py-px text-[10px] font-normal uppercase tracking-wider text-muted-foreground"
+            >
+              Test
+            </span>
+          ) : null}
+          <span className="ml-2 text-[11px] font-normal text-muted-foreground">
+            {r.name && r.name !== r.customer_name
+              ? r.name
+              : [r.industry, r.segment].filter(Boolean).join(" · ") || "—"}
+          </span>
+        </Link>
+      </td>
+      <td className="px-3 py-1.5">
+        <StageBadge stage={r.deal_stage} />
+      </td>
+      <td className="px-3 py-1.5">
+        <StatusDot status={status} />
+        <HealthNote
+          recorded={r.health_recorded}
+          recordedReason={r.health_recorded_reason}
+          legacyStatus={r.status}
+          computed={status}
+          className="mt-0.5 block text-[10px] text-muted-foreground"
+        />
+      </td>
+      <td className="px-3 py-1.5 text-[12px]">{r.owner_name ?? "Unassigned"}</td>
+      <td className="px-3 py-1.5 text-[12px]">{r.tier ?? "—"}</td>
+      {/* The plan end carries its own pace: a date alone does
+          not say whether it has already passed. */}
+      <td className="px-3 py-1.5 font-mono text-[12px]">
+        <PaceChip
+          quiet
+          pace={datePace(r.plan_end ?? r.target_launch_date, r.actual_launch_date)}
+          label={fmtDate(r.plan_end ?? r.target_launch_date)}
+        />
+      </td>
+      {/* Was a bare `> 14` with no explanation. Same threshold, but
+          the chip now says it is a general one rather than this
+          stage's own target — this list does not load
+          stage_instances, and inventing a target would be worse
+          than naming the fallback. The 360 uses the real one. */}
+      <td className="px-3 py-1.5 font-mono text-[12px]">
+        {/* Graduate is the end: no clock to run. */}
+        {r.deal_stage === GRADUATED_STAGE ? (
+          <span className="text-muted-foreground">—</span>
+        ) : (
+          <PaceChip
+            quiet
+            pace={dwellPace(r.stage_entered_at, null)}
+            label={`${businessDaysIn(r.stage_entered_at)}bd`}
+          />
+        )}
+      </td>
+    </tr>
   );
 }
 
