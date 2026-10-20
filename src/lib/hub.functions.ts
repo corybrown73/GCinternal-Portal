@@ -847,6 +847,20 @@ export const analyzeTranscriptDocument = createServerFn({ method: "POST" })
     });
   });
 
+/**
+ * Draft (or redraft) the follow-up email for one uploaded transcript. One
+ * model call; it reads the transcript only, and changes no proposal and no
+ * implementation record. The draft is kept on the transcript's finished
+ * reading when there is one.
+ */
+export const draftTranscriptFollowup = createServerFn({ method: "POST" })
+  .middleware([requireInternalAuth])
+  .inputValidator((data: unknown) => analyzeTranscriptInput.parse(data))
+  .handler(async ({ data }) => {
+    const { draftFollowupEmail } = await import("./transcript-followup.server");
+    return draftFollowupEmail(data.implementationId, data.attachmentId, { persist: true });
+  });
+
 /** The readings in flight and every kept proposal for one implementation. */
 export const pendingTranscriptWork = createServerFn({ method: "GET" })
   .middleware([requireInternalAuth])

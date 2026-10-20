@@ -303,19 +303,21 @@ export async function persistProposals(args: {
   return kept;
 }
 
-/* --------------------------------------------------------------- analyse */
+/* ------------------------------------------------------------------ file */
 
 /**
- * Read an uploaded transcript (an `account_files` row already on this
- * implementation) against what the Hub knows about the implementation, and
- * keep every proposal as a pending row. Nothing on the implementation
- * itself is written here.
+ * The uploaded transcript as the model reads it: its title and upload date for
+ * the context, and its document block. Throws, in the words the panel shows,
+ * when the file is no longer on this implementation, cannot be opened, or
+ * cannot be read as a document. Shared by the reading and the follow-up email.
  */
-export async function analyzeTranscript(
+export async function readTranscriptFile(
   implementationId: string,
   attachmentId: string,
-  opts: { actor?: TranscriptActor | undefined; jobId?: string | null | undefined } = {},
-): Promise<TranscriptAnalysisResult> {
+): Promise<{
+  file: { title: string | null; created_at: string | null };
+  block: BetaContentBlockParam;
+}> {
   const { data: file, error } = await db()
     .from("account_files")
     .select("id,title,storage_path,implementation_id,content_type,created_at")
@@ -354,16 +356,37 @@ export async function analyzeTranscript(
     throw new Error(transcript.problem ?? "The uploaded transcript could not be read.");
   }
 
-  const context = await loadTranscriptContext(implementationId, {
-    title: (file.title as string | null) ?? null,
-    created_at: (file.created_at as string | null) ?? null,
-  });
+  return {
+    file: {
+      title: (file.title as string | null) ?? null,
+      created_at: (file.created_at as string | null) ?? null,
+    },
+    block: transcript.block,
+  };
+}
+
+/* --------------------------------------------------------------- analyse */
+
+/**
+ * Read an uploaded transcript (an `account_files` row already on this
+ * implementation) against what the Hub knows about the implementation, and
+ * keep every proposal as a pending row. Nothing on the implementation
+ * itself is written here.
+ */
+export async function analyzeTranscript(
+  implementationId: string,
+  attachmentId: string,
+  opts: { actor?: TranscriptActor | undefined; jobId?: string | null | undefined } = {},
+): Promise<TranscriptAnalysisResult> {
+  const { file, block } = await readTranscriptFile(implementationId, attachmentId);
+
+  const context = await loadTranscriptContext(implementationId, file);
 
   // The context goes first and on its own, so the model reads the roster and
   // the open records before the transcript rather than after.
   const content: BetaContentBlockParam[] = [
     { type: "text", text: buildTranscriptContextText(context) },
-    transcript.block,
+    block,
     {
       type: "text",
       text: "Read this meeting transcript against the implementation context above and return the JSON described in the system message. Ground every proposal in what was actually said; name duplicates and owners by the ids given, and resolve relative dates against the meeting date.",

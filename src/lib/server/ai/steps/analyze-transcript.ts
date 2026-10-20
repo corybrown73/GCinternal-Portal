@@ -11,7 +11,12 @@ import type { AiJobRow, StepFn } from "../jobs";
  * and the reason: reading it again would only say the same thing.
  */
 
-export const ANALYZE_TRANSCRIPT_STEPS = ["analyze"] as const;
+/*
+ * `draft` runs after `analyze` and drafts the follow-up email onto the same
+ * row. It never fails the job: a draft that fails is kept as a failed draft
+ * with its reason, so the proposals stand and nobody is paged over an email.
+ */
+export const ANALYZE_TRANSCRIPT_STEPS = ["analyze", "draft"] as const;
 
 function subjectOf(job: AiJobRow): { implementationId: string; attachmentId: string } {
   if (!job.implementation_id) throw new Error("An analyze_transcript job needs an implementation");
@@ -41,4 +46,30 @@ export const analyze: StepFn = async (job) => {
   };
 };
 
-export const analyzeTranscriptSteps: Record<string, StepFn> = { analyze };
+/**
+ * The follow-up email. An unreadable reading has no email to draft, so the
+ * draft says so from the reading's own reason, without a model call.
+ */
+export const draftEmail: StepFn = async (job) => {
+  const { implementationId, attachmentId } = subjectOf(job);
+  if (job.result["readable"] === false) {
+    const problem = typeof job.result["problem"] === "string" ? job.result["problem"] : null;
+    const { unreadableDraft } = await import("../../../transcript-followup");
+    return {
+      result: {
+        followup_email: unreadableDraft(
+          problem ?? "That file could not be read as a meeting transcript.",
+          new Date().toISOString(),
+        ),
+      },
+    };
+  }
+  const { draftFollowupEmail } = await import("../../../transcript-followup.server");
+  const r = await draftFollowupEmail(implementationId, attachmentId, { jobId: job.id });
+  return {
+    usage: r.usage ?? undefined,
+    result: { followup_email: r.draft },
+  };
+};
+
+export const analyzeTranscriptSteps: Record<string, StepFn> = { analyze, draft: draftEmail };
