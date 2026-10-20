@@ -7,11 +7,13 @@ import { fileToBase64, MAX_ATTACHMENT_BYTES, textToBase64 } from "@/lib/attachme
 import { uploadAttachment } from "@/lib/attachments.functions";
 import { documentUploadType } from "@/lib/document-upload";
 import type { TeamOption } from "@/components/owner-picker";
+import { FollowupEmailSection, type FollowupSource } from "@/components/transcript-followup-email";
 import {
   addEvidence,
   analyzeTranscriptDocument,
   applyEvidenceProposal,
   dismissEvidenceProposal,
+  draftTranscriptFollowup,
   getTeamOptions,
   pendingTranscriptWork,
 } from "@/lib/hub.functions";
@@ -75,6 +77,18 @@ function showsOwner(p: EvidenceProposalRow): boolean {
 /** What one Apply click did, row by row; a failed row stays ticked with its reason. */
 type ApplyResult = { applied: number; failed: Array<{ id: string; message: string }> };
 
+function dayOf(iso: string | null): string | null {
+  if (!iso) return null;
+  const day = iso.slice(0, 10);
+  return isValidIsoDate(day) ? shortDay(day) : null;
+}
+
+/** The name and day of the transcript a follow-up email came from, for its heading. */
+function fromLabel(source: FollowupSource): string {
+  const day = dayOf(source.at);
+  return `${source.title ?? "the meeting transcript"}${day ? ` · ${day}` : ""}`;
+}
+
 /** Rows from one upload sit together, newest upload first. */
 function groupBySource(rows: EvidenceProposalRow[]): Array<{
   key: string;
@@ -97,12 +111,6 @@ function groupBySource(rows: EvidenceProposalRow[]): Array<{
     groups.set(key, g);
   }
   return [...groups.entries()].map(([key, g]) => ({ key, ...g }));
-}
-
-function dayOf(iso: string | null): string | null {
-  if (!iso) return null;
-  const day = iso.slice(0, 10);
-  return isValidIsoDate(day) ? shortDay(day) : null;
 }
 
 /**
@@ -204,6 +212,7 @@ export function TranscriptUpdatePanel({
   const upload = useServerFn(uploadAttachment);
   const recordEvidence = useServerFn(addEvidence);
   const analyze = useServerFn(analyzeTranscriptDocument);
+  const draftFn = useServerFn(draftTranscriptFollowup);
   const applyFn = useServerFn(applyEvidenceProposal);
   const dismissFn = useServerFn(dismissEvidenceProposal);
 
@@ -216,6 +225,8 @@ export function TranscriptUpdatePanel({
   const [resolvedDate, setResolvedDate] = useState<Record<string, string>>({});
   const [resolvedOwner, setResolvedOwner] = useState<Record<string, string>>({});
   const [rowErrors, setRowErrors] = useState<Record<string, string>>({});
+  // A draft held here is one made for a reading run inline (no job row to keep it on).
+  const [localDraft, setLocalDraft] = useState<FollowupSource | null>(null);
 
   const proposals = useMemo(() => work.data?.proposals ?? [], [work.data]);
   const pending = useMemo(() => proposals.filter((p) => p.status === "pending"), [proposals]);
@@ -257,9 +268,28 @@ export function TranscriptUpdatePanel({
     });
   }, [pending, roster, rosterKnown]);
 
+  // The follow-up email for one transcript: a model call over the transcript
+  // alone. It changes no proposal and no record, so it is safe to repeat.
+  const draftMutation = useMutation({
+    mutationFn: async (source: FollowupSource) => {
+      const out = await draftFn({
+        data: { implementationId, attachmentId: source.attachment_id },
+      });
+      return { source, ...out };
+    },
+    onSuccess: ({ source, draft, persisted }) => {
+      // Kept on the reading, the draft comes back with the work query; a draft
+      // with no reading to keep it on is held here until the next run.
+      setLocalDraft(persisted ? null : { ...source, draft });
+      void qc.invalidateQueries({ queryKey: ["transcript-work", implementationId] });
+    },
+  });
+
   type RunInput = { kind: "paste"; text: string } | { kind: "file"; file: File };
+  type InlineReading = { attachment_id: string; title: string; at: string };
 
   const run = useMutation({
+    onMutate: () => setLocalDraft(null),
     mutationFn: async (input: RunInput) => {
       let fileName: string;
       let contentType: string;
@@ -311,7 +341,9 @@ export function TranscriptUpdatePanel({
           relatedEntityId: null,
         },
       });
-      if (recorded.analysis_queued) return { summary: null as string | null };
+      if (recorded.analysis_queued) {
+        return { summary: null as string | null, inline: null as InlineReading | null };
+      }
       // Nothing could be queued (the flag is off, or no key): read it now,
       // the way the panel always did, and say so if the file is not a
       // transcript.
@@ -321,15 +353,30 @@ export function TranscriptUpdatePanel({
           result.analysis.problem ?? "That file could not be read as a meeting transcript.",
         );
       }
-      return { summary: result.analysis.summary || null };
+      return {
+        summary: result.analysis.summary || null,
+        inline: {
+          attachment_id: stored.id,
+          title,
+          at: new Date().toISOString(),
+        } as InlineReading | null,
+      };
     },
-    onSuccess: ({ summary }) => {
+    onSuccess: ({ summary, inline }) => {
       setLastSummary(summary);
       setFile(null);
       setPastedText("");
+      // The reading ran inline, so no job will draft the email: ask for it now.
+      if (inline) draftMutation.mutate({ ...inline, draft: null });
       void qc.invalidateQueries({ queryKey: ["transcript-work", implementationId] });
     },
   });
+
+  // The newest finished reading's email. Waits while a reading is still
+  // running, since that reading's own draft is not written yet.
+  const followup = work.data?.followups[0] ?? null;
+  const followupSource: FollowupSource | null =
+    localDraft ?? (followup && running.length === 0 ? followup : null);
 
   const apply = useMutation({
     mutationFn: async (): Promise<ApplyResult> => {
@@ -377,6 +424,11 @@ export function TranscriptUpdatePanel({
       void qc.invalidateQueries({ queryKey: ["transcript-work", implementationId] });
     },
   });
+
+  // While a draft is being made, its section stays on the reading it is for.
+  const shownFollowup: FollowupSource | null = draftMutation.isPending
+    ? (draftMutation.variables ?? followupSource)
+    : followupSource;
 
   const selectedCount = pending.filter((p) => selected[p.id]).length;
   const busy = run.isPending || apply.isPending;
@@ -533,6 +585,16 @@ export function TranscriptUpdatePanel({
 
           {work.isError ? (
             <p className="text-[12px] text-destructive">{(work.error as Error).message}</p>
+          ) : null}
+
+          {shownFollowup ? (
+            <FollowupEmailSection
+              source={shownFollowup}
+              from={fromLabel(shownFollowup)}
+              drafting={draftMutation.isPending}
+              error={draftMutation.isError ? (draftMutation.error as Error).message : null}
+              onDraft={(source) => draftMutation.mutate(source)}
+            />
           ) : null}
 
           {pending.length > 0 ? (

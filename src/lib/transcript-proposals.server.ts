@@ -1,5 +1,6 @@
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 
+import { storedFollowupDraft, type TranscriptFollowup } from "./transcript-followup";
 import {
   proposalApplyPlan,
   type EvidenceProposalRow,
@@ -38,6 +39,12 @@ export type TranscriptWork = {
    */
   jobs: TranscriptJob[];
   proposals: EvidenceProposalRow[];
+  /**
+   * The latest finished reading per uploaded file from the last week, newest
+   * first, with the follow-up email drafted for it (null when none is yet,
+   * as for a reading from before the drafts).
+   */
+  followups: TranscriptFollowup[];
 };
 
 /** Readings older than this have had their say; the evidence row remains. */
@@ -173,7 +180,19 @@ export async function loadTranscriptWork(
     });
   }
 
-  return { jobs: jobLines, proposals };
+  const followups: TranscriptFollowup[] = [];
+  for (const [attachmentId, j] of latestJobs) {
+    if (String(j["status"]) !== "done") continue;
+    const result = (j["result"] ?? {}) as Record<string, unknown>;
+    followups.push({
+      attachment_id: attachmentId,
+      title: files.get(attachmentId) ?? null,
+      at: (j["created_at"] as string | null) ?? null,
+      draft: storedFollowupDraft(result["followup_email"]),
+    });
+  }
+
+  return { jobs: jobLines, proposals, followups };
 }
 
 /** PostgREST answers at most this many rows per query unless told otherwise; the reads here page past it. */

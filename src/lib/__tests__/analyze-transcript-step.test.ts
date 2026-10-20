@@ -59,7 +59,7 @@ beforeEach(() => {
 
 describe("the analyze_transcript step", () => {
   it("is the kind's only step", () => {
-    expect(ANALYZE_TRANSCRIPT_STEPS).toEqual(["analyze"]);
+    expect(ANALYZE_TRANSCRIPT_STEPS).toEqual(["analyze", "draft"]);
     expect(analyzeTranscriptSteps["analyze"]).toBe(analyze);
   });
 
