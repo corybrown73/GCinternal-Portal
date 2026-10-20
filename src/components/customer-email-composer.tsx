@@ -12,7 +12,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
-  closeNeedsConfirm,
+  emailWordCount,
+  hasUnsavedEdits,
   CUSTOMER_EMAIL_TYPE_LABEL,
   CUSTOMER_EMAIL_TYPES,
   emailCopyText,
@@ -94,7 +95,7 @@ export function CustomerEmailComposer({
     },
   });
 
-  const edited = draft !== null && closeNeedsConfirm(draft, { subject, body });
+  const edited = hasUnsavedEdits(draft, { subject, body });
 
   const reset = () => {
     setStep("compose");
@@ -126,6 +127,27 @@ export function CustomerEmailComposer({
     reset();
   };
 
+  // Going back to the instructions replaces this draft, so unsaved edits are
+  // confirmed first. Cancelling keeps the draft and the edits as they are.
+  const changeInstructions = async () => {
+    if (edited) {
+      const confirmed = await ask({
+        title: "Discard your edits?",
+        body: "Going back to the instructions replaces this draft, and your changes to it will be lost.",
+        confirmLabel: "Discard edits",
+        destructive: true,
+      });
+      if (confirmed !== true) return;
+    }
+    setDraft(null);
+    setSubject("");
+    setBody("");
+    setUnticked(new Set());
+    setCopied(false);
+    setCopyError(null);
+    setStep("compose");
+  };
+
   const regenerate = async () => {
     if (edited) {
       const confirmed = await ask({
@@ -155,7 +177,9 @@ export function CustomerEmailComposer({
   };
 
   const meetingNeedsTranscript = type === "meeting_followup" && !attachmentId;
-  const status = draft ? wordStatus(body, type) : null;
+  // The count is of the email as it will be copied: subject, body and the resources still ticked.
+  const includedLinks = draft ? includedResources(draft.resources, unticked) : [];
+  const status = draft ? wordStatus(emailWordCount({ subject, body }, includedLinks), type) : null;
 
   return (
     <>
@@ -285,7 +309,11 @@ export function CustomerEmailComposer({
                   <RefreshCw className="h-3 w-3" />
                   Try again
                 </button>
-                <button type="button" onClick={() => setStep("compose")} className={SECONDARY}>
+                <button
+                  type="button"
+                  onClick={() => void changeInstructions()}
+                  className={SECONDARY}
+                >
                   Change instructions
                 </button>
               </div>
@@ -329,7 +357,8 @@ export function CustomerEmailComposer({
                         : "text-amber-800 dark:text-amber-300",
                     )}
                   >
-                    About {status.words} words{status.message ? `. ${status.message}` : "."}
+                    {status.words} words, sign-off not counted
+                    {status.message ? `. ${status.message}` : "."}
                   </span>
                 ) : null}
               </label>
@@ -378,7 +407,11 @@ export function CustomerEmailComposer({
                   <RefreshCw className="h-3 w-3" />
                   {generate.isPending ? "Drafting…" : "Regenerate"}
                 </button>
-                <button type="button" onClick={() => setStep("compose")} className={SECONDARY}>
+                <button
+                  type="button"
+                  onClick={() => void changeInstructions()}
+                  className={SECONDARY}
+                >
                   Change instructions
                 </button>
                 {copyError ? (

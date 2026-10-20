@@ -4,7 +4,8 @@ import {
   CUSTOMER_EMAIL_TYPE_LABEL,
   CUSTOMER_EMAIL_TYPES,
   cleanInstructions,
-  closeNeedsConfirm,
+  emailWordCount,
+  hasUnsavedEdits,
   contextIsLimited,
   contextSummary,
   customerEmailContextText,
@@ -18,7 +19,7 @@ import {
   type CustomerEmailContext,
   type CustomerEmailReply,
 } from "../customer-email";
-import type { ResourceLink } from "../transcript-followup";
+import { followupWordCount, type ResourceLink } from "../transcript-followup";
 
 const CTX: CustomerEmailContext = {
   customerName: "Summit Roofing",
@@ -177,28 +178,75 @@ describe("resources, copying and the word guide", () => {
   });
 
   it("holds a short type to its target, and every type to the 250-word limit", () => {
-    const words = (n: number) => Array.from({ length: n }, () => "word").join(" ");
-    expect(wordStatus(words(170), "check_in").level).toBe("ok");
-    expect(wordStatus(words(200), "check_in").level).toBe("long");
-    expect(wordStatus(words(200), "request").level).toBe("long");
-    expect(wordStatus(words(200), "custom").level).toBe("ok");
-    expect(wordStatus(words(260), "custom").level).toBe("over");
-    expect(wordStatus(words(260), "check_in").message).toMatch(/250-word limit/);
+    expect(wordStatus(170, "check_in").level).toBe("ok");
+    expect(wordStatus(200, "check_in").level).toBe("long");
+    expect(wordStatus(200, "request").level).toBe("long");
+    expect(wordStatus(200, "custom").level).toBe("ok");
+    expect(wordStatus(260, "custom").level).toBe("over");
   });
 });
 
-describe("closing and discarding", () => {
-  const draft = generalEmailDraft(reply(), AT, [], SUMMARY);
+describe("the word count is the email as it will be copied", () => {
+  const email = { subject: "Quick check in", body: "Hi there,\n\nOne two three.\n\nThanks," };
 
-  it("asks before discarding an edited email", () => {
-    expect(closeNeedsConfirm(draft, { subject: draft.subject, body: `${draft.body} x` })).toBe(
-      true,
+  it("counts the subject and the body, and not the sign-off", () => {
+    // "Quick check in" (3) + "Hi there," (2) + "One two three." (3)
+    expect(emailWordCount(email, [])).toBe(8);
+  });
+
+  it("counts a resource that is ticked, and stops counting it when it is unticked", () => {
+    const withLink = emailWordCount(email, [LINK]);
+    expect(withLink).toBeGreaterThan(emailWordCount(email, []));
+    expect(emailWordCount(email, includedResources([LINK], new Set([LINK.url])))).toBe(
+      emailWordCount(email, []),
     );
   });
 
-  it("does not ask when nothing was edited, or there is no draft to lose", () => {
-    expect(closeNeedsConfirm(draft, { subject: draft.subject, body: draft.body })).toBe(false);
-    expect(closeNeedsConfirm(null, { subject: "", body: "" })).toBe(false);
+  it("counts the same text that is copied", () => {
+    const copied = emailCopyText(email, [LINK]).replace(/^Subject:\s*/, "");
+    expect(emailWordCount(email, [LINK])).toBe(followupWordCount(copied));
+  });
+
+  it("moves with the reviewer's edits to the body", () => {
+    const longer = {
+      ...email,
+      body: `${email.body.replace("\n\nThanks,", "")} More words here.\n\nThanks,`,
+    };
+    expect(emailWordCount(longer, [])).toBeGreaterThan(emailWordCount(email, []));
+  });
+});
+
+describe("the length guidance advises and never blocks copying", () => {
+  it("says a long email can still be copied, for each guidance level", () => {
+    expect(wordStatus(260, "custom").message).toMatch(/still copy it/);
+    expect(wordStatus(200, "check_in").message).toMatch(/still copy it/);
+  });
+
+  it("keeps the 250-word limit in the message for an over-long email", () => {
+    expect(wordStatus(260, "check_in").message).toMatch(/250-word limit/);
+  });
+
+  it("gives no message for an email within its guidance", () => {
+    expect(wordStatus(120, "check_in").message).toBeNull();
+  });
+});
+
+describe("unsaved edits are protected", () => {
+  const draft = generalEmailDraft(reply(), AT, [], SUMMARY);
+
+  it("reports unsaved edits when the subject or body has changed", () => {
+    expect(hasUnsavedEdits(draft, { subject: draft.subject, body: `${draft.body} x` })).toBe(true);
+    expect(hasUnsavedEdits(draft, { subject: "Changed", body: draft.body })).toBe(true);
+  });
+
+  it("reports nothing to lose when the email is unedited, or there is no draft", () => {
+    expect(hasUnsavedEdits(draft, { subject: draft.subject, body: draft.body })).toBe(false);
+    expect(hasUnsavedEdits(null, { subject: "", body: "" })).toBe(false);
+  });
+
+  it("reports nothing to lose for a draft with no email in it", () => {
+    const unreadable = generalEmailDraft(reply({ body: "  " }), AT, [], SUMMARY);
+    expect(hasUnsavedEdits(unreadable, { subject: "typed", body: "typed" })).toBe(false);
   });
 });
 

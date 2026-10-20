@@ -234,14 +234,30 @@ export function emailCopyText(
 
 export type WordStatus = { words: number; level: "ok" | "long" | "over"; message: string | null };
 
-/** The length the reviewer sees: over the target for a short type, and over the hard limit for any. */
-export function wordStatus(body: string, type: CustomerEmailType): WordStatus {
-  const words = followupWordCount(body);
+/**
+ * The words in the email as it will be copied: the subject, then the body with
+ * the included resources. The sign-off is not counted, since the sender writes
+ * it. Counted on the same text emailCopyText produces, so the number the
+ * reviewer sees is the number they copy.
+ */
+export function emailWordCount(
+  email: { subject: string; body: string },
+  resources: readonly ResourceLink[],
+): number {
+  const copied = emailCopyText(email, resources).replace(/^Subject:\s*/, "");
+  return followupWordCount(copied);
+}
+
+/**
+ * The length guidance for a count of words. It is advice, not a block: an
+ * over-long email can still be copied, and the message says so.
+ */
+export function wordStatus(words: number, type: CustomerEmailType): WordStatus {
   if (words > EMAIL_WORD_LIMIT) {
     return {
       words,
       level: "over",
-      message: `Over the ${EMAIL_WORD_LIMIT}-word limit. Trim it before you copy it.`,
+      message: `Over the ${EMAIL_WORD_LIMIT}-word limit. You can still copy it, but trimming it is better.`,
     };
   }
   const short = type === "check_in" || type === "request";
@@ -249,14 +265,18 @@ export function wordStatus(body: string, type: CustomerEmailType): WordStatus {
     return {
       words,
       level: "long",
-      message: `Longer than the ${SHORT_TYPE_TARGET.min}–${SHORT_TYPE_TARGET.max}-word target for this type.`,
+      message: `Longer than the ${SHORT_TYPE_TARGET.min}–${SHORT_TYPE_TARGET.max}-word target for this type. You can still copy it.`,
     };
   }
   return { words, level: "ok", message: null };
 }
 
-/** Closing the composer discards the email, so it is confirmed first when the reviewer has edited it. */
-export function closeNeedsConfirm(
+/**
+ * Whether the reviewer has edited the suggested email. Closing the composer or
+ * changing its instructions would lose those edits, so they are confirmed
+ * first. An unedited draft, or no draft, is never confirmed.
+ */
+export function hasUnsavedEdits(
   draft: Pick<CustomerEmailDraft, "status" | "subject" | "body"> | null,
   email: { subject: string; body: string },
 ): boolean {
