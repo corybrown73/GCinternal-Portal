@@ -54,7 +54,8 @@ create table if not exists implementation_owner_history (
   actor_kind text not null check (actor_kind in ('user', 'system', 'integration')),
   source text not null check (source in (
     'claim', 'manager_assignment', 'rule_assignment', 'integration_assignment',
-    'clear', 'inherit', 'partner_handoff', 'salesforce_create', 'salesforce_supersede'
+    'clear', 'inherit', 'partner_handoff', 'salesforce_create', 'salesforce_supersede',
+    'legacy_direct_write'
   )),
   reason text,
   changed_at timestamptz not null default clock_timestamp(),
@@ -80,7 +81,9 @@ create trigger implementation_owner_history_immutable
 alter table implementation_owner_history enable row level security;
 create policy "owner history internal" on implementation_owner_history
   for select using (portal_is_internal());
-revoke insert, update, delete on implementation_owner_history from anon, authenticated;
+-- Privileges, not only policies: row-level security does not cover TRUNCATE, and a
+-- future policy mistake must not reopen a write. Internal logins read these tables only.
+revoke all on implementation_owner_history from anon, authenticated;
 grant select on implementation_owner_history to authenticated;
 
 -- The assignment ledger is read by internal users and written only by the server.
@@ -98,6 +101,8 @@ drop policy if exists "team_members internal delete" on team_members;
 drop policy if exists "assignment_pool internal" on portal_assignment_pool;
 create policy "assignment_pool internal read" on portal_assignment_pool
   for select using (portal_is_internal());
+revoke all on portal_assignments, portal_assignment_pool, team_members from anon, authenticated;
+grant select on portal_assignments, portal_assignment_pool, team_members to authenticated;
 
 -- ---------------------------------------------------------------------------
 -- 2. The authorisation context a protected change runs under. It lasts for the
@@ -126,9 +131,22 @@ begin
   perform set_config('portal.owner_change', '', true);
 end $$;
 
+-- The guard's mode, from portal_app_config (key owner_guard). 'observe' lets a direct
+-- owner write through and records it as a legacy write, so an application that has not
+-- yet moved to the ownership functions keeps working during the rollout. 'enforce'
+-- refuses it. A missing setting means enforce: the default fails closed. Changing the
+-- mode is a configuration change, not a migration.
+create or replace function portal_owner_guard_mode()
+returns text language sql stable security definer set search_path = public as $$
+  select coalesce((select value ->> 'mode' from portal_app_config where key = 'owner_guard'), 'enforce');
+$$;
+
 -- Refuses a change of implementations.owner_id made outside the protected functions.
+-- A signed-in internal login (a REST request under the authenticated role) is refused in
+-- every mode: observe mode is only for the server's own writes during the rollout. The
+-- server writes with the service role, which is what observe mode lets through.
 create or replace function implementations_owner_guard()
-returns trigger language plpgsql set search_path = public as $$
+returns trigger language plpgsql security definer set search_path = public as $$
 begin
   if tg_op = 'INSERT' and new.owner_id is null then
     return new;
@@ -136,11 +154,19 @@ begin
   if tg_op = 'UPDATE' and new.owner_id is not distinct from old.owner_id then
     return new;
   end if;
-  if coalesce(current_setting('portal.owner_change', true), '') <> 'authorised' then
+  if coalesce(current_setting('portal.owner_change', true), '') = 'authorised' then
+    return new;
+  end if;
+  if coalesce(auth.role(), '') = 'authenticated' or portal_owner_guard_mode() = 'enforce' then
     raise exception 'owner_change_not_authorised: an account owner changes only through the ownership functions';
   end if;
   return new;
 end $$;
+
+-- The rollout's starting mode. Enforcement is switched on once the application that
+-- uses the ownership functions is live; see the PR's rollout section.
+insert into portal_app_config (key, value) values ('owner_guard', '{"mode":"observe"}')
+  on conflict (key) do nothing;
 
 drop trigger if exists implementations_owner_guard on implementations;
 create trigger implementations_owner_guard
@@ -157,19 +183,31 @@ begin
   if tg_op = 'UPDATE' and new.owner_id is not distinct from old.owner_id then
     return new;
   end if;
-  insert into implementation_owner_history
-    (implementation_id, deal_id, previous_owner_id, new_owner_id,
-     actor_profile_id, actor_kind, source, reason)
-  values (
-    new.id,
-    new.deal_id,
-    case when tg_op = 'UPDATE' then old.owner_id end,
-    new.owner_id,
-    nullif(current_setting('portal.owner_actor_profile', true), '')::uuid,
-    current_setting('portal.owner_actor_kind', true),
-    current_setting('portal.owner_source', true),
-    nullif(current_setting('portal.owner_reason', true), '')
-  );
+  -- A change made under the protected functions carries its own actor and source. Any
+  -- other change is a legacy direct write: it is recorded as such, with no actor named.
+  if coalesce(current_setting('portal.owner_change', true), '') = 'authorised' then
+    insert into implementation_owner_history
+      (implementation_id, deal_id, previous_owner_id, new_owner_id,
+       actor_profile_id, actor_kind, source, reason)
+    values (
+      new.id, new.deal_id,
+      case when tg_op = 'UPDATE' then old.owner_id end, new.owner_id,
+      nullif(current_setting('portal.owner_actor_profile', true), '')::uuid,
+      current_setting('portal.owner_actor_kind', true),
+      current_setting('portal.owner_source', true),
+      nullif(current_setting('portal.owner_reason', true), '')
+    );
+  else
+    insert into implementation_owner_history
+      (implementation_id, deal_id, previous_owner_id, new_owner_id,
+       actor_profile_id, actor_kind, source, reason)
+    values (
+      new.id, new.deal_id,
+      case when tg_op = 'UPDATE' then old.owner_id end, new.owner_id,
+      null, 'system', 'legacy_direct_write',
+      'Changed without the ownership functions, by an application that has not moved to them yet'
+    );
+  end if;
   return new;
 end $$;
 
@@ -865,6 +903,7 @@ end $$;
 -- ---------------------------------------------------------------------------
 -- Grants. Only the server runs these, with the service role.
 -- ---------------------------------------------------------------------------
+revoke execute on function portal_owner_guard_mode() from public, anon, authenticated;
 revoke execute on function portal_owner_context(uuid, text, text, text) from public, anon, authenticated;
 revoke execute on function portal_owner_context_clear() from public, anon, authenticated;
 revoke execute on function portal_record_deal_owner_change(uuid, uuid, uuid, uuid, text, text, text) from public, anon, authenticated;

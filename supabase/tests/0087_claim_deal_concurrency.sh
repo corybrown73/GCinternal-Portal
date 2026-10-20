@@ -101,6 +101,7 @@ update portal_profiles set role = 'manager' where id = '$MGR_P';
 alter table portal_profiles enable trigger portal_profiles_role_guard;
 insert into portal_app_config (key, value) values ('assignment_rules', '$RULES')
   on conflict (key) do update set value = excluded.value;
+update portal_app_config set value = '{\"mode\":\"enforce\"}' where key = 'owner_guard';
 " >/dev/null || fail "could not commit fixtures"
 
 # A session runs a SQL script in its own psql process, starting after $2 seconds.

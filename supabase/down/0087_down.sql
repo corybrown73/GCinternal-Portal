@@ -23,6 +23,8 @@ drop function if exists portal_deal_owner_state(uuid);
 drop function if exists portal_record_deal_owner_change(uuid, uuid, uuid, uuid, text, text, text);
 drop function if exists portal_owner_context(uuid, text, text, text);
 drop function if exists portal_owner_context_clear();
+drop function if exists portal_owner_guard_mode();
+delete from portal_app_config where key = 'owner_guard';
 drop function if exists implementations_owner_guard();
 drop function if exists implementations_owner_history();
 drop function if exists implementation_owner_history_immutable();
@@ -45,6 +47,8 @@ create policy "team_members internal update" on team_members
   for update to authenticated using (portal_is_internal()) with check (portal_is_internal());
 create policy "team_members internal delete" on team_members
   for delete to authenticated using (portal_is_internal());
+-- The privileges 0087 removed come back as Supabase's default grants gave them.
+grant all on portal_assignments, portal_assignment_pool, team_members to anon, authenticated;
 
 -- 2. The claim protocol, as the previous revision of 0087 defined it.
 -- 0087: a deal's owner is changed in one transaction, under one lock order.

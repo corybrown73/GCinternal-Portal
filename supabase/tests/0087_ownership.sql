@@ -88,6 +88,8 @@ insert into portal_assignments (deal_id, team_member_id, weight, source, created
 insert into portal_app_config (key, value) values
   ('assignment_rules', '{"mode":"claim","window_days":90,"base_points":1,"service_points":1,"arr_bands":[],"seat_bands":[],"integration_points":{}}');
 select set_config('portal.owner_change', '', true);
+-- The guard refuses direct owner writes in enforce mode, which is the target configuration.
+update portal_app_config set value = '{"mode":"enforce"}' where key = 'owner_guard';
 
 -- ---------------------------------------------------------------------------
 -- 1. Who may change an owner by hand: exactly admin, super admin and manager.
@@ -234,6 +236,10 @@ select pg_temp.assert_eq(
 -- ---------------------------------------------------------------------------
 -- 7. Salesforce: a created project may take the named owner; a superseded one keeps the Hub's.
 -- ---------------------------------------------------------------------------
+-- The Salesforce ingest calls these with the service key, which reaches the database as
+-- the request's JWT role. A bare psql session has no JWT, and the functions refuse it,
+-- correctly. So the probe sets the same claim the ingest's request carries.
+select set_config('request.jwt.claims', '{"role":"service_role"}', true);
 select sf_create_implementation(
   '00000000-0000-4000-8000-00000000c001',
   '{"name":"SF create","owner_id":"00000000-0000-4000-8000-00000000a004"}'::jsonb,
@@ -251,6 +257,22 @@ select sf_supersede_implementation(
   (select id from implementations where salesforce_opportunity_id = 'SF-OPP-1'),
   '{"name":"Follow-on","owner_id":"00000000-0000-4000-8000-00000000a002"}'::jsonb,
   'Renewal scope', null);
+select set_config('request.jwt.claims', '', true);
+
+-- The check that refuses the Salesforce functions is still in force for an ordinary
+-- signed-in user, and a manager may still call them.
+select set_config('request.jwt.claims', '{"role":"authenticated","sub":"00000000-0000-4000-8000-00000000f006"}', true);
+select pg_temp.assert_refused(
+  $q$select sf_create_implementation('00000000-0000-4000-8000-00000000c001', '{"name":"Sales SF"}'::jsonb,
+     null, 'SF-OPP-SALES', 'SF-ACC-S', now(), null)$q$,
+  'forbidden', 'a sales user cannot create a project from Salesforce');
+select set_config('request.jwt.claims', '{"role":"authenticated","sub":"00000000-0000-4000-8000-00000000f005"}', true);
+select sf_create_implementation('00000000-0000-4000-8000-00000000c001', '{"name":"Manager SF"}'::jsonb,
+  null, 'SF-OPP-MGR', 'SF-ACC-M', now(), '00000000-0000-4000-8000-00000000f005');
+select pg_temp.assert_eq(
+  (select count(*) from implementations where salesforce_opportunity_id = 'SF-OPP-MGR'), 1::bigint,
+  'a manager may create a project from Salesforce');
+select set_config('request.jwt.claims', '', true);
 select pg_temp.assert_eq(
   (select owner_id from implementations where salesforce_opportunity_id = 'SF-OPP-1' and superseded_by_implementation_id is null),
   '00000000-0000-4000-8000-00000000a004'::uuid, 'a superseded project keeps the owner it had');
