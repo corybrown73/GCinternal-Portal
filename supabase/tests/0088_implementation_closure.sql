@@ -24,9 +24,25 @@ end $fn$;
 
 -- Fixtures ------------------------------------------------------------------
 
--- Fixture users are inserted without the production signup trigger, which
--- admits only approved email domains. The probe is about closure, not signup.
-alter table auth.users disable trigger portal_on_auth_user_created;
+-- The fixture people arrive through the real signup path, so nothing here
+-- disables a trigger, changes the domain allowlist, or bypasses a role guard:
+--   1. Team members carry each person's email. The signup trigger links a new
+--      profile to a team member with the same email (portal_link_team_member).
+--   2. An admin's invite fixes each person's role (portal_user_invites). The
+--      signup trigger creates the profile with that role.
+--   3. The auth user is inserted, and the trigger does the rest.
+-- The checks after the inserts prove those links are what the owner rule reads.
+insert into team_members (id, org_id, active, name, role, email) values
+  ('b0000000-0000-4000-8000-000000000003', '00000000-0000-4000-8000-000000000001', true, 'Sam Specialist', 'implementation', 'se@probe.test'),
+  ('b0000000-0000-4000-8000-000000000004', '00000000-0000-4000-8000-000000000001', true, 'Olive Other', 'implementation', 'other-se@probe.test'),
+  ('b0000000-0000-4000-8000-000000000005', '00000000-0000-4000-8000-000000000001', true, 'Sid Sales', 'sales', 'sales@probe.test');
+
+insert into portal_user_invites (email, full_name, role, expires_at) values
+  ('admin@probe.test', 'Ada Admin', 'super_admin', now() + interval '1 day'),
+  ('mgr@probe.test', 'Mo Manager', 'manager', now() + interval '1 day'),
+  ('se@probe.test', 'Sam Specialist', 'implementation', now() + interval '1 day'),
+  ('other-se@probe.test', 'Olive Other', 'implementation', now() + interval '1 day'),
+  ('sales@probe.test', 'Sid Sales', 'sales', now() + interval '1 day');
 
 insert into auth.users (id, email) values
   ('a0000000-0000-4000-8000-000000000001', 'admin@probe.test'),
@@ -35,17 +51,19 @@ insert into auth.users (id, email) values
   ('a0000000-0000-4000-8000-000000000004', 'other-se@probe.test'),
   ('a0000000-0000-4000-8000-000000000005', 'sales@probe.test');
 
-insert into team_members (id, org_id, active, name, role, email) values
-  ('b0000000-0000-4000-8000-000000000003', '00000000-0000-4000-8000-000000000001', true, 'Sam Specialist', 'implementation', 'se@probe.test'),
-  ('b0000000-0000-4000-8000-000000000004', '00000000-0000-4000-8000-000000000001', true, 'Olive Other', 'implementation', 'other-se@probe.test'),
-  ('b0000000-0000-4000-8000-000000000005', '00000000-0000-4000-8000-000000000001', true, 'Sid Sales', 'sales', 'sales@probe.test');
-
-insert into portal_profiles (id, email, role, org_id, team_member_id) values
-  ('a0000000-0000-4000-8000-000000000001', 'admin@probe.test', 'admin', '00000000-0000-4000-8000-000000000001', null),
-  ('a0000000-0000-4000-8000-000000000002', 'mgr@probe.test', 'manager', '00000000-0000-4000-8000-000000000001', null),
-  ('a0000000-0000-4000-8000-000000000003', 'se@probe.test', 'implementation', '00000000-0000-4000-8000-000000000001', 'b0000000-0000-4000-8000-000000000003'),
-  ('a0000000-0000-4000-8000-000000000004', 'other-se@probe.test', 'implementation', '00000000-0000-4000-8000-000000000001', 'b0000000-0000-4000-8000-000000000004'),
-  ('a0000000-0000-4000-8000-000000000005', 'sales@probe.test', 'sales', '00000000-0000-4000-8000-000000000001', 'b0000000-0000-4000-8000-000000000005');
+do $$
+begin
+  if not exists (select 1 from portal_profiles where id = 'a0000000-0000-4000-8000-000000000001' and role = 'super_admin')
+     or not exists (select 1 from portal_profiles where id = 'a0000000-0000-4000-8000-000000000002' and role = 'manager')
+     or not exists (select 1 from portal_profiles where id = 'a0000000-0000-4000-8000-000000000005' and role = 'sales') then
+    raise exception 'INVARIANT "invited roles reach the profile" failed';
+  end if;
+  if (select team_member_id from portal_profiles where id = 'a0000000-0000-4000-8000-000000000003') is distinct from 'b0000000-0000-4000-8000-000000000003'
+     or (select team_member_id from portal_profiles where id = 'a0000000-0000-4000-8000-000000000004') is distinct from 'b0000000-0000-4000-8000-000000000004' then
+    raise exception 'INVARIANT "a specialist profile is linked to their team member by email" failed';
+  end if;
+  raise notice 'ok — fixture people arrive through invites and the signup link';
+end $$;
 
 insert into customers (id, org_id, name, source, is_test, updated_at) values
   ('c0000000-0000-4000-8000-000000000001', '00000000-0000-4000-8000-000000000001', 'Probe Customer', 'manual', false, now());
