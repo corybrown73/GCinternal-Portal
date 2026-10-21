@@ -24,6 +24,8 @@ describe("commitmentState", () => {
       met: "completed",
       missed: "outstanding",
       renegotiated: "outstanding",
+      fulfilled: "completed",
+      cancelled: "withdrawn",
     });
   });
 

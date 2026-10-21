@@ -24,7 +24,9 @@ import {
 import { APPROVAL_STATUSES, EVIDENCE_TYPES } from "@/lib/evidence-input";
 import {
   COMMITMENT_AUDIENCES,
-  COMMITMENT_STATUSES,
+  commitmentStatusChange,
+  commitmentStatusChoices,
+  commitmentStatusLabel,
   DECISION_STATUSES,
   ESCALATION_SEVERITIES,
   ESCALATION_STATUSES,
@@ -156,12 +158,14 @@ function Enum({
   options,
   onChange,
   disabled,
+  optionLabel = humanize,
 }: {
   label: string;
   value: string;
   options: readonly string[];
   onChange: (v: string) => void;
   disabled: boolean;
+  optionLabel?: (o: string) => string;
 }) {
   return (
     <label className="block space-y-0.5">
@@ -175,7 +179,7 @@ function Enum({
       >
         {options.map((o) => (
           <option key={o} value={o}>
-            {humanize(o)}
+            {optionLabel(o)}
           </option>
         ))}
       </select>
@@ -1228,8 +1232,11 @@ function CommitmentFields(
       <Enum
         label="Status"
         value={draft.status}
-        options={COMMITMENT_STATUSES}
-        onChange={(status) => set({ status })}
+        options={commitmentStatusChoices(draft.status)}
+        optionLabel={commitmentStatusLabel}
+        onChange={(status) =>
+          set(commitmentStatusChange(draft, status, new Date().toISOString().slice(0, 10)))
+        }
         disabled={disabled}
       />
       <Person

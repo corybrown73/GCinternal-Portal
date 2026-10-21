@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { COMMITMENT_COMPLETED_STATUSES, commitmentState } from "@/lib/commitment-status";
 import { calendarDaysBetween } from "@/lib/dates";
 
 /**
@@ -46,7 +47,63 @@ export const ESCALATION_STATUSES = ["open", "in_progress", "resolved"] as const;
 export const DECISION_STATUSES = ["active", "superseded", "reversed"] as const;
 
 export const COMMITMENT_AUDIENCES = ["customer", "internal"] as const;
-export const COMMITMENT_STATUSES = ["open", "met", "missed", "renegotiated"] as const;
+/**
+ * Every status a commitment row can hold, so a row saved under an older word
+ * (fulfilled, cancelled) can still be edited and is saved back unchanged. What
+ * each one means is decided in `commitment-status.ts`; the editor offers the
+ * choices in `commitmentStatusChoices`.
+ */
+export const COMMITMENT_STATUSES = [
+  "open",
+  "met",
+  "missed",
+  "renegotiated",
+  "fulfilled",
+  "cancelled",
+] as const;
+
+const COMMITMENT_STATUS_LABEL: Readonly<Record<string, string>> = {
+  open: "Open",
+  met: "Done",
+  fulfilled: "Done",
+  missed: "Missed",
+  renegotiated: "Renegotiated",
+  cancelled: "Cancelled",
+};
+
+/** The editor's word for a stored status: met and fulfilled both read as Done. */
+export function commitmentStatusLabel(status: string): string {
+  return COMMITMENT_STATUS_LABEL[status] ?? status;
+}
+
+/**
+ * The Status choices the editor offers for a commitment currently at `current`:
+ * Open, Done, Missed, Renegotiated, Cancelled. A new Done is stored as "met";
+ * a row already stored as "fulfilled" keeps that value as its Done, so saving
+ * it again does not rewrite it.
+ */
+export function commitmentStatusChoices(current: string): string[] {
+  const done = (COMMITMENT_COMPLETED_STATUSES as readonly string[]).includes(current)
+    ? current
+    : "met";
+  return ["open", done, "missed", "renegotiated", "cancelled"];
+}
+
+/**
+ * Choosing a status in the editor. Done with no fulfilled date takes `today`
+ * (YYYY-MM-DD, the UTC day the rest of the app reads), so a delivered
+ * commitment is not left undated. A date already entered is kept.
+ */
+export function commitmentStatusChange(
+  draft: { fulfilledAt: string },
+  status: string,
+  today: string,
+): { status: string; fulfilledAt?: string } {
+  if (commitmentState(status) === "completed" && !draft.fulfilledAt) {
+    return { status, fulfilledAt: today };
+  }
+  return { status };
+}
 
 /* ---------------- Resolution dates ---------------- */
 

@@ -160,18 +160,49 @@ async function keepLinkedSow(
 }
 
 /**
- * Does anything still point at this stored object: a deal's SOW, a project's
- * SOW columns, or a Files & links row? Removing a Files & links row asks
- * this before deleting the object, since that file may be the deal's SOW.
+ * Does anything still point at this stored object: a deal's SOW, a SOW the
+ * deal parked before it had a project (intake.earlier_sows), a project's SOW
+ * columns, or a Files & links row? Removing a Files & links row asks this
+ * before deleting the object, since that file may be the deal's SOW.
+ *
+ * Fails closed: when any read errors (or throws), the answer is
+ * "referenced", so a passing database error never deletes a file something
+ * still points at. A kept object nobody points at is harmless; a deleted one
+ * a deal still names is not.
  */
 export async function sowObjectReferenced(path: string): Promise<boolean> {
-  const [files, byUrl, byPath, byDeal] = await Promise.all([
-    db().from("account_files").select("id").eq("storage_path", path).limit(1),
-    db().from("implementations").select("id").eq("sow_document_url", path).limit(1),
-    db().from("implementations").select("id").eq("sow_document_path", path).limit(1),
-    db().from("portal_accounts").select("id").eq("sow_document_path", path).limit(1),
-  ]);
-  return [files, byUrl, byPath, byDeal].some((r: any) => (r?.data ?? []).length > 0);
+  return (await sowObjectReference(path)) !== "no";
+}
+
+/**
+ * The three-way answer behind sowObjectReferenced: "yes", "no", or "unknown"
+ * when a read failed. A remover treats "unknown" as "yes" (keep the object);
+ * retireReplacedSow treats it as "no" (still file or park the replaced SOW),
+ * since a duplicate Files & links row is harmless and an orphaned SOW is not.
+ */
+async function sowObjectReference(path: string): Promise<"yes" | "no" | "unknown"> {
+  try {
+    const reads = await Promise.all([
+      db().from("account_files").select("id").eq("storage_path", path).limit(1),
+      db().from("implementations").select("id").eq("sow_document_url", path).limit(1),
+      db().from("implementations").select("id").eq("sow_document_path", path).limit(1),
+      db().from("portal_accounts").select("id").eq("sow_document_path", path).limit(1),
+      db()
+        .from("portal_accounts")
+        .select("id")
+        .contains("intake", { earlier_sows: [{ path }] })
+        .limit(1),
+    ]);
+    if (reads.some((r: any) => Array.isArray(r?.data) && !r.error && r.data.length > 0)) {
+      return "yes";
+    }
+    return reads.some((r: any) => !r || Boolean(r.error) || !Array.isArray(r.data))
+      ? "unknown"
+      : "no";
+  } catch (e) {
+    console.error("[deal-sow] could not check what points at a stored file", path, e);
+    return "unknown";
+  }
 }
 
 export type EarlierSow = { path: string; name: string | null; replaced_at: string };
@@ -192,7 +223,9 @@ export async function retireReplacedSow(args: {
   const { previousPath } = args;
   if (!previousPath || previousPath === args.newPath) return "none";
   try {
-    if (await sowObjectReferenced(previousPath)) return "referenced";
+    // Only a definite reference skips filing. When the check cannot read,
+    // the replaced SOW is still filed or parked, so it is never lost.
+    if ((await sowObjectReference(previousPath)) === "yes") return "referenced";
     const { data: impl } = await db()
       .from("implementations")
       .select("id")

@@ -97,6 +97,7 @@ import {
 } from "@/components/record";
 
 import { getCustomer360 } from "@/lib/hub.functions";
+import { isOutstandingCommitment } from "@/lib/commitment-status";
 import { triageRowForCustomer360 } from "@/lib/home-triage";
 import type { Customer360, TraceStep } from "@/lib/hub-types";
 import { dealStageLabel, dealStageProgress } from "@/lib/deal-stage";
@@ -2166,7 +2167,7 @@ function JourneyTab({
                       <span className="rounded-sm border border-border px-1.5 py-0.5 text-[10px] uppercase tracking-[0.08em] text-muted-foreground">
                         {humanize(c.committed_to ?? "customer")}
                       </span>
-                      {c.status === "open" && isOverdue(c.due_date) ? (
+                      {isOutstandingCommitment(c.status) && isOverdue(c.due_date) ? (
                         <span className="text-[11px] text-destructive">Overdue</span>
                       ) : null}
                       <span className="ml-auto">

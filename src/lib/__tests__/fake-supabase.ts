@@ -125,6 +125,24 @@ class Builder implements PromiseLike<{ data: any; error: any }> {
     return this;
   }
 
+  /** jsonb `@>`: objects match on a subset of keys; arrays when each wanted element is in one. */
+  contains(col: string, value: unknown): this {
+    const within = (have: unknown, want: unknown): boolean => {
+      if (Array.isArray(want)) {
+        return Array.isArray(have) && want.every((w) => have.some((h) => within(h, w)));
+      }
+      if (want !== null && typeof want === "object") {
+        if (have === null || typeof have !== "object" || Array.isArray(have)) return false;
+        return Object.entries(want as Record<string, unknown>).every(([k, w]) =>
+          within((have as Record<string, unknown>)[k], w),
+        );
+      }
+      return have === want;
+    };
+    this.filters.push((r) => within(r[col], value));
+    return this;
+  }
+
   ilike(col: string, value: string): this {
     const needle = value.replaceAll("%", "").toLowerCase();
     this.filters.push((r) => String(r[col] ?? "").toLowerCase() === needle);
