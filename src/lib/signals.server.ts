@@ -247,7 +247,8 @@ async function loadInputs() {
       .from("implementations")
       .select(
         "id, name, customer_id, deal_id, current_stage, stage_entered_at, target_launch_date, actual_launch_date, go_live_at, health_recorded, health_recorded_reason, health_computed, owner_id",
-      ),
+      )
+      .is("closed_at", null),
     db().from("customers").select("id, name"),
     db().from("team_members").select("id, name"),
     db()

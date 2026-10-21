@@ -64,6 +64,7 @@ export async function loadStageBackfillPreview(): Promise<BackfillCandidate[]> {
         .from("implementations")
         .select("id, name, current_stage, journey_type")
         .is("superseded_by_implementation_id", null)
+        .is("closed_at", null)
         .order("id", { ascending: true }),
     ),
     fetchAll<StageHistoryRow>("implementation_stage_history", () =>

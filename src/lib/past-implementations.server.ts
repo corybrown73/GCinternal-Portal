@@ -2,6 +2,8 @@ import { supabaseAdmin } from "@/integrations/supabase/client.server";
 
 import type { BrandMark } from "./brand-marks";
 
+import { closureSummary } from "./implementation-closure";
+
 const db = () => supabaseAdmin as any;
 
 /**
@@ -27,6 +29,8 @@ export type PastImplementation = {
   marks: BrandMark[];
   /** True when every phase on the plan is done. */
   complete: boolean;
+  /** Set when the implementation was closed without graduating: a label, never a result. */
+  closed: ReturnType<typeof closureSummary>;
 };
 
 export async function loadPastImplementations(
@@ -35,7 +39,9 @@ export async function loadPastImplementations(
 ): Promise<PastImplementation[]> {
   const { data: impls } = await db()
     .from("implementations")
-    .select("id,name,deal_id,owner_id,current_stage,actual_launch_date,created_at")
+    .select(
+      "id,name,deal_id,owner_id,current_stage,actual_launch_date,created_at,closed_at,closure_reason,closure_note",
+    )
     .eq("customer_id", customerId)
     .is("superseded_by_implementation_id", null)
     .order("created_at", { ascending: true });
@@ -48,6 +54,9 @@ export async function loadPastImplementations(
       current_stage: string;
       actual_launch_date: string | null;
       created_at: string;
+      closed_at: string | null;
+      closure_reason: string | null;
+      closure_note: string | null;
     }>
   ).filter((i) => i.id !== activeImplementationId);
   if (rows.length === 0) return [];
@@ -114,7 +123,18 @@ export async function loadPastImplementations(
       complete = t.allDone;
     }
     // Only projects that got somewhere are worth a tile: live, or handed to CS.
-    if (!live_on && !["launch", "graduate-to-cs"].includes(String(r.current_stage))) continue;
+    // A closed one always keeps its tile, labelled, so the history is never lost.
+    const closed = closureSummary(r);
+    if (!closed && !live_on && !["launch", "graduate-to-cs"].includes(String(r.current_stage))) {
+      continue;
+    }
+    // A closed implementation is never shown as launched, completed or measured.
+    if (closed) {
+      live_on = null;
+      planned = null;
+      actual = null;
+      complete = false;
+    }
     out.push({
       id: r.id,
       name: deal?.name ?? r.name,
@@ -126,6 +146,7 @@ export async function loadPastImplementations(
       over_by: planned !== null && actual !== null ? actual - planned : null,
       marks,
       complete,
+      closed,
     });
   }
   return out;

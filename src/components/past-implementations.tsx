@@ -65,11 +65,21 @@ export function PastImplementations({
                   ) : null}
                   <span className="truncate">{r.name}</span>
                 </p>
-                <p className="mt-0.5 text-[11px] text-muted-foreground">
-                  {r.live_on ? `Live ${shortDay(r.live_on)}` : "Launched"}
-                  {r.actual_days !== null ? ` · ${r.actual_days} business days` : ""}
-                  {pace ? `, ${pace}` : ""}
-                </p>
+                {r.closed ? (
+                  <p className="mt-0.5 text-[11px] font-medium text-muted-foreground">
+                    {r.closed.badge}
+                    <span className="block font-normal">
+                      {r.closed.reason}
+                      {r.closed.closedOn ? ` · closed ${shortDay(r.closed.closedOn)}` : ""}
+                    </span>
+                  </p>
+                ) : (
+                  <p className="mt-0.5 text-[11px] text-muted-foreground">
+                    {r.live_on ? `Live ${shortDay(r.live_on)}` : "Launched"}
+                    {r.actual_days !== null ? ` · ${r.actual_days} business days` : ""}
+                    {pace ? `, ${pace}` : ""}
+                  </p>
+                )}
                 <p className="text-[11px] text-muted-foreground">{r.owner_name ?? "Unassigned"}</p>
                 {r.marks.length ? (
                   <MarkRow marks={r.marks} className="mt-1.5" overrides={toolMarks} max={8} />

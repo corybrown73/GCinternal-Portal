@@ -21,6 +21,7 @@ export async function liveImplementationForDeal<T = Record<string, unknown>>(
     .select(args.select)
     .eq("deal_id", args.dealId)
     .is("superseded_by_implementation_id", null)
+    .is("closed_at", null)
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -32,6 +33,7 @@ export async function liveImplementationForDeal<T = Record<string, unknown>>(
     .eq("customer_id", args.customerId)
     .is("deal_id", null)
     .is("superseded_by_implementation_id", null)
+    .is("closed_at", null)
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();

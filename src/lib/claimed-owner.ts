@@ -129,9 +129,10 @@ export function isUnclaimed(stage: string | null | undefined, ownerId: string | 
 export function inActiveBook(row: {
   stage: string | null | undefined;
   superseded?: boolean | null;
+  closed?: boolean | null;
   is_test?: boolean | null;
 }): boolean {
-  return !row.superseded && row.stage !== GRADUATED_STAGE && !isTestAccount(row);
+  return !row.superseded && !row.closed && row.stage !== GRADUATED_STAGE && !isTestAccount(row);
 }
 
 /** What each owner carries: active-book rows per claimed owner. */
@@ -140,6 +141,7 @@ export function workloadByOwner(
     ownerId: string | null;
     stage: string | null | undefined;
     superseded?: boolean | null;
+    closed?: boolean | null;
     is_test?: boolean | null;
   }>,
 ): Map<string, number> {

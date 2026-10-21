@@ -259,6 +259,7 @@ async function runDispatch(): Promise<Response> {
     .from("implementations")
     .select("id, customer_id")
     .eq("source", "salesforce")
+    .is("closed_at", null)
     .order("created_at", { ascending: false })
     .limit(200);
   if ((sfImpls ?? []).length > 0) {

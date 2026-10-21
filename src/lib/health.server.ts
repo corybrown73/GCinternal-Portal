@@ -116,7 +116,7 @@ export function recomputeHealthSoon(implementationId: string | null | undefined)
 
 /** Sweep every implementation. Used by the cron as the staleness backstop. */
 export async function recomputeAllHealth(): Promise<{ updated: number; failed: number }> {
-  const { data: impls } = await db().from("implementations").select("id");
+  const { data: impls } = await db().from("implementations").select("id").is("closed_at", null);
   let updated = 0;
   let failed = 0;
   for (const i of impls ?? []) {

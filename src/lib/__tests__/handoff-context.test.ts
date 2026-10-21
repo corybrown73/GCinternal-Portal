@@ -199,6 +199,7 @@ beforeEach(() => {
     implementations: [
       {
         id: DELTA_IMPL,
+        closed_at: null,
         customer_id: DELTA_CUSTOMER,
         deal_id: DELTA,
         superseded_by_implementation_id: null,
@@ -338,6 +339,7 @@ describe("a deal with a project", () => {
 
   it("counts a second project for the same customer as prior work", async () => {
     seeded("implementations").push({
+      closed_at: null,
       id: "impl-2",
       customer_id: DELTA_CUSTOMER,
       deal_id: "another-deal",
@@ -428,6 +430,7 @@ describe("the deal's own project, not the customer's newest", () => {
       account({ id: DELTA_2, name: "Delta Water Works — services", customer_id: DELTA_CUSTOMER }),
     );
     seeded("implementations").push({
+      closed_at: null,
       id: IMPL_2,
       customer_id: DELTA_CUSTOMER,
       deal_id: DELTA_2,
@@ -452,6 +455,7 @@ describe("the deal's own project, not the customer's newest", () => {
 
   it("skips a superseded project", async () => {
     seeded("implementations").push({
+      closed_at: null,
       id: "impl-newer-superseded",
       customer_id: DELTA_CUSTOMER,
       deal_id: DELTA,
