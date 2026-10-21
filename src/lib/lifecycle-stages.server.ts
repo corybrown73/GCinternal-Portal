@@ -111,7 +111,7 @@ export async function loadLifecycleStageAdminView(): Promise<LifecycleStageAdmin
 
   const [stagesResult, projects, history] = await Promise.all([
     db().from("portal_lifecycle_stages").select(COLUMNS).order("sort_order"),
-    db().from("implementations").select("current_stage").is("closed_at", null),
+    db().from("implementations").select("current_stage"),
     db().from("implementation_stage_history").select("stage"),
   ]);
   if (stagesResult.error) throw new Error(stagesResult.error.message);

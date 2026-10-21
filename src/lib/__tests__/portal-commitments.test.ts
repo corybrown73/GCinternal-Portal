@@ -19,10 +19,6 @@ const h = vi.hoisted(() => {
         filters.push((r) => vs.includes(r[col]));
         return builder;
       },
-      is: (col: string, v: unknown) => {
-        filters.push((r) => (r[col] ?? null) === v);
-        return builder;
-      },
       order: () => builder,
       limit: () => builder,
       maybeSingle: async () => ({ data: rows()[0] ?? null, error: null }),

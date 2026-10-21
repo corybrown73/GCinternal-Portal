@@ -56,7 +56,6 @@ export type ImplementationRow = {
   salesforce_account_id: string | null;
   sf_closed_won_at: string | null;
   superseded_by_implementation_id: string | null;
-  closed_at?: string | null;
   [k: string]: unknown;
 };
 
@@ -505,49 +504,8 @@ type ReplayCtx = {
   branchNote: string;
 };
 
-/**
- * A closed implementation is never reactivated by a sync. The opportunity is
- * refused with its own code and nothing about the implementation changes. No
- * alert is raised, and no follow-on is suggested: closing was a decision a
- * person made, and reopening it is theirs to make, outside this sync.
- */
-async function refuseClosed(existing: ImplementationRow, r: ReplayCtx): Promise<IngestOutcome> {
-  const { port, ctx, input, normalized, oppId } = r;
-  const body = {
-    error: {
-      code: "implementation_closed",
-      message:
-        "This opportunity's implementation was closed without graduating. Nothing has been changed; reopening it is a manager decision.",
-    },
-    existing_implementation_id: existing.id,
-    existing_customer_id: existing.customer_id,
-  };
-  const syncLogId = await port.writeSyncLog({
-    direction: "inbound",
-    kind: "opportunity.ingest",
-    external_id: oppId,
-    implementation_id: existing.id,
-    customer_id: existing.customer_id,
-    idempotency_key: ctx.idempotencyKey,
-    request_payload: input,
-    request_hash: ctx.bodyHash,
-    decision: {
-      branch: "rejected_closed",
-      normalized,
-      closed_at: existing.closed_at ?? null,
-      current_stage: existing.current_stage,
-    },
-    response_status: 409,
-    response_payload: body,
-    status: "rejected",
-    error: "implementation_closed",
-  });
-  return { status: 409, body, syncLogId };
-}
-
 async function replayOrRefuse(existing: ImplementationRow, r: ReplayCtx): Promise<IngestOutcome> {
   const { port, ctx, input, maps, mapped, normalized, oppId } = r;
-  if (existing.closed_at) return refuseClosed(existing, r);
   const terminal = await port.isTerminal(existing);
 
   if (terminal) {

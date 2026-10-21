@@ -163,7 +163,7 @@ export async function loadPortalHome(userId: string): Promise<PortalHome> {
 
   const [{ data: customers }, { data: allImpls }] = await Promise.all([
     db().from("customers").select("id, name").in("id", customerIds),
-    db().from("implementations").select("*").in("customer_id", customerIds).is("closed_at", null),
+    db().from("implementations").select("*").in("customer_id", customerIds),
   ]);
 
   // A scoped grant must never surface a sibling implementation.

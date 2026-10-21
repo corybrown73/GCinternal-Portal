@@ -11,7 +11,6 @@ import { analyzeSowInput, applySowProposalInput, setSowDocumentInput } from "./s
 import { signedInProfileId, signedInTeamMemberId } from "./session-identity";
 import { analyzeTranscriptInput, proposalDecisionInput } from "./transcript-analysis";
 import { customerEmailInput } from "./customer-email";
-import { closureInput } from "./implementation-closure";
 import { SOLUTION_STATUSES } from "./solution-enums";
 import {
   createFieldMappingInput,
@@ -880,19 +879,6 @@ export const draftCustomerEmailFn = createServerFn({ method: "POST" })
       instructions: cleanInstructions(data.instructions),
       attachmentId: data.attachmentId ?? null,
     });
-  });
-
-/**
- * Close an implementation without graduating it. The database decides who may
- * (a manager, an admin, or the assigned specialist), so this only passes the
- * caller's profile through.
- */
-export const closeImplementationFn = createServerFn({ method: "POST" })
-  .middleware([requireDealEditor])
-  .inputValidator((data: unknown) => closureInput.parse(data))
-  .handler(async ({ data, context }) => {
-    const { closeImplementation } = await import("./implementation-closure.server");
-    return closeImplementation(data, context.profile.id);
   });
 
 /** The readings in flight and every kept proposal for one implementation. */

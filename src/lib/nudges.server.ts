@@ -199,7 +199,6 @@ async function nudgeRun(
             "id,deal_id,owner_id,superseded_by_implementation_id,created_at,journey_type,partner_key",
           )
           .in("deal_id", ids)
-          .is("closed_at", null)
           .order("created_at", { ascending: false }),
         db()
           .from("portal_audit_log")

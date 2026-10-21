@@ -794,26 +794,3 @@ describe("the presale stage seam (PLAN.md decision 10)", () => {
     expect(presaleStageForLifecycle("")).toBeNull();
   });
 });
-
-describe("a closed implementation", () => {
-  it("is refused with 409 and changes nothing, raising no alert and suggesting no follow-on", async () => {
-    const port = store.port();
-    await ingestOpportunity(payload(), port, ctx());
-    const impl = store.implementations.values().next().value!;
-    impl["closed_at"] = "2026-10-21T10:00:00.000Z";
-    const before = { ...impl };
-    const alertsBefore = store.alerts.length;
-
-    const out = await ingestOpportunity(payload(), port, ctx());
-
-    expect(out.status).toBe(409);
-    expect((out.body["error"] as any).code).toBe("implementation_closed");
-    expect(out.body["resolution"]).toBeUndefined();
-    expect(store.implementations.size).toBe(1);
-    expect(impl).toEqual(before);
-    expect(store.alerts).toHaveLength(alertsBefore);
-    expect(store.syncLogs.filter((r) => r["status"] === "rejected").at(-1)?.["error"]).toBe(
-      "implementation_closed",
-    );
-  });
-});

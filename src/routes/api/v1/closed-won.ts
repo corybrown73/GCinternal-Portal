@@ -109,8 +109,6 @@ export const Route = createFileRoute("/api/v1/closed-won")({
                 .from("implementations")
                 .select("id")
                 .eq("customer_id", customerId)
-                // A closed implementation is not something a new opportunity attaches to.
-                .is("closed_at", null)
                 .order("created_at", { ascending: false })
                 .limit(1)
                 .maybeSingle();

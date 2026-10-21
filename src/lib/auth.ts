@@ -21,8 +21,6 @@ export interface PortalProfile {
   email: string;
   full_name: string | null;
   role: PortalRole;
-  /** The person's own team member, for "the implementation I own" checks. Their own row only. */
-  team_member_id?: string | null;
 }
 
 /**
@@ -105,7 +103,7 @@ export function useProfile() {
     queryFn: async (): Promise<PortalProfile | null> => {
       const { data } = await supabase
         .from("portal_profiles")
-        .select("id, email, full_name, role, team_member_id")
+        .select("id, email, full_name, role")
         .eq("id", session!.user.id)
         .maybeSingle<PortalProfile>();
       return data ?? null;

@@ -689,7 +689,6 @@ export async function dealAssignment(dealId: string): Promise<DealAssignment> {
         .select("id")
         .eq("deal_id", dealId)
         .is("superseded_by_implementation_id", null)
-        .is("closed_at", null)
         .limit(1),
     ]);
   const l = (ledger ?? [])[0] as any;

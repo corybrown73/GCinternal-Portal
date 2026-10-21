@@ -249,7 +249,6 @@ export async function loadPipeline(
       .from("implementations")
       .select("id,deal_id,created_at,owner_id,journey_type,partner_key")
       .is("superseded_by_implementation_id", null)
-      .is("closed_at", null)
       .not("deal_id", "is", null)
       .order("created_at", { ascending: false }),
     db().from("portal_briefs").select("account_id").eq("status", "complete").eq("generator", "llm"),

@@ -255,17 +255,12 @@ async function overdueMilestonePass(
   );
   const implIds = [...new Set(overdue.map((m: any) => m.implementation_id).filter(Boolean))];
   const { data: milestoneImpls } = implIds.length
-    ? await db.from("implementations").select("id, customer_id, name, closed_at").in("id", implIds)
+    ? await db.from("implementations").select("id, customer_id, name").in("id", implIds)
     : { data: [] };
-  // A closed implementation raises no reminder: its milestones are not chased.
-  const closedImplIds = new Set(
-    (milestoneImpls ?? []).filter((i: any) => i.closed_at).map((i: any) => i.id),
-  );
   const implById = new Map<string, { id: string; customer_id: string | null; name: string }>(
     (milestoneImpls ?? []).map((i: any) => [i.id, i]),
   );
   for (const m of overdue) {
-    if (closedImplIds.has(m.implementation_id)) continue;
     const impl = implById.get(m.implementation_id);
     const row = await createAlert({
       kind: "overdue_milestone",

@@ -104,7 +104,7 @@ export async function loadImplementations(
   const team = await loadTeam();
   const [{ data: impls }, { data: customers }, { data: commitments }, { data: escalations }] =
     await Promise.all([
-      db().from("implementations").select("*").is("closed_at", null),
+      db().from("implementations").select("*"),
       db().from("customers").select("*"),
       db().from("commitments").select("implementation_id,due_date,status"),
       db().from("escalations").select("implementation_id,status"),
@@ -596,12 +596,9 @@ export async function loadCustomer360(
 
   const implList = (implRes.data ?? []) as any[];
   // A customer can run several implementations at once. The caller picks one;
-  // without a pick we show the newest open one. Only when every implementation
-  // is closed does the newest closed one show, and the page labels it so.
+  // without a pick we show the newest, and an unknown id falls back the same way.
   const impl =
-    (implementationId ? implList.find((i) => i.id === implementationId) : null) ??
-    implList.find((i) => !i.closed_at) ??
-    implList[0];
+    (implementationId ? implList.find((i) => i.id === implementationId) : null) ?? implList[0];
 
   // The same deal-facts layer Home's triage reads for this implementation's
   // deal — watch-outs, the checklist's next step — so triageRowForCustomer360
@@ -1096,9 +1093,6 @@ export async function loadCustomer360(
       health_recorded_reason: impl.health_recorded_reason ?? null,
       health_recorded_at: impl.health_recorded_at ?? null,
       owner_id: impl.owner_id ?? null,
-      closed_at: impl.closed_at ?? null,
-      closure_reason: impl.closure_reason ?? null,
-      closure_note: impl.closure_note ?? null,
       owner_name: named(impl.owner_id),
       // Provenance, not a field to edit here: where this project came from.
       // Named as well as identified, because a chip reading "From deal ·

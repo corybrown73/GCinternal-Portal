@@ -96,7 +96,6 @@ export async function runStallAlerts(today = localIso()): Promise<{
           .from("implementations")
           .select("id,deal_id,created_at,journey_type,partner_key")
           .is("superseded_by_implementation_id", null)
-          .is("closed_at", null)
           .in("deal_id", ids)
           .order("created_at", { ascending: false })
       : { data: [] },

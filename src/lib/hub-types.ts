@@ -273,10 +273,6 @@ export type Customer360 = {
     health_recorded_reason: string | null;
     health_recorded_at: string | null;
     owner_id: string | null;
-    /** Set once the implementation was closed without graduating; null while open. */
-    closed_at?: string | null;
-    closure_reason?: string | null;
-    closure_note?: string | null;
     owner_name: string | null;
     /** The pre-sales deal this project came from, and its name for display. */
     deal_id: string | null;
