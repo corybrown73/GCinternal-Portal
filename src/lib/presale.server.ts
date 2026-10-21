@@ -5,6 +5,7 @@ import { TERM_LABELS } from "./terms";
 import { paperworkOnFile } from "./won-gate";
 import { resolveAccountId, transitionStage, upsertAccount } from "./server/accounts";
 import { accountUpsertSchema } from "./server/schemas";
+import { rowsOrLog, rowsOrThrow } from "./server/db-read";
 import {
   isOnboardingStage,
   isPreClose,
@@ -109,9 +110,12 @@ export async function requireSuperAdmin(userId: string): Promise<ProfileRow> {
 }
 
 async function profileNames(): Promise<Map<string, string>> {
-  const { data } = await db().from("portal_profiles").select("id, email, full_name");
+  const rows = rowsOrLog<any>(
+    await db().from("portal_profiles").select("id, email, full_name"),
+    "profile names",
+  );
   const map = new Map<string, string>();
-  for (const p of data ?? []) map.set(p.id, p.full_name || p.email);
+  for (const p of rows) map.set(p.id, p.full_name || p.email);
   return map;
 }
 
@@ -231,15 +235,15 @@ export async function loadPipeline(
   // render one column per configured stage, and a waterfall here is a second
   // round trip on the busiest internal page.
   const [
-    { data: accounts, error },
+    accountsRes,
     names,
     stages,
-    { data: noted },
-    { data: impls },
-    { data: briefed },
-    { data: members },
-    { data: ledger },
-    { data: customers },
+    notedRes,
+    implsRes,
+    briefedRes,
+    membersRes,
+    ledgerRes,
+    customersRes,
   ] = await Promise.all([
     db().from("portal_accounts").select("*").order("name"),
     profileNames(),
@@ -259,6 +263,23 @@ export async function loadPipeline(
       .order("created_at", { ascending: false }),
     db().from("customers").select("*"),
   ]);
+  // The deals and the projects they became are the board: a failed read is a
+  // page that says it could not load, never an empty pipeline. The rest only
+  // decorate a card (a notes or brief tick, an owner's name, the test-account
+  // flag a customer row carries), so a failure there is logged and read as none.
+  const accounts = rowsOrThrow<any>(accountsRes, "deals");
+  const impls = rowsOrThrow<any>(implsRes, "the deals' implementations");
+  const noted = rowsOrLog<any>(notedRes, "pipeline: call notes");
+  const briefed = rowsOrLog<any>(briefedRes, "pipeline: briefs");
+  const members = rowsOrLog<any>(membersRes, "pipeline: team names");
+  // The claim ledger names a card's owner, and under a scope it also decides
+  // which deals are "mine": there a failure would quietly shrink the board, so
+  // it fails the page like the scoped owners read in loadImplementations.
+  const ledger =
+    scope && scope.scope.mode !== "all"
+      ? rowsOrThrow<any>(ledgerRes, "deal owners")
+      : rowsOrLog<any>(ledgerRes, "pipeline: assignments");
+  const customers = rowsOrLog<any>(customersRes, "pipeline: customers (test flag)");
   const implByDeal = new Map<string, string>();
   const partnerDeals = new Set<string>();
   for (const i of (impls ?? []) as Array<{
@@ -281,7 +302,6 @@ export async function loadPipeline(
   const implOwnerByDeal = new Map<string, string | null>(
     [...claimed].map(([dealId, o]) => [dealId, o.id]),
   );
-  if (error) throw new Error(error.message);
   const { isTestAccount } = await import("./test-accounts");
   const customerById = new Map(
     ((customers ?? []) as Array<{ id: string; is_test?: boolean | null }>).map((c) => [
@@ -3392,7 +3412,7 @@ export async function loadDealInbox(scope: ResolvedScope | null): Promise<DealIn
 
   const { loadClaimedOwners } = await import("./claimed-owner.server");
   const { isUnclaimed } = await import("./claimed-owner");
-  const [owner, { data: briefs }] = await Promise.all([
+  const [owner, briefsRes] = await Promise.all([
     // The one owner rule: the project's owner, else the claim ledger's. A
     // deal whose project has an owner but no ledger row is not unclaimed.
     loadClaimedOwners(ids),
@@ -3404,7 +3424,7 @@ export async function loadDealInbox(scope: ResolvedScope | null): Promise<DealIn
       .in("account_id", ids),
   ]);
   const briefed = new Set(
-    ((briefs ?? []) as Array<{ account_id: string }>).map((r) => r.account_id),
+    rowsOrLog<{ account_id: string }>(briefsRes, "deal inbox: briefs").map((r) => r.account_id),
   );
 
   const labels = new Map(stages.map((s) => [s.key, s.label]));

@@ -3,6 +3,7 @@ import { queryOptions, useQuery } from "@tanstack/react-query";
 import { CalendarDays, Check, Clock3, UserRound } from "lucide-react";
 
 import { HandoffChip } from "@/components/handoff-chip";
+import { LoadFailed } from "@/components/load-failed";
 import { PageBody, PageHeader } from "@/components/page";
 import { salesHomeFor, type SalesRow, type SalesTone } from "@/lib/home-sales";
 import { shortDay } from "@/lib/onboarding-timeline";
@@ -83,7 +84,7 @@ export function SalesHome() {
             </section>
           </>
         ) : q.isError ? (
-          <p className="text-[13px] text-destructive">The deals could not be loaded.</p>
+          <LoadFailed error={q.error} onRetry={() => void q.refetch()} className="p-0" />
         ) : (
           <p className="text-[13px] text-muted-foreground">Loading your deals…</p>
         )}

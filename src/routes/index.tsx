@@ -5,6 +5,7 @@ import { ArrowRight, CalendarDays, Check, ChevronRight, Clock, TriangleAlert } f
 
 import { PageBody, PageHeader } from "@/components/page";
 import { SalesHome } from "@/components/home-sales";
+import { LoadFailed } from "@/components/load-failed";
 import { useProfile } from "@/lib/auth";
 import { homeVariantFor } from "@/lib/roles";
 import { useScope } from "@/lib/use-scope";
@@ -141,6 +142,11 @@ function HomePage() {
         hero={{ tagline: "Progress builds momentum." }}
       />
       <PageBody className="space-y-4">
+        {/* The deals waiting on someone feed the counts below: without them the
+            page must say so, not count them as none. */}
+        {inbox.isError && !inbox.data ? (
+          <LoadFailed error={inbox.error} onRetry={() => void inbox.refetch()} className="p-0" />
+        ) : null}
         <Tiles t={today} active={filter} onToggle={toggleFilter} />
         <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
           <div className="min-w-0 space-y-4">

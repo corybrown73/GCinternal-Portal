@@ -29,6 +29,13 @@ function field(row: any, col: string): unknown {
 }
 
 /**
+ * Tables whose every query fails, with the error PostgREST would return —
+ * e.g. `{ implementations: { code: "42703", message: "column ... does not
+ * exist" } }`, the shape of a read against a column production lacks.
+ */
+export type TableFailures = Record<string, { message: string; code?: string }>;
+
+/**
  * Unique indexes to enforce on insert, per table: the columns (or JSON keys,
  * `payload->>claim`) and the partial index's WHERE as a predicate.
  */
@@ -57,6 +64,7 @@ class Builder implements PromiseLike<{ data: any; error: any }> {
     private readonly log: { inserts: Array<{ table: string; row: any }> },
     private readonly unique: UniqueIndexes = {},
     private readonly maxRows: number | null = null,
+    private readonly fail: TableFailures = {},
   ) {}
 
   /** The first insert that a unique index refuses (nulls never collide, as in Postgres). */
@@ -227,6 +235,8 @@ class Builder implements PromiseLike<{ data: any; error: any }> {
   }
 
   private run(): { data: any; error: any } {
+    const failure = this.fail[this.table];
+    if (failure) return { data: null, error: { code: null, ...failure } };
     if (this.op.kind === "insert") {
       if (this.violates(this.op.values)) {
         return {
@@ -279,11 +289,12 @@ class Builder implements PromiseLike<{ data: any; error: any }> {
 
   async maybeSingle(): Promise<{ data: any; error: any }> {
     const { data, error } = this.run();
-    return { data: (data as any[])[0] ?? null, error };
+    return { data: ((data ?? []) as any[])[0] ?? null, error };
   }
 
   async single(): Promise<{ data: any; error: any }> {
     const { data, error } = this.run();
+    if (error) return { data: null, error };
     const row = (data as any[])[0] ?? null;
     return row ? { data: row, error } : { data: null, error: { message: "no rows" } };
   }
@@ -314,6 +325,8 @@ export function createFakeSupabase(
     unique?: UniqueIndexes;
     /** Cap every select at this many rows, as PostgREST's db-max-rows does. */
     maxRows?: number;
+    /** Make every query on these tables return this error (see TableFailures). */
+    fail?: TableFailures;
   } = {},
 ): FakeSupabase {
   const store: Rows = JSON.parse(JSON.stringify(initial));
@@ -324,7 +337,7 @@ export function createFakeSupabase(
 
   const client = {
     from: (table: string) =>
-      new Builder(table, store, log, options.unique, options.maxRows ?? null),
+      new Builder(table, store, log, options.unique, options.maxRows ?? null, options.fail),
     storage: {
       from: (bucket: string) => ({
         upload: async (path: string, bytes: Uint8Array, opts?: { contentType?: string }) => {

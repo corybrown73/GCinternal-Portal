@@ -5,6 +5,7 @@ import { dealValue } from "../deal-value";
 import { readIntake } from "../intake-answers";
 import { liveTickOf } from "../launch-state";
 import type { AccountStage } from "../presale-stages";
+import { rowsOrThrow } from "./db-read";
 
 export type DealStageFacts = {
   stage: AccountStage;
@@ -42,12 +43,14 @@ export async function dealStagesFor(
   >();
   if (dealIds.length) {
     // `*` rather than a column list: is_test (0085) reads as false before
-    // the migration instead of failing the whole page.
-    const { data } = await (supabaseAdmin as any)
-      .from("portal_accounts")
-      .select("*")
-      .in("id", dealIds);
-    for (const d of (data ?? []) as Array<{
+    // the migration instead of failing the whole page. A read that fails
+    // outright does fail it: without the deals every stage, value and
+    // test-account flag on the page would be quietly wrong.
+    const data = rowsOrThrow(
+      await (supabaseAdmin as any).from("portal_accounts").select("*").in("id", dealIds),
+      "deals",
+    );
+    for (const d of data as Array<{
       id: string;
       stage: string;
       arr: number | null;

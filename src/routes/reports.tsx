@@ -5,6 +5,7 @@ import { ArrowRight } from "lucide-react";
 import { PageBody, PageHeader } from "@/components/page";
 import { ShowTestsToggle } from "@/components/show-tests-toggle";
 import { Panel, NoRows } from "@/components/record";
+import { LoadFailed } from "@/components/load-failed";
 import { getLeadership } from "@/lib/hub.functions";
 import { getPipelineReport } from "@/lib/pipeline-report.functions";
 import { getTtvReport } from "@/lib/ttv-report.functions";
@@ -179,10 +180,14 @@ function ReportsPage() {
             meta={
               report.data
                 ? `Pipeline as of ${report.data.asOf.slice(0, 10)} · every deal, whoever owns it`
-                : "Loading the pipeline…"
+                : report.isError
+                  ? "The pipeline did not load"
+                  : "Loading the pipeline…"
             }
           >
-            {report.data ? (
+            {!report.data && report.isError ? (
+              <LoadFailed error={report.error} onRetry={() => void report.refetch()} />
+            ) : report.data ? (
               <ul className="space-y-2.5 px-3 py-3">
                 {report.data.stages.map((s) => {
                   const max = Math.max(1, ...report.data!.stages.map((x) => x.count));
@@ -278,17 +283,24 @@ function ReportsPage() {
           </Panel>
 
           <div className="grid gap-4 sm:grid-cols-2">
-            <TimingTile label="Close → Onboarding" timing={report.data?.timeToOnboarding ?? null} />
+            <TimingTile
+              label="Close → Onboarding"
+              timing={report.data?.timeToOnboarding ?? null}
+              failed={report.isError && !report.data}
+            />
             <TimingTile
               label="Close → first form live"
               timing={report.data?.timeToFirstFormLive ?? null}
+              failed={report.isError && !report.data}
             />
             <Panel
               title="Stuck deals"
-              count={report.data?.stuck.length ?? 0}
+              {...(report.data ? { count: report.data.stuck.length } : {})}
               className="sm:col-span-2"
             >
-              {!report.data ? (
+              {!report.data && report.isError ? (
+                <LoadFailed error={report.error} onRetry={() => void report.refetch()} />
+              ) : !report.data ? (
                 <NoRows label="Loading…" />
               ) : report.data.stuck.length === 0 ? (
                 <NoRows label="Nothing is past its stage limit." />
@@ -321,10 +333,15 @@ function ReportsPage() {
           meta={
             ttv.data
               ? `${ttv.data.live} of ${ttv.data.closed} closed deal${ttv.data.closed === 1 ? "" : "s"} live · Proven ${ttv.data.outcomes.proven} · Not Proven ${ttv.data.outcomes.notProven}`
-              : "Loading…"
+              : ttv.isError
+                ? "Time to value did not load"
+                : "Loading…"
           }
         >
           <div className="space-y-3 px-3 py-3">
+            {!ttv.data && ttv.isError ? (
+              <LoadFailed error={ttv.error} onRetry={() => void ttv.refetch()} className="p-0" />
+            ) : null}
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
               {TTV_TIMINGS.map((t) => (
                 <TimingTile
@@ -332,6 +349,7 @@ function ReportsPage() {
                   label={t.label}
                   hint={t.hint}
                   timing={ttv.data?.[t.key] ?? null}
+                  failed={ttv.isError && !ttv.data}
                 />
               ))}
             </div>
@@ -497,11 +515,14 @@ function TimingTile({
   label,
   hint,
   timing,
+  failed = false,
 }: {
   label: string;
   hint?: string;
   /** With `of` and `excluded` on a TTV tile: "n of N", and what was left out. */
   timing: (Timing & { of?: number; excluded?: number }) | null;
+  /** The report behind it failed: say so, never "Loading…" forever. */
+  failed?: boolean;
 }) {
   const excluded = timing?.excluded ? ` · excluded ${timing.excluded}` : "";
   return (
@@ -510,7 +531,9 @@ function TimingTile({
         {label}
       </p>
       {hint ? <p className="text-[11px] text-muted-foreground">{hint}</p> : null}
-      {!timing ? (
+      {!timing && failed ? (
+        <p className="mt-1 text-[12px] text-destructive">Did not load</p>
+      ) : !timing ? (
         <p className="mt-1 text-[12px] text-muted-foreground">Loading…</p>
       ) : timing.count === 0 ? (
         <p className="mt-1 text-[12px] text-muted-foreground">

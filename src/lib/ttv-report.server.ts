@@ -2,6 +2,7 @@ import { supabaseAdmin } from "@/integrations/supabase/client.server";
 
 import { localIso } from "./onboarding-timeline";
 import { buildTtvReport, type TtvDeal, type TtvReport, type TtvTransition } from "./ttv-report";
+import { rowsOrLog, rowsOrThrow } from "./server/db-read";
 
 const db = () => supabaseAdmin as any;
 
@@ -14,7 +15,7 @@ export async function loadTtvReport(opts: { sinceDays?: number } = {}): Promise<
   const { loadPipeline } = await import("./presale.server");
   const { deals } = await loadPipeline(null);
   const ids = deals.map((d) => d.id);
-  const [{ data: history }, { data: impls }] = await Promise.all([
+  const [historyRes, implsRes] = await Promise.all([
     db()
       .from("portal_stage_transitions")
       .select(
@@ -30,19 +31,24 @@ export async function loadTtvReport(opts: { sinceDays?: number } = {}): Promise<
       .in("deal_id", ids)
       .order("created_at", { ascending: false }),
   ]);
+  // Every timing comes from the stage history and the project dates: a failed
+  // read fails the report rather than showing every deal as not yet timed.
+  const history = rowsOrThrow<any>(historyRes, "the stage history");
+  const impls = rowsOrThrow<any>(implsRes, "the deals' implementations");
   const customerIds = Array.from(
-    new Set(((impls ?? []) as Array<{ customer_id: string | null }>).map((i) => i.customer_id)),
+    new Set((impls as Array<{ customer_id: string | null }>).map((i) => i.customer_id)),
   ).filter(Boolean) as string[];
-  const { data: customers } = customerIds.length
-    ? await db().from("customers").select("id,account_manager_id").in("id", customerIds)
-    : { data: [] };
+  // Coverage (named AM or Customer Success) only labels a row: logged, tolerant.
+  const customers = customerIds.length
+    ? rowsOrLog<{ id: string; account_manager_id: string | null }>(
+        await db().from("customers").select("id,account_manager_id").in("id", customerIds),
+        "ttv report: customers (coverage)",
+      )
+    : [];
   const amOf = new Map<string, string | null>(
-    ((customers ?? []) as Array<{ id: string; account_manager_id: string | null }>).map((c) => [
-      c.id,
-      c.account_manager_id ?? null,
-    ]),
+    customers.map((c) => [c.id, c.account_manager_id ?? null]),
   );
-  const hist = (history ?? []) as Array<{
+  const hist = history as Array<{
     account_id: string;
     from_stage: string | null;
     to_stage: string;
@@ -68,7 +74,7 @@ export async function loadTtvReport(opts: { sinceDays?: number } = {}): Promise<
         actor: h.actor_profile_id ?? h.actor_api_key_id ?? null,
       }));
   const implOf = new Map<string, any>();
-  for (const i of (impls ?? []) as any[]) if (!implOf.has(i.deal_id)) implOf.set(i.deal_id, i);
+  for (const i of impls) if (!implOf.has(i.deal_id)) implOf.set(i.deal_id, i);
 
   const rows: TtvDeal[] = deals.map((d) => {
     const impl = implOf.get(d.id);

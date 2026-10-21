@@ -6,6 +6,7 @@ import { isPartnerJourney } from "./partner-implementation";
 import { kickoffEntryDate } from "./presale-stages";
 import { loadImplementations, type BookOptions } from "./hub.server";
 import type { ResolvedScope } from "./ownership.server";
+import { rowsOrThrow } from "./server/db-read";
 import {
   buildCalendarEvents,
   planMeetingsFor,
@@ -67,7 +68,7 @@ export async function loadCalendar(
     db().from("team_members").select("id,name"),
   ]);
   for (const r of [implRes, dealRes, histRes, commitRes, milestoneRes, teamRes]) {
-    if (r.error) throw new Error(`Could not read the calendar: ${r.error.message}`);
+    rowsOrThrow(r, "the calendar");
   }
 
   const teamName = new Map<string, string>(

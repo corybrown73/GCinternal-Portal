@@ -3,6 +3,7 @@ import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { readIntake } from "./intake-answers";
 import { localIso } from "./onboarding-timeline";
 import { buildPipelineReport, type PipelineReport, type ReportDeal } from "./pipeline-report";
+import { rowsOrLog, rowsOrThrow } from "./server/db-read";
 import type { AccountStage } from "./presale-stages";
 
 const db = () => supabaseAdmin as any;
@@ -25,7 +26,7 @@ export async function loadPipelineReport(
   const { loadPipeline } = await import("./presale.server");
   const { deals } = await loadPipeline(null);
   const ids = deals.map((d) => d.id);
-  const [{ data: history }, { data: briefs }, { data: impls }] = await Promise.all([
+  const [historyRes, briefsRes, implsRes] = await Promise.all([
     db()
       .from("portal_stage_transitions")
       .select("account_id,to_stage,occurred_at")
@@ -44,24 +45,26 @@ export async function loadPipelineReport(
       .is("superseded_by_implementation_id", null)
       .order("created_at", { ascending: false }),
   ]);
-  const hist = (history ?? []) as Array<{
+  // The stage history is every timing on the report and the projects decide
+  // what counts as worked: a failed read fails the report rather than calling
+  // every deal untimed or untouched. The AI-brief tick only decorates a row.
+  const history = rowsOrThrow<any>(historyRes, "the stage history");
+  const impls = rowsOrThrow<any>(implsRes, "the deals' implementations");
+  const briefs = rowsOrLog<any>(briefsRes, "pipeline report: briefs");
+  const hist = history as Array<{
     account_id: string;
     to_stage: string;
     occurred_at: string;
   }>;
   const firstTo = (id: string, stage: string) =>
     hist.find((h) => h.account_id === id && h.to_stage === stage)?.occurred_at ?? null;
-  const briefed = new Set(
-    ((briefs ?? []) as Array<{ account_id: string }>).map((b) => b.account_id),
-  );
+  const briefed = new Set((briefs as Array<{ account_id: string }>).map((b) => b.account_id));
   // "Untouched" uses the reminders' definition of work (deal-activity.ts): a
   // person logging something on the deal or its live project — notes, actions,
   // ticks, files, stage moves, date changes. A system write to the deal row
   // no longer counts. Entering the current stage counts as a touch.
   const { latestImplementations } = await import("./claimed-owner");
-  const liveImpl = latestImplementations(
-    (impls ?? []) as Array<{ id: string; deal_id: string | null }>,
-  );
+  const liveImpl = latestImplementations(impls as Array<{ id: string; deal_id: string | null }>);
   let worked: Map<string, string> | null = null;
   try {
     const { loadPersonActivity } = await import("./deal-activity.server");

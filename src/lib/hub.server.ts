@@ -30,6 +30,7 @@ import type { ResolvedScope } from "./ownership.server";
 
 import { EDITABLE_RECORD_FIELDS, type EditableRecordField } from "./record-fields";
 import { SOLUTION_COMPLETE_STATUS } from "./solution-enums";
+import { rowOrThrow, rowsOrLog, rowsOrThrow, type DbError } from "./server/db-read";
 
 const db = () => supabaseAdmin as any;
 
@@ -67,15 +68,19 @@ async function loadTeam() {
   // login's profile id, not a team_members id; with only team_members here,
   // every one of those read "Who —" on the activity feed while the person
   // was signed in and looking at it.
-  const [{ data }, { data: profiles }] = await Promise.all([
+  // Names only: a failed read leaves "—" where a name would be, and the log
+  // says why, rather than taking every page that names a person down.
+  const [membersRes, profilesRes] = await Promise.all([
     db().from("team_members").select("id,name,role"),
     db().from("portal_profiles").select("id,full_name,email,role"),
   ]);
   const map = new Map<string, { name: string; role: string }>();
-  for (const p of profiles ?? []) {
+  for (const p of rowsOrLog<any>(profilesRes, "team names (profiles)")) {
     map.set(p.id, { name: p.full_name || p.email, role: String(p.role ?? "") });
   }
-  for (const m of data ?? []) map.set(m.id, { name: m.name, role: m.role });
+  for (const m of rowsOrLog<any>(membersRes, "team names")) {
+    map.set(m.id, { name: m.name, role: m.role });
+  }
   return map;
 }
 
@@ -102,16 +107,21 @@ export async function loadImplementations(
   opts: BookOptions = {},
 ): Promise<ImplementationRow[]> {
   const team = await loadTeam();
-  const [{ data: impls }, { data: customers }, { data: commitments }, { data: escalations }] =
-    await Promise.all([
-      db().from("implementations").select("*"),
-      db().from("customers").select("*"),
-      db().from("commitments").select("implementation_id,due_date,status"),
-      db().from("escalations").select("implementation_id,status"),
-    ]);
+  const [implsRes, customersRes, commitmentsRes, escalationsRes] = await Promise.all([
+    db().from("implementations").select("*"),
+    db().from("customers").select("*"),
+    db().from("commitments").select("implementation_id,due_date,status"),
+    db().from("escalations").select("implementation_id,status"),
+  ]);
+  // The book itself: a failed read is a page that says so, never an empty
+  // book. The two counts only decorate a row, so they stay tolerant (logged).
+  const impls = rowsOrThrow<any>(implsRes, "implementations");
+  const customers = rowsOrThrow<any>(customersRes, "customers");
+  const commitments = rowsOrLog<any>(commitmentsRes, "commitments (overdue count)");
+  const escalations = rowsOrLog<any>(escalationsRes, "escalations (open count)");
 
-  const customerMap = new Map((customers ?? []).map((c: any) => [c.id, c]));
-  const dealStages = await dealStagesFor((impls ?? []) as any[]);
+  const customerMap = new Map(customers.map((c: any) => [c.id, c]));
+  const dealStages = await dealStagesFor(impls);
   // One owner rule for every surface (src/lib/claimed-owner.ts): every row
   // here is a project, and a project's owner_id decides, empty included —
   // the claim ledger only speaks for a deal with no project yet.
@@ -126,10 +136,15 @@ export async function loadImplementations(
     { am: string | null; se: string | null; creator: string | null }
   >();
   if (scope && scope.scope.mode !== "all") {
-    const { data: accounts } = await db()
-      .from("portal_accounts")
-      .select("customer_id, am_owner_id, se_owner_id, created_by");
-    for (const a of (accounts ?? []) as any[]) {
+    // Decides which rows are in scope: a failed read would quietly shrink
+    // "my accounts", so it fails the page like the book read does.
+    const accounts = rowsOrThrow<any>(
+      await db()
+        .from("portal_accounts")
+        .select("customer_id, am_owner_id, se_owner_id, created_by"),
+      "deal owners",
+    );
+    for (const a of accounts) {
       if (a.customer_id) {
         accountsByCustomer.set(a.customer_id, {
           am: a.am_owner_id ?? null,
@@ -165,7 +180,7 @@ export async function loadImplementations(
   };
 
   return (
-    excludeTests(impls ?? [], isTest, opts.includeTests)
+    excludeTests(impls, isTest, opts.includeTests)
       // A superseded project was replaced by a newer one for the same deal: it
       // is out of the book (claimed-owner's active book), so no count, queue or
       // list says the deal twice. Customer 360 still opens it by id.
@@ -204,13 +219,13 @@ export async function loadImplementations(
           actual_launch_date: i.actual_launch_date,
           go_live_at: i.go_live_at ?? null,
           live_done_on: dealStages.get(i.id)?.live_done_on ?? null,
-          overdue_commitments: (commitments ?? []).filter(
+          overdue_commitments: commitments.filter(
             (m: any) =>
               m.implementation_id === i.id &&
               isOutstandingCommitment(m.status) &&
               isOverdue(m.due_date),
           ).length,
-          open_escalations: (escalations ?? []).filter(
+          open_escalations: escalations.filter(
             (e: any) => e.implementation_id === i.id && e.status === "open",
           ).length,
         };
@@ -234,14 +249,16 @@ export async function loadHome(
   const keep = (implementationId: string | null | undefined) =>
     implementationId != null ? implById.has(implementationId) : !scoped;
 
-  const { data: commitmentRows } = await db()
-    .from("commitments")
-    .select("*")
-    .order("due_date", { ascending: true });
+  // What is coming up is a list of its own on Home: a failed read must not
+  // read as "nothing owed".
+  const commitmentRows = rowsOrThrow<any>(
+    await db().from("commitments").select("*").order("due_date", { ascending: true }),
+    "commitments",
+  );
 
   // Home lists what is still owed. Completed and withdrawn commitments are not
   // coming up, so they are dropped here, once, by the shared rule.
-  const commitments: CommitmentRow[] = (commitmentRows ?? [])
+  const commitments: CommitmentRow[] = commitmentRows
     .filter((c: any) => isOutstandingCommitment(c.status))
     .filter((c: any) => keep(c.implementation_id))
     .map((c: any) => {
@@ -260,13 +277,18 @@ export async function loadHome(
       };
     });
 
-  const [{ data: audit }, { data: risks }, { data: issues }, { data: escalations }] =
-    await Promise.all([
-      db().from("audit_log").select("*").order("changed_at", { ascending: false }).limit(25),
-      db().from("risks").select("*").order("identified_at", { ascending: false }).limit(15),
-      db().from("issues").select("*").order("raised_at", { ascending: false }).limit(15),
-      db().from("escalations").select("*").order("raised_at", { ascending: false }).limit(15),
-    ]);
+  // The recent-activity feed and the open-item bundles below decorate the
+  // book's rows; a failed one is logged and reads as none.
+  const [auditRes, risksRes, issuesRes, escalationsRes] = await Promise.all([
+    db().from("audit_log").select("*").order("changed_at", { ascending: false }).limit(25),
+    db().from("risks").select("*").order("identified_at", { ascending: false }).limit(15),
+    db().from("issues").select("*").order("raised_at", { ascending: false }).limit(15),
+    db().from("escalations").select("*").order("raised_at", { ascending: false }).limit(15),
+  ]);
+  const audit = rowsOrLog<any>(auditRes, "home: recent audit");
+  const risks = rowsOrLog<any>(risksRes, "home: recent risks");
+  const issues = rowsOrLog<any>(issuesRes, "home: recent issues");
+  const escalations = rowsOrLog<any>(escalationsRes, "home: recent escalations");
 
   const implContext = (id: string | null) => {
     const impl = id ? implById.get(id) : undefined;
@@ -345,27 +367,29 @@ export async function loadHome(
     .slice(0, 30);
 
   // Per-implementation open-item bundles for the triaged Home queue.
-  const [
-    { data: allRisks },
-    { data: allIssues },
-    { data: allEscalations },
-    { data: allMilestones },
-    { data: allDecisions },
-  ] = await Promise.all([
-    db().from("risks").select("*"),
-    db().from("issues").select("*"),
-    db().from("escalations").select("*"),
-    db().from("milestones").select("*"),
-    db().from("decisions").select("*"),
-  ]);
+  const [allRisksRes, allIssuesRes, allEscalationsRes, allMilestonesRes, allDecisionsRes] =
+    await Promise.all([
+      db().from("risks").select("*"),
+      db().from("issues").select("*"),
+      db().from("escalations").select("*"),
+      db().from("milestones").select("*"),
+      db().from("decisions").select("*"),
+    ]);
+  const allRisks = rowsOrLog<any>(allRisksRes, "home triage: risks");
+  const allIssues = rowsOrLog<any>(allIssuesRes, "home triage: issues");
+  const allEscalations = rowsOrLog<any>(allEscalationsRes, "home triage: escalations");
+  const allMilestones = rowsOrLog<any>(allMilestonesRes, "home triage: milestones");
+  const allDecisions = rowsOrLog<any>(allDecisionsRes, "home triage: decisions");
 
   // Success criteria + their observations/confirmations, for due_stage lateness.
-  const [{ data: allCriteria }, { data: allObservations }, { data: allApprovals }] =
-    await Promise.all([
-      db().from("success_criteria").select("*"),
-      db().from("success_criteria_observations").select("*"),
-      db().from("approvals").select("*"),
-    ]);
+  const [allCriteriaRes, allObservationsRes, allApprovalsRes] = await Promise.all([
+    db().from("success_criteria").select("*"),
+    db().from("success_criteria_observations").select("*"),
+    db().from("approvals").select("*"),
+  ]);
+  const allCriteria = rowsOrLog<any>(allCriteriaRes, "home triage: success criteria");
+  const allObservations = rowsOrLog<any>(allObservationsRes, "home triage: observations");
+  const allApprovals = rowsOrLog<any>(allApprovalsRes, "home triage: approvals");
   const criteriaRows = (allCriteria ?? []).map((c: any) => ({
     ...c,
     observations: (allObservations ?? []).filter((o: any) => o.success_criteria_id === c.id),
@@ -375,17 +399,16 @@ export async function loadHome(
   }));
 
   // Dependency inputs for the shared waitingOn signal (no schema change).
-  const [
-    { data: allSolutions },
-    { data: allMappings },
-    { data: allAreas },
-    { data: allAdoptionObs },
-  ] = await Promise.all([
+  const [allSolutionsRes, allMappingsRes, allAreasRes, allAdoptionObsRes] = await Promise.all([
     db().from("technical_solutions").select("*"),
     db().from("field_mappings").select("*"),
     db().from("adoption_areas").select("*"),
     db().from("adoption_observations").select("*"),
   ]);
+  const allSolutions = rowsOrLog<any>(allSolutionsRes, "home triage: technical solutions");
+  const allMappings = rowsOrLog<any>(allMappingsRes, "home triage: field mappings");
+  const allAreas = rowsOrLog<any>(allAreasRes, "home triage: adoption areas");
+  const allAdoptionObs = rowsOrLog<any>(allAdoptionObsRes, "home triage: adoption observations");
 
   const solutionRows = (allSolutions ?? []).map((s: any) => ({
     ...s,
@@ -456,26 +479,35 @@ export async function loadLeadership(
 ): Promise<LeadershipData> {
   const home = await loadHome(scope, opts);
 
-  const { data: history } = await db()
-    .from("implementation_stage_history")
-    .select("implementation_id,stage,entered_at,exited_at")
-    .order("entered_at", { ascending: true });
+  // Dwell times only: logged and read as none rather than failing Reports.
+  const history = rowsOrLog<any>(
+    await db()
+      .from("implementation_stage_history")
+      .select("implementation_id,stage,entered_at,exited_at")
+      .order("entered_at", { ascending: true }),
+    "leadership: stage history",
+  );
 
   const candidates = home.implementations.filter((i) =>
     ["adopt", "graduate-to-cs"].includes(normalizeStage(i.current_stage) ?? ""),
   );
 
+  // One candidate whose record fails to load is left out (and logged), as it
+  // was before: this list decorates one section, it must not fail Reports.
   const records = await Promise.all(
     candidates.map(async (i) => ({
       implementation_id: i.id,
       customer_id: i.customer_id,
-      record: await loadCustomer360(i.customer_id),
+      record: await loadCustomer360(i.customer_id).catch((e: unknown) => {
+        console.error("[leadership] graduation candidate", i.customer_id, e);
+        return null;
+      }),
     })),
   );
 
   return {
     ...home,
-    stage_history: (history ?? []) as LeadershipData["stage_history"],
+    stage_history: history as LeadershipData["stage_history"],
     unclaimed_deals: await unclaimedDealsBeforeProject(scope ?? null, opts, home.implementations),
     graduation_candidates: records.filter(
       (r): r is { implementation_id: string; customer_id: string; record: Customer360 } =>
@@ -543,7 +575,10 @@ export async function loadCustomer360(
       .order("created_at", { ascending: false }),
   ]);
 
-  const customer = customerRes.data;
+  // The record itself and its projects: a failed read is a page that says it
+  // could not load, never "Customer not found" or a customer with no projects.
+  const customer = rowOrThrow<any>(customerRes, "this customer");
+  const implList = rowsOrThrow<any>(implRes, "this customer's implementations");
   if (!customer) return null;
 
   // The deal each of this customer's projects came from, by name.
@@ -552,18 +587,16 @@ export async function loadCustomer360(
   // resource on a nullable FK, and every project on the page is one of at most
   // a handful of deals. Keyed by deal id so the selected project can name its
   // own without another round trip.
-  const dealIds = Array.from(
-    new Set(((implRes.data ?? []) as any[]).map((i) => i.deal_id).filter(Boolean)),
-  ) as string[];
+  const dealIds = Array.from(new Set(implList.map((i) => i.deal_id).filter(Boolean))) as string[];
   const dealNames = new Map<string, string>();
   const dealStageById = new Map<string, string>();
   const dealArrById = new Map<string, number | null>();
   if (dealIds.length) {
-    const { data: dealRows } = await db()
-      .from("portal_accounts")
-      .select("id,name,stage,arr,sow_value")
-      .in("id", dealIds);
-    for (const d of (dealRows ?? []) as any[]) {
+    const dealRows = rowsOrLog<any>(
+      await db().from("portal_accounts").select("id,name,stage,arr,sow_value").in("id", dealIds),
+      "360: deal names",
+    );
+    for (const d of dealRows) {
       dealNames.set(d.id, d.name);
       dealStageById.set(d.id, d.stage);
       dealArrById.set(d.id, dealValue(d));
@@ -575,7 +608,7 @@ export async function loadCustomer360(
       current_stage: i.current_stage,
     });
 
-  const teamOptions = (activeTeamRes.data ?? []).map((t: any) => ({
+  const teamOptions = rowsOrLog<any>(activeTeamRes, "360: active team").map((t: any) => ({
     id: t.id,
     name: t.name,
     role: t.role,
@@ -584,8 +617,7 @@ export async function loadCustomer360(
   // Phase 7 demo mode: the 360 is the surface a demo spends longest on, so the
   // customer and its named contacts are pseudonymised here too. Internal staff
   // names are not masked — they are the demo.
-  const contactRows = contactRes.data;
-  const contacts = (contactRows ?? []).map((c: any) => ({
+  const contacts = rowsOrLog<any>(contactRes, "360: customer contacts").map((c: any) => ({
     id: c.id,
     name: demo.person(c.name, c.id),
     role: c.role,
@@ -594,7 +626,6 @@ export async function loadCustomer360(
   }));
   const contactById = new Map<string, any>(contacts.map((c: any) => [c.id, c]));
 
-  const implList = (implRes.data ?? []) as any[];
   // A customer can run several implementations at once. The caller picks one;
   // without a pick we show the newest, and an unknown id falls back the same way.
   const impl =
@@ -805,6 +836,32 @@ export async function loadCustomer360(
       .order("changed_at", { ascending: false })
       .limit(20),
   ]);
+  // Each of these is one tab's list, read as before; a failed one is at
+  // least in the server log rather than only an empty tab.
+  for (const [what, res] of Object.entries({
+    requirements,
+    successCriteria,
+    milestones,
+    commitments,
+    decisions,
+    risks,
+    issues,
+    escalations,
+    solutions,
+    mappings,
+    evidence,
+    approvals,
+    stageHistory,
+    completionRes,
+    adoptionAreaRes,
+    graduationRes,
+    handoffRes,
+    journalRes,
+    stageInstanceRes,
+    targetChangesRes,
+  })) {
+    rowsOrLog(res as { data: unknown[] | null; error?: DbError }, `360: ${what}`);
+  }
 
   // Group the one stage_instances read by project, and hand each summary its
   // own stages. A project with no journey applied keeps an empty array — the
