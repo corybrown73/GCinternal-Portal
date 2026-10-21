@@ -28,6 +28,7 @@ export async function loadTtvReport(opts: { sinceDays?: number } = {}): Promise<
         "deal_id,customer_id,go_live_at,tier_expected_date,baseline_date,target_date,target_launch_date,complete_outcome,created_at",
       )
       .in("deal_id", ids)
+      .is("closed_at", null)
       .order("created_at", { ascending: false }),
   ]);
   const customerIds = Array.from(

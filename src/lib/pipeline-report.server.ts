@@ -42,6 +42,7 @@ export async function loadPipelineReport(
       .select("id,deal_id,created_at")
       .in("deal_id", ids)
       .is("superseded_by_implementation_id", null)
+      .is("closed_at", null)
       .order("created_at", { ascending: false }),
   ]);
   const hist = (history ?? []) as Array<{

@@ -94,7 +94,8 @@ async function ownsAnything(viewer: Viewer): Promise<boolean> {
       db()
         .from("implementations")
         .select("id", { count: "exact", head: true })
-        .eq("owner_id", viewer.teamMemberId),
+        .eq("owner_id", viewer.teamMemberId)
+        .is("closed_at", null),
       db()
         .from("customers")
         .select("id", { count: "exact", head: true })

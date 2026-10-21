@@ -22,6 +22,7 @@ type ImplRow = {
   owner_id: string | null;
   current_stage?: string | null;
   superseded_by_implementation_id?: string | null;
+  closed_at?: string | null;
 };
 
 /**
@@ -69,7 +70,9 @@ export async function loadActiveWorkload(): Promise<Map<string, number>> {
   const [{ data: impls }, { data: deals }, { data: customers }] = await Promise.all([
     db()
       .from("implementations")
-      .select("id,deal_id,customer_id,owner_id,current_stage,superseded_by_implementation_id"),
+      .select(
+        "id,deal_id,customer_id,owner_id,current_stage,superseded_by_implementation_id,closed_at",
+      ),
     db().from("portal_accounts").select("*"),
     db().from("customers").select("*"),
   ]);
@@ -97,6 +100,7 @@ export async function loadActiveWorkload(): Promise<Map<string, number>> {
           current_stage: i.current_stage ?? null,
         }),
         superseded: Boolean(i.superseded_by_implementation_id),
+        closed: Boolean(i.closed_at),
         is_test: isTestAccount(deal, customer),
       };
     }),
@@ -130,6 +134,7 @@ export async function reconcileImplementationOwners(
       .select("id,deal_id,owner_id,superseded_by_implementation_id")
       .is("owner_id", null)
       .is("superseded_by_implementation_id", null)
+      .is("closed_at", null)
       .not("deal_id", "is", null),
     db()
       .from("portal_assignments")

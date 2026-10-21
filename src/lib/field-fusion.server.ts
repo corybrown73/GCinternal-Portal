@@ -215,6 +215,7 @@ export async function handToImplementation(
         .select("id")
         .eq("deal_id", dealId)
         .is("superseded_by_implementation_id", null)
+        .is("closed_at", null)
         .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle();

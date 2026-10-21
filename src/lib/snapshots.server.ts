@@ -266,7 +266,8 @@ export async function runPlanSnapshotCron(request: Request): Promise<Response> {
   const { data: impls } = await db()
     .from("implementations")
     .select("id, current_stage")
-    .not("current_stage", "in", '("graduate-to-cs","graduate","cs")');
+    .not("current_stage", "in", '("graduate-to-cs","graduate","cs")')
+    .is("closed_at", null);
 
   const { data: existing } = await db()
     .from("plan_snapshots")

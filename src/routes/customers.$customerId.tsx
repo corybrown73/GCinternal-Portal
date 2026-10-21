@@ -13,6 +13,10 @@ import { useQuery } from "@tanstack/react-query";
 import { CurrentImplementationTab } from "@/components/stage-flow";
 import { CustomerHeader } from "@/components/customer-header";
 import { CustomerEmailComposer } from "@/components/customer-email-composer";
+import {
+  ClosedImplementationNotice,
+  CloseImplementationAction,
+} from "@/components/implementation-closure";
 import { CARD, TONE } from "@/components/current-implementation-context";
 import { showKickoffDeckLink } from "@/lib/customer-header";
 import { CustomerOverview } from "@/components/customer-overview";
@@ -339,13 +343,17 @@ function Customer360Page() {
         selectedImplId={selectedImplId}
       />
 
-      <div className="flex justify-end px-6 pt-3">
-        <CustomerEmailComposer
-          customerId={customerId}
-          implementationId={impl.id}
-          implementationName={impl.name}
-        />
-      </div>
+      <ClosedImplementationNotice impl={impl} />
+      {impl.closed_at ? null : (
+        <div className="flex flex-wrap justify-end gap-2 px-6 pt-3">
+          <CustomerEmailComposer
+            customerId={customerId}
+            implementationId={impl.id}
+            implementationName={impl.name}
+          />
+          <CloseImplementationAction customerId={customerId} impl={impl} />
+        </div>
+      )}
 
       {tab === "implementation" ? (
         <div className="px-6 py-4">
