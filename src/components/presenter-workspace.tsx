@@ -1194,9 +1194,9 @@ function PurchasedSolutionsSection({
       <div>
         <h3 className="text-[13px] font-semibold">Purchased solutions</h3>
         <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
-          Review the agreed scope below; it is read-only. Use clarification notes for this
-          solution, and describe any new request separately. Select Potential Scope Change when a
-          request needs review. This flag does not change the agreement or approve additional work.
+          Review the agreed scope below; it is read-only. Use clarification notes for this solution,
+          and describe any new request separately. Select Potential Scope Change when a request
+          needs review. This flag does not change the agreement or approve additional work.
         </p>
       </div>
       {services.length ? (
