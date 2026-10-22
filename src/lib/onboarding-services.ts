@@ -285,19 +285,25 @@ export type ServiceSpec = {
   /** It changes something already live. */
   modifies_production?: boolean | undefined;
   /** Who has the ball, when a person set it. */
-  ball?: {
-    who: "us" | "customer" | "blocked_customer" | "blocked_internal";
-    person: string | null;
-    date: string | null;
-    note: string | null;
-  } | null | undefined;
+  ball?:
+    | {
+        who: "us" | "customer" | "blocked_customer" | "blocked_internal";
+        person: string | null;
+        date: string | null;
+        note: string | null;
+      }
+    | null
+    | undefined;
   /** How it ended. */
-  disposition?: {
-    kind: "accepted" | "descoped" | "transferred";
-    at: string;
-    by: string | null;
-    reason: string | null;
-  } | null | undefined;
+  disposition?:
+    | {
+        kind: "accepted" | "descoped" | "transferred";
+        at: string;
+        by: string | null;
+        reason: string | null;
+      }
+    | null
+    | undefined;
 };
 
 /** What we need from the customer to start this service: theirs if written, else the catalogue's. */
