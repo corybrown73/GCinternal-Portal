@@ -45,16 +45,17 @@ export const PRESENTER_GUIDES: Record<1 | 2 | 3 | 4 | 5 | 6, PresenterGuide> = {
   },
   4: {
     objective:
-      "Agree who decides, who maintains the forms, how we communicate, and what happens when work slips or scope changes.",
+      "Review each purchased solution, clarify the agreed scope, and agree who decides when a new request may change it.",
     opening:
       "Let's agree how we work together. We each own certain things, so let's name them before we start.",
     questions: [
       "Who makes the call when we disagree on scope or timing?",
+      "For each purchased solution, what needs clarifying? Is anything being requested beyond the agreed scope?",
       "How do you want updates: a weekly note, a call, or only when something changes?",
       "If a response from either side is late, who do we escalate to, and when?",
     ],
     capture:
-      "Named people for decisions, form upkeep and day-to-day contact. Mutual accountability: what we owe and what they owe. The update rhythm. How delays and scope changes are raised.",
+      "Solution-by-solution clarifications, any new request flagged for review, and named people for decisions, form upkeep and day-to-day contact. Mutual accountability, update rhythm, and how delays and scope changes are raised.",
     ready:
       "Decision-maker, form maintainer and day-to-day contact are named, and both sides agree how delays and scope changes are raised. Quote a response term only after checking the signed agreement.",
   },

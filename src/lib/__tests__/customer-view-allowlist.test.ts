@@ -120,6 +120,15 @@ function fullInternalView(): WelcomeView {
     firstFormSource: "person",
     formArtifacts: [{ name: SECRET, url: `https://signed/${SECRET}` }],
     nextUseCases: [{ name: "Inspections", objective: null }],
+    purchasedSolutions: [
+      {
+        name: "QuickBooks Online",
+        kind: "Integration",
+        phase: 2,
+        tool: "QuickBooks",
+        acceptance: "Approved submissions reach the accounting system.",
+      },
+    ],
     photoUrl: "https://photo",
     toolMarks: { quickbooks: "https://mark" },
     clientLogoUrl: "https://logo",
@@ -256,6 +265,15 @@ describe("the customer's copy is an allow-list", () => {
     expect(customer.parkingLot?.[0]?.request).toBe("A change");
     expect(customer.homeworkDone).toEqual({ app: "2026-09-20T00:00:00Z" });
     expect(customer.customerScope).toEqual({ state: "agreed", items: ["One form"] });
+    expect(customer.purchasedSolutions).toEqual([
+      {
+        name: "QuickBooks Online",
+        kind: "Integration",
+        phase: 2,
+        tool: "QuickBooks",
+        acceptance: "Approved submissions reach the accounting system.",
+      },
+    ]);
     expect(customer.fieldTester).toBe("Sam");
   });
 
@@ -369,6 +387,12 @@ const ALLOWED = new Set<string>([
   "nextUseCases[].name",
   "nextUseCases[].objective",
   "openedAt",
+  "purchasedSolutions",
+  "purchasedSolutions[].acceptance",
+  "purchasedSolutions[].kind",
+  "purchasedSolutions[].name",
+  "purchasedSolutions[].phase",
+  "purchasedSolutions[].tool",
   "parkingLot",
   "parkingLot[].neededForLaunch",
   "parkingLot[].owner",

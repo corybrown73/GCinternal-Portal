@@ -1,4 +1,5 @@
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import type { IntakeAnswers } from "../intake-answers";
 
 /**
  * Merge keys into a deal's intake in one statement (0062): top-level keys
@@ -17,4 +18,21 @@ export async function mergeIntake(
     p_timeline: timeline ?? null,
   });
   if (error) throw new Error(`Could not save the intake: ${error.message}`);
+}
+
+/**
+ * Persist ordinary intake answers without replacing the clarification map.
+ * Clarifications use a versioned compare-and-set because the legacy RPC
+ * cannot merge entries nested inside that map.
+ */
+export async function mergeIntakeAnswers(
+  dealId: string,
+  intake: IntakeAnswers,
+): Promise<void> {
+  const patch = Object.fromEntries(
+    Object.entries(intake).filter(
+      ([key]) => key !== "timeline" && key !== "solution_clarifications",
+    ),
+  );
+  await mergeIntake(dealId, patch, { ...intake.timeline });
 }

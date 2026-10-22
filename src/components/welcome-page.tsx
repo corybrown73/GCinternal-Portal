@@ -34,7 +34,7 @@ import {
 import { stampDay } from "@/lib/stage-flow";
 import type { HandoffValue } from "@/lib/sales-handoff";
 import { byLabel, dueLabel, journeyOverviewItems } from "@/lib/welcome-journey";
-import { kickoffScreenList } from "@/components/kickoff-view";
+import { kickoffScreenList, purchasedSolutionAppendix } from "@/components/kickoff-view";
 import { CustomerDashboard } from "@/components/customer-dashboard";
 import { DeckReviewBanner } from "@/components/deck-review-banner";
 import { ask } from "@/components/ui/ask";
@@ -179,6 +179,8 @@ export function WelcomePage({
       icsBase: icsBase ?? null,
     }),
   );
+  const scopeAppendix =
+    experience === "kickoff" ? purchasedSolutionAppendix(view, screens.length + 1) : [];
 
   // Present mode: a hint the first time, gone after a few seconds.
   const [hint, setHint] = useState(false);
@@ -240,33 +242,40 @@ export function WelcomePage({
                     // Every visible screen, unzoomed, with the talk track as notes.
                     const notes = speakerNotes(view);
                     const byKey = new Map(notes.sections.map((sec) => [sec.key, sec]));
-                    await exportWelcomePptx({
-                      screens: visible.map((sc, i) =>
-                        sc.render({
-                          page: i + 1,
-                          qr: showQr ? qr : null,
-                          mode: "shared",
-                          onTick: undefined,
-                          onAnswer: undefined,
-                          onBall: undefined,
-                          icsBase: null,
-                        }),
-                      ),
-                      notes: visible.map((sc) => {
-                        const sec =
-                          byKey.get(sc.key) ??
-                          (sc.key.startsWith("phase-")
-                            ? byKey.get(`phase-${view.timeline.phases[0]?.phase}`)
-                            : undefined);
-                        if (!sec) return "";
-                        return [
-                          ...sec.say,
-                          "",
-                          `Why: ${sec.why}`,
-                          "",
-                          ...sec.ifTheyAsk.map((q) => `If they ask "${q.q}": ${q.a}`),
-                        ].join("\n");
+                    const kickoffScreens = visible.map((sc, i) =>
+                      sc.render({
+                        page: i + 1,
+                        qr: showQr ? qr : null,
+                        mode: "shared",
+                        onTick: undefined,
+                        onAnswer: undefined,
+                        onBall: undefined,
+                        icsBase: null,
                       }),
+                    );
+                    await exportWelcomePptx({
+                      screens: [...kickoffScreens, ...scopeAppendix],
+                      notes: [
+                        ...visible.map((sc) => {
+                          const sec =
+                            byKey.get(sc.key) ??
+                            (sc.key.startsWith("phase-")
+                              ? byKey.get(`phase-${view.timeline.phases[0]?.phase}`)
+                              : undefined);
+                          if (!sec) return "";
+                          return [
+                            ...sec.say,
+                            "",
+                            `Why: ${sec.why}`,
+                            "",
+                            ...sec.ifTheyAsk.map((q) => `If they ask "${q.q}": ${q.a}`),
+                          ].join("\n");
+                        }),
+                        ...scopeAppendix.map(
+                          (_, index) =>
+                            `Purchased solution ${index + 1} of ${scopeAppendix.length}. Review the agreed scope shown on this slide.`,
+                        ),
+                      ],
                       fileName: pptxFileName(view.clientName),
                       title: `${view.clientName} — onboarding plan`,
                       onProgress: report,
@@ -341,6 +350,15 @@ export function WelcomePage({
             </div>
           </div>
         )}
+        {scopeAppendix.length ? (
+          <div className="wp-scope-print-appendix" aria-hidden="true">
+            {scopeAppendix.map((screen, index) => (
+              <div className="wp-scope-print-page" key={index}>
+                <Stage fit="both">{screen}</Stage>
+              </div>
+            ))}
+          </div>
+        ) : null}
       </div>
     </EditCtx.Provider>
   );

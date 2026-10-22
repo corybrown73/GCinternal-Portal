@@ -1787,6 +1787,28 @@ body.gc-presenting {
   .gc-welcome .wp-stage {
     zoom: 1 !important;
   }
+  .gc-welcome .wp-content:has(.wp-kick-purchased) {
+    overflow: visible;
+  }
+  .gc-welcome .wp-kick-purchased ul {
+    display: none;
+  }
+  .gc-welcome .wp-kick-purchased-print-note,
+  .gc-welcome .wp-scope-print-appendix {
+    display: block;
+  }
+  .gc-welcome .wp-scope-print-page {
+    break-after: page;
+    page-break-after: always;
+  }
+  .gc-welcome .wp-scope-print-page:last-child {
+    break-after: auto;
+    page-break-after: auto;
+  }
+  .gc-welcome .wp-scope-print-appendix .wp-stage-box {
+    break-after: auto;
+    page-break-after: auto;
+  }
 }
 
 /* ---- the phone mockup */
@@ -4303,7 +4325,7 @@ body.gc-presenting {
   line-height: 1.3;
 }
 
-/* ---- kickoff view: five fixed screens — "Our focus" (NOW dominant, NEXT
+/* ---- kickoff view: six fixed screens — "Our focus" (NOW dominant, NEXT
    and LATER secondary) and "Your path to launch"'s compact responsibility
    band. Small, named additions on the same tokens; no second design
    system. See kickoff-view.tsx for where each one is used. */
@@ -4385,14 +4407,32 @@ body.gc-presenting {
   grid-template-columns: repeat(3, 1fr);
 }
 
-/* Kickoff deck (six fixed 1280x720 slides). Every block is sized to the frame;
-   nothing here scrolls or clips. */
+/* Kickoff deck: six core slides, with purchased scope continued on export pages when needed. */
 
 /* Kickoff slides that do not fill their frame start at the top, like the rest of the deck. */
 .gc-welcome .wp-content:has(.wp-kick-move),
 .gc-welcome .wp-content:has(.wp-kick-expect) {
   justify-content: flex-start;
   padding-top: 16px;
+}
+.gc-welcome:not(.is-present) .wp-content:has(.wp-kick-purchased),
+.gc-welcome.is-present .wp-content:has(.wp-kick-purchased) {
+  justify-content: flex-start;
+  overflow-y: auto;
+  padding-right: 10px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--wp-blue-line) transparent;
+}
+.gc-welcome .wp-content:has(.wp-kick-purchased) > * {
+  flex-shrink: 0;
+}
+.gc-welcome:not(.wp-export) .wp-kick-purchased ul {
+  max-height: none;
+  overflow: visible;
+}
+.gc-welcome .wp-scope-print-appendix,
+.gc-welcome .wp-kick-purchased-print-note {
+  display: none;
 }
 
 /* 2. Your workflow — three equal columns, short connectors between them. */
@@ -4513,6 +4553,94 @@ body.gc-presenting {
   font-size: 12px;
   line-height: 1.4;
   color: var(--wp-muted);
+}
+.gc-welcome .wp-kick-purchased {
+  margin-top: 10px;
+  padding: 9px 12px;
+  border: 1px solid var(--wp-blue-line);
+  border-radius: 12px;
+  background: #fff;
+  text-align: left;
+}
+.gc-welcome .wp-kick-purchased header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+.gc-welcome .wp-kick-purchased h3 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--wp-navy);
+}
+.gc-welcome .wp-kick-purchased header p,
+.gc-welcome .wp-kick-purchased-empty {
+  margin: 0;
+  font-size: 10px;
+  line-height: 1.35;
+  color: var(--wp-muted);
+}
+.gc-welcome .wp-kick-purchased ul {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 8px 16px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-height: 170px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--wp-blue-line) transparent;
+}
+.gc-welcome .wp-kick-purchased li {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--wp-body);
+}
+.gc-welcome .wp-kick-purchased li b {
+  color: var(--wp-navy);
+  font-size: 13px;
+}
+.gc-welcome .wp-kick-purchased li span,
+.gc-welcome .wp-kick-purchased li small {
+  overflow-wrap: anywhere;
+  color: var(--wp-muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+.gc-welcome.wp-export .wp-kick-purchased ul {
+  max-height: 170px;
+  overflow-y: auto;
+}
+.gc-welcome .wp-kick-scope-appendix {
+  margin-top: 18px;
+  padding: 28px 32px;
+  border: 1px solid var(--wp-blue-line);
+  border-radius: 16px;
+  background: #fff;
+  color: var(--wp-body);
+  font-size: 20px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.gc-welcome .wp-kick-scope-appendix h3 {
+  margin: 0 0 12px;
+  color: var(--wp-navy);
+  font-size: 30px;
+  line-height: 1.2;
+}
+.gc-welcome .wp-kick-scope-appendix p {
+  margin: 10px 0 0;
+}
+.gc-welcome .wp-kick-scope-appendix .wp-kick-scope-kind {
+  color: var(--wp-blue-deep);
+  font-weight: 700;
 }
 .gc-welcome .wp-rail.is-six .wp-node-date {
   font-size: 15px;

@@ -514,7 +514,8 @@ export async function createDeal(
       ...(input.industry && !current.industry ? { industry: input.industry } : {}),
       updated_at: new Date().toISOString(),
     });
-    await db().from("portal_accounts").update({ intake: next }).eq("id", result.account.id);
+    const { mergeIntakeAnswers } = await import("./server/intake-merge");
+    await mergeIntakeAnswers(result.account.id, next);
   }
   // A deal entered where it already is: the same move a person would make
   // from the board — the Closed Won gate applies, and so does everything the
@@ -726,8 +727,8 @@ export async function linkExistingCustomer(
     ...(customerId && industry && !current.industry ? { industry } : {}),
     updated_at: new Date().toISOString(),
   });
-  const { error } = await db().from("portal_accounts").update({ intake: next }).eq("id", dealId);
-  if (error) throw new Error(error.message);
+  const { mergeIntakeAnswers } = await import("./server/intake-merge");
+  await mergeIntakeAnswers(dealId, next);
   await audit({
     actor_type: "user",
     actor_id: userId,
@@ -2719,6 +2720,11 @@ export async function saveDealIntake(
 ): Promise<import("./intake-answers").IntakeAnswers> {
   await requireSalesEditor(userId);
   const { readIntake, intakeAnswersSchema } = await import("./intake-answers");
+  if ("solution_clarifications" in patch) {
+    throw new Error(
+      "Purchased-solution clarifications must be saved through their dedicated action.",
+    );
+  }
 
   const { data: before } = await db()
     .from("portal_accounts")
@@ -2756,9 +2762,9 @@ export async function saveDealIntake(
   // A person's answer is theirs: the AI reading stops refreshing it.
   {
     const { claimByPerson } = await import("./intake-answers");
-    const claimed = opts.proposal
-      ? Object.keys(patch).filter((k) => k !== "implementation_focus")
-      : Object.keys(patch);
+    const claimed = Object.keys(patch).filter(
+      (k) => k !== "solution_clarifications" && (!opts.proposal || k !== "implementation_focus"),
+    );
     const own = claimByPerson(current, claimed);
     if (opts.proposal && "implementation_focus" in patch) {
       own.person_set = own.person_set.filter((f) => f !== "implementation_focus");
@@ -2809,11 +2815,22 @@ export async function saveDealIntake(
     updated_at: new Date().toISOString(),
   });
 
-  const { error } = await db()
-    .from("portal_accounts")
-    .update({ intake: next, updated_at: new Date().toISOString() })
-    .eq("id", dealId);
-  if (error) throw new Error(`Could not save the intake: ${error.message}`);
+  const intakePatch = { ...merged };
+  delete intakePatch["timeline"];
+  const incomingTimeline =
+    patch["timeline"] && typeof patch["timeline"] === "object"
+      ? (patch["timeline"] as Record<string, unknown>)
+      : null;
+  const timelinePatch = incomingTimeline ? { ...incomingTimeline } : null;
+  if (timelinePatch) {
+    if (opts.stageTarget && merged["timeline"]) {
+      timelinePatch["stage_targets"] = (merged["timeline"] as typeof current.timeline).stage_targets;
+    } else {
+      delete timelinePatch["stage_targets"];
+    }
+  }
+  const { mergeIntake } = await import("./server/intake-merge");
+  await mergeIntake(dealId, intakePatch, timelinePatch);
 
   await audit({
     actor_type: "user",
@@ -3292,7 +3309,8 @@ export async function saveDealIntakeFacts(
   if (written.length === 0) return { written };
 
   const parsed = intakeAnswersSchema.parse({ ...next, handoff, updated_at: at });
-  await db().from("portal_accounts").update({ intake: parsed }).eq("id", dealId);
+  const { mergeIntakeAnswers } = await import("./server/intake-merge");
+  await mergeIntakeAnswers(dealId, parsed);
   return { written };
 }
 
@@ -3338,17 +3356,20 @@ export async function uploadDealIntakeForm(
     updated_at: new Date().toISOString(),
   });
 
-  const { error } = await db()
-    .from("portal_accounts")
-    .update({ intake: next, updated_at: new Date().toISOString() })
-    .eq("id", args.dealId);
-  if (error) {
+  const { mergeIntakeAnswers } = await import("./server/intake-merge");
+  let saveError: Error | null = null;
+  try {
+    await mergeIntakeAnswers(args.dealId, next);
+  } catch (error) {
+    saveError = error instanceof Error ? error : new Error(String(error));
+  }
+  if (saveError) {
     try {
       await db().storage.from("attachments").remove([path]);
     } catch {
       /* the row is what matters */
     }
-    throw new Error(error.message);
+    throw saveError;
   }
 
   await audit({
@@ -3812,6 +3833,93 @@ export async function updateSolution(
   const services = current.timeline.services.map((s) => (s.id === id ? { ...s, ...patch } : s));
   if (!services.some((s) => s.id === id)) throw new Error("That solution is not on the plan.");
   return saveDealIntake(userId, dealId, { timeline: { ...current.timeline, services } });
+}
+
+/** Saves presenter-only notes without changing the purchased service record. */
+export async function saveSolutionClarification(
+  userId: string,
+  dealId: string,
+  solutionId: string,
+  expected: import("./purchased-solutions").SolutionClarification,
+  notes: string,
+  potentialScopeChange: boolean,
+) {
+  await requireSalesEditor(userId);
+  if (potentialScopeChange && !notes.trim()) {
+    throw new Error("Add a note describing the request before flagging a potential scope change.");
+  }
+
+  const { readIntake } = await import("./intake-answers");
+  const { hasUniquePurchasedSolution, saveClarificationWithRetry } =
+    await import("./purchased-solutions");
+  const value = {
+    notes: notes.trim(),
+    potential_scope_change: potentialScopeChange,
+  };
+  await saveClarificationWithRetry({
+    solutionId,
+    expected,
+    value,
+    load: async () => {
+      const { data: row, error } = await db()
+        .from("portal_accounts")
+        .select("intake,updated_at")
+        .eq("id", dealId)
+        .maybeSingle();
+      if (error) throw new Error(`Could not load the purchased solutions: ${error.message}`);
+      if (!row) throw new Error("Deal not found");
+      if (typeof row.updated_at !== "string" || !row.updated_at) {
+        throw new Error("Could not verify the latest deal version. Reload and try again.");
+      }
+
+      const current = readIntake(row.intake);
+      if (!hasUniquePurchasedSolution(current, solutionId)) {
+        throw new Error("That purchased solution is no longer available on this deal.");
+      }
+      return {
+        version: row.updated_at,
+        clarifications: current.solution_clarifications,
+        context: row.intake,
+      };
+    },
+    compareAndSet: async (snapshot, clarifications) => {
+      if (
+        typeof snapshot.context !== "object" ||
+        snapshot.context === null ||
+        Array.isArray(snapshot.context)
+      ) {
+        throw new Error("The deal intake is not available for a safe clarification save.");
+      }
+      const updatedAt = new Date().toISOString();
+      const next = {
+        ...snapshot.context,
+        solution_clarifications: clarifications,
+        updated_at: updatedAt,
+      };
+      const { data, error } = await db()
+        .from("portal_accounts")
+        .update({ intake: next, updated_at: updatedAt })
+        .eq("id", dealId)
+        .eq("updated_at", snapshot.version)
+        .select("id")
+        .maybeSingle();
+      if (error) throw new Error(`Could not save the clarification: ${error.message}`);
+      return Boolean(data);
+    },
+  });
+  await audit({
+    actor_type: "user",
+    actor_id: userId,
+    action: "deal.solution_clarification_updated",
+    entity_type: "account",
+    entity_id: dealId,
+    payload: {
+      solution_id: solutionId,
+      potential_scope_change: potentialScopeChange,
+      has_notes: Boolean(notes.trim()),
+    },
+  });
+  return value;
 }
 
 /**

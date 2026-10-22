@@ -2,6 +2,7 @@ import type { ImplementationFocusItem, IntakeAnswers } from "./intake-answers";
 import type { Timeline } from "./onboarding-timeline";
 import type { CustomerPrompt } from "./sales-handoff";
 import type { CustomerJourney } from "./welcome-journey";
+import type { PurchasedSolutionView } from "./purchased-solutions";
 
 /**
  * The workflow in the customer's own terms — before field work, during it,
@@ -142,6 +143,8 @@ export type WelcomeView = {
   /** Uploaded source forms, signed for internal review only. */
   formArtifacts: Array<{ name: string; url: string }>;
   nextUseCases: Array<{ name: string; objective: string | null }>;
+  /** All purchased plan lines, projected without internal clarification data. */
+  purchasedSolutions: PurchasedSolutionView[];
   /** Signed, short-lived. null → the icon composition. */
   photoUrl: string | null;
   /** Uploaded logos, tool key → signed URL, for the marks on the phase cards. */
@@ -458,6 +461,9 @@ const CUSTOMER_VIEW: Shape = {
   firstForm: { name: "prim", objective: "prim", source: "prim" },
   firstFormSource: "prim",
   nextUseCases: [{ name: "prim", objective: "prim" }],
+  purchasedSolutions: [
+    { name: "prim", kind: "prim", phase: "prim", tool: "prim", acceptance: "prim" },
+  ],
   photoUrl: "prim",
   toolMarks: "record",
   clientLogoUrl: "prim",

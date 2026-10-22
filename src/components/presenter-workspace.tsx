@@ -11,6 +11,7 @@ import {
   readIntake,
   type IntakeAnswers,
 } from "@/lib/intake-answers";
+import { normalizeServices, SOLUTION_LABEL } from "@/lib/onboarding-services";
 import {
   confirmImplementationFocusFn,
   confirmWorkflowStoryFn,
@@ -19,7 +20,13 @@ import { closeDateFor } from "@/lib/onboarding-plan";
 import { localIso, shortDay } from "@/lib/onboarding-timeline";
 import { getParkingLot, addParkingItemFn, updateParkingItemFn } from "@/lib/parking-lot.functions";
 import { wonStage } from "@/lib/pipeline-stages";
-import { saveHandoffAnswer, saveIntake, saveStageTarget } from "@/lib/presale.functions";
+import {
+  saveHandoffAnswer,
+  saveIntake,
+  saveSolutionClarificationFn,
+  saveStageTarget,
+} from "@/lib/presale.functions";
+import type { SolutionClarification } from "@/lib/purchased-solutions";
 import { PRESENTER_GUIDES, PRESENTER_SECTIONS } from "@/lib/presenter-guides";
 import {
   announceWelcomeChanged,
@@ -78,6 +85,7 @@ function Workspace({
   onSaved: () => void;
 }) {
   const intake = readIntake(deal.account.intake);
+  const purchasedServices = normalizeServices(intake.timeline.services, intake.timeline);
   const closeDate = closeDateFor({
     intake,
     stageHistory: deal.stage_history,
@@ -98,6 +106,23 @@ function Workspace({
           Saved changes reach the open presentation after a moment. Nothing here is shown to the
           customer.
         </p>
+        <div className="mt-2 flex flex-wrap items-center gap-1.5" aria-label="Purchased scope">
+          <span className="mr-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+            Purchased scope · separate from the first form
+          </span>
+          {purchasedServices.length ? (
+            purchasedServices.map((service) => (
+              <span
+                key={service.id}
+                className="rounded-full border border-border bg-muted/30 px-2 py-0.5 text-[10px]"
+              >
+                {service.name} · {SOLUTION_LABEL[service.kind]}
+              </span>
+            ))
+          ) : (
+            <span className="text-[11px] text-muted-foreground">None recorded</span>
+          )}
+        </div>
       </header>
 
       <div
@@ -167,6 +192,12 @@ function Workspace({
         </Section>
 
         <Section n={4} active={active} onStep={setActive}>
+          <PurchasedSolutionsSection
+            dealId={dealId}
+            intake={intake}
+            services={purchasedServices}
+            onSaved={onSaved}
+          />
           <HandoffText
             dealId={dealId}
             intake={intake}
@@ -1144,6 +1175,183 @@ function TesterSection({
       </div>
       {m.error ? <p className="text-[11px] text-destructive">{m.error.message}</p> : null}
     </div>
+  );
+}
+
+function PurchasedSolutionsSection({
+  dealId,
+  intake,
+  services,
+  onSaved,
+}: {
+  dealId: string;
+  intake: IntakeAnswers;
+  services: ReturnType<typeof normalizeServices>;
+  onSaved: () => void;
+}) {
+  return (
+    <section className="space-y-3 rounded-md border border-border bg-muted/10 p-3">
+      <div>
+        <h3 className="text-[13px] font-semibold">Purchased solutions</h3>
+        <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+          Review the agreed scope below; it is read-only. Use clarification notes for this solution,
+          and describe any new request separately. Select Potential Scope Change when a request needs
+          review. This flag does not change the agreement or approve additional work.
+        </p>
+      </div>
+      {services.length ? (
+        <div className="space-y-3">
+          {services.map((service) => (
+            <PurchasedSolutionClarification
+              key={service.id}
+              dealId={dealId}
+              solutionId={service.id}
+              name={service.name}
+              kind={SOLUTION_LABEL[service.kind]}
+              phase={service.phase}
+              tool={service.tool ?? null}
+              acceptance={service.acceptance ?? null}
+              saved={
+                intake.solution_clarifications[service.id] ?? {
+                  notes: "",
+                  potential_scope_change: false,
+                }
+              }
+              onSaved={onSaved}
+            />
+          ))}
+        </div>
+      ) : (
+        <p className="text-[12px] text-muted-foreground">
+          No purchased solutions are recorded on this deal.
+        </p>
+      )}
+    </section>
+  );
+}
+
+function PurchasedSolutionClarification({
+  dealId,
+  solutionId,
+  name,
+  kind,
+  phase,
+  tool,
+  acceptance,
+  saved,
+  onSaved,
+}: {
+  dealId: string;
+  solutionId: string;
+  name: string;
+  kind: string;
+  phase: number;
+  tool: string | null;
+  acceptance: string | null;
+  saved: SolutionClarification;
+  onSaved: () => void;
+}) {
+  const save = useServerFn(saveSolutionClarificationFn);
+  const [baseline, setBaseline] = useState(saved);
+  const [notes, setNotes] = useState(saved.notes);
+  const [potentialScopeChange, setPotentialScopeChange] = useState(saved.potential_scope_change);
+  useEffect(() => {
+    setBaseline(saved);
+    setNotes(saved.notes);
+    setPotentialScopeChange(saved.potential_scope_change);
+  }, [saved.notes, saved.potential_scope_change]);
+  const dirty =
+    notes.trim() !== baseline.notes || potentialScopeChange !== baseline.potential_scope_change;
+  const missingFlagDetails = potentialScopeChange && !notes.trim();
+  const mutation = useMutation({
+    mutationFn: () =>
+      save({
+        data: {
+          dealId,
+          solutionId,
+          expected: baseline,
+          notes: notes.trim(),
+          potentialScopeChange,
+        },
+      }),
+    onSuccess: (next) => {
+      setBaseline(next);
+      onSaved();
+    },
+  });
+
+  return (
+    <article className="space-y-2 rounded-sm border border-border bg-background p-3">
+      <div>
+        <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+          Agreed scope · read-only
+        </p>
+        <h4 className="mt-0.5 text-[12px] font-semibold">
+          {name} <span className="font-normal text-muted-foreground">· {kind}</span>
+        </h4>
+        <p className="text-[11px] text-muted-foreground">
+          {phase === 1 ? "Alongside the first form" : `Later implementation phase · ${phase}`}
+          {tool ? ` · ${tool}` : ""}
+        </p>
+        {acceptance ? (
+          <p className="mt-1 text-[11px]">
+            <span className="font-medium">Agreed outcome:</span> {acceptance}
+          </p>
+        ) : (
+          <p className="mt-1 text-[11px] text-muted-foreground">
+            No acceptance detail is recorded; clarify this together.
+          </p>
+        )}
+      </div>
+      <label className="block space-y-1">
+        <span className="text-[11px] font-medium">Clarification notes · internal</span>
+        <textarea
+          value={notes}
+          maxLength={4000}
+          rows={3}
+          onChange={(event) => setNotes(event.target.value)}
+          className="w-full rounded-sm border border-input bg-background px-2 py-1.5 text-[12px] outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          placeholder="Clarify this purchased solution, or describe a new customer request."
+        />
+      </label>
+      <label className="flex items-start gap-2 text-[11px]">
+        <input
+          type="checkbox"
+          checked={potentialScopeChange}
+          onChange={(event) => setPotentialScopeChange(event.target.checked)}
+          className="mt-0.5"
+        />
+        <span>
+          <span className="font-medium">Potential Scope Change</span>
+          <span className="block text-muted-foreground">
+            Needs review; agreed scope and commitments stay unchanged.
+          </span>
+        </span>
+      </label>
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          disabled={!dirty || mutation.isPending || missingFlagDetails}
+          onClick={() => mutation.mutate()}
+          className="h-7 rounded-sm bg-primary px-2.5 text-[11px] font-medium text-primary-foreground disabled:opacity-50"
+        >
+          {mutation.isPending ? "Saving…" : "Save clarification"}
+        </button>
+        {mutation.isSuccess && !dirty ? (
+          <span className="text-[11px] text-muted-foreground">Saved</span>
+        ) : null}
+      </div>
+      {missingFlagDetails ? (
+        <p className="text-[11px] text-muted-foreground">
+          Add a note describing the request before flagging it for review.
+        </p>
+      ) : null}
+      {mutation.error ? (
+        <p role="alert" className="text-[11px] text-destructive">
+          Could not save: {mutation.error.message}
+        </p>
+      ) : null}
+    </article>
   );
 }
 

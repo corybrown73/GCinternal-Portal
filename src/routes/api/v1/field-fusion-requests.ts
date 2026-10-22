@@ -61,11 +61,8 @@ export const Route = createFileRoute("/api/v1/field-fusion-requests")({
               if (error) throw new Error(`Could not record the contact: ${error.message}`);
             },
             writeIntake: async (dealId, next) => {
-              const { error } = await db
-                .from("portal_accounts")
-                .update({ intake: next })
-                .eq("id", dealId);
-              if (error) throw new Error(`Could not save the request: ${error.message}`);
+              const { mergeIntakeAnswers } = await import("@/lib/server/intake-merge");
+              await mergeIntakeAnswers(dealId, next);
             },
           });
           await audit({

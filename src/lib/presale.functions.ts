@@ -4,6 +4,7 @@ import { z } from "zod";
 import { DOCUMENT_UPLOAD_TYPES } from "./document-upload";
 import { PARTNER_KEYS } from "./partner-implementation";
 import { formEditorUrlSchema } from "./intake-answers";
+import { solutionClarificationSaveSchema } from "./purchased-solutions";
 import {
   implementationFocusPatchSchema,
   timelinePatchSchema,
@@ -970,5 +971,20 @@ export const setSolutionDisposition = createServerFn({ method: "POST" })
       data.dealId,
       data.id,
       data.disposition,
+    );
+  });
+
+export const saveSolutionClarificationFn = createServerFn({ method: "POST" })
+  .middleware([requireDealEditor])
+  .inputValidator((data: unknown) => solutionClarificationSaveSchema.parse(data))
+  .handler(async ({ data, context }) => {
+    const { saveSolutionClarification } = await import("./presale.server");
+    return saveSolutionClarification(
+      context.profile.id,
+      data.dealId,
+      data.solutionId,
+      data.expected,
+      data.notes,
+      data.potentialScopeChange,
     );
   });

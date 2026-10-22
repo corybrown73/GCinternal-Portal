@@ -164,11 +164,8 @@ export async function handToImplementation(
     field_fusion: { ...intake.field_fusion, handed_off_at: new Date().toISOString() },
     updated_at: new Date().toISOString(),
   });
-  const { error } = await db()
-    .from("portal_accounts")
-    .update({ intake: next, updated_at: new Date().toISOString() })
-    .eq("id", dealId);
-  if (error) throw new Error(`Could not record the handoff: ${error.message}`);
+  const { mergeIntakeAnswers } = await import("./server/intake-merge");
+  await mergeIntakeAnswers(dealId, next);
 
   const { transitionStage } = await import("./server/accounts");
   await transitionStage(

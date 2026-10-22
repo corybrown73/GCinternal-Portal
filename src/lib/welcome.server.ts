@@ -16,6 +16,7 @@ import {
   type WelcomeView,
 } from "@/lib/welcome";
 import { kickoffFocusContent } from "@/lib/kickoff-view";
+import { purchasedSolutionsFor } from "./purchased-solutions";
 
 import { audit } from "./server/audit";
 import { hashToken } from "./server/plan-tokens";
@@ -304,6 +305,7 @@ async function viewFor(
     formArtifacts,
     firstFormSource: input.firstForm ? (input.firstFormSource ?? "person") : null,
     nextUseCases: input.nextUseCases,
+    purchasedSolutions: purchasedSolutionsFor(intake),
     photoUrl,
     toolMarks,
     clientLogoUrl,

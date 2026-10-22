@@ -1,6 +1,7 @@
 import { PARTNER_KEYS } from "./partner-implementation";
 import { z } from "zod";
 import { stageTargetsSchema } from "./stage-targets";
+import { solutionClarificationsSchema } from "./purchased-solutions";
 
 /**
  * A date a source states, typed by the reader that read it — never parsed
@@ -218,6 +219,8 @@ export const intakeAnswersSchema = z.object({
    * a service on their own. null until asked.
    */
   solutions_involved: z.boolean().nullable().default(null),
+  /** Internal clarifications keyed by the stable purchased-service id. */
+  solution_clarifications: solutionClarificationsSchema,
   /** Is there a SOW? A small deal has a contract and no SOW; either way the paper travels. */
   has_sow: z.boolean().nullable().default(null),
   /**

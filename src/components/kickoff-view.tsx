@@ -1,4 +1,4 @@
-import { Fragment } from "react";
+import { Fragment, type ReactNode } from "react";
 import { Check } from "lucide-react";
 
 import { Frame, Icon, PhoneMock, T, Tile, type Screen } from "@/components/welcome-primitives";
@@ -240,6 +240,7 @@ const STAGE_ICON: Record<string, string> = {
 
 function KickoffJourney({ view, page }: { view: WelcomeView; page: number }) {
   const j = view.journey;
+  const purchasedSolutions = view.purchasedSolutions ?? [];
   const stages = j ? kickoffJourneyStages(j) : [];
   const details = kickoffUpcomingDetails(view);
   return (
@@ -289,6 +290,47 @@ function KickoffJourney({ view, page }: { view: WelcomeView; page: number }) {
           ))}
         </div>
       ) : null}
+      <section className="wp-kick-purchased">
+        <header>
+          <h3>Purchased solutions</h3>
+          <p>
+            Included in your scope, separate from the first form; planned, not delivered. Scroll
+            this slide to review the full plan and every solution.
+          </p>
+        </header>
+        {purchasedSolutions.length ? (
+          <>
+            <ul>
+              {purchasedSolutions.map((solution, index) => (
+                <li key={`${solution.name}-${solution.kind}-${index}`}>
+                  <div>
+                    <b>{solution.name}</b>
+                    <span>
+                      {solution.kind} ·{" "}
+                      {solution.phase === 1
+                        ? "alongside the first form"
+                        : "later implementation phase"}
+                    </span>
+                  </div>
+                  {solution.tool ? <small>System: {solution.tool}</small> : null}
+                  {solution.acceptance ? (
+                    <small>Agreed outcome: {solution.acceptance}</small>
+                  ) : (
+                    <small>Details to clarify together</small>
+                  )}
+                </li>
+              ))}
+            </ul>
+            <p className="wp-kick-purchased-print-note">
+              The following pages list every purchased solution and its agreed details.
+            </p>
+          </>
+        ) : (
+          <p className="wp-kick-purchased-empty">
+            No additional purchased solutions are recorded on the plan.
+          </p>
+        )}
+      </section>
       <div className="wp-kick-upcoming">
         {KICKOFF_UPCOMING.map((stage) => {
           const facts = details[stage.key] ?? [];
@@ -309,6 +351,40 @@ function KickoffJourney({ view, page }: { view: WelcomeView; page: number }) {
       </div>
     </Frame>
   );
+}
+
+/** Supplemental PowerPoint pages: the core kickoff remains six screens. */
+export function purchasedSolutionAppendix(view: WelcomeView, firstPage: number): ReactNode[] {
+  const solutions = view.purchasedSolutions ?? [];
+  return solutions.map((solution, index) => (
+    <Frame
+      key={`${solution.name}-${index}`}
+      k="kickoff-purchased-solution"
+      page={firstPage + index}
+      eyebrow={`Purchased solutions · ${index + 1} of ${solutions.length}`}
+      title="Agreed scope"
+      lede="Included in the purchase and planned for implementation; this does not mean the solution has been delivered."
+    >
+      <article className="wp-kick-scope-appendix">
+        <h3>{solution.name}</h3>
+        <p className="wp-kick-scope-kind">
+          {solution.kind} ·{" "}
+          {solution.phase === 1
+            ? "Alongside the first form"
+            : `Later implementation phase · ${solution.phase}`}
+        </p>
+        {solution.tool ? (
+          <p>
+            <b>System:</b> {solution.tool}
+          </p>
+        ) : null}
+        <p>
+          <b>Agreed outcome:</b>{" "}
+          {solution.acceptance ?? "No acceptance detail is recorded; confirm the details together."}
+        </p>
+      </article>
+    </Frame>
+  ));
 }
 
 /* ----------------------------------- 4. What we expect from each other */

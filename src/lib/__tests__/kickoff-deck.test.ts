@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
-import { kickoffScreenList } from "@/components/kickoff-view";
+import { kickoffScreenList, purchasedSolutionAppendix } from "@/components/kickoff-view";
 import { shortDay } from "@/lib/onboarding-timeline";
 import {
   KICKOFF_EXPECTATIONS,
@@ -368,6 +368,67 @@ describe("Slide 3 — the timeline keeps its agreed dates; the lower section exp
 
   it("gives a stage with nothing recorded no personal lines at all", () => {
     expect(kickoffUpcomingDetails(viewWith({ firstForm: null, currentProcess: null }))).toEqual({});
+  });
+});
+
+describe("Slide 3 — purchased scope", () => {
+  it("shows every purchased line separately from the first form and without internal notes", () => {
+    const view = viewWith({
+      purchasedSolutions: [
+        {
+          name: "QuickBooks Online",
+          kind: "Integration",
+          phase: 2,
+          tool: "QuickBooks",
+          acceptance: "Approved submissions reach the accounting system.",
+        },
+        {
+          name: "Crew training",
+          kind: "Training",
+          phase: 1,
+          tool: null,
+          acceptance: null,
+        },
+      ],
+    });
+    const markup = slide(view, 2);
+
+    expect(markup).toContain("Purchased solutions");
+    expect(markup).toContain("QuickBooks Online");
+    expect(markup).toContain("Approved submissions reach the accounting system.");
+    expect(markup).toContain("Crew training");
+    expect(markup).toContain("separate from the first form");
+    expect(markup).toContain("Details to clarify together");
+    expect(markup).not.toContain("Potential Scope Change");
+    expect(markup).not.toContain("clarification notes");
+  });
+
+  it("keeps six core screens and exports every long purchased solution on its own page", () => {
+    const longAcceptance = "Agreed outcome detail for the purchased service. ".repeat(8);
+    const purchasedSolutions = Array.from({ length: 14 }, (_, index) => ({
+      name: `Purchased solution ${index + 1}`,
+      kind: index % 2 ? "Training" : "Integration",
+      phase: index + 1,
+      tool: index === 13 ? "A system name that wraps instead of being cut off" : null,
+      acceptance: longAcceptance,
+    }));
+    const view = viewWith({ purchasedSolutions });
+    const screens = kickoffScreenList(view);
+    const journey = slide(view, 2);
+    const appendix = purchasedSolutionAppendix(view, screens.length + 1);
+
+    expect(screens).toHaveLength(6);
+    expect(purchasedSolutions.every((solution) => journey.includes(solution.name))).toBe(true);
+    expect(appendix).toHaveLength(purchasedSolutions.length);
+    for (const [index, solution] of purchasedSolutions.entries()) {
+      const markup = renderToStaticMarkup(
+        appendix[index] as Parameters<typeof renderToStaticMarkup>[0],
+      );
+      expect(markup).toContain(solution.name);
+      expect(markup).toContain(longAcceptance);
+      expect(markup).not.toContain("Potential Scope Change");
+      expect(markup).not.toContain("Clarification notes");
+    }
   });
 });
 
