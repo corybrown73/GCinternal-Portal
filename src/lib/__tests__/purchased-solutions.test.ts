@@ -96,9 +96,7 @@ describe("per-solution clarification persistence", () => {
     ]);
 
     const afterDeckRegeneration = readIntake(savedIntake);
-    expect(afterDeckRegeneration.solution_clarifications).toEqual(
-      reopened.solution_clarifications,
-    );
+    expect(afterDeckRegeneration.solution_clarifications).toEqual(reopened.solution_clarifications);
   });
 
   it("does not overwrite another solution's note when one clarification changes", () => {
@@ -131,8 +129,11 @@ describe("per-solution clarification persistence", () => {
         .success,
     ).toBe(true);
     expect(
-      solutionClarificationSaveSchema.safeParse({ ...valid, notes: "", potentialScopeChange: false })
-        .success,
+      solutionClarificationSaveSchema.safeParse({
+        ...valid,
+        notes: "",
+        potentialScopeChange: false,
+      }).success,
     ).toBe(true);
     expect(
       solutionClarificationSaveSchema.safeParse({

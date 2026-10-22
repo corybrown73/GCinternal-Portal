@@ -2824,7 +2824,9 @@ export async function saveDealIntake(
   const timelinePatch = incomingTimeline ? { ...incomingTimeline } : null;
   if (timelinePatch) {
     if (opts.stageTarget && merged["timeline"]) {
-      timelinePatch["stage_targets"] = (merged["timeline"] as typeof current.timeline).stage_targets;
+      timelinePatch["stage_targets"] = (
+        merged["timeline"] as typeof current.timeline
+      ).stage_targets;
     } else {
       delete timelinePatch["stage_targets"];
     }

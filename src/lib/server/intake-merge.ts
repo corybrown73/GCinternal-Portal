@@ -25,10 +25,7 @@ export async function mergeIntake(
  * Clarifications use a versioned compare-and-set because the legacy RPC
  * cannot merge entries nested inside that map.
  */
-export async function mergeIntakeAnswers(
-  dealId: string,
-  intake: IntakeAnswers,
-): Promise<void> {
+export async function mergeIntakeAnswers(dealId: string, intake: IntakeAnswers): Promise<void> {
   const patch = Object.fromEntries(
     Object.entries(intake).filter(
       ([key]) => key !== "timeline" && key !== "solution_clarifications",
