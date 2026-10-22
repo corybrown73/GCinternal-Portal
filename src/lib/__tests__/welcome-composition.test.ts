@@ -44,6 +44,7 @@ function baseView(over: Partial<WelcomeView> = {}): WelcomeView {
     formArtifacts: [],
     customerScope: { state: "empty", items: [] },
     nextUseCases: [],
+    purchasedSolutions: [],
     photoUrl: null,
     clientLogoUrl: null,
     homeworkDone: {},

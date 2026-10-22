@@ -8,6 +8,7 @@ import {
   saveClarificationWithRetry,
   solutionClarificationsSchema,
   solutionClarificationSaveSchema,
+  type SolutionClarification,
 } from "../purchased-solutions";
 
 describe("purchased solutions", () => {
@@ -183,7 +184,7 @@ describe("per-solution clarification persistence", () => {
     });
     const compareAndSet = async (
       snapshot: Awaited<ReturnType<typeof load>>,
-      clarifications: typeof state.intake.solution_clarifications,
+      clarifications: Record<string, SolutionClarification>,
     ) => {
       if (snapshot.version !== String(state.version)) return false;
       state.intake = { ...snapshot.context, solution_clarifications: clarifications };
@@ -245,7 +246,7 @@ describe("per-solution clarification persistence", () => {
     });
     const compareAndSet = async (
       snapshot: Awaited<ReturnType<typeof load>>,
-      clarifications: typeof state.intake.solution_clarifications,
+      clarifications: Record<string, SolutionClarification>,
     ) => {
       if (snapshot.version !== String(state.version)) return false;
       state.intake = { ...snapshot.context, solution_clarifications: clarifications };
