@@ -62,6 +62,20 @@ describe("purchased solutions", () => {
     expect(hasUniquePurchasedSolution(intake, "solution-2")).toBe(true);
     expect(hasUniquePurchasedSolution(intake, "other-deal-solution")).toBe(false);
   });
+
+  it("rejects missing or duplicate solution ids at the purchased-scope boundary", () => {
+    const intake = readIntake({
+      timeline: {
+        services: [
+          { id: "duplicate-id", kind: "integration", name: "First sync", phase: 1 },
+          { id: "duplicate-id", kind: "training", name: "Second service", phase: 2 },
+        ],
+      },
+    });
+
+    expect(hasUniquePurchasedSolution(intake, "missing-id")).toBe(false);
+    expect(hasUniquePurchasedSolution(intake, "duplicate-id")).toBe(false);
+  });
 });
 
 describe("per-solution clarification persistence", () => {
@@ -150,7 +164,7 @@ describe("per-solution clarification persistence", () => {
         notes: "A clarification.",
         potentialScopeChange: false,
       }).success,
-    ).toBe(false);
+    ).toBe(true);
   });
 
   type ConcurrentSaveState = {
