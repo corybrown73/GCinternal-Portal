@@ -265,39 +265,39 @@ export type ServiceSpec = {
   /** 1 = alongside the form from kickoff; 2 and up wait for the phase before. */
   phase: number;
   /** Integrations only. */
-  tier?: IntegrationTier | null;
+  tier?: IntegrationTier | null | undefined;
   /** Override the catalogue length. */
-  weeks?: number | null;
+  weeks?: number | null | undefined;
   /** Override what we need from the customer to start it. */
-  needs?: string | null;
+  needs?: string | null | undefined;
   /** A known system or product (see onboarding-tools.ts), when it is one. */
-  tool?: string | null;
+  tool?: string | null | undefined;
   /** The person on our side who delivers it (team_members). */
-  owner_id?: string | null;
+  owner_id?: string | null | undefined;
   /** Must be Accepted before Operational Go-Live. */
-  launch_critical?: boolean;
+  launch_critical?: boolean | undefined;
   /** How it will be accepted, in one sentence. */
-  acceptance?: string | null;
+  acceptance?: string | null | undefined;
   /** The customer's date for their part. */
-  due?: string | null;
+  due?: string | null | undefined;
   /** We do not yet know it can be done. */
-  feasibility_needed?: boolean;
+  feasibility_needed?: boolean | undefined;
   /** It changes something already live. */
-  modifies_production?: boolean;
+  modifies_production?: boolean | undefined;
   /** Who has the ball, when a person set it. */
   ball?: {
     who: "us" | "customer" | "blocked_customer" | "blocked_internal";
     person: string | null;
     date: string | null;
     note: string | null;
-  } | null;
+  } | null | undefined;
   /** How it ended. */
   disposition?: {
     kind: "accepted" | "descoped" | "transferred";
     at: string;
     by: string | null;
     reason: string | null;
-  } | null;
+  } | null | undefined;
 };
 
 /** What we need from the customer to start this service: theirs if written, else the catalogue's. */

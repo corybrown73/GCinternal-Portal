@@ -153,8 +153,27 @@ describe("per-solution clarification persistence", () => {
     ).toBe(false);
   });
 
+  type ConcurrentSaveState = {
+    version: number;
+    intake: {
+      unrelated_answer?: string;
+      timeline?: {
+        close_date: string;
+        services: Array<{
+          id: string;
+          kind: "integration";
+          name: string;
+          phase: number;
+          tool?: string;
+          acceptance?: string;
+        }>;
+      };
+      solution_clarifications: Record<string, SolutionClarification>;
+    };
+  };
+
   it("retries concurrent saves for different solutions without losing intake fields", async () => {
-    const state = {
+    const state: ConcurrentSaveState = {
       version: 1,
       intake: {
         unrelated_answer: "Keep this answer",
@@ -231,7 +250,7 @@ describe("per-solution clarification persistence", () => {
   });
 
   it("rejects a concurrent save to the same solution instead of overwriting it", async () => {
-    const state = {
+    const state: ConcurrentSaveState = {
       version: 1,
       intake: {
         solution_clarifications: {
