@@ -51,9 +51,31 @@ jobs:
             echo "production, run its verify file there, then add the \`production-migration-verified\` label."
             echo "Procedure: docs/MIGRATIONS.md"
           } >> "$GITHUB_STEP_SUMMARY"
-      - uses: supabase/setup-cli@v1
-        with:
-          version: latest
+      - name: Install the pinned Supabase CLI
+        # Pinned, and checked against a SHA-256 kept in this file. `latest` was
+        # resolved through the GitHub API on every run, and that API rate-limited
+        # the runner (run 40020608582 failed here before any migration ran). A
+        # new release, or a re-uploaded asset, now fails this step rather than
+        # changing what the migrations are run with.
+        #
+        # To upgrade: pick a release at least two weeks old, download
+        # supabase_linux_amd64.tar.gz from it, and replace both values below with
+        # the version and the sha256 of that file (the release's checksums.txt
+        # lists it too).
+        env:
+          SUPABASE_CLI_VERSION: "2.120.0"
+          SUPABASE_CLI_SHA256: "7074584113aa00495beeac661c41fb09f1ddd0a483cd7333894b0d080086dc6e"
+        run: |
+          set -euo pipefail
+          archive="$RUNNER_TEMP/supabase_linux_amd64.tar.gz"
+          curl -fsSL --retry 4 --retry-delay 5 -o "$archive" \
+            "https://github.com/supabase/cli/releases/download/v${SUPABASE_CLI_VERSION}/supabase_linux_amd64.tar.gz"
+          echo "${SUPABASE_CLI_SHA256}  ${archive}" | sha256sum --check --strict
+          mkdir -p "$RUNNER_TEMP/supabase-cli"
+          tar -xzf "$archive" -C "$RUNNER_TEMP/supabase-cli" supabase
+          echo "$RUNNER_TEMP/supabase-cli" >> "$GITHUB_PATH"
+      - name: Confirm the CLI version
+        run: supabase --version
       - name: Start local database
         run: supabase db start
       - name: Apply all migrations (up)
