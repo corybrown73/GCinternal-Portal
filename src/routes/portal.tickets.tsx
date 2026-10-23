@@ -11,17 +11,21 @@ import { cn } from "@/lib/utils";
 // Type-only import: erased at build time, never pulls server code client-side.
 import type { PortalTicket as Ticket } from "@/lib/portal.server";
 import { When } from "@/components/when";
-import { errorMessage } from "@/lib/error-message";
+import { RouteLoadFailed } from "@/components/load-failed";
 
 export const Route = createFileRoute("/portal/tickets")({
   loader: ({ context }) => {
-    context.queryClient.ensureQueryData(portalTicketsQuery);
+    // A failed read surfaces through the page's own query (and its Retry); the
+    // prefetch must not become an unhandled rejection.
+    void context.queryClient.ensureQueryData(portalTicketsQuery).catch(() => {});
   },
-  errorComponent: ({ error }) => (
-    <div role="alert" className="rounded-md border border-border bg-card p-6 text-[13px]">
-      <p className="font-medium">We couldn&apos;t load your requests.</p>
-      <p className="mt-1 text-muted-foreground">{errorMessage(error)}</p>
-    </div>
+  errorComponent: ({ error, reset }) => (
+    <RouteLoadFailed
+      error={error}
+      reset={reset}
+      title="We couldn't load your requests."
+      className="rounded-md border border-border bg-card p-6 text-[13px]"
+    />
   ),
   component: PortalTicketsPage,
 });

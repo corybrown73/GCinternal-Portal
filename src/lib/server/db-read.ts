@@ -12,8 +12,9 @@
  *
  * - `rowsOrThrow` / `rowOrThrow` for a PRIMARY read: the page cannot be
  *   right without it, so a failure stops the page and says so.
- * - `rowsOrLog` for a read that only decorates rows (a badge count, a name):
- *   the page still renders, but the failure is in the log, never silent.
+ * - `rowsOrLog` / `rowOrLog` for a read that only decorates rows (a badge
+ *   count, a name): the page still renders, but the failure is in the log,
+ *   never silent.
  */
 
 /** The part of a Supabase/PostgREST error this reads. */
@@ -64,4 +65,10 @@ export function rowOrThrow<T>(result: DbResult<T>, what: string): T | null {
 export function rowsOrLog<T>(result: DbResult<T[]>, what: string): T[] {
   if (result.error) logFailure(what, result.error);
   return result.data ?? [];
+}
+
+/** The one row of a `maybeSingle()` read that only decorates the page. */
+export function rowOrLog<T>(result: DbResult<T>, what: string): T | null {
+  if (result.error) logFailure(what, result.error);
+  return result.data ?? null;
 }

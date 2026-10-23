@@ -1,5 +1,6 @@
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { customerFacingNameFor } from "./customer-facing-name";
+import { rowOrLog, rowOrThrow, rowsOrLog, rowsOrThrow } from "./db-read";
 import { isFlagOn } from "@/lib/app-config.server";
 import { LIFECYCLE_STAGE_MAP, STAGE_ALIASES, type LifecycleStageId } from "@/lib/lifecycle";
 import {
@@ -132,22 +133,26 @@ function assertUsable(grant: GrantRow | null, why: string): GrantRow {
 
 /** Resolve a raw `gcpl_…` token. The raw value never leaves this function. */
 export async function grantForToken(rawToken: string): Promise<GrantRow> {
-  const { data } = await db()
-    .from("external_access_grants")
-    .select(GRANT_COLUMNS)
-    .eq("token_hash", hashToken(rawToken))
-    .maybeSingle();
-  return assertUsable((data ?? null) as GrantRow | null, "token");
+  // A failed read is logged and thrown, never read as "no such link": that would
+  // tell a customer with a good link that it expired.
+  const data = rowOrThrow<GrantRow>(
+    await db()
+      .from("external_access_grants")
+      .select(GRANT_COLUMNS)
+      .eq("token_hash", hashToken(rawToken))
+      .maybeSingle(),
+    "this link",
+  );
+  return assertUsable(data, "token");
 }
 
 /** Re-read the grant behind a session cookie. Called on EVERY request. */
 export async function grantForId(grantId: string): Promise<GrantRow> {
-  const { data } = await db()
-    .from("external_access_grants")
-    .select(GRANT_COLUMNS)
-    .eq("id", grantId)
-    .maybeSingle();
-  return assertUsable((data ?? null) as GrantRow | null, "cookie");
+  const data = rowOrThrow<GrantRow>(
+    await db().from("external_access_grants").select(GRANT_COLUMNS).eq("id", grantId).maybeSingle(),
+    "this link",
+  );
+  return assertUsable(data, "cookie");
 }
 
 export function viewerForGrant(grant: GrantRow): ExternalViewer {
@@ -194,32 +199,33 @@ async function resolveImplementation(
 ): Promise<ImplementationRow> {
   if (viewer.kind === "grant") {
     if (ref) {
-      const { data: asked } = await db()
-        .from("implementations")
-        .select("id")
-        .eq("portal_key", ref)
-        .maybeSingle();
+      const asked = rowOrThrow<{ id: string }>(
+        await db().from("implementations").select("id").eq("portal_key", ref).maybeSingle(),
+        "this plan",
+      );
       if (!asked || asked.id !== viewer.implementationId) {
         throw new ExternalAccessError("forbidden", "grant asked for another implementation");
       }
     }
-    const { data } = await db()
-      .from("implementations")
-      .select(IMPL_COLUMNS)
-      .eq("id", viewer.implementationId)
-      .maybeSingle();
+    const data = rowOrThrow<ImplementationRow>(
+      await db()
+        .from("implementations")
+        .select(IMPL_COLUMNS)
+        .eq("id", viewer.implementationId)
+        .maybeSingle(),
+      "this plan",
+    );
     if (!data) throw new ExternalAccessError("unavailable", "grant implementation missing");
-    return data as ImplementationRow;
+    return data;
   }
 
   if (!ref) throw new ExternalAccessError("forbidden", "no implementation reference");
-  const { data } = await db()
-    .from("implementations")
-    .select(IMPL_COLUMNS)
-    .eq("portal_key", ref)
-    .maybeSingle();
+  const data = rowOrThrow<ImplementationRow>(
+    await db().from("implementations").select(IMPL_COLUMNS).eq("portal_key", ref).maybeSingle(),
+    "this plan",
+  );
   if (!data) throw new ExternalAccessError("unavailable", "no implementation for key");
-  const impl = data as ImplementationRow;
+  const impl = data;
 
   if (viewer.kind === "auth") {
     if (!viewer.customerIds.includes(impl.customer_id)) {
@@ -250,29 +256,34 @@ export async function loadSharedPlan(
 ): Promise<SharedPlan> {
   const impl = await resolveImplementation(viewer, implementationRef);
 
-  const [{ data: customer }, { data: items }, { data: milestones }, { data: commitments }] =
-    await Promise.all([
-      db().from("customers").select("id, name, logo_path").eq("id", impl.customer_id).maybeSingle(),
-      db()
-        .from("work_items")
-        .select(
-          "id, title, description, party, visibility, status, due_at, depends_on, completed_at, completed_by_contact_id, position",
-        )
-        .eq("implementation_id", impl.id),
-      db()
-        .from("milestones")
-        .select("name, status, target_date, completed_date")
-        .eq("implementation_id", impl.id),
-      db()
-        .from("commitments")
-        .select("description, due_date, committed_to, status, fulfilled_at")
-        .eq("implementation_id", impl.id),
-    ]);
+  const [customerRes, itemsRes, milestonesRes, commitmentsRes] = await Promise.all([
+    db().from("customers").select("id, name, logo_path").eq("id", impl.customer_id).maybeSingle(),
+    db()
+      .from("work_items")
+      .select(
+        "id, title, description, party, visibility, status, due_at, depends_on, completed_at, completed_by_contact_id, position",
+      )
+      .eq("implementation_id", impl.id),
+    db()
+      .from("milestones")
+      .select("name, status, target_date, completed_date")
+      .eq("implementation_id", impl.id),
+    db()
+      .from("commitments")
+      .select("description, due_date, committed_to, status, fulfilled_at")
+      .eq("implementation_id", impl.id),
+  ]);
+  // The plan the customer reads. A failed read is "could not load", never a plan
+  // with no tasks, milestones or promises on it.
+  const customer = rowOrThrow<any>(customerRes, "this plan");
+  const items = rowsOrThrow<any>(itemsRes, "this plan");
+  const milestones = rowsOrThrow<any>(milestonesRes, "this plan");
+  const commitments = rowsOrThrow<any>(commitmentsRes, "this plan");
 
-  const allItems = (items ?? []) as any[];
+  const allItems = items as any[];
   const sharedIds = allItems.filter((w) => w.visibility === "shared").map((w) => w.id);
 
-  const [{ data: comments }, { data: files }, { data: owner }, { data: conv }] = await Promise.all([
+  const [commentsRes, filesRes, ownerRes, convRes] = await Promise.all([
     sharedIds.length
       ? db()
           .from("work_item_comments")
@@ -291,6 +302,11 @@ export async function loadSharedPlan(
       : Promise.resolve({ data: null }),
     db().from("project_conversations").select("id").eq("implementation_id", impl.id).maybeSingle(),
   ]);
+  const comments = rowsOrThrow<any>(commentsRes, "this plan");
+  // Attachments and the owner's name decorate the plan: logged, never silent.
+  const files = rowsOrLog<any>(filesRes, "this plan's files");
+  const owner = rowOrLog<any>(ownerRes, "this plan's owner");
+  const conv = rowOrThrow<any>(convRes, "this plan's conversation");
 
   // The conversation. `visibility = 'shared'` is applied in the QUERY as well
   // as in the DTO: an internal note must not travel from the database to this
@@ -301,7 +317,7 @@ export async function loadSharedPlan(
   // render "withdrawn" in place — a message that vanishes silently reads as the
   // customer having imagined it.
   const conversationsOn = await isFlagOn("conversations");
-  const [{ data: convMessages }, { data: convParticipants }] =
+  const [convMessagesRes, convParticipantsRes] =
     conv?.id && conversationsOn
       ? await Promise.all([
           db()
@@ -316,6 +332,8 @@ export async function loadSharedPlan(
             .eq("conversation_id", conv.id),
         ])
       : [{ data: [] }, { data: [] }];
+  const convMessages = rowsOrThrow<any>(convMessagesRes, "this plan's conversation");
+  const convParticipants = rowsOrLog<any>(convParticipantsRes, "this plan's conversation");
 
   // Posting needs the actions flag AND a link that is allowed to act. Checked
   // here rather than in the DTO so the button is absent, not merely disabled,
@@ -333,26 +351,30 @@ export async function loadSharedPlan(
   for (const c of (comments ?? []) as any[]) {
     if (c.author_contact_id) contactIds.add(c.author_contact_id);
   }
-  const { data: contactRows } = contactIds.size
-    ? await db()
-        .from("customer_contacts")
-        .select("id, name")
-        .in("id", [...contactIds])
-    : { data: [] };
-  const contactName = new Map<string, string>(
-    ((contactRows ?? []) as any[]).map((c) => [c.id, c.name]),
-  );
+  const contactRows = contactIds.size
+    ? rowsOrLog<any>(
+        await db()
+          .from("customer_contacts")
+          .select("id, name")
+          .in("id", [...contactIds]),
+        "this plan's contact names",
+      )
+    : [];
+  const contactName = new Map<string, string>(contactRows.map((c) => [c.id, c.name]));
 
   const profileIds = [
     ...new Set(
       ((comments ?? []) as any[]).map((c) => c.author_profile_id).filter((x): x is string => !!x),
     ),
   ];
-  const { data: profileRows } = profileIds.length
-    ? await db().from("portal_profiles").select("id, full_name").in("id", profileIds)
-    : { data: [] };
+  const profileRows = profileIds.length
+    ? rowsOrLog<any>(
+        await db().from("portal_profiles").select("id, full_name").in("id", profileIds),
+        "this plan's author names",
+      )
+    : [];
   const profileName = new Map<string, string>(
-    ((profileRows ?? []) as any[]).map((p) => [p.id, p.full_name || "GoCanvas"]),
+    profileRows.map((p) => [p.id, p.full_name || "GoCanvas"]),
   );
 
   const inputs: SharedPlanInputs = {
@@ -465,11 +487,16 @@ export async function workItemForRef(
   implementationId: string,
   ref: string,
 ): Promise<ScopedWorkItem> {
-  const { data } = await db()
-    .from("work_items")
-    .select("id, title, party, visibility, status, depends_on, implementation_id")
-    .eq("implementation_id", implementationId);
-  const match = ((data ?? []) as ScopedWorkItem[]).find((w) => taskRef(w.id) === ref);
+  // A failed read must not answer "no such task": the customer would be told
+  // the task they are looking at does not exist.
+  const data = rowsOrThrow<ScopedWorkItem>(
+    await db()
+      .from("work_items")
+      .select("id, title, party, visibility, status, depends_on, implementation_id")
+      .eq("implementation_id", implementationId),
+    "this plan",
+  );
+  const match = data.find((w) => taskRef(w.id) === ref);
   if (!match) throw new ExternalAccessError("forbidden", "no such task in this implementation");
   return { ...match, depends_on: match.depends_on ?? [] };
 }

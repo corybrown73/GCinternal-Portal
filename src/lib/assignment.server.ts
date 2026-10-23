@@ -16,6 +16,7 @@ import { isPreClose } from "@/lib/presale-stages";
 import { paperworkOnFile } from "@/lib/won-gate";
 
 import { audit } from "./server/audit";
+import { rowOrThrow, rowsOrThrow } from "./server/db-read";
 import { sendEmail } from "./server/email";
 
 const db = () => supabaseAdmin as any;
@@ -24,11 +25,12 @@ const RULES_KEY = "assignment_rules";
 /* ------------------------------------------------------------- rules */
 
 export async function loadRules(): Promise<AssignmentRules> {
-  const { data } = await db()
-    .from("portal_app_config")
-    .select("value")
-    .eq("key", RULES_KEY)
-    .maybeSingle();
+  // A failed read must not fall back to the default rules: the deal would be
+  // handed out under rules nobody configured.
+  const data = rowOrThrow<{ value: unknown }>(
+    await db().from("portal_app_config").select("value").eq("key", RULES_KEY).maybeSingle(),
+    "the assignment rules",
+  );
   return normalizeRules(data?.value ?? DEFAULT_ASSIGNMENT_RULES);
 }
 
@@ -66,7 +68,7 @@ export async function loadPool(rules?: AssignmentRules): Promise<PoolRow[]> {
   const r = rules ?? (await loadRules());
   const since = new Date(Date.now() - r.window_days * 86_400_000).toISOString();
   const { loadActiveWorkload } = await import("./claimed-owner.server");
-  const [{ data: members }, { data: pool }, { data: ledger }, owned] = await Promise.all([
+  const [membersRes, poolRes, ledgerRes, owned] = await Promise.all([
     db().from("team_members").select("id,name,email,role").eq("active", true).order("name"),
     db().from("portal_assignment_pool").select("team_member_id,active,capacity"),
     db()
@@ -78,8 +80,14 @@ export async function loadPool(rules?: AssignmentRules): Promise<PoolRow[]> {
       return new Map<string, number>();
     }),
   ]);
+  // The roster, the pool and the ledger decide who is next. A failed read is not
+  // "nobody is in the pool" (the deal would be left unassigned) or "nobody has
+  // been given anything" (the rotation would start over): it stops here.
+  const members = rowsOrThrow<any>(membersRes, "the team");
+  const pool = rowsOrThrow<any>(poolRes, "the assignment pool");
+  const ledger = rowsOrThrow<any>(ledgerRes, "recent assignments");
   const poolBy = new Map<string, { active: boolean; capacity: number }>(
-    ((pool ?? []) as any[]).map((p) => [
+    (pool as any[]).map((p) => [
       String(p.team_member_id),
       { active: Boolean(p.active), capacity: Number(p.capacity) || 1 },
     ]),
@@ -87,14 +95,14 @@ export async function loadPool(rules?: AssignmentRules): Promise<PoolRow[]> {
   const load = new Map<string, number>();
   const count = new Map<string, number>();
   const last = new Map<string, string>();
-  for (const a of (ledger ?? []) as any[]) {
+  for (const a of ledger as any[]) {
     const id = String(a.team_member_id);
     load.set(id, (load.get(id) ?? 0) + Number(a.weight));
     count.set(id, (count.get(id) ?? 0) + 1);
     const at = String(a.created_at);
     if (!last.has(id) || at > last.get(id)!) last.set(id, at);
   }
-  const rows: PoolRow[] = ((members ?? []) as any[]).map((m) => {
+  const rows: PoolRow[] = (members as any[]).map((m) => {
     const p = poolBy.get(String(m.id));
     const capacity = p?.capacity ?? 1;
     const l = load.get(String(m.id)) ?? 0;
@@ -159,14 +167,17 @@ export type AssignmentRow = {
 };
 
 export async function recentAssignments(limit = 30): Promise<AssignmentRow[]> {
-  const { data } = await db()
-    .from("portal_assignments")
-    .select(
-      "id,deal_id,implementation_id,team_member_id,weight,breakdown,source,note,created_at,portal_accounts(name,customer_id),team_members(name)",
-    )
-    .order("created_at", { ascending: false })
-    .limit(limit);
-  return ((data ?? []) as any[]).map((a) => ({
+  const data = rowsOrThrow<any>(
+    await db()
+      .from("portal_assignments")
+      .select(
+        "id,deal_id,implementation_id,team_member_id,weight,breakdown,source,note,created_at,portal_accounts(name,customer_id),team_members(name)",
+      )
+      .order("created_at", { ascending: false })
+      .limit(limit),
+    "recent assignments",
+  );
+  return data.map((a) => ({
     id: String(a.id),
     dealId: String(a.deal_id),
     dealName: a.portal_accounts?.name ?? null,
@@ -185,11 +196,14 @@ export async function recentAssignments(limit = 30): Promise<AssignmentRow[]> {
 /* ----------------------------------------------------------- assign */
 
 async function dealFacts(dealId: string) {
-  const { data: deal } = await db()
-    .from("portal_accounts")
-    .select("id,name,arr,intake,customer_id,am_owner_id,stage")
-    .eq("id", dealId)
-    .maybeSingle();
+  const deal = rowOrThrow<any>(
+    await db()
+      .from("portal_accounts")
+      .select("id,name,arr,intake,customer_id,am_owner_id,stage")
+      .eq("id", dealId)
+      .maybeSingle(),
+    "this deal",
+  );
   if (!deal) throw new Error("Deal not found");
   const intake = readIntake(deal.intake);
   const { normalizeServices } = await import("@/lib/onboarding-services");
@@ -217,7 +231,10 @@ export async function implementationForDeal(dealId: string, customerId: string |
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
-  if (byDeal.data?.id) return String(byDeal.data.id);
+  // A failed read is not "this deal has no implementation": the caller would
+  // make a second one.
+  const found = rowOrThrow<{ id: string }>(byDeal, "this deal's implementation");
+  if (found?.id) return String(found.id);
   if (!customerId) return null;
   const byCustomer = await db()
     .from("implementations")
@@ -226,7 +243,8 @@ export async function implementationForDeal(dealId: string, customerId: string |
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
-  return byCustomer.data?.id ? String(byCustomer.data.id) : null;
+  const foundByCustomer = rowOrThrow<{ id: string }>(byCustomer, "this customer's implementation");
+  return foundByCustomer?.id ? String(foundByCustomer.id) : null;
 }
 
 /**
@@ -645,53 +663,63 @@ export async function dealAssignment(dealId: string): Promise<DealAssignment> {
 
   let owner: DealAssignment["owner"] = null;
   if (implementationId) {
-    const { data: impl } = await db()
-      .from("implementations")
-      .select("owner_id")
-      .eq("id", implementationId)
-      .maybeSingle();
+    // A failed read is not "unassigned": the person who just claimed it would
+    // see "Unassigned" and claim again.
+    const impl = rowOrThrow<any>(
+      await db()
+        .from("implementations")
+        .select("owner_id")
+        .eq("id", implementationId)
+        .maybeSingle(),
+      "this deal's owner",
+    );
     if (impl?.owner_id) {
       const m = pool.find((p) => p.teamMemberId === String(impl.owner_id));
       if (m) owner = { teamMemberId: m.teamMemberId, name: m.name, email: m.email };
       else {
-        const { data: tm } = await db()
-          .from("team_members")
-          .select("id,name,email")
-          .eq("id", impl.owner_id)
-          .maybeSingle();
+        const tm = rowOrThrow<any>(
+          await db()
+            .from("team_members")
+            .select("id,name,email")
+            .eq("id", impl.owner_id)
+            .maybeSingle(),
+          "this deal's owner",
+        );
         if (tm)
           owner = { teamMemberId: String(tm.id), name: String(tm.name), email: tm.email ?? null };
       }
     }
   }
 
-  const [{ data: ledger }, { count: reports }, { data: dealRow }, { data: liveProjects }] =
-    await Promise.all([
-      db()
-        .from("portal_assignments")
-        .select(
-          "id,deal_id,implementation_id,team_member_id,weight,breakdown,source,note,created_at,team_members(name)",
-        )
-        .eq("deal_id", dealId)
-        .order("created_at", { ascending: false })
-        .limit(1),
-      db()
-        .from("portal_gong_reports")
-        .select("id", { count: "exact", head: true })
-        .eq("account_id", dealId),
-      db()
-        .from("portal_accounts")
-        .select("sow_document_path,sow_document_url,sow_reference,intake,welcome_issued_at")
-        .eq("id", dealId)
-        .maybeSingle(),
-      db()
-        .from("implementations")
-        .select("id")
-        .eq("deal_id", dealId)
-        .is("superseded_by_implementation_id", null)
-        .limit(1),
-    ]);
-  const l = (ledger ?? [])[0] as any;
+  const [ledgerRes, { count: reports }, dealRowRes, liveProjectsRes] = await Promise.all([
+    db()
+      .from("portal_assignments")
+      .select(
+        "id,deal_id,implementation_id,team_member_id,weight,breakdown,source,note,created_at,team_members(name)",
+      )
+      .eq("deal_id", dealId)
+      .order("created_at", { ascending: false })
+      .limit(1),
+    db()
+      .from("portal_gong_reports")
+      .select("id", { count: "exact", head: true })
+      .eq("account_id", dealId),
+    db()
+      .from("portal_accounts")
+      .select("sow_document_path,sow_document_url,sow_reference,intake,welcome_issued_at")
+      .eq("id", dealId)
+      .maybeSingle(),
+    db()
+      .from("implementations")
+      .select("id")
+      .eq("deal_id", dealId)
+      .is("superseded_by_implementation_id", null)
+      .limit(1),
+  ]);
+  const ledger = rowsOrThrow<any>(ledgerRes, "this deal's assignment");
+  const dealRow = rowOrThrow<any>(dealRowRes, "this deal");
+  const liveProjects = rowsOrThrow<any>(liveProjectsRes, "this deal's implementation");
+  const l = ledger[0] as any;
   // Before Start onboarding there is no project to carry the owner, so a
   // claim or a hand-pick lives only in the ledger. Read it from there, or
   // the person who just claimed sees "Unassigned" and clicks again. Once the

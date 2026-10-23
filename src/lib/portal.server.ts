@@ -7,6 +7,7 @@ import {
 } from "./customer-commitments";
 import { customerTaskSteps, type CustomerTaskStep } from "./customer-next-steps";
 import { customerFacingNameFor } from "./server/customer-facing-name";
+import { rowOrThrow, rowsOrThrow } from "./server/db-read";
 import { LIFECYCLE_STAGES } from "./lifecycle";
 import { planEndDate } from "./date-labels";
 import { normalizeStage } from "./hub-format";
@@ -38,13 +39,16 @@ export interface CallerProfile {
 }
 
 export async function callerProfile(userId: string): Promise<CallerProfile> {
-  const { data } = await db()
-    .from("portal_profiles")
-    .select("id, email, full_name, role, team_member_id")
-    .eq("id", userId)
-    .maybeSingle();
+  const data = rowOrThrow<CallerProfile>(
+    await db()
+      .from("portal_profiles")
+      .select("id, email, full_name, role, team_member_id")
+      .eq("id", userId)
+      .maybeSingle(),
+    "your profile",
+  );
   if (!data) throw new Error("Unauthorized: no profile for this user");
-  return data as CallerProfile;
+  return data;
 }
 
 /** Throws unless the caller's portal_profiles.role is internal (not 'customer'). */
@@ -161,47 +165,57 @@ export async function loadPortalHome(userId: string): Promise<PortalHome> {
   const grants = await requireGrants(userId);
   const customerIds = [...new Set(grants.map((g) => g.customer_id))];
 
-  const [{ data: customers }, { data: allImpls }] = await Promise.all([
+  // Every read here is the customer's own plan. A failed read is "could not
+  // load", never an empty plan: an empty plan tells a customer their
+  // onboarding has not started, and a missing milestone list tells them no
+  // work is done. The failure goes to the log; the customer sees a plain
+  // sentence and can retry.
+  const [customersRes, implsRes] = await Promise.all([
     db().from("customers").select("id, name").in("id", customerIds),
     db().from("implementations").select("*").in("customer_id", customerIds),
   ]);
+  const customers = rowsOrThrow<any>(customersRes, "your onboarding plan");
+  const allImpls = rowsOrThrow<any>(implsRes, "your onboarding plan");
 
   // A scoped grant must never surface a sibling implementation.
-  const impls = scopeImplementations((allImpls ?? []) as any[], grants);
+  const impls = scopeImplementations(allImpls as any[], grants);
 
-  const customerName = (customers ?? []).map((c: any) => c.name).join(" · ") || "Customer";
-  const implIds = (impls ?? []).map((i: any) => i.id);
+  const customerName = customers.map((c: any) => c.name).join(" · ") || "Customer";
+  const implIds = impls.map((i: any) => i.id);
 
   // Only the customer's own shared tasks are read here. The filter is repeated
   // in customerTaskSteps, so a change to this query cannot widen the view.
-  const [{ data: milestones }, { data: commitments }, { data: history }, { data: tasks }] =
-    implIds.length
-      ? await Promise.all([
-          db()
-            .from("milestones")
-            .select("id, implementation_id, name, status, target_date, completed_date, stage")
-            .in("implementation_id", implIds),
-          db()
-            .from("commitments")
-            .select("id, implementation_id, description, due_date, status, committed_to")
-            .in("implementation_id", implIds),
-          db()
-            .from("implementation_stage_history")
-            .select("id, implementation_id, stage, entered_at")
-            .in("implementation_id", implIds)
-            .order("entered_at", { ascending: false })
-            .limit(6),
-          db()
-            .from("work_items")
-            .select("id, implementation_id, title, status, party, visibility, due_at")
-            .in("implementation_id", implIds)
-            .eq("party", "customer")
-            .eq("visibility", "shared"),
-        ])
-      : [{ data: [] }, { data: [] }, { data: [] }, { data: [] }];
+  const [milestonesRes, commitmentsRes, historyRes, tasksRes] = implIds.length
+    ? await Promise.all([
+        db()
+          .from("milestones")
+          .select("id, implementation_id, name, status, target_date, completed_date, stage")
+          .in("implementation_id", implIds),
+        db()
+          .from("commitments")
+          .select("id, implementation_id, description, due_date, status, committed_to")
+          .in("implementation_id", implIds),
+        db()
+          .from("implementation_stage_history")
+          .select("id, implementation_id, stage, entered_at")
+          .in("implementation_id", implIds)
+          .order("entered_at", { ascending: false })
+          .limit(6),
+        db()
+          .from("work_items")
+          .select("id, implementation_id, title, status, party, visibility, due_at")
+          .in("implementation_id", implIds)
+          .eq("party", "customer")
+          .eq("visibility", "shared"),
+      ])
+    : [{ data: [] }, { data: [] }, { data: [] }, { data: [] }];
+  const milestones = rowsOrThrow<any>(milestonesRes, "your onboarding plan");
+  const commitments = rowsOrThrow<any>(commitmentsRes, "your onboarding plan");
+  const history = rowsOrThrow<any>(historyRes, "your onboarding plan");
+  const tasks = rowsOrThrow<any>(tasksRes, "your onboarding plan");
 
   const customerById = new Map<string, string>(
-    (customers ?? []).map((c: any) => [c.id as string, c.name as string]),
+    customers.map((c: any) => [c.id as string, c.name as string]),
   );
   // The customer reads their own name here: the deal's customer-facing name.
   const facingName = new Map<string, string>();
@@ -326,7 +340,7 @@ export async function loadPortalTickets(userId: string): Promise<{
   const grants = await requireGrants(userId);
   const customerIds = [...new Set(grants.map((g) => g.customer_id))];
 
-  const [{ data: customers }, { data: allTickets }] = await Promise.all([
+  const [customersRes, ticketsRes] = await Promise.all([
     db().from("customers").select("id, name").in("id", customerIds),
     db()
       .from("tickets")
@@ -336,37 +350,46 @@ export async function loadPortalTickets(userId: string): Promise<{
       .in("customer_id", customerIds)
       .order("created_at", { ascending: false }),
   ]);
+  // A failed read is "could not load", never "you have no requests".
+  const customers = rowsOrThrow<any>(customersRes, "your requests");
+  const allTickets = rowsOrThrow<any>(ticketsRes, "your requests");
 
   // Account-level tickets (no implementation) stay visible to scoped users;
   // tickets belonging to a sibling implementation do not.
-  const tickets = (allTickets ?? []).filter((t: any) =>
+  const tickets = allTickets.filter((t: any) =>
     grantAllows(grants, t.customer_id, t.implementation_id ?? null),
   );
 
   const ticketIds = (tickets ?? []).map((t: any) => t.id);
   // Customers must NEVER see internal comments — filtered here, server-side.
-  const { data: comments } = ticketIds.length
-    ? await db()
-        .from("ticket_comments")
-        .select("id, ticket_id, author_id, author_email, body, internal, created_at")
-        .in("ticket_id", ticketIds)
-        .eq("internal", false)
-        .order("created_at", { ascending: true })
-    : { data: [] };
+  const comments = ticketIds.length
+    ? rowsOrThrow<any>(
+        await db()
+          .from("ticket_comments")
+          .select("id, ticket_id, author_id, author_email, body, internal, created_at")
+          .in("ticket_id", ticketIds)
+          .eq("internal", false)
+          .order("created_at", { ascending: true }),
+        "your requests",
+      )
+    : [];
 
-  const authorIds = Array.from(
-    new Set((comments ?? []).map((c: any) => c.author_id).filter(Boolean)),
-  );
-  const { data: authors } = authorIds.length
-    ? await db().from("portal_profiles").select("id, full_name, email, role").in("id", authorIds)
-    : { data: [] };
-  const authorById = new Map<string, any>((authors ?? []).map((a: any) => [a.id, a]));
+  const authorIds = Array.from(new Set(comments.map((c: any) => c.author_id).filter(Boolean)));
+  // The author decides "GoCanvas team" against "You": a failed read here would
+  // label a team reply as the customer's own, so it is not left silent.
+  const authors = authorIds.length
+    ? rowsOrThrow<any>(
+        await db().from("portal_profiles").select("id, full_name, email, role").in("id", authorIds),
+        "your requests",
+      )
+    : [];
+  const authorById = new Map<string, any>(authors.map((a: any) => [a.id, a]));
 
   return {
-    customers: (customers ?? []).map((c: any) => ({ id: c.id, name: c.name })),
-    tickets: (tickets ?? []).map((t: any) => ({
+    customers: customers.map((c: any) => ({ id: c.id, name: c.name })),
+    tickets: tickets.map((t: any) => ({
       ...t,
-      comments: (comments ?? [])
+      comments: comments
         .filter((c: any) => c.ticket_id === t.id)
         .map((c: any) => {
           const author = c.author_id ? authorById.get(c.author_id) : null;
@@ -409,11 +432,12 @@ export async function submitPortalTicket(
   if (allowed !== null && allowed.size === 1) {
     implementationId = [...allowed][0] ?? null;
   } else {
-    const { data: impls } = await db()
-      .from("implementations")
-      .select("id")
-      .eq("customer_id", input.customerId);
-    const visible = (impls ?? []).filter((i: any) => allowed === null || allowed.has(i.id));
+    // A failed read must not file the ticket at account level by accident.
+    const impls = rowsOrThrow<any>(
+      await db().from("implementations").select("id").eq("customer_id", input.customerId),
+      "your onboarding plan",
+    );
+    const visible = impls.filter((i: any) => allowed === null || allowed.has(i.id));
     implementationId = visible.length === 1 ? visible[0].id : null;
   }
 
@@ -432,11 +456,14 @@ export async function submitPortalTicket(
 
 export async function replyPortalTicket(userId: string, ticketId: string, body: string) {
   const grants = await requireGrants(userId);
-  const { data: ticket } = await db()
-    .from("tickets")
-    .select("id, customer_id, implementation_id")
-    .eq("id", ticketId)
-    .maybeSingle();
+  const ticket = rowOrThrow<any>(
+    await db()
+      .from("tickets")
+      .select("id, customer_id, implementation_id")
+      .eq("id", ticketId)
+      .maybeSingle(),
+    "this request",
+  );
   // Scope matters on reply as much as on read: without this check a scoped
   // contact could comment on a sibling implementation's ticket by id.
   if (!ticket || !grantAllows(grants, ticket.customer_id, ticket.implementation_id ?? null)) {

@@ -15,7 +15,7 @@ import {
 } from "@/lib/signals/alert-rules";
 import { cn } from "@/lib/utils";
 import { When } from "@/components/when";
-import { errorMessage } from "@/lib/error-message";
+import { RouteLoadFailed } from "@/components/load-failed";
 
 const signalsQuery = queryOptions({
   queryKey: ["signals"],
@@ -45,13 +45,11 @@ export const Route = createFileRoute("/signals")({
     ],
   }),
   loader: ({ context }) => {
-    context.queryClient.ensureQueryData(signalsQuery);
+    // A failed read surfaces through the page's own query (and its Retry); the
+    // prefetch must not become an unhandled rejection.
+    void context.queryClient.ensureQueryData(signalsQuery).catch(() => {});
   },
-  errorComponent: ({ error }) => (
-    <div role="alert" className="p-6 text-[13px] text-destructive">
-      Could not load signals: {errorMessage(error)}
-    </div>
-  ),
+  errorComponent: ({ error, reset }) => <RouteLoadFailed error={error} reset={reset} />,
   component: SignalsPage,
 });
 
