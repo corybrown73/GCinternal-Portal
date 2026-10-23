@@ -242,7 +242,29 @@ export type TranscriptContext = {
   hasHandoff: boolean;
   /** Answered handoff questions are listed so the model does not re-answer them. */
   handoffAnswered: string[];
+  /**
+   * A Partner Implementation. Its dates live on the partner journey, so a
+   * standard plan-date change is never offered for it, and never applied.
+   */
+  partner: boolean;
 };
+
+/**
+ * Why a standard plan date is not applied to a partner implementation. Shown
+ * to the reviewer on the row, unchanged, and the same whether the proposal is
+ * new or was made by an earlier reading.
+ */
+export const PARTNER_PLAN_DATE_REFUSAL =
+  "This is a partner implementation, so a standard plan date from a transcript is not applied to it. Its dates are kept on the partner journey. Nothing was changed.";
+
+/**
+ * Whether a proposal may be offered for this implementation. A standard
+ * plan-date change is never offered for a partner; every other kind of
+ * proposal is offered as before.
+ */
+export function proposalOfferable(p: { type: string }, partner: boolean): boolean {
+  return !(partner && p.type === "target_date");
+}
 
 /**
  * The context block, as text, sent before the transcript. Ids are given in
@@ -268,6 +290,11 @@ export function buildTranscriptContextText(ctx: TranscriptContext): string {
     `Current implementation owner: ${ctx.owner ? `${ctx.owner.name} [${ctx.owner.id}]` : "nobody yet"} — an "owner" proposal is only for a different person`,
     `Close date: ${ctx.timeline.closeDate ?? "unknown"}`,
     `Planned go-live / target date: ${ctx.timeline.liveDate ?? "unknown"}`,
+    ...(ctx.partner
+      ? [
+          `Partner implementation: yes. Its dates are kept on the partner journey, so propose no target_date change for it.`,
+        ]
+      : []),
     `First form: ${ctx.timeline.firstForm ?? "not named yet"}`,
     `Transcript file: ${ctx.attachment.title ?? "untitled"}, uploaded ${ctx.attachment.uploadedAt ?? "unknown date"}`,
     ``,
@@ -472,8 +499,10 @@ export function proposalDefaultSelected(
     "type" | "owner_team_member_id" | "proposed_date" | "duplicate_of_id" | "intake_key" | "text"
   >,
   resolvedOwnerId: string,
+  partner = false,
 ): boolean {
   if (p.duplicate_of_id) return false;
+  if (!proposalOfferable(p, partner)) return false;
   if (p.type === "target_date") return Boolean(p.proposed_date && isValidIsoDate(p.proposed_date));
   if (p.type === "owner") return resolvedOwnerId !== "";
   if (p.type === "intake_suggestion") return Boolean(p.intake_key) && p.text.trim() !== "";

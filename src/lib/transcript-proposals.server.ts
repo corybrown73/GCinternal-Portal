@@ -1,7 +1,9 @@
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 
+import { isPartnerJourney } from "./partner-implementation";
 import { storedFollowupDraft, type TranscriptFollowup } from "./transcript-followup";
 import {
+  PARTNER_PLAN_DATE_REFUSAL,
   proposalApplyPlan,
   type EvidenceProposalRow,
   type ProposalApplyPlan,
@@ -45,6 +47,11 @@ export type TranscriptWork = {
    * as for a reading from before the drafts).
    */
   followups: TranscriptFollowup[];
+  /**
+   * A Partner Implementation. The panel does not pre-select a standard
+   * plan-date proposal for it, and applying one is refused.
+   */
+  partner: boolean;
 };
 
 /** Readings older than this have had their say; the evidence row remains. */
@@ -54,7 +61,7 @@ export async function loadTranscriptWork(
   implementationId: string,
   now: Date = new Date(),
 ): Promise<TranscriptWork> {
-  const [{ data: jobs }, rows] = await Promise.all([
+  const [{ data: jobs }, rows, { data: journey }] = await Promise.all([
     db()
       .from("portal_ai_jobs")
       .select("subject_id,status,step,result,last_error,created_at")
@@ -65,7 +72,15 @@ export async function loadTranscriptWork(
     allProposalRows<Record<string, any> & { id: string }>((q) =>
       q.select("*").eq("implementation_id", implementationId),
     ),
+    db()
+      .from("implementations")
+      .select("journey_type,partner_key")
+      .eq("id", implementationId)
+      .maybeSingle(),
   ]);
+  const partner = isPartnerJourney(
+    (journey ?? {}) as { journey_type?: string | null; partner_key?: string | null },
+  );
   // Newest first, as the panel lists them.
   const list = [...rows].sort((a, b) =>
     String(b["created_at"] ?? "").localeCompare(String(a["created_at"] ?? "")),
@@ -192,7 +207,7 @@ export async function loadTranscriptWork(
     });
   }
 
-  return { jobs: jobLines, proposals, followups };
+  return { jobs: jobLines, proposals, followups, partner };
 }
 
 /** PostgREST answers at most this many rows per query unless told otherwise; the reads here page past it. */
@@ -364,11 +379,20 @@ export async function applyProposal(
   const implementationId = String(seen.implementation_id);
   const { data: impl } = await db()
     .from("implementations")
-    .select("id,deal_id")
+    .select("id,deal_id,journey_type,partner_key")
     .eq("id", implementationId)
     .maybeSingle();
   if (!impl) throw new Error("That implementation no longer exists.");
   const dealId = (impl.deal_id as string | null) ?? null;
+  const partner = isPartnerJourney(
+    impl as { journey_type?: string | null; partner_key?: string | null },
+  );
+  // Keyed on the row's type, before the plan is read: a partner's standard
+  // plan-date row is refused with the same reason whatever date it carries,
+  // rather than reported as a missing date. Refused before the row is claimed,
+  // so nothing is written and the row stays pending for dismissal. This covers
+  // rows an earlier reading made, which generation never offered to a partner.
+  if (seen.type === "target_date" && partner) throw new Error(PARTNER_PLAN_DATE_REFUSAL);
 
   const plan = proposalApplyPlan(
     {
@@ -391,7 +415,7 @@ export async function applyProposal(
   const row = await claimRow(id, actor);
   let created: { entityType: string; entityId: string | null };
   try {
-    created = await createFromPlan(plan, { implementationId, dealId, actor });
+    created = await createFromPlan(plan, { implementationId, dealId, actor, partner });
   } catch (e) {
     await releaseRow(id, actor);
     throw e;
@@ -414,7 +438,7 @@ export async function applyProposal(
 /** The create itself, through the path the matching form would call. */
 async function createFromPlan(
   plan: Exclude<ProposalApplyPlan, { kind: "blocked" }>,
-  env: { implementationId: string; dealId: string | null; actor: Actor },
+  env: { implementationId: string; dealId: string | null; actor: Actor; partner: boolean },
 ): Promise<{ entityType: string; entityId: string | null }> {
   const { implementationId, dealId, actor } = env;
   const hub = await import("./hub.server");
@@ -492,6 +516,9 @@ async function createFromPlan(
       break;
     }
     case "target_date": {
+      // The second guard, on the write itself: the plan and the record column
+      // are never written for a partner, whichever path reached this point.
+      if (env.partner) throw new Error(PARTNER_PLAN_DATE_REFUSAL);
       if (plan.via === "plan" && dealId) {
         // The plan owns the date: the override on its last milestone is what
         // the page shows, and the next plan sync copies it onto the record.

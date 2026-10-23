@@ -7,10 +7,12 @@ import type { BetaContentBlockParam } from "@anthropic-ai/sdk/resources/beta/mes
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 
 import type { AiUsage } from "./server/ai/client";
+import { isPartnerJourney } from "./partner-implementation";
 import {
   attachmentReferenceFor,
   buildTranscriptContextText,
   isValidIsoDate,
+  proposalOfferable,
   transcriptAnalysisSchema,
   type TranscriptAnalysis,
   type TranscriptContext,
@@ -74,7 +76,9 @@ export async function loadTranscriptContext(
 ): Promise<TranscriptContext> {
   const { data: impl } = await db()
     .from("implementations")
-    .select("id,name,customer_id,deal_id,current_stage,target_launch_date,owner_id")
+    .select(
+      "id,name,customer_id,deal_id,current_stage,target_launch_date,owner_id,journey_type,partner_key",
+    )
     .eq("id", implementationId)
     .maybeSingle();
   if (!impl) throw new Error("That implementation no longer exists.");
@@ -167,6 +171,7 @@ export async function loadTranscriptContext(
     },
     hasHandoff,
     handoffAnswered,
+    partner: isPartnerJourney(impl),
   };
 }
 
@@ -272,9 +277,12 @@ export async function persistProposals(args: {
   if (readError) throw new Error(`Could not read the earlier proposals: ${readError.message}`);
   const earlierIds = ((earlier ?? []) as Array<{ id: string }>).map((r) => String(r.id));
 
+  // A proposal the journey cannot take is not kept: a standard plan date is
+  // never offered for a partner implementation.
+  const offered = args.analysis.proposals.filter((p) => proposalOfferable(p, args.context.partner));
   let kept: string[] = [];
-  if (args.analysis.proposals.length > 0) {
-    const rows = args.analysis.proposals.map((p) =>
+  if (offered.length > 0) {
+    const rows = offered.map((p) =>
       proposalRowFor(p, args.context, {
         implementationId: args.implementationId,
         evidenceId,
