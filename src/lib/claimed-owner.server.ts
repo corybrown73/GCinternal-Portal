@@ -178,14 +178,13 @@ export async function reconcileImplementationOwners(
   let applied = 0;
   if (opts.apply) {
     for (const r of rows) {
-      // Only while still empty: a person who set an owner since wins.
-      const { error: e } = await db()
-        .from("implementations")
-        .update({ owner_id: r.teamMemberId })
-        .eq("id", r.implementationId)
-        .is("owner_id", null);
+      // Through the ownership locks, which read the newest record again there and
+      // set the owner only while the project has none: a person who set one since wins.
+      const { data: set, error: e } = await db().rpc("portal_inherit_pre_project_owner", {
+        p_implementation: r.implementationId,
+      });
       if (e) throw new Error(`Could not set the owner on ${r.implementationId}: ${e.message}`);
-      applied += 1;
+      if (set === true) applied += 1;
     }
   }
   return { rows, applied };

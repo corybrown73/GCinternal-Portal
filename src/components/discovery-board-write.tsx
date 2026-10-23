@@ -74,7 +74,6 @@ export function DiscoveryBoardPanel({
         data: {
           id: implementation.id,
           name: implementation.name,
-          ownerId: implementation.owner_id,
           salesOwner: implementation.sales_owner,
           tier: implementation.tier,
           status: implementation.status as "on_track" | "at_risk" | "blocked" | "idle",
@@ -245,7 +244,6 @@ export function CustomerGoalsPanel({
         data: {
           id: implementation.id,
           name: implementation.name,
-          ownerId: implementation.owner_id,
           salesOwner: implementation.sales_owner,
           tier: implementation.tier,
           status: implementation.status as "on_track" | "at_risk" | "blocked" | "idle",

@@ -98,3 +98,10 @@ jobs:
             echo "== invariants: $t"
             psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$t"
           done
+      - name: Concurrency, overlapping sessions (0087)
+        # The ownership race tests need real locks, so each actor is its own psql
+        # session. They commit their fixtures and remove them on exit, and they refuse
+        # to run on a database that already holds an earlier run's owner history.
+        env:
+          DB_CMD: "psql postgresql://postgres:postgres@127.0.0.1:54322/postgres -X -q -At -v ON_ERROR_STOP=1"
+        run: bash supabase/tests/0087_claim_deal_concurrency.sh

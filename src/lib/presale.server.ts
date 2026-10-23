@@ -440,6 +440,16 @@ export async function createDeal(
   entry?: DealEntryResult;
 }> {
   await requireSalesEditor(userId);
+  // Naming someone as the owner of an account is an assignment, which only a manager
+  // makes. Checked before anything is written, so a refusal leaves no deal behind.
+  if (input.coverForTeamMemberId) {
+    const { actorMayAssignOwner } = await import("./owner-change.server");
+    if (!(await actorMayAssignOwner(userId))) {
+      throw new Error(
+        "Only an admin, super admin or manager can create an account for a colleague.",
+      );
+    }
+  }
   // Checked before anything is written: a wrong pick must not leave a deal behind.
   if (input.amOwnerId) {
     const allowed = ownerOptionsByRole(await profileDirectory()).am;
@@ -490,17 +500,20 @@ export async function createDeal(
       .eq("active", true)
       .maybeSingle();
     if (member) {
-      await db()
-        .from("portal_assignments")
-        .insert({
-          deal_id: result.account.id,
-          team_member_id: member.id,
-          weight: 0,
-          breakdown: {},
-          source: "manual",
-          actor_profile_id: userId,
-          note: `Created while covering for ${member.name}`,
-        });
+      // Through the ownership locks, like every other write of the deal's owner.
+      // The account was just created, so it has no project yet and only the record is written.
+      const { error: recordError } = await db().rpc("portal_record_assignment", {
+        p_deal: result.account.id,
+        p_team_member: member.id,
+        p_weight: 0,
+        p_breakdown: {},
+        p_source: "manual",
+        p_actor_profile: userId,
+        p_note: `Created while covering for ${member.name}`,
+        p_mode: "manager",
+        p_actor_kind: "user",
+      });
+      if (recordError) console.error("[presale] could not record the covered owner", recordError);
     }
   }
 
@@ -2171,16 +2184,13 @@ export async function startOnboardingAs(
   // record already satisfies — a call note on file, the SOW uploaded, the
   // champion named, the kickoff booked. Never throws: the project exists.
   try {
-    const { data: led } = await db()
-      .from("portal_assignments")
-      .select("team_member_id")
-      .eq("deal_id", dealId)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    if (led?.team_member_id) {
-      await db().from("implementations").update({ owner_id: led.team_member_id }).eq("id", implId);
-    }
+    // The owner is copied from the assignment record under the ownership locks, and
+    // only when the project has none, so it cannot replace an owner set meanwhile.
+    const { error: inheritError } = await db().rpc("portal_inherit_pre_project_owner", {
+      p_implementation: implId,
+    });
+    if (inheritError)
+      console.error("[presale] could not carry the owner onto the new project", inheritError);
     const { readIntake } = await import("./intake-answers");
     const intake = readIntake((account as { intake?: unknown }).intake);
 

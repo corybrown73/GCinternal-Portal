@@ -27,6 +27,7 @@ import { resolveClaimedOwner } from "./claimed-owner";
 import { matchesScope } from "./ownership";
 import { excludeTests, isTestAccount } from "./test-accounts";
 import type { ResolvedScope } from "./ownership.server";
+import { actorMayAssignOwner, changeImplementationOwner } from "./owner-change.server";
 
 import { EDITABLE_RECORD_FIELDS, type EditableRecordField } from "./record-fields";
 import { SOLUTION_COMPLETE_STATUS } from "./solution-enums";
@@ -2297,10 +2298,20 @@ export async function createImplementation(args: {
     }
   }
 
+  // An owner is never written on insert: the database refuses it. A named owner is
+  // set after the insert, through the owner function, and only for a manager.
+  const { owner_id: namedOwner, ...patch } = args.patch as Record<string, unknown>;
+  const ownerToSet = typeof namedOwner === "string" && namedOwner ? namedOwner : null;
+  if (ownerToSet && !(await actorMayAssignOwner(args.actorProfileId ?? null))) {
+    throw new Error(
+      "Forbidden: only an admin, super admin or manager can name the owner of a new project.",
+    );
+  }
+
   const { data: impl, error: implError } = await db()
     .from("implementations")
-    .insert({ ...args.patch, customer_id: customerId, current_stage: "handoff" })
-    .select("id,stage_entered_at,created_at,owner_id")
+    .insert({ ...patch, customer_id: customerId, current_stage: "handoff" })
+    .select("id,stage_entered_at,created_at,owner_id,deal_id")
     .single();
 
   if (implError || !impl) {
@@ -2310,6 +2321,30 @@ export async function createImplementation(args: {
         ? detail
         : `${detail} — the customer record was created, so select it as an existing customer and retry.`,
     );
+  }
+
+  if (ownerToSet) {
+    try {
+      await changeImplementationOwner({
+        implementationId: String(impl.id),
+        ownerId: ownerToSet,
+        actorProfileId: args.actorProfileId ?? "",
+        reason: "Named when the project was created",
+      });
+    } catch (e) {
+      throw new Error(
+        `The project was created, but its owner could not be set: ${e instanceof Error ? e.message : String(e)}`,
+      );
+    }
+  } else if (impl.deal_id) {
+    // A project made for a deal takes the owner the deal already has in its record
+    // (a claim or an assignment made before the project existed), as onboarding does.
+    // Never throws: the project exists, and an owner can be set by hand.
+    const { error: inheritError } = await db().rpc("portal_inherit_pre_project_owner", {
+      p_implementation: impl.id,
+    });
+    if (inheritError)
+      console.error("[hub] could not carry the deal's owner onto the new project", inheritError);
   }
 
   const { error: historyError } = await db()
@@ -2396,6 +2431,13 @@ export async function updateImplementation(
   patch: Record<string, unknown>,
   opts: { actorProfileId?: string | null } = {},
 ) {
+  // An owner changes only through setImplementationOwner. A plain save that carried
+  // one would reassign an account without the lock, the history, or the role check.
+  if ("owner_id" in patch) {
+    throw new Error(
+      "An account owner changes only through the owner function, never a plain save.",
+    );
+  }
   // A hand edit of the target on a project a deal's plan keeps writes
   // target_launch_date only. syncTargetLaunch reads target_date as the date
   // it last wrote and leaves the hand edit alone while the plan's own target
@@ -2529,6 +2571,11 @@ export async function handOffPartner(args: {
   enteredBy: string | null;
   actorProfileId: string | null;
 }) {
+  if (args.teamMemberId && !(await actorMayAssignOwner(args.actorProfileId))) {
+    throw new Error(
+      "Forbidden: only an admin, super admin or manager can name the owner at handoff.",
+    );
+  }
   const { data: impl, error } = await db()
     .from("implementations")
     .select("id,current_stage,journey_type,partner_key,deal_id")
@@ -3202,6 +3249,50 @@ export async function attachmentLink(path: string) {
  * writing, and the customer path records through the same helper — so "who
  * changed the owner, and when" survives.
  */
+/**
+ * A deliberate change of an account's owner: an assignment, a reassignment or a clear.
+ * Only an admin, super admin or manager (checked here, and again in the database).
+ * `expectedOwnerId`, when given, refuses the change if the owner is no longer what the
+ * person saw. The change, its history row and the assignment record commit together.
+ */
+export async function setImplementationOwner(args: {
+  implementationId: string;
+  ownerId: string | null;
+  actorProfileId: string;
+  reason?: string | null;
+  expectedOwnerId?: string | null | undefined;
+}): Promise<{
+  ok: true;
+  changed: boolean;
+  previousOwnerId: string | null;
+  newOwnerId: string | null;
+}> {
+  if (!(await actorMayAssignOwner(args.actorProfileId))) {
+    throw new Error(
+      "Forbidden: only an admin, super admin or manager can change an account owner.",
+    );
+  }
+  const { captureImplementation, recordImplementationChange } = await import("./activity.server");
+  const before = await captureImplementation(args.implementationId);
+  const result = await changeImplementationOwner({
+    implementationId: args.implementationId,
+    ownerId: args.ownerId,
+    actorProfileId: args.actorProfileId,
+    reason: args.reason ?? null,
+    expectedOwnerId: args.expectedOwnerId,
+  });
+  // After the write, so a feed row exists only for a change that happened.
+  if (result.changed) {
+    await recordImplementationChange(
+      args.implementationId,
+      before,
+      { owner_id: args.ownerId },
+      args.actorProfileId,
+    );
+  }
+  return { ok: true, ...result };
+}
+
 export async function updateRecordField(args: {
   implementationId: string;
   field: EditableRecordField;
@@ -3245,6 +3336,21 @@ export async function updateRecordField(args: {
   }
 
   if (spec.kind === "date" && next !== null && String(next).trim() === "") next = null;
+
+  if (args.field === "owner_id") {
+    // The owner changes only through the owner function, which checks the role and
+    // records the change. Refused for everyone else, here and in the database.
+    if (!args.actorProfileId) {
+      throw new Error("Forbidden: only an admin, super admin or manager can change the owner.");
+    }
+    await setImplementationOwner({
+      implementationId: args.implementationId,
+      ownerId: next as string | null,
+      actorProfileId: args.actorProfileId,
+      reason: "Changed on the customer page",
+    });
+    return { ok: true, field: args.field, value: next };
+  }
 
   if (spec.table === "implementations") {
     // Through updateImplementation, so the activity feed snapshot and the

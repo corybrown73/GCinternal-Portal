@@ -13,6 +13,7 @@ import {
 } from "@/lib/hub.functions";
 import { ISSUE_SEVERITIES, RISK_SEVERITIES } from "@/lib/delivery-input";
 import { cn } from "@/lib/utils";
+import { canManage, useProfile } from "@/lib/auth";
 
 const SEVERITY_LABEL: Record<string, string> = {
   low: "Low",
@@ -48,6 +49,9 @@ export function ImplementationUpdatePanel({ implementationId }: { implementation
 
   const addNote = useServerFn(addJournalEntry);
   const setField = useServerFn(setRecordField);
+  // Only an admin, super admin or manager may change the owner. The server refuses the rest.
+  const { profile } = useProfile();
+  const mayAssignOwner = canManage(profile?.role);
   const createRiskFn = useServerFn(addRisk);
   const createIssueFn = useServerFn(addIssue);
 
@@ -103,7 +107,7 @@ export function ImplementationUpdatePanel({ implementationId }: { implementation
         },
       });
 
-      if (showOwner && ownerId) {
+      if (mayAssignOwner && showOwner && ownerId) {
         await setField({ data: { implementationId, field: "owner_id", value: ownerId } });
       }
       if (showRisk && riskTitle.trim()) {
@@ -198,15 +202,17 @@ export function ImplementationUpdatePanel({ implementationId }: { implementation
               Does anything else need updating?
             </div>
             <div className="flex flex-wrap gap-x-4 gap-y-1 text-[12px]">
-              <label className="flex items-center gap-1.5">
-                <input
-                  type="checkbox"
-                  checked={showOwner}
-                  disabled={save.isPending}
-                  onChange={(e) => setShowOwner(e.target.checked)}
-                />
-                Owner
-              </label>
+              {mayAssignOwner ? (
+                <label className="flex items-center gap-1.5">
+                  <input
+                    type="checkbox"
+                    checked={showOwner}
+                    disabled={save.isPending}
+                    onChange={(e) => setShowOwner(e.target.checked)}
+                  />
+                  Owner
+                </label>
+              ) : null}
               <label className="flex items-center gap-1.5">
                 <input
                   type="checkbox"

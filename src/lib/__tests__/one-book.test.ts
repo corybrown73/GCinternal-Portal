@@ -494,6 +494,19 @@ describe("the one-off owner repair (QA 8.1)", () => {
       fake.store["implementations"]!.find((i) => i.id === id)!.owner_id as string | null;
     expect(owner("i-copyfail")).toBeNull();
 
+    // Scripted to the function's contract (0087): sets the owner from the deal's
+    // newest record when the project has none. Its locking is verified in
+    // supabase/tests/0087_claim_deal.sql, not here.
+    fake.handlers["portal_inherit_pre_project_owner"] = ({ p_implementation }) => {
+      const impl = fake.store["implementations"]!.find((i) => i.id === p_implementation)!;
+      const latest = [...(fake.store["portal_assignments"] ?? [])]
+        .filter((a) => a.deal_id === impl.deal_id)
+        .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))[0];
+      if (impl.owner_id !== null || !latest) return { data: false, error: null };
+      impl.owner_id = latest.team_member_id;
+      return { data: true, error: null };
+    };
+
     const done = await reconcileImplementationOwners({ apply: true });
     expect(done.applied).toBe(1);
     expect(owner("i-copyfail")).toBe("cory");
@@ -504,9 +517,23 @@ describe("the one-off owner repair (QA 8.1)", () => {
 });
 
 describe("removing a team member (owner guard)", () => {
-  it("refuses while a deal is claimed through the ledger alone", async () => {
-    await expect(removeTeamMember("cory")).rejects.toThrow(/still owns 1 account/);
+  // Simulated: the database counts what a person owns and refuses (portal_deactivate_team_member,
+  // 0087_ownership.sql section 9 checks the count itself, including a claim with no project).
+  it("passes the refusal from the database through, and leaves the person active", async () => {
+    fake.handlers["portal_deactivate_team_member"] = () => ({
+      data: null,
+      error: { message: "Cory still owns 1 account. Reassign them first, then remove." },
+    });
+    await expect(removeTeamMember("cory", "profile-manager")).rejects.toThrow(
+      /still owns 1 account/,
+    );
     expect(fake.store["team_members"]!.find((m) => m.id === "cory")!.active).toBe(true);
+    expect(fake.rpcs).toEqual([
+      expect.objectContaining({
+        fn: "portal_deactivate_team_member",
+        args: { p_team_member: "cory", p_actor_profile: "profile-manager" },
+      }),
+    ]);
   });
 });
 

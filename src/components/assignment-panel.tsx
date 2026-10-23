@@ -210,7 +210,7 @@ export function OwnerField({ dealId, editable }: { dealId: string; editable: boo
       <span className="block text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
         Implementation owner
       </span>
-      {a && !a.owner && inPool && !open ? (
+      {a && a.claimable && inPool && !open ? (
         <button
           type="button"
           className="mr-2 inline-flex items-center gap-1 rounded-sm bg-primary px-2 py-1 text-[11px] font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"

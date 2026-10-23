@@ -11,6 +11,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { setRecordField, updateCustomer } from "@/lib/hub.functions";
+import { canManage, useProfile } from "@/lib/auth";
 import { INDUSTRIES } from "@/lib/intake-answers";
 
 const inputClass =
@@ -41,6 +42,9 @@ export function EditCustomerDialog({
   ownerId: string | null;
   team: Array<{ id: string; name: string; role: string }>;
 }) {
+  // Only an admin, super admin or manager changes the owner. The server refuses the rest.
+  const { profile } = useProfile();
+  const mayAssignOwner = canManage(profile?.role);
   const qc = useQueryClient();
   const save = useServerFn(updateCustomer);
   const setField = useServerFn(setRecordField);
@@ -75,7 +79,7 @@ export function EditCustomerDialog({
       if (Object.keys(patch).length) {
         await save({ data: { customerId: customer.id, patch } });
       }
-      if ((draft.owner_id || null) !== (ownerId ?? null)) {
+      if (mayAssignOwner && (draft.owner_id || null) !== (ownerId ?? null)) {
         await setField({
           data: { implementationId, field: "owner_id", value: draft.owner_id || null },
         });
@@ -160,7 +164,7 @@ export function EditCustomerDialog({
                   className={inputClass}
                   value={draft.owner_id}
                   onChange={(e) => setDraft((d) => ({ ...d, owner_id: e.target.value }))}
-                  disabled={m.isPending}
+                  disabled={m.isPending || !mayAssignOwner}
                 >
                   <option value="">Unassigned</option>
                   {team.map((t) => (
