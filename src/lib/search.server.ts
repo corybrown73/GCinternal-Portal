@@ -1,6 +1,7 @@
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { isFlagOn } from "./app-config.server";
 import { createMasker } from "./demo-mode";
+import { rowsOrLog, rowsOrThrow } from "./server/db-read";
 import { type SavedView, type SavedViewSurface, type SaveViewInput } from "./saved-view-input";
 import { snippet } from "./search-snippet";
 import { stageLabel } from "./hub-format";
@@ -145,11 +146,26 @@ export async function globalSearch(rawQuery: string): Promise<SearchResult> {
     db().from("people").select("team_member_id,profile_id,name,email,auth_role").limit(cap),
   ]);
 
+  // Every group is a primary read: a group whose query failed would read as "no
+  // match in that group", and a search that quietly drops a group is the one
+  // thing a search must not do. A failure stops the search with a plain
+  // sentence; the database's own message is in the log.
+  const customerRows = rowsOrThrow<any>(customers, "search results");
+  const implRows = rowsOrThrow<any>(impls, "search results");
+  const dealNameRows = rowsOrThrow<any>(deals, "search results");
+  const dealSummaryRows = rowsOrThrow<any>(dealsBySummary, "search results");
+  const noteHits = rowsOrThrow<any>(notes, "search results");
+  const callBodyRows = rowsOrThrow<any>(callsByBody, "search results");
+  const callTitleRows = rowsOrThrow<any>(callsByTitle, "search results");
+  const ticketRows = rowsOrThrow<any>(tickets, "search results");
+  const solutionRows = rowsOrThrow<any>(solutions, "search results");
+  const personRows = rowsOrThrow<any>(people, "search results");
+
   // The view has no index to ilike against and is small, so it is filtered in
   // memory rather than pushed down. Said out loud because it is the one group
   // here that would not scale.
   const needle = query.toLowerCase();
-  const peopleRows = (people.data ?? []).filter(
+  const peopleRows = personRows.filter(
     (p: any) =>
       String(p.name ?? "")
         .toLowerCase()
@@ -160,7 +176,7 @@ export async function globalSearch(rawQuery: string): Promise<SearchResult> {
   );
 
   const customerName = new Map<string, string>();
-  for (const c of customers.data ?? []) customerName.set(c.id, c.name);
+  for (const c of customerRows) customerName.set(c.id, c.name);
 
   // Merge the two-query pairs, first occurrence winning, so a deal whose name
   // AND summary both match appears once rather than twice.
@@ -177,9 +193,9 @@ export async function globalSearch(rawQuery: string): Promise<SearchResult> {
     return out;
   };
 
-  const dealRows = mergeById<any>(deals.data, dealsBySummary.data);
-  const callRows = mergeById<any>(callsByTitle.data, callsByBody.data);
-  const noteRows = (notes.data ?? []) as any[];
+  const dealRows = mergeById<any>(dealNameRows, dealSummaryRows);
+  const callRows = mergeById<any>(callTitleRows, callBodyRows);
+  const noteRows = noteHits;
 
   // Notes and reports hang off a DEAL, and a hit that says only "note, 14
   // March" is unusable. Every one of them names its deal.
@@ -190,8 +206,12 @@ export async function globalSearch(rawQuery: string): Promise<SearchResult> {
   for (const d of dealRows) dealName.set(d.id, d.name);
   const missing = dealAccountIds.filter((id) => !dealName.has(id));
   if (missing.length) {
-    const { data: named } = await db().from("portal_accounts").select("id,name").in("id", missing);
-    for (const d of (named ?? []) as any[]) dealName.set(d.id, d.name);
+    // Only names the hits; a failure is logged and the hit shows without its deal.
+    const named = rowsOrLog<any>(
+      await db().from("portal_accounts").select("id,name").in("id", missing),
+      "search result deal names",
+    );
+    for (const d of named) dealName.set(d.id, d.name);
   }
 
   const group = (
@@ -207,14 +227,14 @@ export async function globalSearch(rawQuery: string): Promise<SearchResult> {
   });
 
   const groups: SearchGroup[] = [
-    group("customers", "Customers", customers.data ?? [], (c) => ({
+    group("customers", "Customers", customerRows, (c) => ({
       id: c.id,
       title: demo.org(c.name, c.id),
       detail: [c.segment, c.industry].filter(Boolean).join(" · ") || null,
       to: "/customers/$customerId",
       params: { customerId: c.id },
     })),
-    group("implementations", "Implementations", impls.data ?? [], (i) => ({
+    group("implementations", "Implementations", implRows, (i) => ({
       id: i.id,
       title: i.name,
       detail: i.current_stage ? stageLabel(i.current_stage) : null,
@@ -250,14 +270,14 @@ export async function globalSearch(rawQuery: string): Promise<SearchResult> {
       to: "/deals/$dealId",
       params: { dealId: r.account_id },
     })),
-    group("tickets", "Tickets", tickets.data ?? [], (t) => ({
+    group("tickets", "Tickets", ticketRows, (t) => ({
       id: t.id,
       title: t.subject,
       detail: [t.status, t.priority].filter(Boolean).join(" · ") || null,
       to: "/tickets/$ticketId",
       params: { ticketId: t.id },
     })),
-    group("solutions", "Technical solutions", solutions.data ?? [], (s) => ({
+    group("solutions", "Technical solutions", solutionRows, (s) => ({
       id: s.id,
       title: s.title,
       detail: s.status ?? null,
@@ -307,13 +327,16 @@ export async function listSavedViews(
 
   // Authorization in app code, not RLS: every app read runs on the service-role
   // client and bypasses the policy 0025 added.
-  const { data } = await db()
-    .from("saved_views")
-    .select("*")
-    .eq("surface", surface)
-    .or(`shared.eq.true,owner_profile_id.eq.${profileId}`)
-    .order("name");
-  return { enabled: true, views: (data ?? []).map((r: any) => toSavedView(r, profileId)) };
+  const data = rowsOrThrow<any>(
+    await db()
+      .from("saved_views")
+      .select("*")
+      .eq("surface", surface)
+      .or(`shared.eq.true,owner_profile_id.eq.${profileId}`)
+      .order("name"),
+    "saved views",
+  );
+  return { enabled: true, views: data.map((r: any) => toSavedView(r, profileId)) };
 }
 
 export async function saveView(profileId: string, input: SaveViewInput): Promise<SavedView> {

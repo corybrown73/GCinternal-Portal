@@ -1,6 +1,7 @@
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { sendEmail } from "./server/email";
 import { audit } from "./server/audit";
+import { rowOrLog, rowOrThrow, rowsOrLog, rowsOrThrow } from "./server/db-read";
 import { appUrl } from "./app-url";
 
 const db = () => supabaseAdmin as any;
@@ -107,11 +108,12 @@ export function rolePool(role: string): string[] {
 export const MANAGER_ROLES = ["manager", "admin", "super_admin"];
 
 async function profilesByRoles(roles: string[]): Promise<ProfileLite[]> {
-  const { data } = await db()
-    .from("portal_profiles")
-    .select("id, email, full_name, role")
-    .in("role", roles);
-  return (data ?? []) as ProfileLite[];
+  // Who gets the email. A failed read must not look like "nobody to tell", and
+  // must not fail the write it decorates either, so it is logged.
+  return rowsOrLog<ProfileLite>(
+    await db().from("portal_profiles").select("id, email, full_name, role").in("role", roles),
+    "the people to notify",
+  );
 }
 
 export async function managerProfiles(): Promise<ProfileLite[]> {
@@ -462,8 +464,7 @@ export async function loadTickets(opts: {
     if (opts.customerIds.length === 0) return [];
     query = query.in("customer_id", opts.customerIds);
   }
-  const { data: tickets } = await query;
-  let rows = (tickets ?? []) as TicketRow[];
+  let rows = rowsOrThrow<TicketRow>(await query, "tickets");
   if (opts.grants) {
     const grants = opts.grants;
     rows = rows.filter((t) =>
@@ -474,7 +475,7 @@ export async function loadTickets(opts: {
 
   const customerIds = [...new Set(rows.map((t) => t.customer_id).filter(Boolean))];
   const profileIds = [...new Set(rows.map((t) => t.assigned_to).filter(Boolean))];
-  const [{ data: customers }, { data: profiles }] = await Promise.all([
+  const [customersRes, profilesRes] = await Promise.all([
     customerIds.length
       ? db().from("customers").select("id, name").in("id", customerIds)
       : Promise.resolve({ data: [] }),
@@ -482,9 +483,12 @@ export async function loadTickets(opts: {
       ? db().from("portal_profiles").select("id, full_name, email").in("id", profileIds)
       : Promise.resolve({ data: [] }),
   ]);
-  const customerName = new Map<string, string>((customers ?? []).map((c: any) => [c.id, c.name]));
+  // Names only decorate the rows: a failure is logged and the list still shows.
+  const customers = rowsOrLog<any>(customersRes, "ticket customer names");
+  const profiles = rowsOrLog<any>(profilesRes, "ticket assignee names");
+  const customerName = new Map<string, string>(customers.map((c: any) => [c.id, c.name]));
   const profileName = new Map<string, string>(
-    (profiles ?? []).map((p: any) => [p.id, p.full_name ?? p.email]),
+    profiles.map((p: any) => [p.id, p.full_name ?? p.email]),
   );
 
   return rows.map((t) => ({
@@ -503,11 +507,10 @@ export async function loadTicket(
   ticketId: string,
   opts: { includeInternal: boolean },
 ): Promise<TicketDetail | null> {
-  const { data: ticketRow } = await db()
-    .from("tickets")
-    .select("*")
-    .eq("id", ticketId)
-    .maybeSingle();
+  const ticketRow = rowOrThrow<any>(
+    await db().from("tickets").select("*").eq("id", ticketId).maybeSingle(),
+    "this ticket",
+  );
   if (!ticketRow) return null;
   const ticket = ticketRow as TicketRow;
 
@@ -517,15 +520,14 @@ export async function loadTicket(
     .eq("ticket_id", ticketId)
     .order("created_at", { ascending: true });
   if (!opts.includeInternal) commentsQuery = commentsQuery.eq("internal", false);
-  const { data: comments } = await commentsQuery;
-  const commentRows = (comments ?? []) as TicketCommentRow[];
+  const commentRows = rowsOrThrow<TicketCommentRow>(await commentsQuery, "the ticket's comments");
 
   const profileIds = [
     ...new Set(
       [ticket.assigned_to, ...commentRows.map((c) => c.author_id)].filter(Boolean) as string[],
     ),
   ];
-  const [{ data: profiles }, customerRes] = await Promise.all([
+  const [profilesRes, customerRes] = await Promise.all([
     profileIds.length
       ? db().from("portal_profiles").select("id, full_name, email").in("id", profileIds)
       : Promise.resolve({ data: [] }),
@@ -533,14 +535,16 @@ export async function loadTicket(
       ? db().from("customers").select("id, name").eq("id", ticket.customer_id).maybeSingle()
       : Promise.resolve({ data: null }),
   ]);
+  const profiles = rowsOrLog<any>(profilesRes, "ticket author names");
+  const customerRow = rowOrLog<any>(customerRes, "the ticket's customer name");
   const profileName = new Map<string, string>(
-    (profiles ?? []).map((p: any) => [p.id, p.full_name ?? p.email]),
+    profiles.map((p: any) => [p.id, p.full_name ?? p.email]),
   );
 
   return {
     ticket: {
       ...ticket,
-      customer_name: (customerRes as any)?.data?.name ?? null,
+      customer_name: customerRow?.name ?? null,
       assignee_name: ticket.assigned_to ? (profileName.get(ticket.assigned_to) ?? null) : null,
     },
     comments: commentRows.map((c) => ({
@@ -558,11 +562,16 @@ export async function loadTicket(
 export type CustomerGrant = { customer_id: string; implementation_id: string | null };
 
 export async function linkedGrants(profileId: string): Promise<CustomerGrant[]> {
-  const { data } = await db()
-    .from("customer_users")
-    .select("customer_id, implementation_id")
-    .eq("profile_id", profileId);
-  return (data ?? []).map((r: any) => ({
+  // A failed read must not look like "no customer is linked to this login": that
+  // sends a real customer to "ask your GoCanvas contact for an invite".
+  const data = rowsOrThrow<any>(
+    await db()
+      .from("customer_users")
+      .select("customer_id, implementation_id")
+      .eq("profile_id", profileId),
+    "your account access",
+  );
+  return data.map((r: any) => ({
     customer_id: r.customer_id as string,
     implementation_id: (r.implementation_id ?? null) as string | null,
   }));
@@ -783,6 +792,59 @@ async function existingVisitAlert(input: {
     .eq("kind", input.kind)
     .eq("payload->>visit", visit);
   return ((data ?? []) as AlertRow[]).find((a) => alertSubject(a) === subject) ?? null;
+}
+
+/** One row of the alerts page. Only the deal id leaves the payload. */
+export interface AlertListItem {
+  id: string;
+  kind: string;
+  severity: "info" | "warning" | "critical";
+  title: string;
+  detail: string | null;
+  customer_id: string | null;
+  implementation_id: string | null;
+  source: string;
+  acknowledged_at: string | null;
+  acknowledged_by: string | null;
+  notified_at: string | null;
+  created_at: string;
+  customer_name: string | null;
+  /** The deal the alert names, for one with no customer yet (a stuck closed deal). */
+  deal_id: string | null;
+}
+
+/** The 200 newest alerts, with the customer's name. */
+export async function loadAlertList(): Promise<AlertListItem[]> {
+  // A failed read is "could not load alerts", never an empty alert list: an
+  // empty list reads as "nothing is wrong".
+  const alerts = rowsOrThrow<Record<string, any>>(
+    await db()
+      .from("alerts")
+      .select(
+        "id, kind, severity, title, detail, customer_id, implementation_id, source, acknowledged_at, acknowledged_by, notified_at, created_at, payload",
+      )
+      .order("created_at", { ascending: false })
+      .limit(200),
+    "alerts",
+  );
+  // Only the deal id leaves the server, not the whole payload.
+  const rows = alerts.map(({ payload, ...a }) => ({
+    ...(a as Omit<AlertListItem, "customer_name" | "deal_id">),
+    deal_id: typeof payload?.deal_id === "string" ? (payload.deal_id as string) : null,
+  }));
+
+  const customerIds = [...new Set(rows.map((a) => a.customer_id).filter(Boolean))];
+  const customers = customerIds.length
+    ? rowsOrLog<any>(
+        await db().from("customers").select("id, name").in("id", customerIds),
+        "alert customer names",
+      )
+    : [];
+  const names = new Map<string, string>(customers.map((c: any) => [c.id, c.name as string]));
+  return rows.map((a) => ({
+    ...a,
+    customer_name: a.customer_id ? (names.get(a.customer_id) ?? null) : null,
+  }));
 }
 
 export async function acknowledgeAlert(alertId: string, profileId: string): Promise<AlertRow> {

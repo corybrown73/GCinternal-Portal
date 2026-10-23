@@ -24,6 +24,7 @@ import {
   primaryButtonClass,
   selectClass,
 } from "@/components/tickets/ticket-ui";
+import { LoadFailed } from "@/components/load-failed";
 import { When } from "@/components/when";
 
 export const Route = createFileRoute("/tickets/$ticketId")({
@@ -71,11 +72,18 @@ function TicketDetailPage() {
       </PageBody>
     );
   }
-  if (query.isError || !query.data) {
+  if (query.isError) {
+    return (
+      <PageBody>
+        <LoadFailed error={query.error} onRetry={() => void query.refetch()} className="py-1" />
+      </PageBody>
+    );
+  }
+  if (!query.data) {
     return (
       <PageBody>
         <p role="alert" className="text-[13px] text-destructive">
-          Could not load this ticket: {(query.error as Error | undefined)?.message ?? "not found"}
+          Could not load this ticket: not found
         </p>
       </PageBody>
     );

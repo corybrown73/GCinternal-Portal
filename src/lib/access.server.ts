@@ -2,6 +2,7 @@ import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { customerFacingNameFor } from "./server/customer-facing-name";
 import { sendEmail } from "./server/email";
 import { audit } from "./server/audit";
+import { rowsOrThrow } from "./server/db-read";
 import type { CallerProfile } from "./portal.server";
 import { appUrl } from "./app-url";
 
@@ -41,13 +42,7 @@ export interface AccessCustomer {
 }
 
 export async function loadAccessOverview(): Promise<AccessCustomer[]> {
-  const [
-    { data: customers },
-    { data: links },
-    { data: invites },
-    { data: contacts },
-    { data: profiles },
-  ] = await Promise.all([
+  const [customersRes, linksRes, invitesRes, contactsRes, profilesRes] = await Promise.all([
     db().from("customers").select("id, name").order("name"),
     db().from("customer_users").select("id, profile_id, customer_id, contact_id, created_at"),
     db()
@@ -57,14 +52,21 @@ export async function loadAccessOverview(): Promise<AccessCustomer[]> {
     db().from("customer_contacts").select("id, customer_id, name, email"),
     db().from("portal_profiles").select("id, email, full_name"),
   ]);
+  // Who has access to what. A failed read is not "nobody has access" (or "no
+  // invites are pending"): an admin would act on a list that is simply wrong.
+  const customers = rowsOrThrow<any>(customersRes, "customer access");
+  const links = rowsOrThrow<any>(linksRes, "customer access");
+  const invites = rowsOrThrow<any>(invitesRes, "customer access");
+  const contacts = rowsOrThrow<any>(contactsRes, "customer access");
+  const profiles = rowsOrThrow<any>(profilesRes, "customer access");
 
-  const profileById = new Map<string, any>((profiles ?? []).map((p: any) => [p.id, p]));
-  const contactById = new Map<string, any>((contacts ?? []).map((c: any) => [c.id, c]));
+  const profileById = new Map<string, any>(profiles.map((p: any) => [p.id, p]));
+  const contactById = new Map<string, any>(contacts.map((c: any) => [c.id, c]));
 
-  return (customers ?? []).map((c: any) => ({
+  return customers.map((c: any) => ({
     id: c.id,
     name: c.name,
-    users: (links ?? [])
+    users: links
       .filter((l: any) => l.customer_id === c.id)
       .map((l: any) => {
         const profile = profileById.get(l.profile_id);
@@ -78,7 +80,7 @@ export async function loadAccessOverview(): Promise<AccessCustomer[]> {
           created_at: l.created_at,
         };
       }),
-    invites: (invites ?? [])
+    invites: invites
       .filter((i: any) => i.customer_id === c.id)
       .map((i: any) => ({
         id: i.id,
@@ -91,7 +93,7 @@ export async function loadAccessOverview(): Promise<AccessCustomer[]> {
           : null,
         created_at: i.created_at,
       })),
-    contacts: (contacts ?? [])
+    contacts: contacts
       .filter((ct: any) => ct.customer_id === c.id)
       .map((ct: any) => ({ id: ct.id, name: ct.name, email: ct.email })),
   }));

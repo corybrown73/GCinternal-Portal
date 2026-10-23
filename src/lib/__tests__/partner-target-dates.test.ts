@@ -272,7 +272,9 @@ describe("missing or incomplete data never falls back to the standard plan", () 
   it("writes nothing when the implementation row cannot be read, and says so", async () => {
     state.implError = { message: "connection reset" };
     const error = await syncTargetLaunch(DEAL_ID, PROFILE_ID);
-    expect(error).toContain("connection reset");
+    // The first read (finding the deal's implementation) fails loudly now, so
+    // the sentence is the plain one; the database's message goes to the log.
+    expect(error).toContain("Could not load this deal's implementation");
     expect(writesTo("implementations")).toHaveLength(0);
   });
 
