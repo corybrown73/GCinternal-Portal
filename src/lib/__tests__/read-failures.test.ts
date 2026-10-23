@@ -221,7 +221,7 @@ describe("the customer's requests (loadPortalTickets, submitPortalTicket)", () =
       {
         ...rows(),
         implementations: [
-          ...portalRows().implementations,
+          ...(portalRows()["implementations"] ?? []),
           { id: "impl-2", customer_id: "cust-1", name: "Second" },
         ],
       },
