@@ -37,6 +37,20 @@ jobs:
       DB_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
     steps:
       - uses: actions/checkout@v4
+      - name: What this job does and does not show
+        # Said in the run summary because a green tick on this job has been
+        # read as "the migrations are live". It proves they replay on a
+        # database created minutes ago. It cannot see production.
+        run: |
+          {
+            echo "### Scratch-database check, not a production check"
+            echo
+            echo "This job replays the migrations (up, down, up) on a database created for this run."
+            echo "**It does not show that production has any of them.** A pull request that changes the"
+            echo "schema also needs the \`Production migration gate\` check: apply the migration to"
+            echo "production, run its verify file there, then add the \`production-migration-verified\` label."
+            echo "Procedure: docs/MIGRATIONS.md"
+          } >> "$GITHUB_STEP_SUMMARY"
       - uses: supabase/setup-cli@v1
         with:
           version: latest
@@ -98,3 +112,19 @@ jobs:
             echo "== invariants: $t"
             psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$t"
           done
+      - name: Verify files hold on a freshly migrated database
+        # The same read-only query a person runs against production
+        # (scripts/schema-verify.mjs). Here it proves each verify file is
+        # correct for the migration it describes; it says nothing about
+        # production.
+        run: |
+          set -euo pipefail
+          node scripts/schema-verify.mjs --failing > "$RUNNER_TEMP/verify-failing.sql"
+          failing=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -At -F ' | ' -f "$RUNNER_TEMP/verify-failing.sql")
+          if [ -n "$failing" ]; then
+            echo "::error::A verify file is false on a freshly migrated database:"
+            echo "$failing"
+            exit 1
+          fi
+          node scripts/schema-verify.mjs > "$RUNNER_TEMP/verify-all.sql"
+          echo "verify rows true on a fresh database: $(psql "$DB_URL" -v ON_ERROR_STOP=1 -At -f "$RUNNER_TEMP/verify-all.sql" | wc -l)"

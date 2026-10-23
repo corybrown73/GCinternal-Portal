@@ -1,0 +1,34 @@
+-- 0090: customer logins can no longer read customer_contacts directly.
+--
+-- THE EXPOSURE. 0005 (re-stated in 0019) gave a signed-in customer a SELECT
+-- policy on customer_contacts for their own customer. The table also holds
+-- what GoCanvas thinks of each person: `notes` (free-text internal
+-- assessment), `is_skeptic` (0018) and `comms_preference`. A customer holds a
+-- real Supabase session and the publishable key is public, so they could ask
+-- PostgREST for `customer_contacts?select=*` and read those columns for every
+-- contact at their own company. 0019's column audit flagged this and left it
+-- open ("needs its own migration").
+--
+-- WHY DROPPING THE POLICY IS THE SMALLEST SAFE FIX. Nothing in the app reads
+-- the table as the customer. Every /portal read goes through server functions
+-- on the service-role client, which RLS does not constrain; the browser client
+-- reads only portal_profiles (src/lib/auth.ts), and the only user-scoped
+-- server client is used for profile roles (presale.functions.ts). So no
+-- screen depends on the policy, and removing it needs no column list to keep
+-- in step with future columns.
+--
+-- WHAT IS KEPT. "customer_contacts internal select" (portal_is_internal())
+-- and the internal insert/update/delete policies are untouched, and the
+-- service role is unaffected. A customer who needs contact names on a screen
+-- gets them from a server function that picks the columns; if the browser
+-- ever needs them directly, add a view of customer-safe columns, not this
+-- policy back.
+--
+-- Version note: 0087-0089 are held by branches that are not merged yet, so
+-- this takes the next number nobody has claimed.
+--
+-- DEPLOY ORDER. Apply to production first and verify with
+-- supabase/verify/0090_verify.sql; no application code depends on it, so the
+-- order only matters for being sure the exposure is closed. See
+-- docs/MIGRATIONS.md.
+drop policy if exists "customer_contacts customer select" on public.customer_contacts;

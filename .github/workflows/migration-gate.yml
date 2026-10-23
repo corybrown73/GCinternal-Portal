@@ -1,0 +1,153 @@
+# Migration release controls. Runs for EVERY branch, `claude/*` included.
+#
+# WHY. A migration is applied to production by hand, in order, and the code that
+# needs it must not deploy first. The CI workflow replays migrations on a
+# scratch database, which proves they run — it says nothing about production.
+# When a PR carrying a migration (and the code that reads its new column)
+# merged before production had the migration, every read failed. The Auto PR
+# workflow guards this for teammates' branches, but it deliberately skips
+# `claude/*`, so those PRs had no guard at all.
+#
+# TWO CHECKS
+#   Migration consistency       any push or PR. Unique versions, a new migration
+#                               numbered after everything on main, and a down
+#                               script and read-only verify file for each
+#                               migration from 0087 on (scripts/check-migrations.mjs).
+#   Production migration gate   PRs only. A PR that adds or changes a migration,
+#                               a down script or a verify file FAILS until a
+#                               person with production access has applied the
+#                               migration, run its verify file there, and added
+#                               the `production-migration-verified` label.
+#
+# A green CI run is never that confirmation. The gate fails closed: no label,
+# no pass. For it to block a merge, require "Production migration gate" as a
+# status check in branch protection (docs/MIGRATIONS.md, "Branch protection").
+#
+# This workflow never connects to a database and never applies a migration.
+name: Migration gate
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled, ready_for_review]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: migration-gate-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  REPO: ${{ github.repository }}
+  HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+  VERIFIED_LABEL: production-migration-verified
+
+jobs:
+  consistency:
+    name: Migration consistency
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Fetch main
+        run: git fetch origin main:refs/remotes/origin/main
+      - name: Versions are unique, ordered, and each has its down and verify file
+        run: node scripts/check-migrations.mjs --base origin/main
+      - name: Warn when another open PR claims the same version
+        # A warning, not a failure: each of two PRs would see the other and
+        # neither could merge. Whichever merges second renumbers.
+        run: |
+          set -euo pipefail
+          mine=$(git diff --name-only origin/main...HEAD -- supabase/migrations | sed 's#.*/##')
+          [ -z "$mine" ] && { echo "No migrations added or changed."; exit 0; }
+          current=${{ github.event.pull_request.number || 0 }}
+          for pr in $(gh pr list --repo "$REPO" --state open --limit 100 --json number --jq '.[].number'); do
+            [ "$pr" = "$current" ] && continue
+            theirs=$(gh api "repos/$REPO/pulls/$pr/files" --paginate --jq '.[].filename' \
+              | grep '^supabase/migrations/' | sed 's#.*/##' || true)
+            for f in $mine; do
+              for g in $theirs; do
+                if [ "${f:0:4}" = "${g:0:4}" ] && [ "$f" != "$g" ]; then
+                  echo "::warning::$f uses the version of $g in open PR #$pr; whichever merges second must renumber."
+                fi
+              done
+            done
+          done
+
+  production-gate:
+    name: Production migration gate
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+      - name: Does this PR touch migrations?
+        id: scope
+        env:
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          files=$(gh api "repos/$REPO/pulls/$PR/files" --paginate --jq '.[].filename' \
+            | grep -E '^supabase/(migrations|down|verify)/' || true)
+          if [ -n "$files" ]; then
+            echo "gated=true" >> "$GITHUB_OUTPUT"
+            { echo 'files<<EOF'; echo "$files"; echo 'EOF'; } >> "$GITHUB_OUTPUT"
+            echo "Schema files in this PR:"; echo "$files"
+          else
+            echo "gated=false" >> "$GITHUB_OUTPUT"
+            echo "No migration, down or verify files: nothing to gate."
+          fi
+
+      - name: New migration content invalidates an earlier attestation
+        # The label says a person verified THIS migration in production. If a
+        # push changed the migration set after that, the attestation is stale.
+        if: steps.scope.outputs.gated == 'true' && github.event.action == 'synchronize'
+        env:
+          PR: ${{ github.event.pull_request.number }}
+          BEFORE: ${{ github.event.before }}
+          AFTER: ${{ github.event.after }}
+        run: |
+          set -euo pipefail
+          if git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
+            changed=$(git diff --name-only "$BEFORE" "$AFTER" -- supabase/migrations supabase/down supabase/verify)
+          else
+            changed="(history rewritten: the earlier head is gone)"
+          fi
+          labels=$(gh pr view "$PR" --repo "$REPO" --json labels --jq '.labels[].name')
+          if [ -n "$changed" ] && grep -qx "$VERIFIED_LABEL" <<<"$labels"; then
+            gh pr edit "$PR" --repo "$REPO" --remove-label "$VERIFIED_LABEL"
+            gh pr comment "$PR" --repo "$REPO" --body "$(printf 'The `%s` label was removed: the migration files changed after it was applied, so the production check must be run again.\n\nChanged:\n%s\n\n---\n_Generated by [Claude Code](https://claude.ai/code)_' "$VERIFIED_LABEL" "$changed")"
+          fi
+
+      - name: Require the production check
+        if: steps.scope.outputs.gated == 'true'
+        env:
+          PR: ${{ github.event.pull_request.number }}
+          FILES: ${{ steps.scope.outputs.files }}
+        run: |
+          set -euo pipefail
+          # Read the labels now, not from the event: a label added a moment ago
+          # (or removed by the step above) is what counts.
+          labels=$(gh pr view "$PR" --repo "$REPO" --json labels --jq '.labels[].name')
+          if grep -qx "$VERIFIED_LABEL" <<<"$labels"; then
+            echo "::notice::A person has attested that this PR's migrations are applied and verified in production ($VERIFIED_LABEL)."
+            exit 0
+          fi
+          marker="<!-- migration-gate:required -->"
+          comments=$(gh pr view "$PR" --repo "$REPO" --json comments --jq '.comments[].body')
+          if ! grep -qF "$marker" <<<"$comments"; then
+            gh pr comment "$PR" --repo "$REPO" --body "$(printf '%s\n**This PR changes the database schema. A green CI run does not mean production has it.** CI only replays migrations on a scratch database.\n\nFiles:\n%s\n\nBefore this can merge, someone with production access:\n1. applies the migration to **production** (never from CI);\n2. runs `node scripts/schema-verify.mjs --since <this migration>` and runs its output read-only in production — every row must say `ok = t`;\n3. adds the `%s` label to this PR.\n\nThe full procedure, and what to do if a step fails, is in `docs/MIGRATIONS.md`.\n\n---\n_Generated by [Claude Code](https://claude.ai/code)_' "$marker" "$(printf '%s\n' "$FILES" | sed 's/^/- `/; s/$/`/')" "$VERIFIED_LABEL")"
+          fi
+          echo "::error::This PR changes the database schema and has not been verified in production. Apply the migration to production, run its verify file there, then add the '$VERIFIED_LABEL' label. A passing CI run is not that confirmation. See docs/MIGRATIONS.md."
+          exit 1
