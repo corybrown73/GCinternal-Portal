@@ -223,3 +223,76 @@ another test.
 `0090` (PR #100) must be numbered before `0091` (PR #101) on the database it runs
 against. Merge #100 first, then bring #101 up to date with `main`. If #101 lands
 first, #100's migration check refuses `0090` as older than the newest migration.
+
+## 9. Acceptance run record
+
+Run on 2026-10-27 against branch `claude/complete-solutions-workspace` at `9a72b90`.
+This run did **not** reach a staging environment. Every browser step is therefore
+recorded as Blocked, not Passed. Nothing in this section was executed in a browser.
+
+### 9.1 Environment check
+
+| Check | Result | Status |
+| --- | --- | --- |
+| Staging Supabase project | None visible to the account (Supabase project list is empty). The repo's `.env.production` and `supabase/config.toml` both reference project `wynvngnbjasiuxkcfofu`. That project is treated as production and was not used. | Blocked |
+| Staging app URL or preview | None found in the repo or the environment | Blocked |
+| `complete_solutions` flag | Not set. No admin session exists to set it, and nothing was changed | Blocked |
+| Migrations on staging | Cannot be checked: no staging database | Blocked |
+| Local Postgres 16 (port 5433) | Not running. The data directory `/tmp/pgrun/data` holds a stale lock and PID file from an earlier start, owned by user `pgtest`. Not cleared. The SQL replay was not re-run in this run | Blocked |
+| Docker and Supabase CLI | Docker daemon not running. Supabase CLI not installed. A local stack cannot start | Blocked |
+| Browser | Playwright chromium is installed. Without a backend the app cannot sign in | Blocked |
+| Test accounts (§2) | None created | Blocked |
+| Test data (§3) | No QA TEST deals or implementations A and B | Blocked |
+| Mako Shark SOW (§4) | Not present. `private-fixtures/` does not exist and `MAKO_SOW_PATH` is unset | Blocked |
+| Model access for SOW reading | Not checked in this run | Not tested |
+
+### 9.2 Unit tests run in this session
+
+Command: `npx vitest run` on `post-sale-access`, `post-sale-writes`, `owner-change`,
+`transcript-component-update`, `sow-proposal-attribution` and `mako-shark-sow.acceptance`.
+
+- 5 files passed. 76 tests passed.
+- 10 skipped. These are the Mako Shark SOW checks, which show NOT CHECKED without the document.
+
+These are unit tests against an in-memory fake. They are not staging evidence.
+
+### 9.3 Scenario results
+
+| Section | Steps | Status | Reason |
+| --- | --- | --- | --- |
+| §5 A. First look | 1–3 | Blocked | No staging backend or accounts |
+| §5 B. Creating and editing | 4–10 | Blocked | As above |
+| §5 C. Dates and history | 11–13 | Blocked | As above |
+| §5 D. SOW review | 14–16 | Blocked | No SOW document (§9.1) |
+| §5 E. Version conflicts | 17–19 | Blocked | Needs two live sessions on staging |
+| §5 F. Permissions | 20–24 | Blocked | No accounts. The rules are covered by unit tests only |
+| §5 G. Purchase-record notes | 25–27 | Blocked | No test deal |
+| §5 H. Customer 360 and navigation | 28–30 | Blocked | As above |
+
+Nothing above is marked Passed. The permission rules and version conflicts were
+checked earlier in local SQL probes (§6). That evidence is from an earlier run and
+is not repeated here.
+
+### 9.4 Defects
+
+No defects were confirmed in this run, because no browser or staging check was run.
+No code was changed in this run.
+
+### 9.5 Blockers and actions needing approval
+
+1. Confirm which Supabase project is staging. `wynvngnbjasiuxkcfofu` must not be
+   used for staging unless the owner confirms it is not production.
+2. Create or designate a staging project and apply migrations `0086`, then `0090`
+   (if PR #100 has merged to main), then `0091`, through `docs/MIGRATIONS.md`.
+3. Set the staging environment variables (§1.2) and turn on `complete_solutions`
+   in staging only (§1.3).
+4. Create the test accounts (§2) and the QA test data (§3).
+5. Provide the Mako Shark SOW through the staging upload, or a local file for
+   `MAKO_SOW_PATH`. Confirm the document may be sent to the model provider (§4).
+6. Clear the stale Postgres lock in `/tmp/pgrun/data` (owned by `pgtest`), or give
+   this environment a fresh local data directory, so the SQL replay can run again.
+
+### 9.6 Readiness
+
+Not ready for functional sign-off. The browser steps in §5 have not run, and the SOW
+checks have not run. Unit tests pass (§9.2).
