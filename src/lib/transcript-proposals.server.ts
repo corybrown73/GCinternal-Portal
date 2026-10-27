@@ -1,8 +1,11 @@
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 
+import { rowOrThrow } from "./server/db-read";
+import type { ComponentStatus, Priority } from "./complete-solutions";
 import { storedFollowupDraft, type TranscriptFollowup } from "./transcript-followup";
 import {
   proposalApplyPlan,
+  type ComponentProposalField,
   type EvidenceProposalRow,
   type ProposalApplyPlan,
   type ProposalPicks,
@@ -258,6 +261,9 @@ type ProposalRecord = {
   owner_team_member_id: string | null;
   proposed_date: string | null;
   intake_key: string | null;
+  solution_component_id?: string | null;
+  component_field?: ComponentProposalField | null;
+  component_value?: string | null;
   status: string;
   decided_by: string | null;
   decided_at: string | null;
@@ -381,6 +387,9 @@ export async function applyProposal(
       owner_team_member_id: seen.owner_team_member_id ?? null,
       proposed_date: seen.proposed_date ?? null,
       intake_key: seen.intake_key ?? null,
+      solution_component_id: seen.solution_component_id ?? null,
+      component_field: seen.component_field ?? null,
+      component_value: seen.component_value ?? null,
     },
     picks,
     { planOwnsTarget: Boolean(dealId) },
@@ -412,6 +421,77 @@ export async function applyProposal(
 }
 
 /** The create itself, through the path the matching form would call. */
+/** The fields of a component a proposal may change, as they are stored. */
+type ComponentSnapshot = {
+  status: ComponentStatus;
+  priority: Priority;
+  target_date: string | null;
+  blocker: string | null;
+  latest_update: string | null;
+  next_action: string | null;
+};
+
+/** The component, only when it sits under this implementation. */
+async function loadComponentOn(
+  componentId: string,
+  implementationId: string,
+): Promise<ComponentSnapshot> {
+  const row = rowOrThrow<ComponentSnapshot & { implementation_id: string }>(
+    await db()
+      .from("solution_components")
+      .select(
+        "implementation_id, status, priority, target_date, blocker, latest_update, next_action",
+      )
+      .eq("id", componentId)
+      .maybeSingle(),
+    "this component",
+  );
+  if (!row || String(row.implementation_id) !== implementationId) {
+    throw new Error("That component is not on this implementation. Nothing was changed.");
+  }
+  return row;
+}
+
+function currentComponentValue(c: ComponentSnapshot, field: ComponentProposalField): string | null {
+  switch (field) {
+    case "status":
+      return c.status;
+    case "priority":
+      return c.priority;
+    case "target_date":
+      return c.target_date;
+    case "next_action":
+      return c.next_action;
+    case "blocker":
+      return c.blocker;
+    case "latest_update":
+      return c.latest_update;
+  }
+}
+
+/** The one field a component update changes, in the terms updateComponent takes. */
+function componentPatch(plan: {
+  field: ComponentProposalField;
+  value: string;
+  reason: string | null;
+}) {
+  switch (plan.field) {
+    case "status":
+      return { status: plan.value as ComponentStatus };
+    case "priority":
+      return { priority: plan.value as Priority };
+    case "target_date":
+      // A date that moves an original needs the reason; the model's sentence is kept as it.
+      return { targetDate: plan.value, targetChangeReason: plan.reason };
+    case "next_action":
+      return { nextAction: plan.value };
+    case "blocker":
+      return { blocker: plan.value };
+    case "latest_update":
+      return { latestUpdate: plan.value };
+  }
+}
+
 async function createFromPlan(
   plan: Exclude<ProposalApplyPlan, { kind: "blocked" }>,
   env: { implementationId: string; dealId: string | null; actor: Actor },
@@ -419,7 +499,7 @@ async function createFromPlan(
   const { implementationId, dealId, actor } = env;
   const hub = await import("./hub.server");
   const opts = { actorProfileId: actor.profileId };
-  let entityType: string;
+  let entityType: string | undefined;
   let entityId: string | null = null;
 
   switch (plan.kind) {
@@ -517,8 +597,30 @@ async function createFromPlan(
       entityId = dealId;
       break;
     }
+    case "component_update": {
+      // The component must be on THIS implementation. A suggestion can name an
+      // id from another one, and nothing may change there from this reading.
+      const component = await loadComponentOn(plan.componentId, implementationId);
+      const current = currentComponentValue(component, plan.field);
+      if (current === plan.value) {
+        throw new Error(
+          "That is already how it is recorded on the component. Nothing was changed.",
+        );
+      }
+      const { updateComponent } = await import("./complete-solutions.server");
+      await updateComponent(
+        {
+          id: plan.componentId,
+          ...componentPatch(plan),
+        },
+        actor.profileId,
+      );
+      entityType = "solution_component";
+      entityId = plan.componentId;
+      break;
+    }
   }
-  return { entityType, entityId };
+  return { entityType: entityType!, entityId };
 }
 
 export async function dismissProposal(id: string, actor: Actor): Promise<{ ok: true }> {
