@@ -9,7 +9,7 @@ import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { LIFECYCLE_STAGES } from "./lifecycle";
 import { sowAnalysisSchema, type SowAnalysis } from "./sow-analysis";
 
-const ATTACHMENT_BUCKET = "attachments";
+export const ATTACHMENT_BUCKET = "attachments";
 
 const db = () => supabaseAdmin as any;
 

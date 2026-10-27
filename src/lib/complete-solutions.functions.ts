@@ -7,12 +7,14 @@ import {
 } from "@/integrations/supabase/internal-middleware";
 
 import {
+  COMPONENT_CATEGORIES,
   COMPONENT_STATUSES,
   confirmReadinessInput,
   createComponentInput,
   createSolutionInput,
   dependencyInput,
   formTrackingInput,
+  INTEGRATION_TYPES,
   isoDate,
   PRIORITIES,
   READINESS,
@@ -223,3 +225,73 @@ export const solutionVocabulary = {
   priorities: PRIORITIES,
   componentStatuses: COMPONENT_STATUSES,
 } as const;
+
+/**
+ * A reviewed set as the TIS confirms it. Validated at the boundary: a set that
+ * was edited into something the database would refuse is rejected here, before
+ * anything is written.
+ */
+const reviewedComponentInput = z
+  .object({
+    category: z.enum(COMPONENT_CATEGORIES),
+    integrationType: z.enum(INTEGRATION_TYPES).nullable(),
+    name: z.string().trim().min(1).max(200),
+    priority: z.enum(PRIORITIES),
+    dependsOn: z.array(z.string().trim().min(1).max(200)).max(20),
+    critical: z.boolean(),
+    startCondition: z.string().trim().max(1000).nullable(),
+    estimateWeeks: z.number().int().min(1).max(520).nullable(),
+    sowQuote: z.string().trim().max(2000).nullable(),
+    suggestedTarget: isoDate.nullable(),
+  })
+  .superRefine((c, ctx) => {
+    if (c.integrationType && c.category !== "integrations") {
+      ctx.addIssue({
+        code: "custom",
+        path: ["integrationType"],
+        message: "Only an integration has an integration type.",
+      });
+    }
+  });
+
+const reviewedSolutionInput = z.object({
+  title: z.string().trim().min(1).max(200),
+  scope: z.enum(SOLUTION_SCOPES),
+  startCondition: z.string().trim().max(1000).nullable(),
+  estimateWeeks: z.number().int().min(1).max(520).nullable(),
+  sowQuote: z.string().trim().max(2000).nullable(),
+  suggestedTarget: isoDate.nullable(),
+  targetReason: z.string().max(500),
+  components: z.array(reviewedComponentInput).max(60),
+});
+
+export const suggestSolutionsFromSow = createServerFn({ method: "POST" })
+  .middleware([requireDealEditor])
+  .inputValidator((data: unknown) => z.object({ implementationId: uuid }).parse(data))
+  .handler(async ({ data }) => {
+    await assertEnabled();
+    const { readSolutionsFromSow } = await import("./complete-solutions-sow.server");
+    return readSolutionsFromSow(data.implementationId);
+  });
+
+export const saveSuggestedSolutions = createServerFn({ method: "POST" })
+  .middleware([requireDealEditor])
+  .inputValidator((data: unknown) =>
+    z
+      .object({
+        implementationId: uuid,
+        sowName: z.string().trim().max(300).nullable(),
+        solutions: z.array(reviewedSolutionInput).min(1).max(30),
+      })
+      .parse(data),
+  )
+  .handler(async ({ data, context }) => {
+    await assertEnabled();
+    const { saveReviewedSolutions } = await import("./complete-solutions-sow.server");
+    return saveReviewedSolutions(
+      data.implementationId,
+      data.solutions,
+      data.sowName,
+      context.profile.id,
+    );
+  });

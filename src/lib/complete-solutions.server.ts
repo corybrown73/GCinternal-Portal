@@ -421,8 +421,11 @@ function changeOf<T>(from: T | null | undefined, to: T | null | undefined): bool
   return (from ?? null) !== (to ?? null);
 }
 
-/** Adds a complete solution to an implementation. */
-export async function createCompleteSolution(
+/**
+ * Adds a complete solution. Returns its id as soon as the row and its history
+ * are written, so a later read problem cannot make a saved solution look failed.
+ */
+export async function insertCompleteSolution(
   input: {
     implementationId: string;
     title: string;
@@ -436,7 +439,7 @@ export async function createCompleteSolution(
     targetDate?: string | null;
   },
   actorProfileId: string,
-): Promise<SolutionView> {
+): Promise<string> {
   const impl = rowOrThrow<any>(
     await db().from("implementations").select("id").eq("id", input.implementationId).maybeSingle(),
     "this implementation",
@@ -484,6 +487,15 @@ export async function createCompleteSolution(
     entity_id: id,
     payload: { scope: input.scope, source: input.source ?? "manual" },
   });
+  return id;
+}
+
+/** Adds a complete solution and returns the workspace view of the implementation. */
+export async function createCompleteSolution(
+  input: Parameters<typeof insertCompleteSolution>[0],
+  actorProfileId: string,
+): Promise<SolutionView> {
+  const id = await insertCompleteSolution(input, actorProfileId);
   return one(input.implementationId, id);
 }
 
@@ -680,7 +692,8 @@ export async function setSolutionArchived(
   return one(implementationId, id);
 }
 
-export async function createComponent(
+/** Adds a component and returns its id, without reading the solution back. */
+export async function insertComponent(
   input: {
     solutionId: string;
     category: ComponentCategory;
@@ -694,7 +707,7 @@ export async function createComponent(
     sowQuote?: string | null | undefined;
   },
   actorProfileId: string,
-): Promise<SolutionView> {
+): Promise<{ id: string; implementationId: string; solutionId: string }> {
   const solution = await loadSolution(input.solutionId);
   assertLive(solution, "solution");
   const implementationId = String(solution.implementation_id);
@@ -733,7 +746,16 @@ export async function createComponent(
       actorProfileId,
     },
   ]);
-  return one(implementationId, input.solutionId);
+  return { id: componentId, implementationId, solutionId: input.solutionId };
+}
+
+/** Adds a component and returns the workspace view of its solution. */
+export async function createComponent(
+  input: Parameters<typeof insertComponent>[0],
+  actorProfileId: string,
+): Promise<SolutionView> {
+  const { implementationId, solutionId } = await insertComponent(input, actorProfileId);
+  return one(implementationId, solutionId);
 }
 
 /**
@@ -925,6 +947,15 @@ export async function addDependency(
   input: { componentId: string; dependsOnId: string; critical: boolean },
   actorProfileId: string,
 ): Promise<SolutionView> {
+  const { implementationId, solutionId } = await insertDependency(input, actorProfileId);
+  return one(implementationId, solutionId);
+}
+
+/** Records a dependency without reading the solution back. */
+export async function insertDependency(
+  input: { componentId: string; dependsOnId: string; critical: boolean },
+  actorProfileId: string,
+): Promise<{ implementationId: string; solutionId: string }> {
   if (input.componentId === input.dependsOnId) {
     throw new Error("A component cannot depend on itself.");
   }
@@ -973,7 +1004,7 @@ export async function addDependency(
       actorProfileId,
     },
   ]);
-  return one(implementationId, String(a.complete_solution_id));
+  return { implementationId, solutionId: String(a.complete_solution_id) };
 }
 
 export async function removeDependency(
@@ -1039,6 +1070,24 @@ export async function setComponentArchived(
     },
   ]);
   return one(implementationId, solutionId);
+}
+
+/** Records that a solution was taken from the SOW on the implementation. */
+export async function recordSowImport(
+  implementationId: string,
+  solutionId: string,
+  sowName: string | null,
+  actorProfileId: string,
+): Promise<void> {
+  await recordEvents([
+    {
+      implementationId,
+      solutionId,
+      kind: "sow_import",
+      to: sowName ?? "Signed SOW",
+      actorProfileId,
+    },
+  ]);
 }
 
 /** Who may see and change solutions: anyone signed in to the Hub, never a customer. */

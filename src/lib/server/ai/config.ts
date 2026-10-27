@@ -14,6 +14,7 @@ export type AiCallKind =
   | "verify"
   | "sow_plan"
   | "sow_analysis"
+  | "sow_solutions"
   | "transcript"
   | "help_picks"
   | "sow_reading"
