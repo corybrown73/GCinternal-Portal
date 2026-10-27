@@ -225,7 +225,9 @@ run on production only with the approval in step 12):
 | Migration replay, CI sequence (up, down with CI confirmations, up, all probes), local Postgres 16 | Passed in this session |
 | Rollback guards for owner history and Team Lead (scratch database) | Passed in this session |
 | Unit tests, typecheck, lint, build | See the PR comment |
-| CI on PR #101 (GitHub) | Not yet re-run at the time this file was written. See the PR |
+| CI on PR #101 (GitHub), first run after the fix | The failing probe was identified from the check-run annotation: `supabase/tests/0091_complete_solutions.sql:32`, "must be owner of table users". The probe disabled a trigger on `auth.users`, which only the owner of that table may do. CI connects as a role that does not own it. The fix replaces the disable with the pattern 0029 and 0030 already use. Reproduced locally as a non-owner role with the same error and exit code 3; after the fix the full replay passes. The GitHub result must be read on the PR |
+| CI-like replay as a non-owner role (`auth.users` owned by another role, migrations and probes run as a plain login role) | Passed in this session: 86 migrations up, 78 rollbacks with the CI confirmations, 78 re-applied, all 51 probe files |
+| `supabase/verify/0091_verify.sql` on that replay | Passed: 14 of 14 checks true |
 | Production backup and recovery | **Not verified.** Needs production access (section 6, step 2) |
 | Production applied migrations | **Not verified.** Needs production access (section 6, step 3) |
 | Main code running against a `0091` database | Reasoned from the code, not executed |

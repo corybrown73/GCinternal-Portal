@@ -26,10 +26,17 @@ begin
 end $fn$;
 
 -- ---------------------------------------------------------------------------
--- Fixtures. The auth.users trigger that creates a profile is switched off for
--- this transaction, so each profile can carry its own role and team member.
+-- Fixtures. The probe emails are on an allowed domain for this transaction only.
+-- auth.users rows are inserted as usual: portal_on_auth_user_created creates a
+-- profile for each, and the probe replaces it with the role and team member it
+-- needs. The trigger is not disabled, because that needs ownership of auth.users,
+-- which the CI role does not have. 0029 and 0030 use the same approach.
 -- ---------------------------------------------------------------------------
-alter table auth.users disable trigger portal_on_auth_user_created;
+insert into portal_app_config (key, value)
+  values ('allowed_email_domains', '["probe.test"]'::jsonb)
+  on conflict (key) do update set value = case when portal_app_config.value ? 'probe.test'
+    then portal_app_config.value
+    else portal_app_config.value || '["probe.test"]'::jsonb end;
 insert into auth.users (id, email) values
   ('a0000000-0000-4000-8000-0000000000b1', 'owner@probe.test'),
   ('a0000000-0000-4000-8000-0000000000b2', 'other@probe.test'),
@@ -41,6 +48,7 @@ insert into team_members (id, org_id, name, role) values
   ('70000000-0000-4000-8000-0000000000b1', '00000000-0000-4000-8000-000000000001', 'Owner TIS', 'implementation'),
   ('70000000-0000-4000-8000-0000000000b2', '00000000-0000-4000-8000-000000000001', 'Other TIS', 'implementation'),
   ('70000000-0000-4000-8000-0000000000b3', '00000000-0000-4000-8000-000000000001', 'Sales rep', 'sales');
+delete from portal_profiles where id in ('a0000000-0000-4000-8000-0000000000b1', 'a0000000-0000-4000-8000-0000000000b2', 'a0000000-0000-4000-8000-0000000000b3', 'a0000000-0000-4000-8000-0000000000b4', 'a0000000-0000-4000-8000-0000000000b5', 'a0000000-0000-4000-8000-0000000000b6');
 insert into portal_profiles (id, email, full_name, role, team_member_id) values
   ('a0000000-0000-4000-8000-0000000000b1', 'owner@probe.test', 'Owner TIS', 'implementation', '70000000-0000-4000-8000-0000000000b1'),
   ('a0000000-0000-4000-8000-0000000000b2', 'other@probe.test', 'Other TIS', 'implementation', '70000000-0000-4000-8000-0000000000b2'),
@@ -65,6 +73,7 @@ insert into team_members (id, org_id, name, role) values
   ('70000000-0000-4000-8000-0000000000b4', '00000000-0000-4000-8000-000000000001', 'SE', 'se'),
   ('70000000-0000-4000-8000-0000000000b5', '00000000-0000-4000-8000-000000000001', 'TAM SE', 'tam_se'),
   ('70000000-0000-4000-8000-0000000000b6', '00000000-0000-4000-8000-000000000001', 'Onboarding', 'onboarding');
+delete from portal_profiles where id in ('a0000000-0000-4000-8000-0000000000c7', 'a0000000-0000-4000-8000-0000000000c8', 'a0000000-0000-4000-8000-0000000000c9', 'a0000000-0000-4000-8000-0000000000ca', 'a0000000-0000-4000-8000-0000000000cb');
 insert into portal_profiles (id, email, full_name, role, team_member_id) values
   ('a0000000-0000-4000-8000-0000000000c7', 'se@probe.test', 'SE', 'se', '70000000-0000-4000-8000-0000000000b4'),
   ('a0000000-0000-4000-8000-0000000000c8', 'tamse@probe.test', 'TAM SE', 'tam_se', '70000000-0000-4000-8000-0000000000b5'),
@@ -84,6 +93,7 @@ insert into auth.users (id, email) values
 insert into team_members (id, org_id, name, role, active) values
   ('70000000-0000-4000-8000-0000000000b7', '00000000-0000-4000-8000-000000000001', 'Onboarding 2', 'onboarding', true),
   ('70000000-0000-4000-8000-0000000000b8', '00000000-0000-4000-8000-000000000001', 'Left the team', 'implementation', false);
+delete from portal_profiles where id in ('a0000000-0000-4000-8000-0000000000cc', 'a0000000-0000-4000-8000-0000000000cd');
 insert into portal_profiles (id, email, full_name, role, team_member_id) values
   ('a0000000-0000-4000-8000-0000000000cc', 'teamlead@probe.test', 'Team Lead', 'implementation', null),
   ('a0000000-0000-4000-8000-0000000000cd', 'onboarding2@probe.test', 'Onboarding 2', 'onboarding', '70000000-0000-4000-8000-0000000000b7');
