@@ -35,6 +35,8 @@ export type V2Flags = {
    * deliberately NOT flagged — this gates who gets notified, never who can see.
    */
   signals_alerts: boolean;
+  /** Complete solutions and their components on Customer 360 and the Solutions workspace (0091). */
+  complete_solutions: boolean;
   /** Phase 7: hub mutations write the account activity feed (`audit_log`). */
   audit_activity_feed: boolean;
   /** Phase 7: a failed audit write on a critical action aborts the mutation. */
@@ -107,6 +109,7 @@ const DEFAULT_FLAGS: V2Flags = {
   sf_pull_enabled: false,
   /** Phase 6: see the type above. */
   signals_alerts: false,
+  complete_solutions: false,
   /* Phase 7 — platform hygiene completion. All off. */
   audit_activity_feed: false,
   audit_strict: false,
