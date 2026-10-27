@@ -21,6 +21,7 @@ import {
   type SolutionScope,
 } from "@/lib/complete-solutions";
 import type { SowSuggestion } from "@/lib/complete-solutions-sow.server";
+import type { PurchaseRecord } from "@/lib/complete-solutions-purchase";
 import type { ReviewedSolution } from "@/lib/complete-solutions-sow";
 
 const FIELD =
@@ -54,6 +55,7 @@ export function SowSolutionsReview({ implementationId }: { implementationId: str
   const [sowName, setSowName] = useState<string | null>(null);
   const [gaps, setGaps] = useState<string[]>([]);
   const [draft, setDraft] = useState<Draft[] | null>(null);
+  const [records, setRecords] = useState<PurchaseRecord[]>([]);
   const [saved, setSaved] = useState<string[] | null>(null);
   const qc = useQueryClient();
   const readFn = useServerFn(suggestSolutionsFromSow);
@@ -65,6 +67,7 @@ export function SowSolutionsReview({ implementationId }: { implementationId: str
       setSowName(out.sowName);
       setGaps(out.gaps);
       setDraft(toDraft(out.solutions));
+      setRecords(out.purchaseRecords);
       setSaved(null);
     },
   });
@@ -79,6 +82,7 @@ export function SowSolutionsReview({ implementationId }: { implementationId: str
           return {
             title: s.title,
             scope: s.scope,
+            purchasedServiceId: s.scope === "purchased" ? (s.purchasedServiceId ?? null) : null,
             startCondition: s.startCondition,
             estimateWeeks: s.estimateWeeks,
             sowQuote: s.sowQuote,
@@ -108,7 +112,6 @@ export function SowSolutionsReview({ implementationId }: { implementationId: str
             `Added ${c.title}: ${c.components} component${c.components === 1 ? "" : "s"}, ${c.dependencies} dependenc${c.dependencies === 1 ? "y" : "ies"}.`,
         ),
         ...result.skipped.map((s) => `Not added — ${s.title}: ${s.reason}`),
-        ...result.problems,
       ];
       setSaved(lines.length ? lines : ["Nothing to add: every suggestion was already recorded."]);
       setDraft(null);
@@ -245,6 +248,25 @@ export function SowSolutionsReview({ implementationId }: { implementationId: str
               </div>
               <p className="mt-1 pl-6 text-[11px] text-muted-foreground">
                 {s.suggestedTarget ? s.targetReason : `No date suggested: ${s.targetReason}`}
+              </p>
+              <p className="mt-1 pl-6 text-[11px] text-muted-foreground">
+                {s.scope !== "purchased" ? (
+                  "Requested, not purchased: not checked against the deal's purchase record."
+                ) : s.purchasedServiceId ? (
+                  <>
+                    Delivers the purchase record item “
+                    {records.find((r) => r.id === s.purchasedServiceId)?.name ?? "on the deal"}”.{" "}
+                    <button
+                      type="button"
+                      className="underline"
+                      onClick={() => patch(i, { purchasedServiceId: null })}
+                    >
+                      Clear the link
+                    </button>
+                  </>
+                ) : (
+                  "No purchase record item has this name, so it is saved without a link. Nothing on the deal changes."
+                )}
               </p>
               {s.sowQuote ? (
                 <p className="mt-1 pl-6 text-[11px] italic text-muted-foreground">“{s.sowQuote}”</p>

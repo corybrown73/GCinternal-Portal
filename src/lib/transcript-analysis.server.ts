@@ -95,6 +95,7 @@ async function loadComponentsForReading(
             status: c.status,
             priority: c.priority,
             targetDate: c.targetDate,
+            updatedAt: c.updatedAt,
           })),
       );
   } catch (e) {
@@ -294,6 +295,10 @@ export function proposalRowFor(
     solution_component_id: p.type === "component_update" ? p.component_id : null,
     component_field: p.type === "component_update" ? p.component_field : null,
     component_value: p.type === "component_update" ? p.component_value : null,
+    component_version:
+      p.type === "component_update"
+        ? ((ctx.solutionComponents ?? []).find((c) => c.id === p.component_id)?.updatedAt ?? null)
+        : null,
     status: "pending",
   };
 }

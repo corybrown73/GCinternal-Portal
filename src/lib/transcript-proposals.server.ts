@@ -264,6 +264,7 @@ type ProposalRecord = {
   solution_component_id?: string | null;
   component_field?: ComponentProposalField | null;
   component_value?: string | null;
+  component_version?: string | null;
   status: string;
   decided_by: string | null;
   decided_at: string | null;
@@ -390,6 +391,7 @@ export async function applyProposal(
       solution_component_id: seen.solution_component_id ?? null,
       component_field: seen.component_field ?? null,
       component_value: seen.component_value ?? null,
+      component_version: seen.component_version ?? null,
     },
     picks,
     { planOwnsTarget: Boolean(dealId) },
@@ -423,6 +425,7 @@ export async function applyProposal(
 /** The create itself, through the path the matching form would call. */
 /** The fields of a component a proposal may change, as they are stored. */
 type ComponentSnapshot = {
+  updated_at: string;
   status: ComponentStatus;
   priority: Priority;
   target_date: string | null;
@@ -440,7 +443,7 @@ async function loadComponentOn(
     await db()
       .from("solution_components")
       .select(
-        "implementation_id, status, priority, target_date, blocker, latest_update, next_action",
+        "implementation_id, updated_at, status, priority, target_date, blocker, latest_update, next_action",
       )
       .eq("id", componentId)
       .maybeSingle(),
@@ -601,6 +604,13 @@ async function createFromPlan(
       // The component must be on THIS implementation. A suggestion can name an
       // id from another one, and nothing may change there from this reading.
       const component = await loadComponentOn(plan.componentId, implementationId);
+      // The suggestion was made against an older version: the component has changed
+      // since, so the suggestion may no longer be true. Nothing is written.
+      if (String(component.updated_at) !== plan.version) {
+        throw new Error(
+          "The component changed after this suggestion was made, so nothing was changed. Read the component and decide again.",
+        );
+      }
       const current = currentComponentValue(component, plan.field);
       if (current === plan.value) {
         throw new Error(
@@ -612,6 +622,7 @@ async function createFromPlan(
         {
           id: plan.componentId,
           ...componentPatch(plan),
+          expectedUpdatedAt: plan.version,
         },
         actor.profileId,
       );

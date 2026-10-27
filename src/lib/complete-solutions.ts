@@ -273,6 +273,13 @@ const optionalText = (max: number) =>
     .optional();
 const uuid = z.string().uuid();
 
+/**
+ * The version of the row the screen was showing (its updated_at, as the server
+ * sent it). Every change to an existing row carries it, so a change made against
+ * an older version is refused rather than written over a newer one.
+ */
+export const versionInput = z.string().trim().min(10).max(40);
+
 export const createSolutionInput = z.object({
   implementationId: uuid,
   title: text(200),
@@ -286,6 +293,7 @@ export const createSolutionInput = z.object({
 
 export const updateSolutionInput = z.object({
   id: uuid,
+  expectedUpdatedAt: versionInput,
   title: text(200).optional(),
   scope: z.enum(SOLUTION_SCOPES).optional(),
   priority: z.enum(PRIORITIES).optional(),
@@ -296,12 +304,14 @@ export const updateSolutionInput = z.object({
 
 export const setSolutionTargetInput = z.object({
   id: uuid,
+  expectedUpdatedAt: versionInput,
   targetDate: isoDate.nullable(),
   reason: optionalText(500),
 });
 
 export const confirmReadinessInput = z.object({
   id: uuid,
+  expectedUpdatedAt: versionInput,
   readiness: z.enum(READINESS),
   reason: optionalText(1000),
 });
@@ -332,6 +342,7 @@ export const createComponentInput = z
 export const updateComponentInput = z
   .object({
     id: uuid,
+    expectedUpdatedAt: versionInput,
     name: text(200).optional(),
     priority: z.enum(PRIORITIES).optional(),
     status: z.enum(COMPONENT_STATUSES).optional(),
@@ -360,6 +371,7 @@ export const updateComponentInput = z
 export const formTrackingInput = z
   .object({
     id: uuid,
+    expectedUpdatedAt: versionInput,
     formBuilt: z.boolean().optional(),
     customerApproved: z.boolean().optional(),
     submissionCount: z.number().int().min(0).max(10_000_000).nullable().optional(),
@@ -386,7 +398,9 @@ export const dependencyInput = z.object({
 export const archiveInput = z.object({
   kind: z.enum(["solution", "component"]),
   id: uuid,
+  archived: z.boolean(),
   reason: optionalText(500),
+  expectedUpdatedAt: versionInput,
 });
 
 /* ---------------------------------------------------------- display */

@@ -3,7 +3,6 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 
 import { ask } from "@/components/ui/ask";
-import { canEditDeal, useProfile } from "@/lib/auth";
 import {
   addComponentDependency,
   addCompleteSolution,
@@ -49,6 +48,7 @@ import type {
 } from "@/lib/complete-solutions";
 import type { ComponentView, HistoryEntry, SolutionView } from "@/lib/complete-solutions.server";
 import { SowSolutionsReview } from "@/components/complete-solutions-sow-review";
+import type { PurchaseCheck } from "@/lib/complete-solutions-purchase";
 
 /** The input each server function takes, read from the function itself. */
 type DataOf<F> = F extends (opts: { data: infer D }) => unknown ? D : never;
@@ -63,6 +63,8 @@ type DependencyAdd = DataOf<typeof addComponentDependency>;
 type DependencyRemove = DataOf<typeof removeComponentDependency>;
 type SolutionAdd = DataOf<typeof addCompleteSolution>;
 type ComponentAdd = DataOf<typeof addSolutionComponent>;
+/** The workspace read: the solutions, and whether this person may change them (decided on the server). */
+type WorkspaceView = { solutions: SolutionView[]; canEdit: boolean; purchase: PurchaseCheck };
 
 const FIELD =
   "rounded-sm border border-input bg-background px-2 py-1 text-[12px] text-foreground outline-none focus:ring-1 focus:ring-ring disabled:opacity-60";
@@ -104,8 +106,6 @@ function errorText(e: unknown): string {
  * confirms the change.
  */
 export function CompleteSolutionsWorkspace({ implementationId }: { implementationId: string }) {
-  const { profile } = useProfile();
-  const editable = canEditDeal(profile?.role);
   const q = useCompleteSolutions(implementationId);
   const [adding, setAdding] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
@@ -121,7 +121,7 @@ export function CompleteSolutionsWorkspace({ implementationId }: { implementatio
     );
   }
 
-  const all = q.data as SolutionView[];
+  const { solutions: all, canEdit: editable, purchase } = q.data as WorkspaceView;
   const active = all.filter((s) => !s.archived);
   const archived = all.filter((s) => s.archived);
 
@@ -141,6 +141,8 @@ export function CompleteSolutionsWorkspace({ implementationId }: { implementatio
           </div>
         ) : null}
       </div>
+
+      <PurchaseCheckNote purchase={purchase} />
 
       {adding ? (
         <NewSolutionForm implementationId={implementationId} onDone={() => setAdding(false)} />
@@ -186,6 +188,60 @@ export function CompleteSolutionsWorkspace({ implementationId }: { implementatio
   );
 }
 
+/**
+ * Purchased scope against the deal's purchase record. A difference is shown, never
+ * fixed here: the signed SOW decides what was agreed, and the deal is not changed.
+ */
+function PurchaseCheckNote({ purchase }: { purchase: PurchaseCheck }) {
+  if (!purchase.hasRecord) {
+    return (
+      <p className="rounded-md border border-dashed border-border px-3 py-2 text-[12px] text-muted-foreground">
+        This implementation has no deal, so its purchased scope cannot be checked against a purchase
+        record.
+      </p>
+    );
+  }
+  const gaps = purchase.solutionsWithoutRecord.length + purchase.recordsWithoutSolution.length;
+  if (gaps === 0) {
+    return (
+      <p className="text-[12px] text-muted-foreground">
+        The purchased solutions match the deal&apos;s purchase record.
+      </p>
+    );
+  }
+  return (
+    <div
+      role="status"
+      className="rounded-md border border-border bg-muted/40 px-3 py-2 text-[12px]"
+    >
+      <p className="font-medium">
+        The purchased scope does not fully match the deal&apos;s purchase record. Nothing has been
+        changed.
+      </p>
+      {purchase.solutionsWithoutRecord.length > 0 ? (
+        <ul className="mt-1 list-disc pl-5">
+          {purchase.solutionsWithoutRecord.map((s) => (
+            <li key={s.solutionId}>
+              Purchased solution with no matching item on the deal: {s.title}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {purchase.recordsWithoutSolution.length > 0 ? (
+        <ul className="mt-1 list-disc pl-5">
+          {purchase.recordsWithoutSolution.map((r) => (
+            <li key={r.id}>Item on the deal with no solution delivering it: {r.name}</li>
+          ))}
+        </ul>
+      ) : null}
+      <p className="mt-1 text-muted-foreground">
+        Check these against the signed SOW. A purchase item is linked to its solution when the SOW
+        is set up.
+      </p>
+    </div>
+  );
+}
+
 /* ----------------------------------------------------------- a solution */
 
 function SolutionCard({
@@ -206,21 +262,27 @@ function SolutionCard({
   const [dateReason, setDateReason] = useState("");
   const [addingComponent, setAddingComponent] = useState(false);
 
-  const solutionChange = useChange<Omit<DataOf<typeof editCompleteSolution>, "id">>(
-    implementationId,
-    (input) => editCompleteSolution({ data: { id: s.id, ...input } }),
+  const solutionChange = useChange<
+    Omit<DataOf<typeof editCompleteSolution>, "id" | "expectedUpdatedAt">
+  >(implementationId, (input) =>
+    editCompleteSolution({ data: { id: s.id, expectedUpdatedAt: s.updatedAt, ...input } }),
   );
-  const dateChange = useChange<Omit<DataOf<typeof setCompleteSolutionTarget>, "id">>(
-    implementationId,
-    (input) => setCompleteSolutionTarget({ data: { id: s.id, ...input } }),
+  const dateChange = useChange<
+    Omit<DataOf<typeof setCompleteSolutionTarget>, "id" | "expectedUpdatedAt">
+  >(implementationId, (input) =>
+    setCompleteSolutionTarget({ data: { id: s.id, expectedUpdatedAt: s.updatedAt, ...input } }),
   );
-  const readinessChange = useChange<Omit<DataOf<typeof confirmCompleteSolutionReadiness>, "id">>(
-    implementationId,
-    (input) => confirmCompleteSolutionReadiness({ data: { id: s.id, ...input } }),
+  const readinessChange = useChange<
+    Omit<DataOf<typeof confirmCompleteSolutionReadiness>, "id" | "expectedUpdatedAt">
+  >(implementationId, (input) =>
+    confirmCompleteSolutionReadiness({
+      data: { id: s.id, expectedUpdatedAt: s.updatedAt, ...input },
+    }),
   );
-  const archive = useChange<Omit<DataOf<typeof archiveCompleteSolution>, "id">>(
-    implementationId,
-    (input) => archiveCompleteSolution({ data: { id: s.id, ...input } }),
+  const archive = useChange<
+    Omit<DataOf<typeof archiveCompleteSolution>, "id" | "expectedUpdatedAt">
+  >(implementationId, (input) =>
+    archiveCompleteSolution({ data: { id: s.id, expectedUpdatedAt: s.updatedAt, ...input } }),
   );
 
   const overdue = isOverdue(s.targetDate, s.status === "complete", today());
@@ -583,17 +645,20 @@ function ComponentRow({
   allComponents: ComponentView[];
 }) {
   const [open, setOpen] = useState(false);
-  const change = useChange<Omit<DataOf<typeof editSolutionComponent>, "id">>(
+  const change = useChange<Omit<DataOf<typeof editSolutionComponent>, "id" | "expectedUpdatedAt">>(
     implementationId,
-    (input) => editSolutionComponent({ data: { id: c.id, ...input } }),
+    (input) =>
+      editSolutionComponent({ data: { id: c.id, expectedUpdatedAt: c.updatedAt, ...input } }),
   );
-  const form = useChange<Omit<DataOf<typeof setComponentFormTracking>, "id">>(
+  const form = useChange<Omit<DataOf<typeof setComponentFormTracking>, "id" | "expectedUpdatedAt">>(
     implementationId,
-    (input) => setComponentFormTracking({ data: { id: c.id, ...input } }),
+    (input) =>
+      setComponentFormTracking({ data: { id: c.id, expectedUpdatedAt: c.updatedAt, ...input } }),
   );
-  const archive = useChange<Omit<DataOf<typeof archiveSolutionComponent>, "id">>(
-    implementationId,
-    (input) => archiveSolutionComponent({ data: { id: c.id, ...input } }),
+  const archive = useChange<
+    Omit<DataOf<typeof archiveSolutionComponent>, "id" | "expectedUpdatedAt">
+  >(implementationId, (input) =>
+    archiveSolutionComponent({ data: { id: c.id, expectedUpdatedAt: c.updatedAt, ...input } }),
   );
 
   const [blocker, setBlocker] = useState(c.blocker ?? "");

@@ -20,18 +20,22 @@ import {
   READINESS,
   SOLUTION_SCOPES,
   SOLUTION_STATUSES,
+  setSolutionTargetInput,
   updateComponentInput,
   updateSolutionInput,
+  versionInput,
 } from "./complete-solutions";
 
 /**
  * Server functions for complete solutions. Reads need any signed-in internal
- * role; writes use the same gate as deal writes (canEditDeal), and the acting
- * person is always the signed-in profile, never a field in the request.
+ * role. Writes need an internal role (requireDealEditor), and the database then
+ * decides whether this person may change this implementation's solutions: a
+ * manager or admin any implementation, an implementation owner their own, and
+ * nobody else. The acting person is always the signed-in profile, never a field
+ * in the request.
  *
  * Each handler checks the `complete_solutions` flag first. The flag hides the
- * feature; it is not a permission (see feature-flags.ts), so a role check is
- * still made by the middleware on every call.
+ * feature; it is not a permission (see feature-flags.ts).
  */
 
 const uuid = z.string().uuid();
@@ -46,10 +50,10 @@ async function assertEnabled(): Promise<void> {
 export const getCompleteSolutions = createServerFn({ method: "GET" })
   .middleware([requireInternalAuth])
   .inputValidator((data: unknown) => z.object({ implementationId: uuid }).parse(data))
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
     await assertEnabled();
-    const { loadSolutionsFor } = await import("./complete-solutions.server");
-    return loadSolutionsFor(data.implementationId);
+    const { loadWorkspace } = await import("./complete-solutions.server");
+    return loadWorkspace(data.implementationId, context.profile.id);
   });
 
 export const getCompleteSolutionHistory = createServerFn({ method: "GET" })
@@ -88,25 +92,23 @@ export const editCompleteSolution = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     await assertEnabled();
     const { updateCompleteSolution } = await import("./complete-solutions.server");
-    const { id, ...patch } = data;
-    return updateCompleteSolution(id, patch, context.profile.id);
+    const { id, expectedUpdatedAt, ...patch } = data;
+    return updateCompleteSolution(id, patch, expectedUpdatedAt, context.profile.id);
   });
 
 export const setCompleteSolutionTarget = createServerFn({ method: "POST" })
   .middleware([requireDealEditor])
-  .inputValidator((data: unknown) =>
-    z
-      .object({
-        id: uuid,
-        targetDate: isoDate.nullable(),
-        reason: z.string().trim().max(500).nullable().optional(),
-      })
-      .parse(data),
-  )
+  .inputValidator((data: unknown) => setSolutionTargetInput.parse(data))
   .handler(async ({ data, context }) => {
     await assertEnabled();
     const { setSolutionTargetDate } = await import("./complete-solutions.server");
-    return setSolutionTargetDate(data.id, data.targetDate, data.reason ?? null, context.profile.id);
+    return setSolutionTargetDate(
+      data.id,
+      data.targetDate,
+      data.reason ?? null,
+      data.expectedUpdatedAt,
+      context.profile.id,
+    );
   });
 
 export const confirmCompleteSolutionReadiness = createServerFn({ method: "POST" })
@@ -119,6 +121,7 @@ export const confirmCompleteSolutionReadiness = createServerFn({ method: "POST" 
       data.id,
       data.readiness,
       data.reason ?? null,
+      data.expectedUpdatedAt,
       context.profile.id,
     );
   });
@@ -131,13 +134,20 @@ export const archiveCompleteSolution = createServerFn({ method: "POST" })
         id: uuid,
         archived: z.boolean(),
         reason: z.string().trim().max(500).nullable().optional(),
+        expectedUpdatedAt: versionInput,
       })
       .parse(data),
   )
   .handler(async ({ data, context }) => {
     await assertEnabled();
     const { setSolutionArchived } = await import("./complete-solutions.server");
-    return setSolutionArchived(data.id, data.archived, data.reason ?? null, context.profile.id);
+    return setSolutionArchived(
+      data.id,
+      data.archived,
+      data.reason ?? null,
+      data.expectedUpdatedAt,
+      context.profile.id,
+    );
   });
 
 export const addSolutionComponent = createServerFn({ method: "POST" })
@@ -169,8 +179,7 @@ export const editSolutionComponent = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     await assertEnabled();
     const { updateComponent } = await import("./complete-solutions.server");
-    const { id, ...patch } = data;
-    return updateComponent({ id, ...patch }, context.profile.id);
+    return updateComponent(data, context.profile.id);
   });
 
 export const setComponentFormTracking = createServerFn({ method: "POST" })
@@ -208,13 +217,20 @@ export const archiveSolutionComponent = createServerFn({ method: "POST" })
         id: uuid,
         archived: z.boolean(),
         reason: z.string().trim().max(500).nullable().optional(),
+        expectedUpdatedAt: versionInput,
       })
       .parse(data),
   )
   .handler(async ({ data, context }) => {
     await assertEnabled();
     const { setComponentArchived } = await import("./complete-solutions.server");
-    return setComponentArchived(data.id, data.archived, data.reason ?? null, context.profile.id);
+    return setComponentArchived(
+      data.id,
+      data.archived,
+      data.reason ?? null,
+      data.expectedUpdatedAt,
+      context.profile.id,
+    );
   });
 
 /** The vocabularies the screens offer, in one place, so the server and the screen agree. */
@@ -257,6 +273,7 @@ const reviewedComponentInput = z
 const reviewedSolutionInput = z.object({
   title: z.string().trim().min(1).max(200),
   scope: z.enum(SOLUTION_SCOPES),
+  purchasedServiceId: z.string().trim().min(1).max(100).nullable().optional(),
   startCondition: z.string().trim().max(1000).nullable(),
   estimateWeeks: z.number().int().min(1).max(520).nullable(),
   sowQuote: z.string().trim().max(2000).nullable(),
@@ -268,7 +285,7 @@ const reviewedSolutionInput = z.object({
 export const suggestSolutionsFromSow = createServerFn({ method: "POST" })
   .middleware([requireDealEditor])
   .inputValidator((data: unknown) => z.object({ implementationId: uuid }).parse(data))
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
     await assertEnabled();
     const { readSolutionsFromSow } = await import("./complete-solutions-sow.server");
     return readSolutionsFromSow(data.implementationId);

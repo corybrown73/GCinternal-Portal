@@ -16,6 +16,7 @@ import {
 } from "../complete-solutions";
 
 const SOL = "e0000000-0000-4000-8000-000000000001";
+const VERSION = "2026-10-20T09:05:00.000001+00:00";
 
 function comp(
   id: string,
@@ -269,18 +270,28 @@ describe("the entry forms refuse what the database would refuse", () => {
   });
 
   it("refuses a waiting component with nothing recorded as the blocker", () => {
-    const r = updateComponentInput.safeParse({ id: SOL, status: "waiting", blocker: null });
+    const r = updateComponentInput.safeParse({
+      id: SOL,
+      expectedUpdatedAt: VERSION,
+      status: "waiting",
+      blocker: null,
+    });
     expect(r.success).toBe(false);
   });
 
   it("allows a waiting status when the blocker is simply not part of this change", () => {
-    const r = updateComponentInput.safeParse({ id: SOL, status: "waiting" });
+    const r = updateComponentInput.safeParse({
+      id: SOL,
+      expectedUpdatedAt: VERSION,
+      status: "waiting",
+    });
     expect(r.success).toBe(true);
   });
 
   it("refuses changes needed with no explanation", () => {
     const r = updateComponentInput.safeParse({
       id: SOL,
+      expectedUpdatedAt: VERSION,
       status: "changes_needed",
       latestUpdate: null,
     });
@@ -288,13 +299,18 @@ describe("the entry forms refuse what the database would refuse", () => {
   });
 
   it("refuses a submission count without the date it was checked", () => {
-    const r = formTrackingInput.safeParse({ id: SOL, submissionCount: 40 });
+    const r = formTrackingInput.safeParse({
+      id: SOL,
+      expectedUpdatedAt: VERSION,
+      submissionCount: 40,
+    });
     expect(r.success).toBe(false);
   });
 
   it("accepts a submission count entered with its date", () => {
     const r = formTrackingInput.safeParse({
       id: SOL,
+      expectedUpdatedAt: VERSION,
       submissionCount: 40,
       submissionCheckedOn: "2026-10-27",
     });
@@ -302,7 +318,11 @@ describe("the entry forms refuse what the database would refuse", () => {
   });
 
   it("refuses a date that is not a real date", () => {
-    const r = updateComponentInput.safeParse({ id: SOL, targetDate: "2026-13-01" });
+    const r = updateComponentInput.safeParse({
+      id: SOL,
+      expectedUpdatedAt: VERSION,
+      targetDate: "2026-13-01",
+    });
     expect(r.success).toBe(false);
   });
 });

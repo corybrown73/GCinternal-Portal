@@ -3,10 +3,12 @@ import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { audit } from "./server/audit";
 import { rowOrThrow, rowsOrThrow } from "./server/db-read";
 import {
-  openComponentsBlockingComplete,
-  requiresReason,
+  reconcilePurchased,
+  type PurchaseCheck,
+  type PurchaseRecord,
+} from "./complete-solutions-purchase";
+import {
   suggestReadiness,
-  wouldCreateCycle,
   type ComponentStatus,
   type Priority,
   type Readiness,
@@ -18,19 +20,18 @@ import {
 } from "./complete-solutions";
 
 /**
- * Reads and writes for complete solutions. Every write is checked against the
- * current row first, so a stale screen cannot change what is no longer true,
- * and every change is recorded in solution_events with who made it and why.
+ * Reads and writes for complete solutions.
  *
- * What the database also enforces (0091): the original target date never
- * changes, a component sits under its own solution's implementation, history
- * is append-only, and a solution with components cannot be deleted. Those are
- * checked again here so the refusal reads as a sentence, not a SQL error.
+ * Every write is one call to a database function (supabase/migrations/0091). The
+ * function checks the caller's permission, locks the row, refuses a change made
+ * against a version that has since changed, makes the change and writes its
+ * history in the same transaction. If any step fails, nothing is kept. This file
+ * only maps the function's refusal to a sentence a person can act on.
  *
- * NOT ATOMIC. A change is written, then its history row. PostgREST has no
- * multi-statement transaction from this client, so if the history write fails
- * after the change, the change is kept and the caller is told to tell an admin
- * rather than being told nothing changed.
+ * Permissions are decided in the database (solution_may_edit): a manager or
+ * admin may change any implementation's solutions, an implementation owner may
+ * change their own, and nobody else may. canEdit below only tells the screen
+ * whether to show the controls; the database is what refuses.
  */
 
 const db = () => supabaseAdmin as any;
@@ -77,6 +78,8 @@ export type ComponentView = {
   submissionCheckedOn: string | null;
   customerUsageConfirmedOn: string | null;
   archived: boolean;
+  /** The row's version. Sent back with every change, so a stale screen cannot overwrite a newer one. */
+  updatedAt: string;
   dependsOn: Array<{ id: string; name: string; critical: boolean; status: ComponentStatus }>;
 };
 
@@ -86,6 +89,8 @@ export type SolutionView = {
   title: string;
   scope: SolutionScope;
   source: "manual" | "sow";
+  /** The purchase record item this solution delivers, when one was linked. A reference only. */
+  purchasedServiceId: string | null;
   sowQuote: string | null;
   startCondition: string | null;
   estimateWeeks: number | null;
@@ -100,6 +105,8 @@ export type SolutionView = {
   originalTargetDate: string | null;
   archived: boolean;
   createdAt: string;
+  /** The row's version. Sent back with every change. */
+  updatedAt: string;
   components: ComponentView[];
 };
 
@@ -116,9 +123,9 @@ export type HistoryEntry = {
 };
 
 const SOLUTION_COLUMNS =
-  "id, implementation_id, title, scope, source, sow_quote, start_condition, estimate_weeks, priority, status, readiness_confirmed, readiness_confirmed_at, next_action, target_date, original_target_date, archived_at, created_at";
+  "id, implementation_id, title, scope, source, purchased_service_id, sow_quote, start_condition, estimate_weeks, priority, status, readiness_confirmed, readiness_confirmed_at, next_action, target_date, original_target_date, archived_at, created_at, updated_at";
 const COMPONENT_COLUMNS =
-  "id, complete_solution_id, implementation_id, category, integration_type, name, status, priority, target_date, original_target_date, target_change_reason, start_condition, estimate_weeks, blocker, latest_update, latest_update_at, next_action, technical_solution_id, sow_quote, form_built, customer_approved, submission_count, submission_checked_on, customer_usage_confirmed_on, archived_at";
+  "id, complete_solution_id, implementation_id, category, integration_type, name, status, priority, target_date, original_target_date, target_change_reason, start_condition, estimate_weeks, blocker, latest_update, latest_update_at, next_action, technical_solution_id, sow_quote, form_built, customer_approved, submission_count, submission_checked_on, customer_usage_confirmed_on, archived_at, updated_at";
 
 /* ------------------------------------------------------------- reads */
 
@@ -148,6 +155,7 @@ function componentFrom(row: any, deps: ComponentView["dependsOn"]): ComponentVie
     submissionCheckedOn: row.submission_checked_on ?? null,
     customerUsageConfirmedOn: row.customer_usage_confirmed_on ?? null,
     archived: row.archived_at != null,
+    updatedAt: String(row.updated_at),
     dependsOn: deps,
   };
 }
@@ -218,6 +226,7 @@ export async function loadSolutionsFor(implementationId: string): Promise<Soluti
       title: String(s.title),
       scope: s.scope,
       source: s.source,
+      purchasedServiceId: s.purchased_service_id ?? null,
       sowQuote: s.sow_quote ?? null,
       startCondition: s.start_condition ?? null,
       estimateWeeks: s.estimate_weeks ?? null,
@@ -240,9 +249,77 @@ export async function loadSolutionsFor(implementationId: string): Promise<Soluti
       originalTargetDate: s.original_target_date ?? null,
       archived: s.archived_at != null,
       createdAt: String(s.created_at),
+      updatedAt: String(s.updated_at),
       components: own,
     };
   });
+}
+
+/**
+ * The purchase record items on the implementation's deal (the services the sale
+ * recorded). Read only: nothing here changes the deal, its intake, or Salesforce.
+ */
+export async function loadPurchaseRecords(implementationId: string): Promise<{
+  hasDeal: boolean;
+  records: PurchaseRecord[];
+}> {
+  const impl = rowOrThrow<any>(
+    await db().from("implementations").select("deal_id").eq("id", implementationId).maybeSingle(),
+    "the implementation",
+  );
+  if (!impl?.deal_id) return { hasDeal: false, records: [] };
+  const deal = rowOrThrow<any>(
+    await db().from("portal_accounts").select("intake").eq("id", impl.deal_id).maybeSingle(),
+    "the purchase record",
+  );
+  const intake = deal?.intake ?? {};
+  const { normalizeServices } = await import("./onboarding-services");
+  const services = normalizeServices(intake.timeline?.services ?? [], intake.timeline ?? {});
+  return {
+    hasDeal: true,
+    records: services.map((svc) => ({
+      id: String(svc.id),
+      name: String(svc.name),
+      kind: String(svc.kind),
+    })),
+  };
+}
+
+/**
+ * The workspace's view for one signed-in person: the solutions, whether that
+ * person may change them, and how the purchased scope compares with the deal's
+ * purchase record. The database makes the same permission decision on every write.
+ */
+export async function loadWorkspace(
+  implementationId: string,
+  actorProfileId: string,
+): Promise<{ solutions: SolutionView[]; canEdit: boolean; purchase: PurchaseCheck }> {
+  const [solutions, canEdit, record] = await Promise.all([
+    loadSolutionsFor(implementationId),
+    canEditSolutions(actorProfileId, implementationId),
+    loadPurchaseRecords(implementationId),
+  ]);
+  const purchase = reconcilePurchased({
+    hasRecord: record.hasDeal,
+    solutions,
+    records: record.records,
+  });
+  return { solutions, canEdit, purchase };
+}
+
+export async function canEditSolutions(
+  actorProfileId: string,
+  implementationId: string,
+): Promise<boolean> {
+  const { data, error } = await db().rpc("solution_may_edit", {
+    p_profile: actorProfileId,
+    p_implementation: implementationId,
+  });
+  if (error) {
+    console.error(`[solutions] permission check failed: ${error.message ?? "unknown"}`);
+    return false;
+  }
+  return data === true;
 }
 
 export async function loadSolutionHistory(
@@ -382,153 +459,70 @@ export function summarizeSolutions(
 
 /* ------------------------------------------------------------- writes */
 
-function saveFailed(what: string, error: { message?: string; code?: string } | null | undefined) {
-  if (error)
-    console.error(
-      `[solutions] ${what} failed: ${error.message ?? "unknown"} (${error.code ?? "no code"})`,
-    );
+/**
+ * The database's refusals are sentences meant for the person (no permission, a
+ * version that changed, a rule that was broken). They are passed on unchanged.
+ * Anything else is logged, and the person is told nothing was changed, which is
+ * true: the database rolls the whole call back.
+ *
+ *   42501  not allowed to change this implementation
+ *   P0409  changed since it was read: reload and try again
+ *   22023  a rule was broken (reason needed, loop, duplicate, archived, ...)
+ */
+const REFUSAL_CODES = new Set(["42501", "P0409", "22023"]);
+
+export function writeFailure(what: string, error: { code?: string; message?: string }): Error {
+  if (error.code && REFUSAL_CODES.has(error.code)) {
+    return new Error(error.message ?? "That change was refused. Nothing has been changed.");
+  }
+  console.error(
+    `[solutions] ${what} failed: ${error.message ?? "unknown"} (${error.code ?? "no code"})`,
+  );
   return new Error(`Could not ${what}. Nothing has been changed.`);
 }
 
-async function loadSolution(id: string): Promise<any> {
+async function write<T = unknown>(
+  fn: string,
+  args: Record<string, unknown>,
+  what: string,
+): Promise<T> {
+  const { data, error } = await db().rpc(fn, args);
+  if (error) throw writeFailure(what, error);
+  return data as T;
+}
+
+/** Drops keys the caller did not send, so "not sent" never reads as "clear it". */
+function definedOnly(patch: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(patch).filter(([, v]) => v !== undefined));
+}
+
+async function solutionOf(id: string): Promise<{ implementationId: string; solutionId: string }> {
   const row = rowOrThrow<any>(
-    await db().from("complete_solutions").select(SOLUTION_COLUMNS).eq("id", id).maybeSingle(),
+    await db()
+      .from("complete_solutions")
+      .select("id, implementation_id")
+      .eq("id", id)
+      .maybeSingle(),
     "this solution",
   );
   if (!row) throw new Error("That solution no longer exists.");
-  return row;
+  return { implementationId: String(row.implementation_id), solutionId: String(row.id) };
 }
 
-async function loadComponent(id: string): Promise<any> {
+async function componentRow(id: string): Promise<{ implementationId: string; solutionId: string }> {
   const row = rowOrThrow<any>(
-    await db().from("solution_components").select(COMPONENT_COLUMNS).eq("id", id).maybeSingle(),
+    await db()
+      .from("solution_components")
+      .select("id, implementation_id, complete_solution_id")
+      .eq("id", id)
+      .maybeSingle(),
     "this component",
   );
   if (!row) throw new Error("That component no longer exists.");
-  return row;
-}
-
-function assertLive(row: { archived_at?: string | null }, what: string) {
-  if (row.archived_at) throw new Error(`This ${what} is archived. Restore it to change it.`);
-}
-
-async function recordEvents(
-  rows: Array<{
-    implementationId: string;
-    solutionId: string;
-    componentId?: string | null;
-    kind: SolutionEventKind;
-    from?: string | null;
-    to?: string | null;
-    reason?: string | null;
-    actorProfileId: string;
-  }>,
-): Promise<void> {
-  if (rows.length === 0) return;
-  const { error } = await db()
-    .from("solution_events")
-    .insert(
-      rows.map((r) => ({
-        implementation_id: r.implementationId,
-        complete_solution_id: r.solutionId,
-        component_id: r.componentId ?? null,
-        kind: r.kind,
-        from_value: r.from ?? null,
-        to_value: r.to ?? null,
-        reason: r.reason ?? null,
-        actor_profile_id: r.actorProfileId,
-      })),
-    );
-  if (error) {
-    console.error(
-      `[solutions] history write failed: ${error.message ?? "unknown"} (${error.code ?? "no code"})`,
-    );
-    throw new Error(
-      "The change was saved, but its history could not be recorded. Tell an admin before making more changes to this solution.",
-    );
-  }
-}
-
-function changeOf<T>(from: T | null | undefined, to: T | null | undefined): boolean {
-  return (from ?? null) !== (to ?? null);
-}
-
-/**
- * Adds a complete solution. Returns its id as soon as the row and its history
- * are written, so a later read problem cannot make a saved solution look failed.
- */
-export async function insertCompleteSolution(
-  input: {
-    implementationId: string;
-    title: string;
-    scope: SolutionScope;
-    priority: Priority;
-    startCondition?: string | null | undefined;
-    estimateWeeks?: number | null | undefined;
-    sowQuote?: string | null | undefined;
-    nextAction?: string | null | undefined;
-    source?: "manual" | "sow";
-    targetDate?: string | null;
-  },
-  actorProfileId: string,
-): Promise<string> {
-  const impl = rowOrThrow<any>(
-    await db().from("implementations").select("id").eq("id", input.implementationId).maybeSingle(),
-    "this implementation",
-  );
-  if (!impl) throw new Error("That implementation no longer exists.");
-
-  const { data, error } = await db()
-    .from("complete_solutions")
-    .insert({
-      implementation_id: input.implementationId,
-      title: input.title,
-      scope: input.scope,
-      source: input.source ?? "manual",
-      priority: input.priority,
-      // Set explicitly rather than left to the column defaults, so a row never
-      // depends on who reads it to know its starting state.
-      status: "not_started",
-      readiness_confirmed: "not_ready",
-      start_condition: input.startCondition ?? null,
-      estimate_weeks: input.estimateWeeks ?? null,
-      sow_quote: input.sowQuote ?? null,
-      next_action: input.nextAction ?? null,
-      target_date: input.targetDate ?? null,
-      original_target_date: input.targetDate ?? null,
-      created_by: actorProfileId,
-    })
-    .select(SOLUTION_COLUMNS)
-    .single();
-  if (error || !data) throw saveFailed("add the solution", error);
-  const id = String((data as any).id);
-  await recordEvents([
-    {
-      implementationId: input.implementationId,
-      solutionId: id,
-      kind: "created",
-      to: input.title,
-      actorProfileId,
-    },
-  ]);
-  await audit({
-    actor_type: "user",
-    actor_id: actorProfileId,
-    action: "solution.create",
-    entity_type: "complete_solution",
-    entity_id: id,
-    payload: { scope: input.scope, source: input.source ?? "manual" },
-  });
-  return id;
-}
-
-/** Adds a complete solution and returns the workspace view of the implementation. */
-export async function createCompleteSolution(
-  input: Parameters<typeof insertCompleteSolution>[0],
-  actorProfileId: string,
-): Promise<SolutionView> {
-  const id = await insertCompleteSolution(input, actorProfileId);
-  return one(input.implementationId, id);
+  return {
+    implementationId: String(row.implementation_id),
+    solutionId: String(row.complete_solution_id),
+  };
 }
 
 async function one(implementationId: string, solutionId: string): Promise<SolutionView> {
@@ -538,9 +532,65 @@ async function one(implementationId: string, solutionId: string): Promise<Soluti
   return found;
 }
 
+export type SolutionCreate = {
+  implementationId: string;
+  title: string;
+  scope: SolutionScope;
+  priority: Priority;
+  startCondition?: string | null | undefined;
+  estimateWeeks?: number | null | undefined;
+  sowQuote?: string | null | undefined;
+  nextAction?: string | null | undefined;
+  source?: "manual" | "sow";
+  targetDate?: string | null;
+  purchasedServiceId?: string | null;
+};
+
+/** Adds a complete solution. Returns its id; the caller reads the view it needs. */
+export async function insertCompleteSolution(
+  input: SolutionCreate,
+  actorProfileId: string,
+): Promise<string> {
+  const id = await write<string>(
+    "solution_create",
+    {
+      p_profile: actorProfileId,
+      p_implementation: input.implementationId,
+      p_title: input.title,
+      p_scope: input.scope,
+      p_priority: input.priority,
+      p_start_condition: input.startCondition ?? null,
+      p_estimate_weeks: input.estimateWeeks ?? null,
+      p_sow_quote: input.sowQuote ?? null,
+      p_next_action: input.nextAction ?? null,
+      p_source: input.source ?? "manual",
+      p_target_date: input.targetDate ?? null,
+      p_purchased_service_id: input.purchasedServiceId ?? null,
+    },
+    "add the solution",
+  );
+  await audit({
+    actor_type: "user",
+    actor_id: actorProfileId,
+    action: "solution.create",
+    entity_type: "complete_solution",
+    entity_id: String(id),
+    payload: { scope: input.scope, source: input.source ?? "manual" },
+  });
+  return String(id);
+}
+
+export async function createCompleteSolution(
+  input: SolutionCreate,
+  actorProfileId: string,
+): Promise<SolutionView> {
+  const id = await insertCompleteSolution(input, actorProfileId);
+  return one(input.implementationId, id);
+}
+
 /**
- * Changes a solution's own fields. Marking it complete is refused while any
- * component is open, and the refusal names them.
+ * Changes a solution's own fields. `expectedUpdatedAt` is the version the screen
+ * was showing; a change against an older version is refused, not merged.
  */
 export async function updateCompleteSolution(
   id: string,
@@ -552,66 +602,28 @@ export async function updateCompleteSolution(
     nextAction?: string | null | undefined;
     startCondition?: string | null | undefined;
   },
+  expectedUpdatedAt: string,
   actorProfileId: string,
 ): Promise<SolutionView> {
-  const row = await loadSolution(id);
-  assertLive(row, "solution");
-  const implementationId = String(row.implementation_id);
-
-  if (patch.status === "complete" && row.status !== "complete") {
-    const components = rowsOrThrow<any>(
-      await db()
-        .from("solution_components")
-        .select("name, status, archived_at")
-        .eq("complete_solution_id", id),
-      "the solution components",
-    );
-    const open = openComponentsBlockingComplete(
-      components.map((c: any) => ({
-        name: String(c.name),
-        status: c.status,
-        archived: c.archived_at != null,
-      })),
-    );
-    if (open.length > 0) {
-      throw new Error(
-        `This solution cannot be marked complete yet. Still open: ${open.join(", ")}.`,
-      );
-    }
-  }
-
-  const update: Record<string, unknown> = {};
-  const events: Parameters<typeof recordEvents>[0] = [];
-  const set = (
-    column: string,
-    key: keyof typeof patch,
-    kind: SolutionEventKind,
-    current: string | null | undefined,
-  ) => {
-    const next = patch[key];
-    if (next === undefined || !changeOf(current, next as string | null)) return;
-    update[column] = next;
-    events.push({
-      implementationId,
-      solutionId: id,
-      kind,
-      from: current ?? null,
-      to: (next as string | null) ?? null,
-      actorProfileId,
-    });
-  };
-  set("title", "title", "edited", row.title);
-  set("scope", "scope", "edited", row.scope);
-  set("priority", "priority", "priority", row.priority);
-  set("status", "status", "status", row.status);
-  set("next_action", "nextAction", "edited", row.next_action);
-  set("start_condition", "startCondition", "edited", row.start_condition);
-
-  if (Object.keys(update).length > 0) {
-    const { error } = await db().from("complete_solutions").update(update).eq("id", id);
-    if (error) throw saveFailed("save the solution", error);
-    await recordEvents(events);
-  }
+  const { implementationId } = await solutionOf(id);
+  const columns = definedOnly({
+    title: patch.title,
+    scope: patch.scope,
+    priority: patch.priority,
+    status: patch.status,
+    next_action: patch.nextAction,
+    start_condition: patch.startCondition,
+  });
+  await write(
+    "solution_update",
+    {
+      p_profile: actorProfileId,
+      p_id: id,
+      p_expected: expectedUpdatedAt,
+      p_patch: columns,
+    },
+    "save the solution",
+  );
   return one(implementationId, id);
 }
 
@@ -623,36 +635,21 @@ export async function setSolutionTargetDate(
   id: string,
   targetDate: string | null,
   reason: string | null,
+  expectedUpdatedAt: string,
   actorProfileId: string,
 ): Promise<SolutionView> {
-  const row = await loadSolution(id);
-  assertLive(row, "solution");
-  const implementationId = String(row.implementation_id);
-  const hadOriginal = row.original_target_date != null;
-  if (!changeOf(row.target_date, targetDate)) return one(implementationId, id);
-  if (
-    requiresReason({ field: "target_date", hadOriginal, from: row.target_date, to: targetDate }) &&
-    !reason
-  ) {
-    throw new Error("Say why the delivery date moves. The original date stays on record.");
-  }
-  // The previous date is taken before the write, so the history records what it was.
-  const previousDate: string | null = row.target_date ?? null;
-  const update: Record<string, unknown> = { target_date: targetDate };
-  if (!hadOriginal && targetDate) update["original_target_date"] = targetDate;
-  const { error } = await db().from("complete_solutions").update(update).eq("id", id);
-  if (error) throw saveFailed("save the delivery date", error);
-  await recordEvents([
+  const { implementationId } = await solutionOf(id);
+  await write(
+    "solution_set_target",
     {
-      implementationId,
-      solutionId: id,
-      kind: "target_date",
-      from: previousDate,
-      to: targetDate,
-      reason,
-      actorProfileId,
+      p_profile: actorProfileId,
+      p_id: id,
+      p_expected: expectedUpdatedAt,
+      p_target: targetDate,
+      p_reason: reason,
     },
-  ]);
+    "save the delivery date",
+  );
   return one(implementationId, id);
 }
 
@@ -661,39 +658,21 @@ export async function confirmSolutionReadiness(
   id: string,
   readiness: Readiness,
   reason: string | null,
+  expectedUpdatedAt: string,
   actorProfileId: string,
 ): Promise<SolutionView> {
-  const row = await loadSolution(id);
-  assertLive(row, "solution");
-  const implementationId = String(row.implementation_id);
-  const from = row.readiness_confirmed as Readiness;
-  if (from === readiness) return one(implementationId, id);
-  if (
-    requiresReason({ field: "readiness_confirmed", hadOriginal: false, from, to: readiness }) &&
-    !reason
-  ) {
-    throw new Error("Say why readiness changes. A reason is kept with the change.");
-  }
-  const { error } = await db()
-    .from("complete_solutions")
-    .update({
-      readiness_confirmed: readiness,
-      readiness_confirmed_at: new Date().toISOString(),
-      readiness_confirmed_by: actorProfileId,
-    })
-    .eq("id", id);
-  if (error) throw saveFailed("save readiness", error);
-  await recordEvents([
+  const { implementationId } = await solutionOf(id);
+  await write(
+    "solution_confirm_readiness",
     {
-      implementationId,
-      solutionId: id,
-      kind: "readiness_confirmed",
-      from,
-      to: readiness,
-      reason,
-      actorProfileId,
+      p_profile: actorProfileId,
+      p_id: id,
+      p_expected: expectedUpdatedAt,
+      p_readiness: readiness,
+      p_reason: reason,
     },
-  ]);
+    "save readiness",
+  );
   return one(implementationId, id);
 }
 
@@ -702,88 +681,66 @@ export async function setSolutionArchived(
   id: string,
   archived: boolean,
   reason: string | null,
+  expectedUpdatedAt: string,
   actorProfileId: string,
 ): Promise<SolutionView> {
-  const row = await loadSolution(id);
-  const implementationId = String(row.implementation_id);
-  if ((row.archived_at != null) === archived) return one(implementationId, id);
-  const { error } = await db()
-    .from("complete_solutions")
-    .update({ archived_at: archived ? new Date().toISOString() : null })
-    .eq("id", id);
-  if (error) throw saveFailed(archived ? "archive the solution" : "restore the solution", error);
-  await recordEvents([
+  const { implementationId } = await solutionOf(id);
+  await write(
+    "solution_set_archived",
     {
-      implementationId,
-      solutionId: id,
-      kind: archived ? "archived" : "restored",
-      reason,
-      actorProfileId,
+      p_profile: actorProfileId,
+      p_id: id,
+      p_expected: expectedUpdatedAt,
+      p_archived: archived,
+      p_reason: reason,
     },
-  ]);
+    archived ? "archive the solution" : "restore the solution",
+  );
   return one(implementationId, id);
 }
 
-/** Adds a component and returns its id, without reading the solution back. */
+export type ComponentCreate = {
+  solutionId: string;
+  category: ComponentCategory;
+  integrationType?: IntegrationType | null | undefined;
+  name: string;
+  priority: Priority;
+  targetDate?: string | null | undefined;
+  startCondition?: string | null | undefined;
+  estimateWeeks?: number | null | undefined;
+  nextAction?: string | null | undefined;
+  sowQuote?: string | null | undefined;
+};
+
+/** Adds a component and returns its id. */
 export async function insertComponent(
-  input: {
-    solutionId: string;
-    category: ComponentCategory;
-    integrationType?: IntegrationType | null | undefined;
-    name: string;
-    priority: Priority;
-    targetDate?: string | null | undefined;
-    startCondition?: string | null | undefined;
-    estimateWeeks?: number | null | undefined;
-    nextAction?: string | null | undefined;
-    sowQuote?: string | null | undefined;
-  },
+  input: ComponentCreate,
   actorProfileId: string,
 ): Promise<{ id: string; implementationId: string; solutionId: string }> {
-  const solution = await loadSolution(input.solutionId);
-  assertLive(solution, "solution");
-  const implementationId = String(solution.implementation_id);
-  const { data, error } = await db()
-    .from("solution_components")
-    .insert({
-      implementation_id: implementationId,
-      complete_solution_id: input.solutionId,
-      category: input.category,
-      integration_type: input.category === "integrations" ? (input.integrationType ?? null) : null,
-      name: input.name,
-      status: "not_started",
-      priority: input.priority,
-      form_built: false,
-      customer_approved: false,
-      sort_order: 0,
-      target_date: input.targetDate ?? null,
-      original_target_date: input.targetDate ?? null,
-      start_condition: input.startCondition ?? null,
-      estimate_weeks: input.estimateWeeks ?? null,
-      next_action: input.nextAction ?? null,
-      sow_quote: input.sowQuote ?? null,
-      created_by: actorProfileId,
-    })
-    .select("id")
-    .single();
-  if (error || !data) throw saveFailed("add the component", error);
-  const componentId = String((data as any).id);
-  await recordEvents([
+  const { implementationId } = await solutionOf(input.solutionId);
+  const id = await write<string>(
+    "component_create",
     {
-      implementationId,
-      solutionId: input.solutionId,
-      componentId,
-      kind: "created",
-      to: input.name,
-      actorProfileId,
+      p_profile: actorProfileId,
+      p_solution: input.solutionId,
+      p_category: input.category,
+      p_integration_type:
+        input.category === "integrations" ? (input.integrationType ?? null) : null,
+      p_name: input.name,
+      p_priority: input.priority,
+      p_target_date: input.targetDate ?? null,
+      p_start_condition: input.startCondition ?? null,
+      p_estimate_weeks: input.estimateWeeks ?? null,
+      p_next_action: input.nextAction ?? null,
+      p_sow_quote: input.sowQuote ?? null,
     },
-  ]);
-  return { id: componentId, implementationId, solutionId: input.solutionId };
+    "add the component",
+  );
+  return { id: String(id), implementationId, solutionId: input.solutionId };
 }
 
-/** Adds a component and returns the workspace view of its solution. */
 export async function createComponent(
-  input: Parameters<typeof insertComponent>[0],
+  input: ComponentCreate,
   actorProfileId: string,
 ): Promise<SolutionView> {
   const { implementationId, solutionId } = await insertComponent(input, actorProfileId);
@@ -791,9 +748,9 @@ export async function createComponent(
 }
 
 /**
- * Changes one component. A waiting component must say what it is waiting on;
- * a component that needs changes must say what. Moving a date that already had
- * an original needs a reason.
+ * Changes one component. A waiting component must say what it is waiting on; a
+ * component that needs changes must say what. Moving a date that already had an
+ * original needs a reason. The version must be the one the screen showed.
  */
 export async function updateComponent(
   input: {
@@ -806,82 +763,31 @@ export async function updateComponent(
     nextAction?: string | null | undefined;
     targetDate?: string | null | undefined;
     targetChangeReason?: string | null | undefined;
+    expectedUpdatedAt: string;
   },
   actorProfileId: string,
 ): Promise<SolutionView> {
-  const row = await loadComponent(input.id);
-  assertLive(row, "component");
-  const solution = await loadSolution(row.complete_solution_id);
-  assertLive(solution, "solution");
-  const implementationId = String(row.implementation_id);
-  const solutionId = String(row.complete_solution_id);
-
-  const effectiveStatus = (input.status ?? row.status) as ComponentStatus;
-  const effectiveBlocker = input.blocker !== undefined ? input.blocker : row.blocker;
-  const effectiveUpdate = input.latestUpdate !== undefined ? input.latestUpdate : row.latest_update;
-  if (effectiveStatus === "waiting" && !effectiveBlocker) {
-    throw new Error("Record what it is waiting on before marking it Waiting.");
-  }
-  if (effectiveStatus === "changes_needed" && !effectiveUpdate) {
-    throw new Error("Say what needs changing before marking it Changes Needed.");
-  }
-
-  const update: Record<string, unknown> = {};
-  const events: Parameters<typeof recordEvents>[0] = [];
-  const base = { implementationId, solutionId, componentId: input.id, actorProfileId };
-
-  if (input.name !== undefined && changeOf(row.name, input.name)) {
-    update["name"] = input.name;
-    events.push({ ...base, kind: "edited", from: row.name, to: input.name });
-  }
-  if (input.priority !== undefined && changeOf(row.priority, input.priority)) {
-    update["priority"] = input.priority;
-    events.push({ ...base, kind: "priority", from: row.priority, to: input.priority });
-  }
-  if (input.status !== undefined && changeOf(row.status, input.status)) {
-    update["status"] = input.status;
-    events.push({ ...base, kind: "status", from: row.status, to: input.status });
-  }
-  if (input.targetDate !== undefined && changeOf(row.target_date, input.targetDate)) {
-    const hadOriginal = row.original_target_date != null;
-    if (
-      requiresReason({
-        field: "target_date",
-        hadOriginal,
-        from: row.target_date,
-        to: input.targetDate,
-      }) &&
-      !input.targetChangeReason
-    ) {
-      throw new Error("Say why the target date moves. The original date stays on record.");
-    }
-    update["target_date"] = input.targetDate;
-    update["target_change_reason"] = hadOriginal ? input.targetChangeReason : null;
-    events.push({
-      ...base,
-      kind: "target_date",
-      from: row.target_date ?? null,
-      to: input.targetDate,
-      reason: hadOriginal ? (input.targetChangeReason ?? null) : null,
-    });
-  }
-  for (const [key, column, current] of [
-    ["blocker", "blocker", row.blocker],
-    ["latestUpdate", "latest_update", row.latest_update],
-    ["nextAction", "next_action", row.next_action],
-  ] as const) {
-    const next = input[key];
-    if (next === undefined || !changeOf(current, next)) continue;
-    update[column] = next;
-    if (key === "latestUpdate") update["latest_update_at"] = new Date().toISOString();
-    events.push({ ...base, kind: "edited", from: current ?? null, to: next });
-  }
-
-  if (Object.keys(update).length > 0) {
-    const { error } = await db().from("solution_components").update(update).eq("id", input.id);
-    if (error) throw saveFailed("save the component", error);
-    await recordEvents(events);
-  }
+  const { implementationId, solutionId } = await componentRow(input.id);
+  const patch = definedOnly({
+    name: input.name,
+    priority: input.priority,
+    status: input.status,
+    blocker: input.blocker,
+    latest_update: input.latestUpdate,
+    next_action: input.nextAction,
+    target_date: input.targetDate,
+  });
+  await write(
+    "component_update",
+    {
+      p_profile: actorProfileId,
+      p_id: input.id,
+      p_expected: input.expectedUpdatedAt,
+      p_patch: patch,
+      p_target_reason: input.targetChangeReason ?? null,
+    },
+    "save the component",
+  );
   return one(implementationId, solutionId);
 }
 
@@ -898,181 +804,69 @@ export async function setFormTracking(
     submissionCount?: number | null | undefined;
     submissionCheckedOn?: string | null | undefined;
     usageConfirmedOn?: string | null | undefined;
+    expectedUpdatedAt: string;
   },
   actorProfileId: string,
 ): Promise<SolutionView> {
-  const row = await loadComponent(input.id);
-  assertLive(row, "component");
-  if (row.category !== "forms") {
-    throw new Error("Form tracking applies to a form component only.");
-  }
-  const implementationId = String(row.implementation_id);
-  const solutionId = String(row.complete_solution_id);
-  const base = { implementationId, solutionId, componentId: input.id, actorProfileId };
-  const update: Record<string, unknown> = {};
-  const events: Parameters<typeof recordEvents>[0] = [];
-
-  if (input.formBuilt !== undefined && input.formBuilt !== row.form_built) {
-    update["form_built"] = input.formBuilt;
-    events.push({
-      ...base,
-      kind: "form_built",
-      from: String(row.form_built),
-      to: String(input.formBuilt),
-    });
-  }
-  if (input.customerApproved !== undefined && input.customerApproved !== row.customer_approved) {
-    update["customer_approved"] = input.customerApproved;
-    events.push({
-      ...base,
-      kind: "customer_approved",
-      from: String(row.customer_approved),
-      to: String(input.customerApproved),
-    });
-  }
-  if (input.submissionCount !== undefined) {
-    const count = input.submissionCount;
-    const checked = count === null ? null : (input.submissionCheckedOn ?? null);
-    if (count !== null && !checked) {
-      throw new Error("Enter the date the count was checked.");
-    }
-    if (count !== row.submission_count || checked !== row.submission_checked_on) {
-      update["submission_count"] = count;
-      update["submission_checked_on"] = checked;
-      events.push({
-        ...base,
-        kind: "submission_count",
-        from:
-          row.submission_count == null
-            ? null
-            : `${row.submission_count} on ${row.submission_checked_on}`,
-        to: count == null ? null : `${count} on ${checked}`,
-      });
-    }
-  }
-  if (
-    input.usageConfirmedOn !== undefined &&
-    input.usageConfirmedOn !== row.customer_usage_confirmed_on
-  ) {
-    update["customer_usage_confirmed_on"] = input.usageConfirmedOn;
-    events.push({
-      ...base,
-      kind: "usage_confirmed",
-      from: row.customer_usage_confirmed_on ?? null,
-      to: input.usageConfirmedOn ?? null,
-    });
-  }
-
-  if (Object.keys(update).length > 0) {
-    const { error } = await db().from("solution_components").update(update).eq("id", input.id);
-    if (error) throw saveFailed("save the form tracking", error);
-    await recordEvents(events);
-  }
+  const { implementationId, solutionId } = await componentRow(input.id);
+  const patch = definedOnly({
+    form_built: input.formBuilt,
+    customer_approved: input.customerApproved,
+    submission_count: input.submissionCount,
+    submission_checked_on:
+      input.submissionCount === undefined ? undefined : (input.submissionCheckedOn ?? null),
+    usage_confirmed_on: input.usageConfirmedOn,
+  });
+  await write(
+    "component_form_update",
+    {
+      p_profile: actorProfileId,
+      p_id: input.id,
+      p_expected: input.expectedUpdatedAt,
+      p_patch: patch,
+    },
+    "save the form tracking",
+  );
   return one(implementationId, solutionId);
 }
 
 /**
- * Makes one component depend on another in the same implementation. A loop is
- * refused before anything is written.
+ * Makes one component depend on another in the same implementation. The
+ * database refuses a loop, a cross-implementation link and a repeat.
  */
 export async function addDependency(
   input: { componentId: string; dependsOnId: string; critical: boolean },
   actorProfileId: string,
 ): Promise<SolutionView> {
-  const { implementationId, solutionId } = await insertDependency(input, actorProfileId);
-  return one(implementationId, solutionId);
-}
-
-/** Records a dependency without reading the solution back. */
-export async function insertDependency(
-  input: { componentId: string; dependsOnId: string; critical: boolean },
-  actorProfileId: string,
-): Promise<{ implementationId: string; solutionId: string }> {
-  if (input.componentId === input.dependsOnId) {
-    throw new Error("A component cannot depend on itself.");
-  }
-  const a = await loadComponent(input.componentId);
-  const b = await loadComponent(input.dependsOnId);
-  assertLive(a, "component");
-  assertLive(b, "component");
-  if (String(a.implementation_id) !== String(b.implementation_id)) {
-    throw new Error("A dependency must stay within one implementation.");
-  }
-  const implementationId = String(a.implementation_id);
-
-  const idsOnImplementation = rowsOrThrow<any>(
-    await db().from("solution_components").select("id").eq("implementation_id", implementationId),
-    "the component dependencies",
-  ).map((c: any) => c.id);
-  const edges = idsOnImplementation.length
-    ? rowsOrThrow<any>(
-        await db()
-          .from("solution_component_dependencies")
-          .select("component_id, depends_on_id")
-          .in("component_id", idsOnImplementation),
-        "the component dependencies",
-      ).map((e: any) => ({ from: String(e.component_id), to: String(e.depends_on_id) }))
-    : [];
-  if (wouldCreateCycle(edges, input.componentId, input.dependsOnId)) {
-    throw new Error("That dependency would make the components depend on each other in a loop.");
-  }
-
-  const { error } = await db().from("solution_component_dependencies").insert({
-    component_id: input.componentId,
-    depends_on_id: input.dependsOnId,
-    critical: input.critical,
-  });
-  if (error) {
-    if (error.code === "23505") throw new Error("That dependency is already recorded.");
-    throw saveFailed("save the dependency", error);
-  }
-  await recordEvents([
+  const { implementationId, solutionId } = await componentRow(input.componentId);
+  await write(
+    "dependency_add",
     {
-      implementationId,
-      solutionId: String(a.complete_solution_id),
-      componentId: input.componentId,
-      kind: "dependency_added",
-      to: `${b.name}${input.critical ? " (critical)" : ""}`,
-      actorProfileId,
+      p_profile: actorProfileId,
+      p_component: input.componentId,
+      p_depends_on: input.dependsOnId,
+      p_critical: input.critical,
     },
-  ]);
-  return { implementationId, solutionId: String(a.complete_solution_id) };
+    "save the dependency",
+  );
+  return one(implementationId, solutionId);
 }
 
 export async function removeDependency(
   input: { componentId: string; dependsOnId: string },
   actorProfileId: string,
 ): Promise<SolutionView> {
-  const a = await loadComponent(input.componentId);
-  const b = await loadComponent(input.dependsOnId);
-  const implementationId = String(a.implementation_id);
-  const existing = rowOrThrow<any>(
-    await db()
-      .from("solution_component_dependencies")
-      .select("component_id")
-      .eq("component_id", input.componentId)
-      .eq("depends_on_id", input.dependsOnId)
-      .maybeSingle(),
-    "the dependency",
-  );
-  if (!existing) throw new Error("That dependency is no longer recorded.");
-  const { error } = await db()
-    .from("solution_component_dependencies")
-    .delete()
-    .eq("component_id", input.componentId)
-    .eq("depends_on_id", input.dependsOnId);
-  if (error) throw saveFailed("remove the dependency", error);
-  await recordEvents([
+  const { implementationId, solutionId } = await componentRow(input.componentId);
+  await write(
+    "dependency_remove",
     {
-      implementationId,
-      solutionId: String(a.complete_solution_id),
-      componentId: input.componentId,
-      kind: "dependency_removed",
-      from: b.name,
-      actorProfileId,
+      p_profile: actorProfileId,
+      p_component: input.componentId,
+      p_depends_on: input.dependsOnId,
     },
-  ]);
-  return one(implementationId, String(a.complete_solution_id));
+    "remove the dependency",
+  );
+  return one(implementationId, solutionId);
 }
 
 /** Archives or restores a component. Nothing is deleted. */
@@ -1080,49 +874,97 @@ export async function setComponentArchived(
   id: string,
   archived: boolean,
   reason: string | null,
+  expectedUpdatedAt: string,
   actorProfileId: string,
 ): Promise<SolutionView> {
-  const row = await loadComponent(id);
-  const implementationId = String(row.implementation_id);
-  const solutionId = String(row.complete_solution_id);
-  if ((row.archived_at != null) === archived) return one(implementationId, solutionId);
-  const { error } = await db()
-    .from("solution_components")
-    .update({ archived_at: archived ? new Date().toISOString() : null })
-    .eq("id", id);
-  if (error) throw saveFailed(archived ? "archive the component" : "restore the component", error);
-  await recordEvents([
+  const { implementationId, solutionId } = await componentRow(id);
+  await write(
+    "component_set_archived",
     {
-      implementationId,
-      solutionId,
-      componentId: id,
-      kind: archived ? "archived" : "restored",
-      reason,
-      actorProfileId,
+      p_profile: actorProfileId,
+      p_id: id,
+      p_expected: expectedUpdatedAt,
+      p_archived: archived,
+      p_reason: reason,
     },
-  ]);
+    archived ? "archive the component" : "restore the component",
+  );
   return one(implementationId, solutionId);
 }
 
-/** Records that a solution was taken from the SOW on the implementation. */
-export async function recordSowImport(
+/** A reviewed solution as the database takes it. Priority is the most urgent component's. */
+export type ReviewedSave = {
+  title: string;
+  scope: SolutionScope;
+  priority: Priority;
+  /** The purchase record item this solution delivers, when the person confirmed the match. */
+  purchasedServiceId: string | null;
+  startCondition: string | null;
+  estimateWeeks: number | null;
+  sowQuote: string | null;
+  suggestedTarget: string | null;
+  components: Array<{
+    category: ComponentCategory;
+    integrationType: IntegrationType | null;
+    name: string;
+    priority: Priority;
+    dependsOn: string[];
+    critical: boolean;
+    startCondition: string | null;
+    estimateWeeks: number | null;
+    sowQuote: string | null;
+    suggestedTarget: string | null;
+  }>;
+};
+
+export type ReviewedSaveResult = {
+  created: Array<{ title: string; components: number; dependencies: number }>;
+  skipped: Array<{ title: string; reason: string }>;
+};
+
+/**
+ * Records a reviewed set in one transaction (solution_save_reviewed_set): every
+ * solution, component, dependency and history row is kept, or none is. A loop
+ * anywhere in the set refuses the whole set.
+ */
+export async function saveReviewedSet(
   implementationId: string,
-  solutionId: string,
+  solutions: ReviewedSave[],
   sowName: string | null,
   actorProfileId: string,
-): Promise<void> {
-  await recordEvents([
+): Promise<ReviewedSaveResult> {
+  const result = await write<ReviewedSaveResult>(
+    "solution_save_reviewed_set",
     {
-      implementationId,
-      solutionId,
-      kind: "sow_import",
-      to: sowName ?? "Signed SOW",
-      actorProfileId,
+      p_profile: actorProfileId,
+      p_implementation: implementationId,
+      p_sow_name: sowName,
+      p_solutions: solutions.map((s) => ({
+        title: s.title,
+        scope: s.scope,
+        priority: s.priority,
+        purchasedServiceId: s.purchasedServiceId,
+        startCondition: s.startCondition,
+        estimateWeeks: s.estimateWeeks,
+        sowQuote: s.sowQuote,
+        suggestedTarget: s.suggestedTarget,
+        components: s.components,
+      })),
     },
-  ]);
+    "save the reviewed solutions",
+  );
+  await audit({
+    actor_type: "user",
+    actor_id: actorProfileId,
+    action: "solution.sow_import",
+    entity_type: "implementation",
+    entity_id: implementationId,
+    payload: { created: result.created.length, skipped: result.skipped.length },
+  });
+  return result;
 }
 
-/** Who may see and change solutions: anyone signed in to the Hub, never a customer. */
+/** Who may see solutions: any signed-in internal user, never a customer. */
 export function assertInternalRole(role: string | null | undefined): void {
   if (!role || role === "customer") {
     throw new Error("Forbidden: internal users only.");

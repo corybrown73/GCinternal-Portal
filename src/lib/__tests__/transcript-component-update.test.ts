@@ -39,6 +39,8 @@ const IMPL = "d0000000-0000-4000-8000-0000000000e1";
 const OTHER = "d0000000-0000-4000-8000-0000000000e2";
 const SOL = "e0000000-0000-4000-8000-0000000000e1";
 const COMP = "f0000000-0000-4000-8000-0000000000e1";
+/** The component's version when the suggestion was made, and the version the write must carry. */
+const VERSION = "2026-10-20T09:05:00.000001+00:00";
 const FOREIGN = "f0000000-0000-4000-8000-0000000000e2";
 const ACTOR = { profileId: "a0000000-0000-4000-8000-0000000000e1" };
 
@@ -90,6 +92,7 @@ function rowsFor(over: Record<string, unknown> = {}): Rows {
         priority: "needed_for_go_live",
         target_date: "2026-11-10",
         original_target_date: "2026-11-10",
+        updated_at: VERSION,
         form_built: false,
         customer_approved: false,
         created_at: "2026-10-01T00:00:00Z",
@@ -137,6 +140,7 @@ function proposal(over: Record<string, unknown>): Rows["evidence_proposals"][num
     solution_component_id: COMP,
     component_field: "status",
     component_value: "ready_for_testing",
+    component_version: VERSION,
     status: "pending",
     applied_entity_type: null,
     applied_entity_id: null,
@@ -154,20 +158,33 @@ beforeEach(() => {
 function use(rows: Rows) {
   fake = createFakeSupabase(rows, {
     unique: { solution_component_dependencies: [{ cols: ["component_id", "depends_on_id"] }] },
+    // The write is the database function; its rules are proven in the SQL probes.
+    rpcHandlers: { component_update: () => ({ data: null }) },
   });
   h.supabase.client = fake.client;
 }
 
+const componentWrites = () => fake.rpcs.filter((r) => r.fn === "component_update");
 const component = (id: string) => fake.store["solution_components"]!.find((c) => c["id"] === id)!;
 
 describe("applying a component change", () => {
-  it("changes the component on its implementation, records it, and marks the proposal applied", async () => {
+  it("writes the change through the component function, with the suggestion's version, and marks the proposal applied", async () => {
     const rows = rowsFor();
     rows["evidence_proposals"] = [proposal({})];
     use(rows);
     await applyProposal("p-1", {}, ACTOR);
-    expect(component(COMP)["status"]).toBe("ready_for_testing");
-    expect(fake.store["solution_events"]!.map((e) => e["kind"])).toEqual(["status"]);
+    expect(componentWrites()).toEqual([
+      {
+        fn: "component_update",
+        args: {
+          p_profile: ACTOR.profileId,
+          p_id: COMP,
+          p_expected: VERSION,
+          p_patch: { status: "ready_for_testing" },
+          p_target_reason: null,
+        },
+      },
+    ]);
     const row = fake.store["evidence_proposals"]![0]!;
     expect(row).toMatchObject({
       status: "applied",
@@ -219,14 +236,44 @@ describe("applying a component change", () => {
     ];
     use(rows);
     await applyProposal("p-1", {}, ACTOR);
-    expect(component(COMP)).toMatchObject({
-      target_date: "2026-11-24",
-      original_target_date: "2026-11-10",
+    expect(componentWrites()[0]!.args).toMatchObject({
+      p_expected: VERSION,
+      p_patch: { target_date: "2026-11-24" },
+      p_target_reason: "Their sandbox arrives on the 20th, so the feed moves two weeks.",
     });
-    expect(fake.store["solution_events"]![0]).toMatchObject({
-      kind: "target_date",
-      reason: "Their sandbox arrives on the 20th, so the feed moves two weeks.",
+  });
+
+  it("refuses when the component has changed since the suggestion was made, and writes nothing", async () => {
+    const rows = rowsFor();
+    rows["solution_components"]![0]!["updated_at"] = "2026-10-22T08:00:00.000002+00:00";
+    rows["evidence_proposals"] = [proposal({})];
+    use(rows);
+    await expect(applyProposal("p-1", {}, ACTOR)).rejects.toThrow(
+      "The component changed after this suggestion was made, so nothing was changed.",
+    );
+    expect(componentWrites()).toEqual([]);
+    expect(fake.store["evidence_proposals"]![0]!["status"]).toBe("pending");
+  });
+
+  it("passes the database's refusal of a stale version through, and does not mark the proposal applied", async () => {
+    const rows = rowsFor();
+    rows["evidence_proposals"] = [proposal({})];
+    fake = createFakeSupabase(rows, {
+      rpcHandlers: {
+        component_update: () => ({
+          error: {
+            code: "P0409",
+            message:
+              "This changed while you were looking at it. Reload to see the latest, then make the change again.",
+          },
+        }),
+      },
     });
+    h.supabase.client = fake.client;
+    await expect(applyProposal("p-1", {}, ACTOR)).rejects.toThrow(
+      "This changed while you were looking at it.",
+    );
+    expect(fake.store["evidence_proposals"]![0]!["status"]).toBe("pending");
   });
 });
 
@@ -255,6 +302,7 @@ describe("the reading names only what it is shown", () => {
       status: "being_built",
       priority: "needed_for_go_live",
       targetDate: null,
+      updatedAt: VERSION,
     },
   ];
 
@@ -338,15 +386,26 @@ describe("the apply plan for a component change", () => {
     solution_component_id: COMP,
     component_field: "status" as const,
     component_value: "complete",
+    component_version: VERSION,
   };
 
-  it("is a component update for a valid status", () => {
+  it("is a component update for a valid status, carrying the version it was made against", () => {
     expect(proposalApplyPlan(base, {}, { planOwnsTarget: false })).toEqual({
       kind: "component_update",
       componentId: COMP,
       field: "status",
       value: "complete",
       reason: "reason",
+      version: VERSION,
+    });
+  });
+
+  it("is blocked when the suggestion has no recorded version, since it cannot be applied safely", () => {
+    expect(
+      proposalApplyPlan({ ...base, component_version: null }, {}, { planOwnsTarget: false }),
+    ).toMatchObject({
+      kind: "blocked",
+      reason: expect.stringMatching(/no record of the component's version/),
     });
   });
 

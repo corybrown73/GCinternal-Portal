@@ -279,6 +279,8 @@ export type TranscriptContext = {
     status: string;
     priority: string;
     targetDate: string | null;
+    /** The component's version when it was read. A suggestion applies only to this version. */
+    updatedAt: string;
   }>;
   /** Who runs the implementation today, so a reading does not propose them as new. */
   owner: { id: string; name: string } | null;
@@ -385,6 +387,7 @@ export type EvidenceProposalRow = {
   solution_component_id?: string | null;
   component_field?: ComponentProposalField | null;
   component_value?: string | null;
+  component_version?: string | null;
 };
 
 export function attributionFor(quote: string | null): string {
@@ -446,6 +449,8 @@ export type ProposalApplyPlan =
       value: string;
       /** The reviewer's reason for a date change; the model's own sentence, as written. */
       reason: string | null;
+      /** The component version the suggestion was made against; the write must match it. */
+      version: string;
     }
   | { kind: "blocked"; reason: string };
 
@@ -472,6 +477,7 @@ export function proposalApplyPlan(
     | "solution_component_id"
     | "component_field"
     | "component_value"
+    | "component_version"
   >,
   picks: ProposalPicks,
   opts: { planOwnsTarget: boolean },
@@ -556,12 +562,20 @@ export function proposalApplyPlan(
         return { kind: "blocked", reason: "The suggested date is not a calendar date." };
       }
       if (!value) return { kind: "blocked", reason: "The suggested value is empty." };
+      if (!p.component_version) {
+        return {
+          kind: "blocked",
+          reason:
+            "This suggestion has no record of the component's version, so it cannot be applied safely. Dismiss it and read the transcript again.",
+        };
+      }
       return {
         kind: "component_update",
         componentId: p.solution_component_id,
         field,
         value,
         reason: p.text.trim() || null,
+        version: p.component_version,
       };
     }
     case "note":

@@ -124,6 +124,8 @@ export type SowReading = z.infer<typeof sowReadingSchema>;
 export type ReviewedSolution = {
   title: string;
   scope: SolutionScope;
+  /** The purchase record item this solution delivers: a match the person confirms, never assumed. */
+  purchasedServiceId?: string | null | undefined;
   startCondition: string | null;
   estimateWeeks: number | null;
   sowQuote: string | null;

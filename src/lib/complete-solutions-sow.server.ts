@@ -1,16 +1,14 @@
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 
 import {
-  insertComponent,
-  insertCompleteSolution,
-  insertDependency,
-  loadSolutionsFor,
-  recordSowImport,
+  loadPurchaseRecords,
+  saveReviewedSet,
+  type ReviewedSaveResult,
 } from "./complete-solutions.server";
+import { purchaseFor, type PurchaseRecord } from "./complete-solutions-purchase";
 import {
   prioritiesOf,
   reviewedSetFrom,
-  sameName,
   sowReadingSchema,
   type ReviewedSolution,
 } from "./complete-solutions-sow";
@@ -49,6 +47,8 @@ export type SowSuggestion = {
   sowName: string | null;
   solutions: ReviewedSolution[];
   gaps: string[];
+  /** The deal's purchase record items, so the person can see what each match is. */
+  purchaseRecords: PurchaseRecord[];
 };
 
 /** The proposed set for the TIS to review. Nothing is written. */
@@ -121,27 +121,29 @@ export async function readSolutionsFromSow(implementationId: string): Promise<So
   if (solutions.length === 0) {
     throw new Error("The SOW did not name any complete solutions. Nothing has been changed.");
   }
+  // A purchased solution is proposed as delivering a purchase record item only when
+  // exactly one item has its name. The person confirms or clears it before saving.
+  const purchase = await loadPurchaseRecords(implementationId);
   return {
     sowName: (impl.data.sow_document_name as string | null) ?? null,
-    solutions,
+    solutions: solutions.map((s) => ({
+      ...s,
+      purchasedServiceId:
+        s.scope === "purchased" ? (purchaseFor(s.title, purchase.records)?.id ?? null) : null,
+    })),
     gaps,
+    purchaseRecords: purchase.records,
   };
 }
 
-export type SaveResult = {
-  created: Array<{ title: string; components: number; dependencies: number }>;
-  skipped: Array<{ title: string; reason: string }>;
-  /** Anything that was saved but could not be finished, with what to do next. */
-  problems: string[];
-};
+export type SaveResult = ReviewedSaveResult;
 
 /**
- * Records a reviewed set. A solution whose name already belongs to an active
- * solution on the implementation is skipped, never duplicated. Each solution
- * takes the priority of its most urgent component.
- *
- * Writes are not one transaction. A failure partway is reported in `problems`
- * with what was saved, so nothing is hidden and nothing is silently lost.
+ * Records a reviewed set in one transaction. A solution whose name already
+ * belongs to an active solution on the implementation is skipped, never
+ * duplicated. Each solution takes the priority of its most urgent component.
+ * If anything in the set cannot be saved (a loop, a refused permission), nothing
+ * is saved: the database rolls the whole set back, and the reason is returned.
  */
 export async function saveReviewedSolutions(
   implementationId: string,
@@ -149,104 +151,31 @@ export async function saveReviewedSolutions(
   sowName: string | null,
   actorProfileId: string,
 ): Promise<SaveResult> {
-  const existing = await loadSolutionsFor(implementationId);
-  const active = existing.filter((s) => !s.archived);
-  const result: SaveResult = { created: [], skipped: [], problems: [] };
-
-  for (const proposed of set) {
-    const title = proposed.title.trim();
-    if (!title) continue;
-    if (active.some((s) => sameName(s.title, title))) {
-      result.skipped.push({
-        title,
-        reason: "A solution with this name already exists on the implementation.",
-      });
-      continue;
-    }
-    if (proposed.components.some((c) => !c.name.trim())) {
-      result.skipped.push({
-        title,
-        reason: "A component has no name, so the solution was not saved.",
-      });
-      continue;
-    }
-
-    let solutionId: string;
-    try {
-      solutionId = await insertCompleteSolution(
-        {
-          implementationId,
-          title,
-          scope: proposed.scope,
-          priority: prioritiesOf(proposed.components),
-          startCondition: proposed.startCondition,
-          estimateWeeks: proposed.estimateWeeks,
-          sowQuote: proposed.sowQuote,
-          source: "sow",
-          targetDate: proposed.suggestedTarget,
-        },
-        actorProfileId,
-      );
-    } catch (e) {
-      result.problems.push(`${title}: ${e instanceof Error ? e.message : "could not be saved"}`);
-      continue;
-    }
-
-    const componentIds = new Map<string, string>();
-    let saved = 0;
-    for (const c of proposed.components) {
-      try {
-        const { id } = await insertComponent(
-          {
-            solutionId,
-            category: c.category,
-            integrationType: c.integrationType,
-            name: c.name,
-            priority: c.priority,
-            targetDate: c.suggestedTarget,
-            startCondition: c.startCondition,
-            estimateWeeks: c.estimateWeeks,
-            sowQuote: c.sowQuote,
-          },
-          actorProfileId,
-        );
-        componentIds.set(c.name.toLowerCase(), id);
-        saved += 1;
-      } catch (e) {
-        result.problems.push(
-          `${title} · ${c.name}: ${e instanceof Error ? e.message : "could not be saved"}`,
-        );
-      }
-    }
-
-    let dependencies = 0;
-    for (const c of proposed.components) {
-      const from = componentIds.get(c.name.toLowerCase());
-      if (!from) continue;
-      for (const depName of c.dependsOn) {
-        const to = componentIds.get(depName.toLowerCase());
-        if (!to) continue;
-        try {
-          await insertDependency(
-            { componentId: from, dependsOnId: to, critical: c.critical },
-            actorProfileId,
-          );
-          dependencies += 1;
-        } catch (e) {
-          result.problems.push(
-            `${title} · ${c.name} → ${depName}: ${e instanceof Error ? e.message : "not recorded"}`,
-          );
-        }
-      }
-    }
-
-    try {
-      await recordSowImport(implementationId, solutionId, sowName, actorProfileId);
-    } catch {
-      result.problems.push(`${title}: saved, but the SOW import was not recorded in its history.`);
-    }
-
-    result.created.push({ title, components: saved, dependencies });
-  }
-  return result;
+  const solutions = set
+    .map((proposed) => ({ ...proposed, title: proposed.title.trim() }))
+    .filter((proposed) => proposed.title.length > 0)
+    .map((proposed) => ({
+      title: proposed.title,
+      scope: proposed.scope,
+      priority: prioritiesOf(proposed.components),
+      purchasedServiceId:
+        proposed.scope === "purchased" ? (proposed.purchasedServiceId ?? null) : null,
+      startCondition: proposed.startCondition,
+      estimateWeeks: proposed.estimateWeeks,
+      sowQuote: proposed.sowQuote,
+      suggestedTarget: proposed.suggestedTarget,
+      components: proposed.components.map((c) => ({
+        category: c.category,
+        integrationType: c.integrationType,
+        name: c.name.trim(),
+        priority: c.priority,
+        dependsOn: c.dependsOn,
+        critical: c.critical,
+        startCondition: c.startCondition,
+        estimateWeeks: c.estimateWeeks,
+        sowQuote: c.sowQuote,
+        suggestedTarget: c.suggestedTarget,
+      })),
+    }));
+  return saveReviewedSet(implementationId, solutions, sowName, actorProfileId);
 }
