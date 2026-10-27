@@ -37,3 +37,6 @@ dist-ssr
 # Ephemeral git worktrees used to run agents in isolation. Each one is a full
 # nested checkout of this repository, so committing them would recurse.
 .claude/worktrees/
+
+# Customer documents supplied for acceptance testing. Never commit them.
+/private-fixtures/

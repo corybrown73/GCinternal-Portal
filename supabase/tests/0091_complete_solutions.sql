@@ -54,6 +54,28 @@ insert into customers (id, org_id, name, source, is_test, updated_at) values
 insert into implementations (id, org_id, customer_id, name, current_stage, owner_id) values
   ('d0000000-0000-4000-8000-0000000000b1', '00000000-0000-4000-8000-000000000001', 'c0000000-0000-4000-8000-0000000000b1', 'S1', 'build', '70000000-0000-4000-8000-0000000000b1'),
   ('d0000000-0000-4000-8000-0000000000b2', '00000000-0000-4000-8000-000000000001', 'c0000000-0000-4000-8000-0000000000b1', 'S2', 'build', '70000000-0000-4000-8000-0000000000b2');
+-- Further people and implementations for the owner and role rules below.
+insert into auth.users (id, email) values
+  ('a0000000-0000-4000-8000-0000000000c7', 'se@probe.test'),
+  ('a0000000-0000-4000-8000-0000000000c8', 'tamse@probe.test'),
+  ('a0000000-0000-4000-8000-0000000000c9', 'onboarding@probe.test'),
+  ('a0000000-0000-4000-8000-0000000000ca', 'admin@probe.test'),
+  ('a0000000-0000-4000-8000-0000000000cb', 'superadmin@probe.test');
+insert into team_members (id, org_id, name, role) values
+  ('70000000-0000-4000-8000-0000000000b4', '00000000-0000-4000-8000-000000000001', 'SE', 'se'),
+  ('70000000-0000-4000-8000-0000000000b5', '00000000-0000-4000-8000-000000000001', 'TAM SE', 'tam_se'),
+  ('70000000-0000-4000-8000-0000000000b6', '00000000-0000-4000-8000-000000000001', 'Onboarding', 'onboarding');
+insert into portal_profiles (id, email, full_name, role, team_member_id) values
+  ('a0000000-0000-4000-8000-0000000000c7', 'se@probe.test', 'SE', 'se', '70000000-0000-4000-8000-0000000000b4'),
+  ('a0000000-0000-4000-8000-0000000000c8', 'tamse@probe.test', 'TAM SE', 'tam_se', '70000000-0000-4000-8000-0000000000b5'),
+  ('a0000000-0000-4000-8000-0000000000c9', 'onboarding@probe.test', 'Onboarding', 'onboarding', '70000000-0000-4000-8000-0000000000b6'),
+  ('a0000000-0000-4000-8000-0000000000ca', 'admin@probe.test', 'Admin', 'admin', null),
+  ('a0000000-0000-4000-8000-0000000000cb', 'superadmin@probe.test', 'Super admin', 'super_admin', null);
+insert into implementations (id, org_id, customer_id, name, current_stage, owner_id) values
+  ('d0000000-0000-4000-8000-0000000000b3', '00000000-0000-4000-8000-000000000001', 'c0000000-0000-4000-8000-0000000000b1', 'S3', 'build', '70000000-0000-4000-8000-0000000000b4'),
+  ('d0000000-0000-4000-8000-0000000000b4', '00000000-0000-4000-8000-000000000001', 'c0000000-0000-4000-8000-0000000000b1', 'S4', 'build', '70000000-0000-4000-8000-0000000000b5'),
+  ('d0000000-0000-4000-8000-0000000000b5', '00000000-0000-4000-8000-000000000001', 'c0000000-0000-4000-8000-0000000000b1', 'S5', 'build', '70000000-0000-4000-8000-0000000000b6');
+
 insert into complete_solutions (id, org_id, implementation_id, title, updated_at) values
   ('e0000000-0000-4000-8000-0000000000b1', '00000000-0000-4000-8000-000000000001', 'd0000000-0000-4000-8000-0000000000b1', 'Inspections', '2026-10-01 10:00:00+00'),
   ('e0000000-0000-4000-8000-0000000000b2', '00000000-0000-4000-8000-000000000001', 'd0000000-0000-4000-8000-0000000000b2', 'Other impl solution', '2026-10-01 10:00:00+00');
@@ -208,6 +230,31 @@ begin
   end if;
   raise notice 'ok — a refused edit writes nothing';
 end $$;
+
+-- ---------------------------------------------------------------------------
+-- Who may change solutions. Admin, super admin and manager may change any
+-- implementation. A delivery owner (implementation or onboarding) may change
+-- their own. A technical contributor (se, tam_se) may not, even as the owner:
+-- an engineering assignment never grants delivery rights.
+-- ---------------------------------------------------------------------------
+do $$
+begin
+  perform public.solution_create('a0000000-0000-4000-8000-0000000000ca', 'd0000000-0000-4000-8000-0000000000b1',
+    'Admin solution', 'purchased', 'deliver_during_implementation');
+  perform public.solution_create('a0000000-0000-4000-8000-0000000000cb', 'd0000000-0000-4000-8000-0000000000b1',
+    'Super admin solution', 'purchased', 'deliver_during_implementation');
+  perform public.solution_create('a0000000-0000-4000-8000-0000000000c9', 'd0000000-0000-4000-8000-0000000000b5',
+    'Onboarding solution', 'purchased', 'deliver_during_implementation');
+  raise notice 'ok — admin, super admin and the owning onboarding lead may create solutions';
+end $$;
+select pg_temp.expect_refused(
+  $$select public.solution_create('a0000000-0000-4000-8000-0000000000c7', 'd0000000-0000-4000-8000-0000000000b3',
+      'SE owned', 'purchased', 'deliver_during_implementation')$$,
+  '42501', 'an SE who owns an implementation is still a technical contributor and cannot change its delivery solutions', '%You can change the solutions%');
+select pg_temp.expect_refused(
+  $$select public.solution_create('a0000000-0000-4000-8000-0000000000c8', 'd0000000-0000-4000-8000-0000000000b4',
+      'TAM SE owned', 'purchased', 'deliver_during_implementation')$$,
+  '42501', 'a TAM SE who owns an implementation cannot change its delivery solutions', '%You can change the solutions%');
 
 -- ---------------------------------------------------------------------------
 -- Concurrency: a change made against a version that has since changed is
@@ -475,6 +522,19 @@ begin
     raise exception 'INVARIANT "a purchase record item links to one solution in a reviewed set" failed: %', r;
   end if;
   raise notice 'ok — a reviewed set skips a second link to the same purchase record item and keeps the rest';
+end $$;
+
+-- A formal reassignment moves the right with it: the old owner is refused, the new one allowed.
+update implementations set owner_id = '70000000-0000-4000-8000-0000000000b2' where id = 'd0000000-0000-4000-8000-0000000000b1';
+select pg_temp.expect_refused(
+  $$select public.solution_create('a0000000-0000-4000-8000-0000000000b1', 'd0000000-0000-4000-8000-0000000000b1',
+      'Old owner', 'purchased', 'deliver_during_implementation')$$,
+  '42501', 'the previous owner loses solution rights on reassignment', '%You can change the solutions%');
+do $$
+begin
+  perform public.solution_create('a0000000-0000-4000-8000-0000000000b2', 'd0000000-0000-4000-8000-0000000000b1',
+    'New owner', 'purchased', 'deliver_during_implementation');
+  raise notice 'ok — the new owner gains solution rights on reassignment';
 end $$;
 
 -- ---------------------------------------------------------------------------

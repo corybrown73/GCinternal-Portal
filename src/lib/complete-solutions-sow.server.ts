@@ -11,6 +11,7 @@ import {
   reviewedSetFrom,
   sowReadingSchema,
   type ReviewedSolution,
+  type SowReading,
 } from "./complete-solutions-sow";
 import { ATTACHMENT_BUCKET, storagePathFor } from "./sow-analysis.server";
 
@@ -29,7 +30,7 @@ import { ATTACHMENT_BUCKET, storagePathFor } from "./sow-analysis.server";
 
 const db = () => supabaseAdmin as any;
 
-const SYSTEM_PROMPT = `You read a signed Statement of Work for a field-operations software implementation and return structured JSON only.
+export const SYSTEM_PROMPT = `You read a signed Statement of Work for a field-operations software implementation and return structured JSON only.
 
 Rules:
 - Ground everything in the document. If the SOW does not say it, leave it out and list it in "gaps".
@@ -51,34 +52,18 @@ export type SowSuggestion = {
   purchaseRecords: PurchaseRecord[];
 };
 
-/** The proposed set for the TIS to review. Nothing is written. */
-export async function readSolutionsFromSow(implementationId: string): Promise<SowSuggestion> {
-  const impl = (await db()
-    .from("implementations")
-    .select("id,sow_document_path,sow_document_url,sow_document_name,deal_id")
-    .eq("id", implementationId)
-    .maybeSingle()) as { data: any; error: any };
-  if (impl.error) throw new Error("Could not load the implementation.");
-  if (!impl.data) throw new Error("That implementation no longer exists.");
-  const { path, link } = storagePathFor(impl.data);
-  if (!path) {
-    throw new Error(
-      link
-        ? "The SOW on this implementation is a link to another system, which cannot be read here. Attach the file itself."
-        : "No SOW is attached to this implementation yet. Attach one first.",
-    );
-  }
-
-  const download = await db().storage.from(ATTACHMENT_BUCKET).download(path);
-  if (download.error || !download.data) throw new Error("Could not open the attached SOW file.");
-
+/**
+ * Reads a SOW document and returns the model's reading, validated. Separate from
+ * the storage lookup so the same path can be run against a document supplied for
+ * acceptance testing. Throws with a sentence that says nothing was changed.
+ */
+export async function readSowReading(
+  bytes: Uint8Array,
+  name: string,
+  dealId: string | null,
+): Promise<SowReading> {
   const { prepareDocument } = await import("./server/ai/documents");
-  const sow = await prepareDocument(
-    new Uint8Array(await download.data.arrayBuffer()),
-    (impl.data.sow_document_name as string | null) ?? path.split("/").pop() ?? "the attached SOW",
-    null,
-    { title: "Statement of Work" },
-  );
+  const sow = await prepareDocument(bytes, name, null, { title: "Statement of Work" });
   if (!sow.block) throw new Error(sow.problem ?? "The attached SOW could not be read.");
 
   const { aiConfigured } = await import("./server/ai/config");
@@ -101,7 +86,7 @@ export async function readSolutionsFromSow(implementationId: string): Promise<So
         },
       ],
       maxTokens: 16000,
-      dealId: (impl.data.deal_id as string | null) ?? null,
+      dealId,
     });
     // Parsed again here: the reader must not depend on the client having done it.
     reading = sowReadingSchema.parse(result.data);
@@ -116,6 +101,35 @@ export async function readSolutionsFromSow(implementationId: string): Promise<So
         "The attached document could not be read as a Statement of Work. Nothing has been changed.",
     );
   }
+  return reading;
+}
+
+/** The proposed set for the TIS to review. Nothing is written. */
+export async function readSolutionsFromSow(implementationId: string): Promise<SowSuggestion> {
+  const impl = (await db()
+    .from("implementations")
+    .select("id,sow_document_path,sow_document_url,sow_document_name,deal_id")
+    .eq("id", implementationId)
+    .maybeSingle()) as { data: any; error: any };
+  if (impl.error) throw new Error("Could not load the implementation.");
+  if (!impl.data) throw new Error("That implementation no longer exists.");
+  const { path, link } = storagePathFor(impl.data);
+  if (!path) {
+    throw new Error(
+      link
+        ? "The SOW on this implementation is a link to another system, which cannot be read here. Attach the file itself."
+        : "No SOW is attached to this implementation yet. Attach one first.",
+    );
+  }
+
+  const download = await db().storage.from(ATTACHMENT_BUCKET).download(path);
+  if (download.error || !download.data) throw new Error("Could not open the attached SOW file.");
+
+  const reading = await readSowReading(
+    new Uint8Array(await download.data.arrayBuffer()),
+    (impl.data.sow_document_name as string | null) ?? path.split("/").pop() ?? "the attached SOW",
+    (impl.data.deal_id as string | null) ?? null,
+  );
 
   const { solutions, gaps } = reviewedSetFrom(reading);
   if (solutions.length === 0) {

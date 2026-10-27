@@ -25,11 +25,15 @@
 -- changed since, so one person's newer edit is never silently overwritten.
 --
 -- PERMISSIONS, DECIDED IN THE DATABASE. solution_may_edit() is the one rule:
--- admin, super admin and manager may change any implementation's solutions; a
--- TIS (implementation, se, tam_se, onboarding) may change the implementations
--- they own (implementations.owner_id is their team member). Every customer login
--- and every other internal user is refused. The functions are callable by the
--- service role only; the application checks the same rule again for a clear
+-- admin, super admin and manager may change any implementation's solutions. A
+-- TIS (portal role implementation or onboarding, which both show as
+-- "Implementation") may change the implementations whose owner is their team
+-- member: implementations.owner_id is the formal assignment, set by the
+-- assignment engine, a claim, or a reassignment. Technical contributors (se,
+-- tam_se) never gain this through an assignment; their engineering ownership is
+-- technical_solutions.owner_id, which this rule does not read. Every customer
+-- login and every other internal user is refused. The functions are callable by
+-- the service role only; the application checks the same rule again for a clear
 -- message, but the database is the authority.
 --
 -- SCOPE. Rows belong to an implementation. Nothing here reads or writes a deal,
@@ -311,7 +315,7 @@ as $$
        where p.id = p_profile
          and p.team_member_id is not null
          and i.owner_id = p.team_member_id
-         and p.role::text in ('implementation', 'se', 'tam_se', 'onboarding')
+         and p.role::text in ('implementation', 'onboarding')
     );
 $$;
 
