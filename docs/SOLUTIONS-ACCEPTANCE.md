@@ -31,7 +31,8 @@ no production data. Never run these steps against production.
 | Account (test name) | Portal role | How it is set up | Expected on the workspace |
 | --- | --- | --- | --- |
 | Admin | `admin` | First sign-up, or set by an admin | Full view and edit on every implementation |
-| Manager (stands in for Team Lead) | `manager` | Set by an admin | Full view and edit on every implementation (see §6, decision D1) |
+| **Team Lead** | any portal role, plus the Team Lead flag | Admin → Users → tick **Team Lead** (an admin or super admin only; nobody can tick their own) | Full view and edit on every post-sale implementation, whoever is assigned |
+| Manager | `manager` | Set by an admin | Full view and edit on every implementation (unchanged; also reaches assignment rules and Salesforce administration) |
 | **Assigned TIS** | `implementation` | Owns implementation **A** (formal assignment: Assignment page or claim) | View and edit on **A**; view-only elsewhere (no edit controls) |
 | **Different TIS** | `implementation` | Owns implementation **B**, not **A** | View on **A**; edit controls hidden; a direct change is refused |
 | **New TIS** | `implementation` | Owns nothing | View; no edit controls on any implementation |
@@ -152,7 +153,7 @@ account) so the sessions do not share one login.
 22. **Technical contributor** (`se` or `tam_se`) who owns implementation A: read-only,
     as step 20. Owning an implementation is not enough for a technical role.
 23. **Manager** (Team Lead stand-in): full edit on A and B. Note whether this is the
-    right level of access (section 6, D1).
+    right level of access. The Team Lead account in §2 should show the same.
 24. **Customer**: open `/solutions/<id>` directly. It must be refused, not shown.
 
 ### G. Existing purchased-service records
@@ -175,25 +176,28 @@ account) so the sessions do not share one login.
 
 **Decisions the business has not made** (the current behaviour is stated):
 
-- **D1. Team Lead.** The Hub has no Team Lead or Director role. The `manager` role
-  is used as the stand-in. That role also unlocks assignment and reassignment of
-  owners, saving assignment rules, removing team members, Salesforce integration
-  administration, AI administration, and pre-sale writes. Giving a Team Lead the
-  manager login for solution editing would give them all of those too. The safe
-  options are: (a) a narrow solution-editing grant scoped to named implementations,
-  which needs a small data model and a decision on who holds it; or (b) keep
-  `manager` for now and accept that every manager may edit any implementation's
-  solutions. Do not give a Team Lead the manager login without choosing (a) or (b).
-- **D2. Who is the assigned TIS?** Edit rights follow `implementations.owner_id`,
-  the formal assignment set by the assignment engine, a claim, or a reassignment.
-  Journey templates also write `implementation_role_assignments` (role key
-  `implementation_manager`, "owns delivery of the plan"), and the application never
-  reads that table. The two can disagree. Confirm which one defines the assigned TIS.
+- **D1. Team Lead. Resolved.** Team Lead is a profile flag, separate from the
+  `manager` role. It gives full post-sale authority over every implementation
+  regardless of assignment, and nothing pre-sale, Salesforce, AI or system setting.
+  Only an admin or super admin may grant it, and nobody may grant it to themselves.
+- **D2. Who is the assigned TIS. Resolved as `implementations.owner_id`.** It is the
+  authority, set by the assignment engine, a claim, or a reassignment. Journey
+  templates also write `implementation_role_assignments` (role key
+  `implementation_manager`), which the application never reads. Disagreements are
+  listed in `implementation_owner_conflicts` (read only). Before acceptance, an admin
+  reviews that list on staging and reassigns where the owner is wrong. Each change
+  keeps its history.
 - **D3. A technical contributor who is an owner.** Under the current rule an SE or
   TAM SE assigned as the owner does **not** get solution edit rights. Confirm that
   is the intent.
 - **D4. Reading.** Any internal user can read any implementation's solutions, as
   with other Hub views. Only changes are restricted.
+
+**Not yet covered by the owner rule.** These still need only `requireInternalAuth`,
+so any internal user can use them today. Each needs an owner decision before it is
+restricted: customer contacts, customer records, journal entries and notes,
+attachments and uploads, the SOW document set and apply, partner graduation,
+technical solutions and their field mappings, and creating an implementation.
 
 **Verified in this environment** (not in staging):
 - Permission rules, version conflicts, history rollback, loops, all-or-nothing set
