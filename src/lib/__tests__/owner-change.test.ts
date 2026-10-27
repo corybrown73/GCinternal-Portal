@@ -5,6 +5,7 @@ import {
   OWNER_CHANGE_REASON_LABEL,
   ownerChangeFrom,
   ownerChangeFromRaw,
+  namedPickNeedsReason,
   ownerChangeReasonInput,
 } from "../owner-change";
 
@@ -71,5 +72,46 @@ describe("a reason sent with a change", () => {
       reasonCode: "workload",
       reason: "Spread the Acme load",
     });
+  });
+});
+
+/**
+ * When a named pick needs a reason. The pre-sale assignment (a deal with no
+ * implementation yet, the Closed Won start, the Salesforce sync, a claim) must
+ * keep working without one; only a change of an existing owner needs it.
+ */
+describe("namedPickNeedsReason", () => {
+  it("does not ask for a reason when the deal has no implementation yet (pre-sale)", () => {
+    expect(
+      namedPickNeedsReason({ implementationId: null, currentOwnerId: null, pickedId: "tm-1" }),
+    ).toBe(false);
+  });
+  it("does not ask for a reason for 'by rule'", () => {
+    expect(
+      namedPickNeedsReason({ implementationId: "impl-1", currentOwnerId: "tm-2", pickedId: null }),
+    ).toBe(false);
+  });
+  it("does not ask for a reason when the pick is the current owner", () => {
+    expect(
+      namedPickNeedsReason({
+        implementationId: "impl-1",
+        currentOwnerId: "tm-1",
+        pickedId: "tm-1",
+      }),
+    ).toBe(false);
+  });
+  it("asks for a reason when an existing implementation's owner would change", () => {
+    expect(
+      namedPickNeedsReason({
+        implementationId: "impl-1",
+        currentOwnerId: "tm-2",
+        pickedId: "tm-1",
+      }),
+    ).toBe(true);
+  });
+  it("asks for a reason when the implementation has no owner yet and a person picks one", () => {
+    expect(
+      namedPickNeedsReason({ implementationId: "impl-1", currentOwnerId: null, pickedId: "tm-1" }),
+    ).toBe(true);
   });
 });

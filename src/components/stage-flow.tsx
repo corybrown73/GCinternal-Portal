@@ -130,6 +130,7 @@ import { shortMeeting, workspaceFor } from "@/lib/workspace";
 import { OwnerChangeReasonFields } from "@/components/owner-change-reason";
 import {
   EMPTY_OWNER_REASON,
+  namedPickNeedsReason,
   ownerReasonPayload,
   ownerReasonReady,
   type OwnerReasonDraft,
@@ -2054,9 +2055,16 @@ function AssignBody({ dealId, editable }: { dealId: string; editable: boolean })
   });
   const [pick, setPick] = useState("");
   const [reason, setReason] = useState<OwnerReasonDraft>(EMPTY_OWNER_REASON);
-  // A named pick is a reassignment: it needs its reason first. "By rule" is automatic.
+  // A named pick needs its reason only where it changes an existing implementation's
+  // owner. "By rule", and a deal with no implementation yet, are the pre-sale assignment.
+  const needsReason = (teamMemberId: string) =>
+    namedPickNeedsReason({
+      implementationId: q.data?.implementationId ?? null,
+      currentOwnerId: q.data?.owner?.teamMemberId ?? null,
+      pickedId: teamMemberId || null,
+    });
   const submitPick = (teamMemberId: string) => {
-    if (teamMemberId && !ownerReasonReady(reason)) {
+    if (needsReason(teamMemberId) && !ownerReasonReady(reason)) {
       setError("Choose why the implementation is being reassigned, then assign.");
       return;
     }
@@ -2108,7 +2116,7 @@ function AssignBody({ dealId, editable }: { dealId: string; editable: boolean })
             </option>
             <MemberOptions members={a.members} />
           </select>
-          {pick ? (
+          {pick && needsReason(pick) ? (
             <OwnerChangeReasonFields value={reason} onChange={setReason} disabled={m.isPending} />
           ) : null}
           <button

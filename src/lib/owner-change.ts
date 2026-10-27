@@ -78,3 +78,17 @@ export function ownerReasonPayload(
   if (!ownerReasonReady(d) || d.reasonCode === "") return null;
   return { reasonCode: d.reasonCode, reason: d.reason.trim() || null };
 }
+
+/**
+ * Whether a person's named pick needs a reason. Only a pick that changes the owner
+ * of an existing implementation does. A deal with no implementation has no owner to
+ * change, so its pick is the pre-sale assignment and goes through as it always has.
+ */
+export function namedPickNeedsReason(input: {
+  implementationId: string | null;
+  currentOwnerId: string | null;
+  pickedId: string | null;
+}): boolean {
+  if (!input.implementationId || !input.pickedId) return false;
+  return input.pickedId !== input.currentOwnerId;
+}

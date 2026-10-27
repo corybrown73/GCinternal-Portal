@@ -1,16 +1,31 @@
--- Reverses 0091. Refuses to drop human-entered solution records, components,
--- dependencies, history or component proposals unless an export has been
--- confirmed (down.complete_solutions_export_confirmed). Production stays strict:
--- the CI replay grants the confirmation on a database thrown away minutes later.
+-- Reverses 0091. Refuses to drop anything a person entered, unless that record's
+-- own export has been confirmed. Each record has its own confirmation, so a
+-- Solutions export can never be mistaken for an owner-history export:
+--   down.complete_solutions_export_confirmed  solutions, components, history, proposals
+--   down.owner_history_export_confirmed       implementation_owner_changes (who moved what, and why)
+--   down.team_lead_export_confirmed           Team Lead grants on portal_profiles
+-- Production stays strict. The CI replay grants the confirmations on a database
+-- thrown away minutes later.
+--
+-- Production is not rolled back with this file. The schema is additive; the
+-- application is reverted instead (docs/RELEASE-PR101.md). Read that before
+-- running any part of this on a database that holds real records.
 do $$
 begin
   if (exists (select 1 from public.complete_solutions)
       or exists (select 1 from public.solution_components)
       or exists (select 1 from public.solution_events)
-      or exists (select 1 from public.implementation_owner_changes)
       or exists (select 1 from public.evidence_proposals where type = 'component_update'))
      and coalesce(current_setting('down.complete_solutions_export_confirmed', true), '') <> '1' then
     raise exception 'Refusing to drop complete solutions: export them and set down.complete_solutions_export_confirmed';
+  end if;
+  if exists (select 1 from public.implementation_owner_changes)
+     and coalesce(current_setting('down.owner_history_export_confirmed', true), '') <> '1' then
+    raise exception 'Refusing to drop the owner history: export implementation_owner_changes and set down.owner_history_export_confirmed';
+  end if;
+  if exists (select 1 from public.portal_profiles where team_lead)
+     and coalesce(current_setting('down.team_lead_export_confirmed', true), '') <> '1' then
+    raise exception 'Refusing to drop Team Lead grants: export portal_profiles.team_lead and set down.team_lead_export_confirmed';
   end if;
 end $$;
 

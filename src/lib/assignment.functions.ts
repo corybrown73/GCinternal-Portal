@@ -81,15 +81,19 @@ export const assignDealFn = createServerFn({ method: "POST" })
         teamMemberId: z.string().uuid().nullable().optional(),
       })
       .parse(data);
-    // A person's pick is a reassignment: it needs its reason. Automatic assignment does not.
     const ownerChange = ownerChangeFromRaw((data as { ownerChange?: unknown }).ownerChange);
-    if (base.teamMemberId && !ownerChange) {
-      throw new Error("Choose why the implementation is being reassigned.");
-    }
     return { ...base, ownerChange };
   })
   .handler(async ({ data, context }) => {
-    const { assignDeal } = await import("./assignment.server");
+    const { assignDeal, namedPickNeedsReasonFor } = await import("./assignment.server");
+    // A named pick needs its reason only where it changes an existing implementation's
+    // owner. A deal with no implementation yet is the pre-sale assignment: no reason.
+    if (
+      !data.ownerChange &&
+      (await namedPickNeedsReasonFor(data.dealId, data.teamMemberId ?? null))
+    ) {
+      throw new Error("Choose why the implementation is being reassigned.");
+    }
     return assignDeal({
       dealId: data.dealId,
       teamMemberId: data.teamMemberId ?? null,

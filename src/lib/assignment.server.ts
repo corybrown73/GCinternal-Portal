@@ -1,5 +1,5 @@
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
-import type { OwnerChangeReasonCode } from "./owner-change";
+import { namedPickNeedsReason, type OwnerChangeReasonCode } from "./owner-change";
 import { appUrl } from "@/lib/app-url";
 import {
   DEFAULT_ASSIGNMENT_RULES,
@@ -297,6 +297,30 @@ export async function chooseAssignee(args: {
   }
   if (!chosen) return { kind: "none" };
   return { kind: "chosen", chosen, source, weight, breakdown, rules, deal, forWeight, training };
+}
+
+/**
+ * Whether a person's named pick on this deal changes an existing implementation's
+ * owner, so that it needs a reason. Read from the database, not from the screen.
+ */
+export async function namedPickNeedsReasonFor(
+  dealId: string,
+  pickedId: string | null,
+): Promise<boolean> {
+  if (!pickedId) return false;
+  const { deal } = await dealFacts(dealId);
+  const implementationId = await implementationForDeal(dealId, deal.customer_id ?? null);
+  if (!implementationId) return false;
+  const { data } = await db()
+    .from("implementations")
+    .select("owner_id")
+    .eq("id", implementationId)
+    .maybeSingle();
+  return namedPickNeedsReason({
+    implementationId,
+    currentOwnerId: data?.owner_id ? String(data.owner_id) : null,
+    pickedId,
+  });
 }
 
 export async function assignDeal(args: {
@@ -627,6 +651,8 @@ function handoffBlock(h: HandoffNote | null): string {
 export type DealAssignment = {
   mode: "auto" | "claim";
   owner: { teamMemberId: string; name: string; email: string | null } | null;
+  /** The implementation whose owner a named pick would change, if the deal has one yet. */
+  implementationId: string | null;
   last: AssignmentRow | null;
   weight: number;
   breakdown: WeightBreakdown;
@@ -734,6 +760,7 @@ export async function dealAssignment(dealId: string): Promise<DealAssignment> {
   return {
     mode: rules.mode,
     owner,
+    implementationId,
     last: l
       ? {
           id: String(l.id),

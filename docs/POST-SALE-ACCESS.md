@@ -52,8 +52,10 @@ opportunity processing, the pre-sale assignment rules and the Closed Won start.
 - A **manual** change needs a reason code: TIS on leave, workload balancing, customer
   escalation, coverage change, or Other. "Other" needs a few words.
 - It is refused without one, on every path a person can use: the implementation
-  edit, the owner panel, the deal assignment pick (manager), the transcript owner
-  change, and the reassignment endpoint. The reason is checked in the server
+  edit, the owner panel, a manager's deal assignment pick where it changes an existing
+  implementation's owner (a deal with no implementation yet needs no reason; see
+  `docs/RELEASE-PR101.md` §4), the transcript owner change, and the reassignment
+  endpoint. The reason is checked in the server
   function and again in the database.
 - Only a Team Lead, a manager, an admin or a super admin may reassign. An assigned
   TIS cannot hand off their own implementation.

@@ -60,6 +60,9 @@ jobs:
             -c down.work_items_export_confirmed=1
             -c down.health_export_confirmed=1
             -c down.scope_export_confirmed=1
+            -c down.complete_solutions_export_confirmed=1
+            -c down.owner_history_export_confirmed=1
+            -c down.team_lead_export_confirmed=1
         run: |
           set -euo pipefail
           shopt -s nullglob
@@ -96,5 +99,13 @@ jobs:
           if [ ${#tests[@]} -eq 0 ]; then echo "no invariant probes"; exit 0; fi
           for t in "${tests[@]}"; do
             echo "== invariants: $t"
-            psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$t"
+            if ! out=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$t" 2>&1); then
+              echo "$out"
+              # The failing file and statement, as a check-run annotation: the
+              # job log itself is not reachable through the API.
+              first=$(printf '%s\n' "$out" | grep -m1 -E '^(psql:|ERROR:)' | tr -d '\r' | sed 's/%/%25/g')
+              echo "::error file=$t,title=Schema invariant failed::${first:-psql exited without a message}"
+              exit 1
+            fi
+            echo "$out"
           done
