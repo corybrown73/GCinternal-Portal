@@ -294,7 +294,22 @@ export async function loadSolutionHistory(
  * waiting on something, and the next actions. Derived from loadSolutionsFor, so
  * the summary and the workspace can never disagree.
  */
+export type SolutionsSummaryRow = {
+  id: string;
+  title: string;
+  scope: SolutionScope;
+  status: SolutionStatus;
+  readinessConfirmed: Readiness;
+  readinessSuggested: Readiness;
+  components: number;
+  openGoLive: number;
+  targetDate: string | null;
+  overdue: boolean;
+};
+
 export type SolutionsSummary = {
+  /** One row per active solution, in the order they were added. */
+  rows: SolutionsSummaryRow[];
   solutions: number;
   purchased: number;
   requested: number;
@@ -338,6 +353,23 @@ export function summarizeSolutions(
   }
   overdue.sort((a, b) => a.targetDate.localeCompare(b.targetDate));
   return {
+    rows: active.map((s) => {
+      const live = s.components.filter((c) => !c.archived);
+      return {
+        id: s.id,
+        title: s.title,
+        scope: s.scope,
+        status: s.status,
+        readinessConfirmed: s.readinessConfirmed,
+        readinessSuggested: s.readinessSuggested.readiness,
+        components: live.length,
+        openGoLive: live.filter(
+          (c) => c.priority === "needed_for_go_live" && c.status !== "complete",
+        ).length,
+        targetDate: s.targetDate,
+        overdue: Boolean(s.targetDate && s.targetDate < today && s.status !== "complete"),
+      };
+    }),
     solutions: active.length,
     purchased: active.filter((s) => s.scope === "purchased").length,
     requested: active.filter((s) => s.scope === "requested").length,

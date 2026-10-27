@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
+import { CompleteSolutionsSummary } from "@/components/complete-solutions-summary";
 import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronRight } from "lucide-react";
@@ -58,6 +59,13 @@ export function CustomerOverview({
   return (
     <div className="space-y-3">
       <CustomerProfile record={record} impl={impl} />
+      {record.complete_solutions ? (
+        <CompleteSolutionsSummary
+          panel={record.complete_solutions}
+          implementationId={impl.id}
+          customerId={customerId}
+        />
+      ) : null}
       <div className="grid grid-cols-1 items-start gap-3 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
         <ImplementationSnapshot record={record} impl={impl} customerId={customerId} />
         <KeyPeople record={record} impl={impl} customerId={customerId} />

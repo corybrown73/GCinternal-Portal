@@ -14,6 +14,7 @@ import { LAUNCH_STAGE, launchAcceptanceGate, launchGateMessage } from "./launch-
 import type {
   Customer360,
   CommitmentRow,
+  CompleteSolutionsPanel,
   HomeData,
   ImplementationRow,
   LeadershipData,
@@ -549,6 +550,33 @@ function label(entityType: string, row: any): string {
   return row.title ?? row.name ?? row.description ?? entityType;
 }
 
+/**
+ * The concise solutions picture for Customer 360. Null when the feature is off.
+ * A failed read is said here and the rest of the record still loads: the
+ * summary is never the reason a Customer 360 page fails to open.
+ */
+async function completeSolutionsFor(
+  implementationId: string,
+): Promise<CompleteSolutionsPanel | null> {
+  const { isFlagOn } = await import("./app-config.server");
+  if (!(await isFlagOn("complete_solutions"))) return null;
+  try {
+    const { loadSolutionsFor, summarizeSolutions } = await import("./complete-solutions.server");
+    const solutions = await loadSolutionsFor(implementationId);
+    return {
+      summary: summarizeSolutions(solutions, new Date().toISOString().slice(0, 10)),
+      failed: null,
+    };
+  } catch (e) {
+    console.error("[solutions] the Customer 360 summary failed", e);
+    return {
+      summary: null,
+      failed:
+        "Could not load the complete solutions for this implementation. Try again in a minute.",
+    };
+  }
+}
+
 export async function loadCustomer360(
   customerId: string,
   implementationId?: string | null,
@@ -725,6 +753,7 @@ export async function loadCustomer360(
     issues: [],
     escalations: [],
     technical_solutions: [],
+    complete_solutions: null,
     evidence: [],
     approvals: [],
     stage_history: [],
@@ -1121,6 +1150,7 @@ export async function loadCustomer360(
 
   return {
     ...base,
+    complete_solutions: await completeSolutionsFor(impl.id),
     partner_progress: selectedPartnerProgress
       ? { implementation_id: impl.id, progress: selectedPartnerProgress }
       : null,

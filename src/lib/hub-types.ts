@@ -1,4 +1,11 @@
 import type { DealFacts } from "./needs-action";
+import type { SolutionsSummary } from "./complete-solutions.server";
+
+export type CompleteSolutionsPanel = {
+  summary: SolutionsSummary | null;
+  /** A plain sentence when the solutions could not be read; the rest of the page still shows. */
+  failed: string | null;
+};
 import type { AccountStage } from "./presale-stages";
 
 export type ImplStatus = "on_track" | "at_risk" | "blocked" | "idle" | string;
@@ -374,6 +381,12 @@ export type Customer360 = {
     implementation_id: string;
     progress: import("./partner-journey").PartnerProgress;
   } | null;
+  /**
+   * The selected implementation's complete solutions, summarised for Customer
+   * 360. Null when the feature is off or no implementation is selected. A failed
+   * read is said here and never takes the rest of the record down with it.
+   */
+  complete_solutions?: CompleteSolutionsPanel | null;
   /**
    * The selected implementation's deal facts (watch-outs, checklist next
    * step) — the same layer `dealFactsFor()` gives Home's triage, so

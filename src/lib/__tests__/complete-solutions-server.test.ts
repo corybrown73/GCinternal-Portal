@@ -62,7 +62,7 @@ afterEach(() => {
 /** The primary key of a dependency is a unique index, as in 0091. */
 const UNIQUE = { solution_component_dependencies: [{ cols: ["component_id", "depends_on_id"] }] };
 
-function use(rows: Rows, fail?: TableFailures) {
+function load(rows: Rows, fail?: TableFailures) {
   fake = createFakeSupabase(rows, { unique: UNIQUE, ...(fail ? { fail } : {}) });
   h.supabase.client = fake.client;
 }
@@ -104,7 +104,7 @@ const eventKinds = () =>
 
 describe("a multi-component solution, end to end (reference shape)", () => {
   it("is created with its components, and its readiness follows the work", async () => {
-    use(baseRows());
+    load(baseRows());
     const created = await createCompleteSolution(
       {
         implementationId: IMPL,
@@ -190,7 +190,7 @@ describe("a multi-component solution, end to end (reference shape)", () => {
   });
 
   it("refuses to complete the solution while a component is open, and names it", async () => {
-    use(baseRows());
+    load(baseRows());
     const s = await createCompleteSolution(
       {
         implementationId: IMPL,
@@ -215,7 +215,7 @@ describe("a multi-component solution, end to end (reference shape)", () => {
   });
 
   it("keeps the TIS's confirmed readiness separate from the suggestion, and needs a reason to move it", async () => {
-    use(baseRows());
+    load(baseRows());
     const s = await createCompleteSolution(
       {
         implementationId: IMPL,
@@ -248,7 +248,7 @@ describe("a multi-component solution, end to end (reference shape)", () => {
 
 describe("two unrelated complete solutions on one implementation", () => {
   it("keeps their components, readiness and history apart", async () => {
-    use(baseRows());
+    load(baseRows());
     const a = await createCompleteSolution(
       {
         implementationId: IMPL,
@@ -303,7 +303,7 @@ describe("two unrelated complete solutions on one implementation", () => {
   });
 
   it("refuses a component whose solution belongs to the other implementation", async () => {
-    use(baseRows());
+    load(baseRows());
     const other = await createCompleteSolution(
       {
         implementationId: OTHER_IMPL,
@@ -360,7 +360,7 @@ describe("existing records are kept", () => {
         created_at: "2026-08-01T00:00:00Z",
       },
     ];
-    use(rows);
+    load(rows);
     const all = await loadSolutionsFor(IMPL);
     expect(all).toHaveLength(1);
     expect(all[0]!.archived).toBe(true);
@@ -402,7 +402,7 @@ describe("existing records are kept", () => {
         created_at: "2026-08-02T00:00:00Z",
       },
     ];
-    use(rows);
+    load(rows);
     const [solution] = await loadSolutionsFor(IMPL);
     expect(solution!.components[0]!.technicalSolutionId).toBe("ts-1");
     await updateComponent({ id: "c-1", status: "complete" }, ACTOR);
@@ -416,7 +416,7 @@ describe("existing records are kept", () => {
 
 describe("dates: the original is kept and every move is explained", () => {
   it("keeps the first date given as the original and records a later move with its reason", async () => {
-    use(baseRows());
+    load(baseRows());
     const s = await createCompleteSolution(
       {
         implementationId: IMPL,
@@ -453,7 +453,7 @@ describe("dates: the original is kept and every move is explained", () => {
   });
 
   it("keeps a component's original target date when it moves, and refuses a move with no reason", async () => {
-    use(baseRows());
+    load(baseRows());
     const s = await createCompleteSolution(
       {
         implementationId: IMPL,
@@ -498,7 +498,7 @@ describe("dates: the original is kept and every move is explained", () => {
 
 describe("forms: built, approved, submissions and usage are tracked separately", () => {
   async function formFixture() {
-    use(baseRows());
+    load(baseRows());
     const s = await createCompleteSolution(
       {
         implementationId: IMPL,
@@ -556,7 +556,7 @@ describe("forms: built, approved, submissions and usage are tracked separately",
   });
 
   it("refuses form tracking on anything that is not a form", async () => {
-    use(baseRows());
+    load(baseRows());
     const s = await createCompleteSolution(
       {
         implementationId: IMPL,
@@ -585,7 +585,7 @@ describe("forms: built, approved, submissions and usage are tracked separately",
 
 describe("dependencies", () => {
   it("refuses a loop, so the critical path can always be followed", async () => {
-    use(baseRows());
+    load(baseRows());
     const s = await createCompleteSolution(
       {
         implementationId: IMPL,
@@ -611,7 +611,7 @@ describe("dependencies", () => {
   });
 
   it("removes a dependency and records it", async () => {
-    use(baseRows());
+    load(baseRows());
     const s = await createCompleteSolution(
       {
         implementationId: IMPL,
@@ -641,7 +641,7 @@ describe("dependencies", () => {
 
 describe("status rules and archiving", () => {
   it("refuses Waiting without a blocker, and Changes Needed without an explanation", async () => {
-    use(baseRows());
+    load(baseRows());
     const s = await createCompleteSolution(
       {
         implementationId: IMPL,
@@ -666,7 +666,7 @@ describe("status rules and archiving", () => {
   });
 
   it("refuses changes to an archived solution until it is restored", async () => {
-    use(baseRows());
+    load(baseRows());
     const s = await createCompleteSolution(
       {
         implementationId: IMPL,
@@ -686,7 +686,7 @@ describe("status rules and archiving", () => {
   });
 
   it("archives a component without deleting it", async () => {
-    use(baseRows());
+    load(baseRows());
     const s = await createCompleteSolution(
       {
         implementationId: IMPL,
@@ -712,7 +712,7 @@ describe("status rules and archiving", () => {
 
 describe("the Customer 360 summary", () => {
   it("counts what is purchased and open, and names what is overdue and waiting", async () => {
-    use(baseRows());
+    load(baseRows());
     const s = await createCompleteSolution(
       {
         implementationId: IMPL,
@@ -751,6 +751,10 @@ describe("the Customer 360 summary", () => {
 
     const summary = summarizeSolutions(await loadSolutionsFor(IMPL), TODAY);
     expect(summary).toMatchObject({ solutions: 2, purchased: 1, requested: 1, openGoLive: 1 });
+    expect(summary.rows.map((r) => [r.title, r.components, r.openGoLive, r.overdue])).toEqual([
+      ["Inspections", 1, 1, true],
+      ["Fuel log", 0, 0, false],
+    ]);
     expect(summary.overdue).toEqual([{ label: "Inspections", targetDate: "2026-10-01" }]);
     expect(summary.waiting).toEqual([
       { label: "Inspections · Dispatch feed", reason: "Waiting on API login" },
@@ -773,13 +777,13 @@ describe("permissions", () => {
 
 describe("failures are said plainly and never look like success", () => {
   it("says a read failed rather than showing no solutions", async () => {
-    use(baseRows(), { complete_solutions: { message: "connection reset", code: "08006" } });
+    load(baseRows(), { complete_solutions: { message: "connection reset", code: "08006" } });
     await expect(loadSolutionsFor(IMPL)).rejects.toThrow("Could not load the solutions");
     expect(errorLog).toHaveBeenCalledWith(expect.stringContaining("connection reset (08006)"));
   });
 
   it("says nothing was changed when a component cannot be added", async () => {
-    use(baseRows());
+    load(baseRows());
     const s = await createCompleteSolution(
       {
         implementationId: IMPL,
@@ -789,7 +793,7 @@ describe("failures are said plainly and never look like success", () => {
       },
       ACTOR,
     );
-    use({ ...fake.store }, { solution_components: { message: "boom", code: "XX000" } });
+    load({ ...fake.store }, { solution_components: { message: "boom", code: "XX000" } });
     await expect(
       createComponent(
         { solutionId: s.id, category: "forms", name: "Form", priority: "needed_for_go_live" },
@@ -828,7 +832,7 @@ describe("failures are said plainly and never look like success", () => {
         created_at: "2026-08-02T00:00:00Z",
       },
     ];
-    use(rows, { solution_events: { message: "disk full", code: "53100" } });
+    load(rows, { solution_events: { message: "disk full", code: "53100" } });
     await expect(updateComponent({ id: "c-1", status: "being_built" }, ACTOR)).rejects.toThrow(
       "The change was saved, but its history could not be recorded.",
     );
@@ -837,7 +841,7 @@ describe("failures are said plainly and never look like success", () => {
   });
 
   it("refuses a dependency that is already recorded, in plain words", async () => {
-    use(baseRows());
+    load(baseRows());
     const s = await createCompleteSolution(
       {
         implementationId: IMPL,
