@@ -17,6 +17,7 @@ import {
   setUserRole,
 } from "@/lib/presale.functions";
 import { fmtDate } from "@/lib/hub-format";
+import { setTeamLeadFn } from "@/lib/post-sale-access.functions";
 import { errorMessage } from "@/lib/error-message";
 
 /** Roles that can be assigned. Legacy roles (admin/am/se/onboarding) are shown
@@ -73,6 +74,7 @@ function UsersPage() {
   const { data: invites } = useSuspenseQuery(invitesQuery);
   const queryClient = useQueryClient();
   const changeRole = useServerFn(setUserRole);
+  const changeTeamLead = useServerFn(setTeamLeadFn);
   const invite = useServerFn(inviteUser);
   const revoke = useServerFn(revokeUserInvite);
   const [error, setError] = useState<string | null>(null);
@@ -130,6 +132,17 @@ function UsersPage() {
     onSuccess: () => {
       setError(null);
       void refreshInvites();
+    },
+    onError: (e) => setError((e as Error).message),
+  });
+
+  // Team Lead: post-sale authority over every implementation. The server and the
+  // database decide who may grant it; nobody can grant it to themselves.
+  const teamLead = useMutation({
+    mutationFn: (vars: { profileId: string; teamLead: boolean }) => changeTeamLead({ data: vars }),
+    onSuccess: () => {
+      setError(null);
+      queryClient.invalidateQueries({ queryKey: ["admin", "users"] });
     },
     onError: (e) => setError((e as Error).message),
   });
@@ -307,6 +320,12 @@ function UsersPage() {
                   <tr>
                     <th className="px-3 py-1.5 font-medium">User</th>
                     <th className="px-3 py-1.5 font-medium">Role</th>
+                    <th
+                      className="px-3 py-1.5 font-medium"
+                      title="Team Lead: manages every post-sale implementation, whoever is assigned. Granted by an admin only."
+                    >
+                      Team Lead
+                    </th>
                     <th className="px-3 py-1.5 font-medium">Password</th>
                     <th className="px-3 py-1.5 font-medium">Created</th>
                   </tr>
@@ -362,6 +381,20 @@ function UsersPage() {
                               </span>
                             ) : null}
                           </div>
+                        </td>
+                        <td className="px-3 py-1.5">
+                          <label className="flex items-center gap-2 text-[12px]">
+                            <input
+                              type="checkbox"
+                              checked={u.team_lead}
+                              disabled={teamLead.isPending}
+                              aria-label={`Team Lead: ${u.full_name || u.email}`}
+                              onChange={(e) =>
+                                teamLead.mutate({ profileId: u.id, teamLead: e.target.checked })
+                              }
+                            />
+                            {u.team_lead ? "Team Lead" : "—"}
+                          </label>
                         </td>
                         <td className="px-3 py-1.5">
                           <PasswordCell

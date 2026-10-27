@@ -26,7 +26,7 @@ select '0091' as migration, requirement, ok from (values
     exists (select 1 from pg_constraint
              where conname = 'evidence_proposals_type_check'
                and pg_get_constraintdef(oid) like '%component_update%')),
-  ('all 15 solution write functions exist',
+  ('all 17 write functions exist',
     (select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace
       where n.nspname = 'public'
         and p.proname = any (array[
@@ -34,7 +34,8 @@ select '0091' as migration, requirement, ok from (values
           'solution_create', 'solution_update', 'solution_set_target',
           'solution_confirm_readiness', 'solution_set_archived', 'solution_save_reviewed_set',
           'component_create', 'component_update', 'component_form_update',
-          'component_set_archived', 'dependency_add', 'dependency_remove'])) = 15),
+          'component_set_archived', 'dependency_add', 'dependency_remove',
+          'post_sale_may_manage', 'implementation_set_owner'])) = 17),
   ('solution write functions are callable by the service role only',
     not exists (
       select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
@@ -44,10 +45,20 @@ select '0091' as migration, requirement, ok from (values
           'solution_create', 'solution_update', 'solution_set_target',
           'solution_confirm_readiness', 'solution_set_archived', 'solution_save_reviewed_set',
           'component_create', 'component_update', 'component_form_update',
-          'component_set_archived', 'dependency_add', 'dependency_remove'])
+          'component_set_archived', 'dependency_add', 'dependency_remove',
+          'post_sale_may_manage', 'implementation_set_owner'])
          and (has_function_privilege('anon', p.oid, 'execute')
               or has_function_privilege('authenticated', p.oid, 'execute')
               or not has_function_privilege('service_role', p.oid, 'execute')))),
+  ('Team Lead is a profile flag, with a guard that only an admin or super admin can change',
+    exists (select 1 from information_schema.columns
+             where table_schema = 'public' and table_name = 'portal_profiles' and column_name = 'team_lead')
+    and exists (select 1 from pg_trigger where tgname = 'portal_profiles_team_lead_guard' and not tgisinternal)),
+  ('owner history is an append-only record',
+    exists (select 1 from pg_trigger where tgname = 'implementation_owner_changes_no_update' and not tgisinternal)),
+  ('the owner conflict report exists',
+    exists (select 1 from information_schema.views
+             where table_schema = 'public' and table_name = 'implementation_owner_conflicts')),
   ('the purchase record link is unique per implementation while active',
     exists (select 1 from pg_indexes
              where schemaname = 'public' and indexname = 'complete_solutions_purchase_link_idx'))

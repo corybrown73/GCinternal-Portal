@@ -233,7 +233,9 @@ create table public.solution_events (
   from_value text,
   to_value text,
   reason text check (reason is null or length(reason) <= 1000),
-  actor_profile_id uuid references public.portal_profiles (id) on delete set null,
+  -- No foreign key: history must outlive the person who made the change. A
+  -- cascade would try to update an append-only row and refuse the delete.
+  actor_profile_id uuid,
   created_at timestamptz not null default now()
 );
 create index solution_events_solution_idx
@@ -296,7 +298,24 @@ alter table public.evidence_proposals add constraint evidence_proposals_type_che
 -- ===========================================================================
 
 -- The one permission rule for these tables. Used by every function below.
-create or replace function public.solution_may_edit(p_profile uuid, p_implementation uuid)
+-- Team Lead is a flag on the profile, separate from the broad manager role. It is
+-- set only by an admin or super admin, signed in, never by the person themselves
+-- (see portal_guard_team_lead below). Added first: the rule below reads it.
+alter table public.portal_profiles
+  add column if not exists team_lead boolean not null default false;
+
+-- The one post-sale permission rule. Everything that changes an implementation's
+-- post-sale work (solutions, components, delivery records, stage moves, gate
+-- decisions, owner reassignment) asks this. It never reads pre-sale tables.
+--
+--   admin, super admin, manager ........ any implementation (existing authority)
+--   Team Lead (portal_profiles.team_lead) any implementation, regardless of owner
+--   implementation, onboarding ......... only implementations they own, where
+--                                        implementations.owner_id is their team member
+--
+-- Technical contributors (se, tam_se) never gain delivery rights through an
+-- assignment: technical_solutions.owner_id is not read here.
+create or replace function public.post_sale_may_manage(p_profile uuid, p_implementation uuid)
 returns boolean
 language sql
 stable
@@ -306,7 +325,7 @@ as $$
   select exists (
       select 1 from public.portal_profiles p
        where p.id = p_profile
-         and p.role::text in ('super_admin', 'admin', 'manager')
+         and (p.role::text in ('super_admin', 'admin', 'manager') or p.team_lead)
     )
     or exists (
       select 1
@@ -317,6 +336,17 @@ as $$
          and i.owner_id = p.team_member_id
          and p.role::text in ('implementation', 'onboarding')
     );
+$$;
+
+-- Solution writes use the same rule.
+create or replace function public.solution_may_edit(p_profile uuid, p_implementation uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select public.post_sale_may_manage(p_profile, p_implementation);
 $$;
 
 create or replace function public.solution_require_edit(p_profile uuid, p_implementation uuid)
@@ -1069,6 +1099,142 @@ begin
 end $$;
 
 -- ===========================================================================
+-- Team Lead authority, owner reassignment and the owner-conflict report.
+-- ===========================================================================
+
+-- Team Lead is a flag on the profile, separate from the broad manager role. Only
+-- an admin or super admin, signed in, may set it, and nobody may set their own.
+-- A service-role call (auth.uid() is null) cannot grant it: that is deliberate.
+create or replace function public.portal_guard_team_lead()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_caller uuid := auth.uid();
+  v_role text;
+begin
+  if new.team_lead is not distinct from old.team_lead then
+    return new;
+  end if;
+  if v_caller is null then
+    raise exception 'Team Lead authority is granted by a signed-in admin, not by a system process'
+      using errcode = '42501';
+  end if;
+  if v_caller = new.id then
+    raise exception 'Nobody can change their own Team Lead authority' using errcode = '42501';
+  end if;
+  select p.role::text into v_role from public.portal_profiles p where p.id = v_caller;
+  if v_role is distinct from 'admin' and v_role is distinct from 'super_admin' then
+    raise exception 'Only an admin or super admin can grant or remove Team Lead authority'
+      using errcode = '42501';
+  end if;
+  return new;
+end $$;
+
+create trigger portal_profiles_team_lead_guard
+  before update on public.portal_profiles
+  for each row execute function public.portal_guard_team_lead();
+
+-- Every owner change, append-only. The implementation's owner_id is the authority;
+-- this is the record of how it came to be that person.
+create table public.implementation_owner_changes (
+  id uuid primary key default gen_random_uuid(),
+  org_id uuid not null default '00000000-0000-4000-8000-000000000001' references public.orgs (id),
+  implementation_id uuid not null references public.implementations (id) on delete restrict,
+  -- No foreign keys on the people here: history must outlive them (see solution_events).
+  from_team_member_id uuid,
+  to_team_member_id uuid,
+  reason text check (reason is null or length(reason) <= 1000),
+  actor_profile_id uuid,
+  created_at timestamptz not null default now()
+);
+create index implementation_owner_changes_impl_idx
+  on public.implementation_owner_changes (implementation_id, created_at);
+
+create or replace function public.implementation_owner_changes_append_only()
+returns trigger
+language plpgsql
+set search_path = public
+as $$
+begin
+  raise exception 'implementation_owner_changes is a record: rows are never % (id %)', lower(tg_op), old.id;
+end $$;
+
+create trigger implementation_owner_changes_no_update
+  before update on public.implementation_owner_changes
+  for each row execute function public.implementation_owner_changes_append_only();
+create trigger implementation_owner_changes_no_delete
+  before delete on public.implementation_owner_changes
+  for each row execute function public.implementation_owner_changes_append_only();
+
+alter table public.implementation_owner_changes enable row level security;
+create policy "implementation_owner_changes internal" on public.implementation_owner_changes
+  for select to authenticated using (portal_is_internal());
+
+-- Reassigns an implementation's owner. Team Lead, manager, admin or super admin
+-- only: an assigned TIS may not hand their own implementation to someone else
+-- through this path. The change is recorded with who made it, from whom and when.
+create or replace function public.implementation_set_owner(
+  p_profile uuid,
+  p_implementation uuid,
+  p_team_member uuid,
+  p_reason text
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_current uuid;
+  v_reason text := nullif(btrim(coalesce(p_reason, '')), '');
+begin
+  if not exists (
+    select 1 from public.portal_profiles p
+     where p.id = p_profile
+       and (p.role::text in ('super_admin', 'admin', 'manager') or p.team_lead)
+  ) then
+    raise exception 'Only a Team Lead, a manager or an admin can reassign an implementation'
+      using errcode = '42501';
+  end if;
+  select owner_id into v_current from public.implementations where id = p_implementation for update;
+  if not found then
+    raise exception 'That implementation no longer exists.' using errcode = '22023';
+  end if;
+  if p_team_member is not null and not exists (
+    select 1 from public.team_members where id = p_team_member and active
+  ) then
+    raise exception 'That team member is not active.' using errcode = '22023';
+  end if;
+  if v_current is not distinct from p_team_member then
+    return;
+  end if;
+  -- A reason is optional and kept when given; the record of who moved it, from
+  -- whom, and when, is kept either way.
+  update public.implementations set owner_id = p_team_member where id = p_implementation;
+  insert into public.implementation_owner_changes
+    (implementation_id, from_team_member_id, to_team_member_id, reason, actor_profile_id)
+  values (p_implementation, v_current, p_team_member, v_reason, p_profile);
+end $$;
+
+-- Where the journey's implementation_manager role assignment and the owner disagree.
+-- Read only. Neither side is changed: owner_id stays authoritative, and the role
+-- assignment stays as the record of what the template set. An admin resolves each
+-- row by reassigning the owner, which leaves its history in place.
+create view public.implementation_owner_conflicts as
+select i.id as implementation_id,
+       i.owner_id as owner_team_member_id,
+       r.team_member_id as role_team_member_id
+  from public.implementations i
+  join public.implementation_role_assignments r
+    on r.implementation_id = i.id
+   and r.role_key = 'implementation_manager'
+   and r.team_member_id is not null
+ where i.owner_id is distinct from r.team_member_id;
+
+-- ===========================================================================
 -- Who may call the functions: the service role, which the application uses
 -- after its own sign-in and role checks. Never a customer or anonymous caller.
 -- ===========================================================================
@@ -1102,3 +1268,9 @@ grant execute on function public.component_set_archived(uuid, uuid, timestamptz,
 grant execute on function public.dependency_add(uuid, uuid, uuid, boolean) to service_role;
 grant execute on function public.dependency_remove(uuid, uuid, uuid) to service_role;
 grant execute on function public.solution_save_reviewed_set(uuid, uuid, text, jsonb) to service_role;
+revoke all on function public.post_sale_may_manage(uuid, uuid) from public, anon, authenticated;
+grant execute on function public.post_sale_may_manage(uuid, uuid) to service_role;
+revoke all on function public.implementation_set_owner(uuid, uuid, uuid, text) from public, anon, authenticated;
+grant execute on function public.implementation_set_owner(uuid, uuid, uuid, text) to service_role;
+revoke all on public.implementation_owner_conflicts from public, anon, authenticated;
+grant select on public.implementation_owner_conflicts to service_role;

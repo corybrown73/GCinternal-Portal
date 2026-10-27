@@ -76,6 +76,18 @@ insert into implementations (id, org_id, customer_id, name, current_stage, owner
   ('d0000000-0000-4000-8000-0000000000b4', '00000000-0000-4000-8000-000000000001', 'c0000000-0000-4000-8000-0000000000b1', 'S4', 'build', '70000000-0000-4000-8000-0000000000b5'),
   ('d0000000-0000-4000-8000-0000000000b5', '00000000-0000-4000-8000-000000000001', 'c0000000-0000-4000-8000-0000000000b1', 'S5', 'build', '70000000-0000-4000-8000-0000000000b6');
 
+-- Team Lead candidate (no team member), an onboarding lead with a separate team
+-- member, and an inactive team member for the reassignment checks.
+insert into auth.users (id, email) values
+  ('a0000000-0000-4000-8000-0000000000cc', 'teamlead@probe.test'),
+  ('a0000000-0000-4000-8000-0000000000cd', 'onboarding2@probe.test');
+insert into team_members (id, org_id, name, role, active) values
+  ('70000000-0000-4000-8000-0000000000b7', '00000000-0000-4000-8000-000000000001', 'Onboarding 2', 'onboarding', true),
+  ('70000000-0000-4000-8000-0000000000b8', '00000000-0000-4000-8000-000000000001', 'Left the team', 'implementation', false);
+insert into portal_profiles (id, email, full_name, role, team_member_id) values
+  ('a0000000-0000-4000-8000-0000000000cc', 'teamlead@probe.test', 'Team Lead', 'implementation', null),
+  ('a0000000-0000-4000-8000-0000000000cd', 'onboarding2@probe.test', 'Onboarding 2', 'onboarding', '70000000-0000-4000-8000-0000000000b7');
+
 insert into complete_solutions (id, org_id, implementation_id, title, updated_at) values
   ('e0000000-0000-4000-8000-0000000000b1', '00000000-0000-4000-8000-000000000001', 'd0000000-0000-4000-8000-0000000000b1', 'Inspections', '2026-10-01 10:00:00+00'),
   ('e0000000-0000-4000-8000-0000000000b2', '00000000-0000-4000-8000-000000000001', 'd0000000-0000-4000-8000-0000000000b2', 'Other impl solution', '2026-10-01 10:00:00+00');
@@ -153,7 +165,8 @@ begin
          'solution_create', 'solution_update', 'solution_set_target',
          'solution_confirm_readiness', 'solution_set_archived', 'solution_save_reviewed_set',
          'component_create', 'component_update', 'component_form_update',
-         'component_set_archived', 'dependency_add', 'dependency_remove'])
+         'component_set_archived', 'dependency_add', 'dependency_remove',
+         'post_sale_may_manage', 'implementation_set_owner'])
   loop
     n := n + 1;
     if has_function_privilege('anon', f.oid, 'execute') or has_function_privilege('authenticated', f.oid, 'execute') then
@@ -163,10 +176,10 @@ begin
       raise exception 'INVARIANT "% is not callable by the service role" failed', f.proname;
     end if;
   end loop;
-  if n <> 15 then
-    raise exception 'INVARIANT "all 15 solution write functions exist" failed: found %', n;
+  if n <> 17 then
+    raise exception 'INVARIANT "all 17 write functions exist" failed: found %', n;
   end if;
-  raise notice 'ok — all 15 solution write functions are callable by the service role only';
+  raise notice 'ok — all 17 write functions are callable by the service role only';
 end $$;
 
 -- ---------------------------------------------------------------------------
@@ -536,6 +549,161 @@ begin
     'New owner', 'purchased', 'deliver_during_implementation');
   raise notice 'ok — the new owner gains solution rights on reassignment';
 end $$;
+
+-- ---------------------------------------------------------------------------
+-- Team Lead authority is granted only by an admin or super admin, signed in, never
+-- to oneself, and never by a system process. The stub reads auth.uid() from the
+-- JWT claims, so each case sets the caller explicitly.
+-- ---------------------------------------------------------------------------
+select set_config('request.jwt.claims', '{"sub":"a0000000-0000-4000-8000-0000000000ca"}', true);
+update portal_profiles set team_lead = true where id = 'a0000000-0000-4000-8000-0000000000cc';
+do $$
+begin
+  if not (select team_lead from portal_profiles where id = 'a0000000-0000-4000-8000-0000000000cc') then
+    raise exception 'INVARIANT "an admin grants Team Lead" failed';
+  end if;
+  raise notice 'ok — an admin grants Team Lead';
+end $$;
+
+select set_config('request.jwt.claims', '{"sub":"a0000000-0000-4000-8000-0000000000cb"}', true);
+update portal_profiles set team_lead = true where id = 'a0000000-0000-4000-8000-0000000000cd';
+select set_config('request.jwt.claims', '{"sub":"a0000000-0000-4000-8000-0000000000cb"}', true);
+update portal_profiles set team_lead = false where id = 'a0000000-0000-4000-8000-0000000000cd';
+do $$
+begin
+  if (select team_lead from portal_profiles where id = 'a0000000-0000-4000-8000-0000000000cd') then
+    raise exception 'INVARIANT "a super admin removes Team Lead" failed';
+  end if;
+  raise notice 'ok — a super admin grants and removes Team Lead';
+end $$;
+
+select set_config('request.jwt.claims', '{"sub":"a0000000-0000-4000-8000-0000000000b3"}', true);
+select pg_temp.expect_refused(
+  $$update portal_profiles set team_lead = true where id = 'a0000000-0000-4000-8000-0000000000cd'$$,
+  '42501', 'a manager cannot grant Team Lead', '%Only an admin or super admin%');
+
+select set_config('request.jwt.claims', '{"sub":"a0000000-0000-4000-8000-0000000000cc"}', true);
+select pg_temp.expect_refused(
+  $$update portal_profiles set team_lead = true where id = 'a0000000-0000-4000-8000-0000000000cd'$$,
+  '42501', 'a Team Lead cannot grant Team Lead to someone else', '%Only an admin or super admin%');
+select pg_temp.expect_refused(
+  $$update portal_profiles set team_lead = false where id = 'a0000000-0000-4000-8000-0000000000cc'$$,
+  '42501', 'a Team Lead cannot remove their own Team Lead authority', '%Nobody can change their own%');
+
+select set_config('request.jwt.claims', '{"sub":"a0000000-0000-4000-8000-0000000000ca"}', true);
+select pg_temp.expect_refused(
+  $$update portal_profiles set team_lead = true where id = 'a0000000-0000-4000-8000-0000000000ca'$$,
+  '42501', 'an admin cannot grant themselves Team Lead', '%Nobody can change their own%');
+
+select set_config('request.jwt.claims', '{}', true);
+select pg_temp.expect_refused(
+  $$update portal_profiles set team_lead = true where id = 'a0000000-0000-4000-8000-0000000000cd'$$,
+  '42501', 'a system process (no signed-in caller) cannot grant Team Lead', '%signed-in admin%');
+
+-- Team Lead reaches every post-sale implementation, not only the ones it owns.
+do $$
+begin
+  perform public.solution_create('a0000000-0000-4000-8000-0000000000cc', 'd0000000-0000-4000-8000-0000000000b3',
+    'Team Lead solution on S3', 'purchased', 'deliver_during_implementation');
+  perform public.solution_create('a0000000-0000-4000-8000-0000000000cc', 'd0000000-0000-4000-8000-0000000000b5',
+    'Team Lead solution on S5', 'purchased', 'deliver_during_implementation');
+  raise notice 'ok — a Team Lead manages implementations it does not own';
+end $$;
+
+-- Technical contributors and other TIS users are refused on implementations they do not own.
+select pg_temp.expect_refused(
+  $$select public.solution_create('a0000000-0000-4000-8000-0000000000c7', 'd0000000-0000-4000-8000-0000000000b1',
+      'SE on S1', 'purchased', 'deliver_during_implementation')$$,
+  '42501', 'an SE who does not own an implementation cannot change it', '%You can change the solutions%');
+select pg_temp.expect_refused(
+  $$select public.solution_create('a0000000-0000-4000-8000-0000000000cd', 'd0000000-0000-4000-8000-0000000000b1',
+      'Onboarding 2 on S1', 'purchased', 'deliver_during_implementation')$$,
+  '42501', 'an onboarding lead who does not own an implementation cannot change it', '%You can change the solutions%');
+
+-- ---------------------------------------------------------------------------
+-- Reassignment: owner_id is the authority; a change of owner needs a reason, is
+-- recorded, and cannot be made by the assigned TIS.
+-- ---------------------------------------------------------------------------
+select pg_temp.expect_refused(
+  $$select public.implementation_set_owner('a0000000-0000-4000-8000-0000000000c9', 'd0000000-0000-4000-8000-0000000000b5',
+      '70000000-0000-4000-8000-0000000000b7', 'Taking it over')$$,
+  '42501', 'an assigned TIS cannot reassign their own implementation', '%Only a Team Lead, a manager or an admin%');
+select pg_temp.expect_refused(
+  $$select public.implementation_set_owner('a0000000-0000-4000-8000-0000000000cc', 'd0000000-0000-4000-8000-0000000000b5',
+      '70000000-0000-4000-8000-0000000000b8', 'Cover')$$,
+  '22023', 'an inactive team member cannot be given an implementation', '%not active%');
+select public.implementation_set_owner('a0000000-0000-4000-8000-0000000000cc', 'd0000000-0000-4000-8000-0000000000b5',
+  '70000000-0000-4000-8000-0000000000b7', 'Onboarding 2 takes over delivery');
+-- A reassignment without a stated reason still succeeds and is still recorded.
+select public.implementation_set_owner('a0000000-0000-4000-8000-0000000000cc', 'd0000000-0000-4000-8000-0000000000b4',
+  '70000000-0000-4000-8000-0000000000b7', null);
+do $$
+begin
+  if (select count(*) from implementation_owner_changes
+       where implementation_id = 'd0000000-0000-4000-8000-0000000000b4'
+         and to_team_member_id = '70000000-0000-4000-8000-0000000000b7'
+         and reason is null
+         and actor_profile_id = 'a0000000-0000-4000-8000-0000000000cc') <> 1 then
+    raise exception 'INVARIANT "a reassignment with no reason is still recorded, with who made it" failed';
+  end if;
+  raise notice 'ok — a reassignment without a stated reason is recorded with who made it';
+end $$;
+
+do $$
+begin
+  if (select owner_id from implementations where id = 'd0000000-0000-4000-8000-0000000000b5') is distinct from '70000000-0000-4000-8000-0000000000b7' then
+    raise exception 'INVARIANT "a Team Lead reassigns an implementation" failed';
+  end if;
+  if (select count(*) from implementation_owner_changes
+       where implementation_id = 'd0000000-0000-4000-8000-0000000000b5'
+         and from_team_member_id = '70000000-0000-4000-8000-0000000000b6'
+         and to_team_member_id = '70000000-0000-4000-8000-0000000000b7'
+         and reason = 'Onboarding 2 takes over delivery') <> 1 then
+    raise exception 'INVARIANT "a reassignment is recorded with the old and new owner and the reason" failed';
+  end if;
+  raise notice 'ok — a Team Lead reassigns an implementation, and the change is recorded';
+end $$;
+select pg_temp.expect_refused(
+  $$select public.solution_create('a0000000-0000-4000-8000-0000000000c9', 'd0000000-0000-4000-8000-0000000000b5',
+      'Old owner after reassignment', 'purchased', 'deliver_during_implementation')$$,
+  '42501', 'the previous owner loses rights on reassignment', '%You can change the solutions%');
+do $$
+begin
+  perform public.solution_create('a0000000-0000-4000-8000-0000000000cd', 'd0000000-0000-4000-8000-0000000000b5',
+    'New owner after reassignment', 'purchased', 'deliver_during_implementation');
+  raise notice 'ok — the new owner gains rights on reassignment';
+end $$;
+
+-- The owner history is a record: it cannot be rewritten or erased.
+select pg_temp.expect_refused(
+  $$update implementation_owner_changes set reason = 'rewritten'$$,
+  'P0001', 'owner history cannot be rewritten', '%is a record%');
+select pg_temp.expect_refused(
+  $$delete from implementation_owner_changes$$,
+  'P0001', 'owner history cannot be deleted', '%is a record%');
+
+-- The owner conflict report: read only, and it reports disagreement, not agreement.
+-- S5's owner is b7; its role assignment says b5: a conflict. S3's owner is b4 and its
+-- role assignment agrees: no conflict.
+insert into implementation_role_assignments (implementation_id, role_key, team_member_id) values
+  ('d0000000-0000-4000-8000-0000000000b5', 'implementation_manager', '70000000-0000-4000-8000-0000000000b5'),
+  ('d0000000-0000-4000-8000-0000000000b3', 'implementation_manager', '70000000-0000-4000-8000-0000000000b4');
+do $$
+begin
+  if (select count(*) from implementation_owner_conflicts where implementation_id = 'd0000000-0000-4000-8000-0000000000b5') <> 1 then
+    raise exception 'INVARIANT "a role assignment that disagrees with the owner is reported" failed';
+  end if;
+  if (select count(*) from implementation_owner_conflicts where implementation_id = 'd0000000-0000-4000-8000-0000000000b3') <> 0 then
+    raise exception 'INVARIANT "an implementation with no owner conflict is not reported" failed';
+  end if;
+  if (select owner_id from implementations where id = 'd0000000-0000-4000-8000-0000000000b5') is distinct from '70000000-0000-4000-8000-0000000000b7' then
+    raise exception 'INVARIANT "reporting a conflict does not change the owner" failed';
+  end if;
+  raise notice 'ok — a disagreement is reported; the owner is unchanged';
+end $$;
+select pg_temp.expect_refused(
+  $$set role authenticated; select count(*) from implementation_owner_conflicts$$,
+  '42501', 'the conflict report is not readable by a signed-in user directly', '%permission denied%');
 
 -- ---------------------------------------------------------------------------
 -- Existing rows: the first solution exists with its history, and a solution

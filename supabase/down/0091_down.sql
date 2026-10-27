@@ -7,11 +7,23 @@ begin
   if (exists (select 1 from public.complete_solutions)
       or exists (select 1 from public.solution_components)
       or exists (select 1 from public.solution_events)
+      or exists (select 1 from public.implementation_owner_changes)
       or exists (select 1 from public.evidence_proposals where type = 'component_update'))
      and coalesce(current_setting('down.complete_solutions_export_confirmed', true), '') <> '1' then
     raise exception 'Refusing to drop complete solutions: export them and set down.complete_solutions_export_confirmed';
   end if;
 end $$;
+
+-- The owner-conflict view reads the journey's role assignments, so it goes first.
+drop view if exists public.implementation_owner_conflicts;
+
+drop trigger if exists portal_profiles_team_lead_guard on public.portal_profiles;
+drop function if exists public.portal_guard_team_lead();
+drop table if exists public.implementation_owner_changes;
+drop function if exists public.implementation_owner_changes_append_only();
+drop function if exists public.implementation_set_owner(uuid, uuid, uuid, text);
+drop function if exists public.post_sale_may_manage(uuid, uuid);
+alter table public.portal_profiles drop column if exists team_lead;
 
 -- Functions first: they name the tables, so they go before the tables do.
 drop function if exists public.solution_save_reviewed_set(uuid, uuid, text, jsonb);
