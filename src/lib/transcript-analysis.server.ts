@@ -44,6 +44,7 @@ Rules you must not break:
   - "issue": something already wrong or already broken. Give severity (low, medium, high).
   - "decision": a choice the customer or the team actually made in this meeting. proposed_date is the day it was made when the transcript says.
   - "target_date": ONLY when the transcript states or clearly implies a new target or launch date. proposed_date must be that date, YYYY-MM-DD. Resolve a relative time ("two weeks from now", "end of month") against the meeting date you read from the transcript, else against the upload date in the context; if you still cannot resolve it to a calendar date, use type "note" instead rather than guessing.
+  - "component_update": ONLY for a solution component listed in the context, and only when the transcript states a change to it. component_id is its [id]; component_field is one of status, priority, target_date, next_action, blocker, latest_update; component_value is the new value (a status or priority word, a date as YYYY-MM-DD, or the text). Name the change in title, and quote the meeting in quote.
   - "owner": ONLY when the transcript says a different, named person should now own or run the implementation. owner_name is that person's name exactly as said; owner_team_member_id is their id from the roster in the context when one of those people is clearly the person, else null. Never invent an id.
   - On a "risk" or "issue", owner_team_member_id may name the roster member who took it on, only when the transcript says so; else null.
   - "note": a useful finding that does not cleanly fit the other types — a follow-up, an open question, context worth keeping.
@@ -68,6 +69,41 @@ type OpenRecord = { id: string; title: string };
  * the same tables the panel and the Customer 360 read, nothing derived from
  * the transcript itself.
  */
+/**
+ * The active components of the implementation's complete solutions, for a
+ * reading to name. Empty while the complete_solutions flag is off, and empty if
+ * the read fails: a reading without components proposes none, rather than
+ * stopping the reading of the rest of the transcript.
+ */
+async function loadComponentsForReading(
+  implementationId: string,
+): Promise<NonNullable<TranscriptContext["solutionComponents"]>> {
+  const { isFlagOn } = await import("./app-config.server");
+  if (!(await isFlagOn("complete_solutions"))) return [];
+  try {
+    const { loadSolutionsFor } = await import("./complete-solutions.server");
+    const solutions = await loadSolutionsFor(implementationId);
+    return solutions
+      .filter((s) => !s.archived)
+      .flatMap((s) =>
+        s.components
+          .filter((c) => !c.archived)
+          .map((c) => ({
+            id: c.id,
+            solution: s.title,
+            name: c.name,
+            status: c.status,
+            priority: c.priority,
+            targetDate: c.targetDate,
+            updatedAt: c.updatedAt,
+          })),
+      );
+  } catch (e) {
+    console.error("[transcript] could not read the solution components for a reading", e);
+    return [];
+  }
+}
+
 export async function loadTranscriptContext(
   implementationId: string,
   attachment: { title: string | null; created_at: string | null },
@@ -153,6 +189,10 @@ export async function loadTranscriptContext(
   const ownerId = (impl.owner_id as string | null) ?? null;
   const owner = ownerId ? (team.find((m) => m.id === ownerId) ?? null) : null;
 
+  // The components a reading may update. Shown only while the feature is on, so
+  // a reading never names what the Hub is not yet using.
+  const solutionComponents = await loadComponentsForReading(implementationId);
+
   return {
     customerName: (customer?.name as string | undefined) ?? "Unknown customer",
     implementationName: String(impl.name ?? ""),
@@ -160,6 +200,7 @@ export async function loadTranscriptContext(
     timeline,
     open: { risks: openOf(risks), issues: openOf(issues), decisions: openOf(decisions) },
     roster: team,
+    solutionComponents,
     owner: owner ? { id: owner.id, name: owner.name } : null,
     attachment: {
       title: attachment.title,
@@ -205,10 +246,20 @@ export function proposalRowFor(
     jobId: string | null;
   },
 ): Record<string, unknown> {
+  const listedComponents = new Set((ctx.solutionComponents ?? []).map((c) => c.id));
+  // A component_update must name a component listed in the context and say what
+  // to change; without both it is kept as a note, so the text is not lost.
+  const componentUpdateOk =
+    raw.type === "component_update" &&
+    raw.component_id !== null &&
+    listedComponents.has(raw.component_id) &&
+    raw.component_field !== null;
   const p: TranscriptProposal =
     raw.type === "intake_suggestion" && !ctx.hasHandoff
       ? { ...raw, type: "note", intake_key: null }
-      : raw;
+      : raw.type === "component_update" && !componentUpdateOk
+        ? { ...raw, type: "note", component_id: null, component_field: null, component_value: null }
+        : raw;
   const rosterIds = new Set(ctx.roster.map((m) => m.id));
   const openIds: Record<string, Set<string>> = {
     risk: new Set(ctx.open.risks.map((r) => r.id)),
@@ -241,6 +292,13 @@ export function proposalRowFor(
     duplicate_of_type: dup?.type ?? null,
     duplicate_of_id: dup?.id ?? null,
     intake_key: p.type === "intake_suggestion" ? p.intake_key : null,
+    solution_component_id: p.type === "component_update" ? p.component_id : null,
+    component_field: p.type === "component_update" ? p.component_field : null,
+    component_value: p.type === "component_update" ? p.component_value : null,
+    component_version:
+      p.type === "component_update"
+        ? ((ctx.solutionComponents ?? []).find((c) => c.id === p.component_id)?.updatedAt ?? null)
+        : null,
     status: "pending",
   };
 }

@@ -9,7 +9,7 @@ import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { LIFECYCLE_STAGES } from "./lifecycle";
 import { sowAnalysisSchema, type SowAnalysis } from "./sow-analysis";
 
-const ATTACHMENT_BUCKET = "attachments";
+export const ATTACHMENT_BUCKET = "attachments";
 
 const db = () => supabaseAdmin as any;
 
@@ -306,4 +306,32 @@ export async function setSowDocument(input: {
     .eq("id", input.implementationId);
   if (error) throw new Error("Could not attach that SOW.");
   return { ok: true };
+}
+
+/**
+ * The SOW's goals and requirements written onto an implementation, for a person. The
+ * requirements are agreed deliverables, so the same post-sale check as every other
+ * delivery write applies before anything is written.
+ */
+export async function applySowProposalAsPerson(
+  input: Parameters<typeof applySowProposal>[0],
+  actorProfileId: string,
+) {
+  const { assertCanManagePostSale } = await import("./post-sale-access.server");
+  await assertCanManagePostSale(actorProfileId, input.implementationId);
+  return applySowProposal(input);
+}
+
+/**
+ * Which document is the reference for the implementation's agreed scope, for a
+ * person. Changing it changes what the delivery is measured against, so the same
+ * post-sale check applies.
+ */
+export async function setSowDocumentAsPerson(
+  input: Parameters<typeof setSowDocument>[0],
+  actorProfileId: string,
+) {
+  const { assertCanManagePostSale } = await import("./post-sale-access.server");
+  await assertCanManagePostSale(actorProfileId, input.implementationId);
+  return setSowDocument(input);
 }

@@ -6,6 +6,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
 import { EDITABLE_RECORD_FIELD_KEYS, type EditableRecordField } from "./record-fields";
+import { ownerChangeFromRaw, type OwnerChangeReason } from "./owner-change";
 import { advanceStageInput } from "./stage-advance-input";
 import { analyzeSowInput, applySowProposalInput, setSowDocumentInput } from "./sow-analysis";
 import { signedInProfileId, signedInTeamMemberId } from "./session-identity";
@@ -297,72 +298,77 @@ export const setSolutionDesign = createServerFn({ method: "POST" })
 export const addSuccessCriterion = createServerFn({ method: "POST" })
   .middleware([requireInternalAuth])
   .inputValidator((data: unknown) => createSuccessCriterionInput.parse(data))
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
     const { createSuccessCriterion } = await import("./hub.server");
     const { implementationId, ...rest } = data;
-    return createSuccessCriterion(implementationId, toSuccessCriterionPatch(rest));
+    return createSuccessCriterion(
+      implementationId,
+      toSuccessCriterionPatch(rest),
+      context.profile.id,
+    );
   });
 
 export const setSuccessCriterion = createServerFn({ method: "POST" })
   .middleware([requireInternalAuth])
   .inputValidator((data: unknown) => updateSuccessCriterionInput.parse(data))
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
     const { updateSuccessCriterion } = await import("./hub.server");
     const { id, ...rest } = data;
-    return updateSuccessCriterion(id, toSuccessCriterionPatch(rest));
+    return updateSuccessCriterion(id, toSuccessCriterionPatch(rest), context.profile.id);
   });
 
 export const addSuccessCriterionObservation = createServerFn({ method: "POST" })
   .middleware([requireInternalAuth])
   .inputValidator((data: unknown) => createObservationInput.parse(data))
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
     const { createSuccessCriterionObservation } = await import("./hub.server");
-    return createSuccessCriterionObservation(toObservationRow(data));
+    return createSuccessCriterionObservation(toObservationRow(data), context.profile.id);
   });
 
 export const addSuccessCriterionConfirmation = createServerFn({ method: "POST" })
   .middleware([requireInternalAuth])
   .inputValidator((data: unknown) => createConfirmationInput.parse(data))
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
     const { createSuccessCriterionConfirmation } = await import("./hub.server");
-    return createSuccessCriterionConfirmation(data);
+    return createSuccessCriterionConfirmation(data, context.profile.id);
   });
 
 export const setSuccessCriterionConfirmation = createServerFn({ method: "POST" })
   .middleware([requireInternalAuth])
   .inputValidator((data: unknown) => updateConfirmationInput.parse(data))
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
     const { updateSuccessCriterionConfirmation } = await import("./hub.server");
-    return updateSuccessCriterionConfirmation(data.id, {
-      status: data.status,
-      evidenceId: data.evidenceId,
-    });
+    return updateSuccessCriterionConfirmation(
+      data.id,
+      { status: data.status, evidenceId: data.evidenceId },
+      context.profile.id,
+    );
   });
 
 export const addAdoptionArea = createServerFn({ method: "POST" })
   .middleware([requireInternalAuth])
   .inputValidator((data: unknown) => createAdoptionAreaInput.parse(data))
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
     const { createAdoptionArea } = await import("./hub.server");
     const { implementationId, ...rest } = data;
-    return createAdoptionArea(implementationId, toAdoptionAreaPatch(rest));
+    return createAdoptionArea(implementationId, toAdoptionAreaPatch(rest), context.profile.id);
   });
 
 export const setAdoptionArea = createServerFn({ method: "POST" })
   .middleware([requireInternalAuth])
   .inputValidator((data: unknown) => updateAdoptionAreaInput.parse(data))
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
     const { updateAdoptionArea } = await import("./hub.server");
     const { id, ...rest } = data;
-    return updateAdoptionArea(id, toAdoptionAreaPatch(rest));
+    return updateAdoptionArea(id, toAdoptionAreaPatch(rest), context.profile.id);
   });
 
 export const addAdoptionObservation = createServerFn({ method: "POST" })
   .middleware([requireInternalAuth])
   .inputValidator((data: unknown) => createAdoptionObservationInput.parse(data))
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
     const { createAdoptionObservation } = await import("./hub.server");
-    return createAdoptionObservation(toAdoptionObservationRow(data));
+    return createAdoptionObservation(toAdoptionObservationRow(data), context.profile.id);
   });
 
 export const addCustomerContact = createServerFn({ method: "POST" })
@@ -429,10 +435,15 @@ export const addImplementation = createServerFn({ method: "POST" })
     });
   });
 
+/** A person's reason for an owner change, when the change is theirs (not the system's). */
+function ownerChangeFromInput(data: unknown): OwnerChangeReason | null {
+  return ownerChangeFromRaw((data as { ownerChange?: unknown }).ownerChange);
+}
+
 export const setRecordField = createServerFn({ method: "POST" })
   .middleware([requireInternalAuth])
-  .inputValidator((data: unknown) =>
-    z
+  .inputValidator((data: unknown) => ({
+    ...z
       .object({
         implementationId: z.string().uuid(),
         field: z.enum(
@@ -441,10 +452,12 @@ export const setRecordField = createServerFn({ method: "POST" })
         value: z.string().max(2000).nullable(),
       })
       .parse(data),
-  )
+    ownerChange: ownerChangeFromInput(data),
+  }))
   .handler(async ({ data, context }) => {
     const { updateRecordField } = await import("./hub.server");
     return updateRecordField({
+      ownerChange: data.ownerChange,
       implementationId: data.implementationId,
       field: data.field,
       value: data.value,
@@ -469,7 +482,10 @@ export const updateCustomer = createServerFn({ method: "POST" })
 
 export const setImplementation = createServerFn({ method: "POST" })
   .middleware([requireInternalAuth])
-  .inputValidator((data: unknown) => updateImplementationInputChecked.parse(data))
+  .inputValidator((data: unknown) => ({
+    ...updateImplementationInputChecked.parse(data),
+    ownerChange: ownerChangeFromInput(data),
+  }))
   .handler(async ({ data, context }) => {
     const { updateImplementation } = await import("./hub.server");
     // health_recorded is the human's statement, so it is stamped with the
@@ -483,7 +499,8 @@ export const setImplementation = createServerFn({ method: "POST" })
         }),
       },
       // Phase 7: the account activity feed attributes through the same bridge.
-      { actorProfileId: context.profile.id },
+      // An owner change carries its reason; it is refused without one.
+      { actorProfileId: context.profile.id, ownerChange: data.ownerChange },
     );
   });
 
@@ -714,6 +731,7 @@ export const addEvidence = createServerFn({ method: "POST" })
     const created = await createEvidence(
       implementationId,
       toEvidencePatch({ ...rest, uploadedBy: context.profile.team_member_id ?? null }),
+      { actorProfileId: context.profile.id },
     );
     // A transcript is read the moment it is recorded: the evidence row
     // carries the uploaded file's reference, and the reading runs as a
@@ -737,28 +755,30 @@ export const addEvidence = createServerFn({ method: "POST" })
 export const setEvidence = createServerFn({ method: "POST" })
   .middleware([requireInternalAuth])
   .inputValidator((data: unknown) => updateEvidenceInput.parse(data))
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
     const { updateEvidence } = await import("./hub.server");
     const { id, ...rest } = data;
-    return updateEvidence(id, toEvidencePatch(rest));
+    return updateEvidence(id, toEvidencePatch(rest), { actorProfileId: context.profile.id });
   });
 
 export const addApproval = createServerFn({ method: "POST" })
   .middleware([requireInternalAuth])
   .inputValidator((data: unknown) => createApprovalInput.parse(data))
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
     const { createApproval } = await import("./hub.server");
     const { implementationId, ...rest } = data;
-    return createApproval(implementationId, toApprovalPatch(rest));
+    return createApproval(implementationId, toApprovalPatch(rest), {
+      actorProfileId: context.profile.id,
+    });
   });
 
 export const setApproval = createServerFn({ method: "POST" })
   .middleware([requireInternalAuth])
   .inputValidator((data: unknown) => updateApprovalInput.parse(data))
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
     const { updateApproval } = await import("./hub.server");
     const { id, ...rest } = data;
-    return updateApproval(id, toApprovalPatch(rest));
+    return updateApproval(id, toApprovalPatch(rest), { actorProfileId: context.profile.id });
   });
 
 /* ---------- Working notes + attachments ---------- */
@@ -821,19 +841,20 @@ export const applySowProposalToImplementation = createServerFn({ method: "POST" 
     signedInProfileId(context.profile);
     // The author is the signed-in user's linked, active team member, read from the
     // session. The request cannot name one. Refused before anything is written.
-    const { applySowProposal, resolveApplyingTeamMember } = await import("./sow-analysis.server");
+    const { applySowProposalAsPerson, resolveApplyingTeamMember } =
+      await import("./sow-analysis.server");
     const authorTeamMemberId = await resolveApplyingTeamMember(
       signedInTeamMemberId(context.profile),
     );
-    return applySowProposal({ ...data, authorTeamMemberId });
+    return applySowProposalAsPerson({ ...data, authorTeamMemberId }, context.profile.id);
   });
 
 export const setSowDocumentForImplementation = createServerFn({ method: "POST" })
   .middleware([requireInternalAuth])
   .inputValidator((data: unknown) => setSowDocumentInput.parse(data))
-  .handler(async ({ data }) => {
-    const { setSowDocument } = await import("./sow-analysis.server");
-    return setSowDocument(data);
+  .handler(async ({ data, context }) => {
+    const { setSowDocumentAsPerson } = await import("./sow-analysis.server");
+    return setSowDocumentAsPerson(data, context.profile.id);
   });
 
 /* ---------- Meeting transcript analysis (read-only proposal) ---------- */

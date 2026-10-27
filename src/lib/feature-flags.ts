@@ -170,6 +170,15 @@ export const FLAG_CATALOGUE: FlagInfo[] = [
     needsMigration: "0078",
   },
 
+  /* ---------------- Delivery ---------------- */
+  {
+    key: "complete_solutions",
+    label: "Complete solutions",
+    description:
+      "Shows the complete solutions being delivered to a customer on Customer 360 and the Solutions workspace, and allows them to be created and edited. Off hides them; the data is kept either way. Needs migration 0091.",
+    group: "delivery",
+    needsMigration: "0091",
+  },
   /* ---------------- Platform ---------------- */
   {
     key: "signals_alerts",

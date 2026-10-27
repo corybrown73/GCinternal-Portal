@@ -18,6 +18,7 @@ export const DEFAULT_FLAGS_FOR_TEST = {
   sf_presale_bridge: false,
   sf_pull_enabled: false,
   signals_alerts: false,
+  complete_solutions: false,
   audit_activity_feed: false,
   audit_strict: false,
   handover_record: false,

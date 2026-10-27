@@ -79,7 +79,11 @@ const rows: Rows = {
 let fake: ReturnType<typeof createFakeSupabase>;
 
 beforeEach(() => {
-  fake = createFakeSupabase(rows);
+  // These tests are about who the write is attributed to. The signed-in person may change the
+  // implementation here, so the access check answers yes.
+  fake = createFakeSupabase(rows, {
+    rpcHandlers: { post_sale_may_manage: () => ({ data: true }) },
+  });
   h.client = fake.client;
   h.journal.length = 0;
 });

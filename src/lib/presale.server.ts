@@ -2436,6 +2436,8 @@ export type ProfileListRow = ProfileRow & {
   /** The auth account is confirmed: the person can sign in. */
   activated: boolean;
   last_sign_in_at: string | null;
+  /** Post-sale Team Lead authority (granted by an admin, never by the person). */
+  team_lead: boolean;
 };
 
 /**
@@ -2448,7 +2450,7 @@ export async function listProfiles(userId: string): Promise<ProfileListRow[]> {
   await requireSuperAdmin(userId);
   const { data, error } = await db()
     .from("portal_profiles")
-    .select("id, email, full_name, role, created_at")
+    .select("id, email, full_name, role, team_lead, created_at")
     .order("created_at", { ascending: true });
   if (error) throw new Error(error.message);
   const rows = (data ?? []) as ProfileRow[];
@@ -2478,6 +2480,7 @@ export async function listProfiles(userId: string): Promise<ProfileListRow[]> {
       ...r,
       activated: a ? a.confirmed : true,
       last_sign_in_at: a?.lastSignIn ?? null,
+      team_lead: Boolean((r as { team_lead?: boolean }).team_lead),
     };
   });
 }

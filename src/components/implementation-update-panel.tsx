@@ -13,6 +13,13 @@ import {
 } from "@/lib/hub.functions";
 import { ISSUE_SEVERITIES, RISK_SEVERITIES } from "@/lib/delivery-input";
 import { cn } from "@/lib/utils";
+import { OwnerChangeReasonFields } from "@/components/owner-change-reason";
+import {
+  EMPTY_OWNER_REASON,
+  ownerReasonPayload,
+  ownerReasonReady,
+  type OwnerReasonDraft,
+} from "@/lib/owner-change";
 
 const SEVERITY_LABEL: Record<string, string> = {
   low: "Low",
@@ -59,6 +66,7 @@ export function ImplementationUpdatePanel({ implementationId }: { implementation
   const [showIssue, setShowIssue] = useState(false);
 
   const [ownerId, setOwnerId] = useState("");
+  const [ownerReason, setOwnerReason] = useState<OwnerReasonDraft>(EMPTY_OWNER_REASON);
   const [riskTitle, setRiskTitle] = useState("");
   const [riskSeverity, setRiskSeverity] = useState<string>("medium");
   const [issueTitle, setIssueTitle] = useState("");
@@ -104,7 +112,15 @@ export function ImplementationUpdatePanel({ implementationId }: { implementation
       });
 
       if (showOwner && ownerId) {
-        await setField({ data: { implementationId, field: "owner_id", value: ownerId } });
+        await setField({
+          data: {
+            implementationId,
+            field: "owner_id",
+            value: ownerId,
+            // A person's owner change carries its reason; the record keeps it.
+            ownerChange: ownerReasonPayload(ownerReason),
+          },
+        });
       }
       if (showRisk && riskTitle.trim()) {
         await createRiskFn({
@@ -153,7 +169,7 @@ export function ImplementationUpdatePanel({ implementationId }: { implementation
 
   const unresolved =
     note.trim() === "" ||
-    (showOwner && !ownerId) ||
+    (showOwner && (!ownerId || !ownerReasonReady(ownerReason))) ||
     (showRisk && !riskTitle.trim()) ||
     (showIssue && !issueTitle.trim());
 
@@ -252,6 +268,11 @@ export function ImplementationUpdatePanel({ implementationId }: { implementation
                   </option>
                 ))}
               </select>
+              <OwnerChangeReasonFields
+                value={ownerReason}
+                onChange={setOwnerReason}
+                disabled={save.isPending}
+              />
             </div>
           ) : null}
 

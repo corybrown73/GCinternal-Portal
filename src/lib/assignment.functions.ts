@@ -3,6 +3,7 @@ import { z } from "zod";
 
 import { requireInternalAuth, requireManager } from "@/integrations/supabase/internal-middleware";
 import { canManage, type PortalRole } from "@/lib/auth";
+import { ownerChangeFromRaw } from "@/lib/owner-change";
 
 function assertCanManage(profile: { role: string }): void {
   if (!canManage(profile.role as PortalRole)) {
@@ -73,20 +74,33 @@ export const getDealAssignment = createServerFn({ method: "GET" })
 /** Assign by rule (no member) or by hand (a member). */
 export const assignDealFn = createServerFn({ method: "POST" })
   .middleware([requireManager])
-  .inputValidator((data: unknown) =>
-    z
+  .inputValidator((data: unknown) => {
+    const base = z
       .object({
         dealId: z.string().uuid(),
         teamMemberId: z.string().uuid().nullable().optional(),
       })
-      .parse(data),
-  )
+      .parse(data);
+    const ownerChange = ownerChangeFromRaw((data as { ownerChange?: unknown }).ownerChange);
+    return { ...base, ownerChange };
+  })
   .handler(async ({ data, context }) => {
-    const { assignDeal } = await import("./assignment.server");
+    const { assignDeal, namedPickNeedsReasonFor } = await import("./assignment.server");
+    // A named pick needs its reason only where it changes an existing implementation's
+    // owner. A deal with no implementation yet is the pre-sale assignment: no reason.
+    if (
+      !data.ownerChange &&
+      (await namedPickNeedsReasonFor(data.dealId, data.teamMemberId ?? null))
+    ) {
+      throw new Error("Choose why the implementation is being reassigned.");
+    }
     return assignDeal({
       dealId: data.dealId,
       teamMemberId: data.teamMemberId ?? null,
       actorProfileId: context.profile.id,
+      reassignment: data.ownerChange
+        ? { ...data.ownerChange, actorProfileId: context.profile.id }
+        : null,
     });
   });
 

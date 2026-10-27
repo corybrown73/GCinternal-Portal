@@ -1,3 +1,5 @@
+import { assertCanManagePostSale } from "./post-sale-access.server";
+import type { OwnerChangeReason } from "./owner-change";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { isPartnerJourney } from "./partner-implementation";
 import { technicalSolutionNextAction } from "./customer360-derive";
@@ -14,6 +16,7 @@ import { LAUNCH_STAGE, launchAcceptanceGate, launchGateMessage } from "./launch-
 import type {
   Customer360,
   CommitmentRow,
+  CompleteSolutionsPanel,
   HomeData,
   ImplementationRow,
   LeadershipData,
@@ -549,6 +552,33 @@ function label(entityType: string, row: any): string {
   return row.title ?? row.name ?? row.description ?? entityType;
 }
 
+/**
+ * The concise solutions picture for Customer 360. Null when the feature is off.
+ * A failed read is said here and the rest of the record still loads: the
+ * summary is never the reason a Customer 360 page fails to open.
+ */
+async function completeSolutionsFor(
+  implementationId: string,
+): Promise<CompleteSolutionsPanel | null> {
+  const { isFlagOn } = await import("./app-config.server");
+  if (!(await isFlagOn("complete_solutions"))) return null;
+  try {
+    const { loadSolutionsFor, summarizeSolutions } = await import("./complete-solutions.server");
+    const solutions = await loadSolutionsFor(implementationId);
+    return {
+      summary: summarizeSolutions(solutions, new Date().toISOString().slice(0, 10)),
+      failed: null,
+    };
+  } catch (e) {
+    console.error("[solutions] the Customer 360 summary failed", e);
+    return {
+      summary: null,
+      failed:
+        "Could not load the complete solutions for this implementation. Try again in a minute.",
+    };
+  }
+}
+
 export async function loadCustomer360(
   customerId: string,
   implementationId?: string | null,
@@ -725,6 +755,7 @@ export async function loadCustomer360(
     issues: [],
     escalations: [],
     technical_solutions: [],
+    complete_solutions: null,
     evidence: [],
     approvals: [],
     stage_history: [],
@@ -1121,6 +1152,7 @@ export async function loadCustomer360(
 
   return {
     ...base,
+    complete_solutions: await completeSolutionsFor(impl.id),
     partner_progress: selectedPartnerProgress
       ? { implementation_id: impl.id, progress: selectedPartnerProgress }
       : null,
@@ -1877,10 +1909,28 @@ export type SuccessCriterionPatch = {
   customer_owner_contact_id: string | null;
 };
 
+/**
+ * Checks a change to an existing row against the implementation that row belongs
+ * to. The caller names only the row; the implementation comes from the row, so an
+ * id from another implementation cannot be used to reach it.
+ */
+async function assertPostSaleRow(table: string, rowId: string, actorProfileId: string) {
+  const { data: row, error } = await db()
+    .from(table)
+    .select("implementation_id")
+    .eq("id", rowId)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!row) throw new Error("That record no longer exists.");
+  await assertCanManagePostSale(actorProfileId, String(row.implementation_id));
+}
+
 export async function createSuccessCriterion(
   implementationId: string,
   patch: SuccessCriterionPatch,
+  actorProfileId: string,
 ) {
+  await assertCanManagePostSale(actorProfileId, implementationId);
   // status starts at 'pending'; measured_value / measured_at are never written here
   // (they belong to observation handling). created_at uses the DB default.
   const { error } = await db()
@@ -1890,7 +1940,12 @@ export async function createSuccessCriterion(
   return { ok: true };
 }
 
-export async function updateSuccessCriterion(id: string, patch: SuccessCriterionPatch) {
+export async function updateSuccessCriterion(
+  id: string,
+  patch: SuccessCriterionPatch,
+  actorProfileId: string,
+) {
+  await assertPostSaleRow("success_criteria", id, actorProfileId);
   const { error } = await db().from("success_criteria").update(patch).eq("id", id);
   if (error) throw new Error(error.message);
   return { ok: true };
@@ -1899,29 +1954,37 @@ export async function updateSuccessCriterion(id: string, patch: SuccessCriterion
 /* ---------- Mutations (Prove Value: observations + customer confirmation) ---------- */
 
 /** Append-only: observations are never updated or deleted. */
-export async function createSuccessCriterionObservation(row: {
-  success_criteria_id: string;
-  observed_value: string;
-  observed_at: string;
-  observed_by: string | null;
-  source: string | null;
-  assessment: string;
-  notes: string | null;
-  evidence_id: string | null;
-}) {
+export async function createSuccessCriterionObservation(
+  row: {
+    success_criteria_id: string;
+    observed_value: string;
+    observed_at: string;
+    observed_by: string | null;
+    source: string | null;
+    assessment: string;
+    notes: string | null;
+    evidence_id: string | null;
+  },
+  actorProfileId: string,
+) {
+  await assertPostSaleRow("success_criteria", row.success_criteria_id, actorProfileId);
   const { error } = await db().from("success_criteria_observations").insert(row);
   if (error) throw new Error(error.message);
   return { ok: true };
 }
 
 /** Customer confirmation = an approvals row scoped to one success criterion. */
-export async function createSuccessCriterionConfirmation(input: {
-  implementationId: string;
-  successCriteriaId: string;
-  customerContactId: string;
-  evidenceId: string | null;
-  status: "pending" | "approved" | "rejected";
-}) {
+export async function createSuccessCriterionConfirmation(
+  input: {
+    implementationId: string;
+    successCriteriaId: string;
+    customerContactId: string;
+    evidenceId: string | null;
+    status: "pending" | "approved" | "rejected";
+  },
+  actorProfileId: string,
+) {
+  await assertCanManagePostSale(actorProfileId, input.implementationId);
   const { data: contact, error: contactError } = await db()
     .from("customer_contacts")
     .select("id,name,role")
@@ -1960,7 +2023,9 @@ export async function createSuccessCriterionConfirmation(input: {
 export async function updateSuccessCriterionConfirmation(
   id: string,
   patch: { status: "pending" | "approved" | "rejected"; evidenceId: string | null },
+  actorProfileId: string,
 ) {
+  await assertPostSaleRow("approvals", id, actorProfileId);
   const { error } = await db()
     .from("approvals")
     .update({
@@ -1988,7 +2053,12 @@ export type AdoptionAreaPatch = {
   customer_owner_contact_id: string | null;
 };
 
-export async function createAdoptionArea(implementationId: string, patch: AdoptionAreaPatch) {
+export async function createAdoptionArea(
+  implementationId: string,
+  patch: AdoptionAreaPatch,
+  actorProfileId: string,
+) {
+  await assertCanManagePostSale(actorProfileId, implementationId);
   const { error } = await db()
     .from("adoption_areas")
     .insert({ implementation_id: implementationId, ...patch });
@@ -1996,7 +2066,12 @@ export async function createAdoptionArea(implementationId: string, patch: Adopti
   return { ok: true };
 }
 
-export async function updateAdoptionArea(id: string, patch: AdoptionAreaPatch) {
+export async function updateAdoptionArea(
+  id: string,
+  patch: AdoptionAreaPatch,
+  actorProfileId: string,
+) {
+  await assertPostSaleRow("adoption_areas", id, actorProfileId);
   const { error } = await db()
     .from("adoption_areas")
     .update({ ...patch, updated_at: new Date().toISOString() })
@@ -2006,17 +2081,21 @@ export async function updateAdoptionArea(id: string, patch: AdoptionAreaPatch) {
 }
 
 /** Append-only: adoption observations are never updated or deleted. */
-export async function createAdoptionObservation(row: {
-  adoption_area_id: string;
-  observed_at: string;
-  observed_by: string | null;
-  state: string;
-  workaround_in_use: boolean;
-  workaround_description: string | null;
-  source: string | null;
-  notes: string | null;
-  evidence_id: string | null;
-}) {
+export async function createAdoptionObservation(
+  row: {
+    adoption_area_id: string;
+    observed_at: string;
+    observed_by: string | null;
+    state: string;
+    workaround_in_use: boolean;
+    workaround_description: string | null;
+    source: string | null;
+    notes: string | null;
+    evidence_id: string | null;
+  },
+  actorProfileId: string,
+) {
+  await assertPostSaleRow("adoption_areas", row.adoption_area_id, actorProfileId);
   const { error } = await db().from("adoption_observations").insert(row);
   if (error) throw new Error(error.message);
   return { ok: true };
@@ -2394,8 +2473,37 @@ export async function createImplementation(args: {
 export async function updateImplementation(
   id: string,
   patch: Record<string, unknown>,
-  opts: { actorProfileId?: string | null } = {},
+  opts: { actorProfileId?: string | null; ownerChange?: OwnerChangeReason | null } = {},
 ) {
+  // A person's edit is checked against the implementation's post-sale rule. The
+  // system's own updates carry no actor and are not checked here.
+  if (opts.actorProfileId) await assertCanManagePostSale(opts.actorProfileId, id);
+  // An owner change is an assignment, so it goes through the reassignment path
+  // (the database decides who may make it, and records it). The owner is never
+  // written here directly when a person is making the change.
+  if (opts.actorProfileId && Object.prototype.hasOwnProperty.call(patch, "owner_id")) {
+    const { data: current } = await db()
+      .from("implementations")
+      .select("owner_id")
+      .eq("id", id)
+      .maybeSingle();
+    const { owner_id: nextOwner, ...rest } = patch;
+    patch = rest;
+    if (String(current?.owner_id ?? "") !== String(nextOwner ?? "")) {
+      // A manual change needs its reason. Nothing is invented for one that is missing.
+      if (!opts.ownerChange) throw new Error("Choose why the implementation is being reassigned.");
+      const { reassignImplementationOwner } = await import("./post-sale-access.server");
+      await reassignImplementationOwner(
+        {
+          implementationId: id,
+          teamMemberId: (nextOwner as string | null) ?? null,
+          reasonCode: opts.ownerChange.reasonCode,
+          reason: opts.ownerChange.reason,
+        },
+        opts.actorProfileId,
+      );
+    }
+  }
   // A hand edit of the target on a project a deal's plan keeps writes
   // target_launch_date only. syncTargetLaunch reads target_date as the date
   // it last wrote and leaves the hand edit alone while the plan's own target
@@ -2527,8 +2635,9 @@ export async function handOffPartner(args: {
   implementationId: string;
   teamMemberId: string | null;
   enteredBy: string | null;
-  actorProfileId: string | null;
+  actorProfileId: string;
 }) {
+  await assertCanManagePostSale(args.actorProfileId, args.implementationId);
   const { data: impl, error } = await db()
     .from("implementations")
     .select("id,current_stage,journey_type,partner_key,deal_id")
@@ -2568,8 +2677,10 @@ export async function handOffPartner(args: {
 export async function graduatePartner(args: {
   implementationId: string;
   actorTeamMember: string | null;
-  actorProfileId: string | null;
+  actorProfileId: string;
 }): Promise<{ graduated: true }> {
+  // Graduation closes the journey: a Team Lead, the assigned TIS, a manager or an admin.
+  await assertCanManagePostSale(args.actorProfileId, args.implementationId);
   const { data: impl, error } = await db()
     .from("implementations")
     .select("id,current_stage,journey_type,partner_key")
@@ -2606,9 +2717,12 @@ export async function advanceStage(args: {
   notes: string | null;
   /** The client's "yes anyway". Re-checked here, never trusted. */
   override?: { reason: string | null } | null;
-  /** portal_profiles id of the caller, for the audit row. */
+  /** portal_profiles id of the caller, for the audit row. A person's move is checked against it. */
   actorProfileId?: string | null;
 }) {
+  if (args.actorProfileId) {
+    await assertCanManagePostSale(args.actorProfileId, args.implementationId);
+  }
   const { data: impl, error: readError } = await db()
     .from("implementations")
     .select("id,current_stage,journey_type,partner_key,deal_id")
@@ -2926,7 +3040,8 @@ async function guardResolutionOrder(
 
 import { deliveryActivityChanges } from "./delivery-activity";
 
-export type DeliveryWriteOpts = { actorProfileId?: string | null };
+/** The signed-in person making the change. Required: every post-sale write is checked against them. */
+export type DeliveryWriteOpts = { actorProfileId: string };
 
 async function recordDeliveryActivity(
   table: string,
@@ -2949,8 +3064,9 @@ async function insertDeliveryRow(
   table: string,
   implementationId: string,
   patch: Record<string, unknown>,
-  opts?: DeliveryWriteOpts,
+  opts: DeliveryWriteOpts,
 ) {
+  await assertCanManagePostSale(opts.actorProfileId, implementationId);
   await guardResolutionOrder(table, patch, null);
   const { data, error } = await db()
     .from(table)
@@ -2971,8 +3087,15 @@ async function updateDeliveryRow(
   table: string,
   id: string,
   patch: Record<string, unknown>,
-  opts?: DeliveryWriteOpts,
+  opts: DeliveryWriteOpts,
 ) {
+  const { data: owned } = await db()
+    .from(table)
+    .select("implementation_id")
+    .eq("id", id)
+    .maybeSingle();
+  if (!owned) throw new Error("That record no longer exists.");
+  await assertCanManagePostSale(opts.actorProfileId, String(owned.implementation_id));
   await guardResolutionOrder(table, patch, id);
   const { error } = await db().from(table).update(patch).eq("id", id);
   if (error) throw deliveryWriteError(table, error.message);
@@ -2993,61 +3116,61 @@ async function updateDeliveryRow(
 export const createRequirement = (
   implementationId: string,
   patch: Record<string, unknown>,
-  opts?: DeliveryWriteOpts,
+  opts: DeliveryWriteOpts,
 ) => insertDeliveryRow("requirements", implementationId, patch, opts);
 export const updateRequirement = (
   id: string,
   patch: Record<string, unknown>,
-  opts?: DeliveryWriteOpts,
+  opts: DeliveryWriteOpts,
 ) => updateDeliveryRow("requirements", id, patch, opts);
 
 export const createRisk = (
   implementationId: string,
   patch: Record<string, unknown>,
-  opts?: DeliveryWriteOpts,
+  opts: DeliveryWriteOpts,
 ) => insertDeliveryRow("risks", implementationId, patch, opts);
-export const updateRisk = (id: string, patch: Record<string, unknown>, opts?: DeliveryWriteOpts) =>
+export const updateRisk = (id: string, patch: Record<string, unknown>, opts: DeliveryWriteOpts) =>
   updateDeliveryRow("risks", id, patch, opts);
 
 export const createIssue = (
   implementationId: string,
   patch: Record<string, unknown>,
-  opts?: DeliveryWriteOpts,
+  opts: DeliveryWriteOpts,
 ) => insertDeliveryRow("issues", implementationId, patch, opts);
-export const updateIssue = (id: string, patch: Record<string, unknown>, opts?: DeliveryWriteOpts) =>
+export const updateIssue = (id: string, patch: Record<string, unknown>, opts: DeliveryWriteOpts) =>
   updateDeliveryRow("issues", id, patch, opts);
 
 export const createEscalation = (
   implementationId: string,
   patch: Record<string, unknown>,
-  opts?: DeliveryWriteOpts,
+  opts: DeliveryWriteOpts,
 ) => insertDeliveryRow("escalations", implementationId, patch, opts);
 export const updateEscalation = (
   id: string,
   patch: Record<string, unknown>,
-  opts?: DeliveryWriteOpts,
+  opts: DeliveryWriteOpts,
 ) => updateDeliveryRow("escalations", id, patch, opts);
 
 export const createDecision = (
   implementationId: string,
   patch: Record<string, unknown>,
-  opts?: DeliveryWriteOpts,
+  opts: DeliveryWriteOpts,
 ) => insertDeliveryRow("decisions", implementationId, patch, opts);
 export const updateDecision = (
   id: string,
   patch: Record<string, unknown>,
-  opts?: DeliveryWriteOpts,
+  opts: DeliveryWriteOpts,
 ) => updateDeliveryRow("decisions", id, patch, opts);
 
 export const createCommitment = (
   implementationId: string,
   patch: Record<string, unknown>,
-  opts?: DeliveryWriteOpts,
+  opts: DeliveryWriteOpts,
 ) => insertDeliveryRow("commitments", implementationId, patch, opts);
 export const updateCommitment = (
   id: string,
   patch: Record<string, unknown>,
-  opts?: DeliveryWriteOpts,
+  opts: DeliveryWriteOpts,
 ) => updateDeliveryRow("commitments", id, patch, opts);
 
 /* ---------- Mutations (Slice 4: evidence + approval requests) ----------
@@ -3055,15 +3178,27 @@ export const updateCommitment = (
  * helpers so error translation and implementation scoping stay identical.
  */
 
-export const createEvidence = (implementationId: string, patch: Record<string, unknown>) =>
-  insertDeliveryRow("evidence", implementationId, patch);
-export const updateEvidence = (id: string, patch: Record<string, unknown>) =>
-  updateDeliveryRow("evidence", id, patch);
+export const createEvidence = (
+  implementationId: string,
+  patch: Record<string, unknown>,
+  opts: DeliveryWriteOpts,
+) => insertDeliveryRow("evidence", implementationId, patch, opts);
+export const updateEvidence = (
+  id: string,
+  patch: Record<string, unknown>,
+  opts: DeliveryWriteOpts,
+) => updateDeliveryRow("evidence", id, patch, opts);
 
-export const createApproval = (implementationId: string, patch: Record<string, unknown>) =>
-  insertDeliveryRow("approvals", implementationId, patch);
-export const updateApproval = (id: string, patch: Record<string, unknown>) =>
-  updateDeliveryRow("approvals", id, patch);
+export const createApproval = (
+  implementationId: string,
+  patch: Record<string, unknown>,
+  opts: DeliveryWriteOpts,
+) => insertDeliveryRow("approvals", implementationId, patch, opts);
+export const updateApproval = (
+  id: string,
+  patch: Record<string, unknown>,
+  opts: DeliveryWriteOpts,
+) => updateDeliveryRow("approvals", id, patch, opts);
 
 /* ---------- Working notes + attachments ---------- */
 
@@ -3207,6 +3342,8 @@ export async function updateRecordField(args: {
   field: EditableRecordField;
   value: string | null;
   actorProfileId: string | null;
+  /** Required when the field is the owner and a person is changing it. */
+  ownerChange?: OwnerChangeReason | null;
 }): Promise<{ ok: true; field: EditableRecordField; value: string | number | null }> {
   const spec = EDITABLE_RECORD_FIELDS[args.field];
   if (!spec) throw new Error(`${args.field} is not editable here`);
@@ -3254,6 +3391,7 @@ export async function updateRecordField(args: {
     // deal's plan keeps the target (see updateImplementation).
     await updateImplementation(args.implementationId, withTargetPair({ [args.field]: next }), {
       actorProfileId: args.actorProfileId,
+      ownerChange: args.ownerChange ?? null,
     });
     return { ok: true, field: args.field, value: next };
   }

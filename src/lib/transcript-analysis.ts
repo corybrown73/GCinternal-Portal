@@ -1,6 +1,7 @@
 import { z } from "zod/v4";
 
 import { handoffQuestion, HANDOFF_QUESTIONS } from "./sales-handoff";
+import { COMPONENT_STATUSES, PRIORITIES } from "./complete-solutions";
 
 /**
  * Meeting-transcript analysis (V2).
@@ -55,7 +56,30 @@ export const PROPOSAL_TYPES = [
   "owner",
   "note",
   "intake_suggestion",
+  "component_update",
 ] as const;
+
+/**
+ * The fields of a complete solution's component a transcript may propose to
+ * change. Matches the check on evidence_proposals.component_field (0091).
+ */
+export const COMPONENT_PROPOSAL_FIELDS = [
+  "status",
+  "priority",
+  "target_date",
+  "next_action",
+  "blocker",
+  "latest_update",
+] as const;
+export type ComponentProposalField = (typeof COMPONENT_PROPOSAL_FIELDS)[number];
+export const COMPONENT_PROPOSAL_FIELD_LABEL: Record<ComponentProposalField, string> = {
+  status: "status",
+  priority: "delivery priority",
+  target_date: "target date",
+  next_action: "next action",
+  blocker: "what it is waiting on",
+  latest_update: "latest update",
+};
 export type ProposalType = (typeof PROPOSAL_TYPES)[number];
 
 export const PROPOSAL_TYPE_LABEL: Record<ProposalType, string> = {
@@ -66,6 +90,7 @@ export const PROPOSAL_TYPE_LABEL: Record<ProposalType, string> = {
   owner: "Implementation owner change",
   note: "Follow-up note",
   intake_suggestion: "Handoff answer",
+  component_update: "Solution component change",
 };
 
 export const PROPOSAL_LEVELS = ["low", "medium", "high"] as const;
@@ -141,6 +166,7 @@ const proposal = z.preprocess(
     const dupType = typeof dupObj?.["type"] === "string" ? dupObj["type"].toLowerCase() : "";
     const dupId = nullableText(dupObj?.["id"]);
     const intakeKey = nullableText(o["intake_key"]);
+    const componentField = nullableText(o["component_field"]);
     return {
       type: (PROPOSAL_TYPES as readonly string[]).includes(type) ? type : "note",
       title: textOf(o["title"]).slice(0, 200) || "Untitled",
@@ -157,6 +183,12 @@ const proposal = z.preprocess(
           ? { type: dupType, id: dupId }
           : null,
       intake_key: intakeKey && HANDOFF_KEYS.includes(intakeKey) ? intakeKey : null,
+      component_id: nullableText(o["component_id"]),
+      component_field:
+        componentField && (COMPONENT_PROPOSAL_FIELDS as readonly string[]).includes(componentField)
+          ? componentField
+          : null,
+      component_value: nullableText(o["component_value"]),
     };
   },
   z.object({
@@ -174,6 +206,11 @@ const proposal = z.preprocess(
     duplicate_of: duplicateOf.nullable(),
     /** For intake_suggestion: the handoff question the text answers. */
     intake_key: z.string().nullable(),
+    /** For component_update: the [id] of the component, as listed in the context. */
+    component_id: z.string().nullable(),
+    component_field: z.enum(COMPONENT_PROPOSAL_FIELDS).nullable(),
+    /** For component_update: the new value. A status, a priority, a date, or the text. */
+    component_value: z.string().nullable(),
   }),
 );
 
@@ -231,6 +268,20 @@ export type TranscriptContext = {
     decisions: Array<{ id: string; title: string }>;
   };
   roster: Array<{ id: string; name: string; role: string }>;
+  /**
+   * The active components of this implementation's complete solutions, with
+   * their ids. A component_update may name only one of these.
+   */
+  solutionComponents?: Array<{
+    id: string;
+    solution: string;
+    name: string;
+    status: string;
+    priority: string;
+    targetDate: string | null;
+    /** The component's version when it was read. A suggestion applies only to this version. */
+    updatedAt: string;
+  }>;
   /** Who runs the implementation today, so a reading does not propose them as new. */
   owner: { id: string; name: string } | null;
   attachment: { title: string | null; uploadedAt: string | null };
@@ -255,6 +306,14 @@ export function buildTranscriptContextText(ctx: TranscriptContext): string {
   const roster = ctx.roster.length
     ? ctx.roster.map((m) => `  - [${m.id}] ${m.name} (${m.role})`).join("\n")
     : "  (nobody listed)";
+  const components = (ctx.solutionComponents ?? []).length
+    ? (ctx.solutionComponents ?? [])
+        .map(
+          (c) =>
+            `  - [${c.id}] ${c.solution} · ${c.name} (status ${c.status}, priority ${c.priority}${c.targetDate ? `, target ${c.targetDate}` : ""})`,
+        )
+        .join("\n")
+    : "  (no solution components recorded)";
   const questions = ctx.hasHandoff
     ? HANDOFF_QUESTIONS.filter((q) => !ctx.handoffAnswered.includes(q.key))
         .map((q) => `  - ${q.key}: ${q.label}`)
@@ -280,6 +339,9 @@ export function buildTranscriptContextText(ctx: TranscriptContext): string {
     ``,
     `Team roster (id, name, role) — owner_team_member_id must be one of these ids or null:`,
     roster,
+    ``,
+    `Solution components (id, solution, name, current state) — a component_update must name one of these ids in component_id; propose none for a component not listed:`,
+    components,
     ``,
     `Handoff questions still unanswered (intake_key, label) — an intake_suggestion must use one of these keys:`,
     questions,
@@ -321,6 +383,11 @@ export type EvidenceProposalRow = {
   owner_name: string | null;
   /** For intake_suggestion: the question's key. */
   intake_key: string | null;
+  /** For component_update: the component, its field, and the new value. */
+  solution_component_id?: string | null;
+  component_field?: ComponentProposalField | null;
+  component_value?: string | null;
+  component_version?: string | null;
 };
 
 export function attributionFor(quote: string | null): string {
@@ -372,9 +439,19 @@ export type ProposalApplyPlan =
       };
     }
   | { kind: "note"; input: { note: string } }
-  | { kind: "owner"; ownerId: string }
+  | { kind: "owner"; ownerId: string; reason: string }
   | { kind: "target_date"; via: "plan" | "record"; date: string }
   | { kind: "intake_suggestion"; key: string; value: string; quote: string | null }
+  | {
+      kind: "component_update";
+      componentId: string;
+      field: ComponentProposalField;
+      value: string;
+      /** The reviewer's reason for a date change; the model's own sentence, as written. */
+      reason: string | null;
+      /** The component version the suggestion was made against; the write must match it. */
+      version: string;
+    }
   | { kind: "blocked"; reason: string };
 
 /**
@@ -397,6 +474,10 @@ export function proposalApplyPlan(
     | "owner_team_member_id"
     | "proposed_date"
     | "intake_key"
+    | "solution_component_id"
+    | "component_field"
+    | "component_value"
+    | "component_version"
   >,
   picks: ProposalPicks,
   opts: { planOwnsTarget: boolean },
@@ -450,14 +531,61 @@ export function proposalApplyPlan(
         return { kind: "blocked", reason: "Enter a calendar date to apply this." };
       }
       return { kind: "target_date", via: opts.planOwnsTarget ? "plan" : "record", date };
-    case "owner":
+    case "owner": {
       if (!ownerId) return { kind: "blocked", reason: "Pick who the new owner is to apply this." };
-      return { kind: "owner", ownerId };
+      // An owner change needs its reason. The call's own words are the reason, recorded as such.
+      const words = (p.quote ?? "").trim() || p.text.trim();
+      if (!words) {
+        return {
+          kind: "blocked",
+          reason: "This owner change has no words to record as its reason.",
+        };
+      }
+      return { kind: "owner", ownerId, reason: `From the call: ${words}`.slice(0, 500) };
+    }
     case "intake_suggestion": {
       const q = p.intake_key ? handoffQuestion(p.intake_key) : null;
       if (!q) return { kind: "blocked", reason: "This suggestion names no handoff question." };
       if (!p.text.trim()) return { kind: "blocked", reason: "The suggested answer is empty." };
       return { kind: "intake_suggestion", key: q.key, value: p.text.trim(), quote: p.quote };
+    }
+    case "component_update": {
+      if (!p.solution_component_id) {
+        return { kind: "blocked", reason: "This suggestion does not name a solution component." };
+      }
+      if (!p.component_field) {
+        return {
+          kind: "blocked",
+          reason: "This suggestion does not say what to change on the component.",
+        };
+      }
+      const value = (p.component_value ?? "").trim();
+      const field = p.component_field;
+      if (field === "status" && !(COMPONENT_STATUSES as readonly string[]).includes(value)) {
+        return { kind: "blocked", reason: `"${value}" is not a component status.` };
+      }
+      if (field === "priority" && !(PRIORITIES as readonly string[]).includes(value)) {
+        return { kind: "blocked", reason: `"${value}" is not a delivery priority.` };
+      }
+      if (field === "target_date" && !isValidIsoDate(value)) {
+        return { kind: "blocked", reason: "The suggested date is not a calendar date." };
+      }
+      if (!value) return { kind: "blocked", reason: "The suggested value is empty." };
+      if (!p.component_version) {
+        return {
+          kind: "blocked",
+          reason:
+            "This suggestion has no record of the component's version, so it cannot be applied safely. Dismiss it and read the transcript again.",
+        };
+      }
+      return {
+        kind: "component_update",
+        componentId: p.solution_component_id,
+        field,
+        value,
+        reason: p.text.trim() || null,
+        version: p.component_version,
+      };
     }
     case "note":
     default:

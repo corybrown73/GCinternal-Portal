@@ -210,7 +210,10 @@ let fake: ReturnType<typeof createFakeSupabase>;
 const row = (id: string) => fake.store["evidence_proposals"]!.find((p) => p.id === id)!;
 
 beforeEach(() => {
-  fake = createFakeSupabase(rows());
+  // The date on a deal's plan is a post-sale decision: the access check answers yes here.
+  fake = createFakeSupabase(rows(), {
+    rpcHandlers: { post_sale_may_manage: () => ({ data: true }) },
+  });
   h.supabase.client = fake.client;
   for (const fn of Object.values(h.hub)) fn.mockClear();
   h.presale.saveDealIntake.mockClear();

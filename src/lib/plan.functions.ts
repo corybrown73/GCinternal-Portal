@@ -22,8 +22,8 @@ export const setTaskStatus = createServerFn({ method: "POST" })
       .parse(data),
   )
   .handler(async ({ data, context }) => {
-    const { setWorkItemStatus } = await import("./plan.server");
-    return setWorkItemStatus({
+    const { setTaskStatusAsPerson } = await import("./plan.server");
+    return setTaskStatusAsPerson({
       workItemId: data.workItemId,
       status: data.status,
       actorProfileId: context.profile.id,

@@ -327,6 +327,8 @@ export function createFakeSupabase(
     maxRows?: number;
     /** Make every query on these tables return this error (see TableFailures). */
     fail?: TableFailures;
+    /** Scripted results for named RPCs, for code that calls a database function. */
+    rpcHandlers?: Record<string, (args: Record<string, any>) => { data?: any; error?: any }>;
   } = {},
 ): FakeSupabase {
   const store: Rows = JSON.parse(JSON.stringify(initial));
@@ -363,6 +365,11 @@ export function createFakeSupabase(
     // intake.timeline. Emulated so a merge-only writer can be exercised here.
     rpc: async (fn: string, args: Record<string, any>) => {
       rpcs.push({ fn, args });
+      const scripted = options.rpcHandlers?.[fn];
+      if (scripted) {
+        const out = scripted(args);
+        return { data: out.data ?? null, error: out.error ?? null };
+      }
       if (fn !== "portal_merge_intake") {
         return { data: null, error: { message: `fake-supabase: unsupported rpc ${fn}` } };
       }
