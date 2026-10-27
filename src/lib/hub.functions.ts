@@ -6,6 +6,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
 import { EDITABLE_RECORD_FIELD_KEYS, type EditableRecordField } from "./record-fields";
+import { ownerChangeFromRaw, type OwnerChangeReason } from "./owner-change";
 import { advanceStageInput } from "./stage-advance-input";
 import { analyzeSowInput, applySowProposalInput, setSowDocumentInput } from "./sow-analysis";
 import { signedInProfileId, signedInTeamMemberId } from "./session-identity";
@@ -434,10 +435,15 @@ export const addImplementation = createServerFn({ method: "POST" })
     });
   });
 
+/** A person's reason for an owner change, when the change is theirs (not the system's). */
+function ownerChangeFromInput(data: unknown): OwnerChangeReason | null {
+  return ownerChangeFromRaw((data as { ownerChange?: unknown }).ownerChange);
+}
+
 export const setRecordField = createServerFn({ method: "POST" })
   .middleware([requireInternalAuth])
-  .inputValidator((data: unknown) =>
-    z
+  .inputValidator((data: unknown) => ({
+    ...z
       .object({
         implementationId: z.string().uuid(),
         field: z.enum(
@@ -446,10 +452,12 @@ export const setRecordField = createServerFn({ method: "POST" })
         value: z.string().max(2000).nullable(),
       })
       .parse(data),
-  )
+    ownerChange: ownerChangeFromInput(data),
+  }))
   .handler(async ({ data, context }) => {
     const { updateRecordField } = await import("./hub.server");
     return updateRecordField({
+      ownerChange: data.ownerChange,
       implementationId: data.implementationId,
       field: data.field,
       value: data.value,
@@ -474,7 +482,10 @@ export const updateCustomer = createServerFn({ method: "POST" })
 
 export const setImplementation = createServerFn({ method: "POST" })
   .middleware([requireInternalAuth])
-  .inputValidator((data: unknown) => updateImplementationInputChecked.parse(data))
+  .inputValidator((data: unknown) => ({
+    ...updateImplementationInputChecked.parse(data),
+    ownerChange: ownerChangeFromInput(data),
+  }))
   .handler(async ({ data, context }) => {
     const { updateImplementation } = await import("./hub.server");
     // health_recorded is the human's statement, so it is stamped with the
@@ -488,7 +499,8 @@ export const setImplementation = createServerFn({ method: "POST" })
         }),
       },
       // Phase 7: the account activity feed attributes through the same bridge.
-      { actorProfileId: context.profile.id },
+      // An owner change carries its reason; it is refused without one.
+      { actorProfileId: context.profile.id, ownerChange: data.ownerChange },
     );
   });
 
@@ -829,19 +841,20 @@ export const applySowProposalToImplementation = createServerFn({ method: "POST" 
     signedInProfileId(context.profile);
     // The author is the signed-in user's linked, active team member, read from the
     // session. The request cannot name one. Refused before anything is written.
-    const { applySowProposal, resolveApplyingTeamMember } = await import("./sow-analysis.server");
+    const { applySowProposalAsPerson, resolveApplyingTeamMember } =
+      await import("./sow-analysis.server");
     const authorTeamMemberId = await resolveApplyingTeamMember(
       signedInTeamMemberId(context.profile),
     );
-    return applySowProposal({ ...data, authorTeamMemberId });
+    return applySowProposalAsPerson({ ...data, authorTeamMemberId }, context.profile.id);
   });
 
 export const setSowDocumentForImplementation = createServerFn({ method: "POST" })
   .middleware([requireInternalAuth])
   .inputValidator((data: unknown) => setSowDocumentInput.parse(data))
-  .handler(async ({ data }) => {
-    const { setSowDocument } = await import("./sow-analysis.server");
-    return setSowDocument(data);
+  .handler(async ({ data, context }) => {
+    const { setSowDocumentAsPerson } = await import("./sow-analysis.server");
+    return setSowDocumentAsPerson(data, context.profile.id);
   });
 
 /* ---------- Meeting transcript analysis (read-only proposal) ---------- */

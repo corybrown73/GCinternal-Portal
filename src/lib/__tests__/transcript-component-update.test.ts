@@ -451,3 +451,71 @@ describe("the apply plan for a component change", () => {
     ).toMatchObject({ kind: "component_update" });
   });
 });
+
+describe("a transcript owner change needs its reason", () => {
+  const ownerRow = (over: Record<string, unknown> = {}) => ({
+    type: "owner" as const,
+    title: "Owner moves to Jordan",
+    text: "Jordan takes over while Sam is on leave.",
+    quote: "Sam is out for three weeks, Jordan picks it up",
+    severity: null,
+    likelihood: null,
+    owner_team_member_id: "70000000-0000-4000-8000-0000000000a1",
+    proposed_date: null,
+    intake_key: null,
+    solution_component_id: null,
+    component_field: null,
+    component_value: null,
+    component_version: null,
+    ...over,
+  });
+
+  it("records the call's own words as the reason, labelled as from the call", () => {
+    expect(proposalApplyPlan(ownerRow(), {}, { planOwnsTarget: false })).toEqual({
+      kind: "owner",
+      ownerId: "70000000-0000-4000-8000-0000000000a1",
+      reason: "From the call: Sam is out for three weeks, Jordan picks it up",
+    });
+  });
+
+  it("falls back to the suggestion's own sentence when the call gave no quote", () => {
+    const plan = proposalApplyPlan(ownerRow({ quote: null }), {}, { planOwnsTarget: false });
+    expect(plan).toMatchObject({
+      kind: "owner",
+      reason: "From the call: Jordan takes over while Sam is on leave.",
+    });
+  });
+
+  it("is blocked when there are no words to record, rather than changing the owner without a reason", () => {
+    expect(
+      proposalApplyPlan(ownerRow({ quote: null, text: "" }), {}, { planOwnsTarget: false }),
+    ).toMatchObject({ kind: "blocked" });
+  });
+});
+
+describe("a date on the deal's plan is a post-sale decision", () => {
+  it("refuses it for someone who may not change the implementation, and leaves the plan and the proposal as they were", async () => {
+    const rows = rowsFor();
+    rows["implementations"]![0]!["deal_id"] = "dea10000-0000-4000-8000-0000000000e1";
+    rows["portal_accounts"] = [
+      { id: "dea10000-0000-4000-8000-0000000000e1", intake: { timeline: {} } },
+    ];
+    rows["evidence_proposals"] = [
+      proposal({
+        type: "target_date",
+        proposed_date: "2026-12-01",
+        title: "Go-live moves",
+        component_value: null,
+      }),
+    ];
+    fake = createFakeSupabase(rows, {
+      rpcHandlers: { post_sale_may_manage: () => ({ data: false }) },
+    });
+    h.supabase.client = fake.client;
+    await expect(applyProposal("p-1", {}, ACTOR)).rejects.toThrow(
+      "You can change the post-sale work of implementations you own.",
+    );
+    expect(fake.store["evidence_proposals"]![0]!["status"]).toBe("pending");
+    expect(fake.store["portal_accounts"]![0]!["intake"]).toEqual({ timeline: {} });
+  });
+});

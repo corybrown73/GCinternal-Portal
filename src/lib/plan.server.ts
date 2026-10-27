@@ -192,3 +192,26 @@ export async function setWorkItemStatus(args: {
     stage_instance_id: (before.stage_instance_id as string | null) ?? null,
   };
 }
+
+/**
+ * A person's change to a task, checked against the implementation the task belongs
+ * to. Marking a gate task done or skipped is an exception to stage progression, so it
+ * is checked the same way a stage move is. The pre-sale flow calls setWorkItemStatus
+ * directly for its own automatic completions; those are not changed.
+ */
+export async function setTaskStatusAsPerson(args: {
+  workItemId: string;
+  status: string;
+  actorProfileId: string;
+}): Promise<{ ok: true; status: string; stage_instance_id: string | null }> {
+  const { data: task, error } = await db()
+    .from("work_items")
+    .select("implementation_id")
+    .eq("id", args.workItemId)
+    .maybeSingle();
+  if (error) throw new Error("Could not read the task. Nothing has been changed.");
+  if (!task) throw new Error("That task no longer exists");
+  const { assertCanManagePostSale } = await import("./post-sale-access.server");
+  await assertCanManagePostSale(args.actorProfileId, String(task.implementation_id));
+  return setWorkItemStatus(args);
+}

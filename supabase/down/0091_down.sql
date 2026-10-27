@@ -19,9 +19,12 @@ drop view if exists public.implementation_owner_conflicts;
 
 drop trigger if exists portal_profiles_team_lead_guard on public.portal_profiles;
 drop function if exists public.portal_guard_team_lead();
+drop trigger if exists implementations_owner_record_insert on public.implementations;
+drop trigger if exists implementations_owner_record_update on public.implementations;
+drop function if exists public.implementation_owner_record_direct();
 drop table if exists public.implementation_owner_changes;
 drop function if exists public.implementation_owner_changes_append_only();
-drop function if exists public.implementation_set_owner(uuid, uuid, uuid, text);
+drop function if exists public.implementation_set_owner(uuid, uuid, uuid, text, text);
 drop function if exists public.post_sale_may_manage(uuid, uuid);
 alter table public.portal_profiles drop column if exists team_lead;
 

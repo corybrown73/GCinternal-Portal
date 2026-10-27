@@ -11,6 +11,13 @@ import { useProfile } from "@/lib/auth";
 import { fmtDateTime } from "@/lib/hub-format";
 import { cn } from "@/lib/utils";
 import { When } from "@/components/when";
+import { OwnerChangeReasonFields } from "@/components/owner-change-reason";
+import {
+  EMPTY_OWNER_REASON,
+  ownerReasonPayload,
+  ownerReasonReady,
+  type OwnerReasonDraft,
+} from "@/lib/owner-change";
 
 /**
  * Who has eyes on this account, and the three things they do first.
@@ -26,6 +33,15 @@ export function AssignmentPanel({ dealId, editable }: { dealId: string; editable
   const assign = useServerFn(assignDealFn);
   const [error, setError] = useState<string | null>(null);
   const [pick, setPick] = useState<string>("");
+  const [reason, setReason] = useState<OwnerReasonDraft>(EMPTY_OWNER_REASON);
+  // A named pick is a reassignment: it needs its reason first. "By rule" is automatic.
+  const submitPick = (teamMemberId: string) => {
+    if (teamMemberId && !ownerReasonReady(reason)) {
+      setError("Choose why the implementation is being reassigned, then assign.");
+      return;
+    }
+    m.mutate(teamMemberId || null);
+  };
 
   const q = useQuery({
     queryKey: ["assignment", dealId],
@@ -33,7 +49,14 @@ export function AssignmentPanel({ dealId, editable }: { dealId: string; editable
     refetchInterval: 15_000,
   });
   const m = useMutation({
-    mutationFn: (teamMemberId: string | null) => assign({ data: { dealId, teamMemberId } }),
+    mutationFn: (teamMemberId: string | null) =>
+      assign({
+        data: {
+          dealId,
+          teamMemberId,
+          ownerChange: teamMemberId ? ownerReasonPayload(reason) : null,
+        },
+      }),
     onMutate: () => setError(null),
     onSuccess: (r) => {
       if (!r) setError("Nobody is in the assignment pool. Add people under Admin → Assignment.");
@@ -70,11 +93,14 @@ export function AssignmentPanel({ dealId, editable }: { dealId: string; editable
                 </option>
               ))}
             </select>
+            {pick ? (
+              <OwnerChangeReasonFields value={reason} onChange={setReason} disabled={m.isPending} />
+            ) : null}
             <button
               type="button"
               className="inline-flex items-center gap-1 rounded-sm bg-primary px-2 py-1 text-[11px] font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
               disabled={m.isPending || !a}
-              onClick={() => m.mutate(pick || null)}
+              onClick={() => submitPick(pick)}
             >
               <UserRoundCheck className="h-3 w-3" />
               {m.isPending ? "Assigning…" : a?.owner ? "Reassign" : "Assign"}
@@ -175,6 +201,15 @@ export function OwnerField({ dealId, editable }: { dealId: string; editable: boo
   const claim = useServerFn(claimDealFn);
   const [error, setError] = useState<string | null>(null);
   const [pick, setPick] = useState<string>("");
+  const [reason, setReason] = useState<OwnerReasonDraft>(EMPTY_OWNER_REASON);
+  // A named pick is a reassignment: it needs its reason first. "By rule" is automatic.
+  const submitPick = (teamMemberId: string) => {
+    if (teamMemberId && !ownerReasonReady(reason)) {
+      setError("Choose why the implementation is being reassigned, then assign.");
+      return;
+    }
+    m.mutate(teamMemberId || null);
+  };
   const [open, setOpen] = useState(false);
   const q = useQuery({
     queryKey: ["assignment", dealId],
@@ -182,7 +217,14 @@ export function OwnerField({ dealId, editable }: { dealId: string; editable: boo
     refetchInterval: 15_000,
   });
   const m = useMutation({
-    mutationFn: (teamMemberId: string | null) => assign({ data: { dealId, teamMemberId } }),
+    mutationFn: (teamMemberId: string | null) =>
+      assign({
+        data: {
+          dealId,
+          teamMemberId,
+          ownerChange: teamMemberId ? ownerReasonPayload(reason) : null,
+        },
+      }),
     onMutate: () => setError(null),
     onSuccess: (r) => {
       if (!r) setError("Nobody is in the assignment pool. Add people under Admin → Assignment.");
@@ -244,11 +286,14 @@ export function OwnerField({ dealId, editable }: { dealId: string; editable: boo
               </option>
             ))}
           </select>
+          {pick ? (
+            <OwnerChangeReasonFields value={reason} onChange={setReason} disabled={m.isPending} />
+          ) : null}
           <button
             type="button"
             className="inline-flex items-center gap-1 rounded-sm bg-primary px-2 py-1 text-[11px] font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
             disabled={m.isPending || !a || (a.mode === "claim" && !pick)}
-            onClick={() => m.mutate(pick || null)}
+            onClick={() => submitPick(pick)}
           >
             <UserRoundCheck className="h-3 w-3" />
             {m.isPending ? "Assigning…" : "Assign"}

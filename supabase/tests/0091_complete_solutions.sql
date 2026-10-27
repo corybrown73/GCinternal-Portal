@@ -626,27 +626,62 @@ select pg_temp.expect_refused(
 -- ---------------------------------------------------------------------------
 select pg_temp.expect_refused(
   $$select public.implementation_set_owner('a0000000-0000-4000-8000-0000000000c9', 'd0000000-0000-4000-8000-0000000000b5',
-      '70000000-0000-4000-8000-0000000000b7', 'Taking it over')$$,
+      '70000000-0000-4000-8000-0000000000b7', 'workload', 'Taking it over')$$,
   '42501', 'an assigned TIS cannot reassign their own implementation', '%Only a Team Lead, a manager or an admin%');
 select pg_temp.expect_refused(
   $$select public.implementation_set_owner('a0000000-0000-4000-8000-0000000000cc', 'd0000000-0000-4000-8000-0000000000b5',
-      '70000000-0000-4000-8000-0000000000b8', 'Cover')$$,
+      '70000000-0000-4000-8000-0000000000b8', 'coverage', 'Cover')$$,
   '22023', 'an inactive team member cannot be given an implementation', '%not active%');
 select public.implementation_set_owner('a0000000-0000-4000-8000-0000000000cc', 'd0000000-0000-4000-8000-0000000000b5',
-  '70000000-0000-4000-8000-0000000000b7', 'Onboarding 2 takes over delivery');
--- A reassignment without a stated reason still succeeds and is still recorded.
+  '70000000-0000-4000-8000-0000000000b7', 'workload', 'Onboarding 2 takes over delivery');
+-- A manual reassignment needs a reason code: without one it is refused, and nothing changes.
+select pg_temp.expect_refused(
+  $$select public.implementation_set_owner('a0000000-0000-4000-8000-0000000000cc', 'd0000000-0000-4000-8000-0000000000b4',
+      '70000000-0000-4000-8000-0000000000b7', null, null)$$,
+  '22023', 'a manual reassignment without a reason is refused', '%Choose why the implementation is being reassigned%');
+select pg_temp.expect_refused(
+  $$select public.implementation_set_owner('a0000000-0000-4000-8000-0000000000cc', 'd0000000-0000-4000-8000-0000000000b4',
+      '70000000-0000-4000-8000-0000000000b7', 'other', '   ')$$,
+  '22023', 'a reason of Other needs words', '%Say why, in a few words%');
+do $$
+begin
+  if (select owner_id from implementations where id = 'd0000000-0000-4000-8000-0000000000b4') is distinct from '70000000-0000-4000-8000-0000000000b5' then
+    raise exception 'INVARIANT "a refused reassignment changes nothing" failed';
+  end if;
+  raise notice 'ok — a refused reassignment changes nothing';
+end $$;
 select public.implementation_set_owner('a0000000-0000-4000-8000-0000000000cc', 'd0000000-0000-4000-8000-0000000000b4',
-  '70000000-0000-4000-8000-0000000000b7', null);
+  '70000000-0000-4000-8000-0000000000b7', 'customer_escalation', null);
+do $$
+begin
+  -- Recorded once: the manual change is a single row with its reason and source, and
+  -- the direct-write trigger does not add a second, system row for the same change.
+  if (select count(*) from implementation_owner_changes
+       where implementation_id = 'd0000000-0000-4000-8000-0000000000b4'
+         and to_team_member_id = '70000000-0000-4000-8000-0000000000b7') <> 1 then
+    raise exception 'INVARIANT "a manual change is recorded exactly once" failed';
+  end if;
+  if (select count(*) from implementation_owner_changes
+       where implementation_id = 'd0000000-0000-4000-8000-0000000000b4'
+         and to_team_member_id = '70000000-0000-4000-8000-0000000000b7'
+         and source = 'manual' and reason_code = 'customer_escalation' and actor_profile_id = 'a0000000-0000-4000-8000-0000000000cc') <> 1 then
+    raise exception 'INVARIANT "a manual change keeps its code, its source and who made it" failed';
+  end if;
+  raise notice 'ok — a manual change is recorded once, with its code, source and actor';
+end $$;
+
+-- A write to owner_id that does not come through the reassignment function is still
+-- recorded, as a system change. Nothing is invented for it: no reason, no actor.
+update implementations set owner_id = '70000000-0000-4000-8000-0000000000b6' where id = 'd0000000-0000-4000-8000-0000000000b4';
 do $$
 begin
   if (select count(*) from implementation_owner_changes
        where implementation_id = 'd0000000-0000-4000-8000-0000000000b4'
-         and to_team_member_id = '70000000-0000-4000-8000-0000000000b7'
-         and reason is null
-         and actor_profile_id = 'a0000000-0000-4000-8000-0000000000cc') <> 1 then
-    raise exception 'INVARIANT "a reassignment with no reason is still recorded, with who made it" failed';
+         and to_team_member_id = '70000000-0000-4000-8000-0000000000b6'
+         and source = 'system' and reason_code is null and reason is null and actor_profile_id is null) <> 1 then
+    raise exception 'INVARIANT "a direct owner write is recorded as a system change, with no invented reason" failed';
   end if;
-  raise notice 'ok — a reassignment without a stated reason is recorded with who made it';
+  raise notice 'ok — a direct owner write is recorded as a system change, with no invented reason';
 end $$;
 
 do $$

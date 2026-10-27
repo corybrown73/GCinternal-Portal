@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
 import { requireInternalAuth } from "@/integrations/supabase/internal-middleware";
+import { ownerChangeFromRaw } from "./owner-change";
 
 /**
  * Server functions for post-sale ownership and Team Lead authority. Each is
@@ -13,22 +14,20 @@ const uuid = z.string().uuid();
 
 export const reassignImplementationOwnerFn = createServerFn({ method: "POST" })
   .middleware([requireInternalAuth])
-  .inputValidator((data: unknown) =>
-    z
-      .object({
-        implementationId: uuid,
-        teamMemberId: uuid.nullable(),
-        reason: z.string().trim().max(1000).nullable().optional(),
-      })
-      .parse(data),
-  )
+  .inputValidator((data: unknown) => {
+    const base = z.object({ implementationId: uuid, teamMemberId: uuid.nullable() }).parse(data);
+    const ownerChange = ownerChangeFromRaw((data as { ownerChange?: unknown }).ownerChange);
+    if (!ownerChange) throw new Error("Choose why the implementation is being reassigned.");
+    return { ...base, ownerChange };
+  })
   .handler(async ({ data, context }) => {
     const { reassignImplementationOwner } = await import("./post-sale-access.server");
     return reassignImplementationOwner(
       {
         implementationId: data.implementationId,
         teamMemberId: data.teamMemberId,
-        reason: data.reason ?? null,
+        reasonCode: data.ownerChange.reasonCode,
+        reason: data.ownerChange.reason,
       },
       context.profile.id,
     );

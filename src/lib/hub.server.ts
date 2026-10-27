@@ -1,4 +1,5 @@
 import { assertCanManagePostSale } from "./post-sale-access.server";
+import type { OwnerChangeReason } from "./owner-change";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { isPartnerJourney } from "./partner-implementation";
 import { technicalSolutionNextAction } from "./customer360-derive";
@@ -2472,7 +2473,7 @@ export async function createImplementation(args: {
 export async function updateImplementation(
   id: string,
   patch: Record<string, unknown>,
-  opts: { actorProfileId?: string | null } = {},
+  opts: { actorProfileId?: string | null; ownerChange?: OwnerChangeReason | null } = {},
 ) {
   // A person's edit is checked against the implementation's post-sale rule. The
   // system's own updates carry no actor and are not checked here.
@@ -2489,12 +2490,15 @@ export async function updateImplementation(
     const { owner_id: nextOwner, ...rest } = patch;
     patch = rest;
     if (String(current?.owner_id ?? "") !== String(nextOwner ?? "")) {
+      // A manual change needs its reason. Nothing is invented for one that is missing.
+      if (!opts.ownerChange) throw new Error("Choose why the implementation is being reassigned.");
       const { reassignImplementationOwner } = await import("./post-sale-access.server");
       await reassignImplementationOwner(
         {
           implementationId: id,
           teamMemberId: (nextOwner as string | null) ?? null,
-          reason: null,
+          reasonCode: opts.ownerChange.reasonCode,
+          reason: opts.ownerChange.reason,
         },
         opts.actorProfileId,
       );
@@ -2673,8 +2677,10 @@ export async function handOffPartner(args: {
 export async function graduatePartner(args: {
   implementationId: string;
   actorTeamMember: string | null;
-  actorProfileId: string | null;
+  actorProfileId: string;
 }): Promise<{ graduated: true }> {
+  // Graduation closes the journey: a Team Lead, the assigned TIS, a manager or an admin.
+  await assertCanManagePostSale(args.actorProfileId, args.implementationId);
   const { data: impl, error } = await db()
     .from("implementations")
     .select("id,current_stage,journey_type,partner_key")
@@ -3336,6 +3342,8 @@ export async function updateRecordField(args: {
   field: EditableRecordField;
   value: string | null;
   actorProfileId: string | null;
+  /** Required when the field is the owner and a person is changing it. */
+  ownerChange?: OwnerChangeReason | null;
 }): Promise<{ ok: true; field: EditableRecordField; value: string | number | null }> {
   const spec = EDITABLE_RECORD_FIELDS[args.field];
   if (!spec) throw new Error(`${args.field} is not editable here`);
@@ -3383,6 +3391,7 @@ export async function updateRecordField(args: {
     // deal's plan keeps the target (see updateImplementation).
     await updateImplementation(args.implementationId, withTargetPair({ [args.field]: next }), {
       actorProfileId: args.actorProfileId,
+      ownerChange: args.ownerChange ?? null,
     });
     return { ok: true, field: args.field, value: next };
   }

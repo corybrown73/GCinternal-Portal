@@ -439,7 +439,7 @@ export type ProposalApplyPlan =
       };
     }
   | { kind: "note"; input: { note: string } }
-  | { kind: "owner"; ownerId: string }
+  | { kind: "owner"; ownerId: string; reason: string }
   | { kind: "target_date"; via: "plan" | "record"; date: string }
   | { kind: "intake_suggestion"; key: string; value: string; quote: string | null }
   | {
@@ -531,9 +531,18 @@ export function proposalApplyPlan(
         return { kind: "blocked", reason: "Enter a calendar date to apply this." };
       }
       return { kind: "target_date", via: opts.planOwnsTarget ? "plan" : "record", date };
-    case "owner":
+    case "owner": {
       if (!ownerId) return { kind: "blocked", reason: "Pick who the new owner is to apply this." };
-      return { kind: "owner", ownerId };
+      // An owner change needs its reason. The call's own words are the reason, recorded as such.
+      const words = (p.quote ?? "").trim() || p.text.trim();
+      if (!words) {
+        return {
+          kind: "blocked",
+          reason: "This owner change has no words to record as its reason.",
+        };
+      }
+      return { kind: "owner", ownerId, reason: `From the call: ${words}`.slice(0, 500) };
+    }
     case "intake_suggestion": {
       const q = p.intake_key ? handoffQuestion(p.intake_key) : null;
       if (!q) return { kind: "blocked", reason: "This suggestion names no handoff question." };

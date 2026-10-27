@@ -193,11 +193,12 @@ account) so the sessions do not share one login.
 - **D4. Reading.** Any internal user can read any implementation's solutions, as
   with other Hub views. Only changes are restricted.
 
-**Not yet covered by the owner rule.** These still need only `requireInternalAuth`,
-so any internal user can use them today. Each needs an owner decision before it is
-restricted: customer contacts, customer records, journal entries and notes,
-attachments and uploads, the SOW document set and apply, partner graduation,
-technical solutions and their field mappings, and creating an implementation.
+**Not yet covered by the owner rule.** Customer contacts and records, notes and
+journal entries, attachments and uploads, technical solutions and field mappings,
+creating an implementation, and the customer's own completions on the shared plan
+still need only sign-in or their own link. Each needs an owner decision before it is
+restricted. The full table, with who can do each and the recommendation, is in
+`docs/POST-SALE-ACCESS.md`.
 
 **Verified in this environment** (not in staging):
 - Permission rules, version conflicts, history rollback, loops, all-or-nothing set

@@ -1,4 +1,5 @@
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import type { OwnerChangeReasonCode } from "./owner-change";
 import { appUrl } from "@/lib/app-url";
 import {
   DEFAULT_ASSIGNMENT_RULES,
@@ -302,6 +303,12 @@ export async function assignDeal(args: {
   dealId: string;
   implementationId?: string | null;
   teamMemberId?: string | null;
+  /** Set only for a person's manual pick: the owner change is recorded with its reason. */
+  reassignment?: {
+    reasonCode: OwnerChangeReasonCode;
+    reason: string | null;
+    actorProfileId: string;
+  } | null;
   ownerEmail?: string | undefined;
   actorProfileId?: string | null;
   note?: string | null;
@@ -344,11 +351,27 @@ export async function assignDeal(args: {
   const implementationId =
     args.implementationId ?? (await implementationForDeal(args.dealId, deal.customer_id ?? null));
   if (implementationId) {
-    const { error } = await db()
-      .from("implementations")
-      .update({ owner_id: chosen.teamMemberId })
-      .eq("id", implementationId);
-    if (error) throw new Error(`Could not set the project owner: ${error.message}`);
+    if (args.reassignment) {
+      // A person picked this owner on the manager's screen: it is recorded with its reason.
+      const { reassignImplementationOwner } = await import("./post-sale-access.server");
+      await reassignImplementationOwner(
+        {
+          implementationId,
+          teamMemberId: chosen.teamMemberId,
+          reasonCode: args.reassignment.reasonCode,
+          reason: args.reassignment.reason,
+        },
+        args.reassignment.actorProfileId,
+      );
+    } else {
+      // Automatic and system assignments (the Closed Won start, the Salesforce sync)
+      // write the owner as they always have; the ledger records them as system changes.
+      const { error } = await db()
+        .from("implementations")
+        .update({ owner_id: chosen.teamMemberId })
+        .eq("id", implementationId);
+      if (error) throw new Error(`Could not set the project owner: ${error.message}`);
+    }
   }
 
   const { error: ledgerError } = await db()

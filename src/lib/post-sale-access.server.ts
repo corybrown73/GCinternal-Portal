@@ -2,6 +2,7 @@ import { supabaseAdmin } from "@/integrations/supabase/client.server";
 
 import { audit } from "./server/audit";
 import { writeFailure } from "./complete-solutions.server";
+import { ownerChangeFrom, ownerChangeReasonInput, type OwnerChangeReason } from "./owner-change";
 
 /**
  * Who may change an implementation's post-sale work. The rule lives in the
@@ -57,13 +58,22 @@ export async function assertCanManagePostSale(
  * appended to implementation_owner_changes.
  */
 export async function reassignImplementationOwner(
-  input: { implementationId: string; teamMemberId: string | null; reason: string | null },
+  input: { implementationId: string; teamMemberId: string | null } & OwnerChangeReason,
   actorProfileId: string,
 ): Promise<{ ok: true }> {
+  // The reason is checked here as well as in the database, so a refusal reads as
+  // a sentence before anything is sent.
+  const reason = ownerChangeReasonInput.safeParse(ownerChangeFrom(input));
+  if (!reason.success) {
+    throw new Error(
+      reason.error.issues[0]?.message ?? "Choose why the implementation is being reassigned.",
+    );
+  }
   const { error } = await db().rpc("implementation_set_owner", {
     p_profile: actorProfileId,
     p_implementation: input.implementationId,
     p_team_member: input.teamMemberId,
+    p_reason_code: input.reasonCode,
     p_reason: input.reason,
   });
   if (error) throw writeFailure("reassign the implementation", error);
@@ -73,7 +83,7 @@ export async function reassignImplementationOwner(
     action: "implementation.owner_reassigned",
     entity_type: "implementation",
     entity_id: input.implementationId,
-    payload: { to: input.teamMemberId },
+    payload: { to: input.teamMemberId, reason_code: input.reasonCode },
   });
   return { ok: true };
 }

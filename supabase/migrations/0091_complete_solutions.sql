@@ -1146,9 +1146,19 @@ create table public.implementation_owner_changes (
   -- No foreign keys on the people here: history must outlive them (see solution_events).
   from_team_member_id uuid,
   to_team_member_id uuid,
+  -- Why a person moved it. Required on every manual change; "other" needs words.
+  reason_code text check (reason_code in ('tis_leave', 'workload', 'customer_escalation', 'coverage', 'other')),
   reason text check (reason is null or length(reason) <= 1000),
+  -- manual: a person through implementation_set_owner, with a reason.
+  -- system: any other write to owner_id (assignment engine, claim, Closed Won,
+  -- Salesforce sync). No human explanation is invented for these.
+  source text not null default 'system' check (source in ('manual', 'system')),
   actor_profile_id uuid,
-  created_at timestamptz not null default now()
+  created_at timestamptz not null default now(),
+  constraint implementation_owner_changes_manual_has_reason
+    check (source <> 'manual' or reason_code is not null),
+  constraint implementation_owner_changes_other_has_words
+    check (reason_code <> 'other' or length(btrim(coalesce(reason, ''))) > 0)
 );
 create index implementation_owner_changes_impl_idx
   on public.implementation_owner_changes (implementation_id, created_at);
@@ -1161,6 +1171,40 @@ as $$
 begin
   raise exception 'implementation_owner_changes is a record: rows are never % (id %)', lower(tg_op), old.id;
 end $$;
+
+-- Every owner_id change is recorded, including the ones the assignment engine,
+-- a claim, the Closed Won start and the Salesforce sync make without a person's
+-- reason. implementation_set_owner sets a flag for its own transaction so the
+-- change is recorded once, with its reason, not twice.
+create or replace function public.implementation_owner_record_direct()
+returns trigger
+language plpgsql
+set search_path = public
+as $$
+begin
+  if tg_op = 'INSERT' then
+    if new.owner_id is not null then
+      insert into public.implementation_owner_changes
+        (implementation_id, from_team_member_id, to_team_member_id, source)
+      values (new.id, null, new.owner_id, 'system');
+    end if;
+    return new;
+  end if;
+  if old.owner_id is distinct from new.owner_id
+     and coalesce(current_setting('app.owner_change_recorded', true), '') <> 'yes' then
+    insert into public.implementation_owner_changes
+      (implementation_id, from_team_member_id, to_team_member_id, source)
+    values (new.id, old.owner_id, new.owner_id, 'system');
+  end if;
+  return new;
+end $$;
+
+create trigger implementations_owner_record_insert
+  after insert on public.implementations
+  for each row execute function public.implementation_owner_record_direct();
+create trigger implementations_owner_record_update
+  after update of owner_id on public.implementations
+  for each row execute function public.implementation_owner_record_direct();
 
 create trigger implementation_owner_changes_no_update
   before update on public.implementation_owner_changes
@@ -1176,10 +1220,16 @@ create policy "implementation_owner_changes internal" on public.implementation_o
 -- Reassigns an implementation's owner. Team Lead, manager, admin or super admin
 -- only: an assigned TIS may not hand their own implementation to someone else
 -- through this path. The change is recorded with who made it, from whom and when.
+-- Reassigns an implementation's owner. Team Lead, manager, admin or super admin
+-- only: an assigned TIS may not hand their own implementation to someone else
+-- through this path. Every manual change needs a reason code; "other" needs words.
+-- The change is recorded with who made it, from whom, to whom and why.
+drop function if exists public.implementation_set_owner(uuid, uuid, uuid, text, text);
 create or replace function public.implementation_set_owner(
   p_profile uuid,
   p_implementation uuid,
   p_team_member uuid,
+  p_reason_code text,
   p_reason text
 )
 returns void
@@ -1199,6 +1249,15 @@ begin
     raise exception 'Only a Team Lead, a manager or an admin can reassign an implementation'
       using errcode = '42501';
   end if;
+  if p_reason_code is null or p_reason_code not in ('tis_leave', 'workload', 'customer_escalation', 'coverage', 'other') then
+    raise exception 'Choose why the implementation is being reassigned.' using errcode = '22023';
+  end if;
+  if p_reason_code = 'other' and v_reason is null then
+    raise exception 'Say why, in a few words, when the reason is Other.' using errcode = '22023';
+  end if;
+  if length(coalesce(v_reason, '')) > 500 then
+    raise exception 'Keep the reason to 500 characters.' using errcode = '22023';
+  end if;
   select owner_id into v_current from public.implementations where id = p_implementation for update;
   if not found then
     raise exception 'That implementation no longer exists.' using errcode = '22023';
@@ -1211,12 +1270,14 @@ begin
   if v_current is not distinct from p_team_member then
     return;
   end if;
-  -- A reason is optional and kept when given; the record of who moved it, from
-  -- whom, and when, is kept either way.
+  -- This change is recorded below, once, with its reason; the direct-write trigger stands aside.
+  perform set_config('app.owner_change_recorded', 'yes', true);
   update public.implementations set owner_id = p_team_member where id = p_implementation;
+  -- The flag lasts for the whole transaction, so it is cleared straight after the write.
+  perform set_config('app.owner_change_recorded', 'no', true);
   insert into public.implementation_owner_changes
-    (implementation_id, from_team_member_id, to_team_member_id, reason, actor_profile_id)
-  values (p_implementation, v_current, p_team_member, v_reason, p_profile);
+    (implementation_id, from_team_member_id, to_team_member_id, reason_code, reason, source, actor_profile_id)
+  values (p_implementation, v_current, p_team_member, p_reason_code, v_reason, 'manual', p_profile);
 end $$;
 
 -- Where the journey's implementation_manager role assignment and the owner disagree.
@@ -1270,7 +1331,7 @@ grant execute on function public.dependency_remove(uuid, uuid, uuid) to service_
 grant execute on function public.solution_save_reviewed_set(uuid, uuid, text, jsonb) to service_role;
 revoke all on function public.post_sale_may_manage(uuid, uuid) from public, anon, authenticated;
 grant execute on function public.post_sale_may_manage(uuid, uuid) to service_role;
-revoke all on function public.implementation_set_owner(uuid, uuid, uuid, text) from public, anon, authenticated;
-grant execute on function public.implementation_set_owner(uuid, uuid, uuid, text) to service_role;
+revoke all on function public.implementation_set_owner(uuid, uuid, uuid, text, text) from public, anon, authenticated;
+grant execute on function public.implementation_set_owner(uuid, uuid, uuid, text, text) to service_role;
 revoke all on public.implementation_owner_conflicts from public, anon, authenticated;
 grant select on public.implementation_owner_conflicts to service_role;

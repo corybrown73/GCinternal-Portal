@@ -324,14 +324,14 @@ describe("the apply mapping", () => {
         {},
         { planOwnsTarget: true },
       ),
-    ).toEqual({ kind: "owner", ownerId: ROSTER[1]!.id });
+    ).toMatchObject({ kind: "owner", ownerId: ROSTER[1]!.id });
     expect(
       proposalApplyPlan(
         row({ type: "owner" }),
         { ownerTeamMemberId: ROSTER[0]!.id },
         { planOwnsTarget: true },
       ),
-    ).toEqual({ kind: "owner", ownerId: ROSTER[0]!.id });
+    ).toMatchObject({ kind: "owner", ownerId: ROSTER[0]!.id });
   });
 
   it("turns a decision, a note and an intake suggestion into their own inputs", () => {

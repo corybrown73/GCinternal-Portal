@@ -3,6 +3,7 @@ import { z } from "zod";
 
 import { requireInternalAuth, requireManager } from "@/integrations/supabase/internal-middleware";
 import { canManage, type PortalRole } from "@/lib/auth";
+import { ownerChangeFromRaw } from "@/lib/owner-change";
 
 function assertCanManage(profile: { role: string }): void {
   if (!canManage(profile.role as PortalRole)) {
@@ -73,20 +74,29 @@ export const getDealAssignment = createServerFn({ method: "GET" })
 /** Assign by rule (no member) or by hand (a member). */
 export const assignDealFn = createServerFn({ method: "POST" })
   .middleware([requireManager])
-  .inputValidator((data: unknown) =>
-    z
+  .inputValidator((data: unknown) => {
+    const base = z
       .object({
         dealId: z.string().uuid(),
         teamMemberId: z.string().uuid().nullable().optional(),
       })
-      .parse(data),
-  )
+      .parse(data);
+    // A person's pick is a reassignment: it needs its reason. Automatic assignment does not.
+    const ownerChange = ownerChangeFromRaw((data as { ownerChange?: unknown }).ownerChange);
+    if (base.teamMemberId && !ownerChange) {
+      throw new Error("Choose why the implementation is being reassigned.");
+    }
+    return { ...base, ownerChange };
+  })
   .handler(async ({ data, context }) => {
     const { assignDeal } = await import("./assignment.server");
     return assignDeal({
       dealId: data.dealId,
       teamMemberId: data.teamMemberId ?? null,
       actorProfileId: context.profile.id,
+      reassignment: data.ownerChange
+        ? { ...data.ownerChange, actorProfileId: context.profile.id }
+        : null,
     });
   });
 

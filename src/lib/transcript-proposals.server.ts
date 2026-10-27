@@ -569,6 +569,7 @@ async function createFromPlan(
         field: "owner_id",
         value: plan.ownerId,
         actorProfileId: actor.profileId,
+        ownerChange: { reasonCode: "other", reason: plan.reason },
       });
       entityType = "implementation";
       entityId = implementationId;
@@ -577,7 +578,10 @@ async function createFromPlan(
     case "target_date": {
       if (plan.via === "plan" && dealId) {
         // The plan owns the date: the override on its last milestone is what
-        // the page shows, and the next plan sync copies it onto the record.
+        // the page shows, and the next plan sync copies it onto the record. That
+        // is a delivery date, so it is checked against the implementation first.
+        const { assertCanManagePostSale } = await import("./post-sale-access.server");
+        await assertCanManagePostSale(actor.profileId, implementationId);
         await moveLiveDate(dealId, plan.date, actor);
         entityType = "plan";
         entityId = dealId;

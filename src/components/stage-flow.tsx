@@ -127,6 +127,13 @@ import { customerFacingName } from "@/lib/names";
 import { fromTheSowLine } from "@/lib/already-bought";
 import { cn } from "@/lib/utils";
 import { shortMeeting, workspaceFor } from "@/lib/workspace";
+import { OwnerChangeReasonFields } from "@/components/owner-change-reason";
+import {
+  EMPTY_OWNER_REASON,
+  ownerReasonPayload,
+  ownerReasonReady,
+  type OwnerReasonDraft,
+} from "@/lib/owner-change";
 
 /**
  * The deal's stages as one checklist, at the top of the page.
@@ -2046,11 +2053,27 @@ function AssignBody({ dealId, editable }: { dealId: string; editable: boolean })
     queryFn: () => getDealAssignment({ data: { dealId } }),
   });
   const [pick, setPick] = useState("");
+  const [reason, setReason] = useState<OwnerReasonDraft>(EMPTY_OWNER_REASON);
+  // A named pick is a reassignment: it needs its reason first. "By rule" is automatic.
+  const submitPick = (teamMemberId: string) => {
+    if (teamMemberId && !ownerReasonReady(reason)) {
+      setError("Choose why the implementation is being reassigned, then assign.");
+      return;
+    }
+    m.mutate(teamMemberId || null);
+  };
   const [error, setError] = useState<string | null>(null);
   // Everything: the customer header and the board show the owner too.
   const done = () => void qc.invalidateQueries();
   const m = useMutation({
-    mutationFn: (teamMemberId: string | null) => assign({ data: { dealId, teamMemberId } }),
+    mutationFn: (teamMemberId: string | null) =>
+      assign({
+        data: {
+          dealId,
+          teamMemberId,
+          ownerChange: teamMemberId ? ownerReasonPayload(reason) : null,
+        },
+      }),
     onMutate: () => setError(null),
     onSuccess: (r) => {
       if (!r) setError("Nobody is in the assignment pool. Add people under Admin → Assignment.");
@@ -2085,11 +2108,14 @@ function AssignBody({ dealId, editable }: { dealId: string; editable: boolean })
             </option>
             <MemberOptions members={a.members} />
           </select>
+          {pick ? (
+            <OwnerChangeReasonFields value={reason} onChange={setReason} disabled={m.isPending} />
+          ) : null}
           <button
             type="button"
             className="inline-flex h-8 items-center gap-1.5 rounded-sm bg-primary px-3 text-[12px] font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
             disabled={m.isPending || (!pick && !a.nextUp)}
-            onClick={() => m.mutate(pick || null)}
+            onClick={() => submitPick(pick)}
           >
             <UserRoundCheck className="h-3.5 w-3.5" />
             {m.isPending ? "Assigning…" : a.owner ? "Reassign" : "Assign"}

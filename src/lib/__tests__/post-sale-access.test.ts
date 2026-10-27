@@ -38,6 +38,7 @@ import {
   updateImplementation,
   updateRisk,
   updateSuccessCriterion,
+  graduatePartner,
 } from "../hub.server";
 
 const ORG = "00000000-0000-4000-8000-000000000001";
@@ -165,6 +166,16 @@ describe("delivery writes are checked before anything is written", () => {
   });
 });
 
+describe("graduation and handover are post-sale decisions", () => {
+  it("refuses graduation for someone who may not change the implementation, before reading it", async () => {
+    load(rows(), { post_sale_may_manage: { data: false } });
+    await expect(
+      graduatePartner({ implementationId: IMPL, actorTeamMember: null, actorProfileId: ACTOR }),
+    ).rejects.toThrow(POST_SALE_REFUSAL);
+    expect(calls("post_sale_may_manage")).toHaveLength(1);
+  });
+});
+
 describe("owner changes go through the reassignment, which the database records", () => {
   it("sends an owner change from a person to the reassignment function, not to the row", async () => {
     load(rows(), {
@@ -174,17 +185,53 @@ describe("owner changes go through the reassignment, which the database records"
     await updateImplementation(
       IMPL,
       { name: "Renamed", owner_id: TM_NEW },
-      { actorProfileId: ACTOR },
+      { actorProfileId: ACTOR, ownerChange: { reasonCode: "workload", reason: null } },
     );
     expect(calls("implementation_set_owner")[0]!.args).toEqual({
       p_profile: ACTOR,
       p_implementation: IMPL,
       p_team_member: TM_NEW,
+      p_reason_code: "workload",
       p_reason: null,
     });
     // The rest of the edit is written; the owner is not written by this path.
     expect(fake.store["implementations"]![0]!["name"]).toBe("Renamed");
     expect(fake.store["implementations"]![0]!["owner_id"]).toBe(TM_OLD);
+  });
+
+  it("refuses a manual owner change with no reason, before anything is sent", async () => {
+    load(rows(), {
+      post_sale_may_manage: { data: true },
+      implementation_set_owner: { data: null },
+    });
+    await expect(
+      updateImplementation(IMPL, { name: "Renamed", owner_id: TM_NEW }, { actorProfileId: ACTOR }),
+    ).rejects.toThrow("Choose why the implementation is being reassigned.");
+    expect(calls("implementation_set_owner")).toEqual([]);
+    expect(fake.store["implementations"]![0]!["name"]).toBe("Rollout");
+    expect(fake.store["implementations"]![0]!["owner_id"]).toBe(TM_OLD);
+  });
+
+  it("refuses a reason code that is not one of the five, and Other with no words", async () => {
+    load(rows(), { implementation_set_owner: { data: null } });
+    await expect(
+      reassignImplementationOwner(
+        {
+          implementationId: IMPL,
+          teamMemberId: TM_NEW,
+          reasonCode: "bored" as never,
+          reason: null,
+        },
+        ACTOR,
+      ),
+    ).rejects.toThrow();
+    await expect(
+      reassignImplementationOwner(
+        { implementationId: IMPL, teamMemberId: TM_NEW, reasonCode: "other", reason: "  " },
+        ACTOR,
+      ),
+    ).rejects.toThrow("Say why, in a few words, when the reason is Other.");
+    expect(calls("implementation_set_owner")).toEqual([]);
   });
 
   it("does not reassign when the owner is unchanged", async () => {
@@ -194,6 +241,15 @@ describe("owner changes go through the reassignment, which the database records"
       { name: "Renamed", owner_id: TM_OLD },
       { actorProfileId: ACTOR },
     );
+    expect(calls("implementation_set_owner")).toEqual([]);
+  });
+
+  it("lets the system change an owner with no reason, as it always has", async () => {
+    load(rows(), { post_sale_may_manage: { data: false } });
+    // No actor: an automatic path (the Closed Won start, the Salesforce sync). It is not refused
+    // for want of a reason, and the database records it as a system change.
+    await updateImplementation(IMPL, { owner_id: TM_NEW });
+    expect(fake.store["implementations"]![0]!["owner_id"]).toBe(TM_NEW);
     expect(calls("implementation_set_owner")).toEqual([]);
   });
 
@@ -208,7 +264,7 @@ describe("owner changes go through the reassignment, which the database records"
     });
     await expect(
       reassignImplementationOwner(
-        { implementationId: IMPL, teamMemberId: TM_NEW, reason: null },
+        { implementationId: IMPL, teamMemberId: TM_NEW, reasonCode: "workload", reason: null },
         ACTOR,
       ),
     ).rejects.toThrow("Only a Team Lead, a manager or an admin can reassign an implementation");
@@ -218,12 +274,18 @@ describe("owner changes go through the reassignment, which the database records"
   it("records a successful reassignment with who made it", async () => {
     load(rows(), { implementation_set_owner: { data: null } });
     await reassignImplementationOwner(
-      { implementationId: IMPL, teamMemberId: TM_NEW, reason: "Cover while on leave" },
+      {
+        implementationId: IMPL,
+        teamMemberId: TM_NEW,
+        reasonCode: "tis_leave",
+        reason: "Cover while on leave",
+      },
       ACTOR,
     );
     expect(calls("implementation_set_owner")[0]!.args).toMatchObject({
       p_profile: ACTOR,
       p_team_member: TM_NEW,
+      p_reason_code: "tis_leave",
       p_reason: "Cover while on leave",
     });
     expect(h.audit.audit).toHaveBeenCalledWith(
@@ -235,7 +297,7 @@ describe("owner changes go through the reassignment, which the database records"
     load(rows(), { implementation_set_owner: { error: { code: "08006", message: "down" } } });
     await expect(
       reassignImplementationOwner(
-        { implementationId: IMPL, teamMemberId: TM_NEW, reason: null },
+        { implementationId: IMPL, teamMemberId: TM_NEW, reasonCode: "workload", reason: null },
         ACTOR,
       ),
     ).rejects.toThrow("Could not reassign the implementation. Nothing has been changed.");
