@@ -26,6 +26,7 @@ import {
 import { setTaskStatus } from "@/lib/plan.functions";
 import { stageGateStatus, type GateItem } from "@/lib/stage-gates";
 import { cn } from "@/lib/utils";
+import { canManage, useProfile } from "@/lib/auth";
 
 /**
  * A Partner Implementation on Current Implementation: its seven stages from its
@@ -284,6 +285,9 @@ function PartnerHandoffSection({
   editable: boolean;
 }) {
   const qc = useQueryClient();
+  // Naming the owner at handoff is an assignment: only an admin, super admin or manager.
+  const { profile } = useProfile();
+  const mayAssignOwner = canManage(profile?.role);
   const hand = useServerFn(handOffPartnerImplementation);
   const tick = useServerFn(setTaskStatus);
   const assignment = useQuery({
@@ -420,7 +424,7 @@ function PartnerHandoffSection({
               className="h-7 rounded-sm border border-border bg-background px-1.5 text-[12px]"
               value={pick}
               onChange={(e) => setPick(e.target.value)}
-              disabled={!editable || busy}
+              disabled={!editable || busy || !mayAssignOwner}
             >
               <option value="">Let the implementation team claim it</option>
               <MemberOptions members={members} />

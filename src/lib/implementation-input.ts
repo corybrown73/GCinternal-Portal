@@ -143,11 +143,15 @@ export type RecordedHealth = (typeof RECORDED_HEALTH)[number];
  * Editing an existing implementation. `current_stage` and `stage_entered_at` are
  * deliberately absent: stage movement only ever happens through stage
  * advancement, so this editor can never disagree with the stage history.
+ *
+ * The owner is absent on purpose. An ordinary save never changes who owns the
+ * account: a form loaded before a claim or a reassignment would resend the old
+ * owner and undo it. Owners change only through setImplementationOwner, for an
+ * admin, super admin or manager. A key sent here is ignored (the schema strips it).
  */
 export const updateImplementationInput = z.object({
   id: z.string().uuid(),
   name: z.string().trim().min(1),
-  ownerId: z.string().uuid().nullable(),
   salesOwner: optionalText,
   tier: optionalText,
   status: implementationStatusInput,
@@ -194,7 +198,6 @@ export type UpdateImplementationInput = z.infer<typeof updateImplementationInput
 export function toImplementationUpdatePatch(data: UpdateImplementationInput) {
   const patch: Record<string, unknown> = {
     name: data.name,
-    owner_id: data.ownerId,
     sales_owner: data.salesOwner,
     tier: data.tier,
     status: data.status,

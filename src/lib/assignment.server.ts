@@ -16,7 +16,10 @@ import { isPreClose } from "@/lib/presale-stages";
 import { paperworkOnFile } from "@/lib/won-gate";
 
 import { audit } from "./server/audit";
+import { liveImplementationForDeal } from "./server/deal-implementation";
+import { rowOrThrow, rowsOrThrow } from "./server/db-read";
 import { sendEmail } from "./server/email";
+import { actorMayAssignOwner } from "./owner-change.server";
 
 const db = () => supabaseAdmin as any;
 const RULES_KEY = "assignment_rules";
@@ -24,11 +27,12 @@ const RULES_KEY = "assignment_rules";
 /* ------------------------------------------------------------- rules */
 
 export async function loadRules(): Promise<AssignmentRules> {
-  const { data } = await db()
-    .from("portal_app_config")
-    .select("value")
-    .eq("key", RULES_KEY)
-    .maybeSingle();
+  // A failed read must not fall back to the default rules: the deal would be
+  // handed out under rules nobody configured.
+  const data = rowOrThrow<{ value: unknown }>(
+    await db().from("portal_app_config").select("value").eq("key", RULES_KEY).maybeSingle(),
+    "the assignment rules",
+  );
   return normalizeRules(data?.value ?? DEFAULT_ASSIGNMENT_RULES);
 }
 
@@ -39,6 +43,31 @@ export async function saveRules(raw: unknown): Promise<AssignmentRules> {
     .upsert({ key: RULES_KEY, value: rules }, { onConflict: "key" });
   if (error) throw new Error(`Could not save the rules: ${error.message}`);
   return rules;
+}
+
+/**
+ * Whether the saved rules let a person take an account for themselves, read
+ * strictly from the stored value. Only the exact mode "claim" allows it. A
+ * missing setting, an unreadable one, and the "auto" mode each refuse, and each
+ * refusal says which it is. This is the one rule the claim server call and the
+ * Claim buttons both use.
+ */
+export type ClaimRulesState = "claim" | "auto" | "missing" | "invalid";
+
+export async function readClaimRulesState(): Promise<ClaimRulesState> {
+  const { data, error } = await db()
+    .from("portal_app_config")
+    .select("value")
+    .eq("key", RULES_KEY)
+    .maybeSingle();
+  if (error)
+    throw new Error("Could not read the assignment rules, so nothing was claimed. Try again.");
+  if (!data) return "missing";
+  const value = data.value as { mode?: unknown } | null;
+  if (!value || typeof value !== "object") return "invalid";
+  if (value.mode === "claim") return "claim";
+  if (value.mode === "auto") return "auto";
+  return "invalid";
 }
 
 /* -------------------------------------------------------------- pool */
@@ -66,7 +95,7 @@ export async function loadPool(rules?: AssignmentRules): Promise<PoolRow[]> {
   const r = rules ?? (await loadRules());
   const since = new Date(Date.now() - r.window_days * 86_400_000).toISOString();
   const { loadActiveWorkload } = await import("./claimed-owner.server");
-  const [{ data: members }, { data: pool }, { data: ledger }, owned] = await Promise.all([
+  const [membersRes, poolRes, ledgerRes, owned] = await Promise.all([
     db().from("team_members").select("id,name,email,role").eq("active", true).order("name"),
     db().from("portal_assignment_pool").select("team_member_id,active,capacity"),
     db()
@@ -78,8 +107,14 @@ export async function loadPool(rules?: AssignmentRules): Promise<PoolRow[]> {
       return new Map<string, number>();
     }),
   ]);
+  // The roster, the pool and the ledger decide who is next. A failed read is not
+  // "nobody is in the pool" (the deal would be left unassigned) or "nobody has
+  // been given anything" (the rotation would start over): it stops here.
+  const members = rowsOrThrow<any>(membersRes, "the team");
+  const pool = rowsOrThrow<any>(poolRes, "the assignment pool");
+  const ledger = rowsOrThrow<any>(ledgerRes, "recent assignments");
   const poolBy = new Map<string, { active: boolean; capacity: number }>(
-    ((pool ?? []) as any[]).map((p) => [
+    (pool as any[]).map((p) => [
       String(p.team_member_id),
       { active: Boolean(p.active), capacity: Number(p.capacity) || 1 },
     ]),
@@ -87,14 +122,14 @@ export async function loadPool(rules?: AssignmentRules): Promise<PoolRow[]> {
   const load = new Map<string, number>();
   const count = new Map<string, number>();
   const last = new Map<string, string>();
-  for (const a of (ledger ?? []) as any[]) {
+  for (const a of ledger as any[]) {
     const id = String(a.team_member_id);
     load.set(id, (load.get(id) ?? 0) + Number(a.weight));
     count.set(id, (count.get(id) ?? 0) + 1);
     const at = String(a.created_at);
     if (!last.has(id) || at > last.get(id)!) last.set(id, at);
   }
-  const rows: PoolRow[] = ((members ?? []) as any[]).map((m) => {
+  const rows: PoolRow[] = (members as any[]).map((m) => {
     const p = poolBy.get(String(m.id));
     const capacity = p?.capacity ?? 1;
     const l = load.get(String(m.id)) ?? 0;
@@ -159,14 +194,17 @@ export type AssignmentRow = {
 };
 
 export async function recentAssignments(limit = 30): Promise<AssignmentRow[]> {
-  const { data } = await db()
-    .from("portal_assignments")
-    .select(
-      "id,deal_id,implementation_id,team_member_id,weight,breakdown,source,note,created_at,portal_accounts(name,customer_id),team_members(name)",
-    )
-    .order("created_at", { ascending: false })
-    .limit(limit);
-  return ((data ?? []) as any[]).map((a) => ({
+  const data = rowsOrThrow<any>(
+    await db()
+      .from("portal_assignments")
+      .select(
+        "id,deal_id,implementation_id,team_member_id,weight,breakdown,source,note,created_at,portal_accounts(name,customer_id),team_members(name)",
+      )
+      .order("created_at", { ascending: false })
+      .limit(limit),
+    "recent assignments",
+  );
+  return data.map((a) => ({
     id: String(a.id),
     dealId: String(a.deal_id),
     dealName: a.portal_accounts?.name ?? null,
@@ -185,11 +223,14 @@ export async function recentAssignments(limit = 30): Promise<AssignmentRow[]> {
 /* ----------------------------------------------------------- assign */
 
 async function dealFacts(dealId: string) {
-  const { data: deal } = await db()
-    .from("portal_accounts")
-    .select("id,name,arr,intake,customer_id,am_owner_id,stage")
-    .eq("id", dealId)
-    .maybeSingle();
+  const deal = rowOrThrow<any>(
+    await db()
+      .from("portal_accounts")
+      .select("id,name,arr,intake,customer_id,am_owner_id,stage")
+      .eq("id", dealId)
+      .maybeSingle(),
+    "this deal",
+  );
   if (!deal) throw new Error("Deal not found");
   const intake = readIntake(deal.intake);
   const { normalizeServices } = await import("@/lib/onboarding-services");
@@ -217,7 +258,10 @@ export async function implementationForDeal(dealId: string, customerId: string |
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
-  if (byDeal.data?.id) return String(byDeal.data.id);
+  // A failed read is not "this deal has no implementation": the caller would
+  // make a second one.
+  const found = rowOrThrow<{ id: string }>(byDeal, "this deal's implementation");
+  if (found?.id) return String(found.id);
   if (!customerId) return null;
   const byCustomer = await db()
     .from("implementations")
@@ -226,7 +270,8 @@ export async function implementationForDeal(dealId: string, customerId: string |
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
-  return byCustomer.data?.id ? String(byCustomer.data.id) : null;
+  const foundByCustomer = rowOrThrow<{ id: string }>(byCustomer, "this customer's implementation");
+  return foundByCustomer?.id ? String(foundByCustomer.id) : null;
 }
 
 /**
@@ -300,6 +345,7 @@ export async function chooseAssignee(args: {
 
 export async function assignDeal(args: {
   dealId: string;
+  /** Not used: the project is found under the ownership lock, not taken from the caller. */
   implementationId?: string | null;
   teamMemberId?: string | null;
   ownerEmail?: string | undefined;
@@ -313,6 +359,12 @@ export async function assignDeal(args: {
   message?: "standard" | "field_fusion_setup" | "handoff";
   /** What the Field Fusion setup hands over, for the "handoff" message. */
   handoff?: HandoffNote | null;
+  /**
+   * Who makes the assignment when there is no signed-in person: the Salesforce
+   * ingest is an integration, a scheduled or system step is a system. Recorded in the
+   * owner history.
+   */
+  actorKind?: "integration" | "system" | undefined;
 }): Promise<{
   assigneeName: string | null;
   teamMemberId: string;
@@ -321,6 +373,18 @@ export async function assignDeal(args: {
   source: "auto" | "manual";
   notified: boolean;
 } | null> {
+  // A person may name the owner only as an admin, super admin or manager. Any other
+  // caller assigns only an unowned account, by the rules or as the integration named it.
+  const manual = Boolean(args.teamMemberId || args.ownerEmail);
+  const human = Boolean(args.actorProfileId);
+  if (manual && human && !(await actorMayAssignOwner(args.actorProfileId))) {
+    throw new Error(
+      "Only an admin, super admin or manager can choose an account's owner. Leave it to the rules, or ask a manager.",
+    );
+  }
+  const mode = manual && human ? "manager" : "unowned_only";
+  const actorKind = human ? "user" : (args.actorKind ?? "system");
+
   const picked = await chooseAssignee({
     dealId: args.dealId,
     teamMemberId: args.teamMemberId ?? null,
@@ -341,36 +405,116 @@ export async function assignDeal(args: {
   if (picked.kind === "none") return null;
   const { chosen, source, weight, breakdown, rules, deal, forWeight, training } = picked;
 
-  const implementationId =
-    args.implementationId ?? (await implementationForDeal(args.dealId, deal.customer_id ?? null));
-  if (implementationId) {
-    const { error } = await db()
-      .from("implementations")
-      .update({ owner_id: chosen.teamMemberId })
-      .eq("id", implementationId);
-    if (error) throw new Error(`Could not set the project owner: ${error.message}`);
+  // The owner and the record are written in one transaction, under the ownership
+  // locks (portal_record_assignment). The project is found under those locks, so
+  // the owner written is the one the record names. args.implementationId is not
+  // used: the project is looked up under the lock, not trusted from the caller.
+  const recorded = await recordAssignment({
+    dealId: args.dealId,
+    teamMemberId: chosen.teamMemberId,
+    weight,
+    breakdown,
+    source,
+    actorProfileId: args.actorProfileId ?? null,
+    mode,
+    actorKind,
+    note:
+      args.note ??
+      (source === "auto"
+        ? `Rule: lowest load in the last ${rules.window_days} days (${chosen.load} carried)`
+        : args.ownerEmail
+          ? "Named on the closed-won row"
+          : "Chosen by hand"),
+  });
+  // The database declined: the account already has an owner, and a rule or an
+  // integration does not replace one. Nothing was written, so nothing is announced.
+  if (!recorded.assigned) return null;
+
+  return announceAssignment({
+    dealId: args.dealId,
+    actorProfileId: args.actorProfileId ?? null,
+    message: args.message,
+    handoff: args.handoff,
+    chosen,
+    weight,
+    breakdown,
+    source,
+    deal,
+    forWeight,
+    training,
+  });
+}
+
+/**
+ * Writes the owner (when the deal has a project) and the assignment record in one
+ * transaction. A retry from the database is reported in words a person can act on.
+ */
+async function recordAssignment(args: {
+  dealId: string;
+  teamMemberId: string;
+  weight: number;
+  breakdown: WeightBreakdown;
+  source: "auto" | "manual";
+  actorProfileId: string | null;
+  mode: "manager" | "unowned_only";
+  actorKind: "user" | "system" | "integration";
+  note: string;
+}): Promise<{ assigned: boolean; implementationId: string | null }> {
+  const { data, error } = await db().rpc("portal_record_assignment", {
+    p_deal: args.dealId,
+    p_team_member: args.teamMemberId,
+    p_weight: args.weight,
+    p_breakdown: args.breakdown,
+    p_source: args.source,
+    p_actor_profile: args.actorProfileId,
+    p_note: args.note,
+    p_mode: args.mode,
+    p_actor_kind: args.actorKind,
+  });
+  if (error) {
+    throw error.message.includes("ownership_retry")
+      ? retryFailure()
+      : new Error(`Could not record the assignment: ${error.message}`);
   }
+  const row = data as { assigned?: unknown; implementation_id?: unknown } | null;
+  return {
+    assigned: row?.assigned === true,
+    implementationId: (row?.implementation_id as string | null) ?? null,
+  };
+}
 
-  const { error: ledgerError } = await db()
-    .from("portal_assignments")
-    .insert({
-      deal_id: args.dealId,
-      implementation_id: implementationId,
-      team_member_id: chosen.teamMemberId,
-      weight,
-      breakdown,
-      source,
-      actor_profile_id: args.actorProfileId ?? null,
-      note:
-        args.note ??
-        (source === "auto"
-          ? `Rule: lowest load in the last ${rules.window_days} days (${chosen.load} carried)`
-          : args.ownerEmail
-            ? "Named on the closed-won row"
-            : "Chosen by hand"),
-    });
-  if (ledgerError) throw new Error(`Could not record the assignment: ${ledgerError.message}`);
+function retryFailure(): Error {
+  return new Error(
+    "The project for this deal changed while the assignment was being made. Try again.",
+  );
+}
 
+/**
+ * The part of an assignment that happens after its ownership is committed: the
+ * audit entry, the customer link and the notices. None of it changes ownership, so
+ * a failure here is logged and does not undo the assignment.
+ */
+async function announceAssignment(args: {
+  dealId: string;
+  actorProfileId: string | null;
+  message?: "standard" | "field_fusion_setup" | "handoff" | undefined;
+  handoff?: HandoffNote | null | undefined;
+  chosen: PoolRow;
+  weight: number;
+  breakdown: WeightBreakdown;
+  source: "auto" | "manual";
+  deal: Awaited<ReturnType<typeof dealFacts>>["deal"];
+  forWeight: Awaited<ReturnType<typeof dealFacts>>["forWeight"];
+  training: boolean;
+}): Promise<{
+  assigneeName: string | null;
+  teamMemberId: string;
+  weight: number;
+  breakdown: WeightBreakdown;
+  source: "auto" | "manual";
+  notified: boolean;
+}> {
+  const { chosen, weight, breakdown, source, deal, forWeight, training } = args;
   await audit({
     actor_type: args.actorProfileId ? "user" : "system",
     actor_id: args.actorProfileId ?? null,
@@ -603,6 +747,13 @@ function handoffBlock(h: HandoffNote | null): string {
 
 export type DealAssignment = {
   mode: "auto" | "claim";
+  /**
+   * Whether someone in the pool may take this account now: the saved rules are
+   * in claim mode and the account has no owner. That holds before a project
+   * exists too. The Claim buttons show from this, and portal_claim_deal enforces
+   * the same rules.
+   */
+  claimable: boolean;
   owner: { teamMemberId: string; name: string; email: string | null } | null;
   last: AssignmentRow | null;
   weight: number;
@@ -641,57 +792,74 @@ export async function dealAssignment(dealId: string): Promise<DealAssignment> {
   const { deal, forWeight } = await dealFacts(dealId);
   const { weight, breakdown } = dealWeight(forWeight, rules);
   const pool = await loadPool(rules);
-  const implementationId = await implementationForDeal(dealId, deal.customer_id ?? null);
+  // The project the claim and the assignment write to: the live-project rule the
+  // database uses (portal_project_for_deal), not the broader lookup other pages use.
+  const liveProject = await liveImplementationForDeal<{ id: string }>(db(), {
+    dealId,
+    customerId: deal.customer_id ?? null,
+    select: "id",
+  });
+  const implementationId = liveProject?.id ? String(liveProject.id) : null;
 
   let owner: DealAssignment["owner"] = null;
   if (implementationId) {
-    const { data: impl } = await db()
-      .from("implementations")
-      .select("owner_id")
-      .eq("id", implementationId)
-      .maybeSingle();
+    // A failed read is not "unassigned": the person who just claimed it would
+    // see "Unassigned" and claim again.
+    const impl = rowOrThrow<any>(
+      await db()
+        .from("implementations")
+        .select("owner_id")
+        .eq("id", implementationId)
+        .maybeSingle(),
+      "this deal's owner",
+    );
     if (impl?.owner_id) {
       const m = pool.find((p) => p.teamMemberId === String(impl.owner_id));
       if (m) owner = { teamMemberId: m.teamMemberId, name: m.name, email: m.email };
       else {
-        const { data: tm } = await db()
-          .from("team_members")
-          .select("id,name,email")
-          .eq("id", impl.owner_id)
-          .maybeSingle();
+        const tm = rowOrThrow<any>(
+          await db()
+            .from("team_members")
+            .select("id,name,email")
+            .eq("id", impl.owner_id)
+            .maybeSingle(),
+          "this deal's owner",
+        );
         if (tm)
           owner = { teamMemberId: String(tm.id), name: String(tm.name), email: tm.email ?? null };
       }
     }
   }
 
-  const [{ data: ledger }, { count: reports }, { data: dealRow }, { data: liveProjects }] =
-    await Promise.all([
-      db()
-        .from("portal_assignments")
-        .select(
-          "id,deal_id,implementation_id,team_member_id,weight,breakdown,source,note,created_at,team_members(name)",
-        )
-        .eq("deal_id", dealId)
-        .order("created_at", { ascending: false })
-        .limit(1),
-      db()
-        .from("portal_gong_reports")
-        .select("id", { count: "exact", head: true })
-        .eq("account_id", dealId),
-      db()
-        .from("portal_accounts")
-        .select("sow_document_path,sow_document_url,sow_reference,intake,welcome_issued_at")
-        .eq("id", dealId)
-        .maybeSingle(),
-      db()
-        .from("implementations")
-        .select("id")
-        .eq("deal_id", dealId)
-        .is("superseded_by_implementation_id", null)
-        .limit(1),
-    ]);
-  const l = (ledger ?? [])[0] as any;
+  const [ledgerRes, { count: reports }, dealRowRes, liveProjectsRes] = await Promise.all([
+    db()
+      .from("portal_assignments")
+      .select(
+        "id,deal_id,implementation_id,team_member_id,weight,breakdown,source,note,created_at,team_members(name)",
+      )
+      .eq("deal_id", dealId)
+      .order("created_at", { ascending: false })
+      .limit(1),
+    db()
+      .from("portal_gong_reports")
+      .select("id", { count: "exact", head: true })
+      .eq("account_id", dealId),
+    db()
+      .from("portal_accounts")
+      .select("sow_document_path,sow_document_url,sow_reference,intake,welcome_issued_at")
+      .eq("id", dealId)
+      .maybeSingle(),
+    db()
+      .from("implementations")
+      .select("id")
+      .eq("deal_id", dealId)
+      .is("superseded_by_implementation_id", null)
+      .limit(1),
+  ]);
+  const ledger = rowsOrThrow<any>(ledgerRes, "this deal's assignment");
+  const dealRow = rowOrThrow<any>(dealRowRes, "this deal");
+  const liveProjects = rowsOrThrow<any>(liveProjectsRes, "this deal's implementation");
+  const l = ledger[0] as any;
   // Before Start onboarding there is no project to carry the owner, so a
   // claim or a hand-pick lives only in the ledger. Read it from there, or
   // the person who just claimed sees "Unassigned" and clicks again. Once the
@@ -708,8 +876,10 @@ export async function dealAssignment(dealId: string): Promise<DealAssignment> {
     };
   }
   const next = rules.mode === "claim" ? null : (pool.find((p) => p.rank === 1) ?? null);
+  const claimable = (await readClaimRulesState()) === "claim" && !owner;
   return {
     mode: rules.mode,
+    claimable,
     owner,
     last: l
       ? {
@@ -800,9 +970,21 @@ export function pickerMembers<
 
 /* ------------------------------------------------------------- claim */
 
+const NOT_IN_POOL =
+  "You are not in the assignment pool. A manager adds people under Admin → Assignment.";
+
 /**
- * The caller takes the account. They must be in the pool — matched by the
- * email on their profile — and the account must have no owner yet.
+ * The caller takes the account for themselves. Allowed only in claim mode, only for
+ * the caller's own active pool membership (matched by the email on their profile),
+ * and only when the account has no owner. Before a project exists, the owner is the
+ * newest assignment record, and the same refusal applies.
+ *
+ * The database makes the decision (portal_claim_deal). It takes the ownership locks,
+ * checks the rules and the owner, and writes the owner and the record in one
+ * transaction, so of two people claiming at once only one succeeds and a refused
+ * claim writes nothing. The Claim buttons follow dealAssignment.claimable, but that
+ * is only a convenience: the database refuses whatever the page shows. A manager's
+ * assignment is a separate path (assignDeal) and is not affected by these rules.
  */
 export async function claimDeal(profileId: string, dealId: string) {
   const { data: profile } = await db()
@@ -811,25 +993,47 @@ export async function claimDeal(profileId: string, dealId: string) {
     .eq("id", profileId)
     .maybeSingle();
   const email = String(profile?.email ?? "").toLowerCase();
-  if (!email) throw new Error("No profile for this sign-in");
+  if (!email) throw new Error("No profile for this sign-in.");
 
-  const pool = await loadPool();
+  const { deal, forWeight, training } = await dealFacts(dealId);
+  const rules = await loadRules();
+  const { weight, breakdown } = dealWeight(forWeight, rules);
+  const pool = await loadPool(rules);
   const me = pool.find((p) => p.inPool && p.active && (p.email ?? "").toLowerCase() === email);
-  if (!me) {
-    throw new Error(
-      "You are not in the assignment pool. A manager adds people under Admin → Assignment.",
-    );
-  }
-  const current = await dealAssignment(dealId);
-  if (current.owner) {
-    throw new Error(`${current.owner.name} already owns this account.`);
-  }
-  return assignDeal({
-    dealId,
-    teamMemberId: me.teamMemberId,
-    actorProfileId: profileId,
-    note: `Claimed by ${me.name}`,
+  if (!me) throw new Error(NOT_IN_POOL);
+
+  const { error } = await db().rpc("portal_claim_deal", {
+    p_deal: dealId,
+    p_team_member: me.teamMemberId,
+    p_actor_profile: profileId,
+    p_weight: weight,
+    p_breakdown: breakdown,
+    p_note: `Claimed by ${me.name}`,
   });
+  if (error) throw claimFailure(error.message);
+
+  return announceAssignment({
+    dealId,
+    actorProfileId: profileId,
+    chosen: me,
+    weight,
+    breakdown,
+    source: "manual",
+    deal,
+    forWeight,
+    training,
+  });
+}
+
+/**
+ * A refusal from portal_claim_deal, in words for the person. Refusals are raised as
+ * claim_refused:<code>|<text>. A retry means the project changed during the claim.
+ */
+function claimFailure(message: string): Error {
+  const refusal = /claim_refused:\w+\|([\s\S]*)$/.exec(message);
+  if (refusal) return new Error(refusal[1] ?? message);
+  if (message.includes("ownership_retry")) return retryFailure();
+  return new Error(`Could not take the account: ${message}`);
 }
 
 /**
@@ -883,9 +1087,14 @@ function escapeHtml(s: string): string {
   return s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 }
 
-/** See assignment.functions.ts removeTeamMember. */
+/**
+ * Take a person off the team. The database refuses while they own anything, claimed
+ * or assigned, and deactivates them under a lock that waits for any claim or
+ * assignment naming them (portal_deactivate_team_member, migration 0087).
+ */
 export async function removeTeamMember(
   teamMemberId: string,
+  actorProfileId: string | null,
 ): Promise<{ removed: true; name: string }> {
   const { data: member } = await db()
     .from("team_members")
@@ -893,72 +1102,21 @@ export async function removeTeamMember(
     .eq("id", teamMemberId)
     .maybeSingle();
   if (!member) throw new Error("That person is not on the team.");
-  const name = String(member.name);
 
-  const [{ count: owned }, { data: login }] = await Promise.all([
-    db()
-      .from("implementations")
-      .select("id", { count: "exact", head: true })
-      .eq("owner_id", teamMemberId)
-      .neq("current_stage", "graduate-to-cs"),
-    db().from("portal_profiles").select("id").eq("team_member_id", teamMemberId).maybeSingle(),
-  ]);
-  // A deal claimed before its project exists is owned only through the
-  // ledger (the one owner rule, src/lib/claimed-owner.ts). Count those too,
-  // or the removed person stays the deal's TIS on every page.
-  const claimedOnly = await ledgerOnlyDealsOwnedBy(teamMemberId);
-  const total = (owned ?? 0) + claimedOnly;
-  if (total > 0) {
-    throw new Error(
-      `${name} still owns ${total} account${total === 1 ? "" : "s"}. Reassign them first, then remove.`,
-    );
-  }
-  if (login) {
-    throw new Error(`${name} has a login. Remove the user under Admin → Users first.`);
-  }
+  const { data, error } = await db().rpc("portal_deactivate_team_member", {
+    p_team_member: teamMemberId,
+    p_actor_profile: actorProfileId,
+  });
+  if (error) throw new Error(error.message);
+  const name = String((data as { name?: unknown } | null)?.name ?? member.name);
 
-  const { error } = await db()
-    .from("team_members")
-    .update({ active: false })
-    .eq("id", teamMemberId);
-  if (error) throw new Error(`Could not remove ${name}: ${error.message}`);
-  // Out of the rotation too, so the rule never picks a name that is gone.
-  await db().from("portal_assignment_pool").delete().eq("team_member_id", teamMemberId);
   await audit({
     actor_type: "user",
-    actor_id: null,
+    actor_id: actorProfileId,
     action: "team.member_removed",
     entity_type: "team_member",
     entity_id: teamMemberId,
     payload: { name },
   });
   return { removed: true, name };
-}
-
-/**
- * Deals not yet graduated whose claimed owner is this person through the
- * ledger alone (no project yet). Projects are counted by owner_id already.
- */
-async function ledgerOnlyDealsOwnedBy(teamMemberId: string): Promise<number> {
-  const { data: ledger, error } = await db()
-    .from("portal_assignments")
-    .select("deal_id")
-    .eq("team_member_id", teamMemberId);
-  if (error) throw new Error(`Could not read the claim ledger: ${error.message}`);
-  const dealIds = [
-    ...new Set(((ledger ?? []) as Array<{ deal_id: string | null }>).map((r) => r.deal_id)),
-  ].filter((id): id is string => Boolean(id));
-  if (dealIds.length === 0) return 0;
-  const [{ loadClaimedOwners }, { GRADUATED_STAGE }, { data: deals, error: dealError }] =
-    await Promise.all([
-      import("./claimed-owner.server"),
-      import("./claimed-owner"),
-      db().from("portal_accounts").select("id,stage").in("id", dealIds),
-    ]);
-  if (dealError) throw new Error(`Could not read the deals: ${dealError.message}`);
-  const owners = await loadClaimedOwners(dealIds);
-  return ((deals ?? []) as Array<{ id: string; stage: string | null }>).filter((d) => {
-    const o = owners.get(String(d.id));
-    return o?.source === "ledger" && o.id === teamMemberId && d.stage !== GRADUATED_STAGE;
-  }).length;
 }

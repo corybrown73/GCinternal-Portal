@@ -18,8 +18,10 @@ import {
   getDealOptions,
   getTeamOptions,
   setImplementation,
+  setImplementationOwnerFn,
   uploadAttachment,
 } from "@/lib/hub.functions";
+import { canManage, useProfile } from "@/lib/auth";
 import { fileToBase64, MAX_ATTACHMENT_BYTES } from "@/lib/attachment-client";
 import { OwnerPicker, groupOf } from "@/components/owner-picker";
 
@@ -140,6 +142,8 @@ function payload(draft: Draft) {
 }
 
 export function NewImplementation({ customers }: { customers: CustomerOption[] }) {
+  const { profile } = useProfile();
+  const mayAssignOwner = canManage(profile?.role);
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState<Draft>(emptyDraft);
   const queryClient = useQueryClient();
@@ -464,7 +468,7 @@ export function NewImplementation({ customers }: { customers: CustomerOption[] }
                 team={team.data ?? []}
                 group={draft.ownerGroup}
                 ownerId={draft.ownerId}
-                disabled={mutation.isPending}
+                disabled={mutation.isPending || !mayAssignOwner}
                 personLabel="Implementation owner"
                 onChange={(next) => set({ ownerGroup: next.group, ownerId: next.ownerId })}
               />
@@ -769,13 +773,18 @@ export function EditImplementation({
   const [draft, setDraft] = useState<EditDraft>(from);
   const set = (patch: Partial<EditDraft>) => setDraft((d) => ({ ...d, ...patch }));
 
+  // Saving the other details never changes the owner. An owner the person changed is
+  // set through the owner function, which only a manager may use, and which refuses
+  // if the owner was changed by someone else since this form was opened.
+  const { profile } = useProfile();
+  const mayAssignOwner = canManage(profile?.role);
+  const setOwner = useServerFn(setImplementationOwnerFn);
   const mutation = useMutation({
-    mutationFn: () =>
-      save({
+    mutationFn: async () => {
+      await save({
         data: {
           id: implementation.id,
           name: draft.name.trim(),
-          ownerId: nullable(draft.ownerId),
           salesOwner: nullable(draft.salesOwner),
           tier: nullable(draft.tier),
           status: draft.status as "on_track" | "at_risk" | "blocked" | "idle",
@@ -790,7 +799,19 @@ export function EditImplementation({
           actualLaunchDate: nullable(draft.actualLaunchDate),
           customerGoals: nullable(draft.customerGoals),
         },
-      }),
+      });
+      const nextOwner = nullable(draft.ownerId);
+      if (mayAssignOwner && nextOwner !== (implementation.owner_id ?? null)) {
+        await setOwner({
+          data: {
+            implementationId: implementation.id,
+            ownerId: nextOwner,
+            expectedOwnerId: implementation.owner_id ?? null,
+            reason: "Changed in the implementation form",
+          },
+        });
+      }
+    },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["customer360", customerId] });
       setOpen(false);
@@ -832,7 +853,7 @@ export function EditImplementation({
           team={team}
           group={draft.ownerGroup}
           ownerId={draft.ownerId}
-          disabled={disabled}
+          disabled={disabled || !mayAssignOwner}
           personLabel="Who owns this"
           onChange={(next) => set({ ownerGroup: next.group, ownerId: next.ownerId })}
         />

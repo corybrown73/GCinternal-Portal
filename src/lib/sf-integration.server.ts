@@ -1064,6 +1064,7 @@ export async function runSalesforcePull(
           implementationId,
           ...(member ? { teamMemberId: member.id } : {}),
           actorProfileId: null,
+          actorKind: "integration",
           note: owner && !member ? `Salesforce named "${owner}", who is not on the team` : null,
         });
       },

@@ -51,7 +51,7 @@ import {
   queueTranscriptReading,
   transcriptReadable,
 } from "../transcript-analysis.server";
-import { attachmentReferenceFor } from "../transcript-analysis";
+import { attachmentReferenceFor, buildTranscriptContextText } from "../transcript-analysis";
 
 const IMPL = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const CUSTOMER = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
@@ -478,5 +478,69 @@ describe("queueTranscriptReading", () => {
     expect(transcriptReadable("application/octet-stream", "call.srt")).toBe(true);
     expect(transcriptReadable("application/octet-stream", "deck.pptx")).toBe(false);
     expect(transcriptReadable(null, null)).toBe(false);
+  });
+});
+
+/**
+ * A partner implementation's reading keeps every proposal the journey can take
+ * and never a standard plan-date change, so a reviewer is not offered one.
+ */
+describe("partner implementations: a reading keeps no standard plan date", () => {
+  const asPartner = () => {
+    fake.store["implementations"]![0]!.journey_type = "partner_implementation";
+  };
+
+  it("names the partner journey to the model, and says nothing of it for a standard one", async () => {
+    asPartner();
+    const partner = await loadTranscriptContext(IMPL, { title: null, created_at: null });
+    expect(partner.partner).toBe(true);
+    expect(buildTranscriptContextText(partner)).toContain("Partner implementation: yes");
+    fake.store["implementations"]![0]!.journey_type = null;
+    const standard = await loadTranscriptContext(IMPL, { title: null, created_at: null });
+    expect(standard.partner).toBe(false);
+    expect(buildTranscriptContextText(standard)).not.toContain("Partner implementation");
+  });
+
+  it("keeps the risk and the handoff answer, and drops the plan date before anything is stored", async () => {
+    asPartner();
+    h.ai.runStructured.mockResolvedValueOnce(
+      reply([
+        {
+          type: "risk",
+          title: "Tablets late",
+          text: "No tablets for the crew yet.",
+          quote: "we still have no tablets",
+          confidence: "stated",
+          severity: "high",
+          likelihood: "medium",
+          owner_team_member_id: null,
+          duplicate_of: null,
+        },
+        {
+          type: "target_date",
+          title: "Go-live in two weeks",
+          text: "2026-10-20",
+          quote: "two weeks from today",
+          confidence: "implied",
+          proposed_date: "2026-10-20",
+        },
+        {
+          type: "intake_suggestion",
+          title: "Field users",
+          text: "About 40",
+          quote: "forty guys in the field",
+          confidence: "stated",
+          intake_key: "field_users",
+        },
+      ]),
+    );
+    const r = await analyzeTranscript(IMPL, FILE, {
+      actor: { type: "user", profileId: "u-1" },
+      jobId: "job-9",
+    });
+    expect(r.proposalIds).toHaveLength(2);
+    const kept = fake.store["evidence_proposals"]!;
+    expect(kept.map((k) => k.type)).toEqual(["risk", "intake_suggestion"]);
+    expect(kept.some((k) => k.type === "target_date")).toBe(false);
   });
 });

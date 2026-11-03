@@ -101,6 +101,7 @@ export const Route = createFileRoute("/api/v1/closed-won")({
                 implementationId,
                 ...(member ? { teamMemberId: member.id } : {}),
                 actorProfileId: null,
+                actorKind: "integration",
                 note: owner && !member ? `Row named "${owner}", who is not on the team` : null,
               });
             },

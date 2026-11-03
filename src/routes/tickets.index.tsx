@@ -22,6 +22,7 @@ import {
   primaryButtonClass,
   selectClass,
 } from "@/components/tickets/ticket-ui";
+import { LoadFailed } from "@/components/load-failed";
 import { When } from "@/components/when";
 
 type QueueSearch = {
@@ -130,9 +131,7 @@ function TicketQueuePage() {
           Loading tickets…
         </p>
       ) : query.isError ? (
-        <p role="alert" className="text-[13px] text-destructive">
-          Could not load tickets: {(query.error as Error).message}
-        </p>
+        <LoadFailed error={query.error} onRetry={() => void query.refetch()} className="py-1" />
       ) : (
         <div className="space-y-4">
           <QueueSection
