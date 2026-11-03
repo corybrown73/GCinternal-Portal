@@ -11,10 +11,10 @@ import {
 
 describe("migration versions", () => {
   it("reads the number from a well-formed name only", () => {
-    expect(versionOf("0090_customer_contacts_internal_only.sql")).toBe(90);
+    expect(versionOf("0087_customer_contacts_internal_only.sql")).toBe(87);
     expect(versionOf("0084_claim_concurrency.sh")).toBeNull();
     expect(versionOf("90_short.sql")).toBeNull();
-    expect(versionOf("0090-Dashes.sql")).toBeNull();
+    expect(versionOf("0087-Dashes.sql")).toBeNull();
   });
 });
 
@@ -83,7 +83,7 @@ describe("checkMigrations", () => {
 });
 
 describe("verify files", () => {
-  const select = "select '0090' as migration, 'x' as requirement, true as ok";
+  const select = "select '0087' as migration, 'x' as requirement, true as ok";
 
   it("accepts one read-only SELECT, ignoring comments and a trailing semicolon", () => {
     expect(verifyStatement("v.sql", `-- note\n${select};\n`)).toBe(select);

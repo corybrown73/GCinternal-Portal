@@ -1,4 +1,4 @@
--- 0090: customer logins can no longer read customer_contacts directly.
+-- 0087: customer logins can no longer read customer_contacts directly.
 --
 -- THE EXPOSURE. 0005 (re-stated in 0019) gave a signed-in customer a SELECT
 -- policy on customer_contacts for their own customer. The table also holds
@@ -24,11 +24,11 @@
 -- ever needs them directly, add a view of customer-safe columns, not this
 -- policy back.
 --
--- Version note: 0087-0089 are held by branches that are not merged yet, so
--- this takes the next number nobody has claimed.
+-- Version note: main's newest migration is 0086, so this takes 0087. PR #95 also
+-- claims 0087 and renumbers past this one when it is rebased.
 --
 -- DEPLOY ORDER. Apply to production first and verify with
--- supabase/verify/0090_verify.sql; no application code depends on it, so the
+-- supabase/verify/0087_verify.sql; no application code depends on it, so the
 -- order only matters for being sure the exposure is closed. See
 -- docs/MIGRATIONS.md.
 drop policy if exists "customer_contacts customer select" on public.customer_contacts;

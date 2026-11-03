@@ -81,10 +81,13 @@ versions as a second signal. Do not rely on it alone.
 * Another open PR claiming the same number is a **warning** on both PRs (each
   would otherwise block the other). Whichever merges second renumbers its
   migration, down script and verify file.
-* Numbers claimed by unmerged work as of this writing: 0087 (ownership claim
-  rules), 0088 (implementation closure; presenter notes), 0089 (Kickoff-held
-  correction). `0090` is taken by `0090_customer_contacts_internal_only.sql`.
-  When those merge they renumber past `main`'s newest.
+* Numbers claimed by unmerged work as of this writing: `0087` by
+  `0087_customer_contacts_internal_only.sql` (PR #100, the customer contact
+  exposure) and by PR #95's ownership claim rules, which renumber past the
+  newest migration on `main` when they are rebased. `0088` and `0089` are
+  claimed only by closed branches (the rolled-back implementation closure and
+  the Kickoff-held correction, neither merged). If either is ever revived it
+  takes the next free number at that time.
 
 Run locally: `node scripts/check-migrations.mjs --base origin/main`.
 

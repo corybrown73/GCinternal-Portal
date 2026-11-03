@@ -15,7 +15,7 @@ export const VERIFY_REQUIRED_FROM = 87;
 
 const MIGRATION_NAME = /^(\d{4})_[a-z0-9_]+\.sql$/;
 
-/** The numeric version of `0090_x.sql`, or null for any other name. */
+/** The numeric version of `0087_x.sql`, or null for any other name. */
 export function versionOf(file) {
   const m = MIGRATION_NAME.exec(file);
   return m ? Number(m[1]) : null;

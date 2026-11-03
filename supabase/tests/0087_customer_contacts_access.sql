@@ -1,4 +1,4 @@
--- Invariant probes for 0090: a customer login cannot read customer_contacts.
+-- Invariant probes for 0087: a customer login cannot read customer_contacts.
 --
 -- customer_contacts holds internal assessments of people (`notes`,
 -- `is_skeptic`, `comms_preference`). A customer holds a real Supabase session,
