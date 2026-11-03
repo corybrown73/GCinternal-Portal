@@ -14,8 +14,8 @@ import { createFakeSupabase, type Rows } from "./fake-supabase";
  *
  * DATABASE-VERIFIED, not here: the rules (claim mode, eligibility, already owned,
  * the newest record before a project exists), the locks, and that two claims
- * cannot both succeed. Those live in supabase/tests/0087_claim_deal.sql (single
- * session) and supabase/tests/0087_claim_deal_concurrency.sh (overlapping sessions
+ * cannot both succeed. Those live in supabase/tests/0088_claim_deal.sql (single
+ * session) and supabase/tests/0088_claim_deal_concurrency.sh (overlapping sessions
  * against a real Postgres).
  */
 
@@ -401,7 +401,7 @@ describe("a person who is not eligible is refused before the database is asked",
 
 describe("two claims at once: the database lets one through, and the app reports the other", () => {
   // Simulated. The database serializes the two claims; the real behaviour under
-  // overlapping sessions is verified by supabase/tests/0087_claim_deal_concurrency.sh.
+  // overlapping sessions is verified by supabase/tests/0088_claim_deal_concurrency.sh.
   it("announces one claim and refuses the other with the owner's name", async () => {
     let owner: string | null = null;
     fake.handlers["portal_claim_deal"] = (args) => {

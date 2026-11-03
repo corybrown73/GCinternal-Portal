@@ -1,6 +1,6 @@
--- Invariant probes for the transactional claiming functions (0087).
+-- Invariant probes for the transactional claiming functions (0088).
 -- Single-session: each outcome is checked against the rows it should leave. The
--- overlapping sessions are proven separately, in 0087_claim_deal_concurrency.sh.
+-- overlapping sessions are proven separately, in 0088_claim_deal_concurrency.sh.
 begin;
 
 create function pg_temp.assert_eq(p_got anyelement, p_want anyelement, p_what text)

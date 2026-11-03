@@ -37,7 +37,7 @@ vi.mock("../journey-sync.server", () => h.journey);
 
 import { addAccountUpload, removeAccountFile } from "../attachments.server";
 import { saveDealIntake, uploadDealSow } from "../presale.server";
-import { adoptUploadedSow, fileEarlierSows } from "../server/deal-sow";
+import { adoptUploadedSow, fileEarlierSows, sowObjectReferenced } from "../server/deal-sow";
 import { setSowDocument, storagePathFor } from "../sow-analysis.server";
 import { paperworkOnFile } from "../won-gate";
 
@@ -196,6 +196,83 @@ describe("a SOW filed under Files & links (kind SOW)", () => {
       actor: { id: USER, role: "am" },
     });
     expect(removed).toContain(fake.uploads[1]!.path);
+  });
+
+  it("removing its Files & links row keeps a SOW the deal parked before it had a project", async () => {
+    const out = await addAccountUpload({
+      implementationId: LONE_IMPL,
+      title: "Old SOW",
+      kind: "deck",
+      fileName: "old-sow.pdf",
+      contentType: "application/pdf",
+      dataBase64: b64(PDF),
+      actorProfileId: USER,
+    });
+    const path = fake.uploads[0]!.path;
+    deal().intake = {
+      has_sow: true,
+      earlier_sows: [{ path, name: "old-sow.pdf", replaced_at: "2026-10-01T00:00:00Z" }],
+    };
+    await removeAccountFile({
+      id: out.id,
+      implementationId: LONE_IMPL,
+      actor: { id: USER, role: "am" },
+    });
+    expect(removed).not.toContain(path);
+  });
+});
+
+describe("what still points at a stored file", () => {
+  /** The parked-SOW read (the only `.contains` query) errors; every other read works. */
+  const failParkedRead = () => {
+    const real = fake.client.from.bind(fake.client);
+    fake.client.from = (name: string) => {
+      const b = real(name);
+      const timedOut: any = {
+        limit: () => timedOut,
+        then: (ok: (v: unknown) => unknown) =>
+          Promise.resolve({ data: null, error: { message: "timeout" } }).then(ok),
+      };
+      b.contains = () => timedOut;
+      return b;
+    };
+  };
+
+  it("says referenced when a read fails, so a file is never deleted on a database error", async () => {
+    failParkedRead();
+    expect(await sowObjectReferenced("sow/nobody.pdf")).toBe(true);
+  });
+
+  it("says referenced when the check throws", async () => {
+    fake.client.from = () => {
+      throw new Error("connection reset");
+    };
+    expect(await sowObjectReferenced("sow/nobody.pdf")).toBe(true);
+  });
+
+  it("says not referenced only when every read answered and none points at it", async () => {
+    expect(await sowObjectReferenced("sow/nobody.pdf")).toBe(false);
+  });
+
+  it("counts a SOW parked on the deal before it had a project", async () => {
+    deal().intake = {
+      earlier_sows: [{ path: "sow/parked.pdf", name: "parked.pdf", replaced_at: "x" }],
+    };
+    expect(await sowObjectReferenced("sow/parked.pdf")).toBe(true);
+  });
+
+  it("still files a replaced SOW when the check cannot read", async () => {
+    deal().sow_document_path = OLD_SOW;
+    deal().sow_document_name = "old-sow.pdf";
+    failParkedRead();
+    await uploadDealSow(USER, {
+      dealId: DEAL,
+      fileName: "new-sow.pdf",
+      contentType: "application/pdf",
+      dataBase64: b64(PDF),
+    });
+    expect(removed).not.toContain(OLD_SOW);
+    expect(fake.store["account_files"]!.some((f) => f.storage_path === OLD_SOW)).toBe(true);
   });
 
   it("leaves the deal alone for another kind, or for a file that is not a PDF or Word document", async () => {

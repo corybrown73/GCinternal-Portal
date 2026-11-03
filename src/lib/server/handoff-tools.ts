@@ -5,6 +5,7 @@ import { functionalByDate } from "@/lib/date-labels";
 import { TEMPLATE_FIELDS } from "@/lib/kickoff-fields";
 import { customerFacingName } from "@/lib/names";
 
+import { rowsOrThrow } from "./db-read";
 import { startOnboardingAtClose } from "./start-at-close";
 
 const db = () => supabaseAdmin as any;
@@ -19,14 +20,17 @@ const db = () => supabaseAdmin as any;
  */
 
 export async function findDeals(query: string) {
-  const { data } = await db()
-    .from("portal_accounts")
-    .select("id,name,stage,domain,arr,customer_id,created_at")
-    .ilike("name", `%${query}%`)
-    .order("created_at", { ascending: false })
-    .limit(10);
-
-  const rows = (data ?? []) as Array<Record<string, any>>;
+  // A failed search is an error the model sees, never "No deal matches" —
+  // which would send it off to create a duplicate.
+  const rows = rowsOrThrow<Record<string, any>>(
+    await db()
+      .from("portal_accounts")
+      .select("id,name,stage,domain,arr,customer_id,created_at")
+      .ilike("name", `%${query}%`)
+      .order("created_at", { ascending: false })
+      .limit(10),
+    "deals",
+  );
   if (rows.length === 0) {
     return {
       matches: [],

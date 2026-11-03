@@ -494,9 +494,9 @@ describe("the one-off owner repair (QA 8.1)", () => {
       fake.store["implementations"]!.find((i) => i.id === id)!.owner_id as string | null;
     expect(owner("i-copyfail")).toBeNull();
 
-    // Scripted to the function's contract (0087): sets the owner from the deal's
+    // Scripted to the function's contract (0088): sets the owner from the deal's
     // newest record when the project has none. Its locking is verified in
-    // supabase/tests/0087_claim_deal.sql, not here.
+    // supabase/tests/0088_claim_deal.sql, not here.
     fake.handlers["portal_inherit_pre_project_owner"] = ({ p_implementation }) => {
       const impl = fake.store["implementations"]!.find((i) => i.id === p_implementation)!;
       const latest = [...(fake.store["portal_assignments"] ?? [])]
@@ -518,7 +518,7 @@ describe("the one-off owner repair (QA 8.1)", () => {
 
 describe("removing a team member (owner guard)", () => {
   // Simulated: the database counts what a person owns and refuses (portal_deactivate_team_member,
-  // 0087_ownership.sql section 9 checks the count itself, including a claim with no project).
+  // 0088_ownership.sql section 9 checks the count itself, including a claim with no project).
   it("passes the refusal from the database through, and leaves the person active", async () => {
     fake.handlers["portal_deactivate_team_member"] = () => ({
       data: null,

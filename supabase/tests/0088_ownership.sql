@@ -1,6 +1,6 @@
--- Invariant probes for the approved ownership rules (0087), in one transaction.
+-- Invariant probes for the approved ownership rules (0088), in one transaction.
 -- Each outcome is checked against the rows it should leave, including the history.
--- Overlapping sessions are proven in 0087_ownership_concurrency.sh.
+-- Overlapping sessions are proven in 0088_ownership_concurrency.sh.
 begin;
 
 create function pg_temp.assert_eq(p_got anyelement, p_want anyelement, p_what text)

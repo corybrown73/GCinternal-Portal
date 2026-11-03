@@ -25,7 +25,7 @@ export const WON_GATE_LABEL: Record<WonGateMissing, string> = {
   notes: "Gong brief or call note",
   // Only the SOW (its document or its reference) clears the gate today: the
   // database gate (0070) refuses a contract-only deal, so the words say SOW.
-  // TODO(0087): once migration 0087 (the paperwork gate) is applied, say
+  // TODO(paperwork gate): once the paperwork-gate migration is applied, say
   // "signed SOW or contract" again and let missingForClosedWon read paperworkOnFile.
   sow: "signed SOW",
   checklist: "every checklist step done",
@@ -111,7 +111,7 @@ export function hasSowOnFile(row: PaperworkFacts): boolean {
  * Deliberately narrower than paperworkOnFile: the database gate (0070) still
  * accepts only the SOW's document path or a trimmed reference, so the app
  * asks for exactly that and a move it lets through is never refused below.
- * TODO(0087): when migration 0087 (the paperwork gate: SOW link, contract or
+ * TODO(paperwork gate): when the paperwork-gate migration (SOW link, contract or
  * a stated no-SOW reason) is applied in production, read paperworkOnFile here.
  */
 export function missingForClosedWon(facts: {

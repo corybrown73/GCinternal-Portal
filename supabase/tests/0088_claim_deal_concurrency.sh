@@ -1,5 +1,5 @@
 #!/bin/bash
-# Overlapping-session proof for the transactional claiming functions (0087).
+# Overlapping-session proof for the transactional claiming functions (0088).
 # Each actor is its own psql process, so the operations really overlap in the
 # database. A holder keeps its transaction open with pg_sleep after its call, so
 # the row locks it took are still held when the other actor arrives. Fixtures are

@@ -1,4 +1,4 @@
--- 0087: who owns an account is changed in one place, under one lock order, and every
+-- 0088: who owns an account is changed in one place, under one lock order, and every
 -- change is recorded in the same transaction.
 --
 -- THE PROBLEM. An owner was written by many paths, most of them outside any lock:

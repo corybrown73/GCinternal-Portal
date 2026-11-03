@@ -11,6 +11,7 @@ import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { isFlagOn } from "./app-config.server";
 import { waitingOn, type WaitingOn } from "./customer360-derive";
 import { normalizeStage } from "./hub-format";
+import { rowsOrLog, rowsOrThrow } from "./server/db-read";
 import { dealStagesFor } from "./server/deal-stage";
 import type { LifecycleStageId } from "./lifecycle";
 import {
@@ -65,10 +66,12 @@ export const ENGAGEMENT_WINDOW_DAYS = 90;
  */
 export async function loadStageTargets(): Promise<ImplementationTargets> {
   const out = new Map<string, Map<LifecycleStageId, number>>();
-  const { data, error } = await db()
-    .from("stage_instances")
-    .select("implementation_id, stage_key, target_duration_days");
-  if (error || !data) return out;
+  // A failed read is not "no targets": every stage would read as having no
+  // target, and the on-time and at-risk rules would run on nothing.
+  const data = rowsOrThrow<any>(
+    await db().from("stage_instances").select("implementation_id, stage_key, target_duration_days"),
+    "stage targets",
+  );
   for (const row of data) {
     if (row.target_duration_days == null) continue;
     const stage = normalizeStage(row.stage_key);
@@ -230,18 +233,18 @@ type ImplRow = {
 
 async function loadInputs() {
   const [
-    { data: impls },
-    { data: customers },
-    { data: team },
-    { data: history },
-    { data: approvals },
-    { data: commitments },
-    { data: escalations },
-    { data: risks },
-    { data: issues },
-    { data: decisions },
-    { data: solutions },
-    { data: mappings },
+    implsRes,
+    customersRes,
+    teamRes,
+    historyRes,
+    approvalsRes,
+    commitmentsRes,
+    escalationsRes,
+    risksRes,
+    issuesRes,
+    decisionsRes,
+    solutionsRes,
+    mappingsRes,
   ] = await Promise.all([
     db()
       .from("implementations")
@@ -269,6 +272,24 @@ async function loadInputs() {
     db().from("technical_solutions").select("id, implementation_id, title, status, updated_at"),
     db().from("field_mappings").select("id, technical_solution_id, required, status"),
   ]);
+
+  // These feed the rules that decide who is waiting on whom and which launch
+  // dates are at risk, and the sweep that raises alerts from them. A failed
+  // read is not "no approvals, no risks, nobody waiting": the page would say
+  // all is well and the sweep would raise (or withhold) alerts on nothing.
+  // Only the two name lookups merely decorate, so they are logged instead.
+  const impls = rowsOrThrow<any>(implsRes, "implementations");
+  const history = rowsOrThrow<any>(historyRes, "stage history");
+  const approvals = rowsOrThrow<any>(approvalsRes, "approvals");
+  const commitments = rowsOrThrow<any>(commitmentsRes, "commitments");
+  const escalations = rowsOrThrow<any>(escalationsRes, "escalations");
+  const risks = rowsOrThrow<any>(risksRes, "risks");
+  const issues = rowsOrThrow<any>(issuesRes, "issues");
+  const decisions = rowsOrThrow<any>(decisionsRes, "decisions");
+  const solutions = rowsOrThrow<any>(solutionsRes, "technical solutions");
+  const mappings = rowsOrThrow<any>(mappingsRes, "field mappings");
+  const customers = rowsOrLog<any>(customersRes, "customer names");
+  const team = rowsOrLog<any>(teamRes, "owner names");
 
   // Rows come back untyped from the service-role client (repo convention), so
   // the grouping helper stays loose and the pure modules do the narrowing.

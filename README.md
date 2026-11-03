@@ -127,7 +127,7 @@ Do not push straight to `main`, and do not expect a preview URL to be the live s
 - **Dependency:** which migration (`supabase/migrations/NNNN_…sql`) and which code needs it.
 - **Deployment order:** 1. apply the migration to production; 2. verify it in production (the probe file, or the check the PR names); 3. merge the code.
 
-Keep the migration's `down` and probe files beside it (see `supabase/`).
+Keep the migration's `down`, `verify` and probe files beside it (see `supabase/`). **A green CI run is not confirmation that production has the migration**: CI replays migrations on a scratch database. The `Production migration gate` check (every branch, `claude/*` included) fails until a person has applied and verified the migration in production and added the `production-migration-verified` label. The full procedure, and how to check what production has, is in [`docs/MIGRATIONS.md`](docs/MIGRATIONS.md).
 
 ### The pull request opens itself
 
@@ -136,6 +136,6 @@ Steps 3 and the merge are automated for every branch except `main` and `claude/*
 - a pull request into `main` is opened if there is not one already;
 - if CI is green and the change touches nothing guarded, it is squash-merged and the branch deleted — that is the deploy;
 - if CI is red, the PR gets a `ci-failed` label and a comment with the run; push a fix and it re-evaluates;
-- if the change touches a **guarded** path, the PR gets `needs-review` and waits for a person: `supabase/` (a migration is applied and verified in production by someone with production access before the merge), `package.json` / `package-lock.json`, `.github/`, and the stage model and gates (`src/lib/presale-stages.ts`, `stage-flow.ts`, `pipeline-stages.ts`, `won-gate.ts`, `sales-handoff.ts`, `src/lib/server/`).
+- if the change touches a **guarded** path, the PR gets `needs-review` and waits for a person: `supabase/` (a migration is applied and verified in production by someone with production access before the merge), `package.json` / `package-lock.json`, `.github/`, `scripts/`, and the stage model and gates (`src/lib/presale-stages.ts`, `stage-flow.ts`, `pipeline-stages.ts`, `won-gate.ts`, `sales-handoff.ts`, `src/lib/server/`).
 
 So for most changes the whole flow is: work, push, done.

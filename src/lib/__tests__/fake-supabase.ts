@@ -29,6 +29,13 @@ function field(row: any, col: string): unknown {
 }
 
 /**
+ * Tables whose every query fails, with the error PostgREST would return —
+ * e.g. `{ implementations: { code: "42703", message: "column ... does not
+ * exist" } }`, the shape of a read against a column production lacks.
+ */
+export type TableFailures = Record<string, { message: string; code?: string }>;
+
+/**
  * Unique indexes to enforce on insert, per table: the columns (or JSON keys,
  * `payload->>claim`) and the partial index's WHERE as a predicate.
  */
@@ -54,9 +61,13 @@ class Builder implements PromiseLike<{ data: any; error: any }> {
   constructor(
     private readonly table: string,
     private readonly store: Rows,
-    private readonly log: { inserts: Array<{ table: string; row: any }> },
+    private readonly log: {
+      inserts: Array<{ table: string; row: any }>;
+      updates: Array<{ table: string; patch: Record<string, any> }>;
+    },
     private readonly unique: UniqueIndexes = {},
     private readonly maxRows: number | null = null,
+    private readonly fail: TableFailures = {},
   ) {}
 
   /** The first insert that a unique index refuses (nulls never collide, as in Postgres). */
@@ -122,6 +133,24 @@ class Builder implements PromiseLike<{ data: any; error: any }> {
 
   lte(col: string, value: string): this {
     this.filters.push((r) => String(r[col] ?? "") <= value);
+    return this;
+  }
+
+  /** jsonb `@>`: objects match on a subset of keys; arrays when each wanted element is in one. */
+  contains(col: string, value: unknown): this {
+    const within = (have: unknown, want: unknown): boolean => {
+      if (Array.isArray(want)) {
+        return Array.isArray(have) && want.every((w) => have.some((h) => within(h, w)));
+      }
+      if (want !== null && typeof want === "object") {
+        if (have === null || typeof have !== "object" || Array.isArray(have)) return false;
+        return Object.entries(want as Record<string, unknown>).every(([k, w]) =>
+          within((have as Record<string, unknown>)[k], w),
+        );
+      }
+      return have === want;
+    };
+    this.filters.push((r) => within(r[col], value));
     return this;
   }
 
@@ -209,6 +238,8 @@ class Builder implements PromiseLike<{ data: any; error: any }> {
   }
 
   private run(): { data: any; error: any } {
+    const failure = this.fail[this.table];
+    if (failure) return { data: null, error: { code: null, ...failure } };
     if (this.op.kind === "insert") {
       if (this.violates(this.op.values)) {
         return {
@@ -248,6 +279,7 @@ class Builder implements PromiseLike<{ data: any; error: any }> {
     }
     if (this.op.kind === "update") {
       const hit = this.matching();
+      this.log.updates.push({ table: this.table, patch: this.op.patch });
       for (const row of hit) Object.assign(row, this.op.patch);
       return { data: hit, error: null };
     }
@@ -261,11 +293,12 @@ class Builder implements PromiseLike<{ data: any; error: any }> {
 
   async maybeSingle(): Promise<{ data: any; error: any }> {
     const { data, error } = this.run();
-    return { data: (data as any[])[0] ?? null, error };
+    return { data: ((data ?? []) as any[])[0] ?? null, error };
   }
 
   async single(): Promise<{ data: any; error: any }> {
     const { data, error } = this.run();
+    if (error) return { data: null, error };
     const row = (data as any[])[0] ?? null;
     return row ? { data: row, error } : { data: null, error: { message: "no rows" } };
   }
@@ -285,6 +318,8 @@ export type FakeSupabase = {
   client: any;
   store: Rows;
   inserts: Array<{ table: string; row: any }>;
+  /** Every `update` call, in order: the table and the patch written. */
+  updates: Array<{ table: string; patch: Record<string, any> }>;
   uploads: Array<{ bucket: string; path: string; bytes: number; contentType: string }>;
   /** Object bytes by "bucket/path", for `download`; seed it for a stored SOW. */
   objects: Map<string, Uint8Array>;
@@ -305,10 +340,15 @@ export function createFakeSupabase(
     unique?: UniqueIndexes;
     /** Cap every select at this many rows, as PostgREST's db-max-rows does. */
     maxRows?: number;
+    /** Make every query on these tables return this error (see TableFailures). */
+    fail?: TableFailures;
   } = {},
 ): FakeSupabase {
   const store: Rows = JSON.parse(JSON.stringify(initial));
-  const log = { inserts: [] as Array<{ table: string; row: any }> };
+  const log = {
+    inserts: [] as Array<{ table: string; row: any }>,
+    updates: [] as Array<{ table: string; patch: Record<string, any> }>,
+  };
   const uploads: FakeSupabase["uploads"] = [];
   const objects = new Map<string, Uint8Array>(Object.entries(options.objects ?? {}));
   const rpcs: FakeSupabase["rpcs"] = [];
@@ -316,7 +356,7 @@ export function createFakeSupabase(
 
   const client = {
     from: (table: string) =>
-      new Builder(table, store, log, options.unique, options.maxRows ?? null),
+      new Builder(table, store, log, options.unique, options.maxRows ?? null, options.fail),
     storage: {
       from: (bucket: string) => ({
         upload: async (path: string, bytes: Uint8Array, opts?: { contentType?: string }) => {
@@ -359,5 +399,14 @@ export function createFakeSupabase(
     },
   };
 
-  return { client, store, inserts: log.inserts, uploads, objects, rpcs, handlers };
+  return {
+    client,
+    store,
+    inserts: log.inserts,
+    updates: log.updates,
+    uploads,
+    objects,
+    rpcs,
+    handlers,
+  };
 }

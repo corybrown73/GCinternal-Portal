@@ -1,0 +1,8 @@
+# Schema, workflow and release-control changes need a person to read them.
+# With "Require review from Code Owners" on in branch protection, these paths
+# cannot merge without that review (docs/MIGRATIONS.md, "Branch protection").
+# Confirm the owner below is who should approve production-facing changes.
+/supabase/                  @corybrown73
+/.github/                   @corybrown73
+/scripts/                   @corybrown73
+/docs/MIGRATIONS.md         @corybrown73

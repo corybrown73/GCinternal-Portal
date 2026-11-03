@@ -55,6 +55,8 @@ describe("open-item status vocabularies", () => {
       met: "completed",
       missed: "outstanding",
       renegotiated: "outstanding",
+      fulfilled: "completed",
+      cancelled: "withdrawn",
     });
   });
 

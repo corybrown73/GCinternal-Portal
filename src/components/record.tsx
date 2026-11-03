@@ -36,6 +36,8 @@ const STATUS_CLASS: Record<string, string> = {
   mitigated: "bg-status-ontrack text-status-ontrack-foreground",
   resolved: "bg-status-ontrack text-status-ontrack-foreground",
   met: "bg-status-ontrack text-status-ontrack-foreground",
+  fulfilled: "bg-status-ontrack text-status-ontrack-foreground",
+  cancelled: "bg-status-idle text-status-idle-foreground",
   accepted: "bg-status-idle text-status-idle-foreground",
   closed: "bg-status-idle text-status-idle-foreground",
 };

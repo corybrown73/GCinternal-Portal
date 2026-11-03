@@ -12,6 +12,7 @@ import { dealQuery } from "@/lib/deal-query";
 import { useQuery } from "@tanstack/react-query";
 import { CurrentImplementationTab } from "@/components/stage-flow";
 import { CustomerHeader } from "@/components/customer-header";
+import { CustomerEmailComposer } from "@/components/customer-email-composer";
 import { CARD, TONE } from "@/components/current-implementation-context";
 import { showKickoffDeckLink } from "@/lib/customer-header";
 import { CustomerOverview } from "@/components/customer-overview";
@@ -92,6 +93,7 @@ import {
 } from "@/components/record";
 
 import { getCustomer360 } from "@/lib/hub.functions";
+import { isOutstandingCommitment } from "@/lib/commitment-status";
 import { triageRowForCustomer360 } from "@/lib/home-triage";
 import type { Customer360, TraceStep } from "@/lib/hub-types";
 import { dealStageLabel, dealStageProgress } from "@/lib/deal-stage";
@@ -337,6 +339,14 @@ function Customer360Page() {
         tabs={TABS.map((t) => ({ id: t, label: TAB_LABEL[t] }))}
         selectedImplId={selectedImplId}
       />
+
+      <div className="flex justify-end px-6 pt-3">
+        <CustomerEmailComposer
+          customerId={customerId}
+          implementationId={impl.id}
+          implementationName={impl.name}
+        />
+      </div>
 
       {tab === "implementation" ? (
         <div className="px-6 py-4">
@@ -2153,7 +2163,7 @@ function JourneyTab({
                       <span className="rounded-sm border border-border px-1.5 py-0.5 text-[10px] uppercase tracking-[0.08em] text-muted-foreground">
                         {humanize(c.committed_to ?? "customer")}
                       </span>
-                      {c.status === "open" && isOverdue(c.due_date) ? (
+                      {isOutstandingCommitment(c.status) && isOverdue(c.due_date) ? (
                         <span className="text-[11px] text-destructive">Overdue</span>
                       ) : null}
                       <span className="ml-auto">

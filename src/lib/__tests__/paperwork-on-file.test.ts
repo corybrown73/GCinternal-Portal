@@ -106,7 +106,7 @@ describe("paperworkOnFile — every combination", () => {
   });
 });
 
-describe("the Closed Won gate is unchanged until 0087", () => {
+describe("the Closed Won gate is unchanged until the paperwork-gate migration", () => {
   it("still asks for the SOW's document or reference: a contract does not clear it yet", () => {
     // The database gate (0070) refuses a contract-only deal; the app must
     // not let one through only to be refused below.

@@ -16,6 +16,7 @@ import {
 import { isKickoffBooked, nextChecklistTask, stageFlow } from "../stage-flow";
 import { watchOutsFor } from "../watch-outs";
 import { paperworkOnFile } from "../won-gate";
+import { rowsOrLog, rowsOrThrow } from "./db-read";
 
 const db = () => supabaseAdmin as any;
 
@@ -53,14 +54,7 @@ export async function dealFactsFor(
   const ids = Array.from(new Set(dealIds.filter(Boolean)));
   if (!ids.length) return out;
 
-  const [
-    { data: deals },
-    { data: notes },
-    { data: briefs },
-    { data: impls },
-    { data: history },
-    { data: ledger },
-  ] = await Promise.all([
+  const [dealsRes, notesRes, briefsRes, implsRes, historyRes, ledgerRes] = await Promise.all([
     db()
       .from("portal_accounts")
       .select(
@@ -95,6 +89,15 @@ export async function dealFactsFor(
       .in("deal_id", ids)
       .order("created_at", { ascending: false }),
   ]);
+  // The deals and their projects are what triage is about: a failed read
+  // fails the page. The rest only add a watch-out or an owner's name, so a
+  // failure there is logged and read as none.
+  const deals = rowsOrThrow<any>(dealsRes, "deals");
+  const impls = rowsOrThrow<any>(implsRes, "the deals' implementations");
+  const notes = rowsOrLog<any>(notesRes, "deal facts: call notes");
+  const briefs = rowsOrLog<any>(briefsRes, "deal facts: briefs");
+  const history = rowsOrLog<any>(historyRes, "deal facts: stage history");
+  const ledger = rowsOrLog<any>(ledgerRes, "deal facts: assignments");
 
   const notesByDeal = new Map<string, Array<{ text: string; date: string | null }>>();
   for (const n of (notes ?? []) as Array<{

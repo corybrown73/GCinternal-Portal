@@ -18,7 +18,8 @@ export type AiCallKind =
   | "help_picks"
   | "sow_reading"
   | "brief_core"
-  | "brief_plan";
+  | "brief_plan"
+  | "customer_email";
 
 /**
  * One model call may run this long, headers and streamed body together,

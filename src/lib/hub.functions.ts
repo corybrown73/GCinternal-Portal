@@ -10,6 +10,7 @@ import { advanceStageInput } from "./stage-advance-input";
 import { analyzeSowInput, applySowProposalInput, setSowDocumentInput } from "./sow-analysis";
 import { signedInProfileId, signedInTeamMemberId } from "./session-identity";
 import { analyzeTranscriptInput, proposalDecisionInput } from "./transcript-analysis";
+import { customerEmailInput } from "./customer-email";
 import { SOLUTION_STATUSES } from "./solution-enums";
 import {
   createFieldMappingInput,
@@ -872,6 +873,39 @@ export const analyzeTranscriptDocument = createServerFn({ method: "POST" })
     const { analyzeTranscript } = await import("./transcript-analysis.server");
     return analyzeTranscript(data.implementationId, data.attachmentId, {
       actor: { type: "user", profileId: context.profile.id },
+    });
+  });
+
+/**
+ * Draft (or redraft) the follow-up email for one uploaded transcript. One
+ * model call; it reads the transcript only, and changes no proposal and no
+ * implementation record. The draft is kept on the transcript's finished
+ * reading when there is one.
+ */
+export const draftTranscriptFollowup = createServerFn({ method: "POST" })
+  .middleware([requireInternalAuth])
+  .inputValidator((data: unknown) => analyzeTranscriptInput.parse(data))
+  .handler(async ({ data }) => {
+    const { draftFollowupEmail } = await import("./transcript-followup.server");
+    return draftFollowupEmail(data.implementationId, data.attachmentId, { persist: true });
+  });
+
+/**
+ * Draft one customer email for the Customer 360 composer. Session only: the
+ * draft is returned, never stored. No email is sent.
+ */
+export const draftCustomerEmailFn = createServerFn({ method: "POST" })
+  .middleware([requireInternalAuth])
+  .inputValidator((data: unknown) => customerEmailInput.parse(data))
+  .handler(async ({ data }) => {
+    const { draftCustomerEmail } = await import("./customer-email.server");
+    const { cleanInstructions } = await import("./customer-email");
+    return draftCustomerEmail({
+      customerId: data.customerId,
+      implementationId: data.implementationId,
+      type: data.type,
+      instructions: cleanInstructions(data.instructions),
+      attachmentId: data.attachmentId ?? null,
     });
   });
 

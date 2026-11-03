@@ -4,7 +4,7 @@ import { supabaseAdmin } from "@/integrations/supabase/client.server";
  * The one way the app changes who owns an account, besides a claim (claimDeal) and
  * the rule-based assignments (assignDeal). Every change runs in the database under
  * the ownership locks, and is recorded in the owner history in the same transaction
- * (migration 0087). The database checks the role too; this checks it first so the
+ * (migration 0088). The database checks the role too; this checks it first so the
  * refusal reads well.
  */
 

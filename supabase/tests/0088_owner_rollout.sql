@@ -1,4 +1,4 @@
--- The owner guard's rollout modes (0087). Observe mode lets a direct owner write through
+-- The owner guard's rollout modes (0088). Observe mode lets a direct owner write through
 -- and records it as a legacy write, so an application still on the old code keeps
 -- working while the new one is deployed. Enforce mode refuses it. A missing setting is
 -- enforce. One transaction, rolled back.

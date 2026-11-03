@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { MANAGE_ROLES } from "./roles";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import type { AlertListItem } from "./tickets.server";
 
 /**
  * Server functions for the tickets + alerts system.
@@ -279,55 +280,13 @@ export const setTicketRouting = createServerFn({ method: "POST" })
 
 /* ---------- Alerts ---------- */
 
-export interface AlertListItem {
-  id: string;
-  kind: string;
-  severity: "info" | "warning" | "critical";
-  title: string;
-  detail: string | null;
-  customer_id: string | null;
-  implementation_id: string | null;
-  source: string;
-  acknowledged_at: string | null;
-  acknowledged_by: string | null;
-  notified_at: string | null;
-  created_at: string;
-  customer_name: string | null;
-  /** The deal the alert names, for one with no customer yet (a stuck closed deal). */
-  deal_id: string | null;
-}
-
 export const getAlerts = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }): Promise<AlertListItem[]> => {
     const profile = await callerProfile(context.userId);
     assertInternal(profile);
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const admin = supabaseAdmin as any;
-    const { data: alerts } = await admin
-      .from("alerts")
-      .select(
-        "id, kind, severity, title, detail, customer_id, implementation_id, source, acknowledged_at, acknowledged_by, notified_at, created_at, payload",
-      )
-      .order("created_at", { ascending: false })
-      .limit(200);
-    // Only the deal id leaves the server, not the whole payload.
-    const rows = ((alerts ?? []) as Array<Record<string, any>>).map(({ payload, ...a }) => ({
-      ...(a as Omit<AlertListItem, "customer_name" | "deal_id">),
-      deal_id: typeof payload?.deal_id === "string" ? (payload.deal_id as string) : null,
-    }));
-
-    const customerIds = [...new Set(rows.map((a) => a.customer_id).filter(Boolean))];
-    const { data: customers } = customerIds.length
-      ? await admin.from("customers").select("id, name").in("id", customerIds)
-      : { data: [] };
-    const names = new Map<string, string>(
-      (customers ?? []).map((c: any) => [c.id, c.name as string]),
-    );
-    return rows.map((a) => ({
-      ...a,
-      customer_name: a.customer_id ? (names.get(a.customer_id) ?? null) : null,
-    }));
+    const { loadAlertList } = await import("./tickets.server");
+    return loadAlertList();
   });
 
 export const ackAlert = createServerFn({ method: "POST" })

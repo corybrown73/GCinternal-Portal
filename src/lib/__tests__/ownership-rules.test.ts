@@ -9,8 +9,8 @@ import { createFakeSupabase, type Rows } from "./fake-supabase";
  * check the application's half: who may call what, what is sent, and what is refused
  * before anything is sent. What the database itself does (its role check, its locks,
  * its history rows, the guard on owner changes, the append-only history) is proven
- * against PostgreSQL in supabase/tests/0087_ownership.sql and 0087_claim_deal.sql,
- * and under overlapping sessions in 0087_ownership_concurrency.sh.
+ * against PostgreSQL in supabase/tests/0088_ownership.sql and 0088_claim_deal.sql,
+ * and under overlapping sessions in 0088_ownership_concurrency.sh.
  */
 
 const h = vi.hoisted(() => {
