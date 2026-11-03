@@ -3293,7 +3293,7 @@ export async function loadCustomerOptions(): Promise<{
   deals: Array<{ id: string; name: string; stage: string }>;
 }> {
   const demo = await demoMasker();
-  const [{ data: customers }, { data: deals }] = await Promise.all([
+  const [customersRes, dealsRes] = await Promise.all([
     db().from("customers").select("id,name,industry").order("name"),
     db()
       .from("portal_accounts")
@@ -3301,13 +3301,17 @@ export async function loadCustomerOptions(): Promise<{
       .neq("stage", "onboarding_complete")
       .order("name"),
   ]);
+  // The picker and the "this already exists" hint. A failed read is not "no
+  // existing accounts": the dialog would invite a duplicate customer.
+  const customers = rowsOrThrow<any>(customersRes, "existing accounts");
+  const deals = rowsOrThrow<any>(dealsRes, "existing accounts");
   return {
-    customers: ((customers ?? []) as any[]).map((c) => ({
+    customers: (customers as any[]).map((c) => ({
       id: String(c.id),
       name: demo.org(String(c.name), String(c.id)),
       industry: (c.industry as string | null) ?? null,
     })),
-    deals: ((deals ?? []) as any[]).map((d) => ({
+    deals: (deals as any[]).map((d) => ({
       id: String(d.id),
       name: demo.org(String(d.name), String(d.id)),
       stage: String(d.stage),

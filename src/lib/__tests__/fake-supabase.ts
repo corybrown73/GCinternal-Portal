@@ -61,7 +61,10 @@ class Builder implements PromiseLike<{ data: any; error: any }> {
   constructor(
     private readonly table: string,
     private readonly store: Rows,
-    private readonly log: { inserts: Array<{ table: string; row: any }> },
+    private readonly log: {
+      inserts: Array<{ table: string; row: any }>;
+      updates: Array<{ table: string; patch: Record<string, any> }>;
+    },
     private readonly unique: UniqueIndexes = {},
     private readonly maxRows: number | null = null,
     private readonly fail: TableFailures = {},
@@ -276,6 +279,7 @@ class Builder implements PromiseLike<{ data: any; error: any }> {
     }
     if (this.op.kind === "update") {
       const hit = this.matching();
+      this.log.updates.push({ table: this.table, patch: this.op.patch });
       for (const row of hit) Object.assign(row, this.op.patch);
       return { data: hit, error: null };
     }
@@ -311,6 +315,8 @@ export type FakeSupabase = {
   client: any;
   store: Rows;
   inserts: Array<{ table: string; row: any }>;
+  /** Every `update` call, in order: the table and the patch written. */
+  updates: Array<{ table: string; patch: Record<string, any> }>;
   uploads: Array<{ bucket: string; path: string; bytes: number; contentType: string }>;
   /** Object bytes by "bucket/path", for `download`; seed it for a stored SOW. */
   objects: Map<string, Uint8Array>;
@@ -330,7 +336,10 @@ export function createFakeSupabase(
   } = {},
 ): FakeSupabase {
   const store: Rows = JSON.parse(JSON.stringify(initial));
-  const log = { inserts: [] as Array<{ table: string; row: any }> };
+  const log = {
+    inserts: [] as Array<{ table: string; row: any }>,
+    updates: [] as Array<{ table: string; patch: Record<string, any> }>,
+  };
   const uploads: FakeSupabase["uploads"] = [];
   const objects = new Map<string, Uint8Array>(Object.entries(options.objects ?? {}));
   const rpcs: FakeSupabase["rpcs"] = [];
@@ -378,5 +387,5 @@ export function createFakeSupabase(
     },
   };
 
-  return { client, store, inserts: log.inserts, uploads, objects, rpcs };
+  return { client, store, inserts: log.inserts, updates: log.updates, uploads, objects, rpcs };
 }

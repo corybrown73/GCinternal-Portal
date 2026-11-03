@@ -8,6 +8,7 @@ import {
   type ClaimedOwner,
 } from "./claimed-owner";
 import { dealStageFor } from "./deal-stage";
+import { rowsOrLog, rowsOrThrow } from "./server/db-read";
 import { isTestAccount } from "./test-accounts";
 
 const db = () => supabaseAdmin as any;
@@ -41,18 +42,24 @@ export async function loadClaimedOwners(
     implQuery = implQuery.in("deal_id", ids);
     ledgerQuery = ledgerQuery.in("deal_id", ids);
   }
-  const [{ data: impls }, { data: ledger }] = await Promise.all([
+  const [implsRes, ledgerRes] = await Promise.all([
     implQuery.order("created_at", { ascending: false }),
     ledgerQuery.order("created_at", { ascending: false }),
   ]);
-  const owners = claimedOwnersByDeal(impls ?? [], ledger ?? []);
+  // A failed read is not "nobody owns these deals": every deal would show as
+  // unclaimed, and in claim mode someone would claim one that is taken.
+  const impls = rowsOrThrow<any>(implsRes, "who owns each deal");
+  const ledger = rowsOrThrow<any>(ledgerRes, "who owns each deal");
+  const owners = claimedOwnersByDeal(impls, ledger);
   const memberIds = [...new Set([...owners.values()].map((o) => o.id))];
-  const { data: members } = memberIds.length
-    ? await db().from("team_members").select("id,name").in("id", memberIds)
-    : { data: [] };
-  const nameById = new Map(
-    ((members ?? []) as Array<{ id: string; name: string }>).map((m) => [String(m.id), m.name]),
-  );
+  // Names only decorate the owner: a failure is logged and the owner shows unnamed.
+  const members = memberIds.length
+    ? rowsOrLog<{ id: string; name: string }>(
+        await db().from("team_members").select("id,name").in("id", memberIds),
+        "owner names",
+      )
+    : [];
+  const nameById = new Map(members.map((m) => [String(m.id), m.name]));
   const out = new Map<string, NamedOwner>();
   for (const [dealId, o] of owners) out.set(dealId, { ...o, name: nameById.get(o.id) ?? null });
   return out;
@@ -66,13 +73,18 @@ export async function loadClaimedOwners(
 export async function loadActiveWorkload(): Promise<Map<string, number>> {
   // Every row counted is a project, so its owner_id decides (the ledger only
   // speaks for a deal with no project, which carries no workload).
-  const [{ data: impls }, { data: deals }, { data: customers }] = await Promise.all([
+  const [implsRes, dealsRes, customersRes] = await Promise.all([
     db()
       .from("implementations")
       .select("id,deal_id,customer_id,owner_id,current_stage,superseded_by_implementation_id"),
     db().from("portal_accounts").select("*"),
     db().from("customers").select("*"),
   ]);
+  // A failed read is not "everyone carries nothing". The caller decides whether
+  // a count is worth failing for; this only refuses to invent one.
+  const impls = rowsOrThrow<any>(implsRes, "what each person owns");
+  const deals = rowsOrThrow<any>(dealsRes, "what each person owns");
+  const customers = rowsOrThrow<any>(customersRes, "what each person owns");
   const dealById = new Map(
     ((deals ?? []) as Array<{ id: string; stage: string; is_test?: boolean | null }>).map((d) => [
       String(d.id),

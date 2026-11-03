@@ -39,6 +39,7 @@ import {
   loadTranscriptWork,
   pendingProposalCounts,
 } from "../transcript-proposals.server";
+import { PARTNER_PLAN_DATE_REFUSAL } from "../transcript-analysis";
 
 const IMPL = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const DEAL = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
@@ -447,5 +448,92 @@ describe("dismissProposal", () => {
     row("p-note").decided_at = new Date().toISOString();
     await expect(dismissProposal("p-note", actor)).rejects.toThrow(/Someone else is applying/);
     expect(row("p-note").status).toBe("pending");
+  });
+});
+
+/**
+ * A partner implementation's dates live on its partner journey. A standard
+ * plan-date change from a transcript is refused before anything is claimed or
+ * written, whichever path would have carried it: the plan's live date, the
+ * record's target column, or a row an earlier reading made.
+ */
+describe("partner implementations: no standard plan-date writes from a transcript", () => {
+  const asPartner = (deal: string | null = DEAL) => {
+    const impl = fake.store["implementations"]![0]!;
+    impl.journey_type = "partner_implementation";
+    impl.partner_key = "field_fusion_iq";
+    impl.deal_id = deal;
+  };
+  // Nothing written at all: no claim stamp, no decision, no audit row.
+  const untouched = (id: string) => {
+    expect(row(id)).toMatchObject({ status: "pending", decided_by: null, decided_at: null });
+    expect(fake.updates.filter((u) => u.table === "evidence_proposals")).toEqual([]);
+    expect(fake.inserts).toEqual([]);
+    expect(h.audit.audit).not.toHaveBeenCalled();
+  };
+
+  it("refuses a standard plan date from a deal, with the reason, and writes nothing", async () => {
+    asPartner();
+    await expect(applyProposal("p-date", {}, actor)).rejects.toThrow(PARTNER_PLAN_DATE_REFUSAL);
+    expect(h.presale.saveDealIntake).not.toHaveBeenCalled();
+    expect(h.hub.updateRecordField).not.toHaveBeenCalled();
+    untouched("p-date");
+  });
+
+  it("refuses the record's target column too, so a partner without a deal is not written either", async () => {
+    asPartner(null);
+    await expect(applyProposal("p-date", { proposedDate: "2026-11-02" }, actor)).rejects.toThrow(
+      PARTNER_PLAN_DATE_REFUSAL,
+    );
+    expect(h.hub.updateRecordField).not.toHaveBeenCalled();
+    expect(h.presale.saveDealIntake).not.toHaveBeenCalled();
+    untouched("p-date");
+  });
+
+  it("refuses an older pending date row even with no valid date, naming the partner rule rather than a missing date", async () => {
+    asPartner();
+    row("p-date").proposed_date = null;
+    await expect(applyProposal("p-date", {}, actor)).rejects.toThrow(PARTNER_PLAN_DATE_REFUSAL);
+    expect(h.presale.saveDealIntake).not.toHaveBeenCalled();
+    untouched("p-date");
+  });
+
+  it("refuses an older pending date proposal, whatever date the reviewer picks", async () => {
+    asPartner();
+    row("p-date").proposed_date = "2026-10-20";
+    await expect(applyProposal("p-date", { proposedDate: "2026-12-01" }, actor)).rejects.toThrow(
+      /partner implementation/,
+    );
+    expect(h.presale.saveDealIntake).not.toHaveBeenCalled();
+    expect(h.hub.updateRecordField).not.toHaveBeenCalled();
+    untouched("p-date");
+  });
+
+  it("can still be dismissed, which writes no date", async () => {
+    asPartner();
+    await dismissProposal("p-date", actor);
+    expect(row("p-date")).toMatchObject({ status: "dismissed", decided_by: "u-1" });
+    expect(h.presale.saveDealIntake).not.toHaveBeenCalled();
+    expect(h.hub.updateRecordField).not.toHaveBeenCalled();
+  });
+
+  it("keeps applying the other kinds of proposal for a partner", async () => {
+    asPartner();
+    const out = await applyProposal("p-risk", {}, actor);
+    expect(out.entityType).toBe("risk");
+    expect(h.hub.createRisk).toHaveBeenCalledTimes(1);
+    expect(row("p-risk").status).toBe("applied");
+  });
+
+  it("still moves the standard plan's live date for a standard implementation", async () => {
+    const out = await applyProposal("p-date", {}, actor);
+    expect(out.entityType).toBe("plan");
+    expect(h.presale.saveDealIntake).toHaveBeenCalledTimes(1);
+  });
+
+  it("tells the read model the implementation is a partner, so the panel does not pre-select its dates", async () => {
+    expect((await loadTranscriptWork(IMPL)).partner).toBe(false);
+    asPartner();
+    expect((await loadTranscriptWork(IMPL)).partner).toBe(true);
   });
 });

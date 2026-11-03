@@ -16,7 +16,7 @@ import { cn } from "@/lib/utils";
 // Type-only import — erased at build time.
 import type { AccessCustomer } from "@/lib/access.server";
 import { ask } from "@/components/ui/ask";
-import { errorMessage } from "@/lib/error-message";
+import { RouteLoadFailed } from "@/components/load-failed";
 
 const accessQuery = queryOptions({
   queryKey: ["access"],
@@ -34,13 +34,11 @@ export const Route = createFileRoute("/access")({
     ],
   }),
   loader: ({ context }) => {
-    context.queryClient.ensureQueryData(accessQuery);
+    // A failed read surfaces through the page's own query (and its Retry); the
+    // prefetch must not become an unhandled rejection.
+    void context.queryClient.ensureQueryData(accessQuery).catch(() => {});
   },
-  errorComponent: ({ error }) => (
-    <div role="alert" className="p-6 text-[13px] text-destructive">
-      Could not load customer access: {errorMessage(error)}
-    </div>
-  ),
+  errorComponent: ({ error, reset }) => <RouteLoadFailed error={error} reset={reset} />,
   component: AccessPage,
 });
 

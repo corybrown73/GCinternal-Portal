@@ -24,7 +24,7 @@ vi.mock("@/lib/app-config.server", () => h.flags);
 vi.mock("../app-config.server", () => h.flags);
 vi.mock("../server/audit", () => h.audit);
 
-import { couldNotLoad, rowOrThrow, rowsOrLog, rowsOrThrow } from "../server/db-read";
+import { couldNotLoad, rowOrLog, rowOrThrow, rowsOrLog, rowsOrThrow } from "../server/db-read";
 import { loadCustomer360, loadImplementations, loadLeadership } from "../hub.server";
 import type { ResolvedScope } from "../ownership.server";
 import { loadPipeline } from "../presale.server";
@@ -85,6 +85,14 @@ describe("rowOrThrow / rowsOrLog", () => {
     expect(() => rowOrThrow({ data: null, error: MISSING_COLUMN }, "this customer")).toThrow(
       couldNotLoad("this customer"),
     );
+  });
+
+  it("rowOrLog reads a failure as no row, but logs it", () => {
+    expect(
+      rowOrLog({ data: null, error: { message: "boom", code: "XX000" } }, "a name"),
+    ).toBeNull();
+    expect(logged()).toContain("[db] a name failed: boom (XX000)");
+    expect(rowOrLog({ data: { id: "x" }, error: null }, "a name")).toEqual({ id: "x" });
   });
 
   it("rowsOrLog reads a failure as no rows, but logs it", () => {
