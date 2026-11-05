@@ -1,11 +1,13 @@
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 
 import {
+  automaticHoldMessage,
   automaticNextStep,
   journeyReason,
   kickoffBooked,
   type JourneySignals,
 } from "./journey-sync";
+import type { StageGateStatus } from "./stage-gates";
 import { audit } from "./server/audit";
 
 const db = () => supabaseAdmin as any;
@@ -56,12 +58,7 @@ export async function syncJourneyStage(
     const signals = await signalsFor(dealId, deal.intake);
     await syncKickoffWorkItems(impl.id, signals, actorProfileId);
 
-    // The live lifecycle: the configured order minus hidden stages, so the
-    // steps taken are the ones a person sees on the rail.
-    const { loadLifecycleStages } = await import("./lifecycle-stages.server");
-    const { applyStageOverrides, LIFECYCLE_STAGES } = await import("./lifecycle");
-    applyStageOverrides((await loadLifecycleStages()) as never);
-    const order = LIFECYCLE_STAGES.map((s) => s.id);
+    const order = await liveOrder();
 
     const from = String(impl.current_stage);
     const next = automaticNextStep(signals, from, order);
@@ -111,6 +108,65 @@ export async function syncJourneyStage(
   } catch (e) {
     console.error("[journey] could not sync the stage for deal", dealId, e);
     return null;
+  }
+}
+
+/**
+ * The live lifecycle: the configured order minus hidden stages, so the steps
+ * taken are the ones a person sees on the rail.
+ */
+async function liveOrder(): Promise<string[]> {
+  const { loadLifecycleStages } = await import("./lifecycle-stages.server");
+  const { applyStageOverrides, LIFECYCLE_STAGES } = await import("./lifecycle");
+  applyStageOverrides((await loadLifecycleStages()) as never);
+  return LIFECYCLE_STAGES.map((s) => s.id);
+}
+
+/**
+ * The sentence the Current Implementation panel shows when a recorded fact is
+ * waiting on the active stage's gate, or null. Read live from the plan on every
+ * load, so it clears as soon as the gate is ready. Never throws: a panel that
+ * cannot work this out shows its usual gate summary.
+ */
+export async function automaticHoldFor(
+  dealId: string,
+  currentStage: string,
+  gate: StageGateStatus,
+): Promise<string | null> {
+  try {
+    const { data: deal } = await db()
+      .from("portal_accounts")
+      .select("intake")
+      .eq("id", dealId)
+      .maybeSingle();
+    if (!deal) return null;
+    const signals = await signalsFor(dealId, deal.intake);
+    return automaticHoldMessage({ signals, current: currentStage, order: await liveOrder(), gate });
+  } catch (e) {
+    console.error("[journey] could not explain the held stage for deal", dealId, e);
+    return null;
+  }
+}
+
+/**
+ * Re-check the journey for the deal behind one implementation. Called after a
+ * person ticks a work item, so a gate that has just been completed moves the
+ * stage now, not at the next unrelated save. Never throws.
+ */
+export async function syncJourneyForImplementation(
+  implementationId: string,
+  actorProfileId: string | null,
+): Promise<void> {
+  try {
+    const { data: impl } = await db()
+      .from("implementations")
+      .select("deal_id")
+      .eq("id", implementationId)
+      .maybeSingle();
+    if (!impl?.deal_id) return;
+    await syncJourneyStage(String(impl.deal_id), actorProfileId);
+  } catch (e) {
+    console.error("[journey] could not re-check the stage for", implementationId, e);
   }
 }
 

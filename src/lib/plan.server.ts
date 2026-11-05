@@ -46,6 +46,11 @@ export type ImplementationPlan = {
   template: { key: string; name: string; version: number } | null;
   stages: PlanStage[];
   items: PlanWorkItem[];
+  /**
+   * The plain sentence for a recorded fact waiting on the active stage's gate,
+   * or null. Derived on every load, so it clears when the gate is ready.
+   */
+  automatic_hold: string | null;
 };
 
 export async function loadPlan(implementationId: string): Promise<ImplementationPlan> {
@@ -55,13 +60,14 @@ export async function loadPlan(implementationId: string): Promise<Implementation
     template: null,
     stages: [],
     items: [],
+    automatic_hold: null,
   };
   if (!(await isFlagOn("work_items"))) return empty;
 
   const [{ data: impl }, { data: stages }, { data: items }, { data: team }] = await Promise.all([
     db()
       .from("implementations")
-      .select("id, journey_template_id, journey_type, template_version")
+      .select("id, journey_template_id, journey_type, template_version, deal_id")
       .eq("id", implementationId)
       .maybeSingle(),
     db()
@@ -93,18 +99,33 @@ export async function loadPlan(implementationId: string): Promise<Implementation
   }
 
   const nameById = new Map<string, string>((team ?? []).map((t: any) => [t.id, t.name]));
+  const planItems = (items ?? []).map((w: any) => ({
+    ...w,
+    depends_on: w.depends_on ?? [],
+    is_gate: Boolean(w.is_gate),
+    owner_name: w.owner_id ? (nameById.get(w.owner_id) ?? null) : null,
+  })) as PlanWorkItem[];
+  const planStages = (stages ?? []) as PlanStage[];
+
+  // A recorded fact waiting on the active stage's gate is explained in plain
+  // words on that stage's panel. The same stage the panel draws, not the
+  // implementation's stored pointer, so the sentence and the gate agree.
+  let automatic_hold: string | null = null;
+  const active = planStages.find((st) => st.status === "active") ?? planStages[0];
+  if (impl.deal_id && active) {
+    const { stageGateStatus } = await import("./stage-gates");
+    const { automaticHoldFor } = await import("./journey-sync.server");
+    const gate = stageGateStatus(planItems.filter((w) => w.stage_instance_id === active.id));
+    automatic_hold = await automaticHoldFor(String(impl.deal_id), active.stage_key, gate);
+  }
 
   return {
     enabled: true,
     implementation_id: implementationId,
     template,
-    stages: (stages ?? []) as PlanStage[],
-    items: (items ?? []).map((w: any) => ({
-      ...w,
-      depends_on: w.depends_on ?? [],
-      is_gate: Boolean(w.is_gate),
-      owner_name: w.owner_id ? (nameById.get(w.owner_id) ?? null) : null,
-    })) as PlanWorkItem[],
+    stages: planStages,
+    items: planItems,
+    automatic_hold,
   };
 }
 
@@ -127,7 +148,12 @@ export async function setWorkItemStatus(args: {
   workItemId: string;
   status: string;
   actorProfileId: string | null;
-}): Promise<{ ok: true; status: string; stage_instance_id: string | null }> {
+}): Promise<{
+  ok: true;
+  status: string;
+  stage_instance_id: string | null;
+  implementation_id: string;
+}> {
   const allowed = ["not_started", "in_progress", "waiting", "blocked", "done", "skipped"];
   if (!allowed.includes(args.status)) throw new Error(`${args.status} is not a work item status`);
 
@@ -190,5 +216,6 @@ export async function setWorkItemStatus(args: {
     ok: true,
     status: args.status,
     stage_instance_id: (before.stage_instance_id as string | null) ?? null,
+    implementation_id: String(before.implementation_id),
   };
 }

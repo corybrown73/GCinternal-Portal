@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
+import { stageGateStatus, type GateItem } from "../stage-gates";
+
 import {
+  automaticHoldMessage,
   automaticNextStep,
   kickoffBooked,
   stepsToward,
@@ -91,5 +94,69 @@ describe("kickoff facts are separate", () => {
     expect(automaticNextStep({ ...none, kickoffHeld: true }, "build", LIVE)).toBeNull();
     expect(automaticNextStep({ ...none, kickoffHeld: true }, "launch", LIVE)).toBeNull();
     expect(automaticNextStep(none, "handoff", LIVE)).toBeNull();
+  });
+});
+
+describe("the sentence a specialist reads when a fact is waiting on a gate", () => {
+  const item = (title: string, status = "not_started"): GateItem => ({
+    id: title,
+    task_key: null,
+    title,
+    status,
+    is_gate: true,
+    party: "internal",
+  });
+  const held = { ...none, kickoffHeld: true };
+
+  it("says what happened and the one requirement that is left", () => {
+    const msg = automaticHoldMessage({
+      signals: held,
+      current: "handoff",
+      order: LIVE,
+      gate: stageGateStatus([item("Schedule the kickoff call")]),
+    });
+    expect(msg).toBe(
+      "The kickoff call was held. It moves on by itself once this is done: Schedule the kickoff call.",
+    );
+  });
+
+  it("names several requirements, and summarises a long list", () => {
+    const gate = stageGateStatus([
+      item("Confirm the champion"),
+      item("Read the packet"),
+      item("Confirm scope"),
+      item("Schedule the call"),
+      item("Book the room"),
+    ]);
+    const msg = automaticHoldMessage({ signals: held, current: "handoff", order: LIVE, gate });
+    expect(msg).toBe(
+      "The kickoff call was held. It moves on by itself once these are done: Confirm the champion, Read the packet, Confirm scope and 2 more.",
+    );
+  });
+
+  it("clears when the gate is ready, and when no fact asks for a move", () => {
+    const ready = stageGateStatus([item("Schedule the kickoff call", "done")]);
+    expect(
+      automaticHoldMessage({ signals: held, current: "handoff", order: LIVE, gate: ready }),
+    ).toBeNull();
+    expect(
+      automaticHoldMessage({
+        signals: none,
+        current: "handoff",
+        order: LIVE,
+        gate: stageGateStatus([item("Schedule the kickoff call")]),
+      }),
+    ).toBeNull();
+  });
+
+  it("explains an empty gate in plain words rather than letting it carry the stage", () => {
+    const msg = automaticHoldMessage({
+      signals: held,
+      current: "handoff",
+      order: LIVE,
+      gate: stageGateStatus([]),
+    });
+    expect(msg).toContain("no criteria set");
+    expect(msg).not.toMatch(/ungated|gate_mode|advisory|blocking/);
   });
 });

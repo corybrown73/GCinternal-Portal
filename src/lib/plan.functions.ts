@@ -23,9 +23,14 @@ export const setTaskStatus = createServerFn({ method: "POST" })
   )
   .handler(async ({ data, context }) => {
     const { setWorkItemStatus } = await import("./plan.server");
-    return setWorkItemStatus({
+    const result = await setWorkItemStatus({
       workItemId: data.workItemId,
       status: data.status,
       actorProfileId: context.profile.id,
     });
+    // A ticked criterion can complete a gate: re-check the stage now, so the
+    // move the panel promised happens on the tick, not at some later save.
+    const { syncJourneyForImplementation } = await import("./journey-sync.server");
+    await syncJourneyForImplementation(result.implementation_id, context.profile.id);
+    return result;
   });

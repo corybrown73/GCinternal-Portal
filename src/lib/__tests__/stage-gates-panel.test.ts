@@ -172,3 +172,38 @@ describe("Complete & Graduate on Roll Out", () => {
     expect(markup).not.toContain("Graduated.");
   });
 });
+
+describe("the held-stage sentence on the Current Implementation panel", () => {
+  function withHold(hold: string | null, items: GateItem[]) {
+    return renderToStaticMarkup(
+      createElement(
+        QueryClientProvider,
+        { client: new QueryClient() },
+        createElement(StageGatesPanel, {
+          customerId: "c1",
+          implementationId: "i1",
+          currentStage: "handoff",
+          stageGateMode: "blocking",
+          items,
+          partner: null,
+          automaticHold: hold,
+        }),
+      ),
+    );
+  }
+  const OPEN_KICKOFF = [gate("k1", "Schedule the kickoff call")];
+
+  it("shows the explanation once, in place of the generic count", () => {
+    const hold =
+      "The kickoff call was held. It moves on by itself once this is done: Schedule the kickoff call.";
+    const markup = withHold(hold, OPEN_KICKOFF);
+    expect(markup.split("The kickoff call was held").length - 1).toBe(1);
+    expect(markup).not.toContain("Waiting on:");
+    expect(markup).not.toContain("waiting on 1 criteria");
+  });
+
+  it("keeps the usual gate summary when no fact is waiting", () => {
+    const markup = withHold(null, OPEN_KICKOFF);
+    expect(markup).toContain("Waiting on: Schedule the kickoff call");
+  });
+});

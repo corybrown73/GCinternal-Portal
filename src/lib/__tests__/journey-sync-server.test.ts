@@ -42,7 +42,8 @@ vi.mock("../onboarding-plan", () => ({
   timelineFor: () => ({ milestones: h.milestones, liveDoneOn: null }),
 }));
 
-import { syncJourneyStage } from "../journey-sync.server";
+import { automaticHoldFor, syncJourneyStage } from "../journey-sync.server";
+import { stageGateStatus, type GateItem } from "../stage-gates";
 
 type Intake = { timeline?: Record<string, unknown> };
 
@@ -208,5 +209,33 @@ describe("the automatic journey sync", () => {
         payload: expect.objectContaining({ reason: "Waiting on: Schedule the kickoff call" }),
       }),
     );
+  });
+
+  it("explains a held kickoff on the handoff gate, and clears once that gate is ready", async () => {
+    fake = createFakeSupabase(rows(booked, [kickoffScheduled]));
+    h.supabase.client = fake.client;
+    h.milestones = [{ key: "kickoff", doneOn: "2026-10-20" }];
+    const open = [
+      {
+        id: "w-sched",
+        title: "Schedule the kickoff call",
+        status: "not_started",
+        is_gate: true,
+        task_key: "nl.kickoff_scheduled",
+        party: "internal",
+      },
+    ] as GateItem[];
+
+    const waiting = await automaticHoldFor("deal-1", "handoff", stageGateStatus(open));
+    expect(waiting).toBe(
+      "The kickoff call was held. It moves on by itself once this is done: Schedule the kickoff call.",
+    );
+
+    const cleared = await automaticHoldFor(
+      "deal-1",
+      "handoff",
+      stageGateStatus(open.map((i) => ({ ...i, status: "done" }))),
+    );
+    expect(cleared).toBeNull();
   });
 });

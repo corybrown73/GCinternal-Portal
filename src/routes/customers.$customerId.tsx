@@ -3169,6 +3169,7 @@ function StageGatesInner({
       currentStage={active.stage_key as LifecycleStageId}
       stageGateMode={active.gate_mode ?? null}
       items={items}
+      automaticHold={plan.automatic_hold}
     />
   );
 }

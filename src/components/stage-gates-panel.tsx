@@ -85,6 +85,7 @@ export function StageGatesPanel({
   partner,
   focus = false,
   focusHeading = null,
+  automaticHold = null,
 }: {
   customerId: string;
   implementationId: string;
@@ -105,6 +106,11 @@ export function StageGatesPanel({
    * so the stage reads as one card, as the standard stage does.
    */
   focusHeading?: { title: string; goal: string | null } | null;
+  /**
+   * A recorded fact (a kickoff, say) is waiting on this stage's gate. Shown in
+   * place of the generic count, so the specialist reads one explanation.
+   */
+  automaticHold?: string | null;
 }) {
   const [showAll, setShowAll] = useState(false);
   const status = stageGateStatus(items);
@@ -305,7 +311,7 @@ export function StageGatesPanel({
             ) : (
               <CircleDashed className="h-3.5 w-3.5" />
             )}
-            {gateSummary(status)}
+            {automaticHold ?? gateSummary(status)}
           </p>
           {focus && status.gates.length > 1 ? (
             <button
@@ -363,7 +369,7 @@ export function StageGatesPanel({
             title={
               outcome === "clear"
                 ? `Move to ${nextName}`
-                : `${gateSummary(status)} — you will be asked to confirm${
+                : `${automaticHold ? "" : `${gateSummary(status)} — `}you will be asked to confirm${
                     mustExplain ? " and say why" : ""
                   }`
             }

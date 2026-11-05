@@ -1,4 +1,5 @@
 import type { LifecycleStageId } from "./lifecycle";
+import type { StageGateStatus } from "./stage-gates";
 
 /**
  * Where an account is on its journey, read from what people have recorded.
@@ -100,4 +101,36 @@ export function stepsToward(
   const to = order.indexOf(target);
   if (from < 0 || to < 0 || to <= from) return [];
   return order.slice(from + 1, to + 1);
+}
+
+/**
+ * The plain sentence a specialist reads on the Current Implementation gate
+ * panel when a recorded fact is waiting on a gate: what happened, and what
+ * has to be done before the stage moves by itself. Null when nothing is
+ * waiting, which is also how it clears: once the gate is ready, or once no
+ * recorded fact asks for a move.
+ */
+export function automaticHoldMessage(args: {
+  signals: JourneySignals;
+  current: string;
+  order: readonly string[];
+  gate: StageGateStatus;
+}): string | null {
+  if (!automaticNextStep(args.signals, args.current, args.order)) return null;
+  if (args.gate.ready && !args.gate.ungated) return null;
+  const fact = sentence(journeyReason(args.signals));
+  if (args.gate.ungated) {
+    return `${fact} This stage has no criteria set, so it moves on by hand when it is ready.`;
+  }
+  const titles = args.gate.remaining.map((c) => c.title);
+  const shown =
+    titles.length > 3
+      ? `${titles.slice(0, 3).join(", ")} and ${titles.length - 3} more`
+      : titles.join(", ");
+  const once = titles.length === 1 ? "this is done" : "these are done";
+  return `${fact} It moves on by itself once ${once}: ${shown}.`;
+}
+
+function sentence(s: string): string {
+  return s.charAt(0).toUpperCase() + s.slice(1) + ".";
 }
