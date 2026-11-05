@@ -2,17 +2,23 @@ import { describe, expect, it } from "vitest";
 
 import { stepsToward, targetJourneyStage } from "../journey-sync";
 
-const none = { briefGenerated: false, kickoffDone: false, workingDone: false, formLive: false };
+const none = { kickoffDone: false, workingDone: false, formLive: false };
 
 describe("the journey follows the plan", () => {
   it("reads the stage from what has happened, the latest fact winning", () => {
     expect(targetJourneyStage(none)).toBe("handoff");
-    expect(targetJourneyStage({ ...none, briefGenerated: true })).toBe("plan-internal");
-    expect(targetJourneyStage({ ...none, briefGenerated: true, kickoffDone: true })).toBe("build");
+    expect(targetJourneyStage({ ...none, kickoffDone: true })).toBe("build");
     expect(targetJourneyStage({ ...none, kickoffDone: true, workingDone: true })).toBe(
       "validate-iterate",
     );
     expect(targetJourneyStage({ ...none, formLive: true })).toBe("launch");
+  });
+
+  it("has no signal for an AI brief: a brief moves no stage", () => {
+    // The signals are the plan's facts only. A brief is not one of them, so
+    // nothing in the rule can move the stage on a brief's account.
+    expect(Object.keys(none).sort()).toEqual(["formLive", "kickoffDone", "workingDone"]);
+    expect(targetJourneyStage(none)).toBe("handoff");
   });
 
   it("steps forward through the live order, never back, and never to handover", () => {

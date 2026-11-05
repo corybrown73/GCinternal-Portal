@@ -1567,8 +1567,8 @@ export async function applyBriefToDeal(
 ): Promise<string[]> {
   const userId = actor.kind === "user" ? actor.userId : null;
 
-  // A brief on file is the first fact the journey reads: the account moves
-  // from Handoff to Kickoff on its own.
+  // A brief on file is not a journey fact: the AI prepared it, and it moves no
+  // stage. The sync still runs, so facts a person recorded meanwhile are picked up.
   if (brief.status === "complete") {
     const { syncJourneyStage } = await import("./journey-sync.server");
     await syncJourneyStage(dealId, userId);

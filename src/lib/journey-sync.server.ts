@@ -12,9 +12,14 @@ const db = () => supabaseAdmin as any;
 
 /**
  * Move the implementation behind a deal to the stage the plan says it is
- * in. Called after anything that changes the plan: a brief generated, a
- * step ticked, the link sent. Never throws — the plan change already
- * succeeded, and a stage that could not follow is recorded, not fatal.
+ * in. Called after anything that changes the plan: a step ticked, the link
+ * sent, a brief applied. Only facts a person has recorded on the plan move
+ * the stage. An AI-prepared brief moves nothing.
+ *
+ * No gate is overridden here. advanceStage refuses a move a gate blocks, and
+ * that refusal is recorded (journey.autosync_blocked) for a person to act on.
+ * Never throws — the plan change already succeeded, and a stage that could
+ * not follow is recorded, not fatal.
  */
 export async function syncJourneyStage(
   dealId: string,
@@ -55,7 +60,8 @@ export async function syncJourneyStage(
     const { advanceStage } = await import("./hub.server");
     const { teamMemberIdForProfile } = await import("./activity.server");
     // The move is automatic, but a person's action caused it: their name is
-    // the one the activity feed shows, not a dash.
+    // the one the activity feed shows, not a dash. No `override`: a gate that
+    // blocks the move blocks it here too, and the refusal is recorded below.
     const enteredBy = await teamMemberIdForProfile(actorProfileId);
     const why = `Automatic — ${journeyReason(signals)}`;
     const taken: string[] = [];
@@ -66,7 +72,6 @@ export async function syncJourneyStage(
           toStage,
           enteredBy,
           notes: why,
-          override: { reason: why },
           actorProfileId,
         });
         taken.push(toStage);
@@ -115,13 +120,8 @@ async function signalsFor(dealId: string, rawIntake: unknown): Promise<JourneySi
   const { loadPipelineStages } = await import("./pipeline-stages.server");
   const { wonStage } = await import("./pipeline-stages");
 
-  const [{ data: transitions }, { count: briefs }, stages] = await Promise.all([
+  const [{ data: transitions }, stages] = await Promise.all([
     db().from("portal_stage_transitions").select("to_stage, occurred_at").eq("account_id", dealId),
-    db()
-      .from("portal_briefs")
-      .select("id", { count: "exact", head: true })
-      .eq("account_id", dealId)
-      .eq("status", "complete"),
     loadPipelineStages(),
   ]);
   const intake = readIntake(rawIntake);
@@ -133,7 +133,6 @@ async function signalsFor(dealId: string, rawIntake: unknown): Promise<JourneySi
   const t = timelineFor(intake, close.date);
   const done = (key: string) => Boolean(t.milestones.find((m) => m.key === key)?.doneOn);
   return {
-    briefGenerated: (briefs ?? 0) > 0,
     kickoffDone: done("kickoff"),
     workingDone: done("working"),
     formLive: Boolean(t.liveDoneOn),

@@ -3,10 +3,15 @@ import type { LifecycleStageId } from "./lifecycle";
 /**
  * Where an account is on its journey, read from what has actually happened.
  *
- * WHY. A stage nobody has to pick is a stage that is always right. The brief
- * gets generated, the kickoff call gets ticked, the form goes live — each of
- * those is a fact on the plan, and the stage follows from the facts. Nobody
- * opens a dropdown, and the Customers list, Home and the digest all agree.
+ * WHY. A stage nobody has to pick is a stage that is always right. The kickoff
+ * call gets ticked, the working session is marked done, the form goes live —
+ * each of those is a fact a person records on the plan, and the stage follows
+ * from the facts. Nobody opens a dropdown, and the Customers list, Home and
+ * the digest all agree.
+ *
+ * What is NOT a fact here: a brief. A brief is prepared by the AI. It is a
+ * suggestion for the TIS to read, and it moves no stage. Stages move on
+ * recorded facts only, and never past a gate (see journey-sync.server.ts).
  *
  * Only forward. A tick can be undone on the plan; the stage does not walk
  * back, because the stage history is a record of what happened and a
@@ -14,8 +19,6 @@ import type { LifecycleStageId } from "./lifecycle";
  * never automatic: that is a person's decision, recorded as one.
  */
 export type JourneySignals = {
-  /** A customer brief has been generated. */
-  briefGenerated: boolean;
   /** The kickoff call is marked done on the plan. */
   kickoffDone: boolean;
   /** The working session (the form built together) is marked done. */
@@ -37,7 +40,6 @@ export function targetJourneyStage(s: JourneySignals): LifecycleStageId {
   if (s.formLive) return "launch";
   if (s.workingDone) return "validate-iterate";
   if (s.kickoffDone) return "build";
-  if (s.briefGenerated) return "plan-internal";
   return "handoff";
 }
 
@@ -46,7 +48,6 @@ export function journeyReason(s: JourneySignals): string {
   if (s.formLive) return "the first form went live";
   if (s.workingDone) return "the working session was held and the form is built";
   if (s.kickoffDone) return "the kickoff call was held";
-  if (s.briefGenerated) return "the customer brief was generated";
   return "the deal closed";
 }
 
