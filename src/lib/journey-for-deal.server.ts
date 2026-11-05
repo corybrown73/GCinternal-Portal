@@ -4,8 +4,17 @@ import { journeyTargetForDeal } from "./journey-for-deal";
 import { isPartnerJourney } from "./partner-implementation";
 import type { AccountStage } from "./presale-stages";
 import { STAGE_LABELS } from "./presale-stages";
+import { automaticMoveBlock, stageGateStatus, type GateItem } from "./stage-gates";
 
 const db = () => supabaseAdmin as any;
+
+/**
+ * The deal's band may only move an implementation that has not started yet.
+ * Once the kickoff has been held, the journey is driven by its recorded facts
+ * and its gates alone: a deal stage never pulls it backwards, never pushes it
+ * forward past uncompleted stages, and never graduates it.
+ */
+const PRE_KICKOFF = "handoff";
 
 /**
  * Pull the deal's implementation into the journey band its stage allows.
@@ -44,6 +53,18 @@ export async function mirrorJourneyToDeal(
     const from = String(impl.current_stage);
     const to = journeyTargetForDeal(dealStage, from, order);
     if (!to || to === from) return null;
+
+    // Past the handoff, the deal does not move the journey at all: a backward
+    // pull, a jump over stages, or a graduation can only come from the stage's
+    // own record and gate, never from where the deal happens to be.
+    if (from !== PRE_KICKOFF) return null;
+    // Before kickoff the deal may take the journey one stage on, and no further:
+    // the stage after that is never skipped on the deal's say-so.
+    const next = order[order.indexOf(from) + 1];
+    if (to !== next) return null;
+    // That one step still has to pass the handoff gate, as any move does.
+    const gateBlock = await handoffGateBlock(impl.id, from);
+    if (gateBlock) return null;
 
     const at = new Date().toISOString();
     const { teamMemberIdForProfile } = await import("./activity.server");
@@ -96,4 +117,31 @@ export async function mirrorJourneyToDeal(
     console.error(`[journey] could not mirror deal ${dealId} → ${dealStage}`, e);
     return null;
   }
+}
+
+/**
+ * Why the stage the journey is leaving is not yet ready to leave, or null when
+ * it is. The same reading advanceStage makes: this stage's own criteria,
+ * judged by its gate mode. Never throws; a stage that cannot be read is held.
+ */
+async function handoffGateBlock(
+  implementationId: string,
+  stageKey: string,
+): Promise<string | null> {
+  const { data: stageRow } = await db()
+    .from("stage_instances")
+    .select("id,gate_mode")
+    .eq("implementation_id", implementationId)
+    .eq("stage_key", stageKey)
+    .maybeSingle();
+  const { data: rows, error } = stageRow?.id
+    ? await db()
+        .from("work_items")
+        .select("id,task_key,title,status,is_gate,party")
+        .eq("implementation_id", implementationId)
+        .eq("stage_instance_id", stageRow.id)
+    : { data: [], error: null };
+  if (error) return "could not read the stage's criteria";
+  const gate = stageGateStatus((rows ?? []) as GateItem[]);
+  return automaticMoveBlock(gate, (stageRow?.gate_mode as string | null) ?? null);
 }
