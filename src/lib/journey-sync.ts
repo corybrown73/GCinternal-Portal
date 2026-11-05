@@ -1,31 +1,48 @@
 import type { LifecycleStageId } from "./lifecycle";
 
 /**
- * Where an account is on its journey, read from what has actually happened.
+ * Where an account is on its journey, read from what people have recorded.
  *
- * WHY. A stage nobody has to pick is a stage that is always right. The kickoff
- * call gets ticked, the working session is marked done, the form goes live —
- * each of those is a fact a person records on the plan, and the stage follows
- * from the facts. Nobody opens a dropdown, and the Customers list, Home and
- * the digest all agree.
+ * WHY. The plan's facts say what has happened, so the stage can follow them
+ * without anybody opening a dropdown. Only a few facts are allowed to move the
+ * stage, and each one moves it at most one gated step:
  *
- * What is NOT a fact here: a brief. A brief is prepared by the AI. It is a
- * suggestion for the TIS to read, and it moves no stage. Stages move on
- * recorded facts only, and never past a gate (see journey-sync.server.ts).
+ *   - a kickoff call BOOKED (a date and a time on the plan) satisfies the
+ *     handoff gate's "schedule the kickoff" item, and nothing more;
+ *   - a kickoff CONFIRMED HELD by a person satisfies the align-external gate's
+ *     "run the kickoff call" item, and nothing more;
+ *   - the working session and the live form follow the same rule.
+ *
+ * What is NOT a fact here: a brief (AI-prepared, a suggestion only), a planned
+ * date passing, or a kickoff deck existing. A kickoff is held only when a
+ * person confirms it. A held kickoff does not satisfy the plan, build or any
+ * later stage's requirements; those are recorded on their own items.
  *
  * Only forward. A tick can be undone on the plan; the stage does not walk
- * back, because the stage history is a record of what happened and a
- * reversal is a note on it, not a rewrite. Handover to Customer Success is
- * never automatic: that is a person's decision, recorded as one.
+ * back, because the stage history is a record of what happened. Handover to
+ * Customer Success is never automatic: that is a person's decision.
  */
 export type JourneySignals = {
-  /** The kickoff call is marked done on the plan. */
-  kickoffDone: boolean;
+  /** A kickoff call is booked: both a date and a time are on the plan. */
+  kickoffScheduled: boolean;
+  /** A person has confirmed the kickoff call as held. */
+  kickoffHeld: boolean;
   /** The working session (the form built together) is marked done. */
   workingDone: boolean;
   /** The first form is live. */
   formLive: boolean;
 };
+
+/**
+ * Whether the kickoff is booked. The same definition the Kickoff checklist
+ * uses ("Kickoff booked for …"): a date override and a time, both set.
+ */
+export function kickoffBooked(timeline: {
+  overrides?: Record<string, unknown>;
+  times?: Record<string, unknown>;
+}): boolean {
+  return Boolean(timeline.overrides?.["kickoff"] && timeline.times?.["kickoff"]);
+}
 
 /** The journey, in order, from the plan's point of view. */
 export const JOURNEY_ORDER: readonly LifecycleStageId[] = [
@@ -39,7 +56,8 @@ export const JOURNEY_ORDER: readonly LifecycleStageId[] = [
 export function targetJourneyStage(s: JourneySignals): LifecycleStageId {
   if (s.formLive) return "launch";
   if (s.workingDone) return "validate-iterate";
-  if (s.kickoffDone) return "build";
+  if (s.kickoffHeld) return "build";
+  if (s.kickoffScheduled) return "plan-internal";
   return "handoff";
 }
 
@@ -47,8 +65,24 @@ export function targetJourneyStage(s: JourneySignals): LifecycleStageId {
 export function journeyReason(s: JourneySignals): string {
   if (s.formLive) return "the first form went live";
   if (s.workingDone) return "the working session was held and the form is built";
-  if (s.kickoffDone) return "the kickoff call was held";
+  if (s.kickoffHeld) return "the kickoff call was held";
+  if (s.kickoffScheduled) return "the kickoff call was booked";
   return "the deal closed";
+}
+
+/**
+ * The next automatic move a recorded fact asks for, or null when there is
+ * none. Exactly one stage: the first step toward the target. Whatever sits
+ * beyond it waits for its own gate, and for a person to act on that gate.
+ */
+export function automaticNextStep(
+  s: JourneySignals,
+  current: string,
+  order: readonly string[],
+): { to: string; target: LifecycleStageId } | null {
+  const target = targetJourneyStage(s);
+  const to = stepsToward(current, target, order)[0];
+  return to ? { to, target } : null;
 }
 
 /**

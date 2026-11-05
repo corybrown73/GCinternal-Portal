@@ -197,6 +197,12 @@ describe("automaticMoveBlock", () => {
     expect(automaticMoveBlock(open, "blocking")).toContain("Waiting on: Sign off the plan");
   });
 
+  it("an empty gate never carries a stage on its own", () => {
+    const empty = stageGateStatus([]);
+    expect(automaticMoveBlock(empty, "advisory")).toContain("no criteria set");
+    expect(automaticMoveBlock(empty, "blocking")).toContain("no criteria set");
+  });
+
   it("says nothing technical: no codes, no raw modes", () => {
     const reason = automaticMoveBlock(open, "blocking") ?? "";
     expect(reason).not.toMatch(/blocking_gap|advisory_gap|gate_mode|override/);

@@ -125,6 +125,11 @@ export function automaticMoveBlock(
   s: StageGateStatus,
   gateMode: string | null | undefined,
 ): string | null {
+  // A stage with no criteria has nothing a recorded fact can be checked against,
+  // so an empty gate must never carry a stage on its own.
+  if (s.ungated) {
+    return "Not moved automatically: this stage has no criteria set, so it moves by hand when it is ready.";
+  }
   if (!needsOverride(s, gateMode)) return null;
   return `Not moved automatically yet. ${gateSummary(s)}. Finish it on the plan and the stage will follow.`;
 }
