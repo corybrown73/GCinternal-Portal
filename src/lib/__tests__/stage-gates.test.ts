@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   advanceLabel,
+  automaticMoveBlock,
   gateOutcome,
   overridePrompt,
   requiresReason,
@@ -174,5 +175,30 @@ describe("overridePrompt", () => {
     const one = stageGateStatus([item({ status: "not_started", title: "Sign off the plan" })]);
     expect(overridePrompt(one, "Build")).toContain("1 criterion outstanding");
     expect(overridePrompt(one, "Build")).not.toContain("•");
+  });
+});
+
+describe("automaticMoveBlock", () => {
+  const open = stageGateStatus([item({ status: "not_started", title: "Sign off the plan" })]);
+  const clear = stageGateStatus([item({ status: "done" })]);
+
+  it("lets a move through when every criterion is complete, in any gate mode", () => {
+    expect(automaticMoveBlock(clear, "blocking")).toBeNull();
+    expect(automaticMoveBlock(clear, "advisory")).toBeNull();
+  });
+
+  it("refuses an automatic move past an advisory gap, not only a blocking one", () => {
+    const reason = automaticMoveBlock(open, "advisory");
+    expect(reason).toContain("Not moved automatically yet");
+    expect(reason).toContain("Waiting on: Sign off the plan");
+  });
+
+  it("refuses an automatic move past a blocking gap", () => {
+    expect(automaticMoveBlock(open, "blocking")).toContain("Waiting on: Sign off the plan");
+  });
+
+  it("says nothing technical: no codes, no raw modes", () => {
+    const reason = automaticMoveBlock(open, "blocking") ?? "";
+    expect(reason).not.toMatch(/blocking_gap|advisory_gap|gate_mode|override/);
   });
 });

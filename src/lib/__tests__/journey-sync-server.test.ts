@@ -98,6 +98,8 @@ describe("the automatic journey sync", () => {
     const sent = advance.mock.calls.map(([args]) => args);
     for (const args of sent) {
       expect(args).not.toHaveProperty("override");
+      // The guard in advanceStage refuses any gate gap for an automatic move.
+      expect(args).toHaveProperty("automatic", true);
     }
     expect(sent.map((args) => args["toStage"])).toEqual([
       "plan-internal",

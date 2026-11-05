@@ -115,6 +115,20 @@ export function needsOverride(s: StageGateStatus, gateMode: string | null | unde
   return gateOutcome(s, gateMode) !== "clear";
 }
 
+/**
+ * Why an automatic move (from a fact a person recorded) must not go ahead, or
+ * null when it may. An automatic move never overrides a gate: any gap, advisory
+ * or blocking, leaves the stage where it is, and the reason is shown on the
+ * Current Implementation workspace in the same words as the gate summary.
+ */
+export function automaticMoveBlock(
+  s: StageGateStatus,
+  gateMode: string | null | undefined,
+): string | null {
+  if (!needsOverride(s, gateMode)) return null;
+  return `Not moved automatically yet. ${gateSummary(s)}. Finish it on the plan and the stage will follow.`;
+}
+
 /** Whether the person has to say WHY, in their own words, before it is allowed. */
 export function requiresReason(s: StageGateStatus, gateMode: string | null | undefined): boolean {
   return gateOutcome(s, gateMode) === "blocking_gap";

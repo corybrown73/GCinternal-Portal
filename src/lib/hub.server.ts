@@ -2608,6 +2608,11 @@ export async function advanceStage(args: {
   override?: { reason: string | null } | null;
   /** portal_profiles id of the caller, for the audit row. */
   actorProfileId?: string | null;
+  /**
+   * The move follows from a fact a person recorded (journey sync). It never
+   * takes an override: any gate gap refuses it, before anything is written.
+   */
+  automatic?: boolean;
 }) {
   const { data: impl, error: readError } = await db()
     .from("implementations")
@@ -2691,7 +2696,8 @@ export async function advanceStage(args: {
   // not raise here: PostgREST returns an error, the destructured `data` is
   // null, and an empty gate reads as a clear one. The gate would have been
   // silently open on every advance.
-  const { stageGateStatus, requiresReason, needsOverride } = await import("./stage-gates");
+  const { stageGateStatus, requiresReason, needsOverride, automaticMoveBlock } =
+    await import("./stage-gates");
   const { data: stageRow } = await db()
     .from("stage_instances")
     .select("id,gate_mode")
@@ -2716,6 +2722,10 @@ export async function advanceStage(args: {
 
   const gateState = stageGateStatus((gateRows ?? []) as any[]);
   const gateMode = (stageRow?.gate_mode as string | null) ?? null;
+  if (args.automatic) {
+    const blocked = automaticMoveBlock(gateState, gateMode);
+    if (blocked) throw new Error(blocked);
+  }
   const overriding = needsOverride(gateState, gateMode);
   const reason = args.override?.reason?.trim() || null;
 

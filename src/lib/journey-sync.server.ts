@@ -73,6 +73,7 @@ export async function syncJourneyStage(
           enteredBy,
           notes: why,
           actorProfileId,
+          automatic: true,
         });
         taken.push(toStage);
       } catch (e) {
