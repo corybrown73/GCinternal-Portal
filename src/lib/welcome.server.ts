@@ -342,6 +342,7 @@ async function viewFor(
           firstFormName: input.firstForm?.name ?? null,
           kickoffDate: input.timeline.milestones.find((m) => m.key === "kickoff")?.date ?? null,
           closeDate: input.timeline.closeDate ?? null,
+          signedDate: (deal.sow_signed_date as string | null) ?? null,
         })
       : null,
     hiddenScreens: (await import("./intake-answers")).readIntake(deal.intake)
@@ -465,7 +466,7 @@ async function parkingLotFor(dealId: string): Promise<NonNullable<WelcomeView["p
 }
 
 const DEAL_COLUMNS =
-  "id,name,display_name,logo_path,stage,se_owner_id,am_owner_id,welcome_token_hash,welcome_issued_at,welcome_opened_at,welcome_homework,welcome_share_url,intake";
+  "id,name,display_name,logo_path,stage,se_owner_id,am_owner_id,welcome_token_hash,welcome_issued_at,welcome_opened_at,welcome_homework,welcome_share_url,sow_signed_date,intake";
 
 export async function loadWelcome(dealId: string): Promise<WelcomeView | null> {
   const { data: deal } = await db()

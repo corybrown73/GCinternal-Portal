@@ -44,7 +44,9 @@ export function isDriverError(message: string): boolean {
  * has never heard of the table it failed on.
  */
 export function userMessage(action: string, error: unknown): string {
-  const raw = error instanceof Error ? error.message : String(error ?? "");
+  // Only an Error's own message, or a string, can be a message we wrote. A database
+  // error arrives as a plain object (not an Error); String() would show "[object Object]".
+  const raw = error instanceof Error ? error.message : typeof error === "string" ? error : "";
 
   // A message we wrote ourselves is already meant for a person: pass it
   // through. This is what makes deliberate validation errors ("A link must

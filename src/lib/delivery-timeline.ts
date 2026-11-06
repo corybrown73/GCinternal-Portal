@@ -3,13 +3,22 @@
  *
  * Precedence, first that applies wins:
  *   1. Expedited delivery the SOW states with a date. Subject to resource review.
- *   2. The SOW's Delivery Timeline duration, in the SOW's own unit, from the
- *      condition the SOW names (never from kickoff by default).
- *   3. The complexity-tier target, in business days from the close.
+ *   2. The SOW's Delivery Timeline duration, in the unit the SOW prints, from the
+ *      start condition the SOW names (never from kickoff by default).
+ *   3. The complexity-tier target from Settings, in business days from the close
+ *      date recorded on the deal.
  *
- * Pure: no database, no React. Nothing here is agreed with the customer, changes
- * a stage, or moves a milestone. A suggestion is a proposal the TIS sees, edits and
- * saves; the decks label it "proposed", never "agreed".
+ * Units. The SOW's own unit is kept. "weeks" and "days" without "business" are
+ * calendar units. "business days" and "business weeks" are business units. The
+ * complexity-tier target is always business days.
+ *
+ * Start dates. A SOW that starts the clock at signing uses the recorded SOW
+ * signature date only. The deal's close date is never used as the signature date.
+ * A missing start is reported as missing, with the SOW's own wording.
+ *
+ * Pure: no database, no React. Nothing here is agreed with the customer, changes a
+ * stage, or moves a milestone. A suggestion is a proposal the TIS sees, edits and
+ * saves; the decks label it "proposed", never "agreed" or "confirmed".
  */
 
 import { addBusinessDays } from "./onboarding-timeline";
@@ -17,11 +26,13 @@ import { addBusinessDays } from "./onboarding-timeline";
 /** The SOW's starting condition, as the paragraph states it. */
 export type SowStartCondition = "forms_finalised" | "kickoff" | "signing" | "unstated";
 
+export type SowDurationUnit = "day" | "week" | "month" | "business_day" | "business_week";
+
 /** A duration in the unit the SOW prints. Never converted to another unit. */
 export type SowDuration = {
   /** The duration as printed, e.g. "4 to 6 weeks". */
   text: string;
-  unit: "day" | "week" | "month";
+  unit: SowDurationUnit;
   min: number;
   max: number;
 };
@@ -38,22 +49,8 @@ export type SowDeliveryTimeline = {
   dependencies: string[];
 };
 
-/**
- * Complexity-tier targets, in BUSINESS days from the close (weekends and the
- * deal's holidays skipped). Used only when the SOW gives no usable delivery
- * timeline and no expedited date. Tier 0 (no integration) counts as Tier 1.
- */
-export const TIER_TARGET_BUSINESS_DAYS: Readonly<Record<1 | 2 | 3 | 4 | 5, number>> = {
-  1: 30,
-  2: 45,
-  3: 90,
-  4: 120,
-  5: 150,
-};
-
-const DAY_MS = 86_400_000;
-
 /** Calendar-day arithmetic on ISO dates, in UTC so no local zone can move a day. */
+const DAY_MS = 86_400_000;
 export function addCalendarDays(iso: string, days: number): string {
   return new Date(Date.parse(`${iso}T00:00:00Z`) + days * DAY_MS).toISOString().slice(0, 10);
 }
@@ -70,19 +67,50 @@ export function addCalendarMonths(iso: string, months: number): string {
 }
 
 /**
- * Add a SOW duration to a start day, in the duration's own unit. Days and weeks
- * are calendar days, as printed; months are calendar months. Business days are
- * never used for a SOW duration: the SOW did not say business days.
+ * Add a SOW duration to a start day, in the duration's own unit.
+ *  - day, week: calendar days (a week is seven calendar days).
+ *  - month: calendar months.
+ *  - business_day: business days, skipping weekends and the deal's holidays.
+ *  - business_week: five business days per week, skipping weekends and holidays.
  */
-export function addSowDuration(start: string, amount: number, unit: SowDuration["unit"]): string {
+export function addSowDuration(
+  start: string,
+  amount: number,
+  unit: SowDurationUnit,
+  holidays: readonly string[] = [],
+): string {
   if (unit === "month") return addCalendarMonths(start, amount);
   if (unit === "week") return addCalendarDays(start, amount * 7);
+  if (unit === "business_day") return addBusinessDays(start, amount, holidays);
+  if (unit === "business_week") return addBusinessDays(start, amount * 5, holidays);
   return addCalendarDays(start, amount);
 }
 
-const UNIT: Record<string, SowDuration["unit"]> = { day: "day", week: "week", month: "month" };
-const unitOf = (word: string): SowDuration["unit"] | null =>
-  UNIT[word.toLowerCase().replace(/s$/, "")] ?? null;
+/** How a duration's unit reads in a sentence. */
+export function unitPhrase(unit: SowDurationUnit): string {
+  switch (unit) {
+    case "day":
+      return "calendar days";
+    case "week":
+      return "calendar weeks";
+    case "month":
+      return "calendar months";
+    case "business_day":
+      return "business days";
+    case "business_week":
+      return "business weeks (five business days each)";
+  }
+}
+
+const UNIT: Record<string, SowDurationUnit> = { day: "day", week: "week", month: "month" };
+const unitOf = (word: string, business: boolean): SowDurationUnit | null => {
+  const base = UNIT[word.toLowerCase().replace(/s$/, "")];
+  if (!base) return null;
+  if (!business) return base;
+  if (base === "day") return "business_day";
+  if (base === "week") return "business_week";
+  return null; // "business months" is not a unit the SOW uses; not read as one.
+};
 
 function classifyStart(text: string): SowStartCondition {
   if (/finali[sz]|complete/i.test(text) && /form|document|edit|build|deliverable/i.test(text)) {
@@ -104,22 +132,22 @@ export function parseDeliveryTimeline(raw: string | null | undefined): SowDelive
 
   let duration: SowDuration | null = null;
   const range =
-    /\b(\d+(?:\.\d+)?)\s*(?:to|-|–|—|and)\s*(\d+(?:\.\d+)?)\s*(weeks?|days?|months?)\b/i.exec(
+    /\b(\d+(?:\.\d+)?)\s*(?:to|-|–|—|and)\s*(\d+(?:\.\d+)?)\s*(business\s+)?(weeks?|days?|months?)\b/i.exec(
       quote,
     );
   const single =
-    /\b(?:is|of|at|about|within|approximately)\s+(\d+(?:\.\d+)?)\s*(weeks?|days?|months?)\b/i.exec(
+    /\b(?:is|of|at|about|within|approximately)\s+(\d+(?:\.\d+)?)\s*(business\s+)?(weeks?|days?|months?)\b/i.exec(
       quote,
     );
   if (range) {
-    const unit = unitOf(range[3]!);
+    const unit = unitOf(range[4]!, Boolean(range[3]));
     const lo = Number(range[1]);
     const hi = Number(range[2]);
     if (unit && lo > 0 && hi >= lo) {
       duration = { text: range[0]!, unit, min: lo, max: hi };
     }
   } else if (single) {
-    const unit = unitOf(single[2]!);
+    const unit = unitOf(single[3]!, Boolean(single[2]));
     const n = Number(single[1]);
     if (unit && n > 0) {
       duration = {
@@ -156,16 +184,28 @@ export function parseDeliveryTimeline(raw: string | null | undefined): SowDelive
   };
 }
 
+/** The complexity-tier target for this deal, resolved from the Settings configuration. */
+export type TierTarget = {
+  /** The tier the target is for (1 to 5). A deal with no integration counts as Tier 1. */
+  tier: number;
+  /** The target in business days, as set in Settings. */
+  businessDays: number;
+  /** True when the deal has no integration (Settings tier 0) and uses the Tier 1 target. */
+  noIntegration: boolean;
+};
+
 export type DeliveryInputs = {
   /** The parsed SOW paragraph, or null when the SOW has none. */
   sow: SowDeliveryTimeline | null;
-  /** The deal's complexity tier on the Hub, 0 to 5, or null when unknown. */
-  tierNumber: number | null;
-  /** The Hub's close date (ISO), the basis of tier targets. */
+  /** The deal's tier target from Settings, or null when none is configured. */
+  tierTarget: TierTarget | null;
+  /** Why there is no tier target, in words, when tierTarget is null. */
+  tierMissing: string | null;
+  /** The Hub's close date for the deal (ISO). Tier targets are counted from it. Never the SOW signature date. */
   closeDate: string | null;
   /** The kickoff date on the plan (ISO), when set. */
   kickoffDate: string | null;
-  /** The signing date (ISO), when recorded. */
+  /** The recorded SOW signature date (ISO), or null when none is recorded. */
   signedDate: string | null;
   /** The day all forms were finalised, as the TIS recorded it (ISO). */
   formsFinalisedOn: string | null;
@@ -274,12 +314,11 @@ export function suggestDeliveryDates(input: DeliveryInputs): DeliverySuggestion 
         break;
       case "signing":
         startCondition = "From signing";
-        start = input.signedDate ?? input.closeDate;
-        if (!input.signedDate && input.closeDate) {
-          assumptions.push("The close date stands in for the signing date.");
+        start = input.signedDate;
+        if (!start) {
+          missing =
+            "The SOW starts the clock at signing. The SOW signature date is not recorded, so no start date or completion date is proposed. The deal's close date is not used in its place.";
         }
-        if (!start)
-          missing = "The SOW starts the clock at signing, and no signing date is recorded.";
         break;
       default:
         startCondition = sow.startText
@@ -289,14 +328,8 @@ export function suggestDeliveryDates(input: DeliveryInputs): DeliverySuggestion 
           "The SOW does not say when the delivery clock starts. Confirm the start with the customer before a completion date is proposed.";
     }
 
-    const unitWord =
-      duration.unit === "day"
-        ? "calendar days"
-        : duration.unit === "week"
-          ? "calendar weeks"
-          : "calendar months";
     assumptions.unshift(
-      `SOW Delivery Timeline: ${duration.text}, in ${unitWord} as the SOW states them (not business days, not the tier target).`,
+      `SOW Delivery Timeline: ${duration.text}, counted in ${unitPhrase(duration.unit)} as the SOW states them, not the tier target.`,
     );
     if (start) {
       return {
@@ -304,8 +337,8 @@ export function suggestDeliveryDates(input: DeliveryInputs): DeliverySuggestion 
         basis: "sow",
         startCondition,
         startDate: start,
-        from: addSowDuration(start, duration.min, duration.unit),
-        to: addSowDuration(start, duration.max, duration.unit),
+        from: addSowDuration(start, duration.min, duration.unit, input.holidays),
+        to: addSowDuration(start, duration.max, duration.unit, input.holidays),
         missing: null,
         assumptions,
         source: sow.quote,
@@ -328,23 +361,22 @@ export function suggestDeliveryDates(input: DeliveryInputs): DeliverySuggestion 
     };
   }
 
-  // 3. No usable SOW timeline: the complexity-tier target, in business days from the close.
-  if (input.tierNumber !== null) {
-    const tier = Math.min(Math.max(Math.round(input.tierNumber), 1), 5) as 1 | 2 | 3 | 4 | 5;
-    const days = TIER_TARGET_BUSINESS_DAYS[tier];
+  // 3. No usable SOW timeline: the Settings tier target, in business days from the deal's close date.
+  if (input.tierTarget) {
+    const { tier, businessDays, noIntegration } = input.tierTarget;
     const assumptions = [
-      `No usable SOW Delivery Timeline. Tier ${tier} target of ${days} business days from the close, skipping weekends and this deal's holidays, as the Hub counts tier targets.`,
+      `No usable SOW Delivery Timeline. Complexity Tier ${tier} target of ${businessDays} business days, as set in Settings, counted from the close date recorded on the deal (not the SOW signature date). Weekends and this deal's holidays are skipped.`,
     ];
-    if (input.tierNumber === 0)
-      assumptions.push("No integration is in scope, so the deal counts as Tier 1.");
+    if (noIntegration)
+      assumptions.push("No integration is in scope, so the deal uses the Tier 1 target.");
     if (!input.closeDate) {
       return none("The close date is not recorded, so no tier target can be counted.", assumptions);
     }
-    const target = addBusinessDays(input.closeDate, days, input.holidays);
+    const target = addBusinessDays(input.closeDate, businessDays, input.holidays);
     return {
       ...base,
       basis: "tier",
-      startCondition: "From the close (business days)",
+      startCondition: "From the close date on the deal (business days)",
       startDate: input.closeDate,
       from: target,
       to: target,
@@ -355,7 +387,10 @@ export function suggestDeliveryDates(input: DeliveryInputs): DeliverySuggestion 
     };
   }
 
-  return none("There is no SOW Delivery Timeline and no complexity tier, so no date is proposed.");
+  return none(
+    input.tierMissing ??
+      "There is no SOW Delivery Timeline and no complexity-tier target configured in Settings, so no date is proposed.",
+  );
 }
 
 /** The TIS's saved schedule for one implementation. Stored in the kickoff_deck row. */
@@ -372,7 +407,8 @@ export type EffectiveSource = "expedited" | "sow" | "tier" | "tis" | "none";
 /**
  * The dates the decks show. A TIS's saved completion dates replace the suggestion
  * and are labelled as the TIS's adjustment; otherwise the suggestion stands.
- * Neither is agreed with the customer. "Agreed" is only the Hub's stage target.
+ * Neither is confirmed with the customer. Only dates the Hub already records as
+ * agreed stage targets count as confirmed.
  */
 export function effectiveCompletion(
   suggestion: Pick<DeliverySuggestion, "basis" | "from" | "to">,
@@ -401,7 +437,7 @@ export function completionLabel(
         ? "Expedited date in the SOW, subject to resource review"
         : effective.source === "sow"
           ? "Proposed from the SOW Delivery Timeline"
-          : "Proposed from the complexity tier, in business days";
+          : "Proposed from the complexity-tier target, in business days";
   return `${basis}: ${when}. Not yet agreed with the customer.`;
 }
 
@@ -410,7 +446,7 @@ export function deliveryFromStored(
   stored: {
     quote: string;
     duration_text: string | null;
-    duration_unit: SowDuration["unit"] | null;
+    duration_unit: SowDurationUnit | null;
     duration_min: number | null;
     duration_max: number | null;
     start_condition: SowStartCondition;

@@ -1,6 +1,10 @@
 import { z } from "zod/v4";
 
-import { parseDeliveryTimeline, type SowStartCondition } from "./delivery-timeline";
+import {
+  parseDeliveryTimeline,
+  type SowDurationUnit,
+  type SowStartCondition,
+} from "./delivery-timeline";
 
 import {
   typedDateSchema,
@@ -317,9 +321,13 @@ export function parseSowReading(output: unknown): SowReading | null {
   if (deep.success) return normalizeProposal(deep.data) as SowReading;
   const plan = sowPlanProposalSchema.safeParse(output);
   if (!plan.success) return null;
+  // The Delivery Timeline paragraph is kept whenever the reading carried it, even when another
+  // deep field did not parse: the deck's dates depend on it, so it is never dropped silently.
+  const rawDelivery = (output as { delivery_timeline?: unknown }).delivery_timeline;
   return {
     ...normalizeProposal(plan.data),
-    delivery_timeline: null,
+    delivery_timeline:
+      typeof rawDelivery === "string" && rawDelivery.trim() ? rawDelivery.slice(0, 1200) : null,
     deliverables: [],
     out_of_scope: [],
     customer_responsibilities: [],
@@ -569,7 +577,7 @@ export function sowFactsFrom(proposal: {
 export function storedDelivery(d: ReturnType<typeof parseDeliveryTimeline>): {
   quote: string;
   duration_text: string | null;
-  duration_unit: "day" | "week" | "month" | null;
+  duration_unit: SowDurationUnit | null;
   duration_min: number | null;
   duration_max: number | null;
   start_condition: SowStartCondition;

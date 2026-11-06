@@ -547,7 +547,10 @@ export const intakeAnswersSchema = z.object({
           quote: z.string().max(1200),
           duration_text: z.string().max(80).nullable().default(null),
           /** The unit the SOW prints. The duration is kept in that unit, never converted. */
-          duration_unit: z.enum(["day", "week", "month"]).nullable().default(null),
+          duration_unit: z
+            .enum(["day", "week", "month", "business_day", "business_week"])
+            .nullable()
+            .default(null),
           duration_min: z.number().int().min(0).nullable().default(null),
           duration_max: z.number().int().min(0).nullable().default(null),
           start_condition: z

@@ -53,4 +53,13 @@ describe("userMessage", () => {
     const wall = new Error("something failed\n  at foo (bar.ts:1:1)\n  at baz (qux.ts:2:2)");
     expect(userMessage("save that task", wall)).toMatch(/^Could not save that task\./);
   });
+
+  it("never shows a database error object as '[object Object]'", () => {
+    // A PostgREST error is a plain object, not an Error: it gets the logged sentence, not its String().
+    const dbError = { message: "permission denied for table x", code: "42501" };
+    expect(userMessage("read the complexity tiers", dbError)).toBe(
+      "Could not read the complexity tiers. This has been logged — try again, and tell us if it keeps happening.",
+    );
+    expect(userMessage("read the complexity tiers", dbError)).not.toMatch(/object/);
+  });
 });

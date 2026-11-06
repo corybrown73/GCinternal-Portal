@@ -14,8 +14,10 @@ import {
   effectiveCompletion,
   suggestDeliveryDates,
   type SavedSchedule,
+  type TierTarget,
 } from "./delivery-timeline";
 import { tierForIntake } from "./complexity-tiers";
+import { loadConfiguredTiersStrict } from "./complexity-tiers.server";
 import {
   canConfigureKickoffDeck,
   isAdditionalSolution,
@@ -81,6 +83,8 @@ export async function kickoffDeckView(args: {
   /** The plan's kickoff day and close day (ISO), from the Hub timeline. */
   kickoffDate: string | null;
   closeDate: string | null;
+  /** The recorded SOW signature date (ISO), or null. The close date is never used as it. */
+  signedDate: string | null;
 }): Promise<KickoffDeckView> {
   try {
     return await readView(args);
@@ -97,6 +101,8 @@ async function readView(args: {
   firstFormName: string | null;
   kickoffDate: string | null;
   closeDate: string | null;
+  /** The recorded SOW signature date (ISO), or null. The close date is never used as it. */
+  signedDate: string | null;
 }): Promise<KickoffDeckView> {
   const what = "the kickoff deck";
   const impl = rowOrThrow<any>(
@@ -178,12 +184,32 @@ async function readView(args: {
     holidays?: string[];
   };
   const savedSchedule: SavedSchedule | null = stored?.choice.schedule ?? null;
+  // The tier target is Settings' own value, read strictly: a failed read holds the deck.
+  const tiers = await loadConfiguredTiersStrict();
+  const tierChoice = tiers ? tierForIntake(args.intake, tiers) : null;
+  let tierTarget: TierTarget | null = null;
+  let tierMissing: string | null = null;
+  if (!tiers) {
+    tierMissing =
+      "No complexity-tier targets are set in Settings, so no tier-based date is proposed.";
+  } else if (!tierChoice) {
+    tierMissing = "Settings has no complexity tier that matches this deal.";
+  } else {
+    const noIntegration = tierChoice.tier === 0;
+    const target = noIntegration ? tiers.find((t) => t.tier === 1) : tierChoice;
+    if (target) {
+      tierTarget = { tier: target.tier, businessDays: target.business_days, noIntegration };
+    } else {
+      tierMissing = "Settings has no Tier 1 target for a deal with no integration.";
+    }
+  }
   const suggestion = suggestDeliveryDates({
     sow: deliveryFromStored(timelineFacts.sow_delivery ?? null),
-    tierNumber: tierForIntake(args.intake)?.tier ?? null,
+    tierTarget,
+    tierMissing,
     closeDate: args.closeDate,
     kickoffDate: args.kickoffDate,
-    signedDate: null,
+    signedDate: args.signedDate,
     formsFinalisedOn: savedSchedule?.formsFinalisedOn ?? null,
     holidays: timelineFacts.holidays ?? [],
     sowDeadlines: (timelineFacts.sow_dates ?? [])

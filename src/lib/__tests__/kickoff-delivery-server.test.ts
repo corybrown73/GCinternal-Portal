@@ -47,9 +47,22 @@ function rows(over: Partial<Rows> = {}): Rows {
       },
     ],
     scoping_answers: [],
+    portal_app_config: [{ key: "complexity_tiers", value: CONFIGURED_TIERS }],
     ...over,
   };
 }
+
+/** The Settings complexity tiers under test: the authoritative Tier 1 to 5 targets, and the seeded Tier 0. */
+const CONFIGURED_TIERS = {
+  tiers: [
+    { tier: 0, name: "None", business_days: 15, qualifies: "No integration in scope." },
+    { tier: 1, name: "Standard", business_days: 30, qualifies: "Free form build only." },
+    { tier: 2, name: "Intermediate", business_days: 45, qualifies: "Level 1." },
+    { tier: 3, name: "Advanced", business_days: 90, qualifies: "Level 2." },
+    { tier: 4, name: "Complex", business_days: 120, qualifies: "Level 3." },
+    { tier: 5, name: "Unknown", business_days: 150, qualifies: "Level 4." },
+  ],
+};
 
 /** A deal whose SOW was applied: the paragraph kept on the timeline, and the deal's own holidays. */
 const sowIntake = (extra: Record<string, unknown> = {}) =>
@@ -79,12 +92,12 @@ const sowIntake = (extra: Record<string, unknown> = {}) =>
   });
 
 let fake: ReturnType<typeof createFakeSupabase>;
-function use(r: Rows) {
-  fake = createFakeSupabase(r, { fail: {} });
+function use(r: Rows, fail: Record<string, { message: string; code?: string }> = {}) {
+  fake = createFakeSupabase(r, { fail });
   h.supabase.client = fake.client;
 }
 
-const args = (intake = sowIntake()) => ({
+const args = (intake = sowIntake(), signedDate: string | null = null) => ({
   dealId: "deal-1",
   intake,
   firstFormNamed: true,
@@ -92,6 +105,7 @@ const args = (intake = sowIntake()) => ({
   firstFormName: "Site Check",
   kickoffDate: "2026-09-07",
   closeDate: "2026-08-20",
+  signedDate,
 });
 
 const savedRow = (
@@ -155,7 +169,7 @@ describe("the SOW's start condition is read from the saved paragraph, not from k
     // No integration on the deal is Tier 0, which counts as Tier 1: 30 business days from the close (2026-08-20).
     expect(view.delivery?.suggestion.basis).toBe("tier");
     expect(view.delivery?.suggestion.from).toBe(addBusinessDays("2026-08-20", 30));
-    expect(view.delivery?.label).toMatch(/complexity tier, in business days/);
+    expect(view.delivery?.label).toMatch(/complexity-tier target, in business days/);
   });
 });
 
@@ -371,5 +385,109 @@ describe("the plan's save accepts the stored SOW paragraph, and refuses a malfor
     const { timelinePatchSchema } = await import("../intake-patch");
     const stored = { ...sowIntake().timeline.sow_delivery!, start_condition: "whenever" };
     expect(timelinePatchSchema.shape.sow_delivery.safeParse(stored).success).toBe(false);
+  });
+});
+
+describe("Settings is the single source of the tier targets", () => {
+  it("a changed Settings value changes the deck's tier date", async () => {
+    use(
+      rows({
+        portal_app_config: [
+          {
+            key: "complexity_tiers",
+            value: {
+              tiers: [
+                ...CONFIGURED_TIERS.tiers.filter((t) => t.tier !== 1),
+                { tier: 1, name: "Standard", business_days: 20, qualifies: "" },
+              ],
+            },
+          },
+        ],
+      }),
+    );
+    const view = await kickoffDeckView({
+      ...args(readIntake({ path: "new_logo", timeline: { services: [], holidays: [] } })),
+    });
+    expect(view.delivery?.suggestion.from).toBe(addBusinessDays("2026-08-20", 20));
+  });
+
+  it("with no tier configuration stored, the deck proposes nothing and names Settings", async () => {
+    use(rows({ portal_app_config: [] }));
+    const view = await kickoffDeckView({
+      ...args(readIntake({ path: "new_logo", timeline: { services: [], holidays: [] } })),
+    });
+    expect(view.loadError).toBeNull();
+    expect(view.delivery?.suggestion.basis).toBe("none");
+    expect(view.delivery?.suggestion.missing).toMatch(/set in Settings/);
+  });
+
+  it("a failed read of the Settings tiers is an explicit error, and the presentation is held", async () => {
+    use(rows(), { portal_app_config: { message: "permission denied" } });
+    const view = await kickoffDeckView(
+      args(readIntake({ path: "new_logo", timeline: { services: [], holidays: [] } })),
+    );
+    expect(view.loadError).toMatch(/complexity tiers/);
+    expect(kickoffDeckBlocked({ kickoffDeck: view })).toBe(true);
+  });
+});
+
+describe("the signing start uses the recorded SOW signature date, never the close date", () => {
+  const signingIntake = () =>
+    readIntake({
+      path: "new_logo",
+      timeline: {
+        services: [],
+        holidays: [],
+        sow_delivery: {
+          quote: "The timeline is 4 to 6 weeks, commencing once the Agreement is signed.",
+          duration_text: "4 to 6 weeks",
+          duration_unit: "week",
+          duration_min: 4,
+          duration_max: 6,
+          start_condition: "signing",
+          start_text: "the Agreement is signed",
+          dependencies: [],
+        },
+      },
+    });
+
+  it("with no recorded signature date, nothing is proposed and the close date is not used", async () => {
+    use(rows());
+    const view = await kickoffDeckView(args(signingIntake(), null));
+    expect(view.delivery?.suggestion.from).toBeNull();
+    expect(view.delivery?.suggestion.missing).toMatch(/signature date is not recorded/);
+  });
+
+  it("with a recorded signature date, the clock starts from it", async () => {
+    use(rows());
+    const view = await kickoffDeckView(args(signingIntake(), "2026-09-01"));
+    expect(view.delivery?.suggestion.startDate).toBe("2026-09-01");
+    expect(view.delivery?.suggestion.from).toBe("2026-09-29");
+  });
+});
+
+describe("the SOW's business units survive the stored path", () => {
+  it("a stored business-day duration is kept in business days through the view", async () => {
+    use(rows());
+    const intake = readIntake({
+      path: "new_logo",
+      timeline: {
+        services: [],
+        holidays: [],
+        sow_delivery: {
+          quote: "Delivery is estimated at 5 business days, commencing at kickoff.",
+          duration_text: "5 business days",
+          duration_unit: "business_day",
+          duration_min: 5,
+          duration_max: 5,
+          start_condition: "kickoff",
+          start_text: "kickoff",
+          dependencies: [],
+        },
+      },
+    });
+    const view = await kickoffDeckView({ ...args(intake), kickoffDate: "2026-10-02" });
+    expect(view.delivery?.suggestion.duration?.unit).toBe("business_day");
+    expect(view.delivery?.suggestion.from).toBe("2026-10-09");
   });
 });

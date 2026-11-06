@@ -261,6 +261,11 @@ function DeliveryNote({ view }: { view: WelcomeView }) {
   } else if (s.basis === "tier") {
     lines.push("Delivery: complexity-tier target, in business days from the close.");
   }
+  // Confirmed dates are only the Hub's agreed stage targets, and only on the standard journey.
+  const confirmed =
+    view.kickoffDeck?.selection?.deckType === "standard" &&
+    Boolean(view.journey?.stages.some((st) => st.target?.currentDate));
+  const confirmedPhrase = confirmed ? "the stage targets shown on the journey" : "none yet";
   const effective = d.effective;
   if (effective.from && effective.to) {
     const when =
@@ -269,15 +274,15 @@ function DeliveryNote({ view }: { view: WelcomeView }) {
         : `${shortDay(effective.from)} to ${shortDay(effective.to)}`;
     const basis =
       effective.source === "tis"
-        ? "Adjusted by the TIS"
+        ? "Adjusted by the TIS, proposed"
         : effective.source === "expedited"
-          ? "Expedited, subject to resource review"
+          ? "Expedited, proposed, subject to resource review"
           : effective.source === "sow"
             ? "Proposed from the SOW"
-            : "Proposed from the tier";
-    lines.push(`${basis}: ${when}. Not yet agreed with the customer.`);
+            : "Proposed from the tier, in business days";
+    lines.push(`${basis}: ${when}. Not yet agreed. Confirmed: ${confirmedPhrase}.`);
   } else {
-    lines.push("Completion date: to confirm together.");
+    lines.push(`Completion date: proposed, to confirm together. Confirmed: ${confirmedPhrase}.`);
   }
   if (s.dependencies.length) {
     lines.push("Depends on the customer's deliverables, as the SOW states.");
@@ -302,7 +307,7 @@ function KickoffJourney({ view, page }: { view: WelcomeView; page: number }) {
       eyebrow="Your path to launch"
       title="Your journey from"
       accent="kickoff to go-live"
-      lede="Each stage has one job. The dates are the targets we have agreed."
+      lede="Each stage has one job. Agreed targets sit on their stage."
     >
       {j ? (
         <div className="wp-rail is-six">
@@ -674,7 +679,7 @@ function KickoffAdditional({ view, page }: { view: WelcomeView; page: number }) 
       accent="solutions."
     >
       {items.length ? (
-        <div className="wp-kick-achieve">
+        <div className="wp-kick-achieve wp-kick-additional">
           {items.map((s) => (
             <section key={`${s.kind}-${s.name}`}>
               <h4>{s.name}</h4>
@@ -685,7 +690,7 @@ function KickoffAdditional({ view, page }: { view: WelcomeView; page: number }) 
           ))}
         </div>
       ) : (
-        <p>{KICKOFF_TO_CONFIRM}</p>
+        <p className="wp-kick-additional">{KICKOFF_TO_CONFIRM}</p>
       )}
     </Frame>
   );

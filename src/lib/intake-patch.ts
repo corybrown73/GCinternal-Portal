@@ -125,7 +125,7 @@ export const timelinePatchSchema = z
       .object({
         quote: z.string().max(1200),
         duration_text: z.string().max(80).nullable(),
-        duration_unit: z.enum(["day", "week", "month"]).nullable(),
+        duration_unit: z.enum(["day", "week", "month", "business_day", "business_week"]).nullable(),
         duration_min: z.number().int().min(0).nullable(),
         duration_max: z.number().int().min(0).nullable(),
         start_condition: z.enum(["forms_finalised", "kickoff", "signing", "unstated"]),

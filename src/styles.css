@@ -4569,6 +4569,12 @@ body.gc-presenting {
   gap: 10px;
 }
 /* Two-column blocks on the additional-solutions and partner slides: a heading and its lines. */
+/* The Additional Solutions slide starts its content under the title, not centred in
+   the space below it, so the approved Metro layout keeps its top band. */
+.gc-welcome .wp-content:has(.wp-kick-additional) {
+  justify-content: flex-start;
+  padding-top: 24px;
+}
 .gc-welcome .wp-kick-achieve {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));

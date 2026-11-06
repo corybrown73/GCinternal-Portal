@@ -406,7 +406,8 @@ const RIVERBAY_PARAGRAPH =
 function withDelivery(view: WelcomeView, formsFinalisedOn: string | null): WelcomeView {
   const suggestion = suggestDeliveryDates({
     sow: parseDeliveryTimeline(RIVERBAY_PARAGRAPH),
-    tierNumber: null,
+    tierTarget: null,
+    tierMissing: null,
     closeDate: "2026-08-20",
     kickoffDate: "2026-09-07",
     signedDate: null,
@@ -444,7 +445,7 @@ describe("delivery on the journey slides: the SOW's own words, proposed, never a
     expect(html).toContain(
       "Delivery: 4 to 6 weeks, when all form builds and edits are finalised, as the SOW states it.",
     );
-    expect(html).toContain("Completion date: to confirm together.");
+    expect(html).toContain("Completion date: proposed, to confirm together. Confirmed: none yet.");
     expect(html).not.toContain("Not yet agreed");
   });
 
@@ -456,7 +457,7 @@ describe("delivery on the journey slides: the SOW's own words, proposed, never a
     const idx = kickoffScreensFor(view).findIndex((s) => s.key === "kickoff-journey");
     const html = markup(view, idx);
     expect(html).toContain("Proposed from the SOW:");
-    expect(html).toContain("Not yet agreed with the customer.");
+    expect(html).toContain("Not yet agreed. Confirmed: none yet.");
   });
 
   it("the partner journey slide carries the same delivery note", () => {
@@ -475,7 +476,9 @@ describe("delivery on the journey slides: the SOW's own words, proposed, never a
       null,
     );
     const idx = kickoffScreensFor(view).findIndex((s) => s.key === "partner-journey");
-    expect(markup(view, idx)).toContain("Completion date: to confirm together.");
+    expect(markup(view, idx)).toContain(
+      "Completion date: proposed, to confirm together. Confirmed: none yet.",
+    );
   });
 });
 
