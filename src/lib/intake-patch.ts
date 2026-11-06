@@ -120,6 +120,20 @@ export const timelinePatchSchema = z
       })
       .nullable()
       .optional(),
+    /** The SOW's Delivery Timeline paragraph, kept as the save receives it (see intake-answers). */
+    sow_delivery: z
+      .object({
+        quote: z.string().max(1200),
+        duration_text: z.string().max(80).nullable(),
+        duration_unit: z.enum(["day", "week", "month"]).nullable(),
+        duration_min: z.number().int().min(0).nullable(),
+        duration_max: z.number().int().min(0).nullable(),
+        start_condition: z.enum(["forms_finalised", "kickoff", "signing", "unstated"]),
+        start_text: z.string().max(300).nullable(),
+        dependencies: z.array(z.string().max(300)).max(10),
+      })
+      .nullable()
+      .optional(),
     removed_services: z.array(z.string().max(160)).max(40).optional(),
     session_minutes: z.number().int().min(15).max(240).nullable().optional(),
     plan_edits: planEditsSchema.optional(),

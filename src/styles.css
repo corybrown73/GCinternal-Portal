@@ -4568,6 +4568,55 @@ body.gc-presenting {
   align-items: flex-start;
   gap: 10px;
 }
+/* Two-column blocks on the additional-solutions and partner slides: a heading and its lines. */
+.gc-welcome .wp-kick-achieve {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 28px 36px;
+  margin-top: 28px;
+  text-align: left;
+}
+.gc-welcome .wp-kick-achieve section {
+  border-top: 2px solid var(--wp-line);
+  padding-top: 12px;
+}
+.gc-welcome .wp-kick-achieve h4 {
+  margin: 0 0 10px;
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--wp-navy);
+}
+.gc-welcome .wp-kick-achieve p,
+.gc-welcome .wp-kick-achieve li {
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--wp-muted);
+}
+.gc-welcome .wp-kick-achieve .wp-lede {
+  font-size: 18px;
+  color: var(--wp-navy);
+}
+.gc-welcome .wp-kick-achieve ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.gc-welcome .wp-kick-achieve ul li {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+.gc-welcome .wp-kick-achieve ul li > span {
+  color: var(--wp-navy);
+  font-weight: 600;
+}
+.gc-welcome .wp-kick-achieve small {
+  color: var(--wp-muted);
+  font-weight: 400;
+}
 .gc-welcome .wp-kick-check {
   flex: none;
   width: 16px;
@@ -4807,6 +4856,23 @@ body.gc-presenting {
   font-size: 12px;
   color: var(--wp-muted);
   text-align: left;
+}
+/* The delivery block on the journey slides: top right, beside the lede, clear of the
+   rail and the cards. Proposed dates, labelled as proposed. */
+.gc-welcome .wp-kick-delivery {
+  position: absolute;
+  top: 118px;
+  right: 64px;
+  width: 640px;
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--wp-muted);
+  text-align: right;
+  z-index: 5;
+}
+.gc-welcome .wp-kick-delivery p {
+  margin: 0;
 }
 .gc-welcome .wp-kick-note.is-strong {
   font-size: 14px;

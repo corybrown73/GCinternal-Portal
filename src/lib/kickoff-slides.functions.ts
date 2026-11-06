@@ -19,6 +19,15 @@ export const saveKickoffDeckFn = createServerFn({ method: "POST" })
           .object({
             deckType: z.enum(["standard", "partner"]),
             formReady: z.boolean(),
+            schedule: z
+              .object({
+                formsFinalisedOn: z.string().nullable(),
+                completionFrom: z.string().nullable(),
+                completionTo: z.string().nullable(),
+                adjustedReason: z.string().max(500).nullable(),
+              })
+              .nullable()
+              .optional(),
           })
           .nullable(),
       })
@@ -30,6 +39,6 @@ export const saveKickoffDeckFn = createServerFn({ method: "POST" })
       actorProfileId: context.profile.id,
       dealId: data.dealId,
       implementationId: data.implementationId,
-      choice: data.choice,
+      choice: data.choice ? { ...data.choice, schedule: data.choice.schedule ?? null } : null,
     });
   });

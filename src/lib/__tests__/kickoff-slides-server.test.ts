@@ -100,6 +100,8 @@ const baseArgs = {
   firstFormNamed: true,
   firstFormConfirmed: true,
   firstFormName: "Site Check",
+  kickoffDate: null,
+  closeDate: null,
 };
 const intake = (extra: Record<string, unknown> = {}) =>
   readIntake({

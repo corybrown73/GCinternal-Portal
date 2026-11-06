@@ -267,9 +267,17 @@ export function KickoffSlidesSection({
 }) {
   const save = useServerFn(saveKickoffDeckFn);
   const kd = view.kickoffDeck ?? null;
-  const signature = kd ? `${JSON.stringify(kd.saved)}|${JSON.stringify(kd.selection)}` : "";
+  const signature = kd
+    ? `${JSON.stringify(kd.saved)}|${JSON.stringify(kd.selection)}|${JSON.stringify(kd.delivery?.saved ?? null)}`
+    : "";
   const [deckType, setDeckType] = useState<KickoffDeckType | null>(kd?.selection?.deckType ?? null);
   const [formReady, setFormReady] = useState<boolean>(kd?.selection?.formReady ?? false);
+  // Delivery dates: proposals for the TIS to edit. Never agreed with the customer.
+  const savedSchedule = kd?.delivery?.saved ?? null;
+  const [formsDone, setFormsDone] = useState<string>(savedSchedule?.formsFinalisedOn ?? "");
+  const [scheduleFrom, setScheduleFrom] = useState<string>(savedSchedule?.completionFrom ?? "");
+  const [scheduleTo, setScheduleTo] = useState<string>(savedSchedule?.completionTo ?? "");
+  const [scheduleReason, setScheduleReason] = useState<string>(savedSchedule?.adjustedReason ?? "");
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
 
@@ -277,6 +285,10 @@ export function KickoffSlidesSection({
   useEffect(() => {
     setDeckType(kd?.selection?.deckType ?? null);
     setFormReady(kd?.selection?.formReady ?? false);
+    setFormsDone(kd?.delivery?.saved?.formsFinalisedOn ?? "");
+    setScheduleFrom(kd?.delivery?.saved?.completionFrom ?? "");
+    setScheduleTo(kd?.delivery?.saved?.completionTo ?? "");
+    setScheduleReason(kd?.delivery?.saved?.adjustedReason ?? "");
     // Keyed on the saved content, not the object identity.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [signature]);
@@ -299,7 +311,6 @@ export function KickoffSlidesSection({
   const chooseDeck = canEdit && (kd.recommended.ambiguous || kd.selection === null);
   const savedDeck = kd.saved?.deckType ?? kd.recommended.deckType;
   const savedForm = kd.saved?.formReady ?? false;
-  const dirty = deckType !== savedDeck || (deckType === "standard" && formReady !== savedForm);
   const formApplies = deckType === "standard";
 
   // The slides the room will see, from the draft: what a save would present.
@@ -331,7 +342,36 @@ export function KickoffSlidesSection({
     },
   ];
 
-  const run = async (choice: { deckType: KickoffDeckType; formReady: boolean } | null) => {
+  // What a save would store for the delivery dates, or null when none are set.
+  const scheduleDraft =
+    formsDone || scheduleFrom || scheduleTo || scheduleReason.trim()
+      ? {
+          formsFinalisedOn: formsDone || null,
+          completionFrom: scheduleFrom || null,
+          completionTo: scheduleTo || null,
+          adjustedReason: scheduleReason.trim() || null,
+        }
+      : null;
+  const scheduleSaved = savedSchedule
+    ? {
+        formsFinalisedOn: savedSchedule.formsFinalisedOn,
+        completionFrom: savedSchedule.completionFrom,
+        completionTo: savedSchedule.completionTo,
+        adjustedReason: savedSchedule.adjustedReason,
+      }
+    : null;
+  const scheduleDirty = JSON.stringify(scheduleDraft) !== JSON.stringify(scheduleSaved);
+  const dirty =
+    deckType !== savedDeck || (deckType === "standard" && formReady !== savedForm) || scheduleDirty;
+  const suggestion = kd.delivery?.suggestion ?? null;
+
+  const run = async (
+    choice: {
+      deckType: KickoffDeckType;
+      formReady: boolean;
+      schedule: typeof scheduleDraft;
+    } | null,
+  ) => {
     if (!implementationId) return;
     setPending(true);
     setError(null);
@@ -413,6 +453,64 @@ export function KickoffSlidesSection({
         </p>
       </div>
 
+      <div className="space-y-2">
+        <h3 className="text-[12px] font-semibold">Delivery dates (proposed, not agreed)</h3>
+        <p className="text-[11px] text-muted-foreground">
+          {suggestion?.from && suggestion.to
+            ? `Suggested from the ${suggestion.basis === "sow" ? "SOW Delivery Timeline" : suggestion.basis === "expedited" ? "SOW expedited date, subject to resource review" : "complexity tier, in business days"}: ${suggestion.from}${suggestion.to !== suggestion.from ? ` to ${suggestion.to}` : ""}.`
+            : `No date is suggested. ${suggestion?.missing ?? ""}`}
+          {suggestion?.assumptions.length ? ` ${suggestion.assumptions.join(" ")}` : ""}
+        </p>
+        <div className="grid gap-2 sm:grid-cols-3">
+          <label className="flex flex-col gap-1 text-[12px]">
+            Day all forms are finalised
+            <input
+              type="date"
+              value={formsDone}
+              disabled={!canEdit}
+              onChange={(e) => setFormsDone(e.target.value)}
+              className="rounded-sm border border-border px-2 py-1 text-[12px]"
+            />
+          </label>
+          <label className="flex flex-col gap-1 text-[12px]">
+            Completion from
+            <input
+              type="date"
+              value={scheduleFrom}
+              disabled={!canEdit}
+              onChange={(e) => setScheduleFrom(e.target.value)}
+              className="rounded-sm border border-border px-2 py-1 text-[12px]"
+            />
+          </label>
+          <label className="flex flex-col gap-1 text-[12px]">
+            Completion to
+            <input
+              type="date"
+              value={scheduleTo}
+              disabled={!canEdit}
+              onChange={(e) => setScheduleTo(e.target.value)}
+              className="rounded-sm border border-border px-2 py-1 text-[12px]"
+            />
+          </label>
+        </div>
+        <label className="flex flex-col gap-1 text-[12px]">
+          Why these dates (required when a completion date is set)
+          <input
+            type="text"
+            maxLength={500}
+            value={scheduleReason}
+            disabled={!canEdit}
+            onChange={(e) => setScheduleReason(e.target.value)}
+            className="rounded-sm border border-border px-2 py-1 text-[12px]"
+          />
+        </label>
+        <p className="text-[11px] text-muted-foreground">
+          Edit these for customer availability, real delivery dependencies and GoCanvas capacity.
+          Saving records the TIS&apos;s proposal; it does not change any stage, milestone or
+          customer commitment.
+        </p>
+      </div>
+
       <div>
         <h3 className="mb-1 text-[12px] font-semibold">What the room will see</h3>
         {preview.length ? (
@@ -464,7 +562,10 @@ export function KickoffSlidesSection({
           type="button"
           className="rounded-sm bg-primary px-3 py-1.5 text-[12px] font-medium text-primary-foreground disabled:opacity-40"
           disabled={!canEdit || !dirty || !deckType || pending}
-          onClick={() => deckType && run({ deckType, formReady: formApplies && formReady })}
+          onClick={() =>
+            deckType &&
+            run({ deckType, formReady: formApplies && formReady, schedule: scheduleDraft })
+          }
           title={
             !implementationId
               ? "Start the implementation to save this choice."

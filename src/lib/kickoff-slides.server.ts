@@ -9,6 +9,14 @@ import { deckKindFor } from "./deck-kind";
 import type { IntakeAnswers } from "./intake-answers";
 import { PARTNERS, implementationTypeFor, type PartnerKey } from "./partner-implementation";
 import {
+  completionLabel,
+  deliveryFromStored,
+  effectiveCompletion,
+  suggestDeliveryDates,
+  type SavedSchedule,
+} from "./delivery-timeline";
+import { tierForIntake } from "./complexity-tiers";
+import {
   canConfigureKickoffDeck,
   isAdditionalSolution,
   recommendKickoffDeck,
@@ -35,10 +43,21 @@ export const KICKOFF_DECK_QUESTION = "kickoff_deck";
  * earlier slide picker reads this row as malformed and holds the presentation,
  * rather than presenting a deck nobody chose.
  */
+const isoDay = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const storedSchema = z.object({
   deck_type: z.enum(["standard", "partner"]),
   form_ready: z.boolean(),
   saved_at: z.string(),
+  /** The TIS's delivery dates, when saved. Absent on a choice saved before dates existed. */
+  schedule: z
+    .object({
+      forms_finalised_on: isoDay.nullable(),
+      completion_from: isoDay.nullable(),
+      completion_to: isoDay.nullable(),
+      adjusted_reason: z.string().max(500).nullable(),
+    })
+    .nullable()
+    .optional(),
 });
 
 export const KICKOFF_DECK_REFUSED =
@@ -59,6 +78,9 @@ export async function kickoffDeckView(args: {
   firstFormNamed: boolean;
   firstFormConfirmed: boolean;
   firstFormName: string | null;
+  /** The plan's kickoff day and close day (ISO), from the Hub timeline. */
+  kickoffDate: string | null;
+  closeDate: string | null;
 }): Promise<KickoffDeckView> {
   try {
     return await readView(args);
@@ -73,6 +95,8 @@ async function readView(args: {
   firstFormNamed: boolean;
   firstFormConfirmed: boolean;
   firstFormName: string | null;
+  kickoffDate: string | null;
+  closeDate: string | null;
 }): Promise<KickoffDeckView> {
   const what = "the kickoff deck";
   const impl = rowOrThrow<any>(
@@ -125,7 +149,11 @@ async function readView(args: {
   const partnerName = partnerKey ? (PARTNERS[partnerKey]?.name ?? null) : null;
   const facts: KickoffFacts = {
     deckSignals: {
-      partnerByRecord: Boolean(impl?.partner_key) || type.type === "partner_implementation",
+      // The same partner evidence the server's document guard reads: a partner key, a partner journey type, or a partner intake.
+      partnerByRecord:
+        Boolean(impl?.partner_key) ||
+        impl?.journey_type === "partner_implementation" ||
+        type.type === "partner_implementation",
       partnerByJourney: classification.kind === "partner",
     },
     partnerName,
@@ -142,6 +170,29 @@ async function readView(args: {
   const stored = implementationId ? await readStored(implementationId) : null;
   const selection = resolveKickoffSelection(stored?.choice ?? null, recommended);
 
+  // Delivery dates: the SOW paragraph first, then the tier target. Proposed only.
+  const timelineFacts = args.intake.timeline as unknown as {
+    sow_delivery?: Parameters<typeof deliveryFromStored>[0];
+    sow_dates?: Array<{ type: string; date: string; who: string | null; quote: string }> | null;
+    sow_notes?: string[];
+    holidays?: string[];
+  };
+  const savedSchedule: SavedSchedule | null = stored?.choice.schedule ?? null;
+  const suggestion = suggestDeliveryDates({
+    sow: deliveryFromStored(timelineFacts.sow_delivery ?? null),
+    tierNumber: tierForIntake(args.intake)?.tier ?? null,
+    closeDate: args.closeDate,
+    kickoffDate: args.kickoffDate,
+    signedDate: null,
+    formsFinalisedOn: savedSchedule?.formsFinalisedOn ?? null,
+    holidays: timelineFacts.holidays ?? [],
+    sowDeadlines: (timelineFacts.sow_dates ?? [])
+      .filter((d) => d.type === "deadline")
+      .map((d) => ({ date: d.date, who: d.who, quote: d.quote })),
+    sowNotes: timelineFacts.sow_notes ?? [],
+  });
+  const effective = effectiveCompletion(suggestion, savedSchedule);
+
   return {
     loadError: null,
     implementationId,
@@ -155,6 +206,12 @@ async function readView(args: {
           formReady: stored.choice.formReady,
         }
       : null,
+    delivery: {
+      suggestion,
+      saved: savedSchedule,
+      effective,
+      label: completionLabel(effective),
+    },
     canConfigure: false,
     partnerName,
     additional: facts.additionalSolutions.map((s) => ({
@@ -186,7 +243,18 @@ async function readStored(
     throw new Error(couldNotLoad("the saved kickoff deck choice"));
   }
   return {
-    choice: { deckType: parsed.data.deck_type, formReady: parsed.data.form_ready },
+    choice: {
+      deckType: parsed.data.deck_type,
+      formReady: parsed.data.form_ready,
+      schedule: parsed.data.schedule
+        ? {
+            formsFinalisedOn: parsed.data.schedule.forms_finalised_on,
+            completionFrom: parsed.data.schedule.completion_from,
+            completionTo: parsed.data.schedule.completion_to,
+            adjustedReason: parsed.data.schedule.adjusted_reason,
+          }
+        : null,
+    },
     savedAt: parsed.data.saved_at,
     answeredBy: (row.answered_by as string | null) ?? null,
   };
@@ -212,6 +280,7 @@ function failedView(error: unknown): KickoffDeckView {
     partnerName: null,
     additional: [],
     firstFormName: null,
+    delivery: null,
   };
 }
 
@@ -300,6 +369,30 @@ export async function canConfigureImplementationDeck(
 }
 
 /**
+ * A TIS's delivery dates are proposals: well-formed ISO days, a completion range
+ * that runs forwards, and a stated reason whenever completion dates are set.
+ * Nothing here is agreed with the customer.
+ */
+export function assertScheduleValid(schedule: SavedSchedule | null): void {
+  if (!schedule) return;
+  const day = /^\d{4}-\d{2}-\d{2}$/;
+  for (const d of [schedule.formsFinalisedOn, schedule.completionFrom, schedule.completionTo]) {
+    if (d !== null && !day.test(d)) throw new Error("A date must be a calendar day (YYYY-MM-DD).");
+  }
+  if (schedule.completionFrom || schedule.completionTo) {
+    if (!schedule.completionFrom || !schedule.completionTo) {
+      throw new Error("Set both ends of the completion range, or neither.");
+    }
+    if (schedule.completionTo < schedule.completionFrom) {
+      throw new Error("The completion range must end on or after the day it starts.");
+    }
+    if (!schedule.adjustedReason || !schedule.adjustedReason.trim()) {
+      throw new Error("Say why the completion dates are set: the TIS adjustment needs a reason.");
+    }
+  }
+}
+
+/**
  * Save or reset one implementation's kickoff deck choice. Checks, before any
  * write, that the person may configure that implementation (the role rule, and
  * that the implementation is on this deal). Writes exactly one row in
@@ -313,6 +406,7 @@ export async function saveKickoffDeck(args: {
   choice: KickoffChoice | null;
 }): Promise<{ implementationId: string; saved: boolean }> {
   await assertKickoffDeckAuthority(args.actorProfileId, args.dealId, [args.implementationId]);
+  if (args.choice) assertScheduleValid(args.choice.schedule ?? null);
 
   if (args.choice === null) {
     const { error } = await db()
@@ -333,6 +427,14 @@ export async function saveKickoffDeck(args: {
             deck_type: args.choice.deckType,
             form_ready: args.choice.formReady,
             saved_at: now,
+            schedule: args.choice.schedule
+              ? {
+                  forms_finalised_on: args.choice.schedule.formsFinalisedOn,
+                  completion_from: args.choice.schedule.completionFrom,
+                  completion_to: args.choice.schedule.completionTo,
+                  adjusted_reason: args.choice.schedule.adjustedReason,
+                }
+              : null,
           },
           source: "manual",
           answered_by: args.actorProfileId,
@@ -353,6 +455,9 @@ export async function saveKickoffDeck(args: {
       deal_id: args.dealId,
       deck_type: args.choice?.deckType ?? null,
       form_ready: args.choice?.formReady ?? null,
+      completion_from: args.choice?.schedule?.completionFrom ?? null,
+      completion_to: args.choice?.schedule?.completionTo ?? null,
+      forms_finalised_on: args.choice?.schedule?.formsFinalisedOn ?? null,
     },
   });
   return { implementationId: args.implementationId, saved: args.choice !== null };

@@ -15,6 +15,8 @@ import {
   type KickoffSelection,
 } from "@/lib/kickoff-slides";
 import type { WelcomeView } from "@/lib/welcome";
+import { customerWelcomeView } from "@/lib/welcome";
+import { parseDeliveryTimeline, suggestDeliveryDates } from "@/lib/delivery-timeline";
 
 /**
  * The Kickoff deck as the room sees it, and as the TIS configures it. The room
@@ -120,6 +122,7 @@ function deckFor(
     partnerName: null,
     additional: [],
     firstFormName: "Site Check",
+    delivery: null,
     ...over,
   };
 }
@@ -394,5 +397,110 @@ describe("the blocked panel says why the presentation is held", () => {
     expect(html).toContain("needs a choice before it can be presented");
     expect(html).not.toContain("could not be loaded");
     expect(html).not.toContain("Try again");
+  });
+});
+
+const RIVERBAY_PARAGRAPH =
+  "The estimated timeline for completion of the solution is 4 to 6 weeks, commencing once all form builds and edits have been finalized. These deliverables may include necessary systems or environments, submitting finalized forms and documentation.";
+
+function withDelivery(view: WelcomeView, formsFinalisedOn: string | null): WelcomeView {
+  const suggestion = suggestDeliveryDates({
+    sow: parseDeliveryTimeline(RIVERBAY_PARAGRAPH),
+    tierNumber: null,
+    closeDate: "2026-08-20",
+    kickoffDate: "2026-09-07",
+    signedDate: null,
+    formsFinalisedOn,
+    holidays: [],
+    sowDeadlines: [],
+    sowNotes: [],
+  });
+  const deck = view.kickoffDeck!;
+  const effective = { from: suggestion.from, to: suggestion.to, source: suggestion.basis };
+  return {
+    ...view,
+    kickoffDeck: {
+      ...deck,
+      delivery: {
+        suggestion,
+        saved: null,
+        effective,
+        label: suggestion.from
+          ? `Proposed from the SOW Delivery Timeline: ${suggestion.from} to ${suggestion.to}. Not yet agreed with the customer.`
+          : null,
+      },
+    },
+  } as WelcomeView;
+}
+
+describe("delivery on the journey slides: the SOW's own words, proposed, never agreed", () => {
+  it("the standard journey slide states the SOW duration in its own unit, and that the date is to confirm", () => {
+    const view = withDelivery(
+      viewWith(deckFor({ deckType: "standard", formReady: false, hasAdditional: false })),
+      null,
+    );
+    const idx = kickoffScreensFor(view).findIndex((s) => s.key === "kickoff-journey");
+    const html = markup(view, idx);
+    expect(html).toContain(
+      "Delivery: 4 to 6 weeks, when all form builds and edits are finalised, as the SOW states it.",
+    );
+    expect(html).toContain("Completion date: to confirm together.");
+    expect(html).not.toContain("Not yet agreed");
+  });
+
+  it("once the finalisation day is recorded, the proposed range is shown as proposed, not agreed", () => {
+    const view = withDelivery(
+      viewWith(deckFor({ deckType: "standard", formReady: false, hasAdditional: false })),
+      "2026-10-05",
+    );
+    const idx = kickoffScreensFor(view).findIndex((s) => s.key === "kickoff-journey");
+    const html = markup(view, idx);
+    expect(html).toContain("Proposed from the SOW:");
+    expect(html).toContain("Not yet agreed with the customer.");
+  });
+
+  it("the partner journey slide carries the same delivery note", () => {
+    const view = withDelivery(
+      viewWith(
+        deckFor(
+          { deckType: "partner", formReady: false, hasAdditional: false },
+          { partnerName: "Field Fusion IQ" },
+          {
+            deckSignals: { partnerByRecord: true, partnerByJourney: true },
+            partnerName: "Field Fusion IQ",
+            path: "partner_implementation",
+          },
+        ),
+      ),
+      null,
+    );
+    const idx = kickoffScreensFor(view).findIndex((s) => s.key === "partner-journey");
+    expect(markup(view, idx)).toContain("Completion date: to confirm together.");
+  });
+});
+
+describe("the customer's copy is never the internal deck", () => {
+  it("the customer projection drops the deck, its delivery state, and the TIS's reasons", () => {
+    const view = withDelivery(
+      viewWith(
+        deckFor(
+          { deckType: "standard", formReady: true, hasAdditional: false },
+          {
+            saved: {
+              savedAt: "2026-11-05",
+              savedBy: "Test Manager",
+              deckType: "standard",
+              formReady: true,
+            },
+          },
+        ),
+      ),
+      "2026-10-05",
+    );
+    const customer = JSON.stringify(customerWelcomeView(view));
+    expect(customer).not.toContain("kickoffDeck");
+    expect(customer).not.toContain("Adjusted by the TIS");
+    expect(customer).not.toContain("recommended");
+    expect(customer).not.toContain("Test Manager");
   });
 });

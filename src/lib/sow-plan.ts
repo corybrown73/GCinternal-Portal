@@ -1,5 +1,7 @@
 import { z } from "zod/v4";
 
+import { parseDeliveryTimeline, type SowStartCondition } from "./delivery-timeline";
+
 import {
   typedDateSchema,
   type AiOwnedField,
@@ -224,6 +226,8 @@ const sideEnum = z.preprocess(
  * the term, the money, the people, the signature, the systems, the forms.
  */
 export const sowReadingSchema = sowPlanProposalSchema.extend({
+  /** The Delivery Timeline paragraph, verbatim as printed. Null when the SOW has none. */
+  delivery_timeline: z.preprocess(looseText(1200), z.string().nullable()),
   deliverables: groundedList(40),
   out_of_scope: groundedList(30),
   customer_responsibilities: groundedList(30),
@@ -315,6 +319,7 @@ export function parseSowReading(output: unknown): SowReading | null {
   if (!plan.success) return null;
   return {
     ...normalizeProposal(plan.data),
+    delivery_timeline: null,
     deliverables: [],
     out_of_scope: [],
     customer_responsibilities: [],
@@ -560,6 +565,30 @@ export function sowFactsFrom(proposal: {
   };
 }
 
+/** The parsed SOW delivery paragraph in the shape the intake keeps it. */
+export function storedDelivery(d: ReturnType<typeof parseDeliveryTimeline>): {
+  quote: string;
+  duration_text: string | null;
+  duration_unit: "day" | "week" | "month" | null;
+  duration_min: number | null;
+  duration_max: number | null;
+  start_condition: SowStartCondition;
+  start_text: string | null;
+  dependencies: string[];
+} | null {
+  if (!d) return null;
+  return {
+    quote: d.quote,
+    duration_text: d.duration?.text ?? null,
+    duration_unit: d.duration?.unit ?? null,
+    duration_min: d.duration?.min ?? null,
+    duration_max: d.duration?.max ?? null,
+    start_condition: d.startCondition,
+    start_text: d.startText,
+    dependencies: d.dependencies,
+  };
+}
+
 export function sowTimelinePatch(
   intake: {
     wanted_forms: Array<{ name: string }>;
@@ -570,6 +599,7 @@ export function sowTimelinePatch(
     notes: string[];
     dates?: TypedDate[];
     seats?: number | null;
+    delivery_timeline?: string | null;
   },
   makeId: (row: SowPlanRow) => string,
 ): { timeline: Record<string, unknown>; accepted: number; sessionMinutes: number | null } {
@@ -604,6 +634,7 @@ export function sowTimelinePatch(
       sow_notes: proposal.notes.map((n) => n.slice(0, 300)).slice(0, 20),
       sow_dates: (proposal.dates ?? []).slice(0, 20),
       sow_facts: sowFactsFrom(proposal),
+      sow_delivery: storedDelivery(parseDeliveryTimeline(proposal.delivery_timeline)),
       ...(sessionMinutes ? { session_minutes: sessionMinutes } : {}),
     },
   };

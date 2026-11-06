@@ -24,6 +24,7 @@
  */
 
 import { isManagerRole } from "./roles";
+import type { DeliverySuggestion, EffectiveSource, SavedSchedule } from "./delivery-timeline";
 
 export type KickoffDeckType = "standard" | "partner";
 
@@ -191,6 +192,17 @@ export type KickoffChoice = {
   deckType: KickoffDeckType;
   /** The TIS confirmed the first form is ready to demonstrate. */
   formReady: boolean;
+  /** The TIS's delivery dates. Proposed, never agreed with the customer. Null when not saved. */
+  schedule?: SavedSchedule | null;
+};
+
+/** What the deck shows for delivery: the suggestion, the TIS's saved schedule, and the dates in effect. */
+export type KickoffDelivery = {
+  suggestion: DeliverySuggestion;
+  saved: SavedSchedule | null;
+  effective: { from: string | null; to: string | null; source: EffectiveSource };
+  /** The "proposed, not yet agreed" line for the slides, or null when there is no date. */
+  label: string | null;
 };
 
 /**
@@ -275,6 +287,8 @@ export type KickoffDeckView = {
   additional: Array<{ kind: string; name: string; phase: number }>;
   /** The first form's name when one is named. */
   firstFormName: string | null;
+  /** The delivery dates for the journey slide: suggested, adjusted, never agreed. Null when the deck did not load. */
+  delivery: KickoffDelivery | null;
 };
 
 /**

@@ -241,6 +241,56 @@ const STAGE_ICON: Record<string, string> = {
   complete: "GraduationCap",
 };
 
+/**
+ * The delivery block on the journey slides: the SOW's duration in its own unit and
+ * its starting condition, the proposed completion, and what it depends on. Always
+ * labelled as proposed, never agreed. With no date proposed, it says the date is to
+ * confirm together. Short lines, so it sits clear of the rail and the cards.
+ */
+function DeliveryNote({ view }: { view: WelcomeView }) {
+  const d = view.kickoffDeck?.delivery;
+  if (!d) return null;
+  const s = d.suggestion;
+  const lines: string[] = [];
+  if (s.basis === "sow" && s.duration) {
+    lines.push(
+      `Delivery: ${s.duration.text}, ${s.startCondition.toLowerCase()}, as the SOW states it.`,
+    );
+  } else if (s.basis === "expedited") {
+    lines.push("Delivery: an expedited date in the SOW, subject to resource review.");
+  } else if (s.basis === "tier") {
+    lines.push("Delivery: complexity-tier target, in business days from the close.");
+  }
+  const effective = d.effective;
+  if (effective.from && effective.to) {
+    const when =
+      effective.from === effective.to
+        ? shortDay(effective.from)
+        : `${shortDay(effective.from)} to ${shortDay(effective.to)}`;
+    const basis =
+      effective.source === "tis"
+        ? "Adjusted by the TIS"
+        : effective.source === "expedited"
+          ? "Expedited, subject to resource review"
+          : effective.source === "sow"
+            ? "Proposed from the SOW"
+            : "Proposed from the tier";
+    lines.push(`${basis}: ${when}. Not yet agreed with the customer.`);
+  } else {
+    lines.push("Completion date: to confirm together.");
+  }
+  if (s.dependencies.length) {
+    lines.push("Depends on the customer's deliverables, as the SOW states.");
+  }
+  return (
+    <div className="wp-kick-delivery">
+      {lines.map((line) => (
+        <p key={line}>{line}</p>
+      ))}
+    </div>
+  );
+}
+
 function KickoffJourney({ view, page }: { view: WelcomeView; page: number }) {
   const j = view.journey;
   const stages = j ? kickoffJourneyStages(j) : [];
@@ -292,6 +342,7 @@ function KickoffJourney({ view, page }: { view: WelcomeView; page: number }) {
           ))}
         </div>
       ) : null}
+      <DeliveryNote view={view} />
       <div className="wp-kick-upcoming">
         {KICKOFF_UPCOMING.map((stage) => {
           const facts = details[stage.key] ?? [];
@@ -623,18 +674,16 @@ function KickoffAdditional({ view, page }: { view: WelcomeView; page: number }) 
       accent="solutions."
     >
       {items.length ? (
-        <ul className="wp-kick-achieve">
+        <div className="wp-kick-achieve">
           {items.map((s) => (
-            <li key={`${s.kind}-${s.name}`}>
-              <Check className="wp-kick-check" strokeWidth={3} aria-hidden="true" />
-              <span>
-                {s.name}
-                <small> · Phase {s.phase}</small>
-                <small> · What it delivers: {KICKOFF_TO_CONFIRM}</small>
-              </span>
-            </li>
+            <section key={`${s.kind}-${s.name}`}>
+              <h4>{s.name}</h4>
+              <p>
+                Phase {s.phase} · What it delivers: {KICKOFF_TO_CONFIRM}
+              </p>
+            </section>
           ))}
-        </ul>
+        </div>
       ) : (
         <p>{KICKOFF_TO_CONFIRM}</p>
       )}
@@ -646,20 +695,67 @@ function KickoffAdditional({ view, page }: { view: WelcomeView; page: number }) 
 
 const PARTNER_JOURNEY_KEYS = ["form_finalisation", "pilot", "trial_run", "roll_out"] as const;
 
-/** P1: Let's get your implementation moving. */
-function PartnerWelcome({ view, page }: { view: WelcomeView; page: number }) {
+/** P1: Let's get your implementation moving. The standard cover's composition, with the partner's lead. */
+function PartnerWelcome({ view }: { view: WelcomeView; page: number }) {
   const partner = view.kickoffDeck?.partnerName ?? null;
   return (
-    <Frame
-      k="partner-welcome"
-      page={page}
-      eyebrow="Kickoff · Partner implementation"
-      title="Let's get your"
-      accent="implementation moving."
-      lede={`${view.clientName}, with ${partner ?? KICKOFF_TO_CONFIRM} leading and GoCanvas alongside.`}
-    >
-      {null}
-    </Frame>
+    <section className="wp-screen is-cover">
+      <div className="wp-blob is-cover" />
+      <div className="wp-dots" />
+      <header className="wp-head">
+        <img src="/branding/gocanvas-wordmark-navy.png" alt="GoCanvas" className="wp-logo" />
+        {view.clientLogoUrl ? (
+          <img src={view.clientLogoUrl} alt={view.clientName} className="wp-client-logo" />
+        ) : null}
+      </header>
+      <div className="wp-cover-grid">
+        <div className="wp-cover-text">
+          <p className="wp-eyebrow">Kickoff · Partner implementation</p>
+          <h1 className="wp-title is-hero">
+            <T k="partner-welcome.title">Let's get your</T>{" "}
+            <span className="wp-accent">
+              <T k="partner-welcome.accent">implementation</T>
+            </span>{" "}
+            <T k="partner-welcome.end">moving.</T>
+          </h1>
+          <div className="wp-rule" />
+          <p className="wp-cover-name">
+            <T k="partner-welcome.name">{view.clientName}</T>
+          </p>
+          <p className="wp-lede">
+            {partner ? `Led by ${partner}, with GoCanvas alongside.` : KICKOFF_TO_CONFIRM}
+          </p>
+          <p className="wp-eyebrow" style={{ marginBottom: 6 }}>
+            Today we&apos;ll
+          </p>
+          <div className="wp-pills is-compact">
+            {KICKOFF_PROMISE.map((item) => (
+              <span className="wp-pill" key={item.text}>
+                <Tile name={item.icon} size="sm" tone="blue" /> {item.text}
+              </span>
+            ))}
+          </div>
+        </div>
+        <div className="wp-cover-art">
+          <div className="wp-photo wp-phone-panel">
+            <PhoneMock view={view} />
+            <span className="wp-photo-cap">
+              <Icon name="Smartphone" className="h-3.5 w-3.5" />
+              {view.firstForm?.name ?? "Your workflow"}, on the phone
+            </span>
+          </div>
+        </div>
+      </div>
+      <footer className="wp-foot">
+        <span>gocanvas.com</span>
+        <span>01</span>
+      </footer>
+      <div className="wp-stripe">
+        <i />
+        <i />
+        <i />
+      </div>
+    </section>
   );
 }
 
@@ -703,7 +799,7 @@ function PartnerStart({ view, page }: { view: WelcomeView; page: number }) {
 }
 
 /** P3: From kickoff to rollout, here's our plan. Four stages, no dates unless they are recorded. */
-function PartnerJourney({ page }: { page: number }) {
+function PartnerJourney({ view, page }: { view: WelcomeView; page: number }) {
   return (
     <Frame
       k="partner-journey"
@@ -723,6 +819,7 @@ function PartnerJourney({ page }: { page: number }) {
           </li>
         ))}
       </ol>
+      <DeliveryNote view={view} />
     </Frame>
   );
 }
@@ -863,7 +960,7 @@ export function kickoffLibrary(view: WelcomeView): Record<string, Screen> {
     "partner-journey": {
       key: "partner-journey",
       label: "From kickoff to rollout, here's our plan.",
-      render: (a) => <PartnerJourney key="partner-journey" page={a.page} />,
+      render: (a) => <PartnerJourney key="partner-journey" view={view} page={a.page} />,
     },
     "partner-together": {
       key: "partner-together",

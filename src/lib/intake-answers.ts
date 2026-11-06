@@ -538,6 +538,26 @@ export const intakeAnswersSchema = z.object({
         })
         .nullable()
         .default(null),
+      /**
+       * The SOW's Delivery Timeline paragraph, verbatim, with its parsed facts
+       * (see delivery-timeline.ts). Null when the SOW has none or none was read.
+       */
+      sow_delivery: z
+        .object({
+          quote: z.string().max(1200),
+          duration_text: z.string().max(80).nullable().default(null),
+          /** The unit the SOW prints. The duration is kept in that unit, never converted. */
+          duration_unit: z.enum(["day", "week", "month"]).nullable().default(null),
+          duration_min: z.number().int().min(0).nullable().default(null),
+          duration_max: z.number().int().min(0).nullable().default(null),
+          start_condition: z
+            .enum(["forms_finalised", "kickoff", "signing", "unstated"])
+            .default("unstated"),
+          start_text: z.string().max(300).nullable().default(null),
+          dependencies: z.array(z.string().max(300)).max(10).default([]),
+        })
+        .nullable()
+        .default(null),
       /** Service keys (see normalizeServiceKey) a person removed: a re-read never puts them back. */
       removed_services: z.array(z.string().max(160)).max(40).default([]),
       /** The core meetings' length when the SOW states one; null for the plan's own. */

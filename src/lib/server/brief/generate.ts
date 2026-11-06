@@ -309,6 +309,34 @@ export async function buildAndStoreDeck(
   // Refused before the deck is drawn or stored. A partner deal has no standard kickoff deck.
   const { assertDocumentAllowed } = await import("../document-guard.server");
   await assertDocumentAllowed("kickoff-deck", accountId);
+  // The journey's own classification, as the presentation reads it. A partner journey is refused
+  // here rather than drawn as the standard deck; the guard above only reads the record.
+  {
+    const { deckKindFor } = await import("../../deck-kind");
+    const { data: impl } = await admin
+      .from("implementations")
+      .select("journey_template_id")
+      .eq("deal_id", accountId)
+      .is("superseded_by_implementation_id", null)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    let journeyKey: string | null = null;
+    if (impl?.journey_template_id) {
+      const { data: tpl } = await admin
+        .from("journey_templates")
+        .select("key")
+        .eq("id", impl.journey_template_id)
+        .maybeSingle();
+      journeyKey = (tpl?.key as string | null) ?? null;
+    }
+    const decision = deckKindFor({ journeyKey, priorImplementations: 0, products: null });
+    if (decision.kind === "partner") {
+      throw new Error(
+        `No kickoff deck is generated for a partner implementation. ${decision.reason}`,
+      );
+    }
+  }
 
   // The two owners are team_members ids on the deal. A deck that prints a uuid
   // where a name belongs is worse than one that prints nothing.

@@ -340,6 +340,8 @@ async function viewFor(
           firstFormConfirmed:
             Boolean(input.firstForm) && (input.firstFormSource ?? "person") === "person",
           firstFormName: input.firstForm?.name ?? null,
+          kickoffDate: input.timeline.milestones.find((m) => m.key === "kickoff")?.date ?? null,
+          closeDate: input.timeline.closeDate ?? null,
         })
       : null,
     hiddenScreens: (await import("./intake-answers")).readIntake(deal.intake)
