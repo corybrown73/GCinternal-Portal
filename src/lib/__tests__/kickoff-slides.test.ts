@@ -5,14 +5,11 @@ import {
   CORE_SLIDE_KEYS,
   OPTIONAL_SLIDE_KEYS,
   defaultSelection,
-  isKickoffDeckOnlyPatch,
-  mergeKickoffDeck,
   moveWithinZone,
   presentedSlideKeys,
   recommendKickoffSlides,
   resolveKickoffSelection,
   type KickoffFacts,
-  type SavedKickoffDeck,
 } from "../kickoff-slides";
 
 const NEW_CUSTOMER: KickoffFacts = {
@@ -293,38 +290,6 @@ describe("reordering never disrupts the core narrative", () => {
       ...order,
       "kickoff-cover",
     ]);
-  });
-});
-
-describe("saving is per implementation", () => {
-  const a: SavedKickoffDeck = {
-    included: ["kickoff-training"],
-    order: [],
-    saved_at: "2026-11-06",
-    saved_by: "p1",
-  };
-  const b: SavedKickoffDeck = {
-    included: ["kickoff-purchased"],
-    order: [],
-    saved_at: "2026-11-06",
-    saved_by: "p2",
-  };
-
-  it("saving one implementation leaves another's selection as it was", () => {
-    const merged = mergeKickoffDeck({ "impl-a": a }, { "impl-b": b });
-    expect(merged["impl-a"]).toEqual(a);
-    expect(merged["impl-b"]).toEqual(b);
-  });
-
-  it("a null removes only that implementation's selection", () => {
-    const merged = mergeKickoffDeck({ "impl-a": a, "impl-b": b }, { "impl-a": null });
-    expect(merged).toEqual({ "impl-b": b });
-  });
-
-  it("a deck-only save is recognised, so it can skip the journey work", () => {
-    expect(isKickoffDeckOnlyPatch({ kickoff_deck: {} })).toBe(true);
-    expect(isKickoffDeckOnlyPatch({ kickoff_deck: {}, timeline: {} })).toBe(false);
-    expect(isKickoffDeckOnlyPatch({})).toBe(false);
   });
 });
 

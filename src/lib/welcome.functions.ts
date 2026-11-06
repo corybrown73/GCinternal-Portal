@@ -15,15 +15,23 @@ export const getWelcome = createServerFn({ method: "GET" })
   .handler(async ({ data, context }) => {
     const { loadWelcome } = await import("./welcome.server");
     const view = await loadWelcome(data.dealId);
-    if (!view?.kickoffDeck) return view;
-    // Whether this person may change the deck: shown on the controls. The save
-    // enforces the same rule on the server, whatever the page shows.
+    const deck = view?.kickoffDeck;
+    if (!view || !deck || deck.loadError || !deck.implementationId) return view;
+    // Whether this person may change the deck, shown on the controls. The save
+    // enforces the same rule on the server, whatever the page shows. A failed
+    // read here is said, and the controls stay off.
     const { canConfigureImplementationDeck } = await import("./kickoff-slides.server");
-    const implementationId = view.kickoffDeck.implementationId;
-    const canConfigure = implementationId
-      ? await canConfigureImplementationDeck(context.profile.id, data.dealId, implementationId)
-      : false;
-    return { ...view, kickoffDeck: { ...view.kickoffDeck, canConfigure } };
+    try {
+      const canConfigure = await canConfigureImplementationDeck(
+        context.profile.id,
+        data.dealId,
+        deck.implementationId,
+      );
+      return { ...view, kickoffDeck: { ...deck, canConfigure } };
+    } catch (e) {
+      const loadError = e instanceof Error ? e.message : "Could not load the kickoff slides.";
+      return { ...view, kickoffDeck: { ...deck, canConfigure: false, loadError } };
+    }
   });
 
 /** The customer's copy of the dashboard, for the TIS to preview. Read-only; no customer write is reachable from it. */

@@ -296,50 +296,14 @@ export function moveWithinZone(order: string[], key: string, direction: -1 | 1):
   });
 }
 
-/** The saved selection, as stored on the deal's intake, per implementation. */
-export type SavedKickoffDeck = {
-  included: string[];
-  order: string[];
-  saved_at: string;
-  saved_by: string | null;
-};
-
-/**
- * Merge a save into the deal's stored configurations. Only the implementations
- * named in the save change; a null removes that implementation's saved
- * selection, so the recommendation applies again.
- */
-export function mergeKickoffDeck(
-  current: Record<string, SavedKickoffDeck | null> | null | undefined,
-  patch: Record<string, SavedKickoffDeck | null> | null | undefined,
-): Record<string, SavedKickoffDeck> {
-  const out: Record<string, SavedKickoffDeck> = {};
-  // A stored entry that did not read cleanly is dropped here, not carried forward.
-  for (const [implementationId, value] of Object.entries(current ?? {})) {
-    if (value) out[implementationId] = value;
-  }
-  for (const [implementationId, value] of Object.entries(patch ?? {})) {
-    if (value === null) delete out[implementationId];
-    else out[implementationId] = value;
-  }
-  return out;
-}
-
-/**
- * Whether a save touches only the kickoff deck. Such a save must change no
- * stage, owner, task or milestone, so it skips the post-save journey work.
- */
-export function isKickoffDeckOnlyPatch(patch: Record<string, unknown>): boolean {
-  const keys = Object.keys(patch);
-  return keys.length > 0 && keys.every((k) => k === "kickoff_deck");
-}
-
 function dedupe(keys: string[]): string[] {
   return [...new Set(keys)];
 }
 
 /** What the TIS sees about one implementation's Kickoff deck. Internal only; never on the customer's copy. */
 export type KickoffDeckView = {
+  /** Set when a read failed: the message to show, and nothing is replaced silently. Null otherwise. */
+  loadError: string | null;
   /** The implementation the configuration is saved against. Null before it exists. */
   implementationId: string | null;
   /** The existing deck classification, and why. */

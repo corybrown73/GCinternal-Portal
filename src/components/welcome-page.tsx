@@ -723,6 +723,12 @@ function Toolbar({
         ) : null}
         <span className="wp-toolbar-title">{view.clientName}</span>
         <span className="wp-toolbar-meta">Kickoff deck</span>
+        {experience === "kickoff" && view.kickoffDeck?.loadError ? (
+          <span role="alert" className="wp-toolbar-meta">
+            {view.kickoffDeck.loadError} The standard slides are shown. Do not present the saved
+            selection until this clears.
+          </span>
+        ) : null}
 
         {experience === "kickoff" && workspaceHref ? (
           <a

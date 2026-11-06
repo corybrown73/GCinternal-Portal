@@ -21,6 +21,7 @@ import { localIso, shortDay } from "@/lib/onboarding-timeline";
 import { getParkingLot, addParkingItemFn, updateParkingItemFn } from "@/lib/parking-lot.functions";
 import { wonStage } from "@/lib/pipeline-stages";
 import { saveHandoffAnswer, saveIntake, saveStageTarget } from "@/lib/presale.functions";
+import { saveKickoffDeckFn } from "@/lib/kickoff-slides.functions";
 import {
   KICKOFF_SLIDES,
   OPTIONAL_SLIDE_KEYS,
@@ -267,7 +268,7 @@ export function KickoffSlidesSection({
   implementationId: string | null;
   onSaved: () => void;
 }) {
-  const save = useServerFn(saveIntake);
+  const save = useServerFn(saveKickoffDeckFn);
   const kd = view.kickoffDeck ?? null;
   const signature = kd ? JSON.stringify(kd.selection) : "";
   const [draft, setDraft] = useState<KickoffSelection | null>(kd?.selection ?? null);
@@ -281,9 +282,23 @@ export function KickoffSlidesSection({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [signature]);
 
-  if (!kd || !draft) {
-    return <GapNote>The kickoff slides are not available for this deal.</GapNote>;
+  if (!kd) {
+    return (
+      <GapNote>
+        The kickoff slide builder is available for test implementations only, during the controlled
+        rollout.
+      </GapNote>
+    );
   }
+  if (kd.loadError) {
+    // A read failed. Nothing is shown as saved, and nothing can be changed, until it clears.
+    return (
+      <p role="alert" className="text-[12px] text-status-risk-foreground">
+        {kd.loadError} Nothing here can be changed until this clears.
+      </p>
+    );
+  }
+  if (!draft) return null;
   // The same rule the save enforces on the server: a person who may not change
   // this deck sees it, previews it, and cannot change it here.
   const canEdit = kd.canConfigure && Boolean(implementationId);
@@ -308,14 +323,12 @@ export function KickoffSlidesSection({
   const move = (key: string, direction: -1 | 1) =>
     canEdit && setDraft((d) => (d ? { ...d, order: moveWithinZone(d.order, key, direction) } : d));
 
-  const run = async (patch: Record<string, unknown> | null) => {
+  const run = async (selection: { included: string[]; order: string[] } | null) => {
     if (!implementationId) return;
     setPending(true);
     setError(null);
     try {
-      await save({
-        data: { dealId, patch: { kickoff_deck: { [implementationId]: patch } } },
-      } as never);
+      await save({ data: { dealId, implementationId, selection } });
       onSaved();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not save the kickoff slides.");

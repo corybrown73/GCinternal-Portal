@@ -2728,12 +2728,6 @@ export async function saveDealIntake(
   if (!before) throw new Error("Deal not found");
 
   const current = readIntake((before as any).intake);
-  // Saving or resetting a Kickoff deck is limited by role, and checked before
-  // anything is merged or written. A reset (null) is the same act.
-  if (patch["kickoff_deck"] && typeof patch["kickoff_deck"] === "object") {
-    const { assertKickoffDeckAuthority } = await import("./kickoff-slides.server");
-    await assertKickoffDeckAuthority(userId, dealId, Object.keys(patch["kickoff_deck"] as object));
-  }
   // Recording that a kickoff was held, or taking that back, is limited by role
   // (kickoff-authority.ts). Checked only when the held state actually changes,
   // and recorded against the actor once the save has succeeded.
@@ -2779,20 +2773,6 @@ export async function saveDealIntake(
       ...incomingTimeline,
       stage_targets: stageTargets,
     };
-  }
-  // Per-implementation kickoff selections merge with what is stored: one
-  // implementation's save never replaces another's (kickoff-slides.ts).
-  if (patch["kickoff_deck"] && typeof patch["kickoff_deck"] === "object") {
-    const { mergeKickoffDeck } = await import("./kickoff-slides");
-    const stamped = Object.fromEntries(
-      Object.entries(patch["kickoff_deck"] as Record<string, unknown>).map(([implId, value]) => [
-        implId,
-        value === null
-          ? null
-          : { ...(value as object), saved_at: new Date().toISOString(), saved_by: userId },
-      ]),
-    );
-    merged["kickoff_deck"] = mergeKickoffDeck(current.kickoff_deck, stamped as never);
   }
   for (const block of ["field_fusion", "existing"] as const) {
     if (patch[block] && typeof patch[block] === "object") {
@@ -2869,14 +2849,6 @@ export async function saveDealIntake(
     entity_id: dealId,
     payload: { fields: Object.keys(patch) },
   });
-
-  // Configuring the kickoff deck changes what the presentation shows, and
-  // nothing else: no stage, owner, task or milestone moves. So a deck-only save
-  // stops here, before any of the journey work below.
-  {
-    const { isKickoffDeckOnlyPatch } = await import("./kickoff-slides");
-    if (isKickoffDeckOnlyPatch(patch)) return next;
-  }
 
   if (heldChange) {
     const { recordKickoffHeldChange } = await import("./kickoff-authority.server");

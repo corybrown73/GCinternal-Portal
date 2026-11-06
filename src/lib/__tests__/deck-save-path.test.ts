@@ -3,10 +3,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createFakeSupabase, type Rows } from "./fake-supabase";
 
 /**
- * Integration over the real saveDealIntake: a Kickoff deck save or reset, by each
- * role, must persist exactly its own entry and nothing else. It must not move a
- * stage, change an owner, touch tasks or milestones, or run the journey work. A
- * control save with an unrelated field shows the harness does see that work.
+ * The Kickoff deck save and reset, over the fake database. A save or reset:
+ *   - is refused, and writes nothing, for a live customer's deal;
+ *   - is refused, and writes nothing, for a role without authority;
+ *   - writes exactly one row for one implementation, and nothing else;
+ *   - leaves the deal's intake alone, so a rolled-back release cannot drop it.
  */
 const h = vi.hoisted(() => {
   const state = {
@@ -32,18 +33,22 @@ vi.mock("../stage-flow.server", () => ({
   syncDealStage: (...args: unknown[]) => (h.syncDealStage.fn as any)(...args),
 }));
 
-import { KICKOFF_DECK_REFUSED } from "../kickoff-slides.server";
-import { readIntake } from "../intake-answers";
+import {
+  KICKOFF_DECK_NOT_AVAILABLE,
+  KICKOFF_DECK_REFUSED,
+  saveKickoffDeck,
+} from "../kickoff-slides.server";
+import { intakeAnswersSchema } from "../intake-answers";
 import { saveDealIntake } from "../presale.server";
 
-const TABLES_THAT_MUST_NOT_CHANGE = [
+const UNCHANGED = [
   "implementations",
   "stage_instances",
   "work_items",
   "implementation_stage_history",
 ] as const;
 
-function seed(overrides: Partial<Rows> = {}): Rows {
+function seed(over: Partial<Rows> = {}): Rows {
   return {
     portal_profiles: [
       {
@@ -59,13 +64,6 @@ function seed(overrides: Partial<Rows> = {}): Rows {
         team_member_id: null,
         full_name: "A Super Admin",
         email: "s@example.test",
-      },
-      {
-        id: "p-admin",
-        role: "admin",
-        team_member_id: null,
-        full_name: "An Admin",
-        email: "a@example.test",
       },
       {
         id: "p-impl",
@@ -93,10 +91,12 @@ function seed(overrides: Partial<Rows> = {}): Rows {
       {
         id: "deal-1",
         customer_id: "cust-1",
-        intake: { kickoff_deck: {} },
+        is_test: true,
+        intake: { welcome_hidden_screens: [] },
         stage: "onboarding_kickoff",
       },
     ],
+    customers: [{ id: "cust-1", is_test: true }],
     implementations: [
       {
         id: "impl-1",
@@ -138,25 +138,20 @@ function seed(overrides: Partial<Rows> = {}): Rows {
     implementation_stage_history: [
       { id: "h-1", implementation_id: "impl-1", stage: "build", exited_at: null },
     ],
+    scoping_answers: [],
     portal_stage_transitions: [],
-    ...overrides,
+    ...over,
   };
 }
 
 const DECK = { included: ["kickoff-training"], order: ["kickoff-training", "kickoff-purchased"] };
-/** A stored entry, as the save writes it: the selection, when, and by whom. */
-const stored = (deck: { included: string[]; order: string[] }, by: string) => ({
-  ...deck,
-  saved_at: "2026-11-01T00:00:00.000Z",
-  saved_by: by,
-});
 
 let fake: ReturnType<typeof createFakeSupabase>;
 let before: Record<string, string>;
 let audits: Array<Record<string, unknown>>;
 
-function setup(overrides: Partial<Rows> = {}) {
-  fake = createFakeSupabase(seed(overrides));
+function setup(over: Partial<Rows> = {}) {
+  fake = createFakeSupabase(seed(over));
   h.supabase.client = fake.client;
   audits = [];
   h.audit.fn = async (row: Record<string, unknown>) => {
@@ -165,24 +160,25 @@ function setup(overrides: Partial<Rows> = {}) {
   h.syncJourney.fn = vi.fn(async () => null);
   h.syncDealStage.fn = vi.fn(async () => undefined);
   before = Object.fromEntries(
-    TABLES_THAT_MUST_NOT_CHANGE.map((t) => [t, JSON.stringify(fake.store[t])]),
+    [...UNCHANGED, "portal_accounts", "scoping_answers"].map((t) => [
+      t,
+      JSON.stringify(fake.store[t]),
+    ]),
   );
 }
 
-const intakeOf = () => fake.store["portal_accounts"]![0]!["intake"] as Record<string, any>;
-const sideEffects = () => ({
-  journey: (h.syncJourney.fn as any).mock.calls.length,
-  dealStage: (h.syncDealStage.fn as any).mock.calls.length,
-});
+const rowsFor = (implementationId?: string) =>
+  (fake.store["scoping_answers"] as Array<Record<string, any>>).filter(
+    (r) => implementationId === undefined || r["implementation_id"] === implementationId,
+  );
 
-function expectNoSideEffects() {
-  expect(sideEffects()).toEqual({ journey: 0, dealStage: 0 });
-  for (const t of TABLES_THAT_MUST_NOT_CHANGE) {
-    expect(JSON.stringify(fake.store[t]), `${t} changed`).toBe(before[t]);
-  }
+/** Nothing outside the deck's own row changed: no stage, owner, task, milestone, history or journey work. */
+function expectOnlyTheDeckChanged() {
+  for (const t of UNCHANGED) expect(JSON.stringify(fake.store[t]), `${t} changed`).toBe(before[t]);
+  expect(fake.store["portal_accounts"]).toEqual(JSON.parse(before["portal_accounts"]!));
+  expect((h.syncJourney.fn as any).mock.calls.length).toBe(0);
+  expect((h.syncDealStage.fn as any).mock.calls.length).toBe(0);
   expect(fake.inserts.filter((i) => i.table === "implementation_stage_history")).toHaveLength(0);
-  // The only audit a deck save writes is the intake update itself: no stage, journey or kickoff audit.
-  expect(audits.map((a) => a["action"])).toEqual(["deal.intake_updated"]);
 }
 
 beforeEach(() => {
@@ -190,189 +186,282 @@ beforeEach(() => {
 });
 
 describe("saving a deck selection", () => {
-  it("a manager saves the selection for an implementation, and nothing else moves", async () => {
+  it("a manager saves one implementation's row, and nothing else moves", async () => {
     setup();
-    await saveDealIntake("p-manager", "deal-1", { kickoff_deck: { "impl-1": DECK } });
-
-    const saved = intakeOf()["kickoff_deck"]["impl-1"];
-    expect(saved).toMatchObject({
-      included: DECK.included,
-      order: DECK.order,
-      saved_by: "p-manager",
+    await saveKickoffDeck({
+      actorProfileId: "p-manager",
+      dealId: "deal-1",
+      implementationId: "impl-1",
+      selection: DECK,
     });
-    expect(typeof saved.saved_at).toBe("string");
-    expectNoSideEffects();
+    const [row] = rowsFor("impl-1");
+    expect(row).toMatchObject({
+      question_key: "kickoff_deck",
+      answered_by: "p-manager",
+      source: "manual",
+    });
+    expect(row!["value"]).toMatchObject({ included: DECK.included, order: DECK.order });
+    expectOnlyTheDeckChanged();
+    expect(audits).toEqual([
+      expect.objectContaining({
+        action: "kickoff_deck.saved",
+        actor_id: "p-manager",
+        entity_id: "impl-1",
+      }),
+    ]);
   });
 
-  it("the owner of the implementation may save its selection", async () => {
+  it("the assigned owner saves their implementation", async () => {
     setup();
-    await saveDealIntake("p-impl", "deal-1", { kickoff_deck: { "impl-1": DECK } });
-    expect(intakeOf()["kickoff_deck"]["impl-1"]).toMatchObject({ saved_by: "p-impl" });
-    expectNoSideEffects();
+    await saveKickoffDeck({
+      actorProfileId: "p-impl",
+      dealId: "deal-1",
+      implementationId: "impl-1",
+      selection: DECK,
+    });
+    expect(rowsFor("impl-1")[0]!["answered_by"]).toBe("p-impl");
+    expectOnlyTheDeckChanged();
   });
 
-  it.each(["p-super", "p-admin"])(
-    "%s may save for any implementation on the deal",
-    async (profile) => {
-      setup();
-      await saveDealIntake(profile, "deal-1", { kickoff_deck: { "impl-2": DECK } });
-      expect(intakeOf()["kickoff_deck"]["impl-2"]).toMatchObject({ saved_by: profile });
-      expectNoSideEffects();
-    },
-  );
+  it("a super administrator saves for any implementation on the deal", async () => {
+    setup();
+    await saveKickoffDeck({
+      actorProfileId: "p-super",
+      dealId: "deal-1",
+      implementationId: "impl-2",
+      selection: DECK,
+    });
+    expect(rowsFor("impl-2")[0]!["answered_by"]).toBe("p-super");
+    expectOnlyTheDeckChanged();
+  });
 
-  it("saving one implementation's selection leaves another's as it was", async () => {
-    const other = {
-      included: ["kickoff-workflow"],
-      order: ["kickoff-workflow"],
-      saved_at: "2026-11-01T00:00:00Z",
-      saved_by: "p-other-impl",
-    };
+  it("saving one implementation leaves another's row exactly as it was", async () => {
     setup({
-      portal_accounts: [
+      scoping_answers: [
         {
-          id: "deal-1",
-          customer_id: "cust-1",
-          intake: { kickoff_deck: { "impl-2": other } },
-          stage: "onboarding_kickoff",
+          implementation_id: "impl-2",
+          question_key: "kickoff_deck",
+          value: {
+            included: ["kickoff-workflow"],
+            order: ["kickoff-workflow"],
+            saved_at: "2026-11-01T00:00:00.000Z",
+          },
+          source: "manual",
+          answered_by: "p-other-impl",
         },
       ],
     });
-    await saveDealIntake("p-manager", "deal-1", { kickoff_deck: { "impl-1": DECK } });
-    expect(intakeOf()["kickoff_deck"]["impl-2"]).toEqual(other);
-    expect(intakeOf()["kickoff_deck"]["impl-1"]).toMatchObject({ included: DECK.included });
+    const other = JSON.stringify(rowsFor("impl-2"));
+    await saveKickoffDeck({
+      actorProfileId: "p-manager",
+      dealId: "deal-1",
+      implementationId: "impl-1",
+      selection: DECK,
+    });
+    expect(JSON.stringify(rowsFor("impl-2"))).toBe(other);
+    expect(rowsFor("impl-1")).toHaveLength(1);
+  });
+
+  it("saving again replaces the one row, never adds a second", async () => {
+    setup();
+    await saveKickoffDeck({
+      actorProfileId: "p-manager",
+      dealId: "deal-1",
+      implementationId: "impl-1",
+      selection: DECK,
+    });
+    await saveKickoffDeck({
+      actorProfileId: "p-manager",
+      dealId: "deal-1",
+      implementationId: "impl-1",
+      selection: { included: [], order: DECK.order },
+    });
+    expect(rowsFor("impl-1")).toHaveLength(1);
+    expect(rowsFor("impl-1")[0]!["value"]).toMatchObject({ included: [] });
   });
 });
 
 describe("resetting a deck selection", () => {
-  it("a manager's reset removes only that implementation's selection", async () => {
-    const other = {
-      included: ["kickoff-workflow"],
-      order: ["kickoff-workflow"],
-      saved_at: "2026-11-01T00:00:00Z",
-      saved_by: "p-impl",
-    };
+  it("removes only that implementation's row", async () => {
     setup({
-      portal_accounts: [
+      scoping_answers: [
         {
-          id: "deal-1",
-          customer_id: "cust-1",
-          intake: { kickoff_deck: { "impl-1": DECK, "impl-2": other } },
-          stage: "onboarding_kickoff",
+          implementation_id: "impl-1",
+          question_key: "kickoff_deck",
+          value: { ...DECK, saved_at: "2026-11-01T00:00:00.000Z" },
+          source: "manual",
+          answered_by: "p-manager",
+        },
+        {
+          implementation_id: "impl-2",
+          question_key: "kickoff_deck",
+          value: { ...DECK, saved_at: "2026-11-01T00:00:00.000Z" },
+          source: "manual",
+          answered_by: "p-other-impl",
         },
       ],
     });
-    await saveDealIntake("p-manager", "deal-1", { kickoff_deck: { "impl-1": null } });
-    expect(intakeOf()["kickoff_deck"]).toEqual({ "impl-2": other });
-    expectNoSideEffects();
-  });
-
-  it("the assigned owner may reset its own implementation", async () => {
-    setup({
-      portal_accounts: [
-        {
-          id: "deal-1",
-          customer_id: "cust-1",
-          intake: { kickoff_deck: { "impl-1": DECK } },
-          stage: "onboarding_kickoff",
-        },
-      ],
+    await saveKickoffDeck({
+      actorProfileId: "p-manager",
+      dealId: "deal-1",
+      implementationId: "impl-1",
+      selection: null,
     });
-    await saveDealIntake("p-impl", "deal-1", { kickoff_deck: { "impl-1": null } });
-    expect(intakeOf()["kickoff_deck"]).toEqual({});
-    expectNoSideEffects();
+    expect(rowsFor("impl-1")).toHaveLength(0);
+    expect(rowsFor("impl-2")).toHaveLength(1);
+    expect(audits).toEqual([expect.objectContaining({ action: "kickoff_deck.reset" })]);
   });
 });
 
 describe("refusals write nothing", () => {
-  it("an implementation specialist cannot save for another's implementation", async () => {
-    setup();
+  it("a live customer's deal is refused for a save and for a reset", async () => {
+    setup({
+      portal_accounts: [
+        {
+          id: "deal-1",
+          customer_id: "cust-1",
+          is_test: false,
+          intake: {},
+          stage: "onboarding_kickoff",
+        },
+      ],
+      customers: [{ id: "cust-1", is_test: false }],
+    });
     await expect(
-      saveDealIntake("p-impl", "deal-1", { kickoff_deck: { "impl-2": DECK } }),
-    ).rejects.toThrow(KICKOFF_DECK_REFUSED);
-    expect(intakeOf()["kickoff_deck"]).toEqual({});
+      saveKickoffDeck({
+        actorProfileId: "p-manager",
+        dealId: "deal-1",
+        implementationId: "impl-1",
+        selection: DECK,
+      }),
+    ).rejects.toThrow(KICKOFF_DECK_NOT_AVAILABLE);
+    await expect(
+      saveKickoffDeck({
+        actorProfileId: "p-manager",
+        dealId: "deal-1",
+        implementationId: "impl-1",
+        selection: null,
+      }),
+    ).rejects.toThrow(KICKOFF_DECK_NOT_AVAILABLE);
+    expect(rowsFor()).toHaveLength(0);
     expect(audits).toHaveLength(0);
-    expect(sideEffects()).toEqual({ journey: 0, dealStage: 0 });
+    expectOnlyTheDeckChanged();
   });
 
-  it("an implementation specialist cannot reset another's implementation", async () => {
+  it("the implementation specialist cannot save another's implementation", async () => {
+    setup();
+    await expect(
+      saveKickoffDeck({
+        actorProfileId: "p-impl",
+        dealId: "deal-1",
+        implementationId: "impl-2",
+        selection: DECK,
+      }),
+    ).rejects.toThrow(KICKOFF_DECK_REFUSED);
+    expect(rowsFor()).toHaveLength(0);
+    expect(audits).toHaveLength(0);
+  });
+
+  it("another specialist cannot reset someone else's saved row", async () => {
     const existing = {
-      included: ["kickoff-workflow"],
-      order: ["kickoff-workflow"],
-      saved_at: "2026-11-01T00:00:00Z",
-      saved_by: "p-other-impl",
+      implementation_id: "impl-2",
+      question_key: "kickoff_deck",
+      value: { ...DECK, saved_at: "2026-11-01T00:00:00.000Z" },
+      source: "manual",
+      answered_by: "p-other-impl",
     };
-    setup({
-      portal_accounts: [
-        {
-          id: "deal-1",
-          customer_id: "cust-1",
-          intake: { kickoff_deck: { "impl-2": existing } },
-          stage: "onboarding_kickoff",
-        },
-      ],
-    });
+    setup({ scoping_answers: [existing] });
     await expect(
-      saveDealIntake("p-impl", "deal-1", { kickoff_deck: { "impl-2": null } }),
+      saveKickoffDeck({
+        actorProfileId: "p-impl",
+        dealId: "deal-1",
+        implementationId: "impl-2",
+        selection: null,
+      }),
     ).rejects.toThrow(KICKOFF_DECK_REFUSED);
-    expect(intakeOf()["kickoff_deck"]["impl-2"]).toEqual(existing);
+    expect(rowsFor("impl-2")).toHaveLength(1);
   });
 
-  it("a sales role gets no deck authority, even as the named owner, for a save or a reset", async () => {
+  it("a sales role gets no authority, even as the named owner", async () => {
     setup();
     await expect(
-      saveDealIntake("p-sales", "deal-1", { kickoff_deck: { "impl-1": DECK } }),
+      saveKickoffDeck({
+        actorProfileId: "p-sales",
+        dealId: "deal-1",
+        implementationId: "impl-1",
+        selection: DECK,
+      }),
     ).rejects.toThrow(KICKOFF_DECK_REFUSED);
     await expect(
-      saveDealIntake("p-sales", "deal-1", { kickoff_deck: { "impl-1": null } }),
+      saveKickoffDeck({
+        actorProfileId: "p-sales",
+        dealId: "deal-1",
+        implementationId: "impl-1",
+        selection: null,
+      }),
     ).rejects.toThrow(KICKOFF_DECK_REFUSED);
-    expect(intakeOf()["kickoff_deck"]).toEqual({});
-    expect(sideEffects()).toEqual({ journey: 0, dealStage: 0 });
+    expect(rowsFor()).toHaveLength(0);
   });
 
-  it("an implementation that is not on this deal is refused, even for management", async () => {
+  it("an implementation on another deal is refused, even for management", async () => {
     setup();
     await expect(
-      saveDealIntake("p-manager", "deal-1", { kickoff_deck: { "impl-x": DECK } }),
+      saveKickoffDeck({
+        actorProfileId: "p-manager",
+        dealId: "deal-1",
+        implementationId: "impl-x",
+        selection: DECK,
+      }),
     ).rejects.toThrow(/not on this deal/);
-    expect(intakeOf()["kickoff_deck"]).toEqual({});
+    expect(rowsFor()).toHaveLength(0);
   });
-});
 
-describe("a malformed stored entry does not erase the others", () => {
-  it("drops the malformed entry and keeps every well-formed selection", async () => {
-    setup({
-      portal_accounts: [
-        {
-          id: "deal-1",
-          customer_id: "cust-1",
-          intake: {
-            kickoff_deck: {
-              "impl-1": { included: "not-a-list" },
-              "impl-2": stored(
-                { included: ["kickoff-workflow"], order: ["kickoff-workflow"] },
-                "p-other-impl",
-              ),
-            },
-          },
-          stage: "onboarding_kickoff",
-        },
-      ],
-    });
-    await saveDealIntake("p-manager", "deal-1", { kickoff_deck: { "impl-1": DECK } });
-    expect(intakeOf()["kickoff_deck"]["impl-2"]).toMatchObject({ included: ["kickoff-workflow"] });
-    expect(intakeOf()["kickoff_deck"]["impl-1"]).toMatchObject({ included: DECK.included });
-  });
-});
-
-describe("the harness observes journey work when it happens", () => {
-  it("an ordinary save still runs the journey and deal-stage synchronisation", async () => {
+  it("a failed write says so, and leaves nothing half-saved", async () => {
     setup();
-    await saveDealIntake("p-manager", "deal-1", { welcome_hidden_screens: ["kickoff-next"] });
-    expect((h.syncJourney.fn as any).mock.calls.length).toBe(1);
-    expect((h.syncDealStage.fn as any).mock.calls.length).toBe(1);
+    fake = createFakeSupabase(seed(), { fail: { scoping_answers: { message: "boom" } } });
+    h.supabase.client = fake.client;
+    await expect(
+      saveKickoffDeck({
+        actorProfileId: "p-manager",
+        dealId: "deal-1",
+        implementationId: "impl-1",
+        selection: DECK,
+      }),
+    ).rejects.toThrow();
+    expect(audits).toHaveLength(0);
+    expect(fake.store["portal_accounts"]).toEqual(JSON.parse(before["portal_accounts"]!));
   });
 });
 
-// Keep the readIntake import referenced for readers comparing defaults.
-void readIntake;
+describe("rollback safety: the saved selection is not in the deal's intake", () => {
+  it("the deal's intake schema drops an unknown deck key, so the deck can never live there", () => {
+    expect(intakeAnswersSchema.parse({ kickoff_deck: { x: 1 } })).not.toHaveProperty(
+      "kickoff_deck",
+    );
+  });
+
+  it("a save of the deck leaves the deal's intake exactly as it was", async () => {
+    setup();
+    await saveKickoffDeck({
+      actorProfileId: "p-manager",
+      dealId: "deal-1",
+      implementationId: "impl-1",
+      selection: DECK,
+    });
+    expect(fake.store["portal_accounts"]![0]!["intake"]).toEqual({ welcome_hidden_screens: [] });
+  });
+
+  it("an ordinary save through the deal's intake path, as a rolled-back release makes it, keeps the deck row", async () => {
+    setup();
+    await saveKickoffDeck({
+      actorProfileId: "p-manager",
+      dealId: "deal-1",
+      implementationId: "impl-1",
+      selection: DECK,
+    });
+    const rowBefore = JSON.stringify(rowsFor("impl-1"));
+    await saveDealIntake("p-manager", "deal-1", { welcome_hidden_screens: ["kickoff-next"] });
+    expect(JSON.stringify(rowsFor("impl-1"))).toBe(rowBefore);
+    expect((h.syncJourney.fn as any).mock.calls.length).toBe(1);
+  });
+});

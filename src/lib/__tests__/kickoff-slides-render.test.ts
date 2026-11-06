@@ -100,6 +100,7 @@ function deckFor(
 ): KickoffDeckView {
   const recommended = recommendKickoffSlides(facts);
   return {
+    loadError: null,
     implementationId: "impl-1",
     kind: "new-logo",
     kindReason: "",
@@ -422,5 +423,62 @@ describe("the deck controls follow the permission the server enforces", () => {
 
   it("Save stays disabled until something has changed, even for someone who may configure", () => {
     expect(buttonTag(controlsMarkup(true, true), "Save selection")).toMatch(/\sdisabled=""/);
+  });
+});
+
+describe("a deck that did not read shows the standard slides, never a recommendation", () => {
+  it("the presentation falls back to the standard slides when the deck has a read error", () => {
+    const deck = deckFor(TRAINING_ONLY);
+    deck.loadError = "Could not load the kickoff slides. Try again in a minute.";
+    const view = viewWith(deck);
+    expect(kickoffScreensFor(view).map((s) => s.key)).toEqual(
+      kickoffScreenList(view).map((s) => s.key),
+    );
+    expect(kickoffScreensFor(view).map((s) => s.key)).not.toContain("kickoff-training");
+  });
+
+  it("a live customer (no deck at all) gets exactly the standard slides", () => {
+    const view = viewWith(null);
+    expect(kickoffScreensFor(view).map((s) => s.key)).toEqual(
+      kickoffScreenList(view).map((s) => s.key),
+    );
+  });
+
+  it("the workspace says the builder is for test implementations when there is no deck", () => {
+    const markup = renderToStaticMarkup(
+      createElement(
+        QueryClientProvider,
+        { client: new QueryClient() },
+        createElement(KickoffSlidesSection, {
+          dealId: "deal-1",
+          view: viewWith(null),
+          implementationId: "impl-1",
+          onSaved: () => undefined,
+        }),
+      ),
+    );
+    expect(markup).toContain("available for test implementations only");
+    expect(markup).not.toContain("Save selection");
+  });
+
+  it("the workspace shows a read error in place of the controls, with nothing changeable", () => {
+    const deck = deckFor(TRAINING_ONLY);
+    deck.loadError = "Could not load the kickoff slides. Try again in a minute.";
+    const markup = renderToStaticMarkup(
+      createElement(
+        QueryClientProvider,
+        { client: new QueryClient() },
+        createElement(KickoffSlidesSection, {
+          dealId: "deal-1",
+          view: viewWith(deck),
+          implementationId: "impl-1",
+          onSaved: () => undefined,
+        }),
+      ),
+    );
+    expect(markup).toContain('role="alert"');
+    expect(markup).toContain("Could not load the kickoff slides");
+    expect(markup).not.toContain("Save selection");
+    expect(markup).not.toMatch(/type="checkbox"/);
   });
 });

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { createFakeSupabase, type Rows } from "./fake-supabase";
+import { createFakeSupabase, type Rows, type TableFailures } from "./fake-supabase";
 
 const h = vi.hoisted(() => {
   const state = { supabase: { client: null as any }, forward: null as any };
@@ -9,147 +9,197 @@ const h = vi.hoisted(() => {
 });
 
 vi.mock("@/integrations/supabase/client.server", () => ({ supabaseAdmin: h.forward }));
+vi.mock("../server/audit", () => ({ audit: async () => undefined }));
 
 import { readIntake } from "../intake-answers";
 import { canConfigureImplementationDeck, kickoffDeckView } from "../kickoff-slides.server";
 
-const SAVED = {
-  included: ["kickoff-training"],
-  order: ["kickoff-training"],
-  saved_at: "2026-11-05T10:00:00Z",
-  saved_by: "profile-7",
-};
+const KEY = "kickoff_deck";
 
+/** A test deal (flag on the deal), with one current implementation. */
 function rows(over: Partial<Rows> = {}): Rows {
   return {
+    portal_accounts: [{ id: "deal-1", customer_id: "cust-1", is_test: true }],
+    customers: [{ id: "cust-1", is_test: false }],
     implementations: [
-      // The current implementation, the one the deck is saved against.
       {
         id: "impl-2",
         deal_id: "deal-1",
         customer_id: "cust-1",
-        journey_template_id: "tpl-integration",
+        owner_id: "tm-owner",
+        journey_template_id: null,
         partner_key: null,
         journey_type: null,
         superseded_by_implementation_id: null,
         created_at: "2026-11-01T00:00:00Z",
       },
-      // The earlier implementation for the same customer, superseded by impl-2.
+    ],
+    journey_templates: [],
+    portal_profiles: [
       {
-        id: "impl-1",
-        deal_id: "deal-1",
-        customer_id: "cust-1",
-        journey_template_id: null,
-        partner_key: null,
-        journey_type: null,
-        superseded_by_implementation_id: "impl-2",
-        created_at: "2026-10-01T00:00:00Z",
+        id: "profile-7",
+        full_name: "Test Specialist",
+        email: "t@example.test",
+        role: "manager",
+        team_member_id: "tm-m",
       },
     ],
-    journey_templates: [{ id: "tpl-integration", key: "integration" }],
-    portal_profiles: [{ id: "profile-7", full_name: "Test Specialist", email: "t@example.test" }],
+    scoping_answers: [],
     ...over,
   };
 }
 
+const SAVED = {
+  included: ["kickoff-training"],
+  order: ["kickoff-training"],
+  saved_at: "2026-11-05T10:00:00.000Z",
+};
+const savedRow = (implementationId: string, value: unknown = SAVED, answeredBy = "profile-7") => ({
+  implementation_id: implementationId,
+  question_key: KEY,
+  value,
+  source: "manual",
+  answered_by: answeredBy,
+});
+
 let fake: ReturnType<typeof createFakeSupabase>;
-function use(r: Rows) {
-  fake = createFakeSupabase(r);
+function use(r: Rows, fail: TableFailures = {}) {
+  fake = createFakeSupabase(r, { fail });
   h.supabase.client = fake.client;
 }
+
+const baseArgs = { dealId: "deal-1", firstFormNamed: false, firstFormConfirmed: false };
+const intake = (extra: Record<string, unknown> = {}) =>
+  readIntake({
+    solutions_involved: true,
+    timeline: { services: [{ id: "s1", kind: "integration", name: "QuickBooks", phase: 2 }] },
+    ...extra,
+  });
+
 beforeEach(() => {
   h.supabase.client = null;
 });
 
-const baseArgs = {
-  dealId: "deal-1",
-  firstFormNamed: false,
-  firstFormConfirmed: false,
-};
-
-describe("the deck for the current implementation", () => {
-  it("uses the TIS's saved selection for that implementation, and says it differs from the recommendation", async () => {
-    use(rows());
-    const intake = readIntake({
-      solutions_involved: true,
-      timeline: { services: [{ id: "s1", kind: "integration", name: "QuickBooks", phase: 2 }] },
-      kickoff_deck: { "impl-2": SAVED },
-    });
-    const view = await kickoffDeckView({ ...baseArgs, intake });
-
-    expect(view.implementationId).toBe("impl-2");
-    expect(view.selection.included).toEqual(["kickoff-training"]);
-    expect(view.recommended.included).toContain("kickoff-purchased");
-    expect(view.recommendationChanged).toBe(true);
-    expect(view.saved).toEqual({ savedAt: SAVED.saved_at, savedBy: "Test Specialist" });
+describe("the deck is for test implementations only", () => {
+  it("a live customer's deal gets no deck at all, and reads nothing for it", async () => {
+    // Even a failing implementations read cannot reach a live deal: it is never read.
+    use(
+      rows({
+        portal_accounts: [{ id: "deal-1", customer_id: "cust-1", is_test: false }],
+        customers: [{ id: "cust-1", is_test: false }],
+      }),
+      {
+        implementations: { message: "boom" },
+      },
+    );
+    expect(await kickoffDeckView({ ...baseArgs, intake: intake() })).toBeNull();
   });
 
-  it("never applies a selection saved against a different implementation", async () => {
+  it("a test deal is recognised by its own flag", async () => {
     use(rows());
-    const intake = readIntake({
-      solutions_involved: true,
-      timeline: { services: [{ id: "s1", kind: "integration", name: "QuickBooks", phase: 2 }] },
-      kickoff_deck: { "impl-1": SAVED },
-    });
-    const view = await kickoffDeckView({ ...baseArgs, intake });
-    expect(view.saved).toBeNull();
-    expect(view.selection).toEqual({
-      included: view.recommended.included,
-      order: view.selection.order,
-    });
-    expect(view.recommendationChanged).toBe(false);
+    expect((await kickoffDeckView({ ...baseArgs, intake: intake() }))?.loadError).toBeNull();
   });
 
-  it("uses the recommendation, and marks nothing as changed, when nothing is saved", async () => {
-    use(rows());
-    const view = await kickoffDeckView({ ...baseArgs, intake: readIntake({}) });
-    expect(view.saved).toBeNull();
-    expect(view.recommendationChanged).toBe(false);
+  it("a deal of a test customer is recognised by the customer's flag", async () => {
+    use(
+      rows({
+        portal_accounts: [{ id: "deal-1", customer_id: "cust-1", is_test: false }],
+        customers: [{ id: "cust-1", is_test: true }],
+      }),
+    );
+    expect(await kickoffDeckView({ ...baseArgs, intake: intake() })).not.toBeNull();
   });
 });
 
-describe("classification and the purchased list", () => {
-  it("classifies an integration journey as an expansion, with the existing classification's reason", async () => {
-    use(rows());
-    const view = await kickoffDeckView({ ...baseArgs, intake: readIntake({}) });
-    expect(view.kind).toBe("expansion");
-    expect(view.kindReason).toMatch(/integration/);
+describe("a failed read is an explicit error, never a silent recommendation", () => {
+  it("a failed implementation read says so, and offers no recommendation or selection", async () => {
+    use(rows(), { implementations: { message: "column does not exist" } });
+    const view = await kickoffDeckView({ ...baseArgs, intake: intake() });
+    expect(view?.loadError).toMatch(/Could not load the kickoff slides/);
+    expect(view?.recommended.included).toEqual([]);
+    expect(view?.saved).toBeNull();
+    expect(view?.canConfigure).toBe(false);
   });
 
+  it("a failed read of the saved selection is an error, not 'nothing saved'", async () => {
+    use(rows({ scoping_answers: [savedRow("impl-2")] }), {
+      scoping_answers: { message: "timeout" },
+    });
+    const view = await kickoffDeckView({ ...baseArgs, intake: intake() });
+    expect(view?.loadError).toMatch(/Could not load/);
+    expect(view?.recommended.included).toEqual([]);
+  });
+
+  it("a saved selection that does not read is an explicit error, not an empty deck", async () => {
+    use(rows({ scoping_answers: [savedRow("impl-2", { included: "not-a-list" })] }));
+    const view = await kickoffDeckView({ ...baseArgs, intake: intake() });
+    expect(view?.loadError).toMatch(/saved slide selection/);
+    expect(view?.selection.included).toEqual([]);
+  });
+
+  it("a failed read of the viewer's permission is reported, not treated as no permission", async () => {
+    use(rows(), { portal_profiles: { message: "boom" } });
+    await expect(canConfigureImplementationDeck("profile-7", "deal-1", "impl-2")).rejects.toThrow(
+      /Could not load/,
+    );
+  });
+
+  it("a deal with no implementation yet reads cleanly, with nothing to save against", async () => {
+    use(rows({ implementations: [] }));
+    const view = await kickoffDeckView({ ...baseArgs, intake: intake() });
+    expect(view?.loadError).toBeNull();
+    expect(view?.implementationId).toBeNull();
+  });
+});
+
+describe("the saved selection takes precedence", () => {
+  it("uses the saved selection for the current implementation, and says the recommendation has changed", async () => {
+    use(rows({ scoping_answers: [savedRow("impl-2")] }));
+    const view = await kickoffDeckView({ ...baseArgs, intake: intake() });
+    expect(view?.selection.included).toEqual(["kickoff-training"]);
+    expect(view?.recommendationChanged).toBe(true);
+    expect(view?.saved).toEqual({ savedAt: SAVED.saved_at, savedBy: "Test Specialist" });
+  });
+
+  it("never applies a selection saved against a different implementation", async () => {
+    use(rows({ scoping_answers: [savedRow("impl-1")] }));
+    const view = await kickoffDeckView({ ...baseArgs, intake: intake() });
+    expect(view?.saved).toBeNull();
+    expect(view?.recommendationChanged).toBe(false);
+  });
+
+  it("uses the recommendation when nothing is saved, with no error", async () => {
+    use(rows());
+    const view = await kickoffDeckView({ ...baseArgs, intake: intake() });
+    expect(view?.loadError).toBeNull();
+    expect(view?.saved).toBeNull();
+  });
+});
+
+describe("the view carries the facts the deck needs", () => {
   it("carries what was bought as name, kind and phase only", async () => {
     use(rows());
-    const intake = readIntake({
-      timeline: {
-        services: [
-          { id: "s1", kind: "integration", name: "QuickBooks", phase: 2, needs: "Internal note" },
-        ],
-      },
+    const view = await kickoffDeckView({
+      ...baseArgs,
+      intake: readIntake({
+        timeline: {
+          services: [
+            { id: "s1", kind: "integration", name: "QuickBooks", phase: 2, needs: "Internal note" },
+          ],
+        },
+      }),
     });
-    const view = await kickoffDeckView({ ...baseArgs, intake });
-    expect(view.purchased).toEqual([{ kind: "integration", name: "QuickBooks", phase: 2 }]);
-    expect(JSON.stringify(view.purchased)).not.toMatch(/Internal note/);
+    expect(view?.purchased).toEqual([{ kind: "integration", name: "QuickBooks", phase: 2 }]);
+    expect(JSON.stringify(view?.purchased)).not.toMatch(/Internal note/);
   });
 
   it("names the partner from the explicit partner on the deal", async () => {
     use(rows());
-    const intake = readIntake({ partner_implementation: { partner_key: "field_fusion_iq" } });
-    const view = await kickoffDeckView({ ...baseArgs, intake });
-    expect(view.partnerName).toBe("Field Fusion IQ");
-    expect(view.recommended.included).toContain("kickoff-partner");
-  });
-});
-
-describe("a deal with no implementation", () => {
-  it("has nothing to save against, says so, and still gives a recommendation", async () => {
-    use(rows({ implementations: [] }));
     const view = await kickoffDeckView({
       ...baseArgs,
-      intake: readIntake({ training_only: true }),
+      intake: readIntake({ partner_implementation: { partner_key: "field_fusion_iq" } }),
     });
-    expect(view.implementationId).toBeNull();
-    expect(view.saved).toBeNull();
-    expect(view.recommended.included).toContain("kickoff-training");
-    expect(view.recommended.flags.join(" ")).toMatch(/cannot be saved/);
+    expect(view?.partnerName).toBe("Field Fusion IQ");
   });
 });
 
@@ -161,31 +211,22 @@ describe("whether the viewer may configure the deck", () => {
     { id: "p-other-impl", role: "implementation", team_member_id: "tm-other" },
     { id: "p-sales", role: "sales", team_member_id: "tm-owner" },
   ];
-  const impls = [
-    { id: "impl-1", deal_id: "deal-1", owner_id: "tm-owner", created_at: "2026-10-01T00:00:00Z" },
-    { id: "impl-x", deal_id: "deal-2", owner_id: "tm-owner", created_at: "2026-10-01T00:00:00Z" },
-  ];
-  const seeded = () => rows({ portal_profiles: people as never, implementations: impls as never });
+  const seeded = () => rows({ portal_profiles: people as never });
 
   it("management may configure any implementation on the deal", async () => {
     use(seeded());
-    expect(await canConfigureImplementationDeck("p-manager", "deal-1", "impl-1")).toBe(true);
-    expect(await canConfigureImplementationDeck("p-admin", "deal-1", "impl-1")).toBe(true);
+    expect(await canConfigureImplementationDeck("p-manager", "deal-1", "impl-2")).toBe(true);
+    expect(await canConfigureImplementationDeck("p-admin", "deal-1", "impl-2")).toBe(true);
   });
 
-  it("the assigned implementation specialist may configure their implementation only", async () => {
+  it("the assigned implementation specialist may configure their own implementation only", async () => {
     use(seeded());
-    expect(await canConfigureImplementationDeck("p-impl", "deal-1", "impl-1")).toBe(true);
-    expect(await canConfigureImplementationDeck("p-other-impl", "deal-1", "impl-1")).toBe(false);
+    expect(await canConfigureImplementationDeck("p-impl", "deal-1", "impl-2")).toBe(true);
+    expect(await canConfigureImplementationDeck("p-other-impl", "deal-1", "impl-2")).toBe(false);
   });
 
   it("no other role may configure, even as the named owner", async () => {
     use(seeded());
-    expect(await canConfigureImplementationDeck("p-sales", "deal-1", "impl-1")).toBe(false);
-  });
-
-  it("an implementation that is not on this deal is never configurable from here", async () => {
-    use(seeded());
-    expect(await canConfigureImplementationDeck("p-manager", "deal-1", "impl-x")).toBe(false);
+    expect(await canConfigureImplementationDeck("p-sales", "deal-1", "impl-2")).toBe(false);
   });
 });
