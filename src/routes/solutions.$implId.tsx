@@ -1,7 +1,6 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, Navigate } from "@tanstack/react-router";
 import { ChevronRight } from "lucide-react";
 
-import { CompleteSolutionsWorkspace } from "@/components/complete-solutions-workspace";
 import { PageBody } from "@/components/page";
 
 /**
@@ -40,6 +39,18 @@ function SolutionsWorkspacePage({
   implementationId: string;
   customerId: string | null;
 }) {
+  // The Solutions view lives on the customer's Solutions tab. This page is kept so existing
+  // links still land there, rather than showing a second copy of the list.
+  if (customerId) {
+    return (
+      <Navigate
+        to="/customers/$customerId"
+        params={{ customerId }}
+        search={{ tab: "solutions", impl: implementationId }}
+        replace
+      />
+    );
+  }
   return (
     <PageBody className="space-y-5">
       <nav
@@ -72,7 +83,9 @@ function SolutionsWorkspacePage({
       <div>
         <h1 className="text-[18px] font-semibold tracking-tight">Solutions being delivered</h1>
       </div>
-      <CompleteSolutionsWorkspace implementationId={implementationId} />
+      <p className="text-[13px] text-muted-foreground">
+        Open the customer to see this implementation's solutions on its Solutions tab.
+      </p>
     </PageBody>
   );
 }

@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 
 import { ask } from "@/components/ui/ask";
+import { errorText, useCompleteSolutions, type WorkspaceView } from "@/lib/complete-solutions-view";
 import {
   addComponentDependency,
   addCompleteSolution,
@@ -63,9 +64,6 @@ type DependencyAdd = DataOf<typeof addComponentDependency>;
 type DependencyRemove = DataOf<typeof removeComponentDependency>;
 type SolutionAdd = DataOf<typeof addCompleteSolution>;
 type ComponentAdd = DataOf<typeof addSolutionComponent>;
-/** The workspace read: the solutions, and whether this person may change them (decided on the server). */
-type WorkspaceView = { solutions: SolutionView[]; canEdit: boolean; purchase: PurchaseCheck };
-
 const FIELD =
   "rounded-sm border border-input bg-background px-2 py-1 text-[12px] text-foreground outline-none focus:ring-1 focus:ring-ring disabled:opacity-60";
 const BUTTON =
@@ -74,15 +72,6 @@ const PRIMARY =
   "rounded-sm border border-primary/40 bg-primary/5 px-2.5 py-1 text-[12px] font-medium text-primary hover:bg-primary/10 disabled:opacity-50";
 
 const today = () => new Date().toISOString().slice(0, 10);
-
-/** The one place the workspace reads its data; every change refreshes it. */
-function useCompleteSolutions(implementationId: string) {
-  const fn = useServerFn(getCompleteSolutions);
-  return useQuery({
-    queryKey: ["complete-solutions", implementationId],
-    queryFn: () => fn({ data: { implementationId } }),
-  });
-}
 
 /** Runs one change, then refreshes the list. The server decides what is allowed. */
 function useChange<T>(implementationId: string, run: (input: T) => Promise<unknown>) {
@@ -93,106 +82,13 @@ function useChange<T>(implementationId: string, run: (input: T) => Promise<unkno
   });
 }
 
-function errorText(e: unknown): string {
-  return e instanceof Error ? e.message : "That did not save. Nothing has been changed.";
-}
-
 /* ----------------------------------------------------------- workspace */
-
-/**
- * The Solutions workspace for one implementation: every complete solution being
- * delivered, its components, what is outstanding, and what needs to happen next.
- * A readiness the Hub suggests is shown beside the one the TIS confirmed; the TIS
- * confirms the change.
- */
-export function CompleteSolutionsWorkspace({ implementationId }: { implementationId: string }) {
-  const q = useCompleteSolutions(implementationId);
-  const [adding, setAdding] = useState(false);
-  const [showArchived, setShowArchived] = useState(false);
-
-  if (q.isPending) {
-    return <p className="text-[12px] text-muted-foreground">Loading the solutions…</p>;
-  }
-  if (q.isError) {
-    return (
-      <p role="alert" className="text-[12px] text-destructive">
-        {errorText(q.error)}
-      </p>
-    );
-  }
-
-  const { solutions: all, canEdit: editable, purchase } = q.data as WorkspaceView;
-  const active = all.filter((s) => !s.archived);
-  const archived = all.filter((s) => s.archived);
-
-  return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-[12px] text-muted-foreground">
-          Each solution is one thing the customer is buying. Its components are the forms,
-          integrations, analytics, training and other work that make it up.
-        </p>
-        {editable ? (
-          <div className="flex gap-2">
-            <SowSolutionsReview implementationId={implementationId} />
-            <button type="button" className={PRIMARY} onClick={() => setAdding((v) => !v)}>
-              {adding ? "Close" : "Add a solution"}
-            </button>
-          </div>
-        ) : null}
-      </div>
-
-      <PurchaseCheckNote purchase={purchase} />
-
-      {adding ? (
-        <NewSolutionForm implementationId={implementationId} onDone={() => setAdding(false)} />
-      ) : null}
-
-      {active.length === 0 ? (
-        <p className="rounded-md border border-dashed border-border px-4 py-6 text-center text-[12px] text-muted-foreground">
-          No complete solutions yet. Set them up from the signed SOW, or add one by hand.
-        </p>
-      ) : null}
-
-      {active.map((s) => (
-        <SolutionCard
-          key={s.id}
-          solution={s}
-          implementationId={implementationId}
-          editable={editable}
-          all={all}
-        />
-      ))}
-
-      {archived.length > 0 ? (
-        <div>
-          <button type="button" className={BUTTON} onClick={() => setShowArchived((v) => !v)}>
-            {showArchived ? "Hide" : "Show"} archived ({archived.length})
-          </button>
-          {showArchived ? (
-            <div className="mt-3 space-y-3 opacity-75">
-              {archived.map((s) => (
-                <SolutionCard
-                  key={s.id}
-                  solution={s}
-                  implementationId={implementationId}
-                  editable={editable}
-                  all={all}
-                />
-              ))}
-            </div>
-          ) : null}
-        </div>
-      ) : null}
-    </div>
-  );
-}
 
 /**
  * Purchased scope against the deal's purchase record. A difference is shown, never
  * fixed here: the signed SOW decides what was agreed, and the deal is not changed.
  */
-function PurchaseCheckNote({ purchase }: { purchase: PurchaseCheck }) {
+export function PurchaseCheckNote({ purchase }: { purchase: PurchaseCheck }) {
   if (!purchase.hasRecord) {
     return (
       <p className="rounded-md border border-dashed border-border px-3 py-2 text-[12px] text-muted-foreground">
@@ -244,7 +140,64 @@ function PurchaseCheckNote({ purchase }: { purchase: PurchaseCheck }) {
 
 /* ----------------------------------------------------------- a solution */
 
-function SolutionCard({
+/**
+ * One complete solution, with its title, scope, priority, lifecycle and delivery detail.
+ * The lifecycle label comes from the purchase record (see solutions-tab.tsx), so there is
+ * no status of this solution's own to show here.
+ */
+export function SolutionCard({
+  solution: s,
+  implementationId,
+  editable,
+  all,
+  lifecycle,
+}: {
+  solution: SolutionView;
+  implementationId: string;
+  editable: boolean;
+  all: SolutionView[];
+  lifecycle: string | null;
+}) {
+  return (
+    <section
+      className="rounded-lg border border-border bg-card p-4"
+      aria-label={`Solution ${s.title}`}
+    >
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div className="min-w-0">
+          <h3 className="text-[15px] font-semibold">{s.title}</h3>
+          <p className="mt-0.5 text-[11px] text-muted-foreground">
+            {SOLUTION_SCOPE_LABEL[s.scope]} · {PRIORITY_LABEL[s.priority]}
+            {s.source === "sow" ? " · from the SOW" : ""}
+            {s.archived ? " · archived" : ""}
+          </p>
+          {s.sowQuote ? (
+            <p className="mt-1 text-[11px] italic text-muted-foreground">“{s.sowQuote}”</p>
+          ) : null}
+        </div>
+        {lifecycle ? (
+          <span className="rounded-sm bg-muted px-2 py-0.5 text-[12px] font-medium text-foreground">
+            {lifecycle}
+          </span>
+        ) : null}
+      </div>
+      <SolutionDetail
+        solution={s}
+        implementationId={implementationId}
+        editable={editable}
+        all={all}
+      />
+    </section>
+  );
+}
+
+/**
+ * One solution's delivery detail: its priority, readiness, delivery date, next action,
+ * components with their dependencies, the history, and the actions on each. Used by the
+ * Solutions view for both purchased solutions (under the purchase record's lifecycle) and
+ * the requested ones. It holds no status of its own.
+ */
+export function SolutionDetail({
   solution: s,
   implementationId,
   editable,
@@ -313,68 +266,30 @@ function SolutionCard({
   const error = solutionChange.error ?? dateChange.error ?? readinessChange.error ?? archive.error;
 
   return (
-    <section
-      className="rounded-lg border border-border bg-card p-4"
-      aria-label={`Solution ${s.title}`}
-    >
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <div className="min-w-0">
-          <h3 className="text-[15px] font-semibold">{s.title}</h3>
-          <p className="mt-0.5 text-[11px] text-muted-foreground">
-            {SOLUTION_SCOPE_LABEL[s.scope]} · {PRIORITY_LABEL[s.priority]}
-            {s.source === "sow" ? " · from the SOW" : ""}
-            {s.archived ? " · archived" : ""}
-          </p>
-          {s.sowQuote ? (
-            <p className="mt-1 text-[11px] italic text-muted-foreground">“{s.sowQuote}”</p>
-          ) : null}
-        </div>
-        <div className="flex flex-wrap items-center gap-2 text-[12px]">
-          {editable && !s.archived ? (
-            <>
-              <label className="flex items-center gap-1">
-                <span className="text-muted-foreground">Status</span>
-                <select
-                  className={FIELD}
-                  value={s.status}
-                  disabled={solutionChange.isPending}
-                  onChange={(e) =>
-                    solutionChange.mutate({ status: e.target.value as SolutionStatus })
-                  }
-                >
-                  {SOLUTION_STATUSES.map((v) => (
-                    <option key={v} value={v}>
-                      {SOLUTION_STATUS_LABEL[v]}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="flex items-center gap-1">
-                <span className="text-muted-foreground">Priority</span>
-                <select
-                  className={FIELD}
-                  value={s.priority}
-                  disabled={solutionChange.isPending}
-                  onChange={(e) => solutionChange.mutate({ priority: e.target.value as Priority })}
-                >
-                  {PRIORITIES.map((v) => (
-                    <option key={v} value={v}>
-                      {PRIORITY_LABEL[v]}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </>
-          ) : (
-            <span className="text-muted-foreground">{SOLUTION_STATUS_LABEL[s.status]}</span>
-          )}
-        </div>
-      </div>
-
+    <div className="mt-3 space-y-3">
+      {editable && !s.archived ? (
+        <label className="flex items-center gap-1 text-[12px]">
+          <span className="text-muted-foreground">Priority</span>
+          <select
+            className={FIELD}
+            value={s.priority}
+            disabled={solutionChange.isPending}
+            onChange={(e) => solutionChange.mutate({ priority: e.target.value as Priority })}
+          >
+            {PRIORITIES.map((v) => (
+              <option key={v} value={v}>
+                {PRIORITY_LABEL[v]}
+              </option>
+            ))}
+          </select>
+        </label>
+      ) : null}
       {/* Readiness: the Hub suggests, the TIS confirms. */}
       <div className="mt-3 rounded-md border border-border bg-muted/30 p-3 text-[12px]">
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-          <span className="font-medium">Readiness: {READINESS_LABEL[s.readinessConfirmed]}</span>
+          <span className="font-medium">
+            Solution readiness: {READINESS_LABEL[s.readinessConfirmed]}
+          </span>
           <span className="text-muted-foreground">
             Suggested: {READINESS_LABEL[suggestion.readiness]}
           </span>
@@ -573,7 +488,7 @@ function SolutionCard({
           {errorText(error)}
         </p>
       ) : null}
-    </section>
+    </div>
   );
 }
 
@@ -1059,7 +974,7 @@ function ComponentRow({
 
 /* ------------------------------------------------------------- new things */
 
-function NewSolutionForm({
+export function NewSolutionForm({
   implementationId,
   onDone,
 }: {

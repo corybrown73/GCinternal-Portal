@@ -37,6 +37,8 @@ export type V2Flags = {
   signals_alerts: boolean;
   /** Complete solutions and their components on Customer 360 and the Solutions workspace (0091). */
   complete_solutions: boolean;
+  /** Implementation training: the Training & Readiness tab and transcript suggestions about it (0092). */
+  training_plan: boolean;
   /** Phase 7: hub mutations write the account activity feed (`audit_log`). */
   audit_activity_feed: boolean;
   /** Phase 7: a failed audit write on a critical action aborts the mutation. */
@@ -110,6 +112,7 @@ const DEFAULT_FLAGS: V2Flags = {
   /** Phase 6: see the type above. */
   signals_alerts: false,
   complete_solutions: false,
+  training_plan: false,
   /* Phase 7 — platform hygiene completion. All off. */
   audit_activity_feed: false,
   audit_strict: false,

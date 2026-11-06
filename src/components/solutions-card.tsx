@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { Check, Star } from "lucide-react";
@@ -33,7 +33,19 @@ const inputClass =
  * The steps themselves are ticked on the plan; this is where the decisions
  * live. A customer's own first form is not a solution and is not here.
  */
-export function SolutionsCard({ deal, editable }: { deal: DealData; editable: boolean }) {
+/** A purchased solution's expandable delivery detail, when the caller has one for it. */
+export type SolutionDetailSlot = { summary: string; body: ReactNode };
+
+export function SolutionsCard({
+  deal,
+  editable,
+  detailFor,
+}: {
+  deal: DealData;
+  editable: boolean;
+  /** The delivery detail for a purchased service, by its id; null when there is none. */
+  detailFor?: (purchasedServiceId: string) => SolutionDetailSlot | null;
+}) {
   const intake = readIntake(deal.account.intake);
   const services = normalizeServices(
     intake.timeline.services as ServiceSpec[],
@@ -67,6 +79,7 @@ export function SolutionsCard({ deal, editable }: { deal: DealData; editable: bo
             completed={completed}
             team={team.data ?? []}
             editable={editable}
+            detail={detailFor?.(s.id) ?? null}
           />
         ))}
       </ul>
@@ -80,14 +93,17 @@ function SolutionRow({
   completed,
   team,
   editable,
+  detail,
 }: {
   deal: DealData;
   s: ServiceSpec;
   completed: Record<string, string>;
   team: Array<{ id: string; name: string; role: string }>;
   editable: boolean;
+  detail: SolutionDetailSlot | null;
 }) {
   const qc = useQueryClient();
+  const [showDetail, setShowDetail] = useState(false);
   const { profile } = useProfile();
   const update = useServerFn(updateSolution);
   const dispose = useServerFn(setSolutionDisposition);
@@ -359,6 +375,20 @@ function SolutionRow({
         </span>
       </div>
       {err ? <p className="text-[11px] text-destructive">{err.message}</p> : null}
+      {detail ? (
+        <div className="border-t border-border pt-2">
+          <button
+            type="button"
+            aria-expanded={showDetail}
+            className="text-[12px] text-primary hover:underline"
+            onClick={() => setShowDetail((v) => !v)}
+          >
+            {showDetail ? "Hide the delivery detail" : "Show the delivery detail"} ·{" "}
+            {detail.summary}
+          </button>
+          {showDetail ? <div className="mt-2">{detail.body}</div> : null}
+        </div>
+      ) : null}
     </li>
   );
 }

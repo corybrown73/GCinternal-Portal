@@ -179,6 +179,14 @@ export const FLAG_CATALOGUE: FlagInfo[] = [
     group: "delivery",
     needsMigration: "0091",
   },
+  {
+    key: "training_plan",
+    label: "Training & Readiness",
+    description:
+      "Shows the Training & Readiness tab on the customer workspace, and lets transcript readings suggest training changes for a person to approve. Off hides them; the data is kept either way. Needs migration 0092.",
+    group: "delivery",
+    needsMigration: "0092",
+  },
   /* ---------------- Platform ---------------- */
   {
     key: "signals_alerts",
