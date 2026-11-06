@@ -37,7 +37,7 @@ The customer workspace gets two new top-level tabs:
 | Readiness evidence | `evidence` (existing) | Reused. Training readiness must point at a row here. |
 | Implementation owner | `implementations.owner_id` (PR #101 owner-change history) | Reused |
 | Stage and checklist | `implementations` stage, `stage-gates`, journey tasks | Untouched. Training never changes them. |
-| History | `audit_log` (existing, generic) | Reused for training changes. No new events table. |
+| History | `portal_audit_log` (the table the application's `audit()` writes) | Reused. Training changes are written in the same transaction as the change. No new events table. |
 | Suggestions | `evidence_proposals` (0079, plus 0091 columns) | Extended with training types |
 
 ## 3. Responsibility
@@ -61,6 +61,7 @@ Supported responsibilities: **GoCanvas**, **Customer**, **Partner**.
 Table `implementation_training` (migration 0092):
 
 - Identity: `id`, `org_id`, `implementation_id`, `created_at`, `updated_at` (the version), `archived_at`.
+- Writes: none directly. Signed-in users may read; every write is a service-role function (see section 11).
 - Content: `topic` (required), `audience`, `outcome` (the capability the customer should reach), `method` (`session | self_paced | recorded | document | other`, optional).
 - Responsibility: `responsibility` (`gocanvas | customer | partner`, nullable), `responsibility_source` (`sow | tis_confirmed`, nullable), `sow_quote` (text, nullable). Rule: a responsibility is set only with its source, and a `sow` source needs a quote.
 - Links (all optional): `purchased_service_id` (text, a reference into the intake services), `solution_component_id` (PR #101), `adoption_area_id`.
@@ -212,3 +213,10 @@ schema replay and invariant tests.
     `completed.live` cascade.
 17. The Define → Build → Accept → Accepted derivation is unchanged for every
     purchased solution.
+
+## 11. Implementation notes (added during the build)
+
+- **History table.** The application's `audit()` writes `portal_audit_log`, not the older `audit_log` from 0003. Training history uses `portal_audit_log`.
+- **Direct writes closed.** PR #101's solution tables have `for all` policies for internal users, which lets a signed-in internal user write them directly and skip the permission functions. The application writes them only through the service role. Migration 0092 removes direct writes (`insert`, `update`, `delete`) from `authenticated` and `anon` on the four 0091 tables, and makes their policies read-only for signed-in users. The down file restores the 0091 state. This is a change to reused PR #101 code and is called out for review.
+- **Responsibility.** `responsibility` and `responsibility_source` are set together, or not at all. A `sow` source needs its quote. Both rules are enforced in the functions and in the table constraints.
+- **Verification.** Migration 0092 is replayed with 0001–0091 on a local Postgres 16 (stubs for the Supabase `auth`, `storage` and `extensions` schema, in the scratchpad only, not in the repo). All 52 schema test files pass, including `0092_implementation_training_invariants.sql` with 42 probes. The CI-style down, re-up and test cycle also passes.
