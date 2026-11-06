@@ -2728,8 +2728,15 @@ export async function saveDealIntake(
   if (!before) throw new Error("Deal not found");
 
   const current = readIntake((before as any).intake);
-  // Recording that a kickoff was held, or taking that back, is the assigned
-  // TIS's call. Checked only when the held state actually changes.
+  // Recording that a kickoff was held, or taking that back, is limited by role
+  // (kickoff-authority.ts). Checked only when the held state actually changes,
+  // and recorded against the actor once the save has succeeded.
+  let heldChange: {
+    held: boolean;
+    implementationId: string;
+    role: string;
+    basis: import("./kickoff-authority").KickoffHeldBasis;
+  } | null = null;
   {
     const incoming = patch["timeline"] as { completed?: Record<string, unknown> } | undefined;
     if (incoming && typeof incoming === "object" && incoming.completed) {
@@ -2737,9 +2744,13 @@ export async function saveDealIntake(
       const previous = (current.timeline.completed as Record<string, unknown> | undefined)?.[
         "kickoff"
       ];
-      if (kickoffHeldChanged(previous, incoming.completed["kickoff"])) {
+      const nextHeld = incoming.completed["kickoff"];
+      if (kickoffHeldChanged(previous, nextHeld)) {
         const { assertKickoffHeldAuthority } = await import("./kickoff-authority.server");
-        await assertKickoffHeldAuthority(userId, dealId);
+        const authority = await assertKickoffHeldAuthority(userId, dealId);
+        if (authority) {
+          heldChange = { held: Boolean(nextHeld), ...authority };
+        }
       }
     }
   }
@@ -2838,6 +2849,11 @@ export async function saveDealIntake(
     entity_id: dealId,
     payload: { fields: Object.keys(patch) },
   });
+
+  if (heldChange) {
+    const { recordKickoffHeldChange } = await import("./kickoff-authority.server");
+    await recordKickoffHeldChange({ userId, dealId, ...heldChange });
+  }
 
   // A ticked step is a fact the journey reads: the stage follows the plan.
   {

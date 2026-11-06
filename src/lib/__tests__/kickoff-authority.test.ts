@@ -1,50 +1,101 @@
 import { describe, expect, it } from "vitest";
 
-import { canChangeKickoffHeld, kickoffHeldChanged } from "../kickoff-authority";
+import { canChangeKickoffHeld, kickoffHeldBasis, kickoffHeldChanged } from "../kickoff-authority";
 
-describe("who may record the kickoff as held", () => {
-  it("allows the assigned TIS", () => {
+const impl = { hasImplementation: true };
+const OWNER = "tm-owner";
+const OTHER = "tm-other";
+
+describe("management roles act on any post-sale implementation", () => {
+  for (const role of ["super_admin", "admin", "manager"]) {
+    it(`${role} may act without being the owner, and it is attributed to management`, () => {
+      expect(
+        kickoffHeldBasis({ role, actorTeamMemberId: OTHER, ownerTeamMemberId: OWNER, ...impl }),
+      ).toBe("management");
+      // An unassigned implementation is still a post-sale one for management.
+      expect(
+        kickoffHeldBasis({ role, actorTeamMemberId: null, ownerTeamMemberId: null, ...impl }),
+      ).toBe("management");
+    });
+  }
+});
+
+describe("the implementation role acts only as the assigned primary TIS", () => {
+  it("may act on an implementation they own", () => {
     expect(
-      canChangeKickoffHeld({
-        actorTeamMemberId: "tm-1",
-        ownerTeamMemberId: "tm-1",
-        hasImplementation: true,
+      kickoffHeldBasis({
+        role: "implementation",
+        actorTeamMemberId: OWNER,
+        ownerTeamMemberId: OWNER,
+        ...impl,
       }),
-    ).toBe(true);
+    ).toBe("assigned_tis");
   });
 
-  it("refuses another specialist, an unassigned implementation, and a person with no team record", () => {
+  it("is refused on another specialist's implementation", () => {
     expect(
       canChangeKickoffHeld({
-        actorTeamMemberId: "tm-2",
-        ownerTeamMemberId: "tm-1",
-        hasImplementation: true,
+        role: "implementation",
+        actorTeamMemberId: OTHER,
+        ownerTeamMemberId: OWNER,
+        ...impl,
       }),
     ).toBe(false);
+  });
+
+  it("is refused on an unassigned implementation, and when it has no team record", () => {
     expect(
       canChangeKickoffHeld({
-        actorTeamMemberId: "tm-1",
+        role: "implementation",
+        actorTeamMemberId: OWNER,
         ownerTeamMemberId: null,
-        hasImplementation: true,
+        ...impl,
       }),
     ).toBe(false);
     expect(
       canChangeKickoffHeld({
+        role: "implementation",
         actorTeamMemberId: null,
         ownerTeamMemberId: null,
-        hasImplementation: true,
+        ...impl,
       }),
     ).toBe(false);
   });
+});
 
-  it("refuses when there is no implementation to be assigned to", () => {
+describe("every other role gains no additional permission", () => {
+  for (const role of ["sales", "am", "se", "tam_se", "onboarding", "customer", "unknown"]) {
+    it(`${role} is refused even on an implementation it is named against`, () => {
+      expect(
+        canChangeKickoffHeld({ role, actorTeamMemberId: OWNER, ownerTeamMemberId: OWNER, ...impl }),
+      ).toBe(false);
+    });
+  }
+
+  it("a null role is refused", () => {
     expect(
       canChangeKickoffHeld({
-        actorTeamMemberId: "tm-1",
-        ownerTeamMemberId: "tm-1",
-        hasImplementation: false,
+        role: null,
+        actorTeamMemberId: OWNER,
+        ownerTeamMemberId: OWNER,
+        ...impl,
       }),
     ).toBe(false);
+  });
+});
+
+describe("with no implementation there is nothing to attribute", () => {
+  it("refuses every role", () => {
+    for (const role of ["super_admin", "admin", "manager", "implementation"]) {
+      expect(
+        canChangeKickoffHeld({
+          role,
+          actorTeamMemberId: OWNER,
+          ownerTeamMemberId: OWNER,
+          hasImplementation: false,
+        }),
+      ).toBe(false);
+    }
   });
 });
 
