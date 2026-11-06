@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  canConfigureKickoffDeck,
   CORE_SLIDE_KEYS,
   OPTIONAL_SLIDE_KEYS,
   defaultSelection,
@@ -325,4 +326,55 @@ describe("saving is per implementation", () => {
     expect(isKickoffDeckOnlyPatch({ kickoff_deck: {}, timeline: {} })).toBe(false);
     expect(isKickoffDeckOnlyPatch({})).toBe(false);
   });
+});
+
+describe("who may configure a Kickoff deck", () => {
+  for (const role of ["super_admin", "admin", "manager"]) {
+    it(`${role} may configure any implementation, without being its owner`, () => {
+      expect(
+        canConfigureKickoffDeck({ role, actorTeamMemberId: "tm-x", ownerTeamMemberId: "tm-owner" }),
+      ).toBe(true);
+    });
+  }
+  it("an implementation specialist may configure only their assigned implementation", () => {
+    expect(
+      canConfigureKickoffDeck({
+        role: "implementation",
+        actorTeamMemberId: "tm-owner",
+        ownerTeamMemberId: "tm-owner",
+      }),
+    ).toBe(true);
+    expect(
+      canConfigureKickoffDeck({
+        role: "implementation",
+        actorTeamMemberId: "tm-other",
+        ownerTeamMemberId: "tm-owner",
+      }),
+    ).toBe(false);
+    expect(
+      canConfigureKickoffDeck({
+        role: "implementation",
+        actorTeamMemberId: "tm-other",
+        ownerTeamMemberId: null,
+      }),
+    ).toBe(false);
+    expect(
+      canConfigureKickoffDeck({
+        role: "implementation",
+        actorTeamMemberId: null,
+        ownerTeamMemberId: null,
+      }),
+    ).toBe(false);
+  });
+  for (const role of ["sales", "am", "se", "tam_se", "onboarding", "customer", null]) {
+    it(`${String(role)} gets no deck authority, even as the named owner`, () => {
+      expect(
+        canConfigureKickoffDeck({
+          role,
+          actorTeamMemberId: "tm-owner",
+          ownerTeamMemberId: "tm-owner",
+        }),
+      ).toBe(false);
+    });
+  }
 });

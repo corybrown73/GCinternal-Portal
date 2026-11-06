@@ -244,3 +244,123 @@ describe("the selection used is never the recommendation after a save", () => {
     expect(deck.selection).toEqual(defaultSelection(deck.recommended));
   });
 });
+
+describe("training: only confirmed training is described as training", () => {
+  it("does not present a form build's working sessions as training", () => {
+    const facts = { ...TRAINING_ONLY, trainingOnly: false, path: "new_logo", services: [] };
+    const view = viewWith(
+      deckFor(facts, { included: ["kickoff-training"], order: ["kickoff-training"] }, null, []),
+    );
+    // A standard plan: the calls after kickoff are working sessions, not training.
+    (view.timeline as { milestones: unknown[]; training: boolean }).milestones = [
+      {
+        key: "build",
+        label: "Build session",
+        kind: "call",
+        date: "2026-11-20",
+        time: "10:00",
+        serviceId: null,
+        doneOn: null,
+      },
+    ];
+    const idx = kickoffScreensFor(view).findIndex((s) => s.key === "kickoff-training");
+    const text = html(view, idx);
+    expect(text).not.toContain("Build session");
+    expect(text).toContain("Training is to be confirmed together.");
+  });
+
+  it("shows a training plan's own sessions as training, with the date only when it is set", () => {
+    const facts = { ...TRAINING_ONLY, path: "new_logo" };
+    const view = viewWith(
+      deckFor(facts, { included: ["kickoff-training"], order: ["kickoff-training"] }, null, []),
+    );
+    (view.timeline as { milestones: unknown[]; training: boolean }).training = true;
+    (view.timeline as { milestones: unknown[]; training: boolean }).milestones = [
+      {
+        key: "kickoff",
+        label: "Session 1 — the admin portal",
+        kind: "call",
+        date: "2026-11-10",
+        time: "10:00",
+        serviceId: null,
+        doneOn: null,
+      },
+      {
+        key: "s2",
+        label: "Session 2 — real jobs",
+        kind: "call",
+        date: "2026-11-17",
+        time: null,
+        serviceId: null,
+        doneOn: null,
+      },
+    ];
+    const idx = kickoffScreensFor(view).findIndex((s) => s.key === "kickoff-training");
+    const text = html(view, idx);
+    expect(text).toContain("Session 1 — the admin portal");
+    expect(text).toContain("Session 2 — real jobs");
+    expect(text).toContain("date to confirm together");
+  });
+
+  it("lists the training that was bought", () => {
+    const facts = { ...TRAINING_ONLY, services: [{ kind: "training", name: "Crew training" }] };
+    const view = viewWith(
+      deckFor(facts, { included: ["kickoff-training"], order: ["kickoff-training"] }, null, [
+        { kind: "training", name: "Crew training", phase: 1 },
+      ]),
+    );
+    const idx = kickoffScreensFor(view).findIndex((s) => s.key === "kickoff-training");
+    expect(html(view, idx)).toContain("Crew training");
+  });
+});
+
+describe("partner: three distinct responsibilities, in the approved wording", () => {
+  const partnerView = () => {
+    const facts = { ...TRAINING_ONLY, trainingOnly: false, partnerLed: true, services: [] };
+    return viewWith(
+      deckFor(
+        facts,
+        { included: ["kickoff-partner"], order: ["kickoff-partner"] },
+        "Field Fusion IQ",
+      ),
+    );
+  };
+
+  it("states the partner, GoCanvas Implementation and Technical Solutions as separate columns", () => {
+    const view = partnerView();
+    const text = html(
+      view,
+      kickoffScreensFor(view).findIndex((s) => s.key === "kickoff-partner"),
+    );
+    expect(text).toContain("Field Fusion IQ");
+    expect(text).toContain("GoCanvas Implementation");
+    expect(text).toContain("Technical Solutions");
+    expect(text).toContain(
+      "Partner configures the solution and establishes the technical connection.",
+    );
+    expect(text).toContain("GoCanvas TIS owns implementation and enablement.");
+    expect(text).toContain("The partner remains available for technical support and escalations.");
+  });
+
+  it("does not present the TIS as owning Technical Solutions work", () => {
+    const view = partnerView();
+    const text = html(
+      view,
+      kickoffScreensFor(view).findIndex((s) => s.key === "kickoff-partner"),
+    );
+    const technical = text.slice(text.indexOf("Technical Solutions"));
+    expect(technical).not.toMatch(/TIS/);
+    expect(technical).toContain(KICKOFF_TO_CONFIRM);
+  });
+
+  it("the recommendation flags that the approved journey does not name the Technical Solutions owner", () => {
+    const deck = deckFor(
+      { ...TRAINING_ONLY, trainingOnly: false, partnerLed: true, services: [] },
+      null,
+      "Field Fusion IQ",
+    );
+    expect(deck.recommended.flags.join(" ")).toMatch(
+      /does not name who owns Technical Solutions work/,
+    );
+  });
+});

@@ -20,6 +20,8 @@
  * it; the TIS can reset to the recommendation on purpose.
  */
 
+import { isManagerRole } from "./roles";
+
 export type KickoffZone = "start" | "before" | "journey" | "after" | "end";
 
 export type KickoffSlideMeta = {
@@ -202,6 +204,11 @@ export function recommendKickoffSlides(f: KickoffFacts): KickoffRecommendation {
       "No first form is named, so the form slide is left out. Name it, or mark the deal training-only.",
     );
   }
+  if (f.partnerLed) {
+    flags.push(
+      "The approved partner journey does not name who owns Technical Solutions work. The partner slide says it is confirmed together; agree the owner with the partner before presenting.",
+    );
+  }
   if (f.partnerLed && !f.partnerName) {
     flags.push(
       "Partner-led, but the partner is not named. The partner slide cannot say who leads.",
@@ -303,10 +310,14 @@ export type SavedKickoffDeck = {
  * selection, so the recommendation applies again.
  */
 export function mergeKickoffDeck(
-  current: Record<string, SavedKickoffDeck> | null | undefined,
+  current: Record<string, SavedKickoffDeck | null> | null | undefined,
   patch: Record<string, SavedKickoffDeck | null> | null | undefined,
 ): Record<string, SavedKickoffDeck> {
-  const out: Record<string, SavedKickoffDeck> = { ...(current ?? {}) };
+  const out: Record<string, SavedKickoffDeck> = {};
+  // A stored entry that did not read cleanly is dropped here, not carried forward.
+  for (const [implementationId, value] of Object.entries(current ?? {})) {
+    if (value) out[implementationId] = value;
+  }
   for (const [implementationId, value] of Object.entries(patch ?? {})) {
     if (value === null) delete out[implementationId];
     else out[implementationId] = value;
@@ -347,3 +358,24 @@ export type KickoffDeckView = {
   /** What was bought, for the slides: name, kind and phase only. Nothing internal. */
   purchased: Array<{ kind: string; name: string; phase: number }>;
 };
+
+/**
+ * Who may save or reset an implementation's Kickoff deck. Only the presentation
+ * setting is governed here; general deal editing, ownership and the kickoff-held
+ * rule are separate and unchanged.
+ *   - super_admin, admin, manager: any post-sale implementation.
+ *   - implementation: only the implementation they are the assigned primary TIS of.
+ *   - every other role: no deck-configuration authority.
+ */
+export function canConfigureKickoffDeck(input: {
+  role: string | null | undefined;
+  actorTeamMemberId: string | null;
+  ownerTeamMemberId: string | null;
+}): boolean {
+  if (isManagerRole(input.role)) return true;
+  return (
+    input.role === "implementation" &&
+    Boolean(input.actorTeamMemberId) &&
+    input.actorTeamMemberId === input.ownerTeamMemberId
+  );
+}

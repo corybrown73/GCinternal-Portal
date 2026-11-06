@@ -2728,6 +2728,12 @@ export async function saveDealIntake(
   if (!before) throw new Error("Deal not found");
 
   const current = readIntake((before as any).intake);
+  // Saving or resetting a Kickoff deck is limited by role, and checked before
+  // anything is merged or written. A reset (null) is the same act.
+  if (patch["kickoff_deck"] && typeof patch["kickoff_deck"] === "object") {
+    const { assertKickoffDeckAuthority } = await import("./kickoff-slides.server");
+    await assertKickoffDeckAuthority(userId, dealId, Object.keys(patch["kickoff_deck"] as object));
+  }
   // Recording that a kickoff was held, or taking that back, is limited by role
   // (kickoff-authority.ts). Checked only when the held state actually changes,
   // and recorded against the actor once the save has succeeded.

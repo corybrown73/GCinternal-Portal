@@ -351,15 +351,20 @@ export const intakeAnswersSchema = z.object({
    * by implementation id, because one customer can have several implementations
    * with different scopes. Absent means the recommendation applies.
    */
+  // Each entry is checked on its own: one malformed entry is dropped, and the
+  // other implementations' selections are kept.
   kickoff_deck: z
     .record(
       z.string().max(80),
-      z.object({
-        included: z.array(z.string().max(60)).max(20),
-        order: z.array(z.string().max(60)).max(20),
-        saved_at: z.string(),
-        saved_by: z.string().nullable(),
-      }),
+      z
+        .object({
+          included: z.array(z.string().max(60)).max(20),
+          order: z.array(z.string().max(60)).max(20),
+          saved_at: z.string(),
+          saved_by: z.string().nullable(),
+        })
+        .nullable()
+        .catch(null),
     )
     .default({})
     .catch({}),

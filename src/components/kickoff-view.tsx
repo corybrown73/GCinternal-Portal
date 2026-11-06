@@ -32,9 +32,8 @@ import { FUNCTIONAL_BY, TARGET_GRADUATION, functionalByDate } from "@/lib/date-l
 import { shortDay } from "@/lib/onboarding-timeline";
 import { cn } from "@/lib/utils";
 import type { WelcomeView } from "@/lib/welcome";
-import { HANDOFF_ROLES } from "@/lib/partner-implementation";
+import { HANDOFF_ROLES, partnerStage } from "@/lib/partner-implementation";
 import { kickoffFocusContent } from "@/lib/kickoff-view";
-import { sessionsAfterKickoff } from "@/lib/presenter-workspace";
 import {
   defaultSelection,
   presentedSlideKeys,
@@ -654,10 +653,19 @@ function KickoffAchieve({ view, page }: { view: WelcomeView; page: number }) {
   );
 }
 
-/** Training and enablement: the training bought, and the sessions in the plan. Optional. */
+/**
+ * Training and enablement. Only confirmed training is shown as training: the
+ * training that was bought, and, on a training plan, that plan's own sessions.
+ * The working sessions of a form build are implementation work and are never
+ * described here. With nothing confirmed, the slide says so neutrally.
+ */
 function KickoffTraining({ view, page }: { view: WelcomeView; page: number }) {
-  const training = (view.kickoffDeck?.purchased ?? []).filter((s) => s.kind === "training");
-  const sessions = sessionsAfterKickoff(view.timeline.milestones);
+  const bought = (view.kickoffDeck?.purchased ?? []).filter((s) => s.kind === "training");
+  const trainingPlan = view.timeline.training === true;
+  const sessions = trainingPlan
+    ? view.timeline.milestones.filter((m) => m.kind === "call" && !m.serviceId)
+    : [];
+  const nothingConfirmed = bought.length === 0 && sessions.length === 0;
   return (
     <Frame
       k="kickoff-training"
@@ -666,40 +674,40 @@ function KickoffTraining({ view, page }: { view: WelcomeView; page: number }) {
       title="Getting the crew"
       accent="ready to work"
     >
-      <div className="wp-kick-achieve">
-        <section>
-          <h4>What we will train</h4>
-          {training.length ? (
-            <ul>
-              {training.map((s) => (
-                <li key={s.name}>
-                  <Check className="wp-kick-check" strokeWidth={3} aria-hidden="true" />
-                  <span>{s.name}</span>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p>{KICKOFF_TO_CONFIRM}</p>
-          )}
-        </section>
-        <section>
-          <h4>The sessions</h4>
+      {nothingConfirmed ? (
+        <p>Training is to be confirmed together.</p>
+      ) : (
+        <div className="wp-kick-achieve">
+          {bought.length ? (
+            <section>
+              <h4>Training you bought</h4>
+              <ul>
+                {bought.map((s) => (
+                  <li key={s.name}>
+                    <Check className="wp-kick-check" strokeWidth={3} aria-hidden="true" />
+                    <span>{s.name}</span>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ) : null}
           {sessions.length ? (
-            <ul>
-              {sessions.map((m) => (
-                <li key={m.key}>
-                  <span>
-                    {m.label}
-                    {m.booked ? ` · ${shortDay(m.date)}` : ""}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p>{KICKOFF_TO_CONFIRM}</p>
-          )}
-        </section>
-      </div>
+            <section>
+              <h4>Training sessions</h4>
+              <ul>
+                {sessions.map((m) => (
+                  <li key={m.key}>
+                    <span>
+                      {m.label}
+                      {m.time ? ` · ${shortDay(m.date)}` : " · date to confirm together"}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ) : null}
+        </div>
+      )}
     </Frame>
   );
 }
@@ -734,9 +742,16 @@ function KickoffPurchased({ view, page }: { view: WelcomeView; page: number }) {
   );
 }
 
-/** Working with your partner: who leads, and what changes hands. Optional. */
+/**
+ * Working with your partner. Three distinct responsibilities, in the approved
+ * partner journey's own words: the partner's (before the handover, and support
+ * after it), GoCanvas Implementation's (from the handover), and Technical
+ * Solutions ownership, which the approved journey does not define and is
+ * therefore confirmed together rather than stated.
+ */
 function KickoffPartner({ view, page }: { view: WelcomeView; page: number }) {
   const partner = view.kickoffDeck?.partnerName ?? null;
+  const [gocanvasOwns, partnerRemains] = HANDOFF_ROLES.after.split("; ");
   return (
     <Frame
       k="kickoff-partner"
@@ -747,12 +762,27 @@ function KickoffPartner({ view, page }: { view: WelcomeView; page: number }) {
     >
       <div className="wp-kick-achieve">
         <section>
-          <h4>Before the handover</h4>
-          <p>{HANDOFF_ROLES.before}</p>
+          <h4>{partner ?? "Your partner"}</h4>
+          <ul>
+            <li>{partnerStage("partner_setup").description}</li>
+            <li>{HANDOFF_ROLES.before}</li>
+            {partnerRemains ? (
+              <li>The partner {partnerRemains.replace(/^the partner /, "")}</li>
+            ) : null}
+          </ul>
         </section>
         <section>
-          <h4>After the handover</h4>
-          <p>{HANDOFF_ROLES.after}</p>
+          <h4>GoCanvas Implementation</h4>
+          <ul>
+            {gocanvasOwns ? <li>{gocanvasOwns}.</li> : null}
+            {(["form_finalisation", "pilot", "trial_run", "roll_out"] as const).map((key) => (
+              <li key={key}>{partnerStage(key).description}</li>
+            ))}
+          </ul>
+        </section>
+        <section>
+          <h4>Technical Solutions</h4>
+          <p>{KICKOFF_TO_CONFIRM}</p>
         </section>
       </div>
     </Frame>

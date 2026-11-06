@@ -5,6 +5,7 @@ import type { IntakeAnswers } from "./intake-answers";
 import { isTrainingOnly } from "./intake-answers";
 import { PARTNERS, implementationTypeFor } from "./partner-implementation";
 import {
+  canConfigureKickoffDeck,
   recommendKickoffSlides,
   resolveKickoffSelection,
   type KickoffDeckView,
@@ -113,4 +114,38 @@ async function nameFor(profileId: string | null): Promise<string | null> {
     .eq("id", profileId)
     .maybeSingle();
   return ((data?.full_name as string | null) || (data?.email as string | null)) ?? null;
+}
+
+export const KICKOFF_DECK_REFUSED =
+  "Only an administrator, a manager, or the TIS assigned to this implementation can change its kickoff slides.";
+
+/**
+ * Refuse a save or reset of kickoff deck configuration unless the signed-in
+ * person may configure every implementation named. Read from the database, never
+ * from the client. A name that is not an implementation of this deal is refused too,
+ * so a configuration can only ever be written against the deal's own implementations.
+ */
+export async function assertKickoffDeckAuthority(
+  userId: string,
+  dealId: string,
+  implementationIds: string[],
+): Promise<void> {
+  if (implementationIds.length === 0) return;
+  const [{ data: profile }, { data: impls }] = await Promise.all([
+    db().from("portal_profiles").select("role, team_member_id").eq("id", userId).maybeSingle(),
+    db().from("implementations").select("id,owner_id").eq("deal_id", dealId),
+  ]);
+  const byId = new Map<string, { owner_id: string | null }>(
+    (impls ?? []).map((i: { id: string; owner_id: string | null }) => [String(i.id), i]),
+  );
+  for (const id of implementationIds) {
+    const impl = byId.get(id);
+    if (!impl) throw new Error("That implementation is not on this deal.");
+    const allowed = canConfigureKickoffDeck({
+      role: (profile?.role as string | null) ?? null,
+      actorTeamMemberId: (profile?.team_member_id as string | null) ?? null,
+      ownerTeamMemberId: (impl.owner_id as string | null) ?? null,
+    });
+    if (!allowed) throw new Error(KICKOFF_DECK_REFUSED);
+  }
 }
