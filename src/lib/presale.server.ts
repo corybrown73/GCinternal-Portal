@@ -2728,6 +2728,21 @@ export async function saveDealIntake(
   if (!before) throw new Error("Deal not found");
 
   const current = readIntake((before as any).intake);
+  // Recording that a kickoff was held, or taking that back, is the assigned
+  // TIS's call. Checked only when the held state actually changes.
+  {
+    const incoming = patch["timeline"] as { completed?: Record<string, unknown> } | undefined;
+    if (incoming && typeof incoming === "object" && incoming.completed) {
+      const { kickoffHeldChanged } = await import("./kickoff-authority");
+      const previous = (current.timeline.completed as Record<string, unknown> | undefined)?.[
+        "kickoff"
+      ];
+      if (kickoffHeldChanged(previous, incoming.completed["kickoff"])) {
+        const { assertKickoffHeldAuthority } = await import("./kickoff-authority.server");
+        await assertKickoffHeldAuthority(userId, dealId);
+      }
+    }
+  }
   // The Field Fusion block is patched one tick at a time; a tick must not
   // wipe the other tick, the note, or the handoff stamp.
   const merged: Record<string, unknown> = { ...patch };
