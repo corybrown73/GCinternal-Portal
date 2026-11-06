@@ -89,6 +89,16 @@ beforeEach(() => {
   h.setWorkItem.fn = async () => undefined;
 });
 
+/** A writer that changes the work item in the fake database, as the real one does. */
+function writeThrough(f: ReturnType<typeof createFakeSupabase>) {
+  return async (args: Record<string, unknown>) => {
+    const items = (f.store["work_items"] ?? []) as Array<Record<string, unknown>>;
+    for (const it of items) {
+      if (it["id"] === args["workItemId"]) it["status"] = args["status"];
+    }
+  };
+}
+
 describe("the automatic journey sync", () => {
   it("a complete AI brief moves no stage, even though it is on file", async () => {
     fake = createFakeSupabase({
@@ -237,5 +247,35 @@ describe("the automatic journey sync", () => {
       stageGateStatus(open.map((i) => ({ ...i, status: "done" }))),
     );
     expect(cleared).toBeNull();
+  });
+
+  it("a kickoff held with no booking completes the scheduling item, so no gate asks to schedule it", async () => {
+    fake = createFakeSupabase(rows({}, [kickoffScheduled, kickoffCall]));
+    h.supabase.client = fake.client;
+    h.milestones = [{ key: "kickoff", doneOn: "2026-11-06" }];
+    h.setWorkItem.fn = writeThrough(fake);
+
+    await syncJourneyStage("deal-1", null);
+
+    const items = fake.store["work_items"] as Array<Record<string, unknown>>;
+    const status = (key: string) => items.find((i) => i["task_key"] === key)?.["status"];
+    expect(status("nl.kickoff_scheduled")).toBe("done");
+    expect(status("nl.kickoff_call")).toBe("done");
+
+    // The gate the panel reads, from the rows as they now stand.
+    const handoffGate = items
+      .filter((i) => i["task_key"] === "nl.kickoff_scheduled")
+      .map((i) => ({
+        id: i["id"],
+        title: "Schedule the kickoff call",
+        status: i["status"],
+        is_gate: true,
+      }));
+    const msg = await automaticHoldFor(
+      "deal-1",
+      "handoff",
+      stageGateStatus(handoffGate as GateItem[]),
+    );
+    expect(msg).toBeNull();
   });
 });

@@ -231,9 +231,13 @@ async function signalsFor(dealId: string, rawIntake: unknown): Promise<JourneySi
   });
   const t = timelineFor(intake, close.date);
   const done = (key: string) => Boolean(t.milestones.find((m) => m.key === key)?.doneOn);
+  const held = done("kickoff");
   return {
-    kickoffScheduled: kickoffBooked(intake.timeline),
-    kickoffHeld: done("kickoff"),
+    // A kickoff that has been held was scheduled, whether or not a booking was
+    // ever put on the plan (the held confirmation can be recorded from the
+    // deal's Kickoff stage). The reverse does not hold: a booking is not a hold.
+    kickoffScheduled: kickoffBooked(intake.timeline) || held,
+    kickoffHeld: held,
     workingDone: done("working"),
     formLive: Boolean(t.liveDoneOn),
   };
