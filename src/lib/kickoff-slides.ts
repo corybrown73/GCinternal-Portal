@@ -287,6 +287,12 @@ export type KickoffDeckView = {
   additional: Array<{ kind: string; name: string; phase: number }>;
   /** The first form's name when one is named. */
   firstFormName: string | null;
+  /**
+   * The complexity tier the implementation is recorded as. `number` is 1 to 5, or null
+   * when unclassified (Tier 0 or no valid tier). `status` says whether the deck can use
+   * it: classified, unclassified, or unconfigured (Settings has no target for it).
+   */
+  tier: { number: number | null; status: "classified" | "unclassified" | "unconfigured" };
   /** The delivery dates for the journey slide: suggested, adjusted, never agreed. Null when the deck did not load. */
   delivery: KickoffDelivery | null;
 };

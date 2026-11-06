@@ -132,3 +132,21 @@ export function targetOverrideHolds(
     last.changed_at === last.explained_at,
   );
 }
+
+/**
+ * The tier an implementation is recorded as: the highest recorded tier on its
+ * intake (the plan's integration tier, or the tier of any integration service).
+ * Returns a tier only when it is 1 to 5, the tiers Settings targets. Returns null
+ * for Tier 0 (no integration), for no recorded tier, and for any out-of-range
+ * value. Nothing is substituted: a null is for the TIS to review.
+ */
+export function recordedTierNumber(intake: Pick<IntakeAnswers, "timeline">): number | null {
+  const recorded = [
+    intake.timeline.integration_tier ?? 0,
+    ...intake.timeline.services
+      .filter((s) => s.kind === "integration")
+      .map((s) => (s as { tier?: number | null }).tier ?? 0),
+  ].filter((n) => Number.isFinite(n));
+  const n = Math.max(0, ...recorded);
+  return Number.isInteger(n) && n >= 1 && n <= 5 ? n : null;
+}

@@ -184,14 +184,15 @@ export function parseDeliveryTimeline(raw: string | null | undefined): SowDelive
   };
 }
 
-/** The complexity-tier target for this deal, resolved from the Settings configuration. */
+/**
+ * The complexity-tier target for this deal: the recorded Tier 1 to 5, and its
+ * business-day target as set in Settings. Never a tier the deal is not recorded as.
+ */
 export type TierTarget = {
-  /** The tier the target is for (1 to 5). A deal with no integration counts as Tier 1. */
+  /** The recorded tier (1 to 5). */
   tier: number;
   /** The target in business days, as set in Settings. */
   businessDays: number;
-  /** True when the deal has no integration (Settings tier 0) and uses the Tier 1 target. */
-  noIntegration: boolean;
 };
 
 export type DeliveryInputs = {
@@ -363,12 +364,10 @@ export function suggestDeliveryDates(input: DeliveryInputs): DeliverySuggestion 
 
   // 3. No usable SOW timeline: the Settings tier target, in business days from the deal's close date.
   if (input.tierTarget) {
-    const { tier, businessDays, noIntegration } = input.tierTarget;
+    const { tier, businessDays } = input.tierTarget;
     const assumptions = [
       `No usable SOW Delivery Timeline. Complexity Tier ${tier} target of ${businessDays} business days, as set in Settings, counted from the close date recorded on the deal (not the SOW signature date). Weekends and this deal's holidays are skipped.`,
     ];
-    if (noIntegration)
-      assumptions.push("No integration is in scope, so the deal uses the Tier 1 target.");
     if (!input.closeDate) {
       return none("The close date is not recorded, so no tier target can be counted.", assumptions);
     }

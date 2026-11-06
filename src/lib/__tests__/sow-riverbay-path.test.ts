@@ -110,7 +110,7 @@ describe("the deck's dates from the Riverbay paragraph", () => {
     const intake = intakeAfterApply();
     const s = suggestDeliveryDates({
       sow: deliveryFromStored(intake.timeline["sow_delivery"]),
-      tierTarget: { tier: 1, businessDays: SETTINGS[1], noIntegration: true },
+      tierTarget: { tier: 1, businessDays: SETTINGS[1] },
       tierMissing: null,
       closeDate: "2026-08-20",
       kickoffDate: "2026-09-07",

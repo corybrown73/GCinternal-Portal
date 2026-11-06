@@ -123,6 +123,7 @@ function deckFor(
     additional: [],
     firstFormName: "Site Check",
     delivery: null,
+    tier: { number: 1, status: "classified" },
     ...over,
   };
 }

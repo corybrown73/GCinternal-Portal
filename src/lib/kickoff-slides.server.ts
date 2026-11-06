@@ -16,7 +16,7 @@ import {
   type SavedSchedule,
   type TierTarget,
 } from "./delivery-timeline";
-import { tierForIntake } from "./complexity-tiers";
+import { recordedTierNumber } from "./complexity-tiers";
 import { loadConfiguredTiersStrict } from "./complexity-tiers.server";
 import {
   canConfigureKickoffDeck,
@@ -61,6 +61,12 @@ const storedSchema = z.object({
     .nullable()
     .optional(),
 });
+
+/** Shown when an implementation is recorded as Tier 0 or has no valid tier. */
+export const UNCLASSIFIED_TIER =
+  "This implementation is unclassified: it is recorded as Tier 0 or has no valid complexity tier. No tier-based date is proposed until the TIS reviews it.";
+const UNCLASSIFIED_TIER_FLAG =
+  "Complexity tier unclassified: this implementation is recorded as Tier 0 or has no valid tier. TIS review is required. No tier-based date is proposed; a SOW delivery timeline is unaffected.";
 
 export const KICKOFF_DECK_REFUSED =
   "Only an administrator, a manager, or the TIS assigned to this implementation can change its kickoff deck.";
@@ -184,24 +190,34 @@ async function readView(args: {
     holidays?: string[];
   };
   const savedSchedule: SavedSchedule | null = stored?.choice.schedule ?? null;
-  // The tier target is Settings' own value, read strictly: a failed read holds the deck.
+  // The tier target is Settings' own value for the tier the implementation is recorded as.
+  // A failed read holds the deck. Tier 0 or no valid tier is unclassified: nothing is
+  // substituted, and the TIS is asked to review it.
   const tiers = await loadConfiguredTiersStrict();
-  const tierChoice = tiers ? tierForIntake(args.intake, tiers) : null;
+  const recordedTier = recordedTierNumber(args.intake);
+  const configured =
+    tiers && recordedTier !== null ? tiers.find((t) => t.tier === recordedTier) : undefined;
   let tierTarget: TierTarget | null = null;
   let tierMissing: string | null = null;
-  if (!tiers) {
+  let tierStatus: KickoffDeckView["tier"]["status"];
+  let tierFlag: string | null = null;
+  if (recordedTier === null) {
+    tierStatus = "unclassified";
+    tierMissing = UNCLASSIFIED_TIER;
+    tierFlag = UNCLASSIFIED_TIER_FLAG;
+  } else if (!tiers) {
+    tierStatus = "unconfigured";
     tierMissing =
       "No complexity-tier targets are set in Settings, so no tier-based date is proposed.";
-  } else if (!tierChoice) {
-    tierMissing = "Settings has no complexity tier that matches this deal.";
+    tierFlag =
+      "Settings has no complexity-tier targets. TIS review is required before a tier-based date is proposed.";
+  } else if (!configured) {
+    tierStatus = "unconfigured";
+    tierMissing = `Settings has no target for Tier ${recordedTier}, so no tier-based date is proposed.`;
+    tierFlag = `Settings has no target for Tier ${recordedTier}. TIS review is required before a tier-based date is proposed.`;
   } else {
-    const noIntegration = tierChoice.tier === 0;
-    const target = noIntegration ? tiers.find((t) => t.tier === 1) : tierChoice;
-    if (target) {
-      tierTarget = { tier: target.tier, businessDays: target.business_days, noIntegration };
-    } else {
-      tierMissing = "Settings has no Tier 1 target for a deal with no integration.";
-    }
+    tierStatus = "classified";
+    tierTarget = { tier: recordedTier, businessDays: configured.business_days };
   }
   const suggestion = suggestDeliveryDates({
     sow: deliveryFromStored(timelineFacts.sow_delivery ?? null),
@@ -222,7 +238,10 @@ async function readView(args: {
   return {
     loadError: null,
     implementationId,
-    recommended,
+    recommended: tierFlag
+      ? { ...recommended, flags: [...recommended.flags, tierFlag] }
+      : recommended,
+    tier: { number: recordedTier, status: tierStatus },
     selection,
     saved: stored
       ? {
@@ -293,6 +312,7 @@ function failedView(error: unknown): KickoffDeckView {
   return {
     loadError,
     implementationId: null,
+    tier: { number: null, status: "unclassified" },
     recommended: {
       deckType: null,
       deckReason: "",

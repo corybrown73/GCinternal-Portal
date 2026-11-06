@@ -64,6 +64,10 @@ const CONFIGURED_TIERS = {
   ],
 };
 
+/** A deal recorded at a complexity tier, with no SOW timeline. */
+const tierIntake = (n: number) =>
+  readIntake({ path: "new_logo", timeline: { services: [], holidays: [], integration_tier: n } });
+
 /** A deal whose SOW was applied: the paragraph kept on the timeline, and the deal's own holidays. */
 const sowIntake = (extra: Record<string, unknown> = {}) =>
   readIntake({
@@ -164,9 +168,9 @@ describe("the SOW's start condition is read from the saved paragraph, not from k
   it("a deal with no SOW paragraph falls back to the tier target, in business days", async () => {
     use(rows());
     const view = await kickoffDeckView({
-      ...args(readIntake({ path: "new_logo", timeline: { services: [], holidays: [] } })),
+      ...args(tierIntake(1)),
     });
-    // No integration on the deal is Tier 0, which counts as Tier 1: 30 business days from the close (2026-08-20).
+    // A recorded Tier 1 takes Settings' Tier 1 target: 30 business days from the close (2026-08-20).
     expect(view.delivery?.suggestion.basis).toBe("tier");
     expect(view.delivery?.suggestion.from).toBe(addBusinessDays("2026-08-20", 30));
     expect(view.delivery?.label).toMatch(/complexity-tier target, in business days/);
@@ -406,7 +410,7 @@ describe("Settings is the single source of the tier targets", () => {
       }),
     );
     const view = await kickoffDeckView({
-      ...args(readIntake({ path: "new_logo", timeline: { services: [], holidays: [] } })),
+      ...args(tierIntake(1)),
     });
     expect(view.delivery?.suggestion.from).toBe(addBusinessDays("2026-08-20", 20));
   });
@@ -414,7 +418,7 @@ describe("Settings is the single source of the tier targets", () => {
   it("with no tier configuration stored, the deck proposes nothing and names Settings", async () => {
     use(rows({ portal_app_config: [] }));
     const view = await kickoffDeckView({
-      ...args(readIntake({ path: "new_logo", timeline: { services: [], holidays: [] } })),
+      ...args(tierIntake(1)),
     });
     expect(view.loadError).toBeNull();
     expect(view.delivery?.suggestion.basis).toBe("none");
@@ -423,9 +427,7 @@ describe("Settings is the single source of the tier targets", () => {
 
   it("a failed read of the Settings tiers is an explicit error, and the presentation is held", async () => {
     use(rows(), { portal_app_config: { message: "permission denied" } });
-    const view = await kickoffDeckView(
-      args(readIntake({ path: "new_logo", timeline: { services: [], holidays: [] } })),
-    );
+    const view = await kickoffDeckView(args(tierIntake(1)));
     expect(view.loadError).toMatch(/complexity tiers/);
     expect(kickoffDeckBlocked({ kickoffDeck: view })).toBe(true);
   });
@@ -489,5 +491,88 @@ describe("the SOW's business units survive the stored path", () => {
     const view = await kickoffDeckView({ ...args(intake), kickoffDate: "2026-10-02" });
     expect(view.delivery?.suggestion.duration?.unit).toBe("business_day");
     expect(view.delivery?.suggestion.from).toBe("2026-10-09");
+  });
+});
+
+describe("unclassified deals are flagged for TIS review, never given a tier-based date", () => {
+  const TIER_FLAG = /Complexity tier unclassified/;
+
+  it("a deal recorded as Tier 0 gets no tier date, even though Settings has a Tier 1 target", async () => {
+    use(rows());
+    const view = await kickoffDeckView(
+      args(readIntake({ path: "new_logo", timeline: { services: [], holidays: [] } })),
+    );
+    expect(view.tier).toEqual({ number: null, status: "unclassified" });
+    expect(view.delivery?.suggestion.basis).toBe("none");
+    expect(view.delivery?.suggestion.from).toBeNull();
+    expect(view.delivery?.suggestion.missing).toMatch(/unclassified/);
+    expect(view.recommended.flags.some((f) => TIER_FLAG.test(f))).toBe(true);
+  });
+
+  it("a deal with no valid tier recorded is unclassified in the same way", async () => {
+    use(rows());
+    // An integration tier above the five Settings tiers is not a valid tier.
+    const view = await kickoffDeckView(
+      args(
+        readIntake({
+          path: "new_logo",
+          timeline: { services: [], holidays: [], integration_tier: 9 },
+        }),
+      ),
+    );
+    expect(view.tier.status).toBe("unclassified");
+    expect(view.delivery?.suggestion.from).toBeNull();
+  });
+
+  it("the flag reaches the TIS, and the unclassified deal's SOW timeline still counts", async () => {
+    use(
+      rows({
+        scoping_answers: [
+          savedRow({
+            forms_finalised_on: "2026-10-05",
+            completion_from: null,
+            completion_to: null,
+            adjusted_reason: null,
+          }),
+        ],
+      }),
+    );
+    const view = await kickoffDeckView(args());
+    expect(view.recommended.flags.some((f) => TIER_FLAG.test(f))).toBe(true);
+    expect(view.delivery?.suggestion.basis).toBe("sow");
+    expect(view.delivery?.suggestion.from).toBe("2026-11-02");
+  });
+
+  it("a recorded tier Settings has no target for is unconfigured, and says which tier", async () => {
+    use(
+      rows({
+        portal_app_config: [
+          {
+            key: "complexity_tiers",
+            value: { tiers: CONFIGURED_TIERS.tiers.filter((t) => t.tier !== 4) },
+          },
+        ],
+      }),
+    );
+    const view = await kickoffDeckView(args(tierIntake(4)));
+    expect(view.tier).toEqual({ number: 4, status: "unconfigured" });
+    expect(view.delivery?.suggestion.from).toBeNull();
+    expect(view.recommended.flags.join(" ")).toMatch(/no target for Tier 4/);
+  });
+
+  it("the recorded Tier 3 and Tier 5 take their own Settings targets", async () => {
+    use(rows());
+    const t3 = await kickoffDeckView(args(tierIntake(3)));
+    expect(t3.tier).toEqual({ number: 3, status: "classified" });
+    expect(t3.delivery?.suggestion.from).toBe(addBusinessDays("2026-08-20", 90));
+    const t5 = await kickoffDeckView(args(tierIntake(5)));
+    expect(t5.delivery?.suggestion.from).toBe(addBusinessDays("2026-08-20", 150));
+  });
+
+  it("a recorded Tier 1 is classified, with no flag", async () => {
+    use(rows());
+    const view = await kickoffDeckView(args(tierIntake(1)));
+    expect(view.tier).toEqual({ number: 1, status: "classified" });
+    expect(view.recommended.flags.some((f) => TIER_FLAG.test(f))).toBe(false);
   });
 });

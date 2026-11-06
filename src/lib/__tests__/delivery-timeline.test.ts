@@ -22,10 +22,9 @@ const RIVERBAY =
 
 /** The Settings values under test: the authoritative targets for Tiers 1 to 5. */
 const SETTINGS_DAYS: Record<number, number> = { 1: 30, 2: 45, 3: 90, 4: 120, 5: 150 };
-const tier = (n: number, noIntegration = false): TierTarget => ({
+const tier = (n: number): TierTarget => ({
   tier: n,
   businessDays: SETTINGS_DAYS[n]!,
-  noIntegration,
 });
 
 const base: DeliveryInputs = {
@@ -334,16 +333,10 @@ describe("complexity-tier targets come from Settings, in business days, skipping
   it("follows whatever Settings holds: a changed Settings value changes the date", () => {
     const changed = suggestDeliveryDates({
       ...base,
-      tierTarget: { tier: 1, businessDays: 20, noIntegration: false },
+      tierTarget: { tier: 1, businessDays: 20 },
       closeDate: "2026-09-01",
     });
     expect(changed.from).toBe(addBusinessDays("2026-09-01", 20));
-  });
-
-  it("a deal with no integration uses the Tier 1 target, and says so", () => {
-    const s = suggestDeliveryDates({ ...base, tierTarget: tier(1, true), closeDate: "2026-09-01" });
-    expect(s.from).toBe(addBusinessDays("2026-09-01", 30));
-    expect(s.assumptions.join(" ")).toMatch(/uses the Tier 1 target/);
   });
 
   it("names the Settings source and the close date, never the signature date", () => {
