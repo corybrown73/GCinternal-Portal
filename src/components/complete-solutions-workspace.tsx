@@ -105,7 +105,14 @@ function errorText(e: unknown): string {
  * A readiness the Hub suggests is shown beside the one the TIS confirmed; the TIS
  * confirms the change.
  */
-export function CompleteSolutionsWorkspace({ implementationId }: { implementationId: string }) {
+export function CompleteSolutionsWorkspace({
+  implementationId,
+  lifecycleFor,
+}: {
+  implementationId: string;
+  /** The lifecycle label of the purchased service a solution delivers, when there is one. */
+  lifecycleFor?: ((purchasedServiceId: string | null) => string | null) | undefined;
+}) {
   const q = useCompleteSolutions(implementationId);
   const [adding, setAdding] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
@@ -161,6 +168,7 @@ export function CompleteSolutionsWorkspace({ implementationId }: { implementatio
           implementationId={implementationId}
           editable={editable}
           all={all}
+          lifecycle={lifecycleFor?.(s.purchasedServiceId) ?? null}
         />
       ))}
 
@@ -178,6 +186,7 @@ export function CompleteSolutionsWorkspace({ implementationId }: { implementatio
                   implementationId={implementationId}
                   editable={editable}
                   all={all}
+                  lifecycle={lifecycleFor?.(s.purchasedServiceId) ?? null}
                 />
               ))}
             </div>
@@ -249,11 +258,13 @@ function SolutionCard({
   implementationId,
   editable,
   all,
+  lifecycle,
 }: {
   solution: SolutionView;
   implementationId: string;
   editable: boolean;
   all: SolutionView[];
+  lifecycle: string | null;
 }) {
   const [showHistory, setShowHistory] = useState(false);
   const [editingNext, setEditingNext] = useState(false);
@@ -330,25 +341,15 @@ function SolutionCard({
           ) : null}
         </div>
         <div className="flex flex-wrap items-center gap-2 text-[12px]">
+          {/* The customer-facing status is the lifecycle (Define, Build, Accept, Accepted),
+              read from the purchase record. It is not changed here. */}
+          {lifecycle ? (
+            <span className="rounded-sm bg-muted px-2 py-0.5 font-medium text-foreground">
+              {lifecycle}
+            </span>
+          ) : null}
           {editable && !s.archived ? (
             <>
-              <label className="flex items-center gap-1">
-                <span className="text-muted-foreground">Status</span>
-                <select
-                  className={FIELD}
-                  value={s.status}
-                  disabled={solutionChange.isPending}
-                  onChange={(e) =>
-                    solutionChange.mutate({ status: e.target.value as SolutionStatus })
-                  }
-                >
-                  {SOLUTION_STATUSES.map((v) => (
-                    <option key={v} value={v}>
-                      {SOLUTION_STATUS_LABEL[v]}
-                    </option>
-                  ))}
-                </select>
-              </label>
               <label className="flex items-center gap-1">
                 <span className="text-muted-foreground">Priority</span>
                 <select
@@ -365,16 +366,16 @@ function SolutionCard({
                 </select>
               </label>
             </>
-          ) : (
-            <span className="text-muted-foreground">{SOLUTION_STATUS_LABEL[s.status]}</span>
-          )}
+          ) : null}
         </div>
       </div>
 
       {/* Readiness: the Hub suggests, the TIS confirms. */}
       <div className="mt-3 rounded-md border border-border bg-muted/30 p-3 text-[12px]">
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-          <span className="font-medium">Readiness: {READINESS_LABEL[s.readinessConfirmed]}</span>
+          <span className="font-medium">
+            Solution readiness: {READINESS_LABEL[s.readinessConfirmed]}
+          </span>
           <span className="text-muted-foreground">
             Suggested: {READINESS_LABEL[suggestion.readiness]}
           </span>

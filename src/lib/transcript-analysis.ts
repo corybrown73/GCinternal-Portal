@@ -2,6 +2,7 @@ import { z } from "zod/v4";
 
 import { handoffQuestion, HANDOFF_QUESTIONS } from "./sales-handoff";
 import { COMPONENT_STATUSES, PRIORITIES } from "./complete-solutions";
+import { TRAINING_METHODS, TRAINING_RESPONSIBILITIES } from "./training-plan";
 
 /**
  * Meeting-transcript analysis (V2).
@@ -57,7 +58,26 @@ export const PROPOSAL_TYPES = [
   "note",
   "intake_suggestion",
   "component_update",
+  "training_add",
+  "training_update",
+  "training_delivered",
+  "training_demonstrated",
+  "training_follow_up",
 ] as const;
+
+/**
+ * The fields of a training need a transcript may propose to change. Matches the
+ * check on evidence_proposals.training_field (0092). Readiness and delivery are
+ * their own proposal types, not fields.
+ */
+export const TRAINING_PROPOSAL_FIELDS = [
+  "topic",
+  "audience",
+  "outcome",
+  "responsibility",
+  "method",
+] as const;
+export type TrainingProposalField = (typeof TRAINING_PROPOSAL_FIELDS)[number];
 
 /**
  * The fields of a complete solution's component a transcript may propose to
@@ -91,6 +111,11 @@ export const PROPOSAL_TYPE_LABEL: Record<ProposalType, string> = {
   note: "Follow-up note",
   intake_suggestion: "Handoff answer",
   component_update: "Solution component change",
+  training_add: "New training need",
+  training_update: "Training change",
+  training_delivered: "Training delivered",
+  training_demonstrated: "Readiness shown",
+  training_follow_up: "Practice or follow-up needed",
 };
 
 export const PROPOSAL_LEVELS = ["low", "medium", "high"] as const;
@@ -189,6 +214,14 @@ const proposal = z.preprocess(
           ? componentField
           : null,
       component_value: nullableText(o["component_value"]),
+      training_id: nullableText(o["training_id"]),
+      training_field:
+        typeof o["training_field"] === "string" &&
+        (TRAINING_PROPOSAL_FIELDS as readonly string[]).includes(o["training_field"])
+          ? (o["training_field"] as TrainingProposalField)
+          : null,
+      training_value: nullableText(o["training_value"]),
+      training_date: isoDateOf(o["training_date"]),
     };
   },
   z.object({
@@ -211,6 +244,13 @@ const proposal = z.preprocess(
     component_field: z.enum(COMPONENT_PROPOSAL_FIELDS).nullable(),
     /** For component_update: the new value. A status, a priority, a date, or the text. */
     component_value: z.string().nullable(),
+    /** For the training types: the [id] of the training need, as listed in the context. */
+    training_id: z.string().nullable(),
+    training_field: z.enum(TRAINING_PROPOSAL_FIELDS).nullable(),
+    /** For training_update: the new value. For training_demonstrated: the status. For training_follow_up: the next step. */
+    training_value: z.string().nullable(),
+    /** For training_delivered: the date it was delivered, when the call says so. */
+    training_date: z.string().regex(ISO_DATE).nullable(),
   }),
 );
 
@@ -280,6 +320,19 @@ export type TranscriptContext = {
     priority: string;
     targetDate: string | null;
     /** The component's version when it was read. A suggestion applies only to this version. */
+    updatedAt: string;
+  }>;
+  /**
+   * The active training needs, with the version each was read at. A training
+   * suggestion may name only one of these, except training_add. Absent while the
+   * training_plan flag is off, so a reading never proposes what the Hub is not using.
+   */
+  trainingNeeds?: Array<{
+    id: string;
+    topic: string;
+    responsibility: string | null;
+    delivered: boolean;
+    readiness: string;
     updatedAt: string;
   }>;
   /** Who runs the implementation today, so a reading does not propose them as new. */
@@ -388,6 +441,12 @@ export type EvidenceProposalRow = {
   component_field?: ComponentProposalField | null;
   component_value?: string | null;
   component_version?: string | null;
+  /** For the training types: the need, its field and value, the date, and the version it was made against. */
+  training_id?: string | null;
+  training_field?: TrainingProposalField | null;
+  training_value?: string | null;
+  training_date?: string | null;
+  training_version?: string | null;
 };
 
 export function attributionFor(quote: string | null): string {
@@ -402,6 +461,8 @@ export function attributionFor(quote: string | null): string {
 export type ProposalPicks = {
   ownerTeamMemberId?: string | null | undefined;
   proposedDate?: string | null | undefined;
+  /** For training_delivered: the date the reviewer confirms, when the call did not give one. */
+  trainingDate?: string | null | undefined;
   severity?: ProposalLevel | null | undefined;
   likelihood?: ProposalLevel | null | undefined;
 };
@@ -452,6 +513,30 @@ export type ProposalApplyPlan =
       /** The component version the suggestion was made against; the write must match it. */
       version: string;
     }
+  | { kind: "training_add"; topic: string; outcome: string | null; quote: string }
+  | {
+      kind: "training_update";
+      trainingId: string;
+      field: TrainingProposalField;
+      value: string;
+      version: string;
+      quote: string;
+    }
+  | { kind: "training_delivered"; trainingId: string; date: string; version: string; quote: string }
+  | {
+      kind: "training_demonstrated";
+      trainingId: string;
+      status: "demonstrated" | "practice_needed" | "not_yet";
+      quote: string;
+      version: string;
+    }
+  | {
+      kind: "training_follow_up";
+      trainingId: string;
+      nextStep: string;
+      version: string;
+      quote: string;
+    }
   | { kind: "blocked"; reason: string };
 
 /**
@@ -478,6 +563,11 @@ export function proposalApplyPlan(
     | "component_field"
     | "component_value"
     | "component_version"
+    | "training_id"
+    | "training_field"
+    | "training_value"
+    | "training_date"
+    | "training_version"
   >,
   picks: ProposalPicks,
   opts: { planOwnsTarget: boolean },
@@ -587,9 +677,107 @@ export function proposalApplyPlan(
         version: p.component_version,
       };
     }
+    case "training_add":
+    case "training_update":
+    case "training_delivered":
+    case "training_demonstrated":
+    case "training_follow_up":
+      return trainingApplyPlan(p, picks);
     case "note":
     default:
       return { kind: "note", input: { note: `${p.title}\n\n${p.text}${attribution}` } };
+  }
+}
+
+type TrainingApplyRow = Pick<
+  EvidenceProposalRow,
+  | "type"
+  | "title"
+  | "text"
+  | "quote"
+  | "training_id"
+  | "training_field"
+  | "training_value"
+  | "training_date"
+  | "training_version"
+>;
+
+/**
+ * The write a training suggestion becomes once an authorised TIS approves it. Every
+ * training suggestion needs the transcript quote, and every change needs the version
+ * of the need it was made against. A suggestion never sets a responsibility source
+ * other than the TIS's own confirmation, and never sets readiness without evidence:
+ * the database creates that evidence from the quote.
+ */
+function trainingApplyPlan(p: TrainingApplyRow, picks: ProposalPicks): ProposalApplyPlan {
+  const blocked = (reason: string): ProposalApplyPlan => ({ kind: "blocked", reason });
+  const quote = (p.quote ?? "").trim();
+  if (!quote) {
+    return blocked(
+      "This training suggestion has no transcript quote, so it cannot be applied. Dismiss it and read the transcript again.",
+    );
+  }
+  if (p.type === "training_add") {
+    const topic = p.title.trim();
+    if (!topic) return blocked("A training need needs a topic.");
+    return { kind: "training_add", topic, outcome: p.text.trim() || null, quote };
+  }
+  if (!p.training_id) {
+    return blocked("This suggestion does not name the training need it changes.");
+  }
+  if (!p.training_version) {
+    return blocked(
+      "This suggestion has no record of the training's version, so it cannot be applied safely. Dismiss it and read the transcript again.",
+    );
+  }
+  const trainingId = p.training_id;
+  const version = p.training_version;
+  const value = (p.training_value ?? "").trim();
+  switch (p.type) {
+    case "training_update": {
+      if (!p.training_field)
+        return blocked("This suggestion does not say what to change on the training.");
+      if (!value) return blocked("The suggested value is empty.");
+      if (
+        p.training_field === "responsibility" &&
+        !(TRAINING_RESPONSIBILITIES as readonly string[]).includes(value)
+      ) {
+        return blocked(`"${value}" is not GoCanvas, Customer or Partner.`);
+      }
+      if (
+        p.training_field === "method" &&
+        !(TRAINING_METHODS as readonly string[]).includes(value)
+      ) {
+        return blocked(`"${value}" is not a method the Hub offers.`);
+      }
+      return {
+        kind: "training_update",
+        trainingId,
+        field: p.training_field,
+        value,
+        version,
+        quote,
+      };
+    }
+    case "training_delivered": {
+      const date = (picks.trainingDate ?? p.training_date ?? "").trim();
+      if (!isValidIsoDate(date)) {
+        return blocked("Enter the date the training was delivered to apply this.");
+      }
+      return { kind: "training_delivered", trainingId, date, version, quote };
+    }
+    case "training_demonstrated": {
+      if (value !== "demonstrated" && value !== "practice_needed" && value !== "not_yet") {
+        return blocked("The suggested readiness is not one the Hub records.");
+      }
+      return { kind: "training_demonstrated", trainingId, status: value, quote, version };
+    }
+    case "training_follow_up": {
+      if (!value) return blocked("The suggested next step is empty.");
+      return { kind: "training_follow_up", trainingId, nextStep: value, version, quote };
+    }
+    default:
+      return blocked("This is not a training suggestion.");
   }
 }
 
@@ -614,5 +802,7 @@ export const proposalDecisionInput = z.object({
   proposedDate: z.string().regex(ISO_DATE).nullable().optional(),
   severity: z.enum(PROPOSAL_LEVELS).nullable().optional(),
   likelihood: z.enum(PROPOSAL_LEVELS).nullable().optional(),
+  /** For a training_delivered suggestion that did not give a date: the date the reviewer confirms. */
+  trainingDate: z.string().regex(ISO_DATE).nullable().optional(),
 });
 export type ProposalDecisionInput = z.infer<typeof proposalDecisionInput>;

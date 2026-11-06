@@ -165,6 +165,10 @@ describe("the transcript analysis schema (V2)", () => {
       component_id: null,
       component_field: null,
       component_value: null,
+      training_id: null,
+      training_field: null,
+      training_value: null,
+      training_date: null,
     });
     expect(parsed.proposals[1]!.type).toBe("owner");
   });

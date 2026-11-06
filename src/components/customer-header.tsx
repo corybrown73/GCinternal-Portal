@@ -40,7 +40,8 @@ import { cn } from "@/lib/utils";
  * already loads, and it changes no data.
  */
 
-export type HeaderTabId = "overview" | "implementation" | "resources" | "details";
+export type HeaderTabId =
+  "overview" | "implementation" | "solutions" | "training" | "resources" | "details";
 
 const FOCUS_RING =
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1";

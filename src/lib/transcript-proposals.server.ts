@@ -6,6 +6,7 @@ import { storedFollowupDraft, type TranscriptFollowup } from "./transcript-follo
 import {
   proposalApplyPlan,
   type ComponentProposalField,
+  type TrainingProposalField,
   type EvidenceProposalRow,
   type ProposalApplyPlan,
   type ProposalPicks,
@@ -265,6 +266,11 @@ type ProposalRecord = {
   component_field?: ComponentProposalField | null;
   component_value?: string | null;
   component_version?: string | null;
+  training_id?: string | null;
+  training_field?: TrainingProposalField | null;
+  training_value?: string | null;
+  training_date?: string | null;
+  training_version?: string | null;
   status: string;
   decided_by: string | null;
   decided_at: string | null;
@@ -392,6 +398,11 @@ export async function applyProposal(
       component_field: seen.component_field ?? null,
       component_value: seen.component_value ?? null,
       component_version: seen.component_version ?? null,
+      training_id: seen.training_id ?? null,
+      training_field: seen.training_field ?? null,
+      training_value: seen.training_value ?? null,
+      training_date: seen.training_date ?? null,
+      training_version: seen.training_version ?? null,
     },
     picks,
     { planOwnsTarget: Boolean(dealId) },
@@ -402,7 +413,7 @@ export async function applyProposal(
   const row = await claimRow(id, actor);
   let created: { entityType: string; entityId: string | null };
   try {
-    created = await createFromPlan(plan, { implementationId, dealId, actor });
+    created = await createFromPlan(plan, { implementationId, dealId, actor, proposalId: id });
   } catch (e) {
     await releaseRow(id, actor);
     throw e;
@@ -495,11 +506,19 @@ function componentPatch(plan: {
   }
 }
 
+/** Training suggestions are applied only while the feature is on, even if a row was kept earlier. */
+async function requireTrainingPlanOn(): Promise<void> {
+  const { isFlagOn } = await import("./app-config.server");
+  if (!(await isFlagOn("training_plan"))) {
+    throw new Error("Training & Readiness is not turned on for this Hub yet. Nothing was changed.");
+  }
+}
+
 async function createFromPlan(
   plan: Exclude<ProposalApplyPlan, { kind: "blocked" }>,
-  env: { implementationId: string; dealId: string | null; actor: Actor },
+  env: { implementationId: string; dealId: string | null; actor: Actor; proposalId: string },
 ): Promise<{ entityType: string; entityId: string | null }> {
-  const { implementationId, dealId, actor } = env;
+  const { implementationId, dealId, actor, proposalId } = env;
   const hub = await import("./hub.server");
   const opts = { actorProfileId: actor.profileId };
   let entityType: string | undefined;
@@ -602,6 +621,74 @@ async function createFromPlan(
       await answerHandoff(dealId, plan.key, plan.value, plan.quote, actor);
       entityType = "handoff_answer";
       entityId = dealId;
+      break;
+    }
+    case "training_add":
+    case "training_update":
+    case "training_delivered":
+    case "training_demonstrated":
+    case "training_follow_up": {
+      const training = await import("./training.server");
+      const { fieldPatchFor } = await import("./training-plan");
+      await requireTrainingPlanOn();
+      const reason = `From the call: ${plan.quote}`.slice(0, 500);
+      if (plan.kind === "training_add") {
+        entityId = await training.addTrainingNeed(
+          implementationId,
+          { topic: plan.topic, outcome: plan.outcome },
+          actor.profileId,
+          reason,
+        );
+      } else if (plan.kind === "training_update") {
+        await training.updateTrainingNeed(
+          plan.trainingId,
+          plan.version,
+          fieldPatchFor(plan.field, plan.value),
+          actor.profileId,
+          reason,
+        );
+        entityId = plan.trainingId;
+      } else if (plan.kind === "training_delivered") {
+        await training.recordTrainingDelivery(
+          plan.trainingId,
+          plan.version,
+          plan.date,
+          actor.profileId,
+          reason,
+        );
+        entityId = plan.trainingId;
+      } else if (plan.kind === "training_demonstrated") {
+        if (plan.status === "demonstrated") {
+          await training.demonstrateTrainingFromTranscript(
+            plan.trainingId,
+            plan.version,
+            plan.quote,
+            proposalId,
+            actor.profileId,
+            reason,
+          );
+        } else {
+          await training.recordTrainingReadiness(
+            plan.trainingId,
+            plan.version,
+            plan.status,
+            null,
+            actor.profileId,
+            reason,
+          );
+        }
+        entityId = plan.trainingId;
+      } else {
+        await training.updateTrainingNeed(
+          plan.trainingId,
+          plan.version,
+          { nextStep: plan.nextStep },
+          actor.profileId,
+          reason,
+        );
+        entityId = plan.trainingId;
+      }
+      entityType = "implementation_training";
       break;
     }
     case "component_update": {

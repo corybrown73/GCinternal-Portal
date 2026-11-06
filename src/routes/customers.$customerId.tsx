@@ -74,6 +74,9 @@ import { ADOPTION_KIND_LABEL, type AdoptionKind } from "@/lib/adoption-input";
 import { contactRoleLabel } from "@/lib/customer-contact-input";
 import { AddCustomerContact, EditCustomerContact } from "@/components/customer-contact-write";
 import { EditableField } from "@/components/editable-field";
+import { SolutionsTab } from "@/components/solutions-tab";
+import { TrainingPlanTab } from "@/components/training-plan-tab";
+import { TrainingReadinessStrip } from "@/components/training-readiness-strip";
 import { setRecordField } from "@/lib/hub.functions";
 import type { EditableRecordField as EditableRecordFieldKey } from "@/lib/record-fields";
 import { AttachmentsPanel, attachmentsQuery } from "@/components/attachments-panel";
@@ -142,7 +145,14 @@ import { cn } from "@/lib/utils";
 import { When } from "@/components/when";
 import { errorMessage } from "@/lib/error-message";
 
-const TABS = ["overview", "implementation", "resources", "details"] as const;
+const TABS = [
+  "overview",
+  "implementation",
+  "solutions",
+  "training",
+  "resources",
+  "details",
+] as const;
 export type TabId = (typeof TABS)[number];
 /** The tabs this page used to have. An old link lands on Details, where that content now lives. */
 const LEGACY_TAB_IDS = [
@@ -170,6 +180,8 @@ function resolveTab(raw: string | undefined): TabId {
 const TAB_LABEL: Record<TabId, string> = {
   overview: "Overview",
   implementation: "Current Implementation",
+  solutions: "Solutions",
+  training: "Training & Readiness",
   resources: "Resources",
   details: "Details",
 };
@@ -350,6 +362,7 @@ function Customer360Page() {
 
       {tab === "implementation" ? (
         <div className="px-6 py-4">
+          <TrainingReadinessStrip customerId={customerId} implementationId={impl.id} />
           {impl.deal_id ? (
             <CurrentImplementationTab
               customerId={customerId}
@@ -384,6 +397,10 @@ function Customer360Page() {
             {tab === "overview" ? (
               <CustomerOverview record={record} customerId={customerId} />
             ) : null}
+            {tab === "solutions" ? (
+              <SolutionsTab implementationId={impl.id} dealId={impl.deal_id ?? null} />
+            ) : null}
+            {tab === "training" ? <TrainingPlanTab implementationId={impl.id} /> : null}
             {tab === "resources" ? <ResourcesTab record={record} /> : null}
             {tab === "details" ? (
               // The project lanes and past projects, and the attention band for a
