@@ -22,12 +22,8 @@ import { getParkingLot, addParkingItemFn, updateParkingItemFn } from "@/lib/park
 import { wonStage } from "@/lib/pipeline-stages";
 import { saveHandoffAnswer, saveIntake, saveStageTarget } from "@/lib/presale.functions";
 import { saveKickoffDeckFn } from "@/lib/kickoff-slides.functions";
-import {
-  KICKOFF_SLIDES,
-  OPTIONAL_SLIDE_KEYS,
-  moveWithinZone,
-  type KickoffSelection,
-} from "@/lib/kickoff-slides";
+import { KICKOFF_SLIDES, presentedSlideKeys, type KickoffDeckType } from "@/lib/kickoff-slides";
+import { nextWorkingSession } from "@/lib/kickoff-view";
 import { PRESENTER_GUIDES, PRESENTER_SECTIONS } from "@/lib/presenter-guides";
 import {
   announceWelcomeChanged,
@@ -252,10 +248,11 @@ function Workspace({
 type SectionN = 1 | 2 | 3 | 4 | 5 | 6 | 7;
 
 /**
- * The Kickoff deck's slides, for this implementation. The recommendation is the
- * starting point; the TIS's saved selection replaces it for this implementation
- * and is never overwritten by a later recommendation. Nothing here is shown to
- * the customer except the slides themselves.
+ * The Kickoff deck for this implementation: which deck it is, whether the first
+ * form is ready to demonstrate, what the room will see, and what is still to be
+ * confirmed. Only the deck type (when the record cannot settle it) and the form
+ * readiness are the TIS's to save. Nothing here is shown to the customer except
+ * the slides themselves.
  */
 export function KickoffSlidesSection({
   dealId,
@@ -270,20 +267,22 @@ export function KickoffSlidesSection({
 }) {
   const save = useServerFn(saveKickoffDeckFn);
   const kd = view.kickoffDeck ?? null;
-  const signature = kd ? JSON.stringify(kd.selection) : "";
-  const [draft, setDraft] = useState<KickoffSelection | null>(kd?.selection ?? null);
+  const signature = kd ? `${JSON.stringify(kd.saved)}|${JSON.stringify(kd.selection)}` : "";
+  const [deckType, setDeckType] = useState<KickoffDeckType | null>(kd?.selection?.deckType ?? null);
+  const [formReady, setFormReady] = useState<boolean>(kd?.selection?.formReady ?? false);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
 
   // A save or a reset elsewhere re-reads the deck: show what is now saved.
   useEffect(() => {
-    setDraft(kd?.selection ?? null);
+    setDeckType(kd?.selection?.deckType ?? null);
+    setFormReady(kd?.selection?.formReady ?? false);
     // Keyed on the saved content, not the object identity.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [signature]);
 
   if (!kd) {
-    return <GapNote>The kickoff slide builder is not available for this deal.</GapNote>;
+    return <GapNote>The kickoff deck is not available for this deal.</GapNote>;
   }
   if (kd.loadError) {
     // A read failed. Nothing is shown as saved, and nothing can be changed, until it clears.
@@ -293,135 +292,163 @@ export function KickoffSlidesSection({
       </p>
     );
   }
-  if (!draft) return null;
+
   // The same rule the save enforces on the server: a person who may not change
   // this deck sees it, previews it, and cannot change it here.
   const canEdit = kd.canConfigure && Boolean(implementationId);
+  const chooseDeck = canEdit && (kd.recommended.ambiguous || kd.selection === null);
+  const savedDeck = kd.saved?.deckType ?? kd.recommended.deckType;
+  const savedForm = kd.saved?.formReady ?? false;
+  const dirty = deckType !== savedDeck || (deckType === "standard" && formReady !== savedForm);
+  const formApplies = deckType === "standard";
 
-  const dirty =
-    JSON.stringify(draft.included) !== JSON.stringify(kd.selection.included) ||
-    JSON.stringify(draft.order) !== JSON.stringify(kd.selection.order);
-  const included = new Set(draft.included);
+  // The slides the room will see, from the draft: what a save would present.
+  const preview = presentedSlideKeys(
+    deckType
+      ? {
+          deckType,
+          formReady: formApplies && formReady,
+          hasAdditional: kd.recommended.hasAdditional,
+        }
+      : null,
+  );
+  const labelOf = (key: string) => KICKOFF_SLIDES.find((s) => s.key === key)?.label ?? key;
 
-  const toggle = (key: string) =>
-    canEdit &&
-    setDraft((d) =>
-      d
-        ? {
-            ...d,
-            included: included.has(key)
-              ? d.included.filter((k) => k !== key)
-              : OPTIONAL_SLIDE_KEYS.filter((k) => k === key || included.has(k)),
-          }
-        : d,
-    );
-  const move = (key: string, direction: -1 | 1) =>
-    canEdit && setDraft((d) => (d ? { ...d, order: moveWithinZone(d.order, key, direction) } : d));
+  const session = nextWorkingSession(view.timeline.milestones);
+  const populated: Array<{ label: string; value: string | null }> = [
+    { label: "Customer", value: view.clientName },
+    { label: "Partner", value: kd.partnerName },
+    { label: "First form", value: kd.firstFormName },
+    {
+      label: "Additional solutions",
+      value: kd.additional.length ? `${kd.additional.length} listed` : null,
+    },
+    { label: "Team lead", value: view.team.lead },
+    {
+      label: "Next working session",
+      value:
+        session?.booked && session.time ? `${session.label} · ${shortDay(session.date)}` : null,
+    },
+  ];
 
-  const run = async (selection: { included: string[]; order: string[] } | null) => {
+  const run = async (choice: { deckType: KickoffDeckType; formReady: boolean } | null) => {
     if (!implementationId) return;
     setPending(true);
     setError(null);
     try {
-      await save({ data: { dealId, implementationId, selection } });
+      await save({ data: { dealId, implementationId, choice } });
       onSaved();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not save the kickoff slides.");
+      setError(e instanceof Error ? e.message : "Could not save the kickoff deck.");
     } finally {
       setPending(false);
     }
   };
 
-  const labelOf = (key: string) => KICKOFF_SLIDES.find((s) => s.key === key)?.label ?? key;
-  const recommended = new Set(kd.recommended.included);
-
   return (
     <div className="space-y-4">
       <div className="space-y-1">
-        <p className="text-[12px] text-muted-foreground">{kd.kindReason}</p>
+        <p className="text-[12px] text-muted-foreground">
+          {deckType === "partner"
+            ? "Partner deck"
+            : deckType === "standard"
+              ? "Standard deck"
+              : "Deck not chosen"}
+          {kd.recommended.deckReason ? ` · ${kd.recommended.deckReason}` : ""}
+        </p>
         <p className="text-[12px]">
           {kd.saved
-            ? `Saved${kd.saved.savedBy ? ` by ${kd.saved.savedBy}` : ""} on ${shortDay(kd.saved.savedAt.slice(0, 10))}. This selection is what the room sees.`
-            : "Using the recommendation. Save to keep this selection for this implementation."}
+            ? `Saved${kd.saved.savedBy ? ` by ${kd.saved.savedBy}` : ""} on ${shortDay(kd.saved.savedAt.slice(0, 10))}. This is what the room sees.`
+            : "Using the automatic choice. Save to keep it for this implementation."}
         </p>
-        {kd.recommendationChanged ? (
+        {kd.selection === null ? (
           <p className="text-[12px] text-status-risk-foreground">
-            The recommendation has changed since you saved. Your selection is kept. Reset to use the
-            new recommendation.
+            The presentation is held until the deck type is chosen below.
           </p>
         ) : null}
       </div>
 
       <div>
-        <h3 className="mb-1 text-[12px] font-semibold">Always in the presentation</h3>
-        <ul className="space-y-1">
-          {KICKOFF_SLIDES.filter((s) => s.core).map((s) => (
-            <li key={s.key} className="text-[12px] text-muted-foreground">
-              {s.label}
+        <h3 className="mb-1 text-[12px] font-semibold">Deck type</h3>
+        {chooseDeck ? (
+          <div className="flex flex-wrap gap-2">
+            {(["standard", "partner"] as const).map((type) => (
+              <button
+                key={type}
+                type="button"
+                aria-pressed={deckType === type}
+                disabled={pending}
+                onClick={() => setDeckType(type)}
+                className={`rounded-sm border px-3 py-1.5 text-[12px] ${deckType === type ? "border-primary font-medium" : "border-border"}`}
+              >
+                {type === "standard" ? "Standard (direct GoCanvas)" : "Partner implementation"}
+              </button>
+            ))}
+          </div>
+        ) : (
+          <p className="text-[12px] text-muted-foreground">
+            {deckType === "partner"
+              ? "Partner implementation"
+              : deckType === "standard"
+                ? "Standard (direct GoCanvas)"
+                : "Not chosen"}
+          </p>
+        )}
+      </div>
+
+      <div className="space-y-1">
+        <label className="flex items-center gap-2 text-[12px] font-medium">
+          <input
+            type="checkbox"
+            checked={formApplies && formReady}
+            disabled={!canEdit || !formApplies}
+            onChange={(e) => setFormReady(e.target.checked)}
+          />
+          The first form is confirmed ready to demonstrate
+        </label>
+        <p className="pl-6 text-[11px] text-muted-foreground">
+          {formApplies
+            ? "Only when this is ticked does the form slide appear. A form that was bought, or read from the paperwork, is not ready until it is confirmed here."
+            : "The partner deck has no first-form slide."}
+        </p>
+      </div>
+
+      <div>
+        <h3 className="mb-1 text-[12px] font-semibold">What the room will see</h3>
+        {preview.length ? (
+          <ol className="list-decimal space-y-0.5 pl-5 text-[12px]">
+            {preview.map((key) => (
+              <li key={key}>{labelOf(key)}</li>
+            ))}
+          </ol>
+        ) : (
+          <p className="text-[12px] text-muted-foreground">
+            Nothing until the deck type is chosen.
+          </p>
+        )}
+      </div>
+
+      <div>
+        <h3 className="mb-1 text-[12px] font-semibold">From the Hub</h3>
+        <ul className="divide-y divide-border rounded-sm border border-border">
+          {populated.map((row) => (
+            <li key={row.label} className="flex justify-between gap-3 px-2.5 py-1.5 text-[12px]">
+              <span className="text-muted-foreground">{row.label}</span>
+              {row.value ? (
+                <span>{row.value}</span>
+              ) : (
+                <span className="italic text-muted-foreground">
+                  Not recorded: to confirm together
+                </span>
+              )}
             </li>
           ))}
         </ul>
       </div>
 
-      <div>
-        <h3 className="mb-1 text-[12px] font-semibold">Optional slides</h3>
-        <ul className="divide-y divide-border rounded-sm border border-border">
-          {draft.order.map((key, i) => {
-            const zone = KICKOFF_SLIDES.find((s) => s.key === key)?.zone;
-            const sameZone = draft.order.filter(
-              (k) => KICKOFF_SLIDES.find((s) => s.key === k)?.zone === zone,
-            );
-            const at = sameZone.indexOf(key);
-            return (
-              <li key={key} className="flex flex-wrap items-start gap-2 px-2.5 py-2">
-                <label className="flex items-center gap-2 text-[13px] font-medium">
-                  <input
-                    type="checkbox"
-                    checked={included.has(key)}
-                    disabled={!canEdit}
-                    onChange={() => toggle(key)}
-                    aria-label={`Include ${labelOf(key)}`}
-                  />
-                  {labelOf(key)}
-                </label>
-                {recommended.has(key) ? (
-                  <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-muted-foreground">
-                    Recommended
-                  </span>
-                ) : null}
-                <p className="w-full pl-6 text-[11px] text-muted-foreground">
-                  {kd.recommended.reasons[key] ?? "Not recommended for this deal."}
-                </p>
-                <div className="ml-auto flex gap-1">
-                  <button
-                    type="button"
-                    className="rounded-sm border border-border px-2 py-0.5 text-[11px] disabled:opacity-40"
-                    disabled={!canEdit || at <= 0}
-                    onClick={() => move(key, -1)}
-                    aria-label={`Move ${labelOf(key)} up`}
-                  >
-                    Up
-                  </button>
-                  <button
-                    type="button"
-                    className="rounded-sm border border-border px-2 py-0.5 text-[11px] disabled:opacity-40"
-                    disabled={!canEdit || at >= sameZone.length - 1}
-                    onClick={() => move(key, 1)}
-                    aria-label={`Move ${labelOf(key)} down`}
-                  >
-                    Down
-                  </button>
-                </div>
-                <span className="sr-only">position {i + 1}</span>
-              </li>
-            );
-          })}
-        </ul>
-      </div>
-
       {kd.recommended.flags.length ? (
         <div className="space-y-1 rounded-sm border border-border bg-muted/40 px-2.5 py-2">
-          <h3 className="text-[12px] font-semibold">To resolve before presenting</h3>
+          <h3 className="text-[12px] font-semibold">To confirm before presenting</h3>
           <ul className="list-disc space-y-0.5 pl-4 text-[12px]">
             {kd.recommended.flags.map((f) => (
               <li key={f}>{f}</li>
@@ -436,47 +463,33 @@ export function KickoffSlidesSection({
         <button
           type="button"
           className="rounded-sm bg-primary px-3 py-1.5 text-[12px] font-medium text-primary-foreground disabled:opacity-40"
-          disabled={!canEdit || !dirty || pending}
-          onClick={() => run({ included: draft.included, order: draft.order })}
+          disabled={!canEdit || !dirty || !deckType || pending}
+          onClick={() => deckType && run({ deckType, formReady: formApplies && formReady })}
           title={
             !implementationId
-              ? "Start the implementation to save this selection."
+              ? "Start the implementation to save this choice."
               : canEdit
                 ? undefined
                 : "Only an administrator, a manager, or the TIS assigned to this implementation can change this deck."
           }
         >
-          Save selection
+          Save choice
         </button>
         <button
           type="button"
           className="rounded-sm border border-border px-3 py-1.5 text-[12px] disabled:opacity-40"
-          disabled={!canEdit || pending || (!kd.saved && !dirty)}
+          disabled={!canEdit || pending || !kd.saved}
           onClick={() => run(null)}
         >
-          Reset to recommendation
+          Reset to automatic
         </button>
         <a
           href={`/onboarding-plan/${dealId}`}
-          target="_blank"
-          rel="noreferrer"
-          className="text-[12px] font-medium text-primary underline-offset-2 hover:underline"
+          className="ml-auto rounded-sm border border-border px-3 py-1.5 text-[12px]"
         >
-          Preview the presentation
+          Preview the customer page
         </a>
       </div>
-      {implementationId && !canEdit ? (
-        <p className="text-[12px] text-muted-foreground">
-          Only an administrator, a manager, or the TIS assigned to this implementation can change
-          this deck. You can still view and preview it.
-        </p>
-      ) : null}
-      {!implementationId ? (
-        <GapNote>
-          No implementation exists for this deal yet, so the selection cannot be saved. The
-          recommendation applies until it does.
-        </GapNote>
-      ) : null}
     </div>
   );
 }

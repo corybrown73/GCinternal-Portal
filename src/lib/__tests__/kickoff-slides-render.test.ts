@@ -3,24 +3,24 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { describe, expect, it } from "vitest";
 
+import { KickoffDeckBlocked } from "@/components/kickoff-deck-blocked";
 import { KickoffSlidesSection } from "@/components/presenter-workspace";
-import { kickoffScreensFor, kickoffScreenList } from "@/components/kickoff-view";
+import { kickoffScreensFor } from "@/components/kickoff-view";
 import { KICKOFF_TO_CONFIRM } from "@/lib/kickoff-view";
 import {
-  OPTIONAL_SLIDE_KEYS,
-  defaultSelection,
   presentedSlideKeys,
-  recommendKickoffSlides,
-  resolveKickoffSelection,
+  recommendKickoffDeck,
   type KickoffDeckView,
   type KickoffFacts,
+  type KickoffSelection,
 } from "@/lib/kickoff-slides";
 import type { WelcomeView } from "@/lib/welcome";
 
 /**
- * The configured Kickoff deck, rendered as the room sees it: only the selected
- * slides, numbered in order, with the new slides honest when information is
- * missing, and no internal flag or reason ever on a slide.
+ * The Kickoff deck as the room sees it, and as the TIS configures it. The room
+ * sees exactly the presented slides, in order, with no internal flag, reason or
+ * control on any slide. The TIS sees the choices and the flags, and cannot change
+ * them without the authority the server enforces.
  */
 
 const ARGS = (page: number) => ({
@@ -92,29 +92,39 @@ function viewWith(
   } as unknown as WelcomeView;
 }
 
+const DIRECT: KickoffFacts = {
+  deckSignals: { partnerByRecord: false, partnerByJourney: false },
+  partnerName: null as string | null,
+  path: "new_logo",
+  additionalSolutions: [],
+  solutionsInvolved: false,
+  firstFormNamed: true,
+  firstFormConfirmed: true,
+  hasImplementation: true,
+};
+
+/** A loaded deck for a selection, with its recommendation, as the server would return it. */
 function deckFor(
-  facts: KickoffFacts,
-  saved: { included: string[]; order: string[] } | null = null,
-  partnerName: string | null = null,
-  purchased: KickoffDeckView["purchased"] = [],
+  selection: KickoffSelection | null,
+  over: Partial<KickoffDeckView> = {},
+  facts: Partial<KickoffFacts> = {},
 ): KickoffDeckView {
-  const recommended = recommendKickoffSlides(facts);
+  const recommended = recommendKickoffDeck({ ...DIRECT, ...facts });
   return {
     loadError: null,
     implementationId: "impl-1",
-    kind: "new-logo",
-    kindReason: "",
     recommended,
-    selection: resolveKickoffSelection(saved, recommended),
-    saved: saved ? { savedAt: "2026-11-05", savedBy: null } : null,
-    recommendationChanged: false,
+    selection,
+    saved: null,
     canConfigure: true,
-    partnerName,
-    purchased,
+    partnerName: null,
+    additional: [],
+    firstFormName: "Site Check",
+    ...over,
   };
 }
 
-function html(view: WelcomeView, index: number): string {
+function markup(view: WelcomeView, index: number): string {
   const screen = kickoffScreensFor(view)[index]!;
   return renderToStaticMarkup(
     screen.render(ARGS(index + 1)) as Parameters<typeof renderToStaticMarkup>[0],
@@ -125,268 +135,21 @@ function html(view: WelcomeView, index: number): string {
     .replace(/&amp;/g, "&");
 }
 
-const TRAINING_ONLY: KickoffFacts = {
-  path: "existing",
-  trainingOnly: true,
-  expansion: false,
-  partnerLed: false,
-  partnerName: null,
-  services: [{ kind: "training", name: "Crew training" }],
-  solutionsInvolved: null,
-  firstFormNamed: false,
-  firstFormConfirmed: false,
-  hasImplementation: true,
-};
+function allText(view: WelcomeView): string {
+  return kickoffScreensFor(view)
+    .map((_, i) => markup(view, i))
+    .join("\n");
+}
 
-describe("the presentation shows exactly the selected slides, numbered in order", () => {
-  it("for training only: training is there, the form is not, and the count matches the selection", () => {
-    const view = viewWith(
-      deckFor(TRAINING_ONLY, null, null, [{ kind: "training", name: "Crew training", phase: 1 }]),
-    );
-    const screens = kickoffScreensFor(view);
-    expect(screens.map((s) => s.key)).toEqual(presentedSlideKeys(view.kickoffDeck!.selection));
-    expect(screens.map((s) => s.key)).not.toContain("kickoff-form-v1");
-    expect(screens.map((s) => s.key)).toContain("kickoff-training");
-  });
-
-  it("honours a TIS's saved selection over the recommendation", () => {
-    const view = viewWith(
-      deckFor(TRAINING_ONLY, { included: ["kickoff-workflow"], order: ["kickoff-workflow"] }),
-    );
-    const keys = kickoffScreensFor(view).map((s) => s.key);
-    expect(keys).toContain("kickoff-workflow");
-    expect(keys).not.toContain("kickoff-training");
-  });
-
-  it("falls back to the six original screens when there is no deck view", () => {
-    const view = viewWith(null);
-    expect(kickoffScreensFor(view).map((s) => s.key)).toEqual(
-      kickoffScreenList(view).map((s) => s.key),
-    );
-  });
-});
-
-describe("the new slides", () => {
-  it("the partner slide names the partner and says who does what", () => {
-    const facts = { ...TRAINING_ONLY, trainingOnly: false, partnerLed: true, services: [] };
-    const view = viewWith(
-      deckFor(
-        facts,
-        { included: ["kickoff-partner"], order: ["kickoff-partner"] },
-        "Field Fusion IQ",
-      ),
-    );
-    const idx = kickoffScreensFor(view).findIndex((s) => s.key === "kickoff-partner");
-    const text = html(view, idx);
-    expect(text).toContain("Field Fusion IQ");
-    expect(text).toContain("Partner Implementation Lead owns the setup");
-  });
-
-  it("the partner slide, with no partner named, says it is to confirm together rather than naming one", () => {
-    const facts = { ...TRAINING_ONLY, trainingOnly: false, partnerLed: true, services: [] };
-    const view = viewWith(
-      deckFor(facts, { included: ["kickoff-partner"], order: ["kickoff-partner"] }, null),
-    );
-    const idx = kickoffScreensFor(view).findIndex((s) => s.key === "kickoff-partner");
-    expect(html(view, idx)).toContain("with your partner");
-  });
-
-  it("purchased solutions shows what was bought, and says so when nothing was recorded", () => {
-    const facts = { ...TRAINING_ONLY, trainingOnly: false, services: [] };
-    const view = viewWith(
-      deckFor(facts, { included: ["kickoff-purchased"], order: ["kickoff-purchased"] }, null, []),
-    );
-    const idx = kickoffScreensFor(view).findIndex((s) => s.key === "kickoff-purchased");
-    expect(html(view, idx)).toContain(KICKOFF_TO_CONFIRM);
-  });
-
-  it("purchased solutions lists the bought items with their phase", () => {
-    const facts = {
-      ...TRAINING_ONLY,
-      trainingOnly: false,
-      services: [{ kind: "integration", name: "QuickBooks" }],
-    };
-    const purchased = [{ kind: "integration", name: "QuickBooks", phase: 2 }];
-    const view = viewWith(
-      deckFor(
-        facts,
-        { included: ["kickoff-purchased"], order: ["kickoff-purchased"] },
-        null,
-        purchased,
-      ),
-    );
-    const idx = kickoffScreensFor(view).findIndex((s) => s.key === "kickoff-purchased");
-    const text = html(view, idx);
-    expect(text).toContain("QuickBooks");
-    expect(text).toContain("Phase 2");
-  });
-
-  it("the core 'achieve' slide is present for every deck, and says what is unconfirmed rather than inventing it", () => {
-    const view = viewWith(deckFor(TRAINING_ONLY));
-    const idx = kickoffScreensFor(view).findIndex((s) => s.key === "kickoff-achieve");
-    expect(idx).toBe(1);
-    expect(html(view, idx)).toContain(KICKOFF_TO_CONFIRM);
-  });
-});
-
-describe("internal reasons never reach a slide", () => {
-  it("no recommendation flag or reason appears on any presented slide", () => {
-    const facts = { ...TRAINING_ONLY, path: null as string | null, solutionsInvolved: null };
-    const deck = deckFor(facts, null, null, []);
-    expect(deck.recommended.flags.length).toBeGreaterThan(0);
-    const view = viewWith(deck);
-    for (let i = 0; i < kickoffScreensFor(view).length; i++) {
-      const text = html(view, i);
-      for (const flag of deck.recommended.flags) expect(text).not.toContain(flag);
-      for (const reason of Object.values(deck.recommended.reasons))
-        expect(text).not.toContain(reason);
-    }
-  });
-});
-
-describe("the selection used is never the recommendation after a save", () => {
-  it("defaults to the recommendation with no save", () => {
-    const deck = deckFor(TRAINING_ONLY);
-    expect(deck.selection).toEqual(defaultSelection(deck.recommended));
-  });
-});
-
-describe("training: only confirmed training is described as training", () => {
-  it("does not present a form build's working sessions as training", () => {
-    const facts = { ...TRAINING_ONLY, trainingOnly: false, path: "new_logo", services: [] };
-    const view = viewWith(
-      deckFor(facts, { included: ["kickoff-training"], order: ["kickoff-training"] }, null, []),
-    );
-    // A standard plan: the calls after kickoff are working sessions, not training.
-    (view.timeline as { milestones: unknown[]; training: boolean }).milestones = [
-      {
-        key: "build",
-        label: "Build session",
-        kind: "call",
-        date: "2026-11-20",
-        time: "10:00",
-        serviceId: null,
-        doneOn: null,
-      },
-    ];
-    const idx = kickoffScreensFor(view).findIndex((s) => s.key === "kickoff-training");
-    const text = html(view, idx);
-    expect(text).not.toContain("Build session");
-    expect(text).toContain("Training is to be confirmed together.");
-  });
-
-  it("shows a training plan's own sessions as training, with the date only when it is set", () => {
-    const facts = { ...TRAINING_ONLY, path: "new_logo" };
-    const view = viewWith(
-      deckFor(facts, { included: ["kickoff-training"], order: ["kickoff-training"] }, null, []),
-    );
-    (view.timeline as { milestones: unknown[]; training: boolean }).training = true;
-    (view.timeline as { milestones: unknown[]; training: boolean }).milestones = [
-      {
-        key: "kickoff",
-        label: "Session 1 — the admin portal",
-        kind: "call",
-        date: "2026-11-10",
-        time: "10:00",
-        serviceId: null,
-        doneOn: null,
-      },
-      {
-        key: "s2",
-        label: "Session 2 — real jobs",
-        kind: "call",
-        date: "2026-11-17",
-        time: null,
-        serviceId: null,
-        doneOn: null,
-      },
-    ];
-    const idx = kickoffScreensFor(view).findIndex((s) => s.key === "kickoff-training");
-    const text = html(view, idx);
-    expect(text).toContain("Session 1 — the admin portal");
-    expect(text).toContain("Session 2 — real jobs");
-    expect(text).toContain("date to confirm together");
-  });
-
-  it("lists the training that was bought", () => {
-    const facts = { ...TRAINING_ONLY, services: [{ kind: "training", name: "Crew training" }] };
-    const view = viewWith(
-      deckFor(facts, { included: ["kickoff-training"], order: ["kickoff-training"] }, null, [
-        { kind: "training", name: "Crew training", phase: 1 },
-      ]),
-    );
-    const idx = kickoffScreensFor(view).findIndex((s) => s.key === "kickoff-training");
-    expect(html(view, idx)).toContain("Crew training");
-  });
-});
-
-describe("partner: the approved responsibilities, and no unresolved customer decision", () => {
-  const partnerView = () => {
-    const facts = { ...TRAINING_ONLY, trainingOnly: false, partnerLed: true, services: [] };
-    return viewWith(
-      deckFor(
-        facts,
-        { included: ["kickoff-partner"], order: ["kickoff-partner"] },
-        "Field Fusion IQ",
-      ),
-    );
-  };
-  const partnerText = (view: WelcomeView) =>
-    html(
-      view,
-      kickoffScreensFor(view).findIndex((s) => s.key === "kickoff-partner"),
-    );
-
-  it("states the partner's and GoCanvas Implementation's responsibilities in the approved wording", () => {
-    const text = partnerText(partnerView());
-    expect(text).toContain("Field Fusion IQ");
-    expect(text).toContain("GoCanvas Implementation");
-    expect(text).toContain(
-      "Partner configures the solution and establishes the technical connection.",
-    );
-    expect(text).toContain("GoCanvas TIS owns implementation and enablement.");
-    expect(text).toContain("The partner remains available for technical support and escalations.");
-  });
-
-  it("does not present Technical Solutions ownership on the slide, so no internal ownership is shown as a customer decision", () => {
-    const text = partnerText(partnerView());
-    expect(text).not.toContain("Technical Solutions");
-    expect(text).not.toContain(KICKOFF_TO_CONFIRM);
-  });
-
-  it("the TIS is never described as owning Technical Solutions work", () => {
-    expect(partnerText(partnerView())).not.toMatch(/TIS[^.]*Technical Solutions/);
-  });
-
-  it("the recommendation still flags the ownership gap internally for the TIS", () => {
-    const deck = deckFor(
-      { ...TRAINING_ONLY, trainingOnly: false, partnerLed: true, services: [] },
-      null,
-      "Field Fusion IQ",
-    );
-    expect(deck.recommended.flags.join(" ")).toMatch(
-      /does not name who owns Technical Solutions work/,
-    );
-  });
-});
-
-/* ----------------------------------------- the deck controls, by permission */
-
-function controlsMarkup(canConfigure: boolean, saved: boolean) {
-  const facts = { ...TRAINING_ONLY, trainingOnly: true };
-  const deck = deckFor(
-    facts,
-    saved ? { included: ["kickoff-training"], order: [...OPTIONAL_SLIDE_KEYS] } : null,
-  );
-  deck.canConfigure = canConfigure;
-  deck.saved = saved ? { savedAt: "2026-11-05T10:00:00Z", savedBy: "A Manager" } : null;
+function presenter(view: WelcomeView): string {
+  const client = new QueryClient();
   return renderToStaticMarkup(
     createElement(
       QueryClientProvider,
-      { client: new QueryClient() },
+      { client },
       createElement(KickoffSlidesSection, {
         dealId: "deal-1",
-        view: viewWith(deck),
+        view,
         implementationId: "impl-1",
         onSaved: () => undefined,
       }),
@@ -394,153 +157,242 @@ function controlsMarkup(canConfigure: boolean, saved: boolean) {
   );
 }
 
-/** The opening tag of the button with this visible label. */
-function buttonTag(markup: string, label: string): string {
-  const at = markup.indexOf(`>${label}<`);
-  const start = markup.lastIndexOf("<button", at);
-  return markup.slice(start, markup.indexOf(">", start) + 1);
-}
+const STANDARD_CORE = [
+  "kickoff-cover",
+  "kickoff-workflow",
+  "kickoff-journey",
+  "kickoff-communication",
+  "kickoff-next",
+];
 
-describe("the deck controls follow the permission the server enforces", () => {
-  it("a person who may not configure the deck gets disabled Save and Reset, and disabled slide controls", () => {
-    const markup = controlsMarkup(false, true);
-    expect(buttonTag(markup, "Save selection")).toMatch(/\sdisabled=""/);
-    expect(buttonTag(markup, "Reset to recommendation")).toMatch(/\sdisabled=""/);
-    expect(markup).toMatch(/<input[^>]*type="checkbox"[^>]*disabled=""/);
-    expect(markup).toContain(
-      "Only an administrator, a manager, or the TIS assigned to this implementation can change this deck.",
+describe("the room sees exactly the presented standard slides, in order", () => {
+  it("core only: no additional solutions and no first form when neither is confirmed", () => {
+    const view = viewWith(
+      deckFor({ deckType: "standard", formReady: false, hasAdditional: false }),
     );
-  });
-
-  it("a person who may configure the deck gets working controls, and no lock message", () => {
-    const markup = controlsMarkup(true, true);
-    expect(buttonTag(markup, "Reset to recommendation")).not.toMatch(/\sdisabled=""/);
-    expect(markup).not.toContain(
-      "Only an administrator, a manager, or the TIS assigned to this implementation can change this deck.",
-    );
-    expect(markup).not.toMatch(/<input[^>]*type="checkbox"[^>]*disabled=""/);
-  });
-
-  it("Save stays disabled until something has changed, even for someone who may configure", () => {
-    expect(buttonTag(controlsMarkup(true, true), "Save selection")).toMatch(/\sdisabled=""/);
-  });
-});
-
-describe("a deck that did not read presents nothing, and never a recommendation or the standard slides", () => {
-  it("the presentation has no slides at all when the deck has a read error", () => {
-    const deck = deckFor(TRAINING_ONLY);
-    deck.loadError = "Could not load the kickoff slides. Try again in a minute.";
-    expect(kickoffScreensFor(viewWith(deck))).toEqual([]);
-  });
-
-  it("a live customer (no deck at all) gets exactly the standard slides", () => {
-    const view = viewWith(null);
+    expect(kickoffScreensFor(view).map((s) => s.key)).toEqual(STANDARD_CORE);
     expect(kickoffScreensFor(view).map((s) => s.key)).toEqual(
-      kickoffScreenList(view).map((s) => s.key),
+      presentedSlideKeys(view.kickoffDeck!.selection),
     );
   });
 
-  it("the workspace says the builder is for test implementations when there is no deck", () => {
-    const markup = renderToStaticMarkup(
-      createElement(
-        QueryClientProvider,
-        { client: new QueryClient() },
-        createElement(KickoffSlidesSection, {
-          dealId: "deal-1",
-          view: viewWith(null),
-          implementationId: "impl-1",
-          onSaved: () => undefined,
-        }),
+  it("Your additional solutions sits directly after the journey, and the first form before the close", () => {
+    const view = viewWith(
+      deckFor(
+        { deckType: "standard", formReady: true, hasAdditional: true },
+        {
+          additional: [{ kind: "integration", name: "QuickBooks", phase: 2 }],
+        },
       ),
     );
-    expect(markup).toContain("not available for this deal");
-    expect(markup).not.toContain("Save selection");
+    expect(kickoffScreensFor(view).map((s) => s.key)).toEqual([
+      "kickoff-cover",
+      "kickoff-workflow",
+      "kickoff-journey",
+      "kickoff-additional",
+      "kickoff-communication",
+      "kickoff-form-v1",
+      "kickoff-next",
+    ]);
   });
 
-  it("the workspace shows a read error in place of the controls, with nothing changeable", () => {
-    const deck = deckFor(TRAINING_ONLY);
-    deck.loadError = "Could not load the kickoff slides. Try again in a minute.";
-    const markup = renderToStaticMarkup(
-      createElement(
-        QueryClientProvider,
-        { client: new QueryClient() },
-        createElement(KickoffSlidesSection, {
-          dealId: "deal-1",
-          view: viewWith(deck),
-          implementationId: "impl-1",
-          onSaved: () => undefined,
-        }),
+  it("slide A names each purchased solution, and says what it delivers is to confirm together", () => {
+    const view = viewWith(
+      deckFor(
+        { deckType: "standard", formReady: false, hasAdditional: true },
+        {
+          additional: [{ kind: "integration", name: "QuickBooks", phase: 2 }],
+        },
       ),
     );
-    expect(markup).toContain('role="alert"');
-    expect(markup).toContain("Could not load the kickoff slides");
-    expect(markup).not.toContain("Save selection");
-    expect(markup).not.toMatch(/type="checkbox"/);
+    const a = markup(view, 3);
+    expect(a).toContain("Your additional");
+    expect(a).toContain("QuickBooks");
+    expect(a).toContain("Phase 2");
+    expect(a).toContain(KICKOFF_TO_CONFIRM);
+  });
+
+  it("the form slide shows the first form's name, and never a placeholder for a form that is not ready", () => {
+    const view = viewWith(
+      deckFor({ deckType: "standard", formReady: true, hasAdditional: false }),
+      {
+        firstForm: { name: "Site Check", objective: null, source: "person" },
+      },
+    );
+    const idx = kickoffScreensFor(view).findIndex((s) => s.key === "kickoff-form-v1");
+    expect(idx).toBeGreaterThan(-1);
+    expect(markup(view, idx)).toContain("Site Check");
   });
 });
 
-/* ----------------------------------------- the blocked presentation, rendered */
-
-import { WelcomePage } from "@/components/welcome-page";
-
-function pageMarkup(view: WelcomeView, onRetryDeck?: () => void) {
-  return renderToStaticMarkup(
-    createElement(
-      QueryClientProvider,
-      { client: new QueryClient() },
-      createElement(WelcomePage, {
-        view,
-        mode: "internal",
-        backHref: "/deals/deal-1",
-        notesHref: "/onboarding-notes/deal-1",
-        workspaceHref: "/onboarding-plan/deal-1?workspace=1",
-        onRetryDeck,
-      } as never),
-    ),
-  );
-}
-
-describe("the Kickoff presentation is blocked until a saved deck loads", () => {
-  const failed = () => {
-    const deck = deckFor(TRAINING_ONLY);
-    deck.loadError = "Could not load the kickoff slides. Try again in a minute.";
-    return viewWith(deck);
-  };
-
-  it("a deck that did not load shows a blocking alert with a retry, and no slides", () => {
-    const markup = pageMarkup(failed(), () => undefined);
-    expect(markup).toContain('role="alert"');
-    expect(markup).toContain("The kickoff slides could not be loaded");
-    expect(markup).toContain("Try again");
-    expect(markup).not.toContain("wp-screen");
-  });
-
-  it("the presentation cannot be started while blocked", () => {
-    const markup = pageMarkup(failed(), () => undefined);
-    expect(markup).not.toContain(" Present</button>");
-    expect(markup).not.toContain("wp-present");
-  });
-
-  it("the retry is enabled only when a retry is wired", () => {
-    expect(
-      buttonTag(
-        pageMarkup(failed(), () => undefined),
-        "Try again",
+describe("the partner deck: its own six slides, never the direct deck's", () => {
+  it("presents P1 to P6 with the partner named, and none of the direct deck's conditional slides", () => {
+    const view = viewWith(
+      deckFor(
+        { deckType: "partner", formReady: true, hasAdditional: true },
+        { partnerName: "Field Fusion IQ" },
+        {
+          deckSignals: { partnerByRecord: true, partnerByJourney: true },
+          partnerName: "Field Fusion IQ",
+          path: "partner_implementation",
+        },
       ),
-    ).not.toMatch(/disabled=""/);
-    expect(buttonTag(pageMarkup(failed(), undefined), "Try again")).toMatch(/disabled=""/);
+    );
+    const keys = kickoffScreensFor(view).map((s) => s.key);
+    expect(keys).toEqual([
+      "partner-welcome",
+      "partner-start",
+      "partner-journey",
+      "partner-together",
+      "partner-proof",
+      "partner-next",
+    ]);
+    const welcome = markup(view, 0);
+    expect(welcome).toContain("Let's get your");
+    expect(welcome).toContain("Field Fusion IQ");
+    const all = allText(view);
+    expect(all).not.toContain("Your additional");
+    expect(all).not.toContain("Let's bring");
   });
 
-  it("a deck that loaded presents its slides and can be presented", () => {
-    const markup = pageMarkup(viewWith(deckFor(TRAINING_ONLY)), () => undefined);
-    expect(markup).toContain("wp-screen");
-    expect(markup).not.toContain('role="alert"');
-    expect(markup).toContain("Present");
+  it("the partner journey shows the four stages, with no dates the plan does not hold", () => {
+    const view = viewWith(
+      deckFor(
+        { deckType: "partner", formReady: false, hasAdditional: false },
+        { partnerName: "Field Fusion IQ" },
+        {
+          deckSignals: { partnerByRecord: true, partnerByJourney: true },
+          partnerName: "Field Fusion IQ",
+          path: "partner_implementation",
+        },
+      ),
+    );
+    const journey = markup(view, 2);
+    expect(journey).toContain("Form Finalisation & Data Readiness");
+    expect(journey).toContain("Pilot");
+    expect(journey).toContain("Trial Run");
+    expect(journey).toContain("Roll Out & Graduation");
+  });
+});
+
+describe("the room sees no internal content on any slide", () => {
+  it("no flag, reason or control text is on any standard or partner slide", () => {
+    for (const deck of [
+      deckFor(
+        { deckType: "standard", formReady: true, hasAdditional: true },
+        {
+          additional: [{ kind: "integration", name: "QuickBooks", phase: 2 }],
+        },
+      ),
+      deckFor(
+        { deckType: "partner", formReady: false, hasAdditional: false },
+        { partnerName: "Field Fusion IQ" },
+        {
+          deckSignals: { partnerByRecord: true, partnerByJourney: true },
+          partnerName: "Field Fusion IQ",
+          path: "partner_implementation",
+        },
+      ),
+    ]) {
+      const text = allText(viewWith(deck));
+      expect(text).not.toMatch(/To confirm before presenting/);
+      expect(text).not.toMatch(/Save choice|Reset to automatic|Preview the customer page/);
+      expect(text).not.toMatch(/The first form was read from the paperwork/);
+    }
+  });
+});
+
+describe("the presentation is held, never guessed", () => {
+  it("a deck that did not load presents no slides and says so in the TIS view", () => {
+    const view = viewWith(
+      deckFor(null, { loadError: "Could not read the saved kickoff deck choice." }),
+    );
+    expect(kickoffScreensFor(view)).toEqual([]);
+    const html = presenter(view);
+    expect(html).toContain('role="alert"');
+    expect(html).toContain("Could not read the saved kickoff deck choice.");
+    expect(html).not.toContain("Save choice");
   });
 
-  it("a live customer's deal, with no deck at all, presents the standard slides as before", () => {
-    const markup = pageMarkup(viewWith(null), () => undefined);
-    expect(markup).toContain("wp-screen");
-    expect(markup).not.toContain('role="alert"');
+  it("an unsettled deck type presents nothing, and the TIS is asked to choose the deck type", () => {
+    const view = viewWith(
+      deckFor(null, {}, { deckSignals: { partnerByRecord: true, partnerByJourney: false } }),
+    );
+    expect(kickoffScreensFor(view)).toEqual([]);
+    const html = presenter(view);
+    expect(html).toContain("held until the deck type is chosen");
+    expect(html).toContain("Standard (direct GoCanvas)");
+    expect(html).toContain("Partner implementation");
+  });
+
+  it("a customer's copy with no internal deck shows the core standard slides only", () => {
+    const view = viewWith(null);
+    expect(kickoffScreensFor(view).map((s) => s.key)).toEqual(STANDARD_CORE);
+  });
+});
+
+describe("the TIS view: what is populated, what is missing, and who may change it", () => {
+  it("shows the Hub's populated facts, and labels what is missing as to confirm together", () => {
+    const html = presenter(
+      viewWith(deckFor({ deckType: "standard", formReady: false, hasAdditional: false })),
+    );
+    expect(html).toContain("Aquatic Facility Services");
+    expect(html).toContain("Site Check");
+    expect(html).toContain("Not recorded: to confirm together");
+  });
+
+  it("without authority, the TIS sees the deck and cannot save or reset it", () => {
+    const html = presenter(
+      viewWith(
+        deckFor(
+          { deckType: "standard", formReady: false, hasAdditional: false },
+          { canConfigure: false },
+        ),
+      ),
+    );
+    expect(html).toMatch(/<button[^>]*disabled=""[^>]*>\s*Save choice/);
+    expect(html).toMatch(/<button[^>]*disabled=""[^>]*>\s*Reset to automatic/);
+    expect(html).toMatch(/<input[^>]*type="checkbox"[^>]*disabled=""/);
+  });
+
+  it("the form-readiness choice is offered on the standard deck only", () => {
+    const html = presenter(
+      viewWith(
+        deckFor(
+          { deckType: "partner", formReady: false, hasAdditional: false },
+          { partnerName: "Field Fusion IQ" },
+          {
+            deckSignals: { partnerByRecord: true, partnerByJourney: true },
+            partnerName: "Field Fusion IQ",
+            path: "partner_implementation",
+          },
+        ),
+      ),
+    );
+    expect(html).toContain("The partner deck has no first-form slide.");
+  });
+});
+
+describe("the blocked panel says why the presentation is held", () => {
+  it("a failed read says it could not load, and offers a retry", () => {
+    const html = renderToStaticMarkup(
+      createElement(KickoffDeckBlocked, { message: "Could not read.", onRetry: () => undefined }),
+    );
+    expect(html).toContain("could not be loaded");
+    expect(html).toMatch(/<button[^>]*>\s*Try again/);
+    expect(html).not.toMatch(/<button[^>]*disabled=""/);
+  });
+
+  it("an unsettled deck type says a choice is needed, never that nothing loaded, and offers no retry", () => {
+    const html = renderToStaticMarkup(
+      createElement(KickoffDeckBlocked, {
+        reason: "choice",
+        message: "The records disagree.",
+        onRetry: undefined,
+      }),
+    );
+    expect(html).toContain("needs a choice before it can be presented");
+    expect(html).not.toContain("could not be loaded");
+    expect(html).not.toContain("Try again");
   });
 });

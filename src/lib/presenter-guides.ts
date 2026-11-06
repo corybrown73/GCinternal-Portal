@@ -84,11 +84,13 @@ export const PRESENTER_GUIDES: Record<1 | 2 | 3 | 4 | 5 | 6 | 7, PresenterGuide>
       "The next session is booked or its date agreed, the tester and deadline are set, and the first scope is confirmed.",
   },
   7: {
-    objective: "Choose the slides this kickoff needs, so the room sees only what applies to them.",
-    opening: "Before we start, what do you want this session to cover, and what can we leave out?",
+    objective:
+      "Check the deck the room will see: its type, whether the first form is ready to show, and what is still to confirm.",
+    opening:
+      "Before we present, which deck is this, and is the first form ready for the room to see?",
     questions: [
-      "Is any of the training already done, or is it all still to come?",
-      "Who will be in the room, and what do they need to see?",
+      "Is the first form built and tested enough to demonstrate, or should it stay out of the room?",
+      "Are there additional solutions the room should hear about, and is anything still to confirm?",
     ],
     capture: "The slides you chose, and anything you left out and why.",
     ready: "The slides match what this customer bought and needs, and every flag is resolved.",

@@ -1,327 +1,275 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  PARTNER_SLIDES,
+  STANDARD_SLIDES,
   canConfigureKickoffDeck,
+  isAdditionalSolution,
   kickoffDeckBlocked,
-  CORE_SLIDE_KEYS,
-  OPTIONAL_SLIDE_KEYS,
-  defaultSelection,
-  moveWithinZone,
   presentedSlideKeys,
-  recommendKickoffSlides,
+  recommendKickoffDeck,
+  resolveDeckType,
   resolveKickoffSelection,
   type KickoffFacts,
+  type KickoffSelection,
 } from "../kickoff-slides";
 
-const NEW_CUSTOMER: KickoffFacts = {
-  path: "new_logo",
-  trainingOnly: false,
-  expansion: false,
-  partnerLed: false,
+const STANDARD_CORE = [
+  "kickoff-cover",
+  "kickoff-workflow",
+  "kickoff-journey",
+  "kickoff-communication",
+  "kickoff-next",
+];
+const PARTNER = [
+  "partner-welcome",
+  "partner-start",
+  "partner-journey",
+  "partner-together",
+  "partner-proof",
+  "partner-next",
+];
+
+const direct: KickoffFacts = {
+  deckSignals: { partnerByRecord: false, partnerByJourney: false },
   partnerName: null,
-  services: [],
-  solutionsInvolved: null,
+  path: "new_logo",
+  additionalSolutions: [],
+  solutionsInvolved: false,
   firstFormNamed: true,
   firstFormConfirmed: true,
   hasImplementation: true,
 };
-const facts = (over: Partial<KickoffFacts>): KickoffFacts => ({ ...NEW_CUSTOMER, ...over });
-const has = (rec: ReturnType<typeof recommendKickoffSlides>, key: string) =>
-  rec.included.includes(key);
+const partnerFacts: KickoffFacts = {
+  ...direct,
+  deckSignals: { partnerByRecord: true, partnerByJourney: true },
+  partnerName: "Acme Partner",
+  path: "partner_implementation",
+};
 
-describe("training-only", () => {
-  const rec = recommendKickoffSlides(
-    facts({
-      path: "existing",
-      trainingOnly: true,
-      expansion: false,
-      firstFormNamed: false,
-      firstFormConfirmed: false,
-      services: [{ kind: "training", name: "Crew training" }],
-    }),
-  );
-  it("includes training and enablement, and never recommends form building", () => {
-    expect(has(rec, "kickoff-training")).toBe(true);
-    expect(has(rec, "kickoff-form-v1")).toBe(false);
-    expect(has(rec, "kickoff-workflow")).toBe(false);
+const selection = (over: Partial<KickoffSelection> = {}): KickoffSelection => ({
+  deckType: "standard",
+  formReady: false,
+  hasAdditional: false,
+  ...over,
+});
+
+describe("the standard deck: six slides when everything is confirmed, in order", () => {
+  it("the fixed slides, in narrative order, with neither conditional slide", () => {
+    expect(STANDARD_SLIDES.filter((s) => !s.when).map((s) => s.key)).toEqual(STANDARD_CORE);
+    expect(presentedSlideKeys(selection())).toEqual(STANDARD_CORE);
   });
-  it("says why training is in", () => {
-    expect(rec.reasons["kickoff-training"]).toMatch(/Training only/);
+
+  it("the first form is the sixth slide when ready, between 'We build it together' and the close", () => {
+    expect(presentedSlideKeys(selection({ formReady: true }))).toEqual([
+      "kickoff-cover",
+      "kickoff-workflow",
+      "kickoff-journey",
+      "kickoff-communication",
+      "kickoff-form-v1",
+      "kickoff-next",
+    ]);
   });
-  it("has no purchased-solutions slide when only training was bought", () => {
-    expect(has(rec, "kickoff-purchased")).toBe(false);
+
+  it("Your additional solutions sits directly after slide 3 (the journey), only with additional solutions", () => {
+    const keys = presentedSlideKeys(selection({ hasAdditional: true }));
+    expect(keys.indexOf("kickoff-additional")).toBe(keys.indexOf("kickoff-journey") + 1);
+    expect(keys.indexOf("kickoff-additional")).toBe(3);
+    expect(presentedSlideKeys(selection())).not.toContain("kickoff-additional");
+  });
+
+  it("with both conditionals, the presentation runs seven slides in the approved order", () => {
+    expect(presentedSlideKeys(selection({ hasAdditional: true, formReady: true }))).toEqual([
+      "kickoff-cover",
+      "kickoff-workflow",
+      "kickoff-journey",
+      "kickoff-additional",
+      "kickoff-communication",
+      "kickoff-form-v1",
+      "kickoff-next",
+    ]);
   });
 });
 
-describe("new customer with purchased solutions", () => {
-  const rec = recommendKickoffSlides(
-    facts({
-      services: [
-        { kind: "paid_form", name: "Inspection form" },
-        { kind: "integration", name: "Salesforce" },
-        { kind: "training", name: "Crew training" },
-      ],
-    }),
-  );
-  it("includes the purchased deliverables, the form and its workflow, training and responsibilities", () => {
-    for (const key of [
-      "kickoff-purchased",
+describe("the form slide is never shown on a guess", () => {
+  it("a purchased paid form does not make the form ready: only the saved confirmation does", () => {
+    const recommended = recommendKickoffDeck({
+      ...direct,
+      additionalSolutions: [{ kind: "paid_form", name: "Form build", phase: 1 }],
+    });
+    // The recommendation has no form key: nothing auto-includes the form slide.
+    expect(recommended).not.toHaveProperty("included");
+    expect(presentedSlideKeys(resolveKickoffSelection(null, recommended))).not.toContain(
       "kickoff-form-v1",
-      "kickoff-workflow",
-      "kickoff-training",
-      "kickoff-communication",
-    ]) {
-      expect(has(rec, key), key).toBe(true);
+    );
+  });
+
+  it("a form read from the paperwork and not confirmed is flagged, and the slide stays out", () => {
+    const recommended = recommendKickoffDeck({ ...direct, firstFormConfirmed: false });
+    expect(recommended.flags.join(" ")).toMatch(/read from the paperwork and is not confirmed/);
+    expect(presentedSlideKeys(resolveKickoffSelection(null, recommended))).not.toContain(
+      "kickoff-form-v1",
+    );
+  });
+
+  it("a form the TIS saved as ready shows, and only then", () => {
+    const recommended = recommendKickoffDeck(direct);
+    const saved = resolveKickoffSelection({ deckType: "standard", formReady: true }, recommended);
+    expect(presentedSlideKeys(saved)).toContain("kickoff-form-v1");
+  });
+});
+
+describe("the partner deck: its own six slides, never the direct deck's", () => {
+  it("is exactly P1 to P6, in order", () => {
+    expect(PARTNER_SLIDES.map((s) => s.key)).toEqual(PARTNER);
+    expect(presentedSlideKeys(selection({ deckType: "partner" }))).toEqual(PARTNER);
+  });
+
+  it("never receives the additional-solutions slide or the first-form slide, even when those are set", () => {
+    const keys = presentedSlideKeys(
+      selection({ deckType: "partner", hasAdditional: true, formReady: true }),
+    );
+    expect(keys).toEqual(PARTNER);
+    expect(keys).not.toContain("kickoff-additional");
+    expect(keys).not.toContain("kickoff-form-v1");
+  });
+
+  it("a partner implementation is a partner deck when the two signals agree", () => {
+    const recommended = recommendKickoffDeck(partnerFacts);
+    expect(recommended.deckType).toBe("partner");
+    expect(recommended.ambiguous).toBe(false);
+  });
+
+  it("the partner deck is flagged for the unowned Technical Solutions work, not assumed", () => {
+    const recommended = recommendKickoffDeck(partnerFacts);
+    expect(recommended.flags.join(" ")).toMatch(/does not name who owns Technical Solutions/);
+  });
+
+  it("a partner-led implementation with no named partner is flagged", () => {
+    const recommended = recommendKickoffDeck({ ...partnerFacts, partnerName: null });
+    expect(recommended.flags.join(" ")).toMatch(/partner is not named/);
+  });
+});
+
+describe("deck type: chosen from the records, never silently when they disagree", () => {
+  it("agreement picks the deck with no ambiguity", () => {
+    expect(resolveDeckType({ partnerByRecord: false, partnerByJourney: false })).toEqual({
+      deckType: "standard",
+      reason: "A direct GoCanvas implementation.",
+      ambiguous: false,
+    });
+    expect(resolveDeckType({ partnerByRecord: true, partnerByJourney: true }).deckType).toBe(
+      "partner",
+    );
+  });
+
+  it("disagreement picks nothing and is ambiguous, in either direction", () => {
+    expect(resolveDeckType({ partnerByRecord: true, partnerByJourney: false })).toMatchObject({
+      deckType: null,
+      ambiguous: true,
+    });
+    expect(resolveDeckType({ partnerByRecord: false, partnerByJourney: true })).toMatchObject({
+      deckType: null,
+      ambiguous: true,
+    });
+  });
+
+  it("an ambiguous deal has no selection until the TIS saves a deck type", () => {
+    const recommended = recommendKickoffDeck({
+      ...direct,
+      deckSignals: { partnerByRecord: true, partnerByJourney: false },
+    });
+    expect(resolveKickoffSelection(null, recommended)).toBeNull();
+    expect(recommended.flags.join(" ")).toMatch(/disagree/);
+  });
+
+  it("the TIS's saved deck type settles an ambiguous deal", () => {
+    const recommended = recommendKickoffDeck({
+      ...direct,
+      deckSignals: { partnerByRecord: true, partnerByJourney: false },
+    });
+    expect(
+      resolveKickoffSelection({ deckType: "partner", formReady: false }, recommended),
+    ).toMatchObject({ deckType: "partner" });
+  });
+});
+
+describe("additional solutions: purchased, and not training or the first form", () => {
+  it("training and the paid form are not additional solutions; anything else is", () => {
+    expect(isAdditionalSolution({ kind: "training" })).toBe(false);
+    expect(isAdditionalSolution({ kind: "paid_form" })).toBe(false);
+    expect(isAdditionalSolution({ kind: "integration" })).toBe(true);
+  });
+
+  it("slide A is on when additional solutions exist, and flagged when solutions were sold but none are listed", () => {
+    expect(
+      recommendKickoffDeck({
+        ...direct,
+        additionalSolutions: [{ kind: "integration", name: "QuickBooks", phase: 2 }],
+      }).hasAdditional,
+    ).toBe(true);
+    const none = recommendKickoffDeck({ ...direct, solutionsInvolved: true });
+    expect(none.hasAdditional).toBe(false);
+    expect(none.flags.join(" ")).toMatch(/Solutions were sold but no additional solutions/);
+  });
+});
+
+describe("the presentation is blocked, never guessed", () => {
+  it("a saved configuration that did not load blocks the presentation", () => {
+    expect(
+      kickoffDeckBlocked({
+        kickoffDeck: {
+          loadError: "Could not read the saved kickoff deck choice.",
+          selection: null,
+        },
+      }),
+    ).toBe(true);
+  });
+
+  it("an unsettled deck type blocks the presentation until it is chosen", () => {
+    expect(kickoffDeckBlocked({ kickoffDeck: { loadError: null, selection: null } })).toBe(true);
+  });
+
+  it("a settled, loaded deck, and the customer's view with no deck, are not blocked", () => {
+    expect(kickoffDeckBlocked({ kickoffDeck: { loadError: null, selection: selection() } })).toBe(
+      false,
+    );
+    expect(kickoffDeckBlocked({ kickoffDeck: null })).toBe(false);
+  });
+});
+
+describe("who may save a deck choice", () => {
+  it("managers and above may configure any implementation", () => {
+    for (const role of ["super_admin", "admin", "manager"]) {
+      expect(
+        canConfigureKickoffDeck({ role, actorTeamMemberId: null, ownerTeamMemberId: "tm-x" }),
+      ).toBe(true);
     }
   });
-  it("is not a partner deck", () => {
-    expect(has(rec, "kickoff-partner")).toBe(false);
-  });
-  it("has no flags when everything is confirmed", () => {
-    expect(rec.flags).toEqual([]);
-  });
-});
 
-describe("existing customer adding solutions", () => {
-  const rec = recommendKickoffSlides(
-    facts({
-      path: "existing",
-      expansion: true,
-      firstFormNamed: false,
-      firstFormConfirmed: false,
-      solutionsInvolved: true,
-      services: [{ kind: "integration", name: "QuickBooks" }],
-    }),
-  );
-  it("focuses on the added scope and the workflows it depends on", () => {
-    expect(has(rec, "kickoff-purchased")).toBe(true);
-    expect(has(rec, "kickoff-workflow")).toBe(true);
-    expect(rec.reasons["kickoff-workflow"]).toMatch(/existing workflows/);
-  });
-  it("avoids first-time onboarding content: no training, no form build", () => {
-    expect(has(rec, "kickoff-training")).toBe(false);
-    expect(has(rec, "kickoff-form-v1")).toBe(false);
-  });
-});
-
-describe("partner implementation", () => {
-  it("includes the partner slide, and purchased solutions too: scope and partner are not exclusive", () => {
-    const rec = recommendKickoffSlides(
-      facts({
-        path: "partner_implementation",
-        partnerLed: true,
-        partnerName: "Field Fusion IQ",
-        expansion: false,
-        services: [{ kind: "integration", name: "Dispatch" }],
-      }),
-    );
-    expect(has(rec, "kickoff-partner")).toBe(true);
-    expect(has(rec, "kickoff-purchased")).toBe(true);
-    expect(rec.flags.some((f) => /partner is not named/.test(f))).toBe(false);
-  });
-
-  it("flags a partner-led deal whose partner is not named, rather than naming one", () => {
-    const rec = recommendKickoffSlides(facts({ partnerLed: true, partnerName: null }));
-    expect(has(rec, "kickoff-partner")).toBe(true);
-    expect(rec.flags.join(" ")).toMatch(/partner is not named/);
-  });
-});
-
-describe("a free form, where the entitlement is confirmed", () => {
-  it("includes the form and its workflow when a paid form was bought", () => {
-    const rec = recommendKickoffSlides(
-      facts({ firstFormConfirmed: false, services: [{ kind: "paid_form", name: "Form" }] }),
-    );
-    expect(has(rec, "kickoff-form-v1")).toBe(true);
-    expect(has(rec, "kickoff-workflow")).toBe(true);
-  });
-  it("leaves the form out when the first form was only read from the paperwork, and says so", () => {
-    const rec = recommendKickoffSlides(facts({ firstFormNamed: true, firstFormConfirmed: false }));
-    expect(has(rec, "kickoff-form-v1")).toBe(false);
-    expect(rec.flags.join(" ")).toMatch(/read from the paperwork and is not confirmed/);
-  });
-});
-
-describe("missing and conflicting information is flagged, never assumed", () => {
-  it("flags an unset account type, and treats it as a new customer, saying so", () => {
-    const rec = recommendKickoffSlides(facts({ path: null }));
-    expect(rec.flags.join(" ")).toMatch(/account type is not set/);
-    expect(has(rec, "kickoff-training")).toBe(true);
-  });
-
-  it("does not invent purchased solutions when it is not known whether any were sold", () => {
-    const rec = recommendKickoffSlides(facts({ solutionsInvolved: null, services: [] }));
-    expect(has(rec, "kickoff-purchased")).toBe(false);
-    expect(rec.flags.join(" ")).toMatch(/Whether solutions were sold is not recorded/);
-  });
-
-  it("flags solutions sold with none listed", () => {
-    const rec = recommendKickoffSlides(facts({ solutionsInvolved: true, services: [] }));
-    expect(has(rec, "kickoff-purchased")).toBe(false);
-    expect(rec.flags.join(" ")).toMatch(/none are listed/);
-  });
-
-  it("flags a new customer with no first form named, and leaves the form out", () => {
-    const rec = recommendKickoffSlides(facts({ firstFormNamed: false, firstFormConfirmed: false }));
-    expect(has(rec, "kickoff-form-v1")).toBe(false);
-    expect(rec.flags.join(" ")).toMatch(/No first form is named/);
-  });
-
-  it("flags training-only that contradicts a paid form, and keeps the form out", () => {
-    const rec = recommendKickoffSlides(
-      facts({ trainingOnly: true, services: [{ kind: "paid_form", name: "Form" }] }),
-    );
-    expect(has(rec, "kickoff-form-v1")).toBe(false);
-    expect(rec.flags.join(" ")).toMatch(/Training only is set, but a paid form/);
-  });
-
-  it("flags a deal with no implementation, which cannot be saved", () => {
-    const rec = recommendKickoffSlides(facts({ hasImplementation: false }));
-    expect(rec.flags.join(" ")).toMatch(/cannot be saved/);
-  });
-});
-
-describe("the saved selection takes precedence over the recommendation", () => {
-  const rec = recommendKickoffSlides(
-    facts({ services: [{ kind: "integration", name: "Dispatch" }] }),
-  );
-
-  it("uses the saved selection even when a new recommendation would differ", () => {
-    const saved = {
-      included: ["kickoff-training"],
-      order: [
-        "kickoff-training",
-        "kickoff-workflow",
-        "kickoff-purchased",
-        "kickoff-partner",
-        "kickoff-communication",
-        "kickoff-form-v1",
-      ],
-    };
-    const sel = resolveKickoffSelection(saved, rec);
-    expect(sel.included).toEqual(["kickoff-training"]);
-    expect(sel.included).not.toContain("kickoff-purchased");
-  });
-
-  it("keeps the order the TIS chose", () => {
-    const saved = {
-      included: ["kickoff-workflow", "kickoff-purchased"],
-      order: [
-        "kickoff-purchased",
-        "kickoff-workflow",
-        "kickoff-partner",
-        "kickoff-training",
-        "kickoff-communication",
-        "kickoff-form-v1",
-      ],
-    };
-    expect(resolveKickoffSelection(saved, rec).included).toEqual([
-      "kickoff-purchased",
-      "kickoff-workflow",
-    ]);
-  });
-
-  it("drops unknown keys and cannot remove a core slide", () => {
-    const saved = {
-      included: ["kickoff-cover", "not-a-slide", "kickoff-purchased"],
-      order: ["kickoff-purchased"],
-    };
-    const sel = resolveKickoffSelection(saved, rec);
-    expect(sel.included).toEqual(["kickoff-purchased"]);
-    expect(sel.order).not.toContain("not-a-slide");
-  });
-
-  it("falls back to the recommendation when nothing is saved", () => {
-    expect(resolveKickoffSelection(null, rec)).toEqual(defaultSelection(rec));
-  });
-});
-
-describe("the presented order keeps the narrative", () => {
-  it("always starts with the core opening and ends with the core close", () => {
-    const keys = presentedSlideKeys(defaultSelection(recommendKickoffSlides(facts({}))));
-    expect(keys[0]).toBe("kickoff-cover");
-    expect(keys[1]).toBe("kickoff-achieve");
-    expect(keys[keys.length - 1]).toBe("kickoff-next");
-    expect(keys).toContain("kickoff-journey");
-  });
-
-  it("places the before-journey slides before the journey, and the after-journey slides after it", () => {
-    const keys = presentedSlideKeys({
-      included: ["kickoff-workflow", "kickoff-training"],
-      order: [...OPTIONAL_SLIDE_KEYS],
-    });
-    expect(keys.indexOf("kickoff-workflow")).toBeLessThan(keys.indexOf("kickoff-journey"));
-    expect(keys.indexOf("kickoff-training")).toBeGreaterThan(keys.indexOf("kickoff-journey"));
-  });
-
-  it("shows only the selected slides, with every core slide still present, in narrative order", () => {
-    const keys = presentedSlideKeys({ included: [], order: [...OPTIONAL_SLIDE_KEYS] });
-    expect(keys).toEqual(["kickoff-cover", "kickoff-achieve", "kickoff-journey", "kickoff-next"]);
-  });
-});
-
-describe("reordering never disrupts the core narrative", () => {
-  const order = [
-    "kickoff-workflow",
-    "kickoff-purchased",
-    "kickoff-partner",
-    "kickoff-training",
-    "kickoff-communication",
-    "kickoff-form-v1",
-  ];
-
-  it("moves a slide within its own zone", () => {
-    expect(moveWithinZone(order, "kickoff-purchased", -1)).toEqual([
-      "kickoff-purchased",
-      "kickoff-workflow",
-      "kickoff-partner",
-      "kickoff-training",
-      "kickoff-communication",
-      "kickoff-form-v1",
-    ]);
-  });
-
-  it("does not move a slide past its zone boundary", () => {
-    expect(moveWithinZone(order, "kickoff-partner", 1)).toEqual(order);
-    expect(moveWithinZone(order, "kickoff-training", -1)).toEqual(order);
-  });
-
-  it("never moves a core slide", () => {
-    expect(moveWithinZone([...order, "kickoff-cover"], "kickoff-cover", -1)).toEqual([
-      ...order,
-      "kickoff-cover",
-    ]);
-  });
-});
-
-describe("who may configure a Kickoff deck", () => {
-  for (const role of ["super_admin", "admin", "manager"]) {
-    it(`${role} may configure any implementation, without being its owner`, () => {
-      expect(
-        canConfigureKickoffDeck({ role, actorTeamMemberId: "tm-x", ownerTeamMemberId: "tm-owner" }),
-      ).toBe(true);
-    });
-  }
-  it("an implementation specialist may configure only their assigned implementation", () => {
+  it("the TIS may configure only the implementation they are the primary TIS of", () => {
     expect(
       canConfigureKickoffDeck({
         role: "implementation",
-        actorTeamMemberId: "tm-owner",
-        ownerTeamMemberId: "tm-owner",
+        actorTeamMemberId: "tm-1",
+        ownerTeamMemberId: "tm-1",
       }),
     ).toBe(true);
     expect(
       canConfigureKickoffDeck({
         role: "implementation",
-        actorTeamMemberId: "tm-other",
-        ownerTeamMemberId: "tm-owner",
+        actorTeamMemberId: "tm-1",
+        ownerTeamMemberId: "tm-2",
       }),
     ).toBe(false);
+  });
+
+  it("every other role, and an unlinked TIS, may not", () => {
     expect(
       canConfigureKickoffDeck({
-        role: "implementation",
-        actorTeamMemberId: "tm-other",
-        ownerTeamMemberId: null,
+        role: "sales",
+        actorTeamMemberId: "tm-1",
+        ownerTeamMemberId: "tm-1",
       }),
     ).toBe(false);
     expect(
@@ -331,29 +279,5 @@ describe("who may configure a Kickoff deck", () => {
         ownerTeamMemberId: null,
       }),
     ).toBe(false);
-  });
-  for (const role of ["sales", "am", "se", "tam_se", "onboarding", "customer", null]) {
-    it(`${String(role)} gets no deck authority, even as the named owner`, () => {
-      expect(
-        canConfigureKickoffDeck({
-          role,
-          actorTeamMemberId: "tm-owner",
-          ownerTeamMemberId: "tm-owner",
-        }),
-      ).toBe(false);
-    });
-  }
-});
-
-describe("when the Kickoff presentation is blocked", () => {
-  it("blocked when the saved deck did not load", () => {
-    expect(kickoffDeckBlocked({ kickoffDeck: { loadError: "Could not load" } })).toBe(true);
-  });
-  it("not blocked when the deck loaded, even with nothing saved (the normal default)", () => {
-    expect(kickoffDeckBlocked({ kickoffDeck: { loadError: null } })).toBe(false);
-  });
-  it("not blocked for a live customer's deal, which has no deck", () => {
-    expect(kickoffDeckBlocked({ kickoffDeck: null })).toBe(false);
-    expect(kickoffDeckBlocked({})).toBe(false);
   });
 });

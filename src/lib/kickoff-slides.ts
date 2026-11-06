@@ -1,344 +1,285 @@
 /**
- * The Kickoff deck's slide library, its recommendation, and the resolution of a
- * saved selection. Pure: no database, no React. The server reads the facts; the
- * Kickoff View and the Presenter Workspace read the result.
+ * The Kickoff deck model: which deck a deal gets, which slides it shows, and
+ * the TIS's saved choices. Pure: no database, no React. The server reads the
+ * facts; the Kickoff View and the Presenter Workspace read the result.
  *
- * THE LIBRARY. Four core slides are always in the presentation and keep their
- * narrative place. The other slides are optional: the TIS includes or excludes
- * them and reorders them, but only within their zone, so the story never reads
- * out of sequence. A slide's zone is fixed by what it does in the meeting:
- * before the journey it says what is being set up; after it, how the team works.
+ * TWO DECKS, ONE FAMILY.
+ *  - Standard (direct GoCanvas): Welcome, How the work runs, the Journey,
+ *    [Your additional solutions, only when additional solutions were bought],
+ *    We build it together, [Your first form, only when the TIS confirms the form
+ *    is ready to demonstrate], Before we meet again.
+ *  - Partner (partner implementation): six slides of their own. No Additional
+ *    Solutions slide and no first-form slide: those belong to the direct deck.
  *
- * THE RECOMMENDATION. A starting point built from confirmed implementation facts
- * (the path, training-only, the purchased services, the first form, the partner)
- * and the existing deck classification. Each inclusion carries its reason, and
- * anything missing or contradictory is returned as a flag for the TIS, never
- * filled in as an assumption.
+ * DECK TYPE. Chosen automatically from existing classification, never from a new
+ * field: a partner implementation (partner record or journey template) gets the
+ * partner deck, a direct GoCanvas implementation gets the standard deck. When
+ * the two signals disagree, nothing is chosen silently: the TIS picks the deck,
+ * and the presentation stays blocked until they do.
  *
- * PRECEDENCE. A TIS's saved selection for an implementation replaces the
- * recommendation for that implementation. A new recommendation never overwrites
- * it; the TIS can reset to the recommendation on purpose.
+ * SAVED CHOICES. Only two things are the TIS's to save: the deck type (when it
+ * had to be chosen) and whether the first form is ready to demonstrate. A saved
+ * choice replaces the automatic one for that implementation. Nothing here
+ * changes a stage, an owner, a task, a deal status or a customer's acceptance.
  */
 
 import { isManagerRole } from "./roles";
 
-export type KickoffZone = "start" | "before" | "journey" | "after" | "end";
+export type KickoffDeckType = "standard" | "partner";
 
 export type KickoffSlideMeta = {
   key: string;
   label: string;
-  /** Always in the presentation; the TIS cannot remove it. */
-  core: boolean;
-  zone: KickoffZone;
+  deck: KickoffDeckType;
+  /** Shown only when this condition holds; absent means always shown in its deck. */
+  when?: "additional-solutions" | "form-ready";
 };
 
-/** Library order is the narrative order of the core slides; the optional ones sit in their zone. */
-export const KICKOFF_SLIDES: ReadonlyArray<KickoffSlideMeta> = [
-  { key: "kickoff-cover", label: "Welcome and introductions", core: true, zone: "start" },
-  { key: "kickoff-achieve", label: "What we're here to achieve", core: true, zone: "start" },
-  { key: "kickoff-workflow", label: "Your workflow", core: false, zone: "before" },
+/** The standard deck's slides, in presentation order (conditional ones marked). */
+export const STANDARD_SLIDES: ReadonlyArray<KickoffSlideMeta> = [
+  { key: "kickoff-cover", label: "Welcome", deck: "standard" },
+  { key: "kickoff-workflow", label: "How the work runs, in your words", deck: "standard" },
+  { key: "kickoff-journey", label: "Your journey from kickoff to go-live", deck: "standard" },
   {
-    key: "kickoff-purchased",
-    label: "Purchased solutions and deliverables",
-    core: false,
-    zone: "before",
+    key: "kickoff-additional",
+    label: "Your additional solutions",
+    deck: "standard",
+    when: "additional-solutions",
   },
-  { key: "kickoff-partner", label: "Working with your partner", core: false, zone: "before" },
-  { key: "kickoff-journey", label: "Your implementation journey", core: true, zone: "journey" },
-  { key: "kickoff-training", label: "Training and enablement", core: false, zone: "after" },
   {
     key: "kickoff-communication",
-    label: "Responsibilities and communication",
-    core: false,
-    zone: "after",
+    label: "We build it together. You learn to run it.",
+    deck: "standard",
   },
-  { key: "kickoff-form-v1", label: "Your first form (Form V1)", core: false, zone: "after" },
-  { key: "kickoff-next", label: "Next steps and commitments", core: true, zone: "end" },
+  { key: "kickoff-form-v1", label: "Your first form", deck: "standard", when: "form-ready" },
+  { key: "kickoff-next", label: "Before we meet again", deck: "standard" },
 ];
 
-export const CORE_SLIDE_KEYS: readonly string[] = KICKOFF_SLIDES.filter((s) => s.core).map(
-  (s) => s.key,
-);
+/** The partner deck's slides, P1 to P6, in presentation order. */
+export const PARTNER_SLIDES: ReadonlyArray<KickoffSlideMeta> = [
+  { key: "partner-welcome", label: "Let's get your implementation moving.", deck: "partner" },
+  { key: "partner-start", label: "Here's where we're starting.", deck: "partner" },
+  { key: "partner-journey", label: "From kickoff to rollout, here's our plan.", deck: "partner" },
+  { key: "partner-together", label: "Three teams. One shared outcome.", deck: "partner" },
+  { key: "partner-proof", label: "What do we need to prove works?", deck: "partner" },
+  { key: "partner-next", label: "Here's what happens next.", deck: "partner" },
+];
 
-/** Optional slides in their default order (zone, then library order). */
-export const OPTIONAL_SLIDE_KEYS: readonly string[] = KICKOFF_SLIDES.filter((s) => !s.core).map(
-  (s) => s.key,
-);
+export const KICKOFF_SLIDES: ReadonlyArray<KickoffSlideMeta> = [
+  ...STANDARD_SLIDES,
+  ...PARTNER_SLIDES,
+];
 
-const KNOWN = new Set(KICKOFF_SLIDES.map((s) => s.key));
+/** Purchased services that are not training and not the first form: the "additional solutions". */
+const FORM_KIND = "paid_form";
+const TRAINING_KIND = "training";
 
-export type KickoffSelection = {
-  /** Optional slide keys to show. Core slides are never listed here. */
-  included: string[];
-  /** Every optional slide key, in the TIS's order. Zones keep their place. */
-  order: string[];
+export function isAdditionalSolution(service: { kind: string }): boolean {
+  return service.kind !== TRAINING_KIND && service.kind !== FORM_KIND;
+}
+
+/** What the deck type is read from. Each signal is a fact on the record, not a guess. */
+export type DeckTypeSignals = {
+  /** The intake or the implementation names a partner (partner_key or the partner implementation type). */
+  partnerByRecord: boolean;
+  /** The implementation runs on a partner journey template (the journey classification). */
+  partnerByJourney: boolean;
 };
 
-/** The facts the recommendation reads. Each is confirmed data, or null/false when it is not. */
 export type KickoffFacts = {
-  /** intake.path, or null when nobody has set it. */
-  path: string | null;
-  trainingOnly: boolean;
-  /** An existing customer adding work (the deck classification or the path says so). */
-  expansion: boolean;
-  /** A partner-led implementation. */
-  partnerLed: boolean;
+  deckSignals: DeckTypeSignals;
   /** The partner's name, when the partner is named. */
   partnerName: string | null;
-  /** Purchased services, from the SOW read and the plan. Customer-safe fields only. */
-  services: Array<{ kind: string; name: string }>;
+  /** intake.path, or null when nobody has set it. */
+  path: string | null;
+  /** Purchased services that are additional solutions (see isAdditionalSolution). Customer-safe fields only. */
+  additionalSolutions: Array<{ kind: string; name: string; phase: number }>;
   /** Whether solutions were sold: true, false, or null when nobody has said. */
   solutionsInvolved: boolean | null;
   /** A first form is named (by anyone). */
   firstFormNamed: boolean;
-  /** The first form is confirmed by a person, not read from the paperwork. */
+  /** The first form was confirmed by a person, not read from the paperwork. */
   firstFormConfirmed: boolean;
   /** An implementation exists to save the configuration against. */
   hasImplementation: boolean;
 };
 
 export type KickoffRecommendation = {
-  included: string[];
-  /** Why each recommended slide is in, in plain words. */
-  reasons: Record<string, string>;
+  /** The deck type the record points to. Null when the signals disagree: the TIS must choose. */
+  deckType: KickoffDeckType | null;
+  /** Why, in plain words. */
+  deckReason: string;
+  /** The signals disagree; nothing is chosen silently. */
+  ambiguous: boolean;
+  /** Purchased additional solutions exist, so the standard deck includes slide A. */
+  hasAdditional: boolean;
   /** What is missing or contradictory, for the TIS to resolve before presenting. */
   flags: string[];
 };
 
-const PAID_FORM = "paid_form";
-const TRAINING = "training";
-
-/**
- * The starting selection. Rules, in plain terms:
- *  - Training is recommended for a training-only deal, for any deal that bought
- *    training, and for every new customer. It is never recommended for an
- *    existing customer who bought no training: that is first-time content.
- *  - The form and its workflow are recommended only where the form is confirmed:
- *    a person has named the first form on a new customer, or a paid form was
- *    bought. A training-only deal never gets the form. An existing customer gets
- *    the workflow (their existing one), but not the form unless a form was bought.
- *  - Purchased solutions are recommended when something other than training was bought.
- *  - The partner slide is recommended for a partner-led implementation. Solution
- *    scope and partner delivery are not exclusive: both can be recommended.
- *  - Responsibilities and communication is recommended for every deal.
- */
-export function recommendKickoffSlides(f: KickoffFacts): KickoffRecommendation {
-  const reasons: Record<string, string> = {};
-  const flags: string[] = [];
-  const include = (key: string, reason: string) => {
-    reasons[key] = reason;
+/** Deck type from the two signals. Agreement decides; disagreement is never resolved here. */
+export function resolveDeckType(signals: DeckTypeSignals): {
+  deckType: KickoffDeckType | null;
+  reason: string;
+  ambiguous: boolean;
+} {
+  if (signals.partnerByRecord && signals.partnerByJourney) {
+    return {
+      deckType: "partner",
+      reason: "A partner leads this implementation.",
+      ambiguous: false,
+    };
+  }
+  if (!signals.partnerByRecord && !signals.partnerByJourney) {
+    return { deckType: "standard", reason: "A direct GoCanvas implementation.", ambiguous: false };
+  }
+  return {
+    deckType: null,
+    reason:
+      "The partner record and the journey template disagree about whether a partner leads this. Choose the deck type before presenting.",
+    ambiguous: true,
   };
+}
 
-  const newCustomer = !f.expansion && !f.partnerLed;
-  const hasPaidForm = f.services.some((s) => s.kind === PAID_FORM);
-  const hasTraining = f.services.some((s) => s.kind === TRAINING);
-  const hasOther = f.services.some((s) => s.kind !== TRAINING);
+export function recommendKickoffDeck(f: KickoffFacts): KickoffRecommendation {
+  const { deckType, reason, ambiguous } = resolveDeckType(f.deckSignals);
+  const hasAdditional = f.additionalSolutions.length > 0;
+  const flags: string[] = [];
 
-  // The form is confirmed only by a person's answer or a bought form, never by
-  // the training-only setting, and never by a paperwork read alone.
-  const formConfirmed = !f.trainingOnly && (hasPaidForm || (newCustomer && f.firstFormConfirmed));
-
-  if (f.trainingOnly || hasTraining || newCustomer) {
-    include(
-      "kickoff-training",
-      f.trainingOnly
-        ? "Training only: this is the content the crew needs."
-        : hasTraining
-          ? "Training is part of what was bought."
-          : "A new customer's crew needs training.",
-    );
+  if (ambiguous) {
+    flags.push(reason);
   }
-  if (hasOther) {
-    include("kickoff-purchased", "Solutions and deliverables were bought.");
-  }
-  if (formConfirmed) {
-    include(
-      "kickoff-form-v1",
-      hasPaidForm ? "A paid form was bought." : "The first form is confirmed.",
-    );
-  }
-  if (formConfirmed || f.expansion) {
-    include(
-      "kickoff-workflow",
-      formConfirmed
-        ? "The workflow the first form supports."
-        : "Their existing workflows, which the new scope depends on.",
-    );
-  }
-  if (f.partnerLed) {
-    include(
-      "kickoff-partner",
-      "A partner leads the setup, so the handoffs are part of the meeting.",
-    );
-  }
-  include("kickoff-communication", "How we work together is covered for every customer.");
-
-  // What is missing or contradictory. Each is for the TIS to resolve; none is assumed.
   if (f.path === null) {
-    flags.push(
-      "The account type is not set on the deal. It is treated as a new customer; confirm it before presenting.",
-    );
-  }
-  if (f.trainingOnly && hasPaidForm) {
-    flags.push(
-      "Training only is set, but a paid form is listed. The form is left out until this is resolved.",
-    );
-  }
-  if (f.solutionsInvolved === null && f.services.length === 0 && !f.trainingOnly) {
-    flags.push(
-      "Whether solutions were sold is not recorded, so the deliverables slide is left out.",
-    );
-  }
-  if (f.solutionsInvolved === true && f.services.length === 0) {
-    flags.push(
-      "Solutions were sold but none are listed, so the deliverables slide is left out. Add them to the plan.",
-    );
-  }
-  if (newCustomer && !f.trainingOnly && !hasPaidForm && f.firstFormNamed && !f.firstFormConfirmed) {
-    flags.push(
-      "The first form was read from the paperwork and is not confirmed, so the form slide is left out.",
-    );
-  }
-  if (newCustomer && !f.trainingOnly && !hasPaidForm && !f.firstFormNamed) {
-    flags.push(
-      "No first form is named, so the form slide is left out. Name it, or mark the deal training-only.",
-    );
-  }
-  if (f.partnerLed) {
-    flags.push(
-      "The approved partner journey does not name who owns Technical Solutions work. The partner slide says it is confirmed together; agree the owner with the partner before presenting.",
-    );
-  }
-  if (f.partnerLed && !f.partnerName) {
-    flags.push(
-      "Partner-led, but the partner is not named. The partner slide cannot say who leads.",
-    );
+    flags.push("The account type is not set on the deal. Confirm it before presenting.");
   }
   if (!f.hasImplementation) {
-    flags.push("There is no implementation yet, so this configuration cannot be saved.");
+    flags.push("There is no implementation yet, so the deck choice cannot be saved.");
   }
-
-  return { included: OPTIONAL_SLIDE_KEYS.filter((k) => k in reasons), reasons, flags };
-}
-
-/** The selection a TIS would see before anything is saved: the recommendation, in default order. */
-export function defaultSelection(recommended: KickoffRecommendation): KickoffSelection {
-  return { included: recommended.included, order: [...OPTIONAL_SLIDE_KEYS] };
-}
-
-/**
- * The selection the presentation uses. A saved selection wins, in full: its
- * included list and order, with any unknown keys dropped and any optional slide
- * the save did not mention placed in default order after the saved ones (and
- * left out of the presentation, since the TIS has seen the list without it).
- */
-export function resolveKickoffSelection(
-  saved: { included: string[]; order: string[] } | null | undefined,
-  recommended: KickoffRecommendation,
-): KickoffSelection {
-  if (!saved) return defaultSelection(recommended);
-  const order = dedupe([
-    ...saved.order.filter((k) => KNOWN.has(k) && !CORE_SLIDE_KEYS.includes(k)),
-    ...OPTIONAL_SLIDE_KEYS,
-  ]);
-  const included = new Set(
-    saved.included.filter((k) => KNOWN.has(k) && !CORE_SLIDE_KEYS.includes(k)),
-  );
-  return { included: order.filter((k) => included.has(k)), order };
-}
-
-/** The optional keys in the order they are presented: zones in library order, the TIS's order within each. */
-export function presentedOptionalKeys(selection: KickoffSelection): string[] {
-  const included = new Set(selection.included);
-  const out: string[] = [];
-  for (const zone of ["before", "after"] as const) {
-    for (const key of selection.order) {
-      if (!included.has(key)) continue;
-      if (KICKOFF_SLIDES.find((s) => s.key === key)?.zone === zone) out.push(key);
+  if (deckType === "partner" && !f.partnerName) {
+    flags.push(
+      "Partner-led, but the partner is not named. The partner slides cannot say who leads.",
+    );
+  }
+  if (deckType === "partner") {
+    flags.push(
+      "The approved partner journey does not name who owns Technical Solutions work. Agree the owner with the partner before presenting.",
+    );
+  }
+  if (deckType !== "partner") {
+    if (!f.firstFormNamed) {
+      flags.push("No first form is named, so the form slide cannot be shown. Name it first.");
+    } else if (!f.firstFormConfirmed) {
+      flags.push(
+        "The first form was read from the paperwork and is not confirmed. Confirm it is ready before showing the form slide.",
+      );
     }
   }
-  return out;
+  if (f.solutionsInvolved === true && f.additionalSolutions.length === 0) {
+    flags.push(
+      "Solutions were sold but no additional solutions are listed, so slide A is left out. Add them to the plan if they exist.",
+    );
+  }
+  if (f.solutionsInvolved === null && !hasAdditional) {
+    flags.push("Whether solutions were sold is not recorded, so slide A is left out.");
+  }
+
+  return { deckType, deckReason: reason, ambiguous, hasAdditional, flags };
 }
 
+/** A TIS's saved choice for one implementation. Stored in scoping_answers 'kickoff_deck'. */
+export type KickoffChoice = {
+  deckType: KickoffDeckType;
+  /** The TIS confirmed the first form is ready to demonstrate. */
+  formReady: boolean;
+};
+
 /**
- * The presented slide keys, in order: the core start, the optional slides
- * before the journey, the journey, the optional slides after it, and the close.
+ * What the presentation shows. Null when the deck type is not settled yet (the
+ * presentation is blocked until the TIS chooses it).
  */
-export function presentedSlideKeys(selection: KickoffSelection): string[] {
-  const optional = presentedOptionalKeys(selection);
-  const before = optional.filter((k) => KICKOFF_SLIDES.find((s) => s.key === k)?.zone === "before");
-  const after = optional.filter((k) => KICKOFF_SLIDES.find((s) => s.key === k)?.zone === "after");
-  return [
-    "kickoff-cover",
-    "kickoff-achieve",
-    ...before,
-    "kickoff-journey",
-    ...after,
-    "kickoff-next",
-  ];
-}
+export type KickoffSelection = {
+  deckType: KickoffDeckType;
+  formReady: boolean;
+  hasAdditional: boolean;
+};
 
-/** Move one optional slide up or down within its own zone. Core slides and zone boundaries never move. */
-export function moveWithinZone(order: string[], key: string, direction: -1 | 1): string[] {
-  const zone = KICKOFF_SLIDES.find((s) => s.key === key)?.zone;
-  if (!zone || CORE_SLIDE_KEYS.includes(key)) return order;
-  const inZone = order.filter((k) => KICKOFF_SLIDES.find((s) => s.key === k)?.zone === zone);
-  const at = inZone.indexOf(key);
-  const to = at + direction;
-  if (at < 0 || to < 0 || to >= inZone.length) return order;
-  const swapped = [...inZone];
-  [swapped[at], swapped[to]] = [swapped[to]!, swapped[at]!];
-  // Put the zone's slides back in place, in their new order, around the other zones.
-  let i = 0;
-  return order.map((k) => {
-    if (KICKOFF_SLIDES.find((s) => s.key === k)?.zone !== zone) return k;
-    return swapped[i++]!;
-  });
-}
-
-function dedupe(keys: string[]): string[] {
-  return [...new Set(keys)];
+/**
+ * The selection the presentation uses. A saved choice wins for the deck type and
+ * the form readiness; the purchased additional solutions always come from the
+ * record. A deck type that is neither saved nor recorded resolves to null.
+ */
+export function resolveKickoffSelection(
+  saved: KickoffChoice | null | undefined,
+  recommended: KickoffRecommendation,
+): KickoffSelection | null {
+  const deckType = saved?.deckType ?? recommended.deckType;
+  if (!deckType) return null;
+  return {
+    deckType,
+    formReady: saved?.formReady ?? false,
+    hasAdditional: recommended.hasAdditional,
+  };
 }
 
 /**
- * Whether the Kickoff presentation must be held back: a saved deck configuration
- * did not load. Blocked is the only state the presentation can be in on a read
- * error; it never falls back to the standard or the recommended slides.
+ * The slide keys the presentation shows, in order. Standard: the conditional
+ * slide A after the journey (only with additional solutions) and the first form
+ * after the communication slide (only when ready). Partner: P1 to P6, always.
+ */
+export function presentedSlideKeys(selection: KickoffSelection | null): string[] {
+  if (!selection) return [];
+  if (selection.deckType === "partner") return PARTNER_SLIDES.map((s) => s.key);
+  return STANDARD_SLIDES.filter((s) => {
+    if (s.when === "additional-solutions") return selection.hasAdditional;
+    if (s.when === "form-ready") return selection.formReady;
+    return true;
+  }).map((s) => s.key);
+}
+
+/**
+ * Whether the Kickoff presentation must be held back. It is held when a saved
+ * deck configuration did not load (a read error or malformed data), and when the
+ * deck type is unsettled (the signals disagree and nothing was saved). It never
+ * falls back to a guessed deck.
  */
 export function kickoffDeckBlocked(view: {
-  kickoffDeck?: { loadError: string | null } | null;
+  kickoffDeck?: { loadError: string | null; selection: KickoffSelection | null } | null;
 }): boolean {
-  return Boolean(view.kickoffDeck?.loadError);
+  const deck = view.kickoffDeck;
+  if (!deck) return false;
+  return Boolean(deck.loadError) || deck.selection === null;
 }
 
 /** What the TIS sees about one implementation's Kickoff deck. Internal only; never on the customer's copy. */
 export type KickoffDeckView = {
-  /** Set when a read failed: the message to show, and nothing is replaced silently. Null otherwise. */
+  /** Set when a read failed: the message to show. Null otherwise. */
   loadError: string | null;
-  /** The implementation the configuration is saved against. Null before it exists. */
+  /** The implementation the choice is saved against. Null before it exists. */
   implementationId: string | null;
-  /** The existing deck classification, and why. */
-  kind: "new-logo" | "expansion" | "partner";
-  kindReason: string;
   /** The recommendation, with its reasons and the flags for the TIS. */
   recommended: KickoffRecommendation;
-  /** What the presentation shows: the saved selection, or the recommendation. */
-  selection: KickoffSelection;
-  /** The saved record, or null when the recommendation applies. */
-  saved: { savedAt: string; savedBy: string | null } | null;
-  /** The recommendation has changed since the TIS saved, so the saved selection stands and this is said. */
-  recommendationChanged: boolean;
+  /** What the presentation shows. Null when the deck type is unsettled and must be chosen. */
+  selection: KickoffSelection | null;
+  /** The saved choice, or null when the automatic choice applies. */
+  saved: {
+    savedAt: string;
+    savedBy: string | null;
+    deckType: KickoffDeckType;
+    formReady: boolean;
+  } | null;
   /** Whether the signed-in person may save or reset this deck. Set per viewer by the server; the server still enforces it. */
   canConfigure: boolean;
   /** The partner who leads, by name, when one is named. */
   partnerName: string | null;
-  /** What was bought, for the slides: name, kind and phase only. Nothing internal. */
-  purchased: Array<{ kind: string; name: string; phase: number }>;
+  /** The purchased additional solutions, for slide A: name, kind and phase only. */
+  additional: Array<{ kind: string; name: string; phase: number }>;
+  /** The first form's name when one is named. */
+  firstFormName: string | null;
 };
 
 /**
  * Who may save or reset an implementation's Kickoff deck. Only the presentation
- * setting is governed here; general deal editing, ownership and the kickoff-held
+ * choices are governed here; general deal editing, ownership and the kickoff-held
  * rule are separate and unchanged.
  *   - super_admin, admin, manager: any post-sale implementation.
  *   - implementation: only the implementation they are the assigned primary TIS of.

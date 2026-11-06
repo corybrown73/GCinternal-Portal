@@ -4,9 +4,9 @@ import { z } from "zod";
 import { requireInternalAuth } from "@/integrations/supabase/internal-middleware";
 
 /**
- * Save or reset one implementation's Kickoff deck. The server enforces the test
- * account rule and the role rule (kickoff-slides.server.ts); the page's controls
- * only reflect them.
+ * Save or reset one implementation's Kickoff deck choice (the deck type and whether
+ * the first form is ready). The server enforces the role rule
+ * (kickoff-slides.server.ts); the page's controls only reflect it.
  */
 export const saveKickoffDeckFn = createServerFn({ method: "POST" })
   .middleware([requireInternalAuth])
@@ -15,10 +15,10 @@ export const saveKickoffDeckFn = createServerFn({ method: "POST" })
       .object({
         dealId: z.string().uuid(),
         implementationId: z.string().uuid(),
-        selection: z
+        choice: z
           .object({
-            included: z.array(z.string().max(60)).max(20),
-            order: z.array(z.string().max(60)).max(20),
+            deckType: z.enum(["standard", "partner"]),
+            formReady: z.boolean(),
           })
           .nullable(),
       })
@@ -30,6 +30,6 @@ export const saveKickoffDeckFn = createServerFn({ method: "POST" })
       actorProfileId: context.profile.id,
       dealId: data.dealId,
       implementationId: data.implementationId,
-      selection: data.selection,
+      choice: data.choice,
     });
   });

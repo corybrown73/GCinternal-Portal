@@ -7,10 +7,27 @@
 export function KickoffDeckBlocked({
   message,
   onRetry,
+  reason = "failed",
 }: {
   message: string;
   onRetry: (() => void) | undefined;
+  /** "failed": a read did not load, so retry. "choice": the records disagree and the TIS must pick the deck. */
+  reason?: "failed" | "choice";
 }) {
+  if (reason === "choice") {
+    return (
+      <section role="alert" className="mx-auto max-w-xl px-6 py-10 text-[14px]">
+        <h2 className="text-[16px] font-semibold">
+          The kickoff deck needs a choice before it can be presented
+        </h2>
+        <p className="mt-2">{message}</p>
+        <p className="mt-2 text-muted-foreground">
+          Choose the deck type in the Presenter Workspace, section 7. The presentation is blocked
+          until then, and no deck is guessed in its place.
+        </p>
+      </section>
+    );
+  }
   return (
     <section role="alert" className="mx-auto max-w-xl px-6 py-10 text-[14px]">
       <h2 className="text-[16px] font-semibold">The kickoff slides could not be loaded</h2>

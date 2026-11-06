@@ -140,7 +140,7 @@ function seed(over: Partial<Rows> = {}): Rows {
   };
 }
 
-const DECK = { included: ["kickoff-training"], order: ["kickoff-training", "kickoff-purchased"] };
+const DECK = { deckType: "standard" as const, formReady: true };
 
 let fake: ReturnType<typeof createFakeSupabase>;
 let before: Record<string, string>;
@@ -188,7 +188,7 @@ describe("saving a deck selection", () => {
       actorProfileId: "p-manager",
       dealId: "deal-1",
       implementationId: "impl-1",
-      selection: DECK,
+      choice: DECK,
     });
     const [row] = rowsFor("impl-1");
     expect(row).toMatchObject({
@@ -196,7 +196,7 @@ describe("saving a deck selection", () => {
       answered_by: "p-manager",
       source: "manual",
     });
-    expect(row!["value"]).toMatchObject({ included: DECK.included, order: DECK.order });
+    expect(row!["value"]).toMatchObject({ deck_type: DECK.deckType, form_ready: DECK.formReady });
     expectOnlyTheDeckChanged();
     expect(audits).toEqual([
       expect.objectContaining({
@@ -213,7 +213,7 @@ describe("saving a deck selection", () => {
       actorProfileId: "p-impl",
       dealId: "deal-1",
       implementationId: "impl-1",
-      selection: DECK,
+      choice: DECK,
     });
     expect(rowsFor("impl-1")[0]!["answered_by"]).toBe("p-impl");
     expectOnlyTheDeckChanged();
@@ -225,7 +225,7 @@ describe("saving a deck selection", () => {
       actorProfileId: "p-super",
       dealId: "deal-1",
       implementationId: "impl-2",
-      selection: DECK,
+      choice: DECK,
     });
     expect(rowsFor("impl-2")[0]!["answered_by"]).toBe("p-super");
     expectOnlyTheDeckChanged();
@@ -238,8 +238,8 @@ describe("saving a deck selection", () => {
           implementation_id: "impl-2",
           question_key: "kickoff_deck",
           value: {
-            included: ["kickoff-workflow"],
-            order: ["kickoff-workflow"],
+            deck_type: "standard",
+            form_ready: false,
             saved_at: "2026-11-01T00:00:00.000Z",
           },
           source: "manual",
@@ -252,7 +252,7 @@ describe("saving a deck selection", () => {
       actorProfileId: "p-manager",
       dealId: "deal-1",
       implementationId: "impl-1",
-      selection: DECK,
+      choice: DECK,
     });
     expect(JSON.stringify(rowsFor("impl-2"))).toBe(other);
     expect(rowsFor("impl-1")).toHaveLength(1);
@@ -264,16 +264,19 @@ describe("saving a deck selection", () => {
       actorProfileId: "p-manager",
       dealId: "deal-1",
       implementationId: "impl-1",
-      selection: DECK,
+      choice: DECK,
     });
     await saveKickoffDeck({
       actorProfileId: "p-manager",
       dealId: "deal-1",
       implementationId: "impl-1",
-      selection: { included: [], order: DECK.order },
+      choice: { deckType: "partner" as const, formReady: false },
     });
     expect(rowsFor("impl-1")).toHaveLength(1);
-    expect(rowsFor("impl-1")[0]!["value"]).toMatchObject({ included: [] });
+    expect(rowsFor("impl-1")[0]!["value"]).toMatchObject({
+      deck_type: "partner",
+      form_ready: false,
+    });
   });
 });
 
@@ -284,14 +287,22 @@ describe("resetting a deck selection", () => {
         {
           implementation_id: "impl-1",
           question_key: "kickoff_deck",
-          value: { ...DECK, saved_at: "2026-11-01T00:00:00.000Z" },
+          value: {
+            deck_type: DECK.deckType,
+            form_ready: DECK.formReady,
+            saved_at: "2026-11-01T00:00:00.000Z",
+          },
           source: "manual",
           answered_by: "p-manager",
         },
         {
           implementation_id: "impl-2",
           question_key: "kickoff_deck",
-          value: { ...DECK, saved_at: "2026-11-01T00:00:00.000Z" },
+          value: {
+            deck_type: DECK.deckType,
+            form_ready: DECK.formReady,
+            saved_at: "2026-11-01T00:00:00.000Z",
+          },
           source: "manual",
           answered_by: "p-other-impl",
         },
@@ -301,7 +312,7 @@ describe("resetting a deck selection", () => {
       actorProfileId: "p-manager",
       dealId: "deal-1",
       implementationId: "impl-1",
-      selection: null,
+      choice: null,
     });
     expect(rowsFor("impl-1")).toHaveLength(0);
     expect(rowsFor("impl-2")).toHaveLength(1);
@@ -327,14 +338,14 @@ describe("refusals write nothing", () => {
       actorProfileId: "p-manager",
       dealId: "deal-1",
       implementationId: "impl-1",
-      selection: DECK,
+      choice: DECK,
     });
     expect(rowsFor("impl-1")).toHaveLength(1);
     await saveKickoffDeck({
       actorProfileId: "p-manager",
       dealId: "deal-1",
       implementationId: "impl-1",
-      selection: null,
+      choice: null,
     });
     expect(rowsFor("impl-1")).toHaveLength(0);
     expect(audits.map((a) => a["action"])).toEqual(["kickoff_deck.saved", "kickoff_deck.reset"]);
@@ -347,7 +358,7 @@ describe("refusals write nothing", () => {
         actorProfileId: "p-impl",
         dealId: "deal-1",
         implementationId: "impl-2",
-        selection: DECK,
+        choice: DECK,
       }),
     ).rejects.toThrow(KICKOFF_DECK_REFUSED);
     expect(rowsFor()).toHaveLength(0);
@@ -358,7 +369,11 @@ describe("refusals write nothing", () => {
     const existing = {
       implementation_id: "impl-2",
       question_key: "kickoff_deck",
-      value: { ...DECK, saved_at: "2026-11-01T00:00:00.000Z" },
+      value: {
+        deck_type: DECK.deckType,
+        form_ready: DECK.formReady,
+        saved_at: "2026-11-01T00:00:00.000Z",
+      },
       source: "manual",
       answered_by: "p-other-impl",
     };
@@ -368,7 +383,7 @@ describe("refusals write nothing", () => {
         actorProfileId: "p-impl",
         dealId: "deal-1",
         implementationId: "impl-2",
-        selection: null,
+        choice: null,
       }),
     ).rejects.toThrow(KICKOFF_DECK_REFUSED);
     expect(rowsFor("impl-2")).toHaveLength(1);
@@ -381,7 +396,7 @@ describe("refusals write nothing", () => {
         actorProfileId: "p-sales",
         dealId: "deal-1",
         implementationId: "impl-1",
-        selection: DECK,
+        choice: DECK,
       }),
     ).rejects.toThrow(KICKOFF_DECK_REFUSED);
     await expect(
@@ -389,7 +404,7 @@ describe("refusals write nothing", () => {
         actorProfileId: "p-sales",
         dealId: "deal-1",
         implementationId: "impl-1",
-        selection: null,
+        choice: null,
       }),
     ).rejects.toThrow(KICKOFF_DECK_REFUSED);
     expect(rowsFor()).toHaveLength(0);
@@ -402,7 +417,7 @@ describe("refusals write nothing", () => {
         actorProfileId: "p-manager",
         dealId: "deal-1",
         implementationId: "impl-x",
-        selection: DECK,
+        choice: DECK,
       }),
     ).rejects.toThrow(/not on this deal/);
     expect(rowsFor()).toHaveLength(0);
@@ -417,7 +432,7 @@ describe("refusals write nothing", () => {
         actorProfileId: "p-manager",
         dealId: "deal-1",
         implementationId: "impl-1",
-        selection: DECK,
+        choice: DECK,
       }),
     ).rejects.toThrow();
     expect(audits).toHaveLength(0);
@@ -438,7 +453,7 @@ describe("rollback safety: the saved selection is not in the deal's intake", () 
       actorProfileId: "p-manager",
       dealId: "deal-1",
       implementationId: "impl-1",
-      selection: DECK,
+      choice: DECK,
     });
     expect(fake.store["portal_accounts"]![0]!["intake"]).toEqual({ welcome_hidden_screens: [] });
   });
@@ -449,7 +464,7 @@ describe("rollback safety: the saved selection is not in the deal's intake", () 
       actorProfileId: "p-manager",
       dealId: "deal-1",
       implementationId: "impl-1",
-      selection: DECK,
+      choice: DECK,
     });
     const rowBefore = JSON.stringify(rowsFor("impl-1"));
     await saveDealIntake("p-manager", "deal-1", { welcome_hidden_screens: ["kickoff-next"] });

@@ -12,15 +12,21 @@ vi.mock("@/integrations/supabase/client.server", () => ({ supabaseAdmin: h.forwa
 vi.mock("../server/audit", () => ({ audit: async () => undefined }));
 
 import { readIntake } from "../intake-answers";
-import { kickoffDeckBlocked, presentedSlideKeys, defaultSelection } from "../kickoff-slides";
-import { canConfigureImplementationDeck, kickoffDeckView } from "../kickoff-slides.server";
+import { kickoffDeckBlocked, presentedSlideKeys } from "../kickoff-slides";
+import {
+  canConfigureImplementationDeck,
+  kickoffDeckView,
+  saveKickoffDeck,
+} from "../kickoff-slides.server";
 
 const KEY = "kickoff_deck";
+const PARTNER_TEMPLATE = "tpl-partner";
+const DIRECT_TEMPLATE = "tpl-new-logo";
 
-/** A test deal (flag on the deal), with one current implementation. */
+/** One deal, one current implementation. The journey template and partner key set the deck type signals. */
 function rows(over: Partial<Rows> = {}): Rows {
   return {
-    portal_accounts: [{ id: "deal-1", customer_id: "cust-1", is_test: true }],
+    portal_accounts: [{ id: "deal-1", customer_id: "cust-1", is_test: false }],
     customers: [{ id: "cust-1", is_test: false }],
     implementations: [
       {
@@ -28,21 +34,45 @@ function rows(over: Partial<Rows> = {}): Rows {
         deal_id: "deal-1",
         customer_id: "cust-1",
         owner_id: "tm-owner",
-        journey_template_id: null,
+        journey_template_id: DIRECT_TEMPLATE,
         partner_key: null,
         journey_type: null,
         superseded_by_implementation_id: null,
         created_at: "2026-11-01T00:00:00Z",
       },
     ],
-    journey_templates: [],
+    journey_templates: [
+      { id: DIRECT_TEMPLATE, key: "new-logo" },
+      { id: PARTNER_TEMPLATE, key: "partner-implementation" },
+    ],
     portal_profiles: [
       {
         id: "profile-7",
-        full_name: "Test Specialist",
-        email: "t@example.test",
+        full_name: "Test Manager",
+        email: "m@example.test",
         role: "manager",
         team_member_id: "tm-m",
+      },
+      {
+        id: "profile-tis",
+        full_name: "Owner TIS",
+        email: "t@example.test",
+        role: "implementation",
+        team_member_id: "tm-owner",
+      },
+      {
+        id: "profile-other",
+        full_name: "Other TIS",
+        email: "o@example.test",
+        role: "implementation",
+        team_member_id: "tm-other",
+      },
+      {
+        id: "profile-sales",
+        full_name: "Sales",
+        email: "s@example.test",
+        role: "sales",
+        team_member_id: "tm-sales",
       },
     ],
     scoping_answers: [],
@@ -50,13 +80,9 @@ function rows(over: Partial<Rows> = {}): Rows {
   };
 }
 
-const SAVED = {
-  included: ["kickoff-training"],
-  order: ["kickoff-training"],
-  saved_at: "2026-11-05T10:00:00.000Z",
-};
-const savedRow = (implementationId: string, value: unknown = SAVED, answeredBy = "profile-7") => ({
-  implementation_id: implementationId,
+const SAVED = { deck_type: "standard", form_ready: false, saved_at: "2026-11-05T10:00:00.000Z" };
+const savedRow = (value: unknown = SAVED, answeredBy = "profile-7") => ({
+  implementation_id: "impl-2",
   question_key: KEY,
   value,
   source: "manual",
@@ -69,11 +95,17 @@ function use(r: Rows, fail: TableFailures = {}) {
   h.supabase.client = fake.client;
 }
 
-const baseArgs = { dealId: "deal-1", firstFormNamed: false, firstFormConfirmed: false };
+const baseArgs = {
+  dealId: "deal-1",
+  firstFormNamed: true,
+  firstFormConfirmed: true,
+  firstFormName: "Site Check",
+};
 const intake = (extra: Record<string, unknown> = {}) =>
   readIntake({
-    solutions_involved: true,
-    timeline: { services: [{ id: "s1", kind: "integration", name: "QuickBooks", phase: 2 }] },
+    path: "new_logo",
+    solutions_involved: false,
+    timeline: { services: [] },
     ...extra,
   });
 
@@ -81,228 +113,243 @@ beforeEach(() => {
   h.supabase.client = null;
 });
 
-describe("the builder reaches every deal with an implementation, and no test-only gate", () => {
-  it("a deal that is not a test account gets the deck, read like any other", async () => {
-    use(
-      rows({
-        portal_accounts: [{ id: "deal-1", customer_id: "cust-1", is_test: false }],
-        customers: [{ id: "cust-1", is_test: false }],
-      }),
-    );
-    const view = await kickoffDeckView({ ...baseArgs, intake: intake() });
-    expect(view?.loadError).toBeNull();
-    expect(view?.implementationId).toBe("impl-2");
-  });
-
-  it("the flag on the deal or customer makes no difference to whether the deck is read", async () => {
-    use(
-      rows({
-        portal_accounts: [{ id: "deal-1", customer_id: "cust-1", is_test: true }],
-        customers: [{ id: "cust-1", is_test: true }],
-      }),
-    );
-    const testView = await kickoffDeckView({ ...baseArgs, intake: intake() });
-    use(
-      rows({
-        portal_accounts: [{ id: "deal-1", customer_id: "cust-1", is_test: false }],
-        customers: [{ id: "cust-1", is_test: false }],
-      }),
-    );
-    const liveView = await kickoffDeckView({ ...baseArgs, intake: intake() });
-    expect(testView?.recommended).toEqual(liveView?.recommended);
-    expect(testView?.implementationId).toEqual(liveView?.implementationId);
-  });
-
-  it("a deal with no implementation yet has the builder, with nothing to save against", async () => {
-    use(rows({ implementations: [] }));
-    const view = await kickoffDeckView({ ...baseArgs, intake: intake() });
-    expect(view.loadError).toBeNull();
-    expect(view.implementationId).toBeNull();
-  });
-});
-
-describe("a failed read is an explicit error, never a silent recommendation", () => {
-  it("a failed implementation read says so, and offers no recommendation or selection", async () => {
-    use(rows(), { implementations: { message: "column does not exist" } });
-    const view = await kickoffDeckView({ ...baseArgs, intake: intake() });
-    expect(view?.loadError).toMatch(/Could not load the kickoff slides/);
-    expect(view?.recommended.included).toEqual([]);
-    expect(view?.saved).toBeNull();
-    expect(view?.canConfigure).toBe(false);
-  });
-
-  it("a failed read of the saved selection is an error, not 'nothing saved'", async () => {
-    use(rows({ scoping_answers: [savedRow("impl-2")] }), {
-      scoping_answers: { message: "timeout" },
-    });
-    const view = await kickoffDeckView({ ...baseArgs, intake: intake() });
-    expect(view?.loadError).toMatch(/Could not load/);
-    expect(view?.recommended.included).toEqual([]);
-  });
-
-  it("a saved selection that does not read is an explicit error, not an empty deck", async () => {
-    use(rows({ scoping_answers: [savedRow("impl-2", { included: "not-a-list" })] }));
-    const view = await kickoffDeckView({ ...baseArgs, intake: intake() });
-    expect(view?.loadError).toMatch(/saved slide selection/);
-    expect(view?.selection.included).toEqual([]);
-  });
-
-  it("a failed read of the viewer's permission is reported, not treated as no permission", async () => {
-    use(rows(), { portal_profiles: { message: "boom" } });
-    await expect(canConfigureImplementationDeck("profile-7", "deal-1", "impl-2")).rejects.toThrow(
-      /Could not load/,
-    );
-  });
-
-  it("a deal with no implementation yet reads cleanly, with nothing to save against", async () => {
-    use(rows({ implementations: [] }));
-    const view = await kickoffDeckView({ ...baseArgs, intake: intake() });
-    expect(view?.loadError).toBeNull();
-    expect(view?.implementationId).toBeNull();
-  });
-});
-
-describe("the saved selection takes precedence", () => {
-  it("uses the saved selection for the current implementation, and says the recommendation has changed", async () => {
-    use(rows({ scoping_answers: [savedRow("impl-2")] }));
-    const view = await kickoffDeckView({ ...baseArgs, intake: intake() });
-    expect(view?.selection.included).toEqual(["kickoff-training"]);
-    expect(view?.recommendationChanged).toBe(true);
-    expect(view?.saved).toEqual({ savedAt: SAVED.saved_at, savedBy: "Test Specialist" });
-  });
-
-  it("never applies a selection saved against a different implementation", async () => {
-    use(rows({ scoping_answers: [savedRow("impl-1")] }));
-    const view = await kickoffDeckView({ ...baseArgs, intake: intake() });
-    expect(view?.saved).toBeNull();
-    expect(view?.recommendationChanged).toBe(false);
-  });
-
-  it("uses the recommendation when nothing is saved, with no error", async () => {
+describe("the automatic deck: direct GoCanvas is standard, a partner implementation is partner", () => {
+  it("a direct implementation with no saved choice presents the standard core slides", async () => {
     use(rows());
     const view = await kickoffDeckView({ ...baseArgs, intake: intake() });
-    expect(view?.loadError).toBeNull();
-    expect(view?.saved).toBeNull();
+    expect(view.loadError).toBeNull();
+    expect(view.selection).toEqual({
+      deckType: "standard",
+      formReady: false,
+      hasAdditional: false,
+    });
+    expect(presentedSlideKeys(view.selection)).not.toContain("kickoff-form-v1");
+    expect(view.saved).toBeNull();
   });
-});
 
-describe("the view carries the facts the deck needs", () => {
-  it("carries what was bought as name, kind and phase only", async () => {
+  it("a partner implementation whose record and journey agree gets the partner deck, with the partner named", async () => {
+    use(
+      rows({
+        implementations: [
+          {
+            ...rows()["implementations"]![0]!,
+            journey_template_id: PARTNER_TEMPLATE,
+            partner_key: "field_fusion_iq",
+          },
+        ],
+      }),
+    );
+    const view = await kickoffDeckView({
+      ...baseArgs,
+      intake: intake({ path: "partner_implementation" }),
+    });
+    expect(view.selection?.deckType).toBe("partner");
+    expect(view.partnerName).toBe("Field Fusion IQ");
+    expect(presentedSlideKeys(view.selection)).toHaveLength(6);
+  });
+
+  it("additional solutions come from the record, never training or the paid form", async () => {
     use(rows());
     const view = await kickoffDeckView({
       ...baseArgs,
-      intake: readIntake({
+      intake: intake({
+        solutions_involved: true,
         timeline: {
           services: [
-            { id: "s1", kind: "integration", name: "QuickBooks", phase: 2, needs: "Internal note" },
+            { id: "a", kind: "training", name: "Crew training", phase: 1 },
+            { id: "b", kind: "paid_form", name: "Form build", phase: 1 },
+            { id: "c", kind: "integration", name: "QuickBooks", phase: 2 },
           ],
         },
       }),
     });
-    expect(view?.purchased).toEqual([{ kind: "integration", name: "QuickBooks", phase: 2 }]);
-    expect(JSON.stringify(view?.purchased)).not.toMatch(/Internal note/);
-  });
-
-  it("names the partner from the explicit partner on the deal", async () => {
-    use(rows());
-    const view = await kickoffDeckView({
-      ...baseArgs,
-      intake: readIntake({ partner_implementation: { partner_key: "field_fusion_iq" } }),
-    });
-    expect(view?.partnerName).toBe("Field Fusion IQ");
+    expect(view.additional.map((s) => s.name)).toEqual(["QuickBooks"]);
+    expect(view.selection?.hasAdditional).toBe(true);
   });
 });
 
-describe("whether the viewer may configure the deck", () => {
-  const people = [
-    { id: "p-manager", role: "manager", team_member_id: "tm-manager" },
-    { id: "p-admin", role: "admin", team_member_id: null },
-    { id: "p-impl", role: "implementation", team_member_id: "tm-owner" },
-    { id: "p-other-impl", role: "implementation", team_member_id: "tm-other" },
-    { id: "p-sales", role: "sales", team_member_id: "tm-owner" },
-  ];
-  const seeded = () => rows({ portal_profiles: people as never });
-
-  it("management may configure any implementation on the deal", async () => {
-    use(seeded());
-    expect(await canConfigureImplementationDeck("p-manager", "deal-1", "impl-2")).toBe(true);
-    expect(await canConfigureImplementationDeck("p-admin", "deal-1", "impl-2")).toBe(true);
-  });
-
-  it("the assigned implementation specialist may configure their own implementation only", async () => {
-    use(seeded());
-    expect(await canConfigureImplementationDeck("p-impl", "deal-1", "impl-2")).toBe(true);
-    expect(await canConfigureImplementationDeck("p-other-impl", "deal-1", "impl-2")).toBe(false);
-  });
-
-  it("no other role may configure, even as the named owner", async () => {
-    use(seeded());
-    expect(await canConfigureImplementationDeck("p-sales", "deal-1", "impl-2")).toBe(false);
-  });
-});
-
-describe("a saved deck that did not load blocks the presentation; a retry clears it", () => {
-  it("a database error on the saved selection blocks the presentation", async () => {
-    use(rows({ scoping_answers: [savedRow("impl-2")] }), {
-      scoping_answers: { message: "timeout" },
-    });
-    const view = await kickoffDeckView({ ...baseArgs, intake: intake() });
-    expect(kickoffDeckBlocked({ kickoffDeck: view })).toBe(true);
-  });
-
-  it("malformed stored data blocks the presentation rather than presenting an empty deck", async () => {
-    use(rows({ scoping_answers: [savedRow("impl-2", { included: 7 })] }));
-    const view = await kickoffDeckView({ ...baseArgs, intake: intake() });
-    expect(view?.loadError).toMatch(/saved slide selection/);
-    expect(kickoffDeckBlocked({ kickoffDeck: view })).toBe(true);
-  });
-
-  it("a retry after the failure, with the database answering, loads the saved selection and unblocks", async () => {
-    // First attempt: the read fails.
-    use(rows({ scoping_answers: [savedRow("impl-2")] }), {
-      scoping_answers: { message: "timeout" },
-    });
-    const failedAttempt = await kickoffDeckView({ ...baseArgs, intake: intake() });
-    expect(kickoffDeckBlocked({ kickoffDeck: failedAttempt })).toBe(true);
-
-    // The retry: the same deal, the database now answers.
-    use(rows({ scoping_answers: [savedRow("impl-2")] }));
-    const retried = await kickoffDeckView({ ...baseArgs, intake: intake() });
-    expect(kickoffDeckBlocked({ kickoffDeck: retried })).toBe(false);
-    expect(retried?.selection.included).toEqual(["kickoff-training"]);
-    expect(retried?.saved).not.toBeNull();
-  });
-
-  it("a retry that still fails stays blocked", async () => {
-    use(rows(), { implementations: { message: "still down" } });
-    const first = await kickoffDeckView({ ...baseArgs, intake: intake() });
-    const second = await kickoffDeckView({ ...baseArgs, intake: intake() });
-    expect(kickoffDeckBlocked({ kickoffDeck: first })).toBe(true);
-    expect(kickoffDeckBlocked({ kickoffDeck: second })).toBe(true);
-  });
-});
-
-describe("normal configurations are not blocked", () => {
-  it("an unsaved configuration on a successful read is not blocked, and uses the normal default", async () => {
-    use(rows());
-    const view = await kickoffDeckView({ ...baseArgs, intake: intake() });
-    expect(kickoffDeckBlocked({ kickoffDeck: view })).toBe(false);
-    expect(view?.saved).toBeNull();
-    expect(view?.selection).toEqual(defaultSelection(view!.recommended));
-    // The presentation is the normal default selection, not an empty deck.
-    expect(presentedSlideKeys(view!.selection)).toContain("kickoff-cover");
-    expect(presentedSlideKeys(view!.selection)).toContain("kickoff-next");
-  });
-
-  it("a customer's deal that is not a test account is not blocked, and gets its recommendation", async () => {
+describe("ambiguous deck type is surfaced, and the presentation is blocked until the TIS chooses", () => {
+  it("a partner key with a direct journey template is ambiguous: no selection, blocked", async () => {
     use(
       rows({
-        portal_accounts: [{ id: "deal-1", customer_id: "cust-1", is_test: false }],
-        customers: [{ id: "cust-1", is_test: false }],
+        implementations: [{ ...rows()["implementations"]![0]!, partner_key: "field_fusion_iq" }],
       }),
     );
     const view = await kickoffDeckView({ ...baseArgs, intake: intake() });
+    expect(view.loadError).toBeNull();
+    expect(view.selection).toBeNull();
+    expect(view.recommended.ambiguous).toBe(true);
+    expect(kickoffDeckBlocked({ kickoffDeck: view })).toBe(true);
+  });
+
+  it("the TIS's saved deck type settles it, and the presentation is no longer blocked", async () => {
+    use(
+      rows({
+        implementations: [{ ...rows()["implementations"]![0]!, partner_key: "field_fusion_iq" }],
+        scoping_answers: [
+          savedRow({ deck_type: "partner", form_ready: false, saved_at: SAVED.saved_at }),
+        ],
+      }),
+    );
+    const view = await kickoffDeckView({ ...baseArgs, intake: intake() });
+    expect(view.selection?.deckType).toBe("partner");
     expect(kickoffDeckBlocked({ kickoffDeck: view })).toBe(false);
-    expect(view.recommended.included.length).toBeGreaterThan(0);
+  });
+});
+
+describe("the saved choice wins for the deck type and the form readiness", () => {
+  it("a saved form-ready choice presents the first form, with who saved it", async () => {
+    use(rows({ scoping_answers: [savedRow({ ...SAVED, form_ready: true })] }));
+    const view = await kickoffDeckView({ ...baseArgs, intake: intake() });
+    expect(view.selection?.formReady).toBe(true);
+    expect(presentedSlideKeys(view.selection)).toContain("kickoff-form-v1");
+    expect(view.saved).toMatchObject({
+      deckType: "standard",
+      formReady: true,
+      savedBy: "Test Manager",
+    });
+  });
+
+  it("the first-form name is shown only when a first form is named", async () => {
+    use(rows());
+    const named = await kickoffDeckView({ ...baseArgs, intake: intake() });
+    expect(named.firstFormName).toBe("Site Check");
+    const none = await kickoffDeckView({
+      ...baseArgs,
+      firstFormNamed: false,
+      firstFormName: null,
+      intake: intake(),
+    });
+    expect(none.firstFormName).toBeNull();
+    expect(none.recommended.flags.join(" ")).toMatch(/No first form is named/);
+  });
+});
+
+describe("a failed or malformed read blocks the presentation with an explicit error", () => {
+  it("a failed implementation read is an error, not a recommendation", async () => {
+    use(rows(), { implementations: { message: "column does not exist" } });
+    const view = await kickoffDeckView({ ...baseArgs, intake: intake() });
+    expect(view.loadError).toMatch(/kickoff deck/);
+    expect(view.selection).toBeNull();
+    expect(kickoffDeckBlocked({ kickoffDeck: view })).toBe(true);
+  });
+
+  it("a failed read of the saved choice is an error, not 'nothing saved'", async () => {
+    use(rows(), { scoping_answers: { message: "permission denied" } });
+    const view = await kickoffDeckView({ ...baseArgs, intake: intake() });
+    expect(view.loadError).toBeTruthy();
+    expect(view.selection).toBeNull();
+  });
+
+  it("a malformed saved row is an explicit error, never a guessed deck", async () => {
+    use(rows({ scoping_answers: [savedRow({ included: ["kickoff-training"], order: [] })] }));
+    const view = await kickoffDeckView({ ...baseArgs, intake: intake() });
+    expect(view.loadError).toBeTruthy();
+    expect(view.selection).toBeNull();
+    expect(kickoffDeckBlocked({ kickoffDeck: view })).toBe(true);
+  });
+});
+
+describe("who may configure the deck", () => {
+  it("managers may configure any implementation on the deal", async () => {
+    use(rows());
+    expect(await canConfigureImplementationDeck("profile-7", "deal-1", "impl-2")).toBe(true);
+  });
+
+  it("the implementation's own TIS may, another TIS may not, and sales may not", async () => {
+    use(rows());
+    expect(await canConfigureImplementationDeck("profile-tis", "deal-1", "impl-2")).toBe(true);
+    expect(await canConfigureImplementationDeck("profile-other", "deal-1", "impl-2")).toBe(false);
+    expect(await canConfigureImplementationDeck("profile-sales", "deal-1", "impl-2")).toBe(false);
+  });
+});
+
+describe("saving writes only the deck choice, and only for someone allowed to", () => {
+  it("a manager's save writes the deck type and form readiness, and nothing else", async () => {
+    use(rows());
+    const before = JSON.stringify({
+      implementations: fake.store["implementations"]!,
+      journey_templates: fake.store["journey_templates"],
+    });
+    await saveKickoffDeck({
+      actorProfileId: "profile-7",
+      dealId: "deal-1",
+      implementationId: "impl-2",
+      choice: { deckType: "standard", formReady: true },
+    });
+    const row = (fake.store["scoping_answers"] ?? []).find((r: any) => r.question_key === KEY);
+    expect(row).toMatchObject({
+      implementation_id: "impl-2",
+      question_key: KEY,
+      source: "manual",
+      answered_by: "profile-7",
+      value: { deck_type: "standard", form_ready: true },
+    });
+    const after = JSON.stringify({
+      implementations: fake.store["implementations"]!,
+      journey_templates: fake.store["journey_templates"],
+    });
+    expect(after).toBe(before);
+  });
+
+  it("the implementation's own TIS may save their deck", async () => {
+    use(rows());
+    await expect(
+      saveKickoffDeck({
+        actorProfileId: "profile-tis",
+        dealId: "deal-1",
+        implementationId: "impl-2",
+        choice: { deckType: "standard", formReady: false },
+      }),
+    ).resolves.toMatchObject({ saved: true });
+  });
+
+  it("another TIS, or sales, is refused and nothing is written", async () => {
+    use(rows());
+    await expect(
+      saveKickoffDeck({
+        actorProfileId: "profile-other",
+        dealId: "deal-1",
+        implementationId: "impl-2",
+        choice: { deckType: "standard", formReady: true },
+      }),
+    ).rejects.toThrow(/Only an administrator, a manager, or the TIS/);
+    await expect(
+      saveKickoffDeck({
+        actorProfileId: "profile-sales",
+        dealId: "deal-1",
+        implementationId: "impl-2",
+        choice: { deckType: "standard", formReady: true },
+      }),
+    ).rejects.toThrow(/Only an administrator, a manager, or the TIS/);
+    expect(fake.store["scoping_answers"] ?? []).toEqual([]);
+  });
+
+  it("an implementation that is not on this deal is refused", async () => {
+    use(rows());
+    await expect(
+      saveKickoffDeck({
+        actorProfileId: "profile-7",
+        dealId: "deal-1",
+        implementationId: "impl-elsewhere",
+        choice: { deckType: "standard", formReady: true },
+      }),
+    ).rejects.toThrow(/not on this deal/);
+  });
+
+  it("a reset removes the saved choice, so the automatic deck applies again", async () => {
+    use(rows({ scoping_answers: [savedRow({ ...SAVED, form_ready: true })] }));
+    await saveKickoffDeck({
+      actorProfileId: "profile-7",
+      dealId: "deal-1",
+      implementationId: "impl-2",
+      choice: null,
+    });
+    expect((fake.store["scoping_answers"] ?? []).some((r: any) => r.question_key === KEY)).toBe(
+      false,
+    );
+    const view = await kickoffDeckView({ ...baseArgs, intake: intake() });
+    expect(view.saved).toBeNull();
+    expect(view.selection?.formReady).toBe(false);
   });
 });

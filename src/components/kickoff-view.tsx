@@ -33,23 +33,19 @@ import { shortDay } from "@/lib/onboarding-timeline";
 import { cn } from "@/lib/utils";
 import type { WelcomeView } from "@/lib/welcome";
 import { HANDOFF_ROLES, partnerStage } from "@/lib/partner-implementation";
-import { kickoffFocusContent } from "@/lib/kickoff-view";
-import {
-  defaultSelection,
-  presentedSlideKeys,
-  recommendKickoffSlides,
-  type KickoffFacts,
-} from "@/lib/kickoff-slides";
+import { presentedSlideKeys, type KickoffSelection } from "@/lib/kickoff-slides";
 
 /**
  * KICKOFF VIEW — the six customer-facing Kickoff slides, composed from the
  * same WelcomeView the living Plan already reads. One implementation, two
  * views: this file adds the second composition, never a second data model.
  *
- * SIX FIXED SCREENS, always, for every account, in this order: Welcome, Your
- * workflow, Your implementation journey, What we expect from each other,
- * Let's work on Form V1, Before we meet again. Complexity changes the content
- * within a screen, never the number of screens.
+ * THE STANDARD DECK: Welcome, How the work runs, Your journey, We build it
+ * together, Before we meet again, plus two conditional slides: Your additional
+ * solutions (after the journey, only when solutions were bought) and Your first
+ * form (only when the TIS has confirmed it is ready). THE PARTNER DECK: six
+ * slides of its own (P1 to P6), in the same family. Which deck a deal gets, and
+ * which conditional slides it shows, is decided in kickoff-slides.ts.
  *
  * Every slide shows only what the Hub already holds. A missing answer is
  * labelled as something to confirm together, never filled in. Internal
@@ -62,7 +58,6 @@ const longText = (text: string | null) =>
 /* ---------------------------------------------------------- 1. Welcome */
 
 function KickoffCover({ view }: { view: WelcomeView }) {
-  const workflowName = view.firstForm?.name ?? "your workflow";
   const outcome = kickoffBusinessOutcome(view);
   const outcomeConfirmed = kickoffBusinessOutcomeConfirmed(view);
   const graduation = kickoffGraduationTarget(view.journey);
@@ -82,11 +77,11 @@ function KickoffCover({ view }: { view: WelcomeView }) {
       </header>
       <div className="wp-cover-grid">
         <div className="wp-cover-text">
-          <p className="wp-eyebrow">Kickoff · {view.industry ?? "Your team"}</p>
+          <p className="wp-eyebrow">Kickoff · Your team</p>
           <h1 className="wp-title is-hero">
             <T k="kickoff-cover.title">Let's bring</T>{" "}
-            <span className={cn("wp-accent", workflowName.length > 24 && "is-long")}>
-              <T k="kickoff-cover.accent">{workflowName}</T>
+            <span className="wp-accent">
+              <T k="kickoff-cover.accent">your workflow</T>
             </span>{" "}
             <T k="kickoff-cover.title-end">to life</T>
           </h1>
@@ -159,7 +154,7 @@ function KickoffCover({ view }: { view: WelcomeView }) {
               <PhoneMock view={view} />
               <span className="wp-photo-cap">
                 <Icon name="Smartphone" className="h-3.5 w-3.5" />
-                {workflowName}, on the phone
+                {view.firstForm?.name ?? "Your workflow"}, on the phone
               </span>
             </div>
           )}
@@ -491,7 +486,8 @@ function MoveColumn({
   );
 }
 
-function KickoffNextMove({ view, page }: { view: WelcomeView; page: number }) {
+/** The next-move body: the action columns, the notes, the next session and the real-world test. */
+function NextMoveBody({ view }: { view: WelcomeView }) {
   const session = nextWorkingSession(view.timeline.milestones);
   const cutoff = session?.booked ? session.date : null;
   const sources = kickoffMoveSources(view);
@@ -504,14 +500,7 @@ function KickoffNextMove({ view, page }: { view: WelcomeView; page: number }) {
   const timezone = view.timeline.timezone ? ` ${view.timeline.timezone}` : "";
 
   return (
-    <Frame
-      k="kickoff-next"
-      page={page}
-      eyebrow="Your next move"
-      title={KICKOFF_NEXT_HEADLINE.title}
-      accent={KICKOFF_NEXT_HEADLINE.accent}
-      lede={KICKOFF_NEXT_LEDE}
-    >
+    <>
       <div className="wp-kick-move">
         <MoveColumn
           title="For us to do"
@@ -558,6 +547,21 @@ function KickoffNextMove({ view, page }: { view: WelcomeView; page: number }) {
         <span className="wp-kick-cta-label">Real-world test</span>
         <span className="wp-kick-cta-text">{nextText}</span>
       </div>
+    </>
+  );
+}
+
+function KickoffNextMove({ view, page }: { view: WelcomeView; page: number }) {
+  return (
+    <Frame
+      k="kickoff-next"
+      page={page}
+      eyebrow="Your next move"
+      title={KICKOFF_NEXT_HEADLINE.title}
+      accent={KICKOFF_NEXT_HEADLINE.accent}
+      lede={KICKOFF_NEXT_LEDE}
+    >
+      <NextMoveBody view={view} />
     </Frame>
   );
 }
@@ -601,136 +605,32 @@ export function kickoffScreenList(view: WelcomeView): Screen[] {
   ];
 }
 
-/* -------------------------------------- Slides added to the Kickoff library */
-
-/** What we're here to achieve: the outcome the customer named, and the focus they agreed. Core. */
-function KickoffAchieve({ view, page }: { view: WelcomeView; page: number }) {
-  const outcome = kickoffBusinessOutcome(view);
-  const outcomeConfirmed = kickoffBusinessOutcomeConfirmed(view);
-  const focus = kickoffFocusContent(view.implementationFocus, view.implementationFocusFallback);
-  const successMeasure = view.intake?.known.find((k) => k.key === "success_measure");
-  const measure =
-    typeof successMeasure?.value === "string" && successMeasure.value.trim()
-      ? successMeasure.value
-      : null;
-  return (
-    <Frame
-      k="kickoff-achieve"
-      page={page}
-      eyebrow="What we're here to achieve"
-      title="The result we are"
-      accent="working toward"
-    >
-      <div className="wp-kick-achieve">
-        <section>
-          <h4>Your goal</h4>
-          <p className="wp-lede">{outcome ?? KICKOFF_TO_CONFIRM}</p>
-          {outcome && !outcomeConfirmed ? (
-            <p className="wp-prepared">We&apos;ll confirm it today.</p>
-          ) : null}
-        </section>
-        <section>
-          <h4>How we will know it worked</h4>
-          <p>{measure ?? KICKOFF_TO_CONFIRM}</p>
-        </section>
-        <section>
-          <h4>What we will focus on</h4>
-          {focus.state === "empty" ? (
-            <p>{KICKOFF_TO_CONFIRM}</p>
-          ) : (
-            <ul>
-              {focus.items.map((item) => (
-                <li key={item}>
-                  <Check className="wp-kick-check" strokeWidth={3} aria-hidden="true" />
-                  <span>{item}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-      </div>
-    </Frame>
-  );
-}
+/* ------------------------------------- Slide A: Your additional solutions */
 
 /**
- * Training and enablement. Only confirmed training is shown as training: the
- * training that was bought, and, on a training plan, that plan's own sessions.
- * The working sessions of a form build are implementation work and are never
- * described here. With nothing confirmed, the slide says so neutrally.
+ * Your additional solutions: the purchased solutions beyond training and the
+ * first form. Name and phase come from the plan. What each one delivers is not
+ * recorded on the plan yet, so it is shown as to confirm together, not invented.
  */
-function KickoffTraining({ view, page }: { view: WelcomeView; page: number }) {
-  const bought = (view.kickoffDeck?.purchased ?? []).filter((s) => s.kind === "training");
-  const trainingPlan = view.timeline.training === true;
-  const sessions = trainingPlan
-    ? view.timeline.milestones.filter((m) => m.kind === "call" && !m.serviceId)
-    : [];
-  const nothingConfirmed = bought.length === 0 && sessions.length === 0;
+function KickoffAdditional({ view, page }: { view: WelcomeView; page: number }) {
+  const items = view.kickoffDeck?.additional ?? [];
   return (
     <Frame
-      k="kickoff-training"
+      k="kickoff-additional"
       page={page}
-      eyebrow="Training and enablement"
-      title="Getting the crew"
-      accent="ready to work"
-    >
-      {nothingConfirmed ? (
-        <p>Training is to be confirmed together.</p>
-      ) : (
-        <div className="wp-kick-achieve">
-          {bought.length ? (
-            <section>
-              <h4>Training you bought</h4>
-              <ul>
-                {bought.map((s) => (
-                  <li key={s.name}>
-                    <Check className="wp-kick-check" strokeWidth={3} aria-hidden="true" />
-                    <span>{s.name}</span>
-                  </li>
-                ))}
-              </ul>
-            </section>
-          ) : null}
-          {sessions.length ? (
-            <section>
-              <h4>Training sessions</h4>
-              <ul>
-                {sessions.map((m) => (
-                  <li key={m.key}>
-                    <span>
-                      {m.label}
-                      {m.time ? ` · ${shortDay(m.date)}` : " · date to confirm together"}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </section>
-          ) : null}
-        </div>
-      )}
-    </Frame>
-  );
-}
-
-/** Purchased solutions and deliverables: what was bought beyond training. Optional. */
-function KickoffPurchased({ view, page }: { view: WelcomeView; page: number }) {
-  const items = (view.kickoffDeck?.purchased ?? []).filter((s) => s.kind !== "training");
-  return (
-    <Frame
-      k="kickoff-purchased"
-      page={page}
-      eyebrow="What you are getting"
-      title="Purchased solutions"
-      accent="and deliverables"
+      eyebrow="Your additional solutions"
+      title="Your additional"
+      accent="solutions."
     >
       {items.length ? (
         <ul className="wp-kick-achieve">
           {items.map((s) => (
-            <li key={s.name}>
+            <li key={`${s.kind}-${s.name}`}>
               <Check className="wp-kick-check" strokeWidth={3} aria-hidden="true" />
               <span>
                 {s.name}
                 <small> · Phase {s.phase}</small>
+                <small> · What it delivers: {KICKOFF_TO_CONFIRM}</small>
               </span>
             </li>
           ))}
@@ -742,29 +642,121 @@ function KickoffPurchased({ view, page }: { view: WelcomeView; page: number }) {
   );
 }
 
-/**
- * Working with your partner: the partner's responsibilities and GoCanvas
- * Implementation's, in the approved partner journey's own words. Technical
- * Solutions ownership is not on this slide: the approved journey does not state
- * a customer-facing responsibility for it, so it is not presented as a decision.
- * The approved technical escalation line stays with the partner.
- */
-function KickoffPartner({ view, page }: { view: WelcomeView; page: number }) {
+/* ------------------------------------------------ Partner deck: P1 to P6 */
+
+const PARTNER_JOURNEY_KEYS = ["form_finalisation", "pilot", "trial_run", "roll_out"] as const;
+
+/** P1: Let's get your implementation moving. */
+function PartnerWelcome({ view, page }: { view: WelcomeView; page: number }) {
   const partner = view.kickoffDeck?.partnerName ?? null;
-  const [gocanvasOwns, partnerRemains] = HANDOFF_ROLES.after.split("; ");
   return (
     <Frame
-      k="kickoff-partner"
+      k="partner-welcome"
       page={page}
-      eyebrow="Working with your partner"
-      title="Who does what,"
-      accent={partner ?? "with your partner"}
+      eyebrow="Kickoff · Partner implementation"
+      title="Let's get your"
+      accent="implementation moving."
+      lede={`${view.clientName}, with ${partner ?? KICKOFF_TO_CONFIRM} leading and GoCanvas alongside.`}
+    >
+      {null}
+    </Frame>
+  );
+}
+
+/** P2: Here's where we're starting. The goal, and what is already in place as recorded. */
+function PartnerStart({ view, page }: { view: WelcomeView; page: number }) {
+  const outcome = kickoffBusinessOutcome(view);
+  const partner = view.kickoffDeck?.partnerName ?? null;
+  const additional = view.kickoffDeck?.additional ?? [];
+  return (
+    <Frame
+      k="partner-start"
+      page={page}
+      eyebrow="Where we're starting"
+      title="Here's where"
+      accent="we're starting."
     >
       <div className="wp-kick-achieve">
         <section>
-          <h4>{partner ?? "Your partner"}</h4>
+          <h4>Your goal</h4>
+          <p className="wp-lede">{outcome ?? KICKOFF_TO_CONFIRM}</p>
+        </section>
+        <section>
+          <h4>What's already in place</h4>
           <ul>
-            <li>{partnerStage("partner_setup").description}</li>
+            <li>Led by {partner ?? KICKOFF_TO_CONFIRM}</li>
+            <li>
+              {view.firstForm?.name
+                ? `First form: ${view.firstForm.name}`
+                : `First form: ${KICKOFF_TO_CONFIRM}`}
+            </li>
+            {additional.map((s) => (
+              <li key={`${s.kind}-${s.name}`}>
+                {s.name} · Phase {s.phase}
+              </li>
+            ))}
+          </ul>
+        </section>
+      </div>
+    </Frame>
+  );
+}
+
+/** P3: From kickoff to rollout, here's our plan. Four stages, no dates unless they are recorded. */
+function PartnerJourney({ page }: { page: number }) {
+  return (
+    <Frame
+      k="partner-journey"
+      page={page}
+      eyebrow="Your path to rollout"
+      title="From kickoff to rollout,"
+      accent="here's our plan."
+    >
+      <ol className="wp-kick-steps">
+        {PARTNER_JOURNEY_KEYS.map((key, index) => (
+          <li key={key}>
+            <span className="wp-step-no">{index + 1}</span>
+            <div>
+              <b>{partnerStage(key).label}</b>
+              <p>{partnerStage(key).description}</p>
+            </div>
+          </li>
+        ))}
+      </ol>
+    </Frame>
+  );
+}
+
+/** P4: Three teams. One shared outcome. Each team's part, as the plan records it. */
+function PartnerTogether({ view, page }: { view: WelcomeView; page: number }) {
+  const partner = view.kickoffDeck?.partnerName ?? null;
+  const [gocanvasOwns, partnerRemains] = HANDOFF_ROLES.after.split("; ");
+  const session = nextWorkingSession(view.timeline.milestones);
+  const people = [view.team.lead, view.team.champion?.name ?? null].filter((name): name is string =>
+    Boolean(name),
+  );
+  return (
+    <Frame
+      k="partner-together"
+      page={page}
+      eyebrow="How we work together"
+      title="Three teams."
+      accent="One shared outcome."
+    >
+      <div className="wp-kick-achieve">
+        <section>
+          <h4>GoCanvas Implementation</h4>
+          <ul>
+            {gocanvasOwns ? <li>{gocanvasOwns}.</li> : null}
+            {PARTNER_JOURNEY_KEYS.map((key) => (
+              <li key={key}>{partnerStage(key).description}</li>
+            ))}
+          </ul>
+        </section>
+        <section>
+          <h4>Your Partner Technical Team</h4>
+          <ul>
+            <li>{partner ?? KICKOFF_TO_CONFIRM}</li>
             <li>{HANDOFF_ROLES.before}</li>
             {partnerRemains ? (
               <li>The partner {partnerRemains.replace(/^the partner /, "")}</li>
@@ -772,15 +764,78 @@ function KickoffPartner({ view, page }: { view: WelcomeView; page: number }) {
           </ul>
         </section>
         <section>
-          <h4>GoCanvas Implementation</h4>
-          <ul>
-            {gocanvasOwns ? <li>{gocanvasOwns}.</li> : null}
-            {(["form_finalisation", "pilot", "trial_run", "roll_out"] as const).map((key) => (
-              <li key={key}>{partnerStage(key).description}</li>
-            ))}
-          </ul>
+          <h4>Your Team</h4>
+          {people.length ? (
+            <ul>
+              {people.map((name) => (
+                <li key={name}>{name}</li>
+              ))}
+            </ul>
+          ) : (
+            <p>{KICKOFF_TO_CONFIRM}</p>
+          )}
+        </section>
+        <section>
+          <h4>How we'll stay aligned</h4>
+          <p>
+            {session?.booked && session.time
+              ? `Next working session: ${session.label} · ${shortDay(session.date)} at ${session.time}`
+              : "Next working session: To be scheduled."}
+          </p>
         </section>
       </div>
+    </Frame>
+  );
+}
+
+/** P5: What do we need to prove works? Workflow, information, people, result. */
+function PartnerProof({ view, page }: { view: WelcomeView; page: number }) {
+  const outcome = kickoffBusinessOutcome(view);
+  const people = [view.team.lead, view.team.champion?.name ?? null].filter((name): name is string =>
+    Boolean(name),
+  );
+  return (
+    <Frame
+      k="partner-proof"
+      page={page}
+      eyebrow="What we need to prove"
+      title="What do we need to"
+      accent="prove works?"
+    >
+      <div className="wp-kick-achieve">
+        <section>
+          <h4>Workflow</h4>
+          <p>{view.firstForm?.name ?? KICKOFF_TO_CONFIRM}</p>
+        </section>
+        <section>
+          <h4>Information</h4>
+          <p>{KICKOFF_TO_CONFIRM}</p>
+        </section>
+        <section>
+          <h4>People</h4>
+          {people.length ? <p>{people.join(", ")}</p> : <p>{KICKOFF_TO_CONFIRM}</p>}
+        </section>
+        <section>
+          <h4>Result</h4>
+          <p>{outcome ?? KICKOFF_TO_CONFIRM}</p>
+        </section>
+      </div>
+    </Frame>
+  );
+}
+
+/** P6: Here's what happens next. The same action table as the standard closing slide. */
+function PartnerNext({ view, page }: { view: WelcomeView; page: number }) {
+  return (
+    <Frame
+      k="partner-next"
+      page={page}
+      eyebrow="Your next move"
+      title="Here's what"
+      accent="happens next."
+      lede={KICKOFF_NEXT_LEDE}
+    >
+      <NextMoveBody view={view} />
     </Frame>
   );
 }
@@ -790,42 +845,63 @@ export function kickoffLibrary(view: WelcomeView): Record<string, Screen> {
   const six = Object.fromEntries(kickoffScreenList(view).map((sc) => [sc.key, sc]));
   return {
     ...six,
-    "kickoff-achieve": {
-      key: "kickoff-achieve",
-      label: "What we're here to achieve",
-      render: (a) => <KickoffAchieve key="kickoff-achieve" view={view} page={a.page} />,
+    "kickoff-additional": {
+      key: "kickoff-additional",
+      label: "Your additional solutions",
+      render: (a) => <KickoffAdditional key="kickoff-additional" view={view} page={a.page} />,
     },
-    "kickoff-training": {
-      key: "kickoff-training",
-      label: "Training and enablement",
-      render: (a) => <KickoffTraining key="kickoff-training" view={view} page={a.page} />,
+    "partner-welcome": {
+      key: "partner-welcome",
+      label: "Let's get your implementation moving.",
+      render: (a) => <PartnerWelcome key="partner-welcome" view={view} page={a.page} />,
     },
-    "kickoff-purchased": {
-      key: "kickoff-purchased",
-      label: "Purchased solutions and deliverables",
-      render: (a) => <KickoffPurchased key="kickoff-purchased" view={view} page={a.page} />,
+    "partner-start": {
+      key: "partner-start",
+      label: "Here's where we're starting.",
+      render: (a) => <PartnerStart key="partner-start" view={view} page={a.page} />,
     },
-    "kickoff-partner": {
-      key: "kickoff-partner",
-      label: "Working with your partner",
-      render: (a) => <KickoffPartner key="kickoff-partner" view={view} page={a.page} />,
+    "partner-journey": {
+      key: "partner-journey",
+      label: "From kickoff to rollout, here's our plan.",
+      render: (a) => <PartnerJourney key="partner-journey" page={a.page} />,
+    },
+    "partner-together": {
+      key: "partner-together",
+      label: "Three teams. One shared outcome.",
+      render: (a) => <PartnerTogether key="partner-together" view={view} page={a.page} />,
+    },
+    "partner-proof": {
+      key: "partner-proof",
+      label: "What do we need to prove works?",
+      render: (a) => <PartnerProof key="partner-proof" view={view} page={a.page} />,
+    },
+    "partner-next": {
+      key: "partner-next",
+      label: "Here's what happens next.",
+      render: (a) => <PartnerNext key="partner-next" view={view} page={a.page} />,
     },
   } as Record<string, Screen>;
 }
 
 /**
- * The screens the Kickoff deck presents for this implementation: exactly the
- * selected slides, in presentation order, with the core slides always present.
- * Without a deck view (nothing to select from), the six original screens.
+ * The screens the Kickoff presentation shows, in presentation order. An internal
+ * view with a deck shows exactly its selection. A deck that did not load, or whose
+ * deck type is unsettled, shows nothing: the presentation is blocked
+ * (kickoffDeckBlocked). With no deck at all (not an internal view), the standard
+ * deck shows its core slides only: nothing confirmed, so no conditional slide.
  */
 export function kickoffScreensFor(view: WelcomeView): Screen[] {
-  // No deck at all (a live customer, which the builder does not reach): the
-  // standard slides, as before. A deck that did not load presents nothing: the
-  // presentation is blocked until it loads (see kickoffDeckBlocked).
-  if (!view.kickoffDeck) return kickoffScreenList(view);
-  if (view.kickoffDeck.loadError) return [];
+  const deck = view.kickoffDeck;
+  if (deck?.loadError) return [];
+  const selection = deck ? deck.selection : UNCONFIRMED_STANDARD;
   const library = kickoffLibrary(view);
-  return presentedSlideKeys(view.kickoffDeck.selection)
-    .map((key) => library[key]!)
-    .filter(Boolean);
+  return presentedSlideKeys(selection)
+    .map((key) => library[key])
+    .filter((screen): screen is Screen => Boolean(screen));
 }
+
+const UNCONFIRMED_STANDARD: KickoffSelection = {
+  deckType: "standard",
+  formReady: false,
+  hasAdditional: false,
+};

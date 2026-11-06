@@ -308,7 +308,15 @@ export function WelcomePage({
             icsBase={icsBase ?? null}
           />
         ) : deckBlocked ? (
-          <KickoffDeckBlocked message={view.kickoffDeck?.loadError ?? ""} onRetry={onRetryDeck} />
+          view.kickoffDeck?.loadError ? (
+            <KickoffDeckBlocked message={view.kickoffDeck.loadError} onRetry={onRetryDeck} />
+          ) : (
+            <KickoffDeckBlocked
+              reason="choice"
+              message="The records disagree about whether a partner leads this implementation."
+              onRetry={undefined}
+            />
+          )
         ) : present ? (
           <div className="wp-present" onClick={() => setAt((i) => Math.min(total - 1, i + 1))}>
             <Stage key={at} fit="both">

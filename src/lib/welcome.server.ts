@@ -339,6 +339,7 @@ async function viewFor(
           firstFormNamed: Boolean(input.firstForm),
           firstFormConfirmed:
             Boolean(input.firstForm) && (input.firstFormSource ?? "person") === "person",
+          firstFormName: input.firstForm?.name ?? null,
         })
       : null,
     hiddenScreens: (await import("./intake-answers")).readIntake(deal.intake)
