@@ -248,3 +248,20 @@ Not yet built, or partly built:
 - Staging acceptance has not run. The feature flags are off everywhere.
 - The release runbook (`docs/RELEASE-PR101.md`) refers to migration `0090`, which does not
   exist. The file is `0087` on the PR #100 branch. This needs correcting by the release owner.
+
+### Usability pass (consolidation)
+
+- The Solutions tab is one view. The purchased solutions are one list from
+  `intake.timeline.services`, each with its lifecycle and existing actions, and each expands
+  to its linked delivery record (components, dependencies, readiness, next action, blockers,
+  history). Requested and other solutions come after, under their own heading.
+- Current Implementation shows a compact Solutions summary (progress, launch-critical work
+  outstanding, genuine blockers) linked to the tab, and the Training & Readiness line. The
+  full Solutions list is no longer in Current Implementation.
+- The `/solutions/:implId` deep link redirects to the customer's Solutions tab.
+- Customer visibility: no customer-facing file changed. A regression test checks the
+  customer-facing routes and server modules for references to the training plan, transcript
+  suggestions, evidence and delivery records, and checks that internal server functions are
+  behind an internal-role middleware.
+- While complete solutions are off, the purchased list still shows, and the delivery detail
+  says it is not turned on.

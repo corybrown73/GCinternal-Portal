@@ -76,6 +76,7 @@ import { AddCustomerContact, EditCustomerContact } from "@/components/customer-c
 import { EditableField } from "@/components/editable-field";
 import { SolutionsTab } from "@/components/solutions-tab";
 import { TrainingPlanTab } from "@/components/training-plan-tab";
+import { SolutionsSummary } from "@/components/solutions-summary";
 import { TrainingReadinessStrip } from "@/components/training-readiness-strip";
 import { setRecordField } from "@/lib/hub.functions";
 import type { EditableRecordField as EditableRecordFieldKey } from "@/lib/record-fields";
@@ -362,6 +363,13 @@ function Customer360Page() {
 
       {tab === "implementation" ? (
         <div className="px-6 py-4">
+          {impl.deal_id ? (
+            <SolutionsSummary
+              customerId={customerId}
+              implementationId={impl.id}
+              dealId={impl.deal_id}
+            />
+          ) : null}
           <TrainingReadinessStrip customerId={customerId} implementationId={impl.id} />
           {impl.deal_id ? (
             <CurrentImplementationTab

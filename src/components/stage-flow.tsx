@@ -12,7 +12,6 @@ import { ImplementationFocusPanel } from "@/components/implementation-focus-pane
 import { MeetingRecap } from "@/components/meeting-recap";
 import { ParkingLot } from "@/components/parking-lot";
 import { Field, StatusDot } from "@/components/record";
-import { SolutionsCard } from "@/components/solutions-card";
 import { TranscriptUpdatePanel } from "@/components/transcript-update-panel";
 import { WorkflowStoryPanel } from "@/components/workflow-story-panel";
 import { ImplementationUpdatePanel } from "@/components/implementation-update-panel";
@@ -1479,9 +1478,6 @@ export function CurrentImplementationTab({
       </div>
 
       <div className="space-y-3">
-        <SupportingSection title="Solutions" persistKey="solutions">
-          <SolutionsCard deal={deal} editable={editable} />
-        </SupportingSection>
         <SupportingSection title="Implementation focus" persistKey="focus">
           <ImplementationFocusPanel dealId={dealId} intake={intake} />
         </SupportingSection>
