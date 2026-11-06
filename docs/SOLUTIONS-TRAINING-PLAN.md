@@ -220,3 +220,31 @@ schema replay and invariant tests.
 - **Direct writes closed.** PR #101's solution tables have `for all` policies for internal users, which lets a signed-in internal user write them directly and skip the permission functions. The application writes them only through the service role. Migration 0092 removes direct writes (`insert`, `update`, `delete`) from `authenticated` and `anon` on the four 0091 tables, and makes their policies read-only for signed-in users. The down file restores the 0091 state. This is a change to reused PR #101 code and is called out for review.
 - **Responsibility.** `responsibility` and `responsibility_source` are set together, or not at all. A `sow` source needs its quote. Both rules are enforced in the functions and in the table constraints.
 - **Verification.** Migration 0092 is replayed with 0001–0091 on a local Postgres 16 (stubs for the Supabase `auth`, `storage` and `extensions` schema, in the scratchpad only, not in the repo). All 52 schema test files pass, including `0092_implementation_training_invariants.sql` with 42 probes. The CI-style down, re-up and test cycle also passes.
+
+## 12. Build status
+
+Built on this branch, each step checked with typecheck, lint, the unit tests, and the
+schema replay where a migration changed:
+
+- Migration 0092 (table, functions, proposal columns and types, grants, down and verify
+  files) with a 42-probe invariant file. Replayed on a local Postgres 16 after 0001–0091,
+  with the CI-style down, re-up and test cycle.
+- Domain rules (`training-plan.ts`): responsibility, coverage, delivered and shown kept
+  apart, purchased training shown as uncovered and never created.
+- Transcript suggestions: five types, prompt carve-out, listed-need and quote validation,
+  failed suggestions kept as notes, reviewed delivery date, and approval through the 0092
+  functions with the version check.
+- Server functions behind `training_plan`; reads return `enabled: false` while it is off.
+- Navigation: Solutions and Training & Readiness are top-level tabs in the approved order.
+  Current Implementation shows a training readiness line that links to the tab.
+- Solutions tab: the lifecycle card (purchase record) above PR #101's delivery detail. The
+  solution-level status select in PR #101 is replaced by the lifecycle label.
+
+Not yet built, or partly built:
+
+- The Current Implementation summary is training only. A solutions summary line is not added.
+- The Training tab shows the implementation's needs for the Hub's own users; it is not
+  customer-visible, and no decision has been taken to make it so.
+- Staging acceptance has not run. The feature flags are off everywhere.
+- The release runbook (`docs/RELEASE-PR101.md`) refers to migration `0090`, which does not
+  exist. The file is `0087` on the PR #100 branch. This needs correcting by the release owner.

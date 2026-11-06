@@ -294,7 +294,9 @@ export function proposalRowFor(
   const dup =
     p.duplicate_of && openIds[p.duplicate_of.type]?.has(p.duplicate_of.id) ? p.duplicate_of : null;
   const proposedDate =
-    p.proposed_date ?? (p.type === "target_date" && isValidIsoDate(p.text) ? p.text.trim() : null);
+    p.proposed_date ??
+    (p.type === "target_date" && isValidIsoDate(p.text) ? p.text.trim() : null) ??
+    (p.type === "training_delivered" ? (p.training_date ?? null) : null);
   // The name said is what the owner picker shows when no roster id matched.
   const text = p.type === "owner" ? p.owner_name || p.text : p.text;
   return {

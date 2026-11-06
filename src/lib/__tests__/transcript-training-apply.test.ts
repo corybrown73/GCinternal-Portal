@@ -421,6 +421,38 @@ describe("how a reading stores a training suggestion", () => {
     });
   });
 
+  it("a delivery date the call gave is also the reviewed date, so the panel can show and confirm it", () => {
+    const row = proposalRowFor(
+      raw({
+        type: "training_delivered",
+        training_field: null,
+        training_value: null,
+        training_date: "2026-11-03",
+      }),
+      ctx(),
+      IDS,
+    );
+    expect(row).toMatchObject({
+      type: "training_delivered",
+      proposed_date: "2026-11-03",
+      training_date: "2026-11-03",
+    });
+  });
+
+  it("a delivery with no date in the call leaves the reviewed date empty, for the reviewer to enter", () => {
+    const row = proposalRowFor(
+      raw({
+        type: "training_delivered",
+        training_field: null,
+        training_value: null,
+        training_date: null,
+      }),
+      ctx(),
+      IDS,
+    );
+    expect(row).toMatchObject({ type: "training_delivered", proposed_date: null });
+  });
+
   it("a new need needs no listed id and carries no version", () => {
     const row = proposalRowFor(
       raw({ type: "training_add", training_id: null, title: "Dispatch" }),

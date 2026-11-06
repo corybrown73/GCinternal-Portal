@@ -1,3 +1,4 @@
+import { DEMONSTRATED_LABEL, type DemonstratedStatus } from "@/lib/training-plan";
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -394,6 +395,8 @@ export function TranscriptUpdatePanel({
               // picker writes none, whatever the reading carried.
               ownerTeamMemberId: showsOwner(p) ? resolvedOwner[p.id] || null : null,
               proposedDate: resolvedDate[p.id] || null,
+              // A training delivery takes the date the reviewer confirmed, when the call gave none.
+              trainingDate: p.type === "training_delivered" ? resolvedDate[p.id] || null : null,
             },
           });
           out.applied += 1;
@@ -748,7 +751,7 @@ function ProposalRow({
   error: string | null;
   onDismiss: () => void;
 }) {
-  const needsDate = proposal.type === "target_date";
+  const needsDate = proposal.type === "target_date" || proposal.type === "training_delivered";
   const needsOwner = proposal.type === "owner";
   // A risk or issue the reading assigned to someone shows who, so the
   // reviewer can clear it; one it did not assign writes no owner.
@@ -789,6 +792,18 @@ function ProposalRow({
             <LevelPill label="likelihood" value={proposal.likelihood} />
           </span>
           {!needsOwner ? <span className="mt-1 block text-foreground">{proposal.text}</span> : null}
+          {proposal.type === "training_update" && proposal.training_field ? (
+            <span className="mt-1 block text-foreground">
+              Change {proposal.training_field}: {proposal.training_value ?? "(no value)"}
+            </span>
+          ) : null}
+          {proposal.type === "training_demonstrated" && proposal.training_value ? (
+            <span className="mt-1 block text-foreground">
+              Readiness:{" "}
+              {DEMONSTRATED_LABEL[proposal.training_value as DemonstratedStatus] ??
+                proposal.training_value}
+            </span>
+          ) : null}
           {proposal.quote ? (
             <span className="mt-1 block border-l border-border pl-2 text-[11px] italic text-muted-foreground">
               “{proposal.quote}”
@@ -803,7 +818,11 @@ function ProposalRow({
           {needsDate ? (
             <span className="mt-1.5 flex flex-wrap items-center gap-1.5">
               <span className="text-[11px] text-muted-foreground">
-                {planOwnsTarget ? "Moves the plan's Functional by date to" : "New plan end date"}
+                {proposal.type === "training_delivered"
+                  ? "Delivered on"
+                  : planOwnsTarget
+                    ? "Moves the plan's Functional by date to"
+                    : "New plan end date"}
               </span>
               <input
                 type="date"
