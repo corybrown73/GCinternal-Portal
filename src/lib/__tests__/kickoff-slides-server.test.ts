@@ -11,7 +11,7 @@ const h = vi.hoisted(() => {
 vi.mock("@/integrations/supabase/client.server", () => ({ supabaseAdmin: h.forward }));
 
 import { readIntake } from "../intake-answers";
-import { kickoffDeckView } from "../kickoff-slides.server";
+import { canConfigureImplementationDeck, kickoffDeckView } from "../kickoff-slides.server";
 
 const SAVED = {
   included: ["kickoff-training"],
@@ -150,5 +150,42 @@ describe("a deal with no implementation", () => {
     expect(view.saved).toBeNull();
     expect(view.recommended.included).toContain("kickoff-training");
     expect(view.recommended.flags.join(" ")).toMatch(/cannot be saved/);
+  });
+});
+
+describe("whether the viewer may configure the deck", () => {
+  const people = [
+    { id: "p-manager", role: "manager", team_member_id: "tm-manager" },
+    { id: "p-admin", role: "admin", team_member_id: null },
+    { id: "p-impl", role: "implementation", team_member_id: "tm-owner" },
+    { id: "p-other-impl", role: "implementation", team_member_id: "tm-other" },
+    { id: "p-sales", role: "sales", team_member_id: "tm-owner" },
+  ];
+  const impls = [
+    { id: "impl-1", deal_id: "deal-1", owner_id: "tm-owner", created_at: "2026-10-01T00:00:00Z" },
+    { id: "impl-x", deal_id: "deal-2", owner_id: "tm-owner", created_at: "2026-10-01T00:00:00Z" },
+  ];
+  const seeded = () => rows({ portal_profiles: people as never, implementations: impls as never });
+
+  it("management may configure any implementation on the deal", async () => {
+    use(seeded());
+    expect(await canConfigureImplementationDeck("p-manager", "deal-1", "impl-1")).toBe(true);
+    expect(await canConfigureImplementationDeck("p-admin", "deal-1", "impl-1")).toBe(true);
+  });
+
+  it("the assigned implementation specialist may configure their implementation only", async () => {
+    use(seeded());
+    expect(await canConfigureImplementationDeck("p-impl", "deal-1", "impl-1")).toBe(true);
+    expect(await canConfigureImplementationDeck("p-other-impl", "deal-1", "impl-1")).toBe(false);
+  });
+
+  it("no other role may configure, even as the named owner", async () => {
+    use(seeded());
+    expect(await canConfigureImplementationDeck("p-sales", "deal-1", "impl-1")).toBe(false);
+  });
+
+  it("an implementation that is not on this deal is never configurable from here", async () => {
+    use(seeded());
+    expect(await canConfigureImplementationDeck("p-manager", "deal-1", "impl-x")).toBe(false);
   });
 });

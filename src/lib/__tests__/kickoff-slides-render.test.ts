@@ -1,9 +1,13 @@
+import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { describe, expect, it } from "vitest";
 
+import { KickoffSlidesSection } from "@/components/presenter-workspace";
 import { kickoffScreensFor, kickoffScreenList } from "@/components/kickoff-view";
 import { KICKOFF_TO_CONFIRM } from "@/lib/kickoff-view";
 import {
+  OPTIONAL_SLIDE_KEYS,
   defaultSelection,
   presentedSlideKeys,
   recommendKickoffSlides,
@@ -103,6 +107,7 @@ function deckFor(
     selection: resolveKickoffSelection(saved, recommended),
     saved: saved ? { savedAt: "2026-11-05", savedBy: null } : null,
     recommendationChanged: false,
+    canConfigure: true,
     partnerName,
     purchased,
   };
@@ -314,7 +319,7 @@ describe("training: only confirmed training is described as training", () => {
   });
 });
 
-describe("partner: three distinct responsibilities, in the approved wording", () => {
+describe("partner: the approved responsibilities, and no unresolved customer decision", () => {
   const partnerView = () => {
     const facts = { ...TRAINING_ONLY, trainingOnly: false, partnerLed: true, services: [] };
     return viewWith(
@@ -325,16 +330,16 @@ describe("partner: three distinct responsibilities, in the approved wording", ()
       ),
     );
   };
-
-  it("states the partner, GoCanvas Implementation and Technical Solutions as separate columns", () => {
-    const view = partnerView();
-    const text = html(
+  const partnerText = (view: WelcomeView) =>
+    html(
       view,
       kickoffScreensFor(view).findIndex((s) => s.key === "kickoff-partner"),
     );
+
+  it("states the partner's and GoCanvas Implementation's responsibilities in the approved wording", () => {
+    const text = partnerText(partnerView());
     expect(text).toContain("Field Fusion IQ");
     expect(text).toContain("GoCanvas Implementation");
-    expect(text).toContain("Technical Solutions");
     expect(text).toContain(
       "Partner configures the solution and establishes the technical connection.",
     );
@@ -342,18 +347,17 @@ describe("partner: three distinct responsibilities, in the approved wording", ()
     expect(text).toContain("The partner remains available for technical support and escalations.");
   });
 
-  it("does not present the TIS as owning Technical Solutions work", () => {
-    const view = partnerView();
-    const text = html(
-      view,
-      kickoffScreensFor(view).findIndex((s) => s.key === "kickoff-partner"),
-    );
-    const technical = text.slice(text.indexOf("Technical Solutions"));
-    expect(technical).not.toMatch(/TIS/);
-    expect(technical).toContain(KICKOFF_TO_CONFIRM);
+  it("does not present Technical Solutions ownership on the slide, so no internal ownership is shown as a customer decision", () => {
+    const text = partnerText(partnerView());
+    expect(text).not.toContain("Technical Solutions");
+    expect(text).not.toContain(KICKOFF_TO_CONFIRM);
   });
 
-  it("the recommendation flags that the approved journey does not name the Technical Solutions owner", () => {
+  it("the TIS is never described as owning Technical Solutions work", () => {
+    expect(partnerText(partnerView())).not.toMatch(/TIS[^.]*Technical Solutions/);
+  });
+
+  it("the recommendation still flags the ownership gap internally for the TIS", () => {
     const deck = deckFor(
       { ...TRAINING_ONLY, trainingOnly: false, partnerLed: true, services: [] },
       null,
@@ -362,5 +366,61 @@ describe("partner: three distinct responsibilities, in the approved wording", ()
     expect(deck.recommended.flags.join(" ")).toMatch(
       /does not name who owns Technical Solutions work/,
     );
+  });
+});
+
+/* ----------------------------------------- the deck controls, by permission */
+
+function controlsMarkup(canConfigure: boolean, saved: boolean) {
+  const facts = { ...TRAINING_ONLY, trainingOnly: true };
+  const deck = deckFor(
+    facts,
+    saved ? { included: ["kickoff-training"], order: [...OPTIONAL_SLIDE_KEYS] } : null,
+  );
+  deck.canConfigure = canConfigure;
+  deck.saved = saved ? { savedAt: "2026-11-05T10:00:00Z", savedBy: "A Manager" } : null;
+  return renderToStaticMarkup(
+    createElement(
+      QueryClientProvider,
+      { client: new QueryClient() },
+      createElement(KickoffSlidesSection, {
+        dealId: "deal-1",
+        view: viewWith(deck),
+        implementationId: "impl-1",
+        onSaved: () => undefined,
+      }),
+    ),
+  );
+}
+
+/** The opening tag of the button with this visible label. */
+function buttonTag(markup: string, label: string): string {
+  const at = markup.indexOf(`>${label}<`);
+  const start = markup.lastIndexOf("<button", at);
+  return markup.slice(start, markup.indexOf(">", start) + 1);
+}
+
+describe("the deck controls follow the permission the server enforces", () => {
+  it("a person who may not configure the deck gets disabled Save and Reset, and disabled slide controls", () => {
+    const markup = controlsMarkup(false, true);
+    expect(buttonTag(markup, "Save selection")).toMatch(/\sdisabled=""/);
+    expect(buttonTag(markup, "Reset to recommendation")).toMatch(/\sdisabled=""/);
+    expect(markup).toMatch(/<input[^>]*type="checkbox"[^>]*disabled=""/);
+    expect(markup).toContain(
+      "Only an administrator, a manager, or the TIS assigned to this implementation can change this deck.",
+    );
+  });
+
+  it("a person who may configure the deck gets working controls, and no lock message", () => {
+    const markup = controlsMarkup(true, true);
+    expect(buttonTag(markup, "Reset to recommendation")).not.toMatch(/\sdisabled=""/);
+    expect(markup).not.toContain(
+      "Only an administrator, a manager, or the TIS assigned to this implementation can change this deck.",
+    );
+    expect(markup).not.toMatch(/<input[^>]*type="checkbox"[^>]*disabled=""/);
+  });
+
+  it("Save stays disabled until something has changed, even for someone who may configure", () => {
+    expect(buttonTag(controlsMarkup(true, true), "Save selection")).toMatch(/\sdisabled=""/);
   });
 });

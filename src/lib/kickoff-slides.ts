@@ -353,6 +353,8 @@ export type KickoffDeckView = {
   saved: { savedAt: string; savedBy: string | null } | null;
   /** The recommendation has changed since the TIS saved, so the saved selection stands and this is said. */
   recommendationChanged: boolean;
+  /** Whether the signed-in person may save or reset this deck. Set per viewer by the server; the server still enforces it. */
+  canConfigure: boolean;
   /** The partner who leads, by name, when one is named. */
   partnerName: string | null;
   /** What was bought, for the slides: name, kind and phase only. Nothing internal. */

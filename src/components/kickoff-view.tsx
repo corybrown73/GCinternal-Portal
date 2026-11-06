@@ -743,11 +743,11 @@ function KickoffPurchased({ view, page }: { view: WelcomeView; page: number }) {
 }
 
 /**
- * Working with your partner. Three distinct responsibilities, in the approved
- * partner journey's own words: the partner's (before the handover, and support
- * after it), GoCanvas Implementation's (from the handover), and Technical
- * Solutions ownership, which the approved journey does not define and is
- * therefore confirmed together rather than stated.
+ * Working with your partner: the partner's responsibilities and GoCanvas
+ * Implementation's, in the approved partner journey's own words. Technical
+ * Solutions ownership is not on this slide: the approved journey does not state
+ * a customer-facing responsibility for it, so it is not presented as a decision.
+ * The approved technical escalation line stays with the partner.
  */
 function KickoffPartner({ view, page }: { view: WelcomeView; page: number }) {
   const partner = view.kickoffDeck?.partnerName ?? null;
@@ -779,10 +779,6 @@ function KickoffPartner({ view, page }: { view: WelcomeView; page: number }) {
               <li key={key}>{partnerStage(key).description}</li>
             ))}
           </ul>
-        </section>
-        <section>
-          <h4>Technical Solutions</h4>
-          <p>{KICKOFF_TO_CONFIRM}</p>
         </section>
       </div>
     </Frame>

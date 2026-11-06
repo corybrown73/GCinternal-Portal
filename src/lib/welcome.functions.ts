@@ -12,9 +12,18 @@ import { HOMEWORK_KEYS } from "@/lib/welcome";
 export const getWelcome = createServerFn({ method: "GET" })
   .middleware([requireInternalAuth])
   .inputValidator((data: unknown) => z.object({ dealId: z.string().uuid() }).parse(data))
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
     const { loadWelcome } = await import("./welcome.server");
-    return loadWelcome(data.dealId);
+    const view = await loadWelcome(data.dealId);
+    if (!view?.kickoffDeck) return view;
+    // Whether this person may change the deck: shown on the controls. The save
+    // enforces the same rule on the server, whatever the page shows.
+    const { canConfigureImplementationDeck } = await import("./kickoff-slides.server");
+    const implementationId = view.kickoffDeck.implementationId;
+    const canConfigure = implementationId
+      ? await canConfigureImplementationDeck(context.profile.id, data.dealId, implementationId)
+      : false;
+    return { ...view, kickoffDeck: { ...view.kickoffDeck, canConfigure } };
   });
 
 /** The customer's copy of the dashboard, for the TIS to preview. Read-only; no customer write is reachable from it. */

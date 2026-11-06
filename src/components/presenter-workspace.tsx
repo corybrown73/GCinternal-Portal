@@ -256,7 +256,7 @@ type SectionN = 1 | 2 | 3 | 4 | 5 | 6 | 7;
  * and is never overwritten by a later recommendation. Nothing here is shown to
  * the customer except the slides themselves.
  */
-function KickoffSlidesSection({
+export function KickoffSlidesSection({
   dealId,
   view,
   implementationId,
@@ -284,6 +284,9 @@ function KickoffSlidesSection({
   if (!kd || !draft) {
     return <GapNote>The kickoff slides are not available for this deal.</GapNote>;
   }
+  // The same rule the save enforces on the server: a person who may not change
+  // this deck sees it, previews it, and cannot change it here.
+  const canEdit = kd.canConfigure && Boolean(implementationId);
 
   const dirty =
     JSON.stringify(draft.included) !== JSON.stringify(kd.selection.included) ||
@@ -291,6 +294,7 @@ function KickoffSlidesSection({
   const included = new Set(draft.included);
 
   const toggle = (key: string) =>
+    canEdit &&
     setDraft((d) =>
       d
         ? {
@@ -302,7 +306,7 @@ function KickoffSlidesSection({
         : d,
     );
   const move = (key: string, direction: -1 | 1) =>
-    setDraft((d) => (d ? { ...d, order: moveWithinZone(d.order, key, direction) } : d));
+    canEdit && setDraft((d) => (d ? { ...d, order: moveWithinZone(d.order, key, direction) } : d));
 
   const run = async (patch: Record<string, unknown> | null) => {
     if (!implementationId) return;
@@ -366,6 +370,7 @@ function KickoffSlidesSection({
                   <input
                     type="checkbox"
                     checked={included.has(key)}
+                    disabled={!canEdit}
                     onChange={() => toggle(key)}
                     aria-label={`Include ${labelOf(key)}`}
                   />
@@ -383,7 +388,7 @@ function KickoffSlidesSection({
                   <button
                     type="button"
                     className="rounded-sm border border-border px-2 py-0.5 text-[11px] disabled:opacity-40"
-                    disabled={at <= 0}
+                    disabled={!canEdit || at <= 0}
                     onClick={() => move(key, -1)}
                     aria-label={`Move ${labelOf(key)} up`}
                   >
@@ -392,7 +397,7 @@ function KickoffSlidesSection({
                   <button
                     type="button"
                     className="rounded-sm border border-border px-2 py-0.5 text-[11px] disabled:opacity-40"
-                    disabled={at >= sameZone.length - 1}
+                    disabled={!canEdit || at >= sameZone.length - 1}
                     onClick={() => move(key, 1)}
                     aria-label={`Move ${labelOf(key)} down`}
                   >
@@ -423,16 +428,22 @@ function KickoffSlidesSection({
         <button
           type="button"
           className="rounded-sm bg-primary px-3 py-1.5 text-[12px] font-medium text-primary-foreground disabled:opacity-40"
-          disabled={!implementationId || !dirty || pending}
+          disabled={!canEdit || !dirty || pending}
           onClick={() => run({ included: draft.included, order: draft.order })}
-          title={implementationId ? undefined : "Start the implementation to save this selection."}
+          title={
+            !implementationId
+              ? "Start the implementation to save this selection."
+              : canEdit
+                ? undefined
+                : "Only an administrator, a manager, or the TIS assigned to this implementation can change this deck."
+          }
         >
           Save selection
         </button>
         <button
           type="button"
           className="rounded-sm border border-border px-3 py-1.5 text-[12px] disabled:opacity-40"
-          disabled={!implementationId || pending || (!kd.saved && !dirty)}
+          disabled={!canEdit || pending || (!kd.saved && !dirty)}
           onClick={() => run(null)}
         >
           Reset to recommendation
@@ -446,6 +457,12 @@ function KickoffSlidesSection({
           Preview the presentation
         </a>
       </div>
+      {implementationId && !canEdit ? (
+        <p className="text-[12px] text-muted-foreground">
+          Only an administrator, a manager, or the TIS assigned to this implementation can change
+          this deck. You can still view and preview it.
+        </p>
+      ) : null}
       {!implementationId ? (
         <GapNote>
           No implementation exists for this deal yet, so the selection cannot be saved. The

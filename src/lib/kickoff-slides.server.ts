@@ -97,6 +97,8 @@ export async function kickoffDeckView(args: {
     selection,
     saved: stored ? { savedAt: stored.saved_at, savedBy: await nameFor(stored.saved_by) } : null,
     recommendationChanged,
+    // Set per viewer by the caller (see canConfigureImplementationDeck).
+    canConfigure: false,
     partnerName: type.partner ? (PARTNERS[type.partner]?.name ?? null) : null,
     purchased: (args.intake.timeline.services ?? []).map((s) => ({
       kind: s.kind,
@@ -148,4 +150,31 @@ export async function assertKickoffDeckAuthority(
     });
     if (!allowed) throw new Error(KICKOFF_DECK_REFUSED);
   }
+}
+
+/**
+ * Whether this person may save or reset the deck of one implementation on the
+ * deal: the same rule the save enforces (assertKickoffDeckAuthority). Used to
+ * show the controls to those who can use them. Never grants anything itself.
+ */
+export async function canConfigureImplementationDeck(
+  userId: string,
+  dealId: string,
+  implementationId: string,
+): Promise<boolean> {
+  const [{ data: profile }, { data: impl }] = await Promise.all([
+    db().from("portal_profiles").select("role, team_member_id").eq("id", userId).maybeSingle(),
+    db()
+      .from("implementations")
+      .select("id,owner_id")
+      .eq("deal_id", dealId)
+      .eq("id", implementationId)
+      .maybeSingle(),
+  ]);
+  if (!impl) return false;
+  return canConfigureKickoffDeck({
+    role: (profile?.role as string | null) ?? null,
+    actorTeamMemberId: (profile?.team_member_id as string | null) ?? null,
+    ownerTeamMemberId: (impl.owner_id as string | null) ?? null,
+  });
 }
