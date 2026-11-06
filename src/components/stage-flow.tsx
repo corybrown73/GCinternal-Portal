@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useRef, useState } from "react";
+import { refreshStageViews } from "@/lib/stage-refresh";
 import { Link, useSearch } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -2642,8 +2643,8 @@ export function KickoffBody({
       }),
     onMutate: () => setError(null),
     onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ["deal", deal.account.id] });
-      void qc.invalidateQueries({ queryKey: ["welcome", deal.account.id] });
+      // A booking can move the stage: every view of it re-reads.
+      void refreshStageViews(qc, { dealId: deal.account.id });
     },
     onError: (e) => setError((e as Error).message),
   });
@@ -2939,8 +2940,8 @@ function BookCoreBody({
       }),
     onMutate: () => setError(null),
     onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ["deal", deal.account.id] });
-      void qc.invalidateQueries({ queryKey: ["welcome", deal.account.id] });
+      // A booking can move the stage: every view of it re-reads.
+      void refreshStageViews(qc, { dealId: deal.account.id });
     },
     onError: (e) => setError((e as Error).message),
   });
@@ -3161,11 +3162,8 @@ function OnboardingList({
           // cards (customer360), the customer preview, Home and the Calendar
           // re-read too, so they agree on this screen without a reload.
           await Promise.all([
-            qc.invalidateQueries({ queryKey: ["deal", id] }),
-            qc.invalidateQueries({ queryKey: ["welcome", id] }),
-            qc.invalidateQueries({ queryKey: ["customer360"] }),
+            refreshStageViews(qc, { dealId: id, implementationId }),
             qc.invalidateQueries({ queryKey: ["customer-dashboard-preview", id] }),
-            qc.invalidateQueries({ queryKey: ["home"] }),
             qc.invalidateQueries({ queryKey: ["calendar"] }),
           ]);
           latest.current = null;

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { refreshStageViews } from "@/lib/stage-refresh";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { ChevronDown, ChevronRight, Loader2, Sparkles, Upload } from "lucide-react";
@@ -197,10 +198,7 @@ export function TranscriptUpdatePanel({
       // The real transition already happened server-side inside that save
       // (or it didn't, and the rail stays where it is) — refetch the same
       // query Current Implementation reads rather than assuming the result.
-      await Promise.all([
-        qc.invalidateQueries({ queryKey: ["deal", dealId] }),
-        qc.invalidateQueries({ queryKey: ["welcome", dealId] }),
-      ]);
+      await refreshStageViews(qc, { implementationId, dealId });
     } catch (e) {
       setKickoffChecked(false);
       setKickoffError(e instanceof Error ? e.message : "Could not save. Try again.");

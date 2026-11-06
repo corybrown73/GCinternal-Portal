@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from "react";
+import { refreshStageViews } from "@/lib/stage-refresh";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { ArrowRight, Check, CircleDashed } from "lucide-react";
@@ -124,10 +125,9 @@ export function StageGatesPanel({
   const tick = useServerFn(setTaskStatus);
   const advance = useServerFn(advanceImplementationStage);
 
+  // A tick or a move can change the stage: every view that shows it re-reads.
   const refresh = () => {
-    void queryClient.invalidateQueries({ queryKey: ["partner-progress", implementationId] });
-    void queryClient.invalidateQueries({ queryKey: ["plan", implementationId] });
-    void queryClient.invalidateQueries({ queryKey: ["customer360", customerId] });
+    void refreshStageViews(queryClient, { implementationId, customerId });
   };
 
   // The row changes as it is clicked; the save follows, and a failure puts
@@ -171,7 +171,6 @@ export function StageGatesPanel({
     refresh();
     void queryClient.invalidateQueries({ queryKey: ["deal"] });
     void queryClient.invalidateQueries({ queryKey: ["welcome"] });
-    void queryClient.invalidateQueries({ queryKey: ["home"] });
   };
   const graduate = useMutation({
     mutationFn: () => graduateNow({ data: { implementationId } }),

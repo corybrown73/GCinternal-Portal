@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { refreshStageViews } from "@/lib/stage-refresh";
 import { Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -608,7 +609,9 @@ function useCompletedTick(deal: DealData, intake: IntakeAnswers) {
         async () => {
           pending.current -= 1;
           if (pending.current === 0) {
-            await qc.invalidateQueries({ queryKey: ["deal", deal.account.id] });
+            // A milestone can move the stage (a held kickoff, a booking): every
+            // view of the stage re-reads, not just the deal.
+            await refreshStageViews(qc, { dealId: deal.account.id });
             latest.current = null;
             setOptimistic({});
           }

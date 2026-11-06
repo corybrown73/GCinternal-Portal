@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
+import { refreshStageViews } from "@/lib/stage-refresh";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 
@@ -58,8 +59,8 @@ export function PresenterWorkspace({ dealId }: { dealId: string }) {
   }
 
   const onSaved = () => {
-    void qc.invalidateQueries({ queryKey: ["deal", dealId] });
-    void qc.invalidateQueries({ queryKey: ["welcome", dealId] });
+    // A booking or milestone here can move the stage: every view of it re-reads.
+    void refreshStageViews(qc, { dealId });
     announceWelcomeChanged(dealId);
   };
 

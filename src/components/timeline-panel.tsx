@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { refreshStageViews } from "@/lib/stage-refresh";
 import { Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -399,8 +400,8 @@ export function TimelinePanel({
       save({ data: { dealId, patch: { timeline } } as never }),
     onMutate: () => setError(null),
     onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ["deal", dealId] });
-      void qc.invalidateQueries({ queryKey: ["welcome", dealId] });
+      // A milestone or booking can move the stage: every view of it re-reads.
+      void refreshStageViews(qc, { dealId });
     },
     onError: (e) => setError((e as Error).message),
   });
