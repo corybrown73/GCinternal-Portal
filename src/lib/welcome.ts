@@ -100,6 +100,12 @@ export function implementationFocusFallbackView(
  * the portal, the customer on their link, or the print dialog.
  */
 export type WelcomeView = {
+  /**
+   * Internal only: the Kickoff deck for this implementation — the recommendation,
+   * the TIS's saved selection, and the flags. Never on the customer's copy: the
+   * customer projection (CUSTOMER_VIEW) does not list it.
+   */
+  kickoffDeck?: import("./kickoff-slides").KickoffDeckView | null;
   dealId: string;
   clientName: string;
   industry: string | null;

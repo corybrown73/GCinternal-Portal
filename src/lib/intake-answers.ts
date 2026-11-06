@@ -347,6 +347,23 @@ export const intakeAnswersSchema = z.object({
   /** Welcome-page screens the presenter has switched off for this customer, by key. */
   welcome_hidden_screens: z.array(z.string().max(40)).max(20).default([]),
   /**
+   * The Kickoff deck the TIS saved, per implementation (kickoff-slides.ts). Keyed
+   * by implementation id, because one customer can have several implementations
+   * with different scopes. Absent means the recommendation applies.
+   */
+  kickoff_deck: z
+    .record(
+      z.string().max(80),
+      z.object({
+        included: z.array(z.string().max(60)).max(20),
+        order: z.array(z.string().max(60)).max(20),
+        saved_at: z.string(),
+        saved_by: z.string().nullable(),
+      }),
+    )
+    .default({})
+    .catch({}),
+  /**
    * Readiness items that are not part of this implementation — "Updates the
    * datasets" for a customer with no datasets. The owner takes them off; the
    * plan's own signals (a data load, the Field Fusion request) put the data

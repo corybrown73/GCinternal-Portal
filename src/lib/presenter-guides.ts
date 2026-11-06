@@ -7,7 +7,7 @@ export type PresenterGuide = {
 };
 
 /** One guide per customer-facing slide, in slide order. Plain language, for a live call. */
-export const PRESENTER_GUIDES: Record<1 | 2 | 3 | 4 | 5 | 6, PresenterGuide> = {
+export const PRESENTER_GUIDES: Record<1 | 2 | 3 | 4 | 5 | 6 | 7, PresenterGuide> = {
   1: {
     objective: "Confirm the outcome they are buying and the first form we build for it.",
     opening: "What should be different for your team a month after go-live?",
@@ -83,10 +83,20 @@ export const PRESENTER_GUIDES: Record<1 | 2 | 3 | 4 | 5 | 6, PresenterGuide> = {
     ready:
       "The next session is booked or its date agreed, the tester and deadline are set, and the first scope is confirmed.",
   },
+  7: {
+    objective: "Choose the slides this kickoff needs, so the room sees only what applies to them.",
+    opening: "Before we start, what do you want this session to cover, and what can we leave out?",
+    questions: [
+      "Is any of the training already done, or is it all still to come?",
+      "Who will be in the room, and what do they need to see?",
+    ],
+    capture: "The slides you chose, and anything you left out and why.",
+    ready: "The slides match what this customer bought and needs, and every flag is resolved.",
+  },
 };
 
 export const PRESENTER_SECTIONS: ReadonlyArray<{
-  n: 1 | 2 | 3 | 4 | 5 | 6;
+  n: 1 | 2 | 3 | 4 | 5 | 6 | 7;
   title: string;
   short: string;
 }> = [
@@ -96,4 +106,5 @@ export const PRESENTER_SECTIONS: ReadonlyArray<{
   { n: 4, title: "How we'll keep things moving", short: "Keep moving" },
   { n: 5, title: "Form V1", short: "Form V1" },
   { n: 6, title: "Your next move", short: "Next move" },
+  { n: 7, title: "Kickoff slides", short: "Slides" },
 ];

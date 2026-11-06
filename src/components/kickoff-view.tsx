@@ -32,6 +32,15 @@ import { FUNCTIONAL_BY, TARGET_GRADUATION, functionalByDate } from "@/lib/date-l
 import { shortDay } from "@/lib/onboarding-timeline";
 import { cn } from "@/lib/utils";
 import type { WelcomeView } from "@/lib/welcome";
+import { HANDOFF_ROLES } from "@/lib/partner-implementation";
+import { kickoffFocusContent } from "@/lib/kickoff-view";
+import { sessionsAfterKickoff } from "@/lib/presenter-workspace";
+import {
+  defaultSelection,
+  presentedSlideKeys,
+  recommendKickoffSlides,
+  type KickoffFacts,
+} from "@/lib/kickoff-slides";
 
 /**
  * KICKOFF VIEW — the six customer-facing Kickoff slides, composed from the
@@ -591,4 +600,202 @@ export function kickoffScreenList(view: WelcomeView): Screen[] {
       render: (a) => <KickoffNextMove key="kickoff-next" view={view} page={a.page} />,
     },
   ];
+}
+
+/* -------------------------------------- Slides added to the Kickoff library */
+
+/** What we're here to achieve: the outcome the customer named, and the focus they agreed. Core. */
+function KickoffAchieve({ view, page }: { view: WelcomeView; page: number }) {
+  const outcome = kickoffBusinessOutcome(view);
+  const outcomeConfirmed = kickoffBusinessOutcomeConfirmed(view);
+  const focus = kickoffFocusContent(view.implementationFocus, view.implementationFocusFallback);
+  const successMeasure = view.intake?.known.find((k) => k.key === "success_measure");
+  const measure =
+    typeof successMeasure?.value === "string" && successMeasure.value.trim()
+      ? successMeasure.value
+      : null;
+  return (
+    <Frame
+      k="kickoff-achieve"
+      page={page}
+      eyebrow="What we're here to achieve"
+      title="The result we are"
+      accent="working toward"
+    >
+      <div className="wp-kick-achieve">
+        <section>
+          <h4>Your goal</h4>
+          <p className="wp-lede">{outcome ?? KICKOFF_TO_CONFIRM}</p>
+          {outcome && !outcomeConfirmed ? (
+            <p className="wp-prepared">We&apos;ll confirm it today.</p>
+          ) : null}
+        </section>
+        <section>
+          <h4>How we will know it worked</h4>
+          <p>{measure ?? KICKOFF_TO_CONFIRM}</p>
+        </section>
+        <section>
+          <h4>What we will focus on</h4>
+          {focus.state === "empty" ? (
+            <p>{KICKOFF_TO_CONFIRM}</p>
+          ) : (
+            <ul>
+              {focus.items.map((item) => (
+                <li key={item}>
+                  <Check className="wp-kick-check" strokeWidth={3} aria-hidden="true" />
+                  <span>{item}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      </div>
+    </Frame>
+  );
+}
+
+/** Training and enablement: the training bought, and the sessions in the plan. Optional. */
+function KickoffTraining({ view, page }: { view: WelcomeView; page: number }) {
+  const training = (view.kickoffDeck?.purchased ?? []).filter((s) => s.kind === "training");
+  const sessions = sessionsAfterKickoff(view.timeline.milestones);
+  return (
+    <Frame
+      k="kickoff-training"
+      page={page}
+      eyebrow="Training and enablement"
+      title="Getting the crew"
+      accent="ready to work"
+    >
+      <div className="wp-kick-achieve">
+        <section>
+          <h4>What we will train</h4>
+          {training.length ? (
+            <ul>
+              {training.map((s) => (
+                <li key={s.name}>
+                  <Check className="wp-kick-check" strokeWidth={3} aria-hidden="true" />
+                  <span>{s.name}</span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p>{KICKOFF_TO_CONFIRM}</p>
+          )}
+        </section>
+        <section>
+          <h4>The sessions</h4>
+          {sessions.length ? (
+            <ul>
+              {sessions.map((m) => (
+                <li key={m.key}>
+                  <span>
+                    {m.label}
+                    {m.booked ? ` · ${shortDay(m.date)}` : ""}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p>{KICKOFF_TO_CONFIRM}</p>
+          )}
+        </section>
+      </div>
+    </Frame>
+  );
+}
+
+/** Purchased solutions and deliverables: what was bought beyond training. Optional. */
+function KickoffPurchased({ view, page }: { view: WelcomeView; page: number }) {
+  const items = (view.kickoffDeck?.purchased ?? []).filter((s) => s.kind !== "training");
+  return (
+    <Frame
+      k="kickoff-purchased"
+      page={page}
+      eyebrow="What you are getting"
+      title="Purchased solutions"
+      accent="and deliverables"
+    >
+      {items.length ? (
+        <ul className="wp-kick-achieve">
+          {items.map((s) => (
+            <li key={s.name}>
+              <Check className="wp-kick-check" strokeWidth={3} aria-hidden="true" />
+              <span>
+                {s.name}
+                <small> · Phase {s.phase}</small>
+              </span>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p>{KICKOFF_TO_CONFIRM}</p>
+      )}
+    </Frame>
+  );
+}
+
+/** Working with your partner: who leads, and what changes hands. Optional. */
+function KickoffPartner({ view, page }: { view: WelcomeView; page: number }) {
+  const partner = view.kickoffDeck?.partnerName ?? null;
+  return (
+    <Frame
+      k="kickoff-partner"
+      page={page}
+      eyebrow="Working with your partner"
+      title="Who does what,"
+      accent={partner ?? "with your partner"}
+    >
+      <div className="wp-kick-achieve">
+        <section>
+          <h4>Before the handover</h4>
+          <p>{HANDOFF_ROLES.before}</p>
+        </section>
+        <section>
+          <h4>After the handover</h4>
+          <p>{HANDOFF_ROLES.after}</p>
+        </section>
+      </div>
+    </Frame>
+  );
+}
+
+/** Every Kickoff screen the library can show, keyed as the presentation keys them. */
+export function kickoffLibrary(view: WelcomeView): Record<string, Screen> {
+  const six = Object.fromEntries(kickoffScreenList(view).map((sc) => [sc.key, sc]));
+  return {
+    ...six,
+    "kickoff-achieve": {
+      key: "kickoff-achieve",
+      label: "What we're here to achieve",
+      render: (a) => <KickoffAchieve key="kickoff-achieve" view={view} page={a.page} />,
+    },
+    "kickoff-training": {
+      key: "kickoff-training",
+      label: "Training and enablement",
+      render: (a) => <KickoffTraining key="kickoff-training" view={view} page={a.page} />,
+    },
+    "kickoff-purchased": {
+      key: "kickoff-purchased",
+      label: "Purchased solutions and deliverables",
+      render: (a) => <KickoffPurchased key="kickoff-purchased" view={view} page={a.page} />,
+    },
+    "kickoff-partner": {
+      key: "kickoff-partner",
+      label: "Working with your partner",
+      render: (a) => <KickoffPartner key="kickoff-partner" view={view} page={a.page} />,
+    },
+  } as Record<string, Screen>;
+}
+
+/**
+ * The screens the Kickoff deck presents for this implementation: exactly the
+ * selected slides, in presentation order, with the core slides always present.
+ * Without a deck view (nothing to select from), the six original screens.
+ */
+export function kickoffScreensFor(view: WelcomeView): Screen[] {
+  if (!view.kickoffDeck) return kickoffScreenList(view);
+  const library = kickoffLibrary(view);
+  return presentedSlideKeys(view.kickoffDeck.selection)
+    .map((key) => library[key]!)
+    .filter(Boolean);
 }

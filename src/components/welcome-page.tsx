@@ -34,7 +34,7 @@ import {
 import { stampDay } from "@/lib/stage-flow";
 import type { HandoffValue } from "@/lib/sales-handoff";
 import { byLabel, dueLabel, journeyOverviewItems } from "@/lib/welcome-journey";
-import { kickoffScreenList } from "@/components/kickoff-view";
+import { kickoffScreensFor } from "@/components/kickoff-view";
 import { CustomerDashboard } from "@/components/customer-dashboard";
 import { DeckReviewBanner } from "@/components/deck-review-banner";
 import { ask } from "@/components/ui/ask";
@@ -160,7 +160,8 @@ export function WelcomePage({
   // is a fixed sequence, never filtered by that same persisted preference —
   // hiding a Plan screen must never hide an unrelated Kickoff screen, or the
   // other way around.
-  const all = experience === "kickoff" ? kickoffScreenList(view) : screenList(view);
+  // The Kickoff deck is the presenter-selected set (kickoff-slides.ts); the Plan is unchanged.
+  const all = experience === "kickoff" ? kickoffScreensFor(view) : screenList(view);
   const visible =
     experience === "kickoff" ? all : all.filter((sc) => isScreenShown(sc.key, view.hiddenScreens));
   const hidden =

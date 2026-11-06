@@ -330,6 +330,17 @@ async function viewFor(
     sharedAt: opts.internal ? (readIntake(deal.intake).welcome_shared_at ?? null) : null,
     openedAt: opts.internal ? (deal.welcome_opened_at ?? null) : null,
     issuedAt: opts.internal && deal.welcome_share_url ? (deal.welcome_issued_at ?? null) : null,
+    kickoffDeck: opts.internal
+      ? await (
+          await import("./kickoff-slides.server")
+        ).kickoffDeckView({
+          dealId: String(deal.id),
+          intake: (await import("./intake-answers")).readIntake(deal.intake),
+          firstFormNamed: Boolean(input.firstForm),
+          firstFormConfirmed:
+            Boolean(input.firstForm) && (input.firstFormSource ?? "person") === "person",
+        })
+      : null,
     hiddenScreens: (await import("./intake-answers")).readIntake(deal.intake)
       .welcome_hidden_screens,
     textOverrides: (await import("./intake-answers")).readIntake(deal.intake).welcome_text,

@@ -21,6 +21,12 @@ import { localIso, shortDay } from "@/lib/onboarding-timeline";
 import { getParkingLot, addParkingItemFn, updateParkingItemFn } from "@/lib/parking-lot.functions";
 import { wonStage } from "@/lib/pipeline-stages";
 import { saveHandoffAnswer, saveIntake, saveStageTarget } from "@/lib/presale.functions";
+import {
+  KICKOFF_SLIDES,
+  OPTIONAL_SLIDE_KEYS,
+  moveWithinZone,
+  type KickoffSelection,
+} from "@/lib/kickoff-slides";
 import { PRESENTER_GUIDES, PRESENTER_SECTIONS } from "@/lib/presenter-guides";
 import {
   announceWelcomeChanged,
@@ -228,12 +234,227 @@ function Workspace({
           <TesterSection dealId={dealId} intake={intake} onSaved={onSaved} />
           <ScopeConfirm dealId={dealId} intake={intake} onSaved={onSaved} />
         </Section>
+
+        <Section n={7} active={active} onStep={setActive}>
+          <KickoffSlidesSection
+            dealId={dealId}
+            view={view}
+            implementationId={deal.implementation_id ?? null}
+            onSaved={onSaved}
+          />
+        </Section>
       </div>
     </div>
   );
 }
 
-type SectionN = 1 | 2 | 3 | 4 | 5 | 6;
+type SectionN = 1 | 2 | 3 | 4 | 5 | 6 | 7;
+
+/**
+ * The Kickoff deck's slides, for this implementation. The recommendation is the
+ * starting point; the TIS's saved selection replaces it for this implementation
+ * and is never overwritten by a later recommendation. Nothing here is shown to
+ * the customer except the slides themselves.
+ */
+function KickoffSlidesSection({
+  dealId,
+  view,
+  implementationId,
+  onSaved,
+}: {
+  dealId: string;
+  view: WelcomeView;
+  implementationId: string | null;
+  onSaved: () => void;
+}) {
+  const save = useServerFn(saveIntake);
+  const kd = view.kickoffDeck ?? null;
+  const signature = kd ? JSON.stringify(kd.selection) : "";
+  const [draft, setDraft] = useState<KickoffSelection | null>(kd?.selection ?? null);
+  const [error, setError] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
+
+  // A save or a reset elsewhere re-reads the deck: show what is now saved.
+  useEffect(() => {
+    setDraft(kd?.selection ?? null);
+    // Keyed on the saved content, not the object identity.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [signature]);
+
+  if (!kd || !draft) {
+    return <GapNote>The kickoff slides are not available for this deal.</GapNote>;
+  }
+
+  const dirty =
+    JSON.stringify(draft.included) !== JSON.stringify(kd.selection.included) ||
+    JSON.stringify(draft.order) !== JSON.stringify(kd.selection.order);
+  const included = new Set(draft.included);
+
+  const toggle = (key: string) =>
+    setDraft((d) =>
+      d
+        ? {
+            ...d,
+            included: included.has(key)
+              ? d.included.filter((k) => k !== key)
+              : OPTIONAL_SLIDE_KEYS.filter((k) => k === key || included.has(k)),
+          }
+        : d,
+    );
+  const move = (key: string, direction: -1 | 1) =>
+    setDraft((d) => (d ? { ...d, order: moveWithinZone(d.order, key, direction) } : d));
+
+  const run = async (patch: Record<string, unknown> | null) => {
+    if (!implementationId) return;
+    setPending(true);
+    setError(null);
+    try {
+      await save({
+        data: { dealId, patch: { kickoff_deck: { [implementationId]: patch } } },
+      } as never);
+      onSaved();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not save the kickoff slides.");
+    } finally {
+      setPending(false);
+    }
+  };
+
+  const labelOf = (key: string) => KICKOFF_SLIDES.find((s) => s.key === key)?.label ?? key;
+  const recommended = new Set(kd.recommended.included);
+
+  return (
+    <div className="space-y-4">
+      <div className="space-y-1">
+        <p className="text-[12px] text-muted-foreground">{kd.kindReason}</p>
+        <p className="text-[12px]">
+          {kd.saved
+            ? `Saved${kd.saved.savedBy ? ` by ${kd.saved.savedBy}` : ""} on ${shortDay(kd.saved.savedAt.slice(0, 10))}. This selection is what the room sees.`
+            : "Using the recommendation. Save to keep this selection for this implementation."}
+        </p>
+        {kd.recommendationChanged ? (
+          <p className="text-[12px] text-status-risk-foreground">
+            The recommendation has changed since you saved. Your selection is kept. Reset to use the
+            new recommendation.
+          </p>
+        ) : null}
+      </div>
+
+      <div>
+        <h3 className="mb-1 text-[12px] font-semibold">Always in the presentation</h3>
+        <ul className="space-y-1">
+          {KICKOFF_SLIDES.filter((s) => s.core).map((s) => (
+            <li key={s.key} className="text-[12px] text-muted-foreground">
+              {s.label}
+            </li>
+          ))}
+        </ul>
+      </div>
+
+      <div>
+        <h3 className="mb-1 text-[12px] font-semibold">Optional slides</h3>
+        <ul className="divide-y divide-border rounded-sm border border-border">
+          {draft.order.map((key, i) => {
+            const zone = KICKOFF_SLIDES.find((s) => s.key === key)?.zone;
+            const sameZone = draft.order.filter(
+              (k) => KICKOFF_SLIDES.find((s) => s.key === k)?.zone === zone,
+            );
+            const at = sameZone.indexOf(key);
+            return (
+              <li key={key} className="flex flex-wrap items-start gap-2 px-2.5 py-2">
+                <label className="flex items-center gap-2 text-[13px] font-medium">
+                  <input
+                    type="checkbox"
+                    checked={included.has(key)}
+                    onChange={() => toggle(key)}
+                    aria-label={`Include ${labelOf(key)}`}
+                  />
+                  {labelOf(key)}
+                </label>
+                {recommended.has(key) ? (
+                  <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-muted-foreground">
+                    Recommended
+                  </span>
+                ) : null}
+                <p className="w-full pl-6 text-[11px] text-muted-foreground">
+                  {kd.recommended.reasons[key] ?? "Not recommended for this deal."}
+                </p>
+                <div className="ml-auto flex gap-1">
+                  <button
+                    type="button"
+                    className="rounded-sm border border-border px-2 py-0.5 text-[11px] disabled:opacity-40"
+                    disabled={at <= 0}
+                    onClick={() => move(key, -1)}
+                    aria-label={`Move ${labelOf(key)} up`}
+                  >
+                    Up
+                  </button>
+                  <button
+                    type="button"
+                    className="rounded-sm border border-border px-2 py-0.5 text-[11px] disabled:opacity-40"
+                    disabled={at >= sameZone.length - 1}
+                    onClick={() => move(key, 1)}
+                    aria-label={`Move ${labelOf(key)} down`}
+                  >
+                    Down
+                  </button>
+                </div>
+                <span className="sr-only">position {i + 1}</span>
+              </li>
+            );
+          })}
+        </ul>
+      </div>
+
+      {kd.recommended.flags.length ? (
+        <div className="space-y-1 rounded-sm border border-border bg-muted/40 px-2.5 py-2">
+          <h3 className="text-[12px] font-semibold">To resolve before presenting</h3>
+          <ul className="list-disc space-y-0.5 pl-4 text-[12px]">
+            {kd.recommended.flags.map((f) => (
+              <li key={f}>{f}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
+      {error ? <p className="text-[12px] text-status-risk-foreground">{error}</p> : null}
+
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          className="rounded-sm bg-primary px-3 py-1.5 text-[12px] font-medium text-primary-foreground disabled:opacity-40"
+          disabled={!implementationId || !dirty || pending}
+          onClick={() => run({ included: draft.included, order: draft.order })}
+          title={implementationId ? undefined : "Start the implementation to save this selection."}
+        >
+          Save selection
+        </button>
+        <button
+          type="button"
+          className="rounded-sm border border-border px-3 py-1.5 text-[12px] disabled:opacity-40"
+          disabled={!implementationId || pending || (!kd.saved && !dirty)}
+          onClick={() => run(null)}
+        >
+          Reset to recommendation
+        </button>
+        <a
+          href={`/onboarding-plan/${dealId}`}
+          target="_blank"
+          rel="noreferrer"
+          className="text-[12px] font-medium text-primary underline-offset-2 hover:underline"
+        >
+          Preview the presentation
+        </a>
+      </div>
+      {!implementationId ? (
+        <GapNote>
+          No implementation exists for this deal yet, so the selection cannot be saved. The
+          recommendation applies until it does.
+        </GapNote>
+      ) : null}
+    </div>
+  );
+}
 
 function Section({
   n,
