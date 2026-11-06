@@ -278,4 +278,32 @@ describe("the automatic journey sync", () => {
     );
     expect(msg).toBeNull();
   });
+
+  it("recording a held kickoff keeps the owner and the deal's intake, and attributes every write to the actor", async () => {
+    fake = createFakeSupabase(rows({}, [kickoffScheduled, kickoffCall]));
+    fake.store["implementations"]![0]!["owner_id"] = "tm-1";
+    h.supabase.client = fake.client;
+    h.milestones = [{ key: "kickoff", doneOn: "2026-11-06" }];
+    const setItem = vi.fn(async (_args: Record<string, unknown>) => undefined);
+    const advance = vi.fn(async (_args: Record<string, unknown>) => undefined);
+    const audit = vi.fn(async (_row: Record<string, unknown>) => undefined);
+    h.setWorkItem.fn = setItem;
+    h.advanceStage.fn = advance;
+    h.audit.fn = audit;
+    const intakeBefore = JSON.stringify(fake.store["portal_accounts"]);
+
+    await syncJourneyStage("deal-1", "actor-1");
+
+    // The owner is the TIS, and nothing about it changes.
+    expect(fake.store["implementations"]![0]!["owner_id"]).toBe("tm-1");
+    // No booking, date or time is written: the deal's intake is untouched.
+    expect(JSON.stringify(fake.store["portal_accounts"])).toBe(intakeBefore);
+    // Every write names the person who recorded the hold.
+    expect(setItem.mock.calls.length).toBeGreaterThan(0);
+    for (const [args] of setItem.mock.calls)
+      expect(args).toHaveProperty("actorProfileId", "actor-1");
+    for (const [args] of advance.mock.calls)
+      expect(args).toHaveProperty("actorProfileId", "actor-1");
+    for (const [row] of audit.mock.calls) expect(row).toHaveProperty("actor_id", "actor-1");
+  });
 });

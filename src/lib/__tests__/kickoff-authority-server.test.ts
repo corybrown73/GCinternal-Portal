@@ -17,10 +17,15 @@ function rows(opts: {
   partner?: boolean;
   noImpl?: boolean;
   actorTeam?: string | null;
+  role?: string;
 }): Rows {
   return {
     portal_profiles: [
-      { id: "profile-1", team_member_id: opts.actorTeam === undefined ? "tm-1" : opts.actorTeam },
+      {
+        id: "profile-1",
+        team_member_id: opts.actorTeam === undefined ? "tm-1" : opts.actorTeam,
+        role: opts.role ?? "implementation",
+      },
     ],
     implementations: opts.noImpl
       ? []
@@ -83,5 +88,21 @@ describe("the held-kickoff check, over the database", () => {
   it("leaves a partner implementation to its own record, as before", async () => {
     use(rows({ owner: "tm-9", partner: true }));
     await expect(assertKickoffHeldAuthority("profile-1", "deal-1")).resolves.toBeUndefined();
+  });
+
+  it("does not let a manager's role stand in for being the assigned TIS", async () => {
+    // Managers are not identified as Implementation Team Leads by the data, so
+    // a manager login gains nothing here: the rule is still the assigned TIS.
+    use(rows({ owner: "tm-1", actorTeam: "tm-7", role: "manager" }));
+    await expect(assertKickoffHeldAuthority("profile-1", "deal-1")).rejects.toThrow(
+      /assigned to this implementation/,
+    );
+  });
+
+  it("does not let an admin's role stand in for being the assigned TIS", async () => {
+    use(rows({ owner: "tm-1", actorTeam: "tm-7", role: "super_admin" }));
+    await expect(assertKickoffHeldAuthority("profile-1", "deal-1")).rejects.toThrow(
+      /assigned to this implementation/,
+    );
   });
 });
