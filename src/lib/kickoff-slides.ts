@@ -300,6 +300,17 @@ function dedupe(keys: string[]): string[] {
   return [...new Set(keys)];
 }
 
+/**
+ * Whether the Kickoff presentation must be held back: a saved deck configuration
+ * did not load. Blocked is the only state the presentation can be in on a read
+ * error; it never falls back to the standard or the recommended slides.
+ */
+export function kickoffDeckBlocked(view: {
+  kickoffDeck?: { loadError: string | null } | null;
+}): boolean {
+  return Boolean(view.kickoffDeck?.loadError);
+}
+
 /** What the TIS sees about one implementation's Kickoff deck. Internal only; never on the customer's copy. */
 export type KickoffDeckView = {
   /** Set when a read failed: the message to show, and nothing is replaced silently. Null otherwise. */

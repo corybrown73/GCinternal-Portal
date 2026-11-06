@@ -33,11 +33,7 @@ vi.mock("../stage-flow.server", () => ({
   syncDealStage: (...args: unknown[]) => (h.syncDealStage.fn as any)(...args),
 }));
 
-import {
-  KICKOFF_DECK_NOT_AVAILABLE,
-  KICKOFF_DECK_REFUSED,
-  saveKickoffDeck,
-} from "../kickoff-slides.server";
+import { KICKOFF_DECK_REFUSED, saveKickoffDeck } from "../kickoff-slides.server";
 import { intakeAnswersSchema } from "../intake-answers";
 import { saveDealIntake } from "../presale.server";
 
@@ -314,7 +310,7 @@ describe("resetting a deck selection", () => {
 });
 
 describe("refusals write nothing", () => {
-  it("a live customer's deal is refused for a save and for a reset", async () => {
+  it("a customer's deal that is not a test account is saved and reset like any other", async () => {
     setup({
       portal_accounts: [
         {
@@ -327,25 +323,21 @@ describe("refusals write nothing", () => {
       ],
       customers: [{ id: "cust-1", is_test: false }],
     });
-    await expect(
-      saveKickoffDeck({
-        actorProfileId: "p-manager",
-        dealId: "deal-1",
-        implementationId: "impl-1",
-        selection: DECK,
-      }),
-    ).rejects.toThrow(KICKOFF_DECK_NOT_AVAILABLE);
-    await expect(
-      saveKickoffDeck({
-        actorProfileId: "p-manager",
-        dealId: "deal-1",
-        implementationId: "impl-1",
-        selection: null,
-      }),
-    ).rejects.toThrow(KICKOFF_DECK_NOT_AVAILABLE);
-    expect(rowsFor()).toHaveLength(0);
-    expect(audits).toHaveLength(0);
-    expectOnlyTheDeckChanged();
+    await saveKickoffDeck({
+      actorProfileId: "p-manager",
+      dealId: "deal-1",
+      implementationId: "impl-1",
+      selection: DECK,
+    });
+    expect(rowsFor("impl-1")).toHaveLength(1);
+    await saveKickoffDeck({
+      actorProfileId: "p-manager",
+      dealId: "deal-1",
+      implementationId: "impl-1",
+      selection: null,
+    });
+    expect(rowsFor("impl-1")).toHaveLength(0);
+    expect(audits.map((a) => a["action"])).toEqual(["kickoff_deck.saved", "kickoff_deck.reset"]);
   });
 
   it("the implementation specialist cannot save another's implementation", async () => {

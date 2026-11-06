@@ -34,7 +34,9 @@ import {
 import { stampDay } from "@/lib/stage-flow";
 import type { HandoffValue } from "@/lib/sales-handoff";
 import { byLabel, dueLabel, journeyOverviewItems } from "@/lib/welcome-journey";
+import { KickoffDeckBlocked } from "@/components/kickoff-deck-blocked";
 import { kickoffScreensFor } from "@/components/kickoff-view";
+import { kickoffDeckBlocked } from "@/lib/kickoff-slides";
 import { CustomerDashboard } from "@/components/customer-dashboard";
 import { DeckReviewBanner } from "@/components/deck-review-banner";
 import { ask } from "@/components/ui/ask";
@@ -103,6 +105,7 @@ export function WelcomePage({
   workspaceHref,
   icsBase,
   onToggleScreen,
+  onRetryDeck,
 }: {
   view: WelcomeView;
   mode: WelcomeMode;
@@ -131,6 +134,8 @@ export function WelcomePage({
   icsBase?: string | null;
   /** Internal: switch a screen off (or on) for this customer. Saved on the deal. */
   onToggleScreen?: ((key: string, hidden: boolean) => Promise<void> | void) | undefined;
+  /** Internal: read the saved Kickoff configuration again, when it did not load. */
+  onRetryDeck?: (() => void) | undefined;
 }) {
   const [present, setPresent] = useState(false);
   const [at, setAt] = useState(0);
@@ -161,6 +166,8 @@ export function WelcomePage({
   // hiding a Plan screen must never hide an unrelated Kickoff screen, or the
   // other way around.
   // The Kickoff deck is the presenter-selected set (kickoff-slides.ts); the Plan is unchanged.
+  // A Kickoff configuration that did not load presents nothing: it is blocked.
+  const deckBlocked = experience === "kickoff" && kickoffDeckBlocked(view);
   const all = experience === "kickoff" ? kickoffScreensFor(view) : screenList(view);
   const visible =
     experience === "kickoff" ? all : all.filter((sc) => isScreenShown(sc.key, view.hiddenScreens));
@@ -180,6 +187,11 @@ export function WelcomePage({
       icsBase: icsBase ?? null,
     }),
   );
+
+  // A blocked presentation cannot be left in present mode.
+  useEffect(() => {
+    if (deckBlocked) setPresent(false);
+  }, [deckBlocked]);
 
   // Present mode: a hint the first time, gone after a few seconds.
   const [hint, setHint] = useState(false);
@@ -223,7 +235,7 @@ export function WelcomePage({
             view={view}
             experience={experience}
             onPresent={
-              experience === "kickoff"
+              experience === "kickoff" && !deckBlocked
                 ? () => {
                     setAt(0);
                     setPresent(true);
@@ -236,7 +248,7 @@ export function WelcomePage({
             onRevokeLink={onRevokeLink}
             onMarkSent={onMarkSent}
             onExportPptx={
-              experience === "kickoff"
+              experience === "kickoff" && !deckBlocked
                 ? async (report) => {
                     // Every visible screen, unzoomed, with the talk track as notes.
                     const notes = speakerNotes(view);
@@ -295,6 +307,8 @@ export function WelcomePage({
             onBall={onBall}
             icsBase={icsBase ?? null}
           />
+        ) : deckBlocked ? (
+          <KickoffDeckBlocked message={view.kickoffDeck?.loadError ?? ""} onRetry={onRetryDeck} />
         ) : present ? (
           <div className="wp-present" onClick={() => setAt((i) => Math.min(total - 1, i + 1))}>
             <Stage key={at} fit="both">
@@ -723,12 +737,6 @@ function Toolbar({
         ) : null}
         <span className="wp-toolbar-title">{view.clientName}</span>
         <span className="wp-toolbar-meta">Kickoff deck</span>
-        {experience === "kickoff" && view.kickoffDeck?.loadError ? (
-          <span role="alert" className="wp-toolbar-meta">
-            {view.kickoffDeck.loadError} The standard slides are shown. Do not present the saved
-            selection until this clears.
-          </span>
-        ) : null}
 
         {experience === "kickoff" && workspaceHref ? (
           <a

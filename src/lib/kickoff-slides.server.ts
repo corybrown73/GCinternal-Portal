@@ -9,7 +9,6 @@ import { deckKindFor } from "./deck-kind";
 import type { IntakeAnswers } from "./intake-answers";
 import { isTrainingOnly } from "./intake-answers";
 import { PARTNERS, implementationTypeFor } from "./partner-implementation";
-import { isTestAccount } from "./test-accounts";
 import {
   OPTIONAL_SLIDE_KEYS,
   canConfigureKickoffDeck,
@@ -39,42 +38,16 @@ const storedSchema = z.object({
   saved_at: z.string(),
 });
 
-export const KICKOFF_DECK_NOT_AVAILABLE =
-  "The kickoff slide builder is available for test implementations only, during the controlled rollout.";
-
 export const KICKOFF_DECK_REFUSED =
   "Only an administrator, a manager, or the TIS assigned to this implementation can change its kickoff slides.";
 
 /**
- * Whether this deal is a test account (the deal or its customer is flagged, the
- * same rule every other test-only feature uses). Live customer deals return false
- * and see nothing of the deck builder.
- */
-export async function kickoffDeckAvailable(dealId: string): Promise<boolean> {
-  const deal = rowOrThrow<any>(
-    await db()
-      .from("portal_accounts")
-      .select("id,customer_id,is_test")
-      .eq("id", dealId)
-      .maybeSingle(),
-    "the kickoff slides",
-  );
-  if (!deal) return false;
-  if (deal.is_test === true) return true;
-  if (!deal.customer_id) return false;
-  const customer = rowOrThrow<any>(
-    await db().from("customers").select("id,is_test").eq("id", deal.customer_id).maybeSingle(),
-    "the kickoff slides",
-  );
-  return isTestAccount(deal, customer);
-}
-
-/**
  * The Kickoff deck for a deal's current implementation, for the internal view.
- *   - null: not a test deal. The deck builder does not exist for it at all.
- *   - a view with `loadError`: a read failed. Nothing is replaced silently: the
- *     presentation shows the standard slides with the error, and saving is refused.
+ *   - a view with `loadError`: a read failed. The presentation is blocked until it
+ *     loads, and saving is refused. Nothing is replaced silently.
  *   - otherwise: the recommendation, and the saved selection, which takes precedence.
+ * Every deal with an implementation has the builder, and so does every implementation
+ * a person may configure (see assertKickoffDeckAuthority).
  */
 export async function kickoffDeckView(args: {
   dealId: string;
@@ -82,9 +55,8 @@ export async function kickoffDeckView(args: {
   /** The first form is named, and whether a person confirmed it (not the paperwork alone). */
   firstFormNamed: boolean;
   firstFormConfirmed: boolean;
-}): Promise<KickoffDeckView | null> {
+}): Promise<KickoffDeckView> {
   try {
-    if (!(await kickoffDeckAvailable(args.dealId))) return null;
     return await readView(args);
   } catch (e) {
     return failedView(e);
@@ -313,8 +285,9 @@ export async function canConfigureImplementationDeck(
 }
 
 /**
- * Save or reset one implementation's Kickoff deck. Checks, in order, before any
- * write: the deal is a test account; the person may configure that implementation.
+ * Save or reset one implementation's Kickoff deck. Checks, before any write, that
+ * the person may configure that implementation (the role rule, and that the
+ * implementation is on this deal).
  * Writes exactly one row in `scoping_answers` (or deletes it on reset). It touches
  * no stage, owner, task, milestone or the deal's intake, and runs no journey work.
  */
@@ -324,7 +297,6 @@ export async function saveKickoffDeck(args: {
   implementationId: string;
   selection: { included: string[]; order: string[] } | null;
 }): Promise<{ implementationId: string; saved: boolean }> {
-  if (!(await kickoffDeckAvailable(args.dealId))) throw new Error(KICKOFF_DECK_NOT_AVAILABLE);
   await assertKickoffDeckAuthority(args.actorProfileId, args.dealId, [args.implementationId]);
 
   if (args.selection === null) {

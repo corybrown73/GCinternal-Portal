@@ -12,6 +12,7 @@ vi.mock("@/integrations/supabase/client.server", () => ({ supabaseAdmin: h.forwa
 vi.mock("../server/audit", () => ({ audit: async () => undefined }));
 
 import { readIntake } from "../intake-answers";
+import { kickoffDeckBlocked, presentedSlideKeys, defaultSelection } from "../kickoff-slides";
 import { canConfigureImplementationDeck, kickoffDeckView } from "../kickoff-slides.server";
 
 const KEY = "kickoff_deck";
@@ -80,34 +81,43 @@ beforeEach(() => {
   h.supabase.client = null;
 });
 
-describe("the deck is for test implementations only", () => {
-  it("a live customer's deal gets no deck at all, and reads nothing for it", async () => {
-    // Even a failing implementations read cannot reach a live deal: it is never read.
+describe("the builder reaches every deal with an implementation, and no test-only gate", () => {
+  it("a deal that is not a test account gets the deck, read like any other", async () => {
     use(
       rows({
         portal_accounts: [{ id: "deal-1", customer_id: "cust-1", is_test: false }],
         customers: [{ id: "cust-1", is_test: false }],
       }),
-      {
-        implementations: { message: "boom" },
-      },
     );
-    expect(await kickoffDeckView({ ...baseArgs, intake: intake() })).toBeNull();
+    const view = await kickoffDeckView({ ...baseArgs, intake: intake() });
+    expect(view?.loadError).toBeNull();
+    expect(view?.implementationId).toBe("impl-2");
   });
 
-  it("a test deal is recognised by its own flag", async () => {
-    use(rows());
-    expect((await kickoffDeckView({ ...baseArgs, intake: intake() }))?.loadError).toBeNull();
-  });
-
-  it("a deal of a test customer is recognised by the customer's flag", async () => {
+  it("the flag on the deal or customer makes no difference to whether the deck is read", async () => {
     use(
       rows({
-        portal_accounts: [{ id: "deal-1", customer_id: "cust-1", is_test: false }],
+        portal_accounts: [{ id: "deal-1", customer_id: "cust-1", is_test: true }],
         customers: [{ id: "cust-1", is_test: true }],
       }),
     );
-    expect(await kickoffDeckView({ ...baseArgs, intake: intake() })).not.toBeNull();
+    const testView = await kickoffDeckView({ ...baseArgs, intake: intake() });
+    use(
+      rows({
+        portal_accounts: [{ id: "deal-1", customer_id: "cust-1", is_test: false }],
+        customers: [{ id: "cust-1", is_test: false }],
+      }),
+    );
+    const liveView = await kickoffDeckView({ ...baseArgs, intake: intake() });
+    expect(testView?.recommended).toEqual(liveView?.recommended);
+    expect(testView?.implementationId).toEqual(liveView?.implementationId);
+  });
+
+  it("a deal with no implementation yet has the builder, with nothing to save against", async () => {
+    use(rows({ implementations: [] }));
+    const view = await kickoffDeckView({ ...baseArgs, intake: intake() });
+    expect(view.loadError).toBeNull();
+    expect(view.implementationId).toBeNull();
   });
 });
 
@@ -228,5 +238,71 @@ describe("whether the viewer may configure the deck", () => {
   it("no other role may configure, even as the named owner", async () => {
     use(seeded());
     expect(await canConfigureImplementationDeck("p-sales", "deal-1", "impl-2")).toBe(false);
+  });
+});
+
+describe("a saved deck that did not load blocks the presentation; a retry clears it", () => {
+  it("a database error on the saved selection blocks the presentation", async () => {
+    use(rows({ scoping_answers: [savedRow("impl-2")] }), {
+      scoping_answers: { message: "timeout" },
+    });
+    const view = await kickoffDeckView({ ...baseArgs, intake: intake() });
+    expect(kickoffDeckBlocked({ kickoffDeck: view })).toBe(true);
+  });
+
+  it("malformed stored data blocks the presentation rather than presenting an empty deck", async () => {
+    use(rows({ scoping_answers: [savedRow("impl-2", { included: 7 })] }));
+    const view = await kickoffDeckView({ ...baseArgs, intake: intake() });
+    expect(view?.loadError).toMatch(/saved slide selection/);
+    expect(kickoffDeckBlocked({ kickoffDeck: view })).toBe(true);
+  });
+
+  it("a retry after the failure, with the database answering, loads the saved selection and unblocks", async () => {
+    // First attempt: the read fails.
+    use(rows({ scoping_answers: [savedRow("impl-2")] }), {
+      scoping_answers: { message: "timeout" },
+    });
+    const failedAttempt = await kickoffDeckView({ ...baseArgs, intake: intake() });
+    expect(kickoffDeckBlocked({ kickoffDeck: failedAttempt })).toBe(true);
+
+    // The retry: the same deal, the database now answers.
+    use(rows({ scoping_answers: [savedRow("impl-2")] }));
+    const retried = await kickoffDeckView({ ...baseArgs, intake: intake() });
+    expect(kickoffDeckBlocked({ kickoffDeck: retried })).toBe(false);
+    expect(retried?.selection.included).toEqual(["kickoff-training"]);
+    expect(retried?.saved).not.toBeNull();
+  });
+
+  it("a retry that still fails stays blocked", async () => {
+    use(rows(), { implementations: { message: "still down" } });
+    const first = await kickoffDeckView({ ...baseArgs, intake: intake() });
+    const second = await kickoffDeckView({ ...baseArgs, intake: intake() });
+    expect(kickoffDeckBlocked({ kickoffDeck: first })).toBe(true);
+    expect(kickoffDeckBlocked({ kickoffDeck: second })).toBe(true);
+  });
+});
+
+describe("normal configurations are not blocked", () => {
+  it("an unsaved configuration on a successful read is not blocked, and uses the normal default", async () => {
+    use(rows());
+    const view = await kickoffDeckView({ ...baseArgs, intake: intake() });
+    expect(kickoffDeckBlocked({ kickoffDeck: view })).toBe(false);
+    expect(view?.saved).toBeNull();
+    expect(view?.selection).toEqual(defaultSelection(view!.recommended));
+    // The presentation is the normal default selection, not an empty deck.
+    expect(presentedSlideKeys(view!.selection)).toContain("kickoff-cover");
+    expect(presentedSlideKeys(view!.selection)).toContain("kickoff-next");
+  });
+
+  it("a customer's deal that is not a test account is not blocked, and gets its recommendation", async () => {
+    use(
+      rows({
+        portal_accounts: [{ id: "deal-1", customer_id: "cust-1", is_test: false }],
+        customers: [{ id: "cust-1", is_test: false }],
+      }),
+    );
+    const view = await kickoffDeckView({ ...baseArgs, intake: intake() });
+    expect(kickoffDeckBlocked({ kickoffDeck: view })).toBe(false);
+    expect(view.recommended.included.length).toBeGreaterThan(0);
   });
 });

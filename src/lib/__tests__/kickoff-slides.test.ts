@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   canConfigureKickoffDeck,
+  kickoffDeckBlocked,
   CORE_SLIDE_KEYS,
   OPTIONAL_SLIDE_KEYS,
   defaultSelection,
@@ -342,4 +343,17 @@ describe("who may configure a Kickoff deck", () => {
       ).toBe(false);
     });
   }
+});
+
+describe("when the Kickoff presentation is blocked", () => {
+  it("blocked when the saved deck did not load", () => {
+    expect(kickoffDeckBlocked({ kickoffDeck: { loadError: "Could not load" } })).toBe(true);
+  });
+  it("not blocked when the deck loaded, even with nothing saved (the normal default)", () => {
+    expect(kickoffDeckBlocked({ kickoffDeck: { loadError: null } })).toBe(false);
+  });
+  it("not blocked for a live customer's deal, which has no deck", () => {
+    expect(kickoffDeckBlocked({ kickoffDeck: null })).toBe(false);
+    expect(kickoffDeckBlocked({})).toBe(false);
+  });
 });

@@ -426,15 +426,11 @@ describe("the deck controls follow the permission the server enforces", () => {
   });
 });
 
-describe("a deck that did not read shows the standard slides, never a recommendation", () => {
-  it("the presentation falls back to the standard slides when the deck has a read error", () => {
+describe("a deck that did not read presents nothing, and never a recommendation or the standard slides", () => {
+  it("the presentation has no slides at all when the deck has a read error", () => {
     const deck = deckFor(TRAINING_ONLY);
     deck.loadError = "Could not load the kickoff slides. Try again in a minute.";
-    const view = viewWith(deck);
-    expect(kickoffScreensFor(view).map((s) => s.key)).toEqual(
-      kickoffScreenList(view).map((s) => s.key),
-    );
-    expect(kickoffScreensFor(view).map((s) => s.key)).not.toContain("kickoff-training");
+    expect(kickoffScreensFor(viewWith(deck))).toEqual([]);
   });
 
   it("a live customer (no deck at all) gets exactly the standard slides", () => {
@@ -457,7 +453,7 @@ describe("a deck that did not read shows the standard slides, never a recommenda
         }),
       ),
     );
-    expect(markup).toContain("available for test implementations only");
+    expect(markup).toContain("not available for this deal");
     expect(markup).not.toContain("Save selection");
   });
 
@@ -480,5 +476,71 @@ describe("a deck that did not read shows the standard slides, never a recommenda
     expect(markup).toContain("Could not load the kickoff slides");
     expect(markup).not.toContain("Save selection");
     expect(markup).not.toMatch(/type="checkbox"/);
+  });
+});
+
+/* ----------------------------------------- the blocked presentation, rendered */
+
+import { WelcomePage } from "@/components/welcome-page";
+
+function pageMarkup(view: WelcomeView, onRetryDeck?: () => void) {
+  return renderToStaticMarkup(
+    createElement(
+      QueryClientProvider,
+      { client: new QueryClient() },
+      createElement(WelcomePage, {
+        view,
+        mode: "internal",
+        backHref: "/deals/deal-1",
+        notesHref: "/onboarding-notes/deal-1",
+        workspaceHref: "/onboarding-plan/deal-1?workspace=1",
+        onRetryDeck,
+      } as never),
+    ),
+  );
+}
+
+describe("the Kickoff presentation is blocked until a saved deck loads", () => {
+  const failed = () => {
+    const deck = deckFor(TRAINING_ONLY);
+    deck.loadError = "Could not load the kickoff slides. Try again in a minute.";
+    return viewWith(deck);
+  };
+
+  it("a deck that did not load shows a blocking alert with a retry, and no slides", () => {
+    const markup = pageMarkup(failed(), () => undefined);
+    expect(markup).toContain('role="alert"');
+    expect(markup).toContain("The kickoff slides could not be loaded");
+    expect(markup).toContain("Try again");
+    expect(markup).not.toContain("wp-screen");
+  });
+
+  it("the presentation cannot be started while blocked", () => {
+    const markup = pageMarkup(failed(), () => undefined);
+    expect(markup).not.toContain(" Present</button>");
+    expect(markup).not.toContain("wp-present");
+  });
+
+  it("the retry is enabled only when a retry is wired", () => {
+    expect(
+      buttonTag(
+        pageMarkup(failed(), () => undefined),
+        "Try again",
+      ),
+    ).not.toMatch(/disabled=""/);
+    expect(buttonTag(pageMarkup(failed(), undefined), "Try again")).toMatch(/disabled=""/);
+  });
+
+  it("a deck that loaded presents its slides and can be presented", () => {
+    const markup = pageMarkup(viewWith(deckFor(TRAINING_ONLY)), () => undefined);
+    expect(markup).toContain("wp-screen");
+    expect(markup).not.toContain('role="alert"');
+    expect(markup).toContain("Present");
+  });
+
+  it("a live customer's deal, with no deck at all, presents the standard slides as before", () => {
+    const markup = pageMarkup(viewWith(null), () => undefined);
+    expect(markup).toContain("wp-screen");
+    expect(markup).not.toContain('role="alert"');
   });
 });

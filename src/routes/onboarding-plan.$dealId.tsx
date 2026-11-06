@@ -94,6 +94,7 @@ function OnboardingPlanPage() {
     <WelcomePage
       view={query.data}
       mode="internal"
+      onRetryDeck={() => void query.refetch()}
       backHref={`/deals/${dealId}`}
       notesHref={`/onboarding-notes/${dealId}`}
       workspaceHref={`/onboarding-plan/${dealId}?workspace=1`}

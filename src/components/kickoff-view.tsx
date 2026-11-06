@@ -819,10 +819,11 @@ export function kickoffLibrary(view: WelcomeView): Record<string, Screen> {
  * Without a deck view (nothing to select from), the six original screens.
  */
 export function kickoffScreensFor(view: WelcomeView): Screen[] {
-  // No deck (a live customer, which the builder does not reach) or a deck that did
-  // not read: the standard slides. A failed read is shown on the toolbar; it is
-  // never replaced by a recommendation.
-  if (!view.kickoffDeck || view.kickoffDeck.loadError) return kickoffScreenList(view);
+  // No deck at all (a live customer, which the builder does not reach): the
+  // standard slides, as before. A deck that did not load presents nothing: the
+  // presentation is blocked until it loads (see kickoffDeckBlocked).
+  if (!view.kickoffDeck) return kickoffScreenList(view);
+  if (view.kickoffDeck.loadError) return [];
   const library = kickoffLibrary(view);
   return presentedSlideKeys(view.kickoffDeck.selection)
     .map((key) => library[key]!)

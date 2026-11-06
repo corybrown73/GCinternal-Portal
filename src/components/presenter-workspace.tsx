@@ -283,12 +283,7 @@ export function KickoffSlidesSection({
   }, [signature]);
 
   if (!kd) {
-    return (
-      <GapNote>
-        The kickoff slide builder is available for test implementations only, during the controlled
-        rollout.
-      </GapNote>
-    );
+    return <GapNote>The kickoff slide builder is not available for this deal.</GapNote>;
   }
   if (kd.loadError) {
     // A read failed. Nothing is shown as saved, and nothing can be changed, until it clears.
